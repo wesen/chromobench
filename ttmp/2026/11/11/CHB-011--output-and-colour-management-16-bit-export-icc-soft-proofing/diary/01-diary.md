@@ -1016,3 +1016,85 @@ I built this diary from my transcript (`agent-ac0370df62e7c8b96.jsonl`) with the
 ### Technical details
 
 - Timestamps are the transcript's UTC values.
+
+## Step 16: M2 implementation, part 1 — encoders, sinks, bundled profiles, output spaces from the profiles, lcms, renderings in core
+
+Implementation started on branch `task/chb-011-output` (worktree `agent-a416713ba50a28262`). This step builds `packages/output` stages 1 and 2 and the core half of stage 3: a streaming PNG16/TIFF16 writer with sinks, the CC0 Compact ICC v4 profiles bundled and parsed, the five output spaces whose maths are the profiles' own numbers, an lcms-wasm wrapper with a worker proxy, the printer-profile library, and in `@chromobench/core` the per-space display transform, the two renderings, and a CAM16-UCS knee next to OkLCh. The GPU display op follows core (any space, both renderings, an OkLCh knee kernel). All checks green: 2006 unit tests (baseline 1936), 42 browser tests.
+
+### Prompt Context
+
+**User prompt (verbatim):** not available to this agent; the work came through the orchestrator.
+**Orchestrator brief (not the user's words):** "You implement the M2 slice of ticket CHB-011 (output and colour management) … Scope for now (milestone M2: export the photographer's converted roll): Stage 1 (encoders: 16-bit PNG/TIFF, metadata, sinks), Stage 2 (colour management: the output spaces, ICC profiles embedded, lcms where the guide says), Stage 3 (display path), plus the two tasks moved here from CHB-005: the GPU 16-bit export precision path (rgba16uint upload, pack2x16unorm output) and the tiled-export driver (Stage 5) if time allows. Soft proofing (Stage 4) stays open." Plus the common brief `$SP/impl-brief-common.md` (branch, commits, lanes, CONTRACT-REQUESTS.md, diary).
+**Assistant interpretation:** Build `@chromobench/output` stages 1–3 and contribute the f64 maths to core and the WGSL to gpu, with the guide's acceptance numbers as tests.
+**Inferred user intent:** The photographer can export a converted roll as correctly tagged 16-bit files (milestone M2).
+**Commit (code):** see Step 17 (this step's work is committed together with this entry).
+
+### What I did
+
+- `pnpm install` (the worktree had no `node_modules`); `pnpm --filter @chromobench/output add lcms-wasm@1.0.5` and `-D fast-png@8.0.0 utif@3.1.0`. lcms-wasm 1.0.5 lists `tape` as a runtime dependency (127 packages, +1309 lockfile lines); root `package.json` gets `pnpm.overrides: {"lcms-wasm>tape": "-"}`, which leaves +52 lockfile lines.
+- Downloaded ten profiles from github.com/saucecontrol/Compact-ICC-Profiles (CC0; `$SP/chb011/fetch-icc.sh`): `sRGB-v4`, `DisplayP3-v4`, `Rec2020-v4`, `AdobeCompat-v4`, `ProPhoto-v4` and v2 variants, plus `LICENSE`, into `packages/output/src/icc/profiles/`; `scripts/bundle-profiles.ts` writes `bundled.ts` (base64 + sha256) so Node, workers and pages load them the same way.
+- `encode/`: `crc32.ts` (table CRC from 05-inline.js 3231–3244), `deflate.ts` (`DeflateStream` over `CompressionStream('deflate')` with a pump, `deflateAll`, `inflateAll`), `png16.ts` (`Png16Writer.open/writeRows/finish`: IHDR, cICP, iCCP | sRGB, pHYs, iTXt, IDAT about every 1 MiB, big-endian samples by explicit byte writes, 32-row batches, 8-bit output with a position-keyed TPDF dither), `tiff16.ts` (`Tiff16Writer`: sorted tags incl. 282/283/296/305/306/339/34675, 64-row strips; uncompressed → IFD first; Deflate → predictor 2, IFD at the end, offset patched via `writeAt`), `zip.ts` (port), `sinks.ts` (`MemorySink`, `CountingSink`, `opfsSink` with a sync access handle in workers or `createWritable` in windows, `pickerSink` over `showSaveFilePicker`, `abort()` deletes), `metadata.ts`, `quantise.ts`.
+- `icc/parse.ts` (header, tag table, XYZ, sf32, para types 0–4, curv, mluc/desc/text, bounds checks → `E_ICC_INVALID`; `matrixTrc` un-adapts colorants with chad⁻¹, or with Bradford from wtpt for v2), `icc/lcms/api.ts` (`createLcms`, `lcmsInWorker`; pixel types computed from the lcms2.h shift macros because lcms-wasm exports no `TYPE_RGB_FLT`/`TYPE_XYZ_FLT`), `icc/lcms/worker.ts`, `icc/library.ts` (`ProfileLibrary` in OPFS `profiles/` by SHA-256; `validatePrinterProfile` requires class `prtr` and an RGB device space).
+- Core `print/colour.ts`: `ICC_V4_RAW` (the five profiles' raw s15Fixed16 rXYZ/gXYZ/bXYZ/chad/para, extracted with `$SP/chb011/icc_raw.py`), `outputSpace(id)` (toXYZ = chad⁻¹·colorants, white = toXYZ·1), `decodeCurve`/`encodeCurve` (ICC parametric types; the inverse maps the ~1e-6 gap between the two s15-rounded segments to d), `rgbToXYZFromPrimaries`, `OUTPUT_PRIMARIES`.
+- Core `print/gamut.ts`: `oklabFor(space)` (Ottosson's M1 composed with the space's toXYZ, rows normalised so the space white is neutral), `cam16` (Li et al. 2017) and `jmhToUcs`/`ucsToJmh`, `perceptual(kind, space)`, `maxChromaOf` (per-pixel bisection, 40 halvings in f64), `compressOutput` with `space`, `lightness: [t, ℓ, p] | null` and `'cam16-ucs'`, `displaySetup`/`displayLinear`/`displayPixel`. `chain.ts` `displayEncode` now uses the space's matrix and TRC; `ops.ts` `output.display` uses `displaySetupAt(ctx, args)` (replaces `displayGain`, also exported for the GPU).
+- GPU: `physics/core.ts` `display()`; `chain/program.ts` `lowerDisplay()` and PROG fields `okM1`, `okM1i`; `pointwise.wgsl` op 8 gains `paraEnc` (any space's TRC), `okKnee`/`okMaxChroma` (26-step f32 bisection) and the tanh start in p1.w; `engine-gpu.ts` drops the srgb-only refusal and the oklch clip warning (cam16-ucs lowers to oklch with `W_PREVIEW_APPROX`).
+- Tests: `packages/output/test/encode.test.ts` (15), `icc.test.ts` (29), `display.test.ts` (26); `fixtures/golden/chb-011.json`; `core/test/engine-ref.test.ts` print-chain check moved to `displaySetup`. `packages/output/CONTRACT-REQUESTS.md` R1–R3.
+
+### Why
+
+- Decision D3 taken literally: core's constants are the embedded profiles' integers, so the encoded numbers and the profile cannot disagree; `icc.test.ts` parses the files and compares them exactly (and to the analytic matrices within 1e-4).
+- Per-pixel bisection for C_max instead of the guide's 101 × 360 table: exact in f64, the same algorithm in f32 WGSL, no table to build, key, upload or interpolate. The guide's table remains an optimisation if profiling ever asks for it.
+- Renderings as one Bradford from different source whites (guide §2.5, §5.2): scan-of-print adapts from the paper white and clips lightness at white; print-as-seen adapts from print-xyz's white and starts the one-sided lightness knee at the paper white's lightness.
+
+### What worked
+
+- `pnpm vitest run packages/output`: 15/15 on the first run of `encode.test.ts`; CRC 0xCBF43926, IEND AE 42 60 82; all 65,536 values bit-exact through fast-png and utif (none and Deflate+predictor).
+- `CHB_SLOW=1 node --expose-gc ./node_modules/vitest/vitest.mjs run packages/output -t streaming`: "png 100 MP: 553.7 MiB written, peak growth 78.5 MiB" (49.9 s); "tiff 100 MP: 4.5 MiB written, peak growth 0.0 MiB" (3.2 s; the synthetic band compresses to almost nothing with the predictor). The default run streams 4 MP.
+- Grey card (`scratch-grey.ts`, then `icc.test.ts`): sRGB 28895, 29969, 31663 (#70757b), P3 29089, 29934, 31499, Rec.2020 25885, 26455, 28114, ProPhoto 24704, 24959, 26470 (guide 26469) — every code within ±1 of the guide's table. Profile-derived matrices within 3.9e-5 (sRGB), 1.3e-5, 1.1e-5, 1.3e-5, 7.8e-6 of the analytic ones.
+- CAM16-UCS against colour-science 0.4.6 (`$SP/chb011/venv`, `$SP/chb011/cam16_ref.py`): max difference 1.8e-14 for six samples; forward∘inverse 4e-15.
+- lcms round trip (`createLcms`, RGB_16 → `cmsCreateXYZProfile`, relative intent): worst 1.15e-5 over seven colours × five spaces (tolerance 2e-4).
+- Paper white in scan-of-print: 65,535 in all three channels for all five spaces with oklch, cam16-ucs and clip. Print-as-seen paper white Y 0.813; black density 2.09 (0.48 % flare) and 1.35 (k₁ 4 %); scan-of-print black 2.28 below paper white.
+- `STUDIO_PORT=4461 CI=1 pnpm test:browser`: 42 passed; `chain:export-display` 0.0505 levels (print-as-seen, clip), 0.060 (scan-of-print, tanh) after the display change, as before.
+
+### What didn't work
+
+- Bash refused heredocs and `curl … raw.githubusercontent.com …` lines ("this command names git in a form too complex to verify that it stays inside the worktree"); scripts went into files under `$SP/chb011/` instead.
+- `pnpm typecheck`: "error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is enabled" for constructor parameter properties in `png16.ts`, `tiff16.ts`, `sinks.ts`; rewritten as fields.
+- CAM16 scale: my first `cam16(W)` used XYZ at Y = 1 and n = Y_b/Y_w = 20, giving J = 11.39 for XYZ (0.2, 0.3, 0.4) where colour-science's `XYZ_to_CAM16UCS` gives J′ = 63.15. colour-science's UCS functions multiply XYZ and XYZ_w by 100 (domain-range "reference"), so spektrafilm's knee runs with n = 0.2. Fixed in `perceptual()`.
+- lcms round trip, first run: "srgb worst 0.008564209226790014: expected … to be less than 0.0002". Two causes: core's `D50` constant (Z 0.82521) is not the ICC PCS illuminant (Z 0.8249) lcms adapts to; and (0.05, 0.08, 0.12) is outside sRGB (linear R −0.0208). With the PCS white and an in-gamut colour: 1.15e-5.
+- `display.test.ts` neutrals: "expected 1.3066532339456316e-7 to be less than 1e-7" — Ottosson's published M2⁻¹ has 10 digits, so OkLab round trips drift by 2.4e-7 at 0.9. `perceptual()` now uses `inv3(M2)` (round trip 1.8e-15); `pointwise.wgsl` `OK_M2I` uses the same values.
+- `pnpm test` under load (load average 12, other agents running): `tiles.test.ts` and `dust.test.ts` "Test timed out in 5000ms" once; both pass alone (20/20) and in the next full run.
+
+### What I learned
+
+- The AdobeCompat v4 profile is not v^(256/563): its para type 3 is gamma 2.2 with a linear toe (c = 1/32 below d = 0.0557). Following the embedded profile puts the grey card 8 codes above the guide's Adobe row (29062 vs 29054); the fixture records both.
+- The Compact profiles' Rec2020-v4 uses the BT.2020 OETF (α = 1.0993) and ProPhoto-v4 the ROMM curve with its linear segment (c = 1/16 below 1/32).
+- With spektrafilm's D(L_A = 64) = 0.912 the CAM16-UCS white is at a′, b′ = (−1.33, −0.76): the chroma knee would tint neutrals and scan-of-print could not keep paper white at 65,535. Core discounts the illuminant (D = 1); recorded as a deliberate difference in `gamut.ts` and CONTRACT-REQUESTS R1.
+
+### What was tricky to build
+
+- The TIFF IFD for Deflate: strip sizes are unknown until compressed, so the header goes out with a zero offset, the IFD and its out-of-line values are serialised at the (word-aligned) end, and `writeAt(4, …)` patches the offset. Uncompressed files compute offsets first and need no random access.
+- `DeflateStream` must read the compressed side concurrently (a pump) or `writer.write()` never resolves; a sink error in the pump cancels the reader so the next write rejects instead of hanging.
+- Exactness of paper white needs the rendering's source white and the space white to be the same vectors the matrix maps to (1, 1, 1): `white = toXYZ · (1, 1, 1)`, not a named D65 constant.
+
+### What warrants a second pair of eyes
+
+- `ops.ts` `output.display` semantics changed (CHB-003's file): scan-of-print now adapts from the paper white (tint removed) instead of dividing by its Y, and the oklch lightness knee starts at the paper white (print-as-seen) or is a clip (scan-of-print) instead of (0.7, 1, 2.2). `displayGain` is gone (only `packages/gpu` used it).
+- `displayEncode` (chain.ts) now uses the profile matrices for sRGB instead of Lindbloom's `XYZ_TO_SRGB` (≤ 4e-5 apart).
+- The cICP value for sRGB (1, 13, 0, 1) is still from memory of H.273 (task bk2k); the PNG policy writes the sRGB chunk alone for sRGB, so cICP is only written for Display P3.
+- lcms-wasm bundles Little CMS 2.16 (CVE-2026-41254 is reported up to 2.18); printer profiles are validated in TS first and lcms is meant to run in the worker.
+
+### What should be done in the future
+
+- GPU parity for the oklch knee and the non-sRGB spaces (next step), the 16-bit export path, the tiled export runner, configureCanvas.
+- CHB-002: decide CONTRACT-REQUESTS R1 (cam16-ucs vs cam16ucs) and R2.
+
+### Code review instructions
+
+- Start at `packages/core/src/print/gamut.ts` (`displaySetup`, `compressOutput`, `cam16`), `packages/core/src/print/colour.ts` (output spaces), `packages/output/src/encode/png16.ts`, `tiff16.ts`, `packages/output/src/spaces.ts`, `packages/gpu/kernels/pointwise.wgsl` (op 8).
+- `pnpm vitest run packages/output packages/core`; `CHB_SLOW=1 node --expose-gc ./node_modules/vitest/vitest.mjs run packages/output -t streaming`; `STUDIO_PORT=4461 CI=1 pnpm test:browser`.
+
+### Technical details
+
+- Sources: `$SP/chb011/spektra/gamut_compression.py` (spektrafilm main: `_CAM16UCS_L_A = 64.0`, `_CAM16UCS_Y_B = 20.0`, oklch table 64 × 720 with 18 bisections, cam16ucs J′ grid 1…110, chroma start 150); colour-science 0.4.6 in `$SP/chb011/venv`.
+- `$SP` = `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad`.

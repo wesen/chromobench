@@ -11,7 +11,7 @@ import {
 } from '@chromobench/contract';
 import { readTiff } from '@chromobench/engine-mock';
 import { ChainRunner, POINTWISE_WGSL } from './chain/run.ts';
-import { OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
+import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
 import { densitiesOf, rebateBox, type PhysicsData } from '@chromobench/core';
@@ -241,7 +241,7 @@ export class GpuEngine implements Engine {
     const segments: Segment[] = [];
     const warnings: Diagnostic[] = [];
     let cur: Segment = { ops: [], tables: {} };
-    const push = (op: PwOp, need: Partial<SegmentTables> = {}, disp?: Mat3) => {
+    const push = (op: PwOp, need: Partial<SegmentTables> = {}, disp?: Mat3, ok?: [Mat3, Mat3]) => {
       const clash = (Object.keys(need) as (keyof SegmentTables)[]).some((k) => cur.tables[k] && cur.tables[k] !== need[k]);
       if (cur.ops.length >= 12 || clash || (disp && cur.disp)) {
         segments.push(cur);
@@ -249,6 +249,7 @@ export class GpuEngine implements Engine {
       }
       Object.assign(cur.tables, need);
       if (disp) cur.disp = disp;
+      if (ok) cur.ok = ok;
       cur.ops.push(op);
     };
     for (let i = 0; i < nodes.length; i++) {
@@ -276,10 +277,10 @@ export class GpuEngine implements Engine {
         case 'view.flare': push({ code: OP.FLARE, p0: P.flare(ctx, a['flare'] as number), p1: [1], node: n.id }); break;
         case 'view.adapt': push({ code: OP.ADAPT, p0: P.adaptGains(ctx, a['to']), node: n.id }); break;
         case 'output.display': {
-          if (a['space'] !== 'srgb') fail('E_NOT_IMPLEMENTED', `output.display space ${String(a['space'])} is not implemented by the GPU engine (srgb only)`, { valid: ['srgb'] });
-          const knee = a['knee'];
-          if (knee === 'oklch') warnings.push({ code: 'W_PREVIEW_APPROX', message: 'the oklch knee is not implemented on the GPU yet (TODO CHB-011); clipped instead' });
-          push({ code: OP.DISPLAY, flags: knee === 'tanh-shoulder' ? 1 : 0, node: n.id }, {}, P.displayMatrix(ctx, a['rendering']));
+          // core's display setup (CHB-011): every space, both renderings, clip / tanh / oklch knees
+          const d = lowerDisplay(P.display(ctx, a), n.id);
+          if (d.approx) warnings.push({ code: 'W_PREVIEW_APPROX', message: 'the cam16-ucs knee has no GPU kernel yet; the oklch knee is used instead' });
+          push(d.op, {}, d.disp, d.ok);
           break;
         }
         case 'film.grain': {

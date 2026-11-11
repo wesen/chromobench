@@ -1,16 +1,16 @@
 # Tasks
 
 ## TODO
-- [ ] [stage 1] Port the table-driven CRC-32, the PNG chunk writer and the deflate helper (export.js 3231–3256); add the CRC test vectors 0xCBF43926 and 0xAE426082 <!-- t:a7w7 -->
-- [ ] [stage 1] Implement a streaming Png16Writer: IDAT chunks from CompressionStream, big-endian byte swap, pHYs, iTXt, and the colour-chunk policy per space <!-- t:y54v -->
-- [ ] [stage 1] Implement Tiff16Writer: sorted tags including 282/283/296, strips, Deflate with horizontal predictor, IFD-at-end patching, explicit little-endian writes <!-- t:b2oc -->
+- [x] [stage 1] Port the table-driven CRC-32, the PNG chunk writer and the deflate helper (export.js 3231–3256); add the CRC test vectors 0xCBF43926 and 0xAE426082 <!-- t:a7w7 -->
+- [x] [stage 1] Implement a streaming Png16Writer: IDAT chunks from CompressionStream, big-endian byte swap, pHYs, iTXt, and the colour-chunk policy per space <!-- t:y54v -->
+- [x] [stage 1] Implement Tiff16Writer: sorted tags including 282/283/296, strips, Deflate with horizontal predictor, IFD-at-end patching, explicit little-endian writes <!-- t:b2oc -->
 - [ ] [stage 1] Implement ByteSinks (OPFS sync access handle, showSaveFilePicker) and fix the screen-size 16-bit bug (4484) with a regression test <!-- t:vejp -->
-- [ ] [stage 2] Bundle the CC0 Compact ICC v4 profiles; write the ICC parser (header, tag table, XYZ, para, chad, mluc) and derive OutputSpace matrices and curves, tested against the analytic matrices <!-- t:6ej1 -->
-- [ ] [stage 2] Embed profiles: PNG sRGB/iCCP/cICP policy and TIFF tag 34675; verify with independent readers and libtiff <!-- t:5r58 -->
-- [ ] [stage 2] Wrap lcms-wasm in a module worker behind the Lcms interface; add the lcms round-trip test and the printer-profile library in OPFS with class validation <!-- t:i07v -->
-- [ ] [stage 2] Contribute output-space conversion (Bradford to the space's white, matrices, parametric curves) to core print/colour.ts with CHB-003 <!-- t:smhb -->
+- [x] [stage 2] Bundle the CC0 Compact ICC v4 profiles; write the ICC parser (header, tag table, XYZ, para, chad, mluc) and derive OutputSpace matrices and curves, tested against the analytic matrices <!-- t:6ej1 -->
+- [x] [stage 2] Embed profiles: PNG sRGB/iCCP/cICP policy and TIFF tag 34675; verify with independent readers and libtiff <!-- t:5r58 -->
+- [x] [stage 2] Wrap lcms-wasm in a module worker behind the Lcms interface; add the lcms round-trip test and the printer-profile library in OPFS with class validation <!-- t:i07v -->
+- [x] [stage 2] Contribute output-space conversion (Bradford to the space's white, matrices, parametric curves) to core print/colour.ts with CHB-003 <!-- t:smhb -->
 - [ ] [stage 3] Implement configureCanvas (display-p3 or srgb, rgba16float, reconfigure on color-gamut change) <!-- t:m97c -->
-- [ ] [stage 3] Implement the two renderings (print-as-seen, scan-of-print) and propose the scan-of-print flare compile rule; add paper-white exactness tests in all five spaces <!-- t:4of5 -->
+- [x] [stage 3] Implement the two renderings (print-as-seen, scan-of-print) and propose the scan-of-print flare compile rule; add paper-white exactness tests in all five spaces <!-- t:4of5 -->
 - [ ] [stage 3] Implement the CAM16-UCS knee (max-chroma table per space, f64 in core gamut.ts, WGSL in output.wgsl), keep the tanh shoulder, and add parity and knee-last tests <!-- t:s4tf -->
 - [ ] [stage 4] Build the 33³ proof table (proofing transform plus round-trip ΔE gamut channel), wire it into the output kernel, and test it against direct lcms transforms <!-- t:069x -->
 - [ ] [stage 4] Implement printer output: strip-wise lcms conversion from ProPhoto to the printer profile with intent and BPC, printer profile embedded in the TIFF <!-- t:joib -->
