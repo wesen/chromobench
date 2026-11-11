@@ -146,7 +146,7 @@ export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
         .center(
           ck.view.grid(s => (s as any).catalog.filtered, {
             id: 'grid',
-            cell: (p: Photo) => ck.column({}, ck.view.thumb({ src: '' }), ck.text(p.name, { dim: true })),
+            cell: (p: Photo) => ck.column({}, ck.view.thumb({ image: s => pictureOf(s, p.id), max: 160 }), ck.text(p.name, { dim: true })),
             size: s => s.view.thumbSize,
             select: { bind: s => s.ui.selection, mode: 'multi' },
             keys: { Enter: 'module.develop' },

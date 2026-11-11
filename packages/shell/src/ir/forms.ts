@@ -144,6 +144,7 @@ export const collectionSlots = {
   key: item<(it: any) => unknown>(),
   select: b<{ bind?: ((s: any) => unknown) | string; mode?: 'multi' | 'single' | 'none' }>(),
   activate: h(),
+  keys: b<Record<string, unknown>>(),
   context: t<unknown[]>(),
   dnd: b<Record<string, unknown>>(),
   empty: t<string>(),
@@ -178,6 +179,7 @@ export const histogramSlots = { data: t<unknown>(), clip: bind<unknown>(), regio
 // ── canvas ──
 export const viewportSlots = {
   image: t<unknown>('a renderable the render bridge accepts'),
+  label: t<string>(),
   before: t<unknown>(),
   arg: t<unknown>(),
   dims: t<[number, number] | null>('the source size, for 1:1 and proxies'),

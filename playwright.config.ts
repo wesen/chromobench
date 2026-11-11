@@ -4,6 +4,7 @@ import { defineConfig } from '@playwright/test';
 // new headless mode is selected with channel 'chromium'; the stripped headless shell has no WebGPU.
 // STUDIO_PORT lets parallel worktrees run their own dev servers side by side.
 const port = Number(process.env['STUDIO_PORT'] ?? 4173);
+const shellPort = Number(process.env['SHELL_DEMO_PORT'] ?? 4186);
 
 export default defineConfig({
   testDir: '.',
@@ -40,6 +41,13 @@ export default defineConfig({
         },
       },
     },
+    {
+      // CHB-018 shell demo (packages/shell/demo), its own server and port
+      name: 'shell-demo',
+      testDir: 'packages/shell/test/browser',
+      testMatch: ['**/*.spec.ts'],
+      use: { browserName: 'chromium', channel: 'chromium', baseURL: `http://localhost:${shellPort}` },
+    },
   ],
   webServer: [
     {
@@ -51,6 +59,12 @@ export default defineConfig({
     {
       command: 'pnpm --filter @chromobench/gpu exec vite --config parity-page/vite.config.ts --port 4185 --strictPort',
       port: 4185,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 60_000,
+    },
+    {
+      command: `pnpm --filter @chromobench/shell exec vite --config demo/vite.config.ts --port ${shellPort} --strictPort`,
+      port: shellPort,
       reuseExistingServer: !process.env['CI'],
       timeout: 60_000,
     },
