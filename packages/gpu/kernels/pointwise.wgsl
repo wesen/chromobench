@@ -268,10 +268,12 @@ fn okKnee(rgb: vec3<f32>, lightOn: bool, lightT: f32) -> vec3<f32> {
   var L = min(L0, 1.0);
   if (lightOn) { L = min(kneeR(L0, lightT, 1.0, 2.2), 1.0); }
   if (L >= 1.0) { return vec3<f32>(1.0); }
+  // the hue direction as a unit vector, not atan2/cos/sin: WGSL only requires 2^-11 absolute accuracy
+  // of sin/cos, which moved the hue by up to 1.5e-4 in linear RGB on SwiftShader
   let C = length(lab.yz);
-  let h = atan2(lab.z, lab.y);
-  let ca = cos(h);
-  let sa = sin(h);
+  var ca = 1.0;
+  var sa = 0.0;
+  if (C > 1e-12) { ca = lab.y / C; sa = lab.z / C; }
   let Cmax = okMaxChroma(L, ca, sa);
   var Cn = 0.0;
   if (Cmax > 0.0) { Cn = Cmax * kneeR(C / Cmax, 0.0, 1.0, 6.0); }

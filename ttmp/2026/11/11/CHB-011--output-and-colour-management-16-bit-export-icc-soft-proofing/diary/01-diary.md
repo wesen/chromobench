@@ -1098,3 +1098,112 @@ Implementation started on branch `task/chb-011-output` (worktree `agent-a416713b
 
 - Sources: `$SP/chb011/spektra/gamut_compression.py` (spektrafilm main: `_CAM16UCS_L_A = 64.0`, `_CAM16UCS_Y_B = 20.0`, oklch table 64 × 720 with 18 bisections, cam16ucs J′ grid 1…110, chroma start 150); colour-science 0.4.6 in `$SP/chb011/venv`.
 - `$SP` = `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad`.
+
+## Step 17: M2 implementation, part 2 — GPU parity for output.display, the 16-bit GPU export path, the tiled export runner, the display canvas
+
+This step finishes the GPU side of M2 and the export driver. `output.display` on the GPU now matches core's f64 in all five spaces, both renderings and all three knees. `GpuEngine.evaluateU16` uploads 16-bit sources as rgba16uint and reads back pack2x16unorm codes. `exportFrame` runs plan tiles in row bands into the PNG/TIFF writers, with progress, cancellation and sink clean-up. `configureCanvas` sets up the display canvas. Unit tests 2014/2014; browser 49/49 (18 e2e + 31 GPU parity).
+
+### Prompt context
+
+**User prompt (verbatim):** (none in this step; the orchestrator's CHB-011 brief: stages 1–3, tasks dajd and 4x53 if time allows, stage 4 open)
+
+**Assistant interpretation:** Prove the GPU output kernel against core, add the 16-bit GPU path, and build the export runner that CHB-019's export UI will call.
+
+**Inferred user intent:** The photographer can export a converted roll in 16 bits with the right profile, from the GPU engine, without the screen-size bug.
+
+### What I did
+
+- `pointwise.wgsl` op 8 (`okKnee`): the hue is carried as a unit vector (a, b)/C instead of atan2 → cos/sin. Error against core went from 1.5e-4 to 1.33e-5 linear.
+- `packages/gpu/src/parity/output-tests.ts` (registered in `page.ts`) and `packages/gpu/test/browser/output.spec.ts`, four tests:
+  - oklch knee in all spaces and renderings;
+  - clip and tanh shoulder;
+  - the 16-bit path;
+  - a broken variant that swaps the renderings and must fail.
+- `kernels/pack16.wgsl`: `unpack` (rgba16uint → rgba32float through a code→f32 table) and `pack` (pack2x16unorm, 8 bytes per pixel read back).
+- `engine-gpu.ts`:
+  - 16-bit TIFF sources are kept as `Uint16Array`.
+  - `sourceTexture(root, rect)` uploads only the region and caches the full frame.
+  - New `evaluateU16(ref, target)`.
+  - The result cache is an LRU capped at 256 MB.
+- `packages/output/src/export/run.ts`:
+  - `exportFrame(engine, req)` follows plan → tiles (row bands) → encoder → finalise. It uses `evaluateU16` where the engine has it, else evaluate + `toU16`.
+  - Below full scale it does one pass.
+  - Progress phases: plan/tiles/finalise/done.
+  - Cancellation is checked before every tile, then the sink is aborted and the export rejects with E_CANCELLED. Failures report "export failed in <phase> (tile n)".
+  - Recipe sidecar or embedded recipe.
+  - `exportNode(r, g)` compiles with displaySpace = the export space and swaps in the export knee.
+- `packages/output/src/display/canvas.ts`: `configureCanvas` (rgba16float, display-p3 when `(color-gamut: p3)` matches, reconfigures on change, falls back to the preferred format) and `displaySpace`.
+- Tests:
+  - `packages/output/test/export.test.ts` (8):
+    - tiles equal one pass bit for bit, and progress is monotonic;
+    - TIFF16 in ProPhoto decodes with utif;
+    - bug 4484 quarter-size regression;
+    - cancel after tile 3 leaves no OPFS file;
+    - a failing sink aborts;
+    - an edit during the export does not change the file;
+    - refusals;
+    - sidecar.
+  - `e2e/output.spec.ts` (3): canvas, a real OPFS sink with abort, lcms in its module worker.
+- `packages/output` devDependency `@chromobench/engine-mock` (lockfile +3 lines).
+
+### Why
+
+- The trig change: WGSL only bounds sin/cos to about 2^-11 absolute error. That alone is ~1e-4 in chroma at C = 0.3, far above f32 rounding. The unit-vector form needs only sqrt and divides.
+- `unpack` through a table: the first version multiplied by f32(1/65535). That product rounds twice and differs by an ulp from the CPU path's correctly rounded `code / 65535`. chain.spec's `segmentVsEngine` (which must be exactly 0) caught it at 7.9e-4 levels. A 256 KB table per bit depth gives the same f32 values as the CPU path.
+
+### What worked
+
+- GPU vs core f64, 2048 colours × 15 space/rendering pairs (61,440 values):
+  - oklch: max 1.33e-5 linear, 91 values over 2e-6, ≤ 1 16-bit code.
+  - clip: 6.7e-7.
+  - tanh: 5.9e-7.
+  - Paper white 65535 in scan-of-print in every space.
+  - The swapped-rendering variant fails at 0.99 linear.
+- 16-bit path:
+  - Tiles equal one pass bit for bit (tileDiff 0).
+  - The quarter-size export has 1474–1476 distinct values per channel and is not all multiples of 257.
+  - pack2x16unorm vs `Math.round(65535·f32)`: ≤ 1 code on 109 of 73,728 values.
+- `segmentVsEngine` is 0 again after the table fix; full GPU parity 31/31, conformance 179/179.
+
+### What didn't work
+
+- Port 4185 (gpu-parity's fixed port in `playwright.config.ts`) was held for the whole step by another worktree's vite (pid 2027766, agent-a780a23d243227508), so `pnpm test:browser` could not start its second webServer. I ran the two projects through standalone configs in `$SP/chb011/` instead: `pw-studio.config.mts` (chromium-webgpu on STUDIO_PORT 4461) and `pw-gpu.config.mts` (gpu-parity on 4462). A `.ts` config there failed with "SyntaxError: Cannot use 'import.meta' outside a module" when importing the base config; `.mts` works.
+- Canvas presentation does not work in headless Chromium on SwiftShader: every `getCurrentTexture()` threw "OperationError: A valid external Instance reference no longer exists." I probed rgba16float and bgra8unorm, with and without toneMapping, attached and detached: all eight failed. The e2e test checks the configuration (format, colour space, reconfiguration, onChange) and accepts that error where a draw is attempted.
+- The first u16 run: "expect(received).toBe(expected) Expected: 0 Received: 1" on packDiff. pack2x16unorm computes floor(0.5 + 65535·e) with the product in f32 (ulp up to 2^-8 codes near white), so values near a half code round the other way. The test now bounds it to 1 code on < 0.4% of values, with the reason in the spec.
+- chain.spec "Expected: 0 Received: 0.0007856078445911407" (segmentVsEngine): the unpack rounding above; fixed.
+- `pnpm test` once: bug 4484 regression "Test timed out in 5000ms" (11.6 s under load; ~2 s alone). It now has a 30 s timeout. A full e2e run once failed `ingest-libraw-worker` and `studio.spec` library; both pass alone and in the next full run (18/18).
+
+### What I learned
+
+- In WGSL, avoid trig in parity-critical kernels. A hue rotation with no change of angle never needs the angle.
+- "u × f32(1/max)" is not "u / max" in f32. Any GPU decode that must match a CPU f32 path bit for bit needs the CPU's own quotients.
+
+### What was tricky to build
+
+- The export runner has to work with both engines. RefEngine has no plan() and no u16 output; GpuEngine has both. The runner duck-types `evaluateU16`, falls back to a default grid, and assembles each band of tiles into rows before it writes.
+- Consistency during edits needs no locking: the runner holds one immutable NodeRef, and an edit interns new nodes. The test edits `print.lights` at tile 2 and gets the same bytes.
+
+### What warrants a second pair of eyes
+
+- Changes in `engine-gpu.ts` (CHB-005's file):
+  - async `sourceTexture` with region uploads;
+  - the u16 source form (8-bit sources keep the f32 path);
+  - the 256 MB result LRU;
+  - `evaluateU16`, which is not cached and is display-rgb only.
+- The cam16-ucs knee still falls back to oklch on the GPU with W_PREVIEW_APPROX. The CAM16 WGSL is not written (task s4tf stays open; the f64 version is in core).
+- Pinned global fields (7iba/4x53) are not exercised: neither engine has spatial ops or global fields yet. The runner evaluates each plan tile's `core` region and leaves the halo to the engine. The "with halo" half of l2dd is covered only at kernel level by gpu `spatial.spec`; l2dd stays open.
+- Not measured: SwiftShader ms per MP for the GPU export, and the 100 MP GPU cost. Work and progress are per tile, the source upload is region-only u16, and the read-back is 8 B/px.
+
+### What should be done in the future
+
+- Stage 4 (069x proof table, joib printer output), s4tf CAM16 WGSL, l2dd halo tiles once spatial ops exist, 6luo (contract, CHB-002), bk2k (cICP source).
+- Give the gpu-parity webServer a configurable port (like STUDIO_PORT), so parallel worktrees do not collide on 4185.
+
+### Code review instructions
+
+- Start at `packages/output/src/export/run.ts`, `packages/gpu/kernels/pack16.wgsl`, `engine-gpu.ts` (`uploadU16`, `readU16`, `evaluateU16`), `pointwise.wgsl` `okKnee`.
+- `pnpm vitest run packages/output`; `STUDIO_PORT=4461 CI=1 pnpm test:browser` (needs 4185 free), or the two configs under `$SP/chb011/`.
+
+### Technical details
+
+- Measurements are printed by `output.spec.ts` (`output:display`, `output:u16` lines) and `chain.spec.ts` (`chain:preview-display`).

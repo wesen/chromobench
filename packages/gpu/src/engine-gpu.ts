@@ -11,6 +11,7 @@ import {
 } from '@chromobench/contract';
 import { readTiff } from '@chromobench/engine-mock';
 import { ChainRunner, POINTWISE_WGSL } from './chain/run.ts';
+import pack16Code from '../kernels/pack16.wgsl?raw';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
@@ -30,6 +31,7 @@ export const GPU_OPS = [
 ] as const;
 
 const DEFAULT_UM_PER_PX = 6;
+const PACK16_WGSL: string = pack16Code;
 
 export interface GpuEngineOptions extends RuntimeOptions {
   runtime?: GpuRuntime;
@@ -44,9 +46,19 @@ export interface GpuEngineOptions extends RuntimeOptions {
   data?: PhysicsData;
 }
 
-interface SourceImg { w: number; h: number; c: number; data: Float32Array }
+/**
+ * A source image on the CPU: f32 samples (patterns, 8-bit files), or a 16-bit scan kept as its
+ * Uint16Array (`u16`, `samples` per pixel; CHB-011), uploaded tile by tile as rgba16uint.
+ */
+interface SourceImg { w: number; h: number; c: number; data?: Float32Array; u16?: Uint16Array; samples?: number; max?: number }
 interface Lowered { root: Node; segments: Segment[]; warnings: Diagnostic[] }
 interface Cached { data: Float32Array; width: number; height: number; region: Box; scale: number; warnings: Diagnostic[] }
+
+/** Result-cache budget: oldest entries go first (tiles of a large export must not pile up). */
+const RESULT_CACHE_BYTES = 256 * 2 ** 20;
+
+/** CHB-011: 16-bit RGB codes of a display-rgb node, packed on the GPU (pack2x16unorm). */
+export interface U16Result { node: string; width: number; height: number; region: Box; scale: number; data: Uint16Array; warnings: Diagnostic[] }
 
 const cancelled = () => new ChromobenchError({ code: 'E_CANCELLED', message: 'evaluation cancelled' });
 
@@ -76,6 +88,8 @@ export class GpuEngine implements Engine {
   readonly physics: CorePhysics;
   private readonly sources = new Map<string, SourceImg>();
   private readonly srcTex = new Map<string, GPUTexture>();
+  /** code → code/max as f32 (the f64 quotient rounded once, as the f32 path), per max; see uploadU16. */
+  private readonly unpackLut = new Map<number, GPUBuffer>();
   private readonly results = new Map<string, Cached>();
   private disposed = false;
   private recreating: Promise<void> | null = null;
@@ -122,6 +136,7 @@ export class GpuEngine implements Engine {
   // ---- device loss: drop GPU state, keep CPU state; recreate on the next call ----
   private dropDeviceState(): void {
     this.srcTex.clear();
+    this.unpackLut.clear();
   }
 
   private async ensure(): Promise<void> {
@@ -158,14 +173,16 @@ export class GpuEngine implements Engine {
     if (source.sha256 && source.sha256 !== sha) fail('E_DATA_HASH', `source bytes hash to ${sha.slice(0, 12)}…, not ${source.sha256.slice(0, 12)}…`);
     const raw = readTiff(bytes);
     const max = raw.bits === 16 ? 65535 : 255;
-    const data = new Float32Array(raw.width * raw.height * 3);
     let clipped = 0;
-    for (let i = 0; i < raw.width * raw.height; i++) for (let k = 0; k < 3; k++) {
-      const v = raw.data[i * raw.samples + (raw.samples === 3 ? k : 0)]!;
-      if (v >= max) clipped++;
-      data[i * 3 + k] = v / max;
+    for (let i = 0; i < raw.width * raw.height; i++) for (let k = 0; k < 3; k++) if (raw.data[i * raw.samples + (raw.samples === 3 ? k : 0)]! >= max) clipped++;
+    if (raw.bits === 16) {
+      // CHB-011: keep the 16-bit samples (no f32 copy of the scan); tiles upload as rgba16uint
+      this.sources.set(sha, { w: raw.width, h: raw.height, c: 3, u16: raw.data as Uint16Array, samples: raw.samples, max });
+    } else {
+      const data = new Float32Array(raw.width * raw.height * 3);
+      for (let i = 0; i < raw.width * raw.height; i++) for (let k = 0; k < 3; k++) data[i * 3 + k] = raw.data[i * raw.samples + (raw.samples === 3 ? k : 0)]! / max;
+      this.sources.set(sha, { w: raw.width, h: raw.height, c: 3, data });
     }
-    this.sources.set(sha, { w: raw.width, h: raw.height, c: 3, data });
     const info: SourceInfo = {
       sha256: sha, format: 'tiff', width: raw.width, height: raw.height, channels: 3, bits: raw.bits, sample: 'uint',
       encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [max, max, max], from: 'default' },
@@ -203,6 +220,8 @@ export class GpuEngine implements Engine {
     this.pool?.terminate();
     for (const t of this.srcTex.values()) t.destroy();
     this.srcTex.clear();
+    for (const b of this.unpackLut.values()) b.destroy();
+    this.unpackLut.clear();
     this.chain.destroy();
     if (this.ownsRuntime) this.rt.destroy();
   }
@@ -325,14 +344,113 @@ export class GpuEngine implements Engine {
     return { w: info.width, h: info.height, c: info.channels, data };
   }
 
-  private sourceTexture(root: Node): { tex: GPUTexture; img: SourceImg } {
+  /**
+   * The source as an rgba32float texture covering `rect` of the frame (the chain reads it with srcOrigin
+   * = rect's corner). The full frame is cached per source; a sub-rectangle (a tile of an export, a rebate
+   * box) is uploaded for this call only and returned `owned` (CHB-011: no full-frame upload for a tile).
+   */
+  private async sourceTexture(root: Node, rect: Box): Promise<{ tex: GPUTexture; owned: boolean }> {
     const img = this.sourceImage(root);
-    let tex = this.srcTex.get(root.id);
-    if (!tex) {
-      tex = this.chain.upload(img.data, img.w, img.h, img.c, `source.${root.id.slice(0, 8)}`);
-      this.srcTex.set(root.id, tex);
+    const full = rect.x === 0 && rect.y === 0 && rect.w === img.w && rect.h === img.h;
+    if (full) {
+      const t = this.srcTex.get(root.id);
+      if (t) return { tex: t, owned: false };
     }
-    return { tex, img };
+    const label = `source.${root.id.slice(0, 8)}`;
+    let tex: GPUTexture;
+    if (img.u16) tex = await this.uploadU16(img, rect, label);
+    else {
+      const d = img.data!;
+      const sub = full ? d : new Float32Array(rect.w * rect.h * img.c);
+      if (!full) for (let y = 0; y < rect.h; y++) sub.set(d.subarray(((rect.y + y) * img.w + rect.x) * img.c, ((rect.y + y) * img.w + rect.x + rect.w) * img.c), y * rect.w * img.c);
+      tex = this.chain.upload(sub, rect.w, rect.h, img.c, label);
+    }
+    if (full) this.srcTex.set(root.id, tex);
+    return { tex, owned: !full };
+  }
+
+  /** A rectangle of a 16-bit source → rgba16uint upload → rgba32float by kernels/pack16.wgsl `unpack`. */
+  private async uploadU16(img: SourceImg, rect: Box, label: string): Promise<GPUTexture> {
+    const rt = this.rt;
+    const src = img.u16!;
+    const s = img.samples ?? 3;
+    const rgba = new Uint16Array(rect.w * rect.h * 4);
+    for (let y = 0; y < rect.h; y++) {
+      let o = y * rect.w * 4;
+      let i = ((rect.y + y) * img.w + rect.x) * s;
+      for (let x = 0; x < rect.w; x++, o += 4, i += s) {
+        rgba[o] = src[i]!;
+        rgba[o + 1] = src[i + (s === 3 ? 1 : 0)]!;
+        rgba[o + 2] = src[i + (s === 3 ? 2 : 0)]!;
+        rgba[o + 3] = 65535;
+      }
+    }
+    const t16 = rt.textures.acquire({ format: 'rgba16uint', w: rect.w, h: rect.h, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }, `${label}.u16`);
+    rt.device.queue.writeTexture({ texture: t16 }, rgba, { bytesPerRow: rect.w * 8 }, [rect.w, rect.h]);
+    const out = rt.textures.acquire({ format: 'rgba32float', w: rect.w, h: rect.h, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING }, label);
+    const pipe = await rt.pipelines.get({ name: 'pack16.unpack', code: PACK16_WGSL, entryPoint: 'unpack' });
+    // code/max through a table, not code × f32(1/max): the product rounds twice and differs from the
+    // f32 path's correctly rounded quotient by an ulp on some codes, which the chain parity sees
+    const max = img.max ?? 65535;
+    let lut = this.unpackLut.get(max);
+    if (!lut) {
+      const t = new Float32Array(max + 1);
+      for (let i = 0; i <= max; i++) t[i] = i / max;
+      lut = rt.device.createBuffer({ size: t.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: `pack16.lut${max}` });
+      rt.device.queue.writeBuffer(lut, 0, t);
+      this.unpackLut.set(max, lut);
+    }
+    const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.u');
+    rt.device.queue.writeBuffer(ub, 0, new Uint32Array([rect.w, rect.h, 0, 0]));
+    const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: 32 } }, { binding: 1, resource: t16.createView() }, { binding: 2, resource: out.createView() }, { binding: 6, resource: { buffer: lut } }] });
+    const enc = rt.device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setPipeline(pipe);
+    pass.setBindGroup(0, bg);
+    pass.dispatchWorkgroups(Math.ceil(rect.w / 8), Math.ceil(rect.h / 8));
+    pass.end();
+    rt.device.queue.submit([enc.finish()]);
+    rt.buffers.release(ub);
+    rt.textures.release(t16);
+    return out;
+  }
+
+  /** The chain's rgba32float output → 16-bit RGB codes (kernels/pack16.wgsl `pack`, pack2x16unorm). */
+  private async readU16(tex: GPUTexture, w: number, h: number): Promise<Uint16Array> {
+    const rt = this.rt;
+    const pipe = await rt.pipelines.get({ name: 'pack16.pack', code: PACK16_WGSL, entryPoint: 'pack' });
+    const bytes = w * h * 8;
+    const sb = rt.buffers.acquire({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }, 'pack16.out');
+    const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.u');
+    rt.device.queue.writeBuffer(ub, 0, new Uint32Array([w, h, 0, 0]));
+    const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 3, resource: { buffer: ub, size: 32 } }, { binding: 4, resource: tex.createView() }, { binding: 5, resource: { buffer: sb, size: bytes } }] });
+    const enc = rt.device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setPipeline(pipe);
+    pass.setBindGroup(0, bg);
+    pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
+    pass.end();
+    rt.device.queue.submit([enc.finish()]);
+    const raw = await rt.readBuffer(sb, bytes);
+    rt.buffers.release(sb);
+    rt.buffers.release(ub);
+    // pack2x16unorm puts the first component in the low half; WebGPU platforms are little-endian
+    const u16 = new Uint16Array(raw);
+    const out = new Uint16Array(w * h * 3);
+    for (let i = 0; i < w * h; i++) { out[3 * i] = u16[4 * i]!; out[3 * i + 1] = u16[4 * i + 1]!; out[3 * i + 2] = u16[4 * i + 2]!; }
+    return out;
+  }
+
+  /** Adds a result, then drops the least recently used ones over RESULT_CACHE_BYTES (the new one stays). */
+  private cacheResult(key: string, res: Cached): void {
+    this.results.set(key, res);
+    let bytes = 0;
+    for (const r of this.results.values()) bytes += r.data.byteLength;
+    for (const [k, r] of this.results) {
+      if (bytes <= RESULT_CACHE_BYTES || k === key) break;
+      this.results.delete(k);
+      bytes -= r.data.byteLength;
+    }
   }
 
   /** Rebate transmittance for scan.density nodes: mean of the receiver over the rebate box. */
@@ -357,9 +475,8 @@ export class GpuEngine implements Engine {
     return out;
   }
 
-  async evaluate(ref: NodeRef, target: EvalTarget): Promise<ImageResult> {
+  private checkTarget(n: Node, target: EvalTarget): { info: ImageInfo; region: Box; scale: number } {
     if (target.signal?.aborted) throw cancelled();
-    const n = this.node(ref);
     if (n.info.kind !== 'Image') fail('E_WRONG_KIND', `${n.op} returns a value; use measure()`);
     this.check(n);
     const info = n.info as ImageInfo;
@@ -369,29 +486,67 @@ export class GpuEngine implements Engine {
     }
     const scale = quantizeScale(target.scale);
     if (!(scale > 0 && scale <= 1)) fail('E_ARG_RANGE', `scale ${target.scale} must be in (0, 1] or 'full'`);
+    return { info, region, scale };
+  }
+
+  /** Lowers and runs a node's chain over `region`; `read` turns the output texture into the result. */
+  private async render<T>(n: Node, info: ImageInfo, region: Box, scale: number, precision: EvalTarget['precision'], read: (tex: GPUTexture, w: number, h: number) => Promise<T>): Promise<{ px: T; width: number; height: number; warnings: Diagnostic[] }> {
+    const nodes = this.chainOf(n.id);
+    const treb = await this.rebates(nodes);
+    const low = this.lower(nodes, treb);
+    const width = Math.max(1, Math.round(region.w * scale));
+    const height = Math.max(1, Math.round(region.h * scale));
+    const um = (info.umPerPx.film ?? DEFAULT_UM_PER_PX) * (region.w / width);
+    this.fillGrain(low.segments, nodes, um);
+    const px = await this.gpu(async () => {
+      // pointwise chains read only their own pixels: the source is uploaded for the region alone
+      const { tex, owned } = await this.sourceTexture(low.root, region);
+      try {
+        const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
+        const out = await this.chain.run(segs, tex, [region.x, region.y], { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision });
+        try {
+          return await read(out, width, height);
+        } finally {
+          this.rt.textures.release(out);
+        }
+      } finally {
+        if (owned) this.rt.textures.release(tex);
+      }
+    });
+    return { px, width, height, warnings: low.warnings };
+  }
+
+  /**
+   * CHB-011 export precision path: the node at export precision as 16-bit RGB codes, packed on the GPU
+   * with pack2x16unorm (8 bytes per pixel read back instead of 16) and never cached. For display-rgb
+   * nodes (encoded values in [0, 1]); the tiled export runner calls it per tile.
+   */
+  async evaluateU16(ref: NodeRef, target: Omit<EvalTarget, 'precision'>): Promise<U16Result> {
+    const n = this.node(ref);
+    const { info, region, scale } = this.checkTarget(n, { ...target, precision: 'export' });
+    if (info.domain !== 'display-rgb') fail('E_DOMAIN', `evaluateU16 packs display-rgb, not ${info.domain}`);
+    const r = await this.render(n, info, region, scale, 'export', (tex, w, h) => this.readU16(tex, w, h));
+    if (target.signal?.aborted) throw cancelled();
+    return { node: n.id, width: r.width, height: r.height, region: { ...region }, scale, data: r.px, warnings: r.warnings };
+  }
+
+  async evaluate(ref: NodeRef, target: EvalTarget): Promise<ImageResult> {
+    const n = this.node(ref);
+    const { info, region, scale } = this.checkTarget(n, target);
     const key = `${n.id}|${scale}|${region.x},${region.y},${region.w},${region.h}|${target.precision}`;
     let res = this.results.get(key);
     if (!res) {
-      const nodes = this.chainOf(n.id);
-      const treb = await this.rebates(nodes);
-      const low = this.lower(nodes, treb);
-      const width = Math.max(1, Math.round(region.w * scale));
-      const height = Math.max(1, Math.round(region.h * scale));
-      const um = (info.umPerPx.film ?? DEFAULT_UM_PER_PX) * (region.w / width);
-      this.fillGrain(low.segments, nodes, um);
-      const px = await this.gpu(async () => {
-        const { tex } = this.sourceTexture(low.root);
-        const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
-        const out = await this.chain.run(segs, tex, [0, 0], { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision: target.precision });
-        const raw = await this.chain.readTexture(out, width, height);
-        this.rt.textures.release(out);
-        return raw;
-      });
+      const r = await this.render(n, info, region, scale, target.precision, (tex, w, h) => this.chain.readTexture(tex, w, h));
+      const { width, height, px } = r;
       if (target.signal?.aborted) throw cancelled(); // nothing partial enters the cache
       const c = info.channels;
       const data = new Float32Array(width * height * c);
       for (let i = 0; i < width * height; i++) for (let k = 0; k < c; k++) data[i * c + k] = px[4 * i + k]!;
-      res = { data, width, height, region, scale, warnings: low.warnings };
+      res = { data, width, height, region, scale, warnings: r.warnings };
+      this.cacheResult(key, res);
+    } else {
+      // most recently used last
+      this.results.delete(key);
       this.results.set(key, res);
     }
     const r = res;

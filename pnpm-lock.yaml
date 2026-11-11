@@ -186,6 +186,9 @@ importers:
         specifier: 1.0.5
         version: 1.0.5
     devDependencies:
+      '@chromobench/engine-mock':
+        specifier: workspace:*
+        version: link:../engine-mock
       fast-png:
         specifier: 8.0.0
         version: 8.0.0

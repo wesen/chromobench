@@ -12,6 +12,7 @@
     "lcms-wasm": "1.0.5"
   },
   "devDependencies": {
+    "@chromobench/engine-mock": "workspace:*",
     "fast-png": "8.0.0",
     "utif": "3.1.0"
   }
