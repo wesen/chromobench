@@ -270,7 +270,7 @@ Pushing means underexposing (rating the film at a higher exposure index) and dev
   | Profile | gamma factor g (R, G, B) | shift s | rms of fit | D_max (R, G, B) | f(0) |
   |---|---|---|---|---|---|
   | normal | 1, 1, 1 | 0 | – | 1.90, 1.73, 2.03 | 0.749, 0.759, 0.752 |
-  | push 1 | 1.25, 1.18, 1.24 | −0.01…0.00 | 0.019–0.034 | 2.30, 1.96, 2.26 | 0.751, 0.761, 0.747 |
+  | push 1 | 1.25, 1.18, 1.24 | −0.02…0.00 | 0.019–0.034 | 2.30, 1.96, 2.26 | 0.751, 0.761, 0.747 |
   | push 2 | 1.38, 1.30, 1.36 | −0.02…0.00 | 0.030–0.061 | 2.52, 2.01, 2.52 | 0.749, 0.761, 0.745 |
 
   The grey card's dye amount f(0) is unchanged, which suggests the push profiles put log H = 0 at the *pushed* exposure index (5.5 discusses what follows). The rms of 0.02 to 0.06 says a gamma stretch alone does not capture the change; the shoulder rises too.

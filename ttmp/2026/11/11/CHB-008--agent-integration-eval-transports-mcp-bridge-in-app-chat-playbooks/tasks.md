@@ -20,3 +20,4 @@
 - [ ] [stage 4] Write the five playbooks (test strip, ring-around, grey balance, dust pass, roll consistency) with doc lines and mock-engine tests <!-- t:siva -->
 - [ ] [stage 4] Implement opt-in transcript recording, the replay harness against engine-mock, and the metrics report feeding the pruning and redirect procedure <!-- t:hnav -->
 - [ ] [stage 4] Implement the budget-gated task evaluations on the reference engine (grey balance from +10 pt red, test strip aim 0.755) and the image-privacy settings <!-- t:u7mw -->
+- [ ] [errata] Line ~83: alpha = 0.75 cites §3.6, not §2.6; line ~933: grey card 0.755 is from the chapter-2 introduction, not §2.6 <!-- t:lzad -->

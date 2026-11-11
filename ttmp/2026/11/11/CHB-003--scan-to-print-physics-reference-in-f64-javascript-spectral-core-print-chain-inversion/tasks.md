@@ -17,3 +17,4 @@
 - [ ] [stage 3] Implement engine-ref.ts in exact and tabulated modes with op adapters for invert.*, print.*, view.*, output.display and measure.*; pass the CHB-002 conformance suite <!-- t:i839 -->
 - [ ] [stage 3] Reproduce the Gold 200 class percentages at 640 x 443 and 1,090 x 754 using test ports of the sample loader and sigmaD <!-- t:7zy5 -->
 - [ ] [stage 3] File the proposed contract additions (PhysicsConventions, residual channel, scan-classes, AutoBalance, aim, print-xyz white, scanner flare) with CHB-002 <!-- t:o8al -->
+- [ ] [errata] §8.3 Gold 200 fixture: cite 05-inline.js addSample (line 3916, flipH: true) for the horizontal flip, not 03-inline.js metadata <!-- t:ccc7 -->

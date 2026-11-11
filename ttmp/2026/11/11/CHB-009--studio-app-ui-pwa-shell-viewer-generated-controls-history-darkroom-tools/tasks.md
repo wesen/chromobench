@@ -20,3 +20,4 @@
 - [ ] [stage 6] Implement the keyboard shortcut map, ARIA labelling with aria-valuetext in darkroom units, live regions, and axe-core checks in Playwright <!-- t:grer -->
 - [ ] [stage 6] Implement the chat panel on CHB-008's ChatSession (streaming text, step cards, looks, approval cards, Stop, mode and effort selectors) <!-- t:rrhv -->
 - [ ] [stage 6] Write the M1 walking-skeleton Playwright test: open fixture TIFF, mock render, slider change, undo, DSL eval through window.chromobench.eval, canvas readback <!-- t:o944 -->
+- [ ] [errata] Line ~694: grey card 0.755 is from the chapter-2 introduction, not §2.6 <!-- t:vt4x -->

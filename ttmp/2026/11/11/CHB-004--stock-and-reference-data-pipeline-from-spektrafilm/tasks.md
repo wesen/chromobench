@@ -17,3 +17,4 @@
 - [ ] [stage 5] Have CHB-006 decode the TIFF and PNG subset of the synthetic frames <!-- t:urgj -->
 - [ ] [stage 6] Add licence files, CHANGELOG, attribution strings and About-screen data; script-check that no artefact mixes BY-SA and BY-NC-SA sources <!-- t:wlvi -->
 - [ ] [stage 6] Send the owner the decision list of Section 12.4 <!-- t:w6wv -->
+- [ ] Check the shipped irradiance_xy_tc.npy size at export: textbook/LFP say 192x192x81, spektrafilm code defaults to lut_size=128 <!-- t:o0m6 -->
