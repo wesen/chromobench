@@ -462,3 +462,59 @@ The guide follows the shared UI design brief and marks its refinements: a separa
 
 - IR kinds: `ui`, `recipe`, `patch`, `dag`, `kernel`, `tiles`, `mutations`. Code prefixes: `CK-` (I B K D L M T S V P X), `CB-` (A H L R V), and contract codes unchanged.
 - Contract requests: `EditLog.preview(ms: Mutation[] | null)`; `Diagnostic.where.file`. DSL requests: a shared vocabulary module; a host `propose(batch)` hook.
+
+## Step 6: Two open questions answered by the user
+
+The guide's two open design questions were put to the user: partial approval of a card that spans many frames, and
+whether re-running look parameters on every change (DR-2) is fast enough. Partial approval is now decided and
+written into the guide; speed stays open until there is something to measure.
+
+### Prompt Context
+
+**User prompt (verbatim):** "yes, partly approved. speed? i dunno, especially since we haven't started on webgpu. no
+worries we can always address that"
+**Assistant interpretation:** Allow partial approval; keep DR-2 (concrete re-run) and measure later.
+**Inferred user intent:** Do not block implementation on performance speculation.
+**Commit (code):** see the commit adding this step — "CHB-016: partial approval decided"
+
+### What I did
+
+- Edited `design-doc/01-intern-guide.md`: the Example 10 note and the §17 risk bullet now say partial approval is
+  allowed (fresh frames apply, stale ones stay on the card with "Apply anyway").
+
+### Why
+
+- Decisions belong where implementers read them; the diary records when and why.
+
+### What worked
+
+- Both sentences replaced exactly once.
+
+### What didn't work
+
+- No failures.
+
+### What I learned
+
+- The GPU engine exists (CHB-005) but is not wired into any UI yet; DR-2's cost is mostly recipe compile plus
+  render scheduling, measurable once CHB-019 runs a look on the real engine.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- N/A.
+
+### What should be done in the future
+
+- Measure DR-2 (look parameter drag → draft render latency) in CHB-019/CHB-021 once a look runs on GpuEngine.
+
+### Code review instructions
+
+- `grep -n "partial approval" design-doc/01-intern-guide.md`.
+
+### Technical details
+
+- N/A.

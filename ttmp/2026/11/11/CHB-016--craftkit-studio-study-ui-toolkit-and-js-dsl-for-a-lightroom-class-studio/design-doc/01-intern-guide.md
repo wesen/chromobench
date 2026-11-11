@@ -634,7 +634,7 @@ export const rollCard = ck.pass('roll.oneCard', { on: 'mutations', after: ['muta
 })
 ```
 
-Approving the card approves each log. If some frames are stale, the card lists them with "Apply anyway" for those; the others are applied. Whether a partial approval is acceptable is an open question (§17).
+Approving the card approves each log. If some frames are stale, the card lists them with "Apply anyway" for those; the others are applied. Partial approval is allowed (decided by the user, 2026-11-11).
 
 **Example 11: a parameterised look.** Parameters are declared with `ArgSpec`s, so they get the same controls, units and checks as recipe arguments. The patch function is concrete JS, re-run on every change (DR-2). More blue light makes the print's yellow dye denser, so `warmth` adds blue light.
 
@@ -915,7 +915,7 @@ CHB-016 owns the design, not the packages. Its stages keep the design honest whi
 - **Call sites in contract diagnostics.** The contract's `Diagnostic.where` has `line` and `col` but no file. Proposed: an optional `file`, so contract errors raised for a variant point at its file.
 - **The shared vocabulary module.** `packages/dsl/src/host.ts` owns the expansion today. Extracting it is a change in CHB-007's package; it blocks the one-vocabulary test, not the rest.
 - **The propose hook.** The DSL session should take a host `propose(batch)` callback so mutation passes run on agent batches (CHB-007/CHB-019).
-- **Cross-frame approval.** One card over 36 logs is not atomic: some frames can be stale. Open question for CHB-020/CHB-021: allow partial approval (current proposal), or refuse the whole card when any frame is stale.
+- **Cross-frame approval.** One card over 36 logs is not atomic: some frames can be stale. Decided (user, 2026-11-11): partial approval is allowed — fresh frames apply, stale ones stay on the card with "Apply anyway".
 - **Unified undo consistency** between a global stack and per-frame cursors (§9.3) is the trickiest piece of the bridge. Prototype it first.
 - **Call-site capture** relies on `Error().stack`, whose format differs between engines and is changed by bundling. Fine in dev; production builds need source maps or can drop sites.
 - **Proxied elements** cost something at build only; nothing proxied survives into state (CraftKit's `strip` already enforces that for the store).
