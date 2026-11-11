@@ -3,63 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Chromobench</title>
-    <link rel="stylesheet" href="/src/studio.css" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   </head>
   <body>
-    <div id="studio">
-      <header class="st-bar">
-        <div class="brand">Chromobench <i>M1 · mock engine</i></div>
-        <div class="frame-t"><small>Frame</small><b id="frame-name">no frame</b></div>
-        <label class="btn">Open TIFF…<input id="file" type="file" accept=".tif,.tiff,image/tiff" /></label>
-        <span class="sp"></span>
-        <span class="pill" title="SHA-256 of the committed recipe"><span>state</span><b id="hash">—</b></span>
-      </header>
-
-      <aside class="st-left">
-        <section class="sec">
-          <div class="h"><b>Print</b><span class="tag op">print.lights</span></div>
-          <p class="about">Printer lights shift the paper's log exposure per layer, shown in points (1 pt = 0.025 log H). Dragging previews; releasing records one edit.</p>
-          <div id="controls"></div>
-        </section>
-        <section class="sec">
-          <div class="h"><b>Agent</b></div>
-          <div class="sel-row"><label for="mode">Agent edits</label>
-            <select id="mode"><option value="ask" selected>ask first</option><option value="auto">apply at once</option><option value="read-only">read-only</option></select>
-          </div>
-          <p class="about">Until the DSL lands (CHB-007), try <code>chromobench.propose({'print.lights.logH': [0.1, 0, 0]}, 'warmer')</code> in the console.</p>
-        </section>
-      </aside>
-
-      <main class="st-mid">
-        <div class="tools">
-          <button id="undo" class="btn sm" disabled>Undo</button>
-          <button id="redo" class="btn sm" disabled>Redo</button>
-          <span class="sp"></span>
-          <span class="lbl" id="status">no frame</span>
-        </div>
-        <div class="canvas-wrap">
-          <div class="drop" id="drop"><div><b>Open a 16-bit RGB TIFF</b><br />e.g. fixtures/synthetic/m1-negative-96x64.tif</div></div>
-          <canvas id="view" width="96" height="64" hidden></canvas>
-        </div>
-        <div class="sreadout" id="readout"><span>move over the print to read values</span></div>
-      </main>
-
-      <aside class="st-right">
-        <section class="sec">
-          <div class="h"><b>Pending</b><span class="tag" id="pending-count">0</span></div>
-          <ul id="pending" style="list-style: none; margin: 0; padding: 0"></ul>
-        </section>
-        <section class="sec">
-          <div class="h"><b>History</b></div>
-          <div id="history"></div>
-        </section>
-        <section class="sec">
-          <div class="h"><b>Provenance</b><span class="tag">why</span></div>
-          <pre class="why" id="why"></pre>
-        </section>
-      </aside>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <noscript>Chromobench needs JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,13 @@
+{
+  "name": "Chromobench Studio",
+  "short_name": "Chromobench",
+  "description": "A colour darkroom in a browser tab.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

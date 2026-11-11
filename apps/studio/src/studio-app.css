@@ -1,0 +1,63 @@
+/* Studio components on top of studio.css (CHB-002's port of the Chromogen look): same tokens,
+   one ink, 1 px rules; red only for errors and pending agent changes. */
+.btn { position: relative; }
+.link { background: none; border: 0; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+button.hist-it { background: none; border: 0; padding: 0; width: 100%; text-align: left; font-size: 11px; color: inherit; cursor: pointer; }
+button.hist-it:hover span:nth-child(2) { text-decoration: underline; }
+.hist-it .sp { flex: 1; }
+.row-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+.bar-select { border: 1px solid var(--hair); background: var(--bg); color: var(--ink); font-size: 11.5px; padding: 3px 6px; border-radius: 0; }
+.ctl.unusual .val { font-style: italic; text-decoration: underline dotted; }
+kbd { font: 400 10.5px/1 var(--code); border: 1px solid var(--hair); padding: 1px 4px; }
+.sec input[type=number], .sec input:not([type]), form input { border: 1px solid var(--hair); background: var(--bg); color: var(--ink); font-size: 11.5px; padding: 3px 6px; border-radius: 0; }
+
+/* right panel tabs */
+.tabs { display: flex; border-bottom: 1px solid var(--hair); position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.tabs button { flex: 1; background: none; border: 0; border-right: 1px solid var(--hair); height: 34px; font-size: var(--fs-s); color: var(--ink-2); }
+.tabs button:last-child { border-right: 0; }
+.tabs button.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--ink); }
+.tool-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+
+/* viewer: the canvas is sized in device pixels and draws its own stage and hairline frame */
+.canvas-wrap canvas.viewer { object-fit: fill; image-rendering: auto; }
+.canvas-wrap .mask-overlay { position: absolute; inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); cursor: crosshair; touch-action: none; }
+.canvas-wrap canvas.viewer:focus-visible { outline: 1px solid var(--ink); outline-offset: -1px; }
+
+/* film strip */
+.strip { display: flex; gap: 6px; align-items: stretch; padding: 6px 14px; border-top: 1px solid var(--hair); overflow-x: auto; min-height: 92px; }
+.strip .cell { background: none; border: 1px solid var(--hair); padding: 3px; display: flex; flex-direction: column; gap: 2px; width: 104px; flex: none; font-size: 10px; text-align: left; position: relative; }
+.strip .cell.on { border-color: var(--ink); outline: 1px solid var(--ink); }
+.strip .cell img, .strip .cell .ph { width: 96px; height: 56px; object-fit: contain; background: var(--fill); display: block; }
+.strip .cell .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .badges { position: absolute; top: 4px; right: 5px; display: flex; gap: 3px; }
+.strip .badges .pend { color: var(--accent); }
+
+/* tools in the viewer area */
+.bands { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; border-top: 1px solid var(--ink); background: var(--bg); }
+.bands .band { flex: 1; background: none; border: 0; border-left: 1px solid var(--hair); padding: 4px 6px; display: flex; flex-direction: column; font-size: 11px; text-align: left; font-variant-numeric: tabular-nums; }
+.bands .band:first-child { border-left: 0; }
+.bands .band.now b { text-decoration: underline; }
+.bands .band:hover { background: var(--fill); }
+.ring { position: absolute; inset: 16px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ring-tile, .sheet-cell { background: none; border: 1px solid var(--hair); padding: 4px; display: flex; flex-direction: column; gap: 3px; font-size: 11px; align-items: center; min-height: 0; min-width: 0; overflow: hidden; }
+.ring-tile:hover, .sheet-cell:hover { border-color: var(--ink); }
+.ring-tile.now, .sheet-cell.now { border-color: var(--ink); outline: 1px solid var(--ink); }
+.canvas-wrap canvas.tile-img, .tile-img { position: static; inset: auto; cursor: pointer; width: 100%; height: 0; flex: 1 1 0; object-fit: contain; image-rendering: pixelated; min-height: 0; }
+.sheet-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.sheet { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; padding: 12px 16px; align-content: start; }
+.canvas-wrap .sheet-cell canvas.tile-img { height: 110px; flex: none; }
+
+/* exposure table */
+table.exp { width: 100%; border-collapse: collapse; font-size: 11px; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+table.exp th { text-align: left; font-weight: 400; color: var(--ink-2); border-bottom: 1px solid var(--ink); padding: 2px 3px; }
+table.exp td { border-bottom: 1px solid var(--rule); padding: 3px; vertical-align: middle; }
+table.exp tr.off td { color: var(--ink-2); text-decoration: line-through; }
+table.exp select { max-width: 70px; font-size: 11px; }
+
+/* dialogs */
+.modal { position: fixed; inset: 0; background: rgb(0 0 0 / 0.25); display: grid; place-items: center; z-index: 10; }
+.modal-box { background: var(--bg); border: 1px solid var(--ink); padding: 0 16px 12px; width: min(520px, 92vw); max-height: 80vh; overflow: auto; }
+
+@media (max-width: 1279px) {
+  #studio { grid-template-columns: 240px minmax(0, 1fr) 300px; }
+}

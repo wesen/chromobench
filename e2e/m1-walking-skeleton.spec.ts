@@ -13,10 +13,9 @@ async function idle(page: Page): Promise<void> {
 }
 const pixel = (page: Page) => page.evaluate(({ x, y }) => window.chromobench.pixel(x, y), P);
 const hash = (page: Page) => page.evaluate(() => window.chromobench.log!.stateHash);
-const canvasPixel = (page: Page) => page.evaluate(({ x, y }) => {
-  const c = document.getElementById('view') as HTMLCanvasElement;
-  return Array.from(c.getContext('2d')!.getImageData(x, y, 1, 1).data.slice(0, 3));
-}, P);
+// The studio (CHB-009) presents through WebGPU (Display P3) with a viewport transform, so the
+// canvas pixel of a document pixel is read back through the presenter's own pipeline.
+const canvasPixel = (page: Page) => page.evaluate(({ x, y }) => window.chromobench.canvasPixel(x, y), P);
 
 function near(a: number[] | null, b: number[], tol = 1e-4): void {
   expect(a).not.toBeNull();
