@@ -638,3 +638,58 @@ then "ok, clean up" (taken as approval of the proposal, including the CHB-007 DR
 ### Technical details
 
 - Remaining open tickets: CHB-004, -017, -018 (running); CHB-008, -010..-016, -019..-022.
+
+## Step 10: Correction — CHB-007 reopened, DR-1/DR-2 not confirmed
+
+In Step 9 I read the user's "ok, clean up" as confirming CHB-007's two decision records. The user corrected that:
+the "ok" was general. CHB-007 is reopened with task zr25 unchecked and annotated "awaiting the user's
+confirmation"; the DSL worker task stays moved to CHB-008.
+
+### Prompt Context
+
+**User prompt (verbatim):** "no actually the ok was generall, what were the questions in CHB-007?"
+**Assistant interpretation:** Undo the confirmation and explain DR-1 and DR-2.
+**Inferred user intent:** Decide the two records knowingly.
+**Commit (code):** see the commit adding this step — "CHB-007: reopen; DR-1/DR-2 await confirmation"
+
+### What I did
+
+- `docmgr task uncheck --ticket CHB-007 --id zr25`; replaced its note; `docmgr meta update --doc index.md --field
+  Status --value active`; `docmgr changelog update` with the reason.
+
+### Why
+
+- A decision recorded as the user's must be the user's.
+
+### What worked
+
+- Status back to active.
+
+### What didn't work
+
+- My Step 9 interpretation of a general "ok" as a specific confirmation.
+
+### What I learned
+
+- When a proposal bundles bookkeeping with a decision, ask for the decision separately.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- N/A.
+
+### What should be done in the future
+
+- Close CHB-007 once the user answers DR-1/DR-2.
+
+### Code review instructions
+
+- `docmgr task list --ticket CHB-007`
+
+### Technical details
+
+- DR-1: QuickJS-in-WASM (in a worker) vs plain Web Worker + CSP in a sandboxed iframe. DR-2: QuickJS sync build with
+  deferred host promises vs the asyncify build.
