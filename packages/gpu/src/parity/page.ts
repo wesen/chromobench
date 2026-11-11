@@ -13,7 +13,7 @@ import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 // the conformance generator, imported by path: the package index also exports Vitest wrappers
-import { generateCases, makeEnv } from '../../../conformance/src/generate.ts';
+import { generateCases, makeEnv } from '@chromobench/conformance/generate';
 
 async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, tol: number, name: string): Promise<ParityReport> {
   const rt = await runtime();

@@ -133,7 +133,7 @@ export function defaultRecipe(kind: FrameRecipe['kind'], source: NewSource, opts
     ...(source.name !== undefined ? { name: source.name } : {}),
     decode: { mode: kind === 'digital-raw' ? 'photo' : 'scan', encoding: 'linear', ...opts.decode },
   };
-  const knee = { method: 'cam16-ucs' as const, strength: 6 };
+  const knee = { method: 'oklch' as const, strength: 6 };
   const r: FrameRecipe = {
     version: RECIPE_VERSION,
     frame: opts.frame ?? `frame_${source.sha256.slice(0, 8)}`,
@@ -258,6 +258,22 @@ export function assertRecipe(x: unknown): asserts x is FrameRecipe {
 /** migrations[n] turns a version-n recipe into version n+1. Empty at v0/v1. */
 export const migrations: ReadonlyArray<(r: Record<string, unknown>) => Record<string, unknown>> = [];
 
+/**
+ * Value renames inside recipe version 1 (contract 0.1 → 0.2), applied by migrateRecipe after the
+ * version migrations: knee method 'cam16-ucs' → 'oklch' (it always was OkLCh; CHB-003 R5).
+ * Returns the recipe unchanged (same object) when nothing needs renaming.
+ */
+export function renameLegacyValues(x: Record<string, unknown>): Record<string, unknown> {
+  const knee = (o: unknown, k: 'display' | 'export'): Record<string, unknown> | undefined => {
+    const out = isObj(o) && isObj(o['view']) && isObj(o['view']['output']) ? o['view']['output'][k] : undefined;
+    return isObj(out) && isObj(out['knee']) ? out['knee'] : undefined;
+  };
+  if (![knee(x, 'display'), knee(x, 'export')].some((k) => k?.['method'] === 'cam16-ucs')) return x;
+  const copy = structuredClone(x);
+  for (const k of [knee(copy, 'display'), knee(copy, 'export')]) if (k?.['method'] === 'cam16-ucs') k['method'] = 'oklch';
+  return copy;
+}
+
 export function migrateRecipe(x: Record<string, unknown>): FrameRecipe {
   let cur = x;
   let v = Number(cur['version']);
@@ -266,6 +282,7 @@ export function migrateRecipe(x: Record<string, unknown>): FrameRecipe {
     cur = m(cur);
     v = Number(cur['version']);
   }
+  cur = renameLegacyValues(cur);
   assertRecipe(cur);
   return cur;
 }

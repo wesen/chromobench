@@ -302,7 +302,7 @@ export class GpuEngine implements Engine {
         case 'output.display': {
           if (a['space'] !== 'srgb') fail('E_NOT_IMPLEMENTED', `output.display space ${String(a['space'])} is not implemented by the GPU engine (srgb only)`, { valid: ['srgb'] });
           const knee = a['knee'];
-          if (knee === 'cam16-ucs') warnings.push({ code: 'W_PREVIEW_APPROX', message: 'cam16-ucs knee not implemented on the GPU yet (TODO CHB-011); clipped instead' });
+          if (knee === 'oklch') warnings.push({ code: 'W_PREVIEW_APPROX', message: 'the oklch knee is not implemented on the GPU yet (TODO CHB-011); clipped instead' });
           push({ code: OP.DISPLAY, flags: knee === 'tanh-shoulder' ? 1 : 0, node: n.id });
           break;
         }

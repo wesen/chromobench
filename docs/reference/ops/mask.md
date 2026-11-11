@@ -26,7 +26,8 @@ Elliptical mask.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` |  | Bounding box in source px. |
+| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` |  | Bounding box in source px (before rotation). |
+| `angle_deg` | number | deg | [-90, 90] |  | `0` |  | Rotation about the box centre. |
 
 ## `mask.feather`
 
@@ -94,7 +95,7 @@ Union (maximum).
 
 ## `mask.paint`
 
-Painted mask.
+Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).
 
 - Owner: CHB-009
 - On: Image (any) → Mask (mask)
@@ -103,4 +104,4 @@ Painted mask.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `strokes` | string |  |  |  | `"none"` |  | Id of a stroke set stored with mask.set. |
+| `strokes` | string |  |  |  | `"[]"` |  | Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"\|"erase"}], sensor px, simplified (RDP 0.5 px). |

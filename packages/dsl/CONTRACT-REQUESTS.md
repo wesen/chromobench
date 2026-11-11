@@ -1,5 +1,8 @@
 # CHB-007 contract requests
 
+> **Status (CHB-017, contract 0.2.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.2". Kept here as the record of the request.
+
 Requests for `@chromobench/contract`, applied by the orchestrator at merge time. The DSL works
 without them today; each describes what the DSL does locally in the meantime.
 

@@ -14,7 +14,8 @@ export interface Diagnostic {
 
 /**
  * The closed list of codes. Owners in comments. Codes starting with `W_` and the bare
- * upper-case words (RANGE, LOOKS, …) are warnings; `E_` codes are errors.
+ * upper-case words (RANGE, LOOKS, …) are warnings; `E_` codes and the JavaScript error names
+ * (SyntaxError, ReferenceError, TypeError, RangeError, Error; CHB-007, contract 0.2) are errors.
  * A ticket adds codes through CHB-002's change process (CONTRACT-DECISIONS.md).
  */
 export const ERROR_CODES = {
@@ -61,6 +62,12 @@ export const ERROR_CODES = {
   E_SANDBOX: 'Sandbox failure.',
   E_STALLED: 'The eval made no progress.',
   E_MEMORY: 'Sandbox memory limit exceeded.',
+  // JavaScript exceptions from agent code keep their names (CHB-007 R1, contract 0.2)
+  SyntaxError: 'The agent code does not parse; where.line points at it.',
+  ReferenceError: 'An undefined name; the hint says whether mem or a missing timer is the cause.',
+  TypeError: 'A JavaScript type error in agent code.',
+  RangeError: 'A JavaScript range error in agent code.',
+  Error: 'The agent code threw a plain Error (or a non-Error value).',
   // CHB-008 transports
   E_BUSY: 'Another eval is running.',
   E_SESSION: 'Session error.',
@@ -80,6 +87,7 @@ export const ERROR_CODES = {
   W_STOCK_NO_MODEL: 'The stock has no model for this quantity.',
   W_DATA_ILLUSTRATIVE: 'Illustrative (not measured) data in use.',
   W_ENCODING_ASSUMED: 'Source encoding was assumed.',
+  W_DECODE_NOTE: 'A fact about how the source was decoded (mode, levels applied, channel dropped); informational (CHB-006 #1, contract 0.2).',
   W_ICC_IGNORED: 'An embedded ICC profile was ignored.',
   W_CLIPPED: 'Clipped samples in the source.',
   W_FLAT_SHAPE: 'Flat field has an unexpected shape.',

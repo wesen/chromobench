@@ -42,10 +42,14 @@ describe('generated controls', () => {
     expect(m.format(15.119)).toBe('15.12 s');
     expect(m.aside!(15.119, 12)).toBe('+1/3 st');
   });
-  it('filtration: CC with the isolated-band aside', () => {
+  it('filtration: a signed CC shift on the neutral pack, with the isolated-band aside (contract 0.2)', () => {
     const m = model('print.enlarger.filtration');
-    expect(m.format({ c: 0, m: 51.6, y: 62.5 }, 2)).toBe('63 CC');
-    expect(m.aside!({ c: 0, m: 0, y: 62.5 }, { c: 0, m: 0, y: 52.5 }, 2)).toBe('≈ −4.0 pt B');
+    expect(m.min).toBe(-100);
+    expect(m.detents).toEqual([0]);
+    expect(m.format({ c: 0, m: -5, y: 10 }, 2)).toBe('+10 CC');
+    expect(m.format({ c: 0, m: -5, y: 10 }, 1)).toBe('−5 CC');
+    expect(m.format({ c: 0, m: -5, y: 10 })).toBe('(0, −5, +10) CC');
+    expect(m.aside!({ c: 0, m: 0, y: 10 }, { c: 0, m: 0, y: 0 }, 2)).toBe('≈ −4.0 pt B');
   });
   it('aperture: third-stop series and stops aside', () => {
     const m = model('print.enlarger.fstop');

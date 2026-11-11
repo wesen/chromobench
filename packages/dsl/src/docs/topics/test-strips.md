@@ -32,8 +32,8 @@ return cb.testStrip(frame, { vary: 'time', steps: 7, step: 5 })
 ## A ring-around
 
 ```js looks=1
-const ring = cb.ringAround(frame, { step_cc: 10 })
-ring.look('ring-around, 10 CC')
+const ring = cb.ringAround(frame, { step_pt: 4 })
+ring.look('ring-around, 4 points')
 return 'nine prints; see the look numbers'
 ```
 

@@ -1,5 +1,8 @@
 # Contract requests from CHB-003 (`@chromobench/core`)
 
+> **Status (CHB-017, contract 0.2.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.2". Kept here as the record of the request.
+
 Most CHB-003 proposals are already in contract v0 (CONTRACT-DECISIONS.md, CHB-003 #1–7). These are the
 gaps found while implementing the reference engine. Core works around each one locally; nothing here
 blocks merging.

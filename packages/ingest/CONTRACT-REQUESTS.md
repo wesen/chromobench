@@ -1,5 +1,8 @@
 # Contract requests from CHB-006 (ingest)
 
+> **Status (CHB-017, contract 0.2.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.2". Kept here as the record of the request.
+
 Contract v0 covers everything ingest needed (`SourceRef`, `DecodeOptions`, `SourceInfo`, `CameraColour`, `ScannerForward`, the `E_FORMAT` and `W_*` codes, `scan-classes`, `scalar-field`). The requests below are small. Ingest works around each one locally until they are applied.
 
 ## 1. An informational decoder note code

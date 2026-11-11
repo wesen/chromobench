@@ -88,7 +88,7 @@ export function genDts(): string {
 
 export function genInstructions(): string {
   const common = ['frame.print()', 'frame.negative()', 'neg.print({ time_s, lights, filtration, grade })', 'h.measure.densitometer({ at, aperture_px })', 'h.measure.stats({ box })',
-    'h.measure.patches({ cols, rows })', 'h.look(label)', "cb.testStrip(frame, { vary: 'time', steps, step })", 'cb.ringAround(frame, { step_cc })', "cb.compare([a, b], 'label')",
+    'h.measure.patches({ cols, rows })', 'h.look(label)', "cb.testStrip(frame, { vary: 'time', steps, step })", 'cb.ringAround(frame, { step_pt })', "cb.compare([a, b], 'label')",
     "frame.edit({ 'print.lights.logH': lights }, { why })", 'frame.edit.exposure.add({ id, kind, mask, stops })', "frame.why('path')", 'units.pt([4, 0, 0])', 'units.toPt(logH)',
     'units.stopsFromTime(t1, t2)', "h.mask.gradient({ from, to })", 'cb.help(name)', "cb.docs.search('text')", "cb.docs.read(id, { section })"];
   return [

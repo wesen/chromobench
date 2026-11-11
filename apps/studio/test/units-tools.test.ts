@@ -5,7 +5,7 @@ import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { describe, expect, it } from 'vitest';
 import { defaultFor } from '../src/core/frame-session.ts';
 import {
-  bandOffsets, exposureRows, maskSpec, parseMask, printingScript, ringTiles, simplify, stripMutation, stripValues, type MaskDoc, type Pt3,
+  bandOffsets, exposureRows, maskSpec, parseMask, printingScript, ringTiles, simplify, stripLabel, stripMutation, stripValues, type MaskDoc, type Pt3,
 } from '../src/core/tools.ts';
 import {
   burnSeconds, dodgeSeconds, filtrationAside, formatSeconds, formatStops, FSTOPS_THIRD, fstopLogH, fstopStops, PT, PT_PER_STOP, STOP, timeAtStops,
@@ -83,6 +83,11 @@ describe('test strip and ring-around', () => {
     expect(stripMutation('time', r, 15.1191)).toEqual({ op: 'set', path: 'print.enlarger.time_s', value: 15.1191 });
     expect(stripMutation('filtration.y', r, 10)).toEqual({ op: 'set', path: 'print.enlarger.filtration', value: { c: 0, m: 0, y: 10 } });
   });
+  it('a filtration strip steps the signed shift through 0 (contract 0.2) and is labelled with signs', () => {
+    expect(stripValues('filtration.y', 0, 5, 5)).toEqual([-10, -5, 0, 5, 10]);
+    expect(stripValues('filtration.m', -95, 5, 5)).toEqual([-100, -100, -95, -90, -85]);
+    expect([-10, 0, 2.5].map((v) => stripLabel('filtration.y', v))).toEqual(['−10 CC', '0 CC', '+2.5 CC']);
+  });
   it('+G (−M) at 4 pt is (+2, −4, +2) pt; the dominant component equals the step', () => {
     const tiles = ringTiles(G.ringAround.step_pt);
     const g = tiles.find((t) => t.id === 'G')!;
@@ -121,6 +126,7 @@ describe('masks', () => {
     const doc: MaskDoc = {
       shapes: [
         { kind: 'ellipse', cx: 48, cy: 32, rx: 10, ry: 8 },
+        { kind: 'ellipse', cx: 30, cy: 20, rx: 12, ry: 4, angle: 30 },
         { kind: 'gradient', from: [0, 0], to: [0, 64] },
         { kind: 'stroke', points: [[10, 10, 0.5], [20, 12, 0.5]], radius: 4, hardness: 0.5, mode: 'add' },
       ],
@@ -135,5 +141,12 @@ describe('masks', () => {
     engine.adopt(spec.nodes);
     const r = await engine.evaluate(root, { scale: 'full', precision: 'preview' });
     expect(r.info.domain).toBe('mask');
+    // the tilted ellipse (mask.ellipse.angle_deg) covers its rotated major axis, not the box corner
+    const tilted = spec.nodes.find((n) => n.op === 'mask.ellipse' && n.args['angle_deg'] === 30)!;
+    const e = g.adopt(spec.nodes.slice(0, spec.nodes.indexOf(tilted) + 1)).at(-1)!;
+    const m = await (await engine.evaluate(e, { scale: 'full', precision: 'preview' })).read();
+    const at = (x: number, y: number) => m[y * r.width + x];
+    expect(at(30 + 9, 20 + 5)).toBe(1); // 10.4 px along the 30° axis
+    expect(at(30 + 9, 20 - 5)).toBe(0);
   });
 });

@@ -74,13 +74,14 @@ export interface Exposure {
   time_s: number | null;
   /** Relative to the main time: burn t_main(2^s − 1), dodge t_main(1 − 2^−s). */
   stops: number | null;
-  /** Absolute pack; forbidden on dodge. */
+  /** The exposure's own pack (a shift on the database neutral, as print.enlarger.filtration); forbidden on dodge. */
   filtration: Cmy | null;
   through: 'base' | 'open' | null;
 }
 
-export type KneeMethod = 'cam16-ucs' | 'tanh-shoulder' | 'clip';
-/** Adapted from CHB-011: one strength parameter (p for cam16-ucs, s for tanh-shoulder). */
+/** 'oklch' was called 'cam16-ucs' before contract 0.2 (migrateRecipe rewrites it); CAM16-UCS proper is CHB-011's. */
+export type KneeMethod = 'oklch' | 'tanh-shoulder' | 'clip';
+/** Adapted from CHB-011: one strength parameter (p for oklch, s for tanh-shoulder). */
 export interface KneeSpec { method: KneeMethod; strength: number }
 export type OutputSpaceId = 'srgb' | 'display-p3' | 'rec2020' | 'adobe-rgb' | 'prophoto';
 export const OUTPUT_SPACES: readonly OutputSpaceId[] = ['srgb', 'display-p3', 'rec2020', 'adobe-rgb', 'prophoto'];
@@ -199,7 +200,7 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'capture.development.grain.seed': OP,
   // print
   'print.paper': OP,
-  'print.aim': spec({ type: 'enum', values: ['grey-0.184', 'midgray-normalised'], doc: 'aim the printer lights are relative to (CHB-003)' }),
+  'print.aim': OP,
   'print.enlarger.mode': OP,
   'print.enlarger.lamp': OP,
   'print.enlarger.filtration': OP,
@@ -218,7 +219,7 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'print.exposures.*.mask': spec({ type: 'string', doc: 'mask id in masks' }, true),
   'print.exposures.*.time_s': spec({ type: 'number', unit: 's', min: 0, max: 600, doc: 'absolute time' }, true),
   'print.exposures.*.stops': spec({ type: 'number', unit: 'stop', min: -6, max: 6, doc: 'relative to the main time' }, true),
-  'print.exposures.*.filtration': spec({ type: 'cmy', unit: 'CC', min: 0, max: 200, doc: 'absolute pack' }, true),
+  'print.exposures.*.filtration': spec({ type: 'cmy', unit: 'CC', min: -100, max: 200, doc: "the exposure's own pack, a shift on the database neutral like print.enlarger.filtration" }, true),
   'print.exposures.*.through': spec({ type: 'enum', values: ['base', 'open'], doc: 'flash through the base or open gate' }, true),
   'print.grade': OP,
   'print.preflash': OP,
@@ -232,7 +233,7 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'view.output.display.proof': custom('ProofSettings or null', (v) => (v === null || isObj(v) ? null : 'expected ProofSettings or null')),
   'view.output.export.format': OP,
   'view.output.export.space': spec({ type: 'enum', values: [...OUTPUT_SPACES], doc: 'export colour space' }),
-  'view.output.export.knee.method': spec({ type: 'enum', values: ['cam16-ucs', 'tanh-shoulder', 'clip'], doc: 'export knee' }),
+  'view.output.export.knee.method': spec({ type: 'enum', values: ['oklch', 'tanh-shoulder', 'clip'], doc: 'export knee' }),
   'view.output.export.knee.strength': spec({ type: 'number', unit: 'none', min: 0, max: 20, doc: 'export knee strength' }),
   'view.output.export.scale': custom("'full' or a number in (0, 1]", (v) => (v === 'full' || (fin(v) && v > 0 && v <= 1) ? null : "expected 'full' or a number in (0, 1]")),
   'view.output.export.dpi': OP,

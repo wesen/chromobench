@@ -1,5 +1,8 @@
 # CHB-005 contract requests
 
+> **Status (CHB-017, contract 0.2.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.2". Kept here as the record of the request.
+
 ## 1. A browser-safe entry point for the conformance generator
 
 **What.** Add a subpath export to `@chromobench/conformance` that does not import Vitest. For example:

@@ -17,7 +17,7 @@ export const VOCABULARY: readonly VocabEntry[] = Object.freeze([
   { name: 'frame.edit.exposure', call: 'frame.edit.exposure.add({ id, kind, mask, stops }, { why }) / .remove(id)', doc: 'proposes a dodge, burn, flash or split exposure (a mask handle is stored with it)' },
   { name: 'frame.why', call: "frame.why('print.lights.logH')", doc: 'who set a recipe value, and when' },
   { name: 'cb.testStrip', call: "cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })", doc: 'a test strip; its look carries one reading per band' },
-  { name: 'cb.ringAround', call: 'cb.ringAround(frame, { step_cc: 10 })', doc: 'a 3×3 ring-around; its look carries one reading per cell' },
+  { name: 'cb.ringAround', call: 'cb.ringAround(frame, { step_pt: 4 })', doc: 'a 3×3 ring-around; its look carries one reading per cell' },
   { name: 'cb.compare', call: "cb.compare([a, b], 'label')", doc: 'one side-by-side look; each half carries its own numbers' },
   { name: 'h.look', call: "h.look('label' | { label, box, at, size })", doc: 'queues an image for you, with the numbers it shows (max 4 per eval)' },
   { name: 'units', call: 'units.pt(x) · toPt · stops · toStops · stopsFromTime(t1, t2) · stopsFromFstop(n1, n2)', doc: 'unit conversions; numbers or arrays' },

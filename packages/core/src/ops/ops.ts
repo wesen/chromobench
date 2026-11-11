@@ -40,13 +40,9 @@ export class PhysicsEnv {
   private readonly memo = new Map<string, unknown>();
   readonly data: PhysicsData;
   readonly conv: Conventions;
-  readonly aim: Aim;
-  readonly sigmaD: Vec3;
-  constructor(data: PhysicsData, conv: Conventions, aim: Aim, sigmaD: Vec3) {
+  constructor(data: PhysicsData, conv: Conventions) {
     this.data = data;
     this.conv = conv;
-    this.aim = aim;
-    this.sigmaD = sigmaD;
   }
   cached<T>(key: string, make: () => T): T {
     if (!this.memo.has(key)) this.memo.set(key, make());
@@ -58,16 +54,25 @@ export class PhysicsEnv {
   forward(stock: string, scanner: string): ForwardModel {
     return this.cached(`fwd:${stock}:${scanner}`, () => makeForward(makeScanner(this.data, scanner), this.stock(stock)));
   }
-  chain(o: { film: string; paper: string; lamp: string; mode: 'normalised' | 'real'; filtration: Cmy; time_s: number; fstop: number }): PrintChain {
+  /** The print chain of a print.expose node: filtration is a shift on the database neutral pack; the aim is neutral under `aimView`. */
+  chain(o: ExposeSettings): PrintChain {
     return this.cached(`chain:${JSON.stringify(o)}`, () => makePrintChain({
       data: this.data, conv: this.conv, film: this.stock(o.film), paper: this.stock(o.paper), lamp: o.lamp, filtrationShift: o.filtration,
-      mode: o.mode, ...(o.mode === 'real' ? { real: { time_s: o.time_s, fstop: o.fstop } } : {}), aim: this.aim,
+      mode: o.mode, ...(o.mode === 'real' ? { real: { time_s: o.time_s, fstop: o.fstop } } : {}), aim: o.aim, view: o.aimView,
     }));
   }
   viewing(paper: string, illuminant: string): Viewing {
     return this.cached(`view:${paper}:${illuminant}`, () => makePrintChain({ data: this.data, conv: this.conv, film: this.stock('kodak_portra_400'), paper: this.stock(paper), view: illuminant, aim: 'midgray-normalised' }).viewing);
   }
 }
+
+/** print.expose's arguments plus the upstream film: everything its chain depends on. */
+export interface ExposeSettings {
+  film: string; paper: string; lamp: string; mode: 'normalised' | 'real'; filtration: Cmy; time_s: number; fstop: number; aim: Aim; aimView: string;
+}
+
+/** Contract defaults for nodes adopted from an older contract (args are filled by bindArgs otherwise). */
+export const DEFAULT_SIGMA_D: Vec3 = [0.0043, 0.0033, 0.0057];
 
 export type ImageOp = (ctx: OpCtx) => Img;
 export type ValueOp = (ctx: OpCtx) => Record<string, unknown>;
@@ -122,10 +127,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
   'invert.classes': (ctx) => classesOf(ctx),
   'print.expose': (ctx) => {
-    const ch = ctx.env.chain({
-      film: filmOf(ctx), paper: A(ctx, 'paper') as string, lamp: A(ctx, 'lamp') as string, mode: A(ctx, 'mode') as 'normalised',
-      filtration: A(ctx, 'filtration') as Cmy, time_s: num(ctx, 'time_s'), fstop: num(ctx, 'fstop'),
-    });
+    const ch = ctx.env.chain(exposeSettings(ctx.args, filmOf(ctx)));
     return mapPx(recv(ctx), 3, (px, o) => {
       const x = ch.xOfDyes(px);
       o[0] = x[0]; o[1] = x[1]; o[2] = x[2];
@@ -168,7 +170,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const from = currentWhite(ctx);
     const space = A(ctx, 'space') as OutputSpace;
     const kneeArg = A(ctx, 'knee') as string;
-    // cam16-ucs is not implemented yet: OkLCh with the same knee parameters stands in (guide §5.4 decision).
+    // 'oklch' (contract 0.2; 'cam16-ucs' before): OkLCh with spektrafilm's knee parameters (guide §5.4 decision).
     const compress: CompressSpec = { ...DEFAULT_COMPRESS, algorithm: kneeArg === 'clip' ? 'clip' : kneeArg === 'tanh-shoulder' ? 'tanh-shoulder' : 'oklch' };
     let gain = 1;
     if (A(ctx, 'rendering') === 'scan-of-print') {
@@ -183,12 +185,21 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
 };
 
-/** Per-pixel class codes. Needs the upstream invert.dyes input (density above rebate); σ from the engine. */
+/** print.expose arguments → chain settings (shared with the tabulated mode and packages/gpu). */
+export function exposeSettings(a: Readonly<Record<string, unknown>>, film: string): ExposeSettings {
+  return {
+    film, paper: a['paper'] as string, lamp: a['lamp'] as string, mode: a['mode'] as 'normalised' | 'real',
+    filtration: a['filtration'] as Cmy, time_s: a['time_s'] as number, fstop: a['fstop'] as number,
+    aim: (a['aim'] as Aim | undefined) ?? 'grey-0.184', aimView: (a['aimView'] as string | undefined) ?? 'D50',
+  };
+}
+
+/** Per-pixel class codes. Needs the upstream invert.dyes input (density above rebate); σ from the sigma argument. */
 function classesOf(ctx: OpCtx): Img {
   const r = recv(ctx);
   const inv = ctx.up('invert.dyes');
   const scan = inv ? ctx.image(inv.inputs[0]!) : undefined;
-  const sigma = ctx.env.sigmaD;
+  const sigma = (ctx.args['sigma'] as Vec3 | undefined) ?? DEFAULT_SIGMA_D;
   return mapPx(r, 1, (px, o, i) => {
     const res = r.c >= 4 ? px[3]! : 0;
     if (scan) {

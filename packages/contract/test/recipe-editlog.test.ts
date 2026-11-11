@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  check, ChromobenchError, defaultRecipe, EditLog, law, validateRecipe, type Diagnostic, type FrameRecipe, type Mutation, type Rng,
+  check, ChromobenchError, compile, CONTRACT_VERSION, defaultRecipe, EditLog, ERROR_CODES, getOp, Graph, law, migrateRecipe, renameLegacyValues,
+  validateRecipe, type Diagnostic, type FrameRecipe, type Mutation, type Rng,
 } from '@chromobench/contract';
 
 const SHA = 'cd'.repeat(32);
@@ -185,5 +186,69 @@ describe('edit log', () => {
     const again = new EditLog(JSON.parse(JSON.stringify(log.toJSON())) as ReturnType<EditLog['toJSON']>);
     expect(again.stateHash).toBe(log.stateHash);
     expect((again.state as FrameRecipe).print.grade).toBe(3);
+  });
+});
+
+describe('contract 0.2 (CHB-017)', () => {
+  it('the version and the new codes', () => {
+    expect(CONTRACT_VERSION).toBe('0.2.0');
+    for (const c of ['W_DECODE_NOTE', 'SyntaxError', 'ReferenceError', 'TypeError', 'RangeError', 'Error']) expect(Object.keys(ERROR_CODES)).toContain(c);
+  });
+
+  it('filtration is a signed shift: −10 Y validates, below −100 does not', () => {
+    const r = defaultRecipe('negative-scan', { sha256: SHA });
+    expect(validateRecipe({ ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, filtration: { c: 0, m: -5, y: -10 } } } })).toEqual([]);
+    const bad = validateRecipe({ ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, filtration: { c: 0, m: 0, y: -101 } } } });
+    expect(bad[0]!.code).toBe('E_ARG_RANGE');
+    expect(bad[0]!.path).toBe('print.enlarger.filtration');
+  });
+
+  it("knee 'cam16-ucs' is renamed 'oklch'; migrateRecipe rewrites pre-0.2 recipes", () => {
+    const r = defaultRecipe('negative-scan', { sha256: SHA });
+    expect(r.view.output.display.knee.method).toBe('oklch');
+    const old = structuredClone(r) as unknown as Record<string, any>;
+    old['view'].output.display.knee.method = 'cam16-ucs';
+    old['view'].output.export.knee.method = 'cam16-ucs';
+    expect(validateRecipe(old).length).toBeGreaterThan(0);
+    const m = migrateRecipe(old);
+    expect([m.view.output.display.knee.method, m.view.output.export.knee.method]).toEqual(['oklch', 'oklch']);
+    expect(old['view'].output.display.knee.method).toBe('cam16-ucs'); // the input is not mutated
+    expect(renameLegacyValues(r as unknown as Record<string, unknown>)).toBe(r);
+  });
+
+  it("an edit log persisted under 0.1 with 'cam16-ucs' loads, initial recipe and logged sets renamed", () => {
+    const log = fresh();
+    log.apply([{ op: 'set', path: 'view.output.display.knee.method', value: 'clip' }], 'user', 'knee');
+    const data = log.toJSON() as unknown as Record<string, any>;
+    data['initial'].view.output.display.knee.method = 'cam16-ucs';
+    data['entries'][0].m.value = 'cam16-ucs';
+    const back = new EditLog(data as never);
+    expect(back.toJSON().initial.view.output.display.knee.method).toBe('oklch');
+    expect(back.state.view.output.display.knee.method).toBe('oklch');
+  });
+
+  it('compile passes print.aim and the viewing light to print.expose', () => {
+    const r = defaultRecipe('negative-scan', { sha256: SHA });
+    r.print.aim = 'midgray-normalised';
+    r.view.illuminant = 'D65';
+    const g = new Graph();
+    g.registerSource({
+      sha256: SHA, format: 'tiff', width: 8, height: 6, channels: 3, bits: 16, sample: 'uint', encoding: { value: 'linear', evidence: 'format' },
+      levels: { black: [0, 0, 0], white: [65535, 65535, 65535], from: 'default' }, cfa: 'none', clippedFraction: 0, notes: [],
+    });
+    const root = compile(r, g);
+    const expose = g.closure(root.id).find((n) => n.op === 'print.expose')!;
+    expect(expose.args['aim']).toBe('midgray-normalised');
+    expect(expose.args['aimView']).toBe('D65');
+  });
+
+  it('ring-around steps are printer points; step_cc redirects with a hint', () => {
+    const op = getOp('darkroom.ringAround');
+    expect(op.args['step_pt']!.unit).toBe('point');
+    const g = new Graph();
+    const src = g.intern('source.pattern', [], { domain: 'film-dyes', width: 6, height: 6, seed: 1 }).node;
+    const d = diagOf(() => g.intern('darkroom.ringAround', [src.id], { step_cc: 10 }));
+    expect(d.code).toBe('E_UNKNOWN_OPTION');
+    expect(d.hint).toMatch(/points/);
   });
 });

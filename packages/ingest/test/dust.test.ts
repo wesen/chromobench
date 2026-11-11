@@ -59,7 +59,8 @@ describe('dust detection in density', () => {
 describe('heal laws (goja-cv heal_test.go 61–119, in density)', () => {
   const sigmaMean = (): number => (F.sigma[0] + F.sigma[1] + F.sigma[2]) / 3;
   const healWith = (method: 'patch' | 'diffuse'): ReturnType<typeof heal> => heal(F.D, F.w, F.h, spotsMask(R.spots.filter((s) => s.score >= 0.5), F.w, F.h), { marginPx: 1.5, method });
-  it('healed specks are within 1.5σ of the truth; nothing outside the grown targets changes', () => {
+  // ~2 s alone; under the full parallel suite it crossed the 5 s default (CHB-017 runs), hence the explicit timeout
+  it('healed specks are within 1.5σ of the truth; nothing outside the grown targets changes', { timeout: 30_000 }, () => {
     const h = healWith('patch');
     let sum = 0, n = 0;
     for (const p of F.specks) for (let y = Math.floor(p.cy - p.r); y <= Math.ceil(p.cy + p.r); y++) for (let x = Math.floor(p.cx - p.r); x <= Math.ceil(p.cx + p.r); x++) {

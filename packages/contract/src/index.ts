@@ -1,6 +1,6 @@
 // @chromobench/contract — the shared vocabulary every ticket codes against.
-// Importing this module registers the v0 catalog.
-export const CONTRACT_VERSION = '0.1.0';
+// Importing this module registers the catalog (contract 0.2: the Phase-1 requests, CHB-017).
+export const CONTRACT_VERSION = '0.2.0';
 
 export * from './errors.ts';
 export * from './units.ts';

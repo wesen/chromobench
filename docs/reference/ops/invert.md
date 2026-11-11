@@ -11,6 +11,10 @@ Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut.
 - Class: pointwise; binding: stock
 - Implementation: mock
 
+| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
+|---|---|---|---|---|---|---|---|
+| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` |  | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
+
 ## `invert.classify`
 
 Fractions of the frame per inversion class.
@@ -19,6 +23,10 @@ Fractions of the frame per inversion class.
 - On: Image (film-dyes) → Value
 - Class: measure; binding: stock
 - Implementation: mock
+
+| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
+|---|---|---|---|---|---|---|---|
+| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` |  | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
 
 Returns:
 

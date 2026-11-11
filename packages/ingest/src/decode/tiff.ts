@@ -334,10 +334,10 @@ export function decodeTiff(bytes: Uint8Array, o: TiffDecodeOptions = {}): RawIma
         }
         return m ? s / m : 0;
       });
-      if (period > 1) notes.push({ code: 'W_ENCODING_ASSUMED', message: `DNG BlackLevelRepeatDim ${rr}×${cc}: the pattern's mean black level is used per channel.` });
+      if (period > 1) notes.push({ code: 'W_DECODE_NOTE', message: `DNG BlackLevelRepeatDim ${rr}×${cc}: the pattern's mean black level is used per channel.` });
       from = 'file';
     }
-    if (d.tags.has(T.BlackLevelDeltaH) || d.tags.has(T.BlackLevelDeltaV)) notes.push({ code: 'W_ENCODING_ASSUMED', message: 'DNG BlackLevelDeltaH/V are ignored.' });
+    if (d.tags.has(T.BlackLevelDeltaH) || d.tags.has(T.BlackLevelDeltaV)) notes.push({ code: 'W_DECODE_NOTE', message: 'DNG BlackLevelDeltaH/V are ignored.' });
     const wl = d.tags.get(T.WhiteLevel);
     if (wl) {
       white = Array.from({ length: keep }, (_, ch) => wl[Math.min(ch, wl.length - 1)]!);

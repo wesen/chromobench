@@ -1,7 +1,7 @@
 // Mock maths for every catalog op. f64, deterministic, deliberately simple, but each formula moves
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
-import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Domain, type ImageInfo, type Point, type Vec3 } from '@chromobench/contract';
+import { DOMAINS, fail, LOGH_PER_POINT, mulberry32, type Box, type Cmy, type Domain, type ImageInfo, type Point, type Vec3 } from '@chromobench/contract';
 
 export interface Img {
   w: number;
@@ -331,12 +331,18 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
   'mask.ellipse': (ctx) => {
     const b = A(ctx, 'box') as Box;
+    const t = ((ctx.args['angle_deg'] as number | undefined) ?? 0) * (Math.PI / 180);
+    const [cos, sin] = [Math.cos(t), Math.sin(t)];
     return map(recv(ctx), 1, (_, x, y) => {
-      const u = (x + 0.5 - (b.x + b.w / 2)) / (b.w / 2);
-      const v = (y + 0.5 - (b.y + b.h / 2)) / (b.h / 2);
+      // rotate the pixel into the box frame (the box is the ellipse before rotation about its centre)
+      const dx = x + 0.5 - (b.x + b.w / 2);
+      const dy = y + 0.5 - (b.y + b.h / 2);
+      const u = (cos * dx + sin * dy) / (b.w / 2);
+      const v = (-sin * dx + cos * dy) / (b.h / 2);
       return [u * u + v * v <= 1 ? 1 : 0];
     });
   },
+  // strokes is canonical JSON (contract 0.2); the mock leaves painting to CHB-010 and returns an empty mask
   'mask.paint': (ctx) => map(recv(ctx), 1, () => [0]),
   'mask.feather': (ctx) => boxBlur(recv(ctx), num(ctx, 'radius_px') / 2),
   'mask.and': (ctx) => map(recv(ctx), 1, (px, x, y) => [Math.min(px[0]!, ctx.extra[0]!.data[y * ctx.extra[0]!.w + x]!)]),
@@ -360,13 +366,15 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     });
   },
   'darkroom.ringAround': (ctx) => {
+    // Printer lights in points (contract 0.2): cells +Y +R +M / +G current +B / −1 step +C +1 step.
+    // A colour cell moves the lights by (v − mean v)·1.5·step, so its dominant component is the step.
     const r = recv(ctx);
-    const st = num(ctx, 'step_cc');
-    const deltas: [number, number, number][] = [[st, 0, 0], [0, st, 0], [0, 0, st], [0, 0, 0], [0, 0, 0], [st, st, 0], [0, st, st], [st, 0, st], [0, 0, 0]];
+    const st = num(ctx, 'step_pt') * LOGH_PER_POINT;
+    const dir = (v: Vec3): Vec3 => { const m = (v[0] + v[1] + v[2]) / 3; return v.map((x) => (x - m) * 1.5 * st) as Vec3; };
+    const cells: Vec3[] = [dir([0, 0, 1]), dir([0, 1, 1]), dir([0, 1, 0]), dir([1, 0, 1]), [0, 0, 0], dir([1, 1, 0]), [-st, -st, -st], dir([1, 0, 0]), [st, st, st]];
     return map(r, 3, (px, x, y) => {
       const cell = Math.min(2, Math.floor((y * 3) / r.h)) * 3 + Math.min(2, Math.floor((x * 3) / r.w));
-      const d = deltas[cell]!;
-      return printPixel(rgb3(px), { ...DEFAULT_PRINT, filtration: { c: d[0], m: d[1], y: d[2] } });
+      return printPixel(rgb3(px), { ...DEFAULT_PRINT, lights: cells[cell]! });
     });
   },
   'darkroom.contactSheet': (ctx) => {

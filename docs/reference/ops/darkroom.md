@@ -36,7 +36,7 @@ Returns:
 
 ## `darkroom.ringAround`
 
-A ring-around: the print surrounded by prints with more and less of each filter.
+A ring-around: the print surrounded by prints moved one step towards and away from each colour, in printer lights.
 
 - Owner: CHB-010
 - On: Image (film-dyes) → Image (print-xyz)
@@ -45,7 +45,7 @@ A ring-around: the print surrounded by prints with more and less of each filter.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `step_cc` | number | CC | [2, 40] |  | `10` |  | Filtration step between prints. |
+| `step_pt` | number | point | [1, 16] | [2, 8] | `4` |  | Printer-light step between prints, in points (2, 4 or 8 are usual). Redirects: step_cc. |
 | `rings` | number | none | [1, 2] |  | `1` |  | Number of rings. |
 
 ## `darkroom.testStrip`
