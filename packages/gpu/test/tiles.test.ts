@@ -71,7 +71,7 @@ describe('planTiles: properties', () => {
       expect(cover.every((c) => c === 1)).toBe(true);
       expect(p.tiles.map((x) => x.index)).toEqual(p.tiles.map((_, i) => i));
     }
-  });
+  }, 30_000); // ~4–5 s of pixel bookkeeping on a loaded runner; the 5 s default timed out (CHB-010 diary Step 19)
 
   it('halos sum along a chain and take the max across chains', () => {
     const p1 = planTiles({ w: 4000, h: 3000, umPerPx: 5 }, [
