@@ -4,11 +4,14 @@ import {
   acceptsDomain, allOps, ChromobenchError, DOMAINS, DOMAIN_NAMES, Graph, nodeArgs, outputChannels, sha256Hex,
   type ArgSpec, type Diagnostic, type Domain, type Engine, type ImageInfo, type Node, type OpDef,
 } from '@chromobench/contract';
+import { semanticCases } from './semantics.ts';
 import { writeTiny16 } from './tiny-tiff.ts';
 
 export type CaseKind =
   | 'build' | 'wrong-domain' | 'hard-bound' | 'soft-bound' | 'unknown-option' | 'redirect' | 'canonical-id'
-  | 'shape' | 'region' | 'determinism' | 'measure-fields' | 'wrong-kind' | 'cancel' | 'not-implemented';
+  | 'shape' | 'region' | 'determinism' | 'measure-fields' | 'wrong-kind' | 'cancel' | 'not-implemented'
+  /** What an op computes (CHB-010: print.combine and mask.*), semantics.ts. */
+  | 'semantics';
 
 export interface EnvOptions {
   /** Test hook: conformance mutants swap the canonicaliser. */
@@ -302,6 +305,7 @@ export function generateCases(implemented: readonly string[]): Case[] {
       await expectCode('E_WRONG_KIND', () => env.engine.evaluate(n, { scale: 'full', precision: 'export' }));
     } });
   }
+  cases.push(...semanticCases(impl));
   return cases;
 }
 

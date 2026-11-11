@@ -1,0 +1,10 @@
+{
+  "ticket": "CHB-010",
+  "about": "Stage 3 (multi-exposure printing) and stage 4 (density masks) golden numbers of the CHB-010 intern guide §6.5, §6.6 and §9.2. Setup unless noted: Portra 400 on Portra Endura, TH-KG3 lamp, the database neutral pack, SPEKTRAFILM conventions, D50 viewing, no flare, real mode, aim 'midgray-normalised' (the guide's computations have no aim lights), main exposure 10 s at f/8. Points are 0.025 log H.",
+  "entries": [
+    { "id": "chb010.burn.feather", "section": "guide §6.5 finding 1, §9.1", "what": "featheredBurn", "mask": 0.5, "stops": 1, "expect": { "dx": 0.17609, "dxLogDomain": 0.15051 }, "tol": 0.000005, "note": "a one-stop burn at mask 0.5 adds log10(1 + 0.5); a log-domain burn would add 0.5·log10 2" },
+    { "id": "chb010.burn.featherDvis", "section": "guide §6.5 finding 1", "what": "featheredBurnDvis", "expect": { "linear": 1.247, "logDomain": 1.170 }, "tol": 0.004, "note": "1.2446 and 1.1676 here; the grey card itself sits 0.002 lighter than the guide's (chb010.grey.Dvis)" },
+    { "id": "chb010.split.lights", "section": "guide §6.5 finding 2, §9.2", "what": "split", "half": { "c": 0, "m": 30, "y": 0 }, "expect": { "lights_pt": [-0.32, -4.26, -0.01], "maxDeviation_pt": 0.48 }, "tol": 0.006, "note": "5 s through the neutral pack + 5 s through +30 M = one 10 s exposure with these lights at the grey card; deviation 0.36 points here over film log H −1.5…+2.0 (bound 0.48)" },
+    { "id": "chb010.densityMask.contrast", "section": "guide §6.6", "what": "densityMaskContrast", "amount": 0.6, "expect": { "largeAreaContrast": 0.4 }, "tol": 1e-9, "note": "a neutral contrast mask of strength γ leaves (1 − γ) of the large-area density difference: Chromogen's 100 % = 0.6 → 40 %" }
+  ]
+}
