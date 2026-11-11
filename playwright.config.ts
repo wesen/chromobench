@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   testMatch: ['e2e/**/*.spec.ts', 'tools/wgsl-check/**/*.spec.ts'],
+  testIgnore: ['**/node_modules/**', '.claude/**'],
   timeout: 60_000,
   reporter: [['list']],
   projects: [
