@@ -102,6 +102,17 @@ export class Studio {
     return e.log.propose(ms, { tx: o.tx ?? `eval-${++this.proposeSeq}`, ...(o.why ? { why: o.why } : {}) });
   }
 
+  /** the densitometer at a source pixel of the frame's print (print-xyz), as the probe and pins read it */
+  async measure(frame: string, recipe: FrameRecipe, x: number, y: number): Promise<{ D: number[]; visual?: number } | null> {
+    const e = this.frames.get(frame);
+    if (!e) return null;
+    const named = this.bridge.lower({ $: 'cb.image', frame, recipe, what: 'print', args: {}, expr: 'frame.print()' }).named;
+    const m = e.graph.intern('measure.densitometer', [named.id], { at: { x: Math.round(x), y: Math.round(y) }, aperture_px: 3 }).node;
+    this.engine.adopt(e.graph.closure(m.id));
+    const r = await this.engine.measure(m, { precision: 'preview' });
+    return r.value as { D: number[]; visual?: number };
+  }
+
   /** wait for log writes (tests) */
   flush(): Promise<unknown> {
     return this.frames.flush();

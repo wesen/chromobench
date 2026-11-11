@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test';
 // STUDIO_PORT lets parallel worktrees run their own dev servers side by side.
 const port = Number(process.env['STUDIO_PORT'] ?? 4173);
 const shellPort = Number(process.env['SHELL_DEMO_PORT'] ?? 4186);
+const kitPort = Number(process.env['STUDIO_KIT_PORT'] ?? 4187);
 
 export default defineConfig({
   testDir: '.',
@@ -48,6 +49,13 @@ export default defineConfig({
       testMatch: ['**/*.spec.ts'],
       use: { browserName: 'chromium', channel: 'chromium', baseURL: `http://localhost:${shellPort}` },
     },
+    {
+      // CHB-019 studio-kit dev host (packages/studio-kit/demo): the variants on MockEngine, its own server and port
+      name: 'studio-kit',
+      testDir: 'packages/studio-kit/test/browser',
+      testMatch: ['**/*.spec.ts'],
+      use: { browserName: 'chromium', channel: 'chromium', baseURL: `http://localhost:${kitPort}` },
+    },
   ],
   webServer: [
     {
@@ -65,6 +73,12 @@ export default defineConfig({
     {
       command: `pnpm --filter @chromobench/shell exec vite --config demo/vite.config.ts --port ${shellPort} --strictPort`,
       port: shellPort,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 60_000,
+    },
+    {
+      command: `pnpm --filter @chromobench/studio-kit exec vite --config demo/vite.config.ts --port ${kitPort} --strictPort`,
+      port: kitPort,
       reuseExistingServer: !process.env['CI'],
       timeout: 60_000,
     },

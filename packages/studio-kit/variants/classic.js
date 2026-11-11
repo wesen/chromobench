@@ -18,7 +18,7 @@ export const printModule = (ck, cb, o = {}) => m =>
       }),
     )
     .right(ck.dock.column({ width: 300 }, cb.panel.densitometer(), cb.panel.controls('darkroom'), cb.panel.exposures(), cb.panel.approvals(), ...(o.extraRight ?? [])))
-    .bottom(cb.view.strip({ id: 'strip-print' }))
+    .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-print' })))
     .keys({ ...cb.keys.views, ...cb.keys.darkroom });
 
 /** the Library module, shared with lab */
@@ -29,7 +29,7 @@ export const libraryModule = (ck, cb) => m =>
     .left(ck.dock.column({ width: 236 }, cb.panel.navigator(), cb.panel.library()))
     .center(ck.column({ grow: 1 }, cb.bar.filter(), cb.views.library()))
     .right(ck.dock.column({ width: 260 }, cb.panel.metadata()))
-    .bottom(cb.view.strip())
+    .bottom(ck.dock.column({ width: 124 }, cb.view.strip()))
     .keys({ ...cb.keys.cull, ...cb.keys.libraryModes });
 
 export const menus = m =>
@@ -55,7 +55,7 @@ export default {
         .key('Mod+Shift+E')
         .center(cb.view.grid({ id: 'picks', source: st => cb.visible(st).filter(f => f.flag === 'pick') }))
         .right(ck.dock.column({ width: 260 }, cb.panel.output()))
-        .bottom(cb.view.strip({ id: 'strip-output' })),
+        .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-output' }))),
     );
     return s;
   },

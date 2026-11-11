@@ -63,7 +63,6 @@ export const CB_FORMS: FormSpec[] = [
   panelSpec('cb.output', 'Save the print (CHB-011 replaces this with export and colour management)', { simple: b<boolean>() }),
   panelSpec('cb.chat', "The chat slot (CHB-008's chat kit fills it); until then window.chromobench.propose()"),
   spec('cb.steps', { steps: b<string[]>(), labels: b<Record<string, string>>() }, 'Step buttons for view.step with Next and Back'),
-  spec('cb.ring', { step: b<number>('points'), size: b<number>() }, 'A ring-around: the print and its neighbours one step towards each colour; click the best'),
   spec('cb.readout', { frame: t<string | null>() }, 'The densitometer line under the probe'),
   spec('cb.ribbon', { frame: t<string | null>() }, 'The ribbon over a shown agent proposal'),
   spec('cb.filter', { onChange: h() }, 'Search and flag filter for the library'),

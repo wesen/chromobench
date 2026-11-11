@@ -519,7 +519,25 @@ export function createCb(ck: Ck) {
     const centre = ring ? ck.match((s: any) => (s.ui?.tool === 'ring-around' ? 'ring' : 'view'), { view: vp, ring: ring_({}) }, { of: ['view', 'ring'] }) : vp;
     return ck.column({ grow: 1, class: 'cb-viewer' }, ...parts, centre);
   };
-  const ring_ = (o: { step?: number; size?: number }): any => node('cb.ring', o);
+  /** the ring-around (CHB-009's decision: ordinary print nodes with a lights offset, so the centre tile is the
+   *  main view's node by hash-consing); click the print that looks best */
+  const ring_ = (o: { step?: number; size?: number } = {}): any => {
+    const tiles = ringTiles(o.step ?? 4);
+    const tile = (t: (typeof tiles)[number]) =>
+      ck.column(
+        { class: `cb-ring-tile${t.id === 'current' ? ' is-current' : ''}` },
+        ck.view.thumb({ image: (s: any) => frame(s)?.ringTile(t.offset) ?? null, max: o.size ?? 200 } as any),
+        t.id === 'current' ? ck.ui.command('tool.none', { text: 'Keep this one', small: true }) : ck.ui.button(t.label, { run: ['ring.apply', t.offset, `Ring-around ${t.label}`], small: true } as any),
+      );
+    const at = (r: number, c: number) => tiles.find(t => t.row === r && t.col === c);
+    const colour = [0, 1, 2].flatMap(r => [0, 1, 2].map(c => at(r, c))).map(t => (t ? tile(t) : ck.spacer()));
+    return ck.column(
+      { class: 'cb-ring', grow: 1 },
+      ck.text(`Ring-around, ${o.step ?? 4} pt: click the print that looks best`, { strong: true }),
+      ck.grid({ cols: 3, class: 'cb-ring-grid' } as any, ...colour),
+      ck.row({ class: 'cb-ring-density' }, ...tiles.filter(t => t.row === 3).map(tile)),
+    );
+  };
 
   // ── cells and library views ──
   const cellFrame = (o: { size?: 'large' | 'small'; badges?: boolean; print?: boolean } = {}) => (item: CatalogFrame) =>
