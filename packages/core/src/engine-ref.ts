@@ -1,7 +1,7 @@
 // The reference engine (guide §5.7): implements the contract's Engine with core's f64 physics.
 // Slow but exact. Full-resolution results are cached per node id; previews and regions are sampled
 // from them (nearest sample, as the mock), so a region is bit-identical to the crop of the full result.
-// Mode 'exact' only; 'tabulated' (render through tables/) is open (TODO, CHB-005 parity).
+// Modes 'exact' and 'tabulated' (f64 tables through look3, the GPU preview's reference).
 import {
   ChromobenchError, fail, getOp, Graph, nodeArgs, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Domain, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
@@ -18,7 +18,14 @@ export interface RefEngineOptions {
   conv?: Conventions;
   /** Restrict capabilities().ops. */
   ops?: string[];
-  mode?: 'exact';
+  /**
+   * 'exact' (default): every pixel through the physics. 'tabulated': invert.dyes, print.expose and
+   * view.reflect read core's f64 N³ tables with the GPU's texel-centre trilinear lookup (look3), the
+   * reference the GPU preview path is compared with (CHB-005 parity).
+   */
+  mode?: 'exact' | 'tabulated';
+  /** Table size in tabulated mode (default 33). */
+  N?: number;
 }
 
 /** Every op the reference engine implements. */
@@ -39,7 +46,7 @@ export class RefEngine implements Engine {
 
   constructor(o: RefEngineOptions = {}) {
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
-    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv);
+    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
   }
 

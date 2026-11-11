@@ -1,12 +1,12 @@
 // Shared state of the parity page: one runtime (recreated after device loss), the Gold 200 set-up,
 // and the f64 reference tables built with the current oracle.
 import { GpuRuntime } from '../device.ts';
-import { buildTableF64, chromogenOracle, type F64Oracle } from '../physics/oracle.ts';
+import { buildTableF64, coreOracle, type F64Oracle } from '../physics/oracle.ts';
 import type { Table } from '../tables/inputs.ts';
 import { setup, type Setup } from './fixtures.ts';
 
-/** The f64 oracle the harness compares against. TODO(CHB-003): setOracle(coreOracle). */
-let oracle: F64Oracle = chromogenOracle;
+/** The f64 oracle the harness compares against: core's (CHB-017). setOracle swaps it for experiments. */
+let oracle: F64Oracle = coreOracle;
 export function setOracle(o: F64Oracle): void {
   oracle = o;
   refs.clear();

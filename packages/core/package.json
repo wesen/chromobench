@@ -5,11 +5,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./interim": "./src/data/interim.ts"
+    "./interim": "./src/data/interim.ts",
+    "./tables": "./src/tables/arrays.ts"
   },
   "dependencies": {
     "@chromobench/contract": "workspace:*",
     "@chromobench/engine-mock": "workspace:*"
   },
-  "devDependencies": { "@chromobench/conformance": "workspace:*" }
+  "devDependencies": {
+    "@chromobench/conformance": "workspace:*",
+    "@chromobench/ingest": "workspace:*"
+  }
 }

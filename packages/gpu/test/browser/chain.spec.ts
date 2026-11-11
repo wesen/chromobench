@@ -1,5 +1,5 @@
-// Stage 4 in headless Chromium: chain and lookup parity on synthetic Gold 200 frames against the
-// CPU f64 evaluation of the same program (interim reference until CHB-003's engine).
+// Stage 4 in headless Chromium: chain and lookup parity on synthetic Gold 200 frames against core's
+// reference engine on the same graph (CHB-017): exact, and tabulated (core's f64 tables, look3).
 import { expect, test, type Page } from '@playwright/test';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
@@ -21,18 +21,29 @@ test('export chain: film-dyes within 5e-6 of the exact f64 solve on reachable pi
   expect(r.flips).toBe(0);
 });
 
-// "Within one 8-bit level": the 8-bit encodings differ by at most 1. The continuous difference is
-// reported too; export reaches ~1.1 levels at the steepest part of the curve (pd/print table error).
-test('preview chain: display-rgb within one 8-bit level of the f64 reference', async ({ page }) => {
+// "Within one 8-bit level": the 8-bit encodings differ by at most 1. The preview renders through 33³
+// tables by design; against core's tabulated reference (the same tables in f64) it is within 0.05
+// level. Against core exact it reaches 1.6 levels (2 in 8 bits): that is the tables' interpolation of
+// core's pd and print, which core's own tabulated mode shows too (tabulatedVsExact), not GPU error
+// (CHB-017; with the interim Chromogen chain it was 1.1).
+test('preview chain: display-rgb within 0.1 level of core tabulated; table error alone separates it from core exact', async ({ page }) => {
   const r = await run(page, 'chain:preview-display');
-  expect(r.max8bit).toBeLessThanOrEqual(1);
+  expect(r.vsTabulated.max8bit).toBeLessThanOrEqual(1);
+  expect(r.vsTabulated.maxLevels).toBeLessThan(0.1);
+  expect(r.segmentVsEngine.maxLevels).toBe(0); // scanChain() is exactly GpuEngine's lowering of the graph
+  expect(r.max8bit).toBeLessThanOrEqual(2);
   expect(r.meanLevels).toBeLessThan(0.25);
+  expect(Math.abs(r.maxLevels - r.tabulatedVsExact.maxLevels)).toBeLessThan(0.1);
 });
 
-test('export chain: display-rgb within one 8-bit level of the f64 reference', async ({ page }) => {
+// Export integrates printing density and print XYZ per pixel (CHB-017), so it is within 0.1 level of
+// core exact in both renderings (print-as-seen with clip; scan-of-print with the tanh shoulder).
+test('export chain: display-rgb within one 8-bit level (0.1 continuous) of core exact', async ({ page }) => {
   const r = await run(page, 'chain:export-display');
   expect(r.max8bit).toBeLessThanOrEqual(1);
-  expect(r.meanLevels).toBeLessThan(0.25);
+  expect(r.maxLevels).toBeLessThan(0.1);
+  expect(r.tanhScanOfPrint.max8bit).toBeLessThanOrEqual(1);
+  expect(r.tanhScanOfPrint.maxLevels).toBeLessThan(0.1);
 });
 
 test('broken variant: lookups without the half-texel mapping fail the preview chain', async ({ page }) => {

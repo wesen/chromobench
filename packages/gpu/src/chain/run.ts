@@ -2,10 +2,9 @@
 // source (or the previous segment's output) and writing an rgba32float storage texture.
 import pointwiseCode from '../../kernels/pointwise.wgsl?raw';
 import type { GpuRuntime } from '../device.ts';
-import { curveRows } from '../physics/setup.ts';
-import type { Stock } from '../physics/spectral.ts';
+import type { CurveRow } from '../physics/core.ts';
 import type { TableManager } from '../tables/manager.ts';
-import { LOOKUP, packProgram, type Segment } from './program.ts';
+import { exactBits, LOOKUP, packProgram, packSpectra, type Segment } from './program.ts';
 
 export const POINTWISE_WGSL = pointwiseCode;
 
@@ -53,15 +52,13 @@ export class ChainRunner {
     return { t3: this.dummy3, t2: this.dummy2, buf: this.dummyBuf, samp: this.sampler };
   }
 
-  private curves(film: { name: string } & Pick<Stock, 'curves'>, paper: { name: string } & Pick<Stock, 'curves'>): GPUTexture {
-    const k = `${film.name}|${paper.name}`;
-    let t = this.curveTex.get(k);
+  private curves(row: CurveRow): GPUTexture {
+    let t = this.curveTex.get(row.id);
     if (!t) {
-      const { data } = curveRows(film as Stock, paper as Stock);
-      const N1 = data.length / 12;
-      t = this.rt.device.createTexture({ size: [N1, 3], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-      this.rt.device.queue.writeTexture({ texture: t }, data as Float32Array<ArrayBuffer>, { bytesPerRow: N1 * 16 }, [N1, 3]);
-      this.curveTex.set(k, t);
+      const N1 = row.data.length / 4;
+      t = this.rt.device.createTexture({ size: [N1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      this.rt.device.queue.writeTexture({ texture: t }, row.data as Float32Array<ArrayBuffer>, { bytesPerRow: N1 * 16 }, [N1, 1]);
+      this.curveTex.set(row.id, t);
     }
     return t;
   }
@@ -86,18 +83,16 @@ export class ChainRunner {
       const seg = segments[i]!;
       const tb = seg.tables;
       const res = async (inp: typeof tb.solve | typeof tb.pd) => (inp ? (await this.tables.resolve(inp, builder ? { builder } : {})).texture : d.t3);
-      // the exact solve needs no solve table
+      // the exact path needs no tables
       const solveTex = tb.solve && !exact ? await res(tb.solve) : d.t3;
-      const pdTex = await res(tb.pd);
-      const printTex = await res(tb.print);
-      const curveTex = tb.curves ? this.curves(tb.curves.film as Stock, tb.curves.paper as Stock) : d.t2;
+      const pdTex = !exact ? await res(tb.pd) : d.t3;
+      const printTex = !exact ? await res(tb.print) : d.t3;
+      const curveTex = tb.curves ? this.curves(tb.curves) : d.t2;
       let specBuf = d.buf;
       let ownSpec: GPUBuffer | null = null;
-      if (tb.solve && exact) {
-        const s = tb.solve;
-        const n = s.B.length;
-        const arr = new Float32Array(7 * n);
-        [...s.P, ...s.E, s.B].forEach((a, j) => { for (let q = 0; q < n; q++) arr[j * n + q] = a[q]!; });
+      if (exactBits(seg, exact)) {
+        // export: exact solve and exact pd / print integrals per pixel (no table interpolation)
+        const arr = packSpectra(seg);
         ownSpec = rt.buffers.acquire({ size: arr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }, 'pointwise.spectra');
         dev.queue.writeBuffer(ownSpec, 0, arr);
         specBuf = ownSpec;

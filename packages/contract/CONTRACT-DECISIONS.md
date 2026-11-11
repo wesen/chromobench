@@ -228,6 +228,33 @@ Decisions marked **(review)** were taken with sensible defaults and should be lo
 | studio #2 | `mask.ellipse.angle_deg` | accepted | deg, −90…90, default 0, rotation about the box centre. Mock implements it; the studio's `MaskShape` carries `angle` and round-trips it. Per-shape feather stays `mask.feather` |
 | studio #3 | Ring-around step unit **(review)** | adapted | `darkroom.ringAround.step_cc` → `step_pt` (unit point, 1…16, usual 2…8, default 4) with a `step_cc` redirect whose hint explains the change. Mock: cells +Y +R +M / +G current +B / −1 step +C +1 step, offsets (v − mean v)·1.5·step as in the studio. DSL docs and examples use `{ step_pt: 4 }` |
 
+### One physics for all engines (CHB-017 stage 2)
+
+No contract type changed; these are the rules every engine now follows.
+
+| Item | Decision |
+|---|---|
+| Conventions id | One id: core's `conventionsKey(conv)` (`core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean` by default) in `RefEngine` and `GpuEngine` capabilities and in every GPU `TableKey`. `chromogen-interim-0` is gone |
+| Stock and reference data | `PhysicsData` (core `data/provider.ts`) is the only way in. Interim provider: core's `interimFromJson` (browser-safe) and `interimData()` (Node; reaches `node:fs` through `process.getBuiltinModule`, so core's index also loads in a page). **Switch point for CHB-004:** `packages/gpu/src/physics/data.ts` `defaultPhysicsData()` / `GpuEngineOptions.data`, `RefEngineOptions.data` |
+| GPU f64 oracle | core's `solveNode` / `spectralNode` over the table arrays (`@chromobench/core/tables`); worker, main-thread and parity tables are core's tables (solve table bit-identical to `buildSolveTable` in Studio node order, pd/print to f32 rounding). The Chromogen port in `packages/gpu/src/physics/` is deleted, and with it `fixtures/chromogen/` |
+| GPU lowering | Parameters from core for the same nodes: filtration shift on the neutral pack, `aim`/`aimView`, normalised mode ignoring time and f-stop (as core), core's paper developer (grade → gamma morph) as the 1-D curve row, flare white, `view.adapt` (new GPU op, Bradford gains), display matrix `XYZ_TO_SRGB · Bradford(white → D65) · gain`, core's tanh shoulder, densitometer/patch densities (`densitiesOf`) |
+| GPU `print-xyz` | XYZ under the viewing light with Y(perfect white) = 1, as the domain says and core does (it was D65-adapted in the interim chain) |
+| GPU export path **(review)** | Printing density and print XYZ are integrated per pixel on export (exact bits in the pointwise kernel), not looked up tetrahedrally as CHB-005's guide planned. Reason: against core exact, the 33³ tables cost up to 1.8 levels; exact integrals bring export to 0.05 level. Preview still renders through tables |
+| Reference engine | `RefEngine({mode: 'tabulated'})` renders `invert.dyes`, `print.expose` and `view.reflect` through core's f64 tables with the GPU's texel-centre trilinear lookup; `scan.density` is implemented (box mean or the brightest 5 % column band, as the mock; the GPU now uses the same rule when no box is given) |
+| Ingest | `forward-stub.ts` is deleted; hosts pass core's `scannerForward(data, scanner, conv)`. The Gold 200 ranking golden (`fixtures/golden/ingest-laws.json`) reproduces under CHROMOGEN conventions (missing samples = zero density), as it was computed **(review)**: under core's default (missing = opaque) Ektar 100 reads 0.304 instead of 0.202 D in red, because its base data stops at 700 nm inside the 678 nm LED's tail; Gold 200 still ranks first and C200 second. Which convention ingest's ranking should use in the studio is CHB-006/CHB-013's call |
+| Per-channel flare | Deferred to CHB-013 (ingest #2 above) |
+
+GPU parity against core (SwiftShader, synthetic Gold 200 frame 96 × 64, `packages/gpu/test/browser`):
+
+| Check | Interim (Chromogen) | Core (CHB-017) | Tolerance |
+|---|---|---|---|
+| Solve table vs f64 | ≤ 2.2e-6 | 2.15e-6, 0 flips | 2.2e-6 (unchanged) |
+| pd table / print table | ≤ 7.2e-7 / 4.2e-7 | 7.15e-7 / 2.98e-7 | unchanged; print with a Bradford M 6e-7 (new check, 1e-6) |
+| Export film-dyes vs exact | ≤ 5e-6 | 5.3e-7 | 5e-6 (unchanged) |
+| Export display vs exact | 1.10 levels | 0.05 levels (0.06 scan-of-print + tanh) | ≤ 1 in 8 bits, < 0.1 continuous (tightened) |
+| Preview display vs core tabulated | — | 0.046 levels | < 0.1 continuous (new) |
+| Preview display vs core exact | ≤ 1 in 8 bits | 1.59 levels, 2 in 8 bits | ≤ 2 in 8 bits, mean < 0.25 (moved: the 33³ tables' own error, 1.61 levels in core's tabulated mode) |
+
 ### Change notes (contract 0.2)
 
 ```text

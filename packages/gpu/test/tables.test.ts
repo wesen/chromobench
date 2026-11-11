@@ -1,21 +1,21 @@
-// Stage 3 (node-side): interim f64 oracle, table keys, cache file format, lookups, half floats.
-import { readFileSync } from 'node:fs';
+// Stage 3 (node-side): the f64 oracle (core's, CHB-017), table keys, cache file format, lookups, half floats.
 import { describe, expect, it } from 'vitest';
-import { buildTableF64, chromogenOracle, look3, tableNodes, tetra3 } from '../src/physics/oracle.ts';
-import { pdInputs, printInputs, solveInputs } from '../src/physics/setup.ts';
-import { loadStock, scannerChannels, type CameraJson, type StockJson } from '../src/physics/spectral.ts';
+import { buildPdTable, buildPrintTable, buildSolveTable, conventionsKey, DEFAULT_CONVENTIONS, exposeSettings } from '@chromobench/core';
+import { CorePhysics } from '../src/physics/core.ts';
+import { defaultPhysicsData } from '../src/physics/data.ts';
+import { buildTableF64, coreOracle, look3, tableNodes, tetra3 } from '../src/physics/oracle.ts';
 import { decodeTable, encodeTable, MemoryStore, TableCache } from '../src/tables/cache.ts';
 import { keyFor, tableId } from '../src/tables/keys.ts';
 import { toHalf } from '../src/tables/manager.ts';
 import { nodeAt, type SpectralInputs, type Table } from '../src/tables/inputs.ts';
 
-const fx = (n: string) => JSON.parse(readFileSync(new URL(`../../../fixtures/chromogen/${n}.json`, import.meta.url), 'utf8'));
-const gold = loadStock(fx('kodak_gold_200') as StockJson);
-const endura = loadStock(fx('kodak_portra_endura') as StockJson);
-const camera = fx('generic-bayer') as CameraJson;
-const si = solveInputs(scannerChannels('xt5-fitted', camera), gold, 9);
+const P = new CorePhysics(defaultPhysicsData());
+const es = exposeSettings({ paper: 'kodak_portra_endura', mode: 'normalised', lamp: 'TH-KG3', filtration: { c: 0, m: 0, y: 0 }, time_s: 10, fstop: 8, aim: 'grey-0.184', aimView: 'D50' }, 'kodak_gold_200');
+const si = P.solveInputs('kodak_gold_200', 'xt5-fitted', 9);
+const pdi = P.expose(es, 9).pd;
+const pri = P.printInputs('kodak_portra_endura', 'D50', 9);
 
-describe('interim f64 oracle (Chromogen port)', () => {
+describe('the f64 oracle is core (one physics)', () => {
   it('solves a reachable density back to its dyes', () => {
     const c = [0.6, 0.8, 1.1] as [number, number, number];
     // forward model: d_k = −log10 Σ P_k 10^−(B + Σ c ε)
@@ -24,36 +24,58 @@ describe('interim f64 oracle (Chromogen port)', () => {
       for (let i = 0; i < 81; i++) s += si.P[k]![i]! * 10 ** -(si.B[i]! + c[0] * si.E[0][i]! + c[1] * si.E[1][i]! + c[2] * si.E[2][i]!);
       return -Math.log10(s);
     }) as [number, number, number];
-    const r = chromogenOracle.solve(si, d);
+    const r = coreOracle.solve(si, d);
     for (let k = 0; k < 3; k++) expect(r.c[k]).toBeCloseTo(c[k]!, 6);
     expect(r.residual).toBeLessThan(1e-6);
   });
 
   it('a range-chunked build is bitwise equal to the whole build (worker invariant)', () => {
-    const whole = buildTableF64(chromogenOracle, si).data;
+    const whole = buildTableF64(coreOracle, si).data;
     const parts = new Float32Array(whole.length);
-    for (let q0 = 0; q0 < 729; q0 += 100) parts.set(tableNodes(chromogenOracle, si, q0, Math.min(729, q0 + 100)), 4 * q0);
+    for (let q0 = 0; q0 < 729; q0 += 100) parts.set(tableNodes(coreOracle, si, q0, Math.min(729, q0 + 100)), 4 * q0);
     expect(Buffer.from(parts.buffer).equals(Buffer.from(whole.buffer))).toBe(true);
   });
 
   it('the solve table has nodes on both sides of the 0.01 reachability flag', () => {
-    const t = buildTableF64(chromogenOracle, si).data;
+    const t = buildTableF64(coreOracle, si).data;
     let reach = 0;
     for (let q = 0; q < 729; q++) if (t[4 * q + 3]! < 0.01) reach++;
     expect(reach).toBeGreaterThan(100);
     expect(reach).toBeLessThan(729);
   });
 
-  it('print table: paper white is bright and near-neutral under D65 adaptation', () => {
-    const pi = printInputs(endura);
-    const w = chromogenOracle.spectral(pi, [0, 0, 0]);
+  it('print table: XYZ under the D50 viewing light (not adapted); the paper white is bright and near D50', () => {
+    const w = coreOracle.spectral(pri, [0, 0, 0]);
     expect(w[1]).toBeGreaterThan(0.7);
-    expect(w[0] / w[1]).toBeCloseTo(0.95047, 1);
+    expect(w[0] / w[1]).toBeCloseTo(0.96422, 1);
+  });
+
+  it("the GPU's f64 tables are core's builders' tables in Studio node order (solve bitwise, pd and print to f32 rounding)", () => {
+    const f = P.env.forward('kodak_gold_200', 'xt5-fitted');
+    const ch = P.env.chain(es);
+    const pairs: [Float32Array, Float64Array, number][] = [
+      [buildTableF64(coreOracle, si).data, buildSolveTable(f, { N: 9 }).table.data, 0],
+      [buildTableF64(coreOracle, pdi).data, buildPdTable(ch, { N: 9 }).data, 2e-7],
+      [buildTableF64(coreOracle, pri).data, buildPrintTable(ch, { N: 9 }).data, 2e-7],
+    ];
+    for (const [gpu, core, rel] of pairs) {
+      expect(gpu.length).toBe(core.length);
+      const f32 = Float32Array.from(core);
+      for (let i = 0; i < gpu.length; i++) {
+        if (i % 4 === 3 && rel) continue; // spectral tables carry 1 in channel 4
+        if (rel === 0) expect(gpu[i]).toBe(f32[i]);
+        else expect(Math.abs(gpu[i]! - f32[i]!)).toBeLessThanOrEqual(rel * Math.max(1, Math.abs(f32[i]!)));
+      }
+    }
   });
 });
 
 describe('table keys', () => {
-  const pi = pdInputs(gold, endura);
+  const pi = pdi;
+  it("carry core's conventions id", () => {
+    expect(keyFor(pi, { builder: 'f64' }).conventions).toBe(conventionsKey(DEFAULT_CONVENTIONS));
+    expect(P.conventions).toBe(conventionsKey(DEFAULT_CONVENTIONS));
+  });
   it('change with the domain, N, the data, the scan and the builder', () => {
     const id = tableId(keyFor(pi, { builder: 'f64' }));
     expect(tableId(keyFor(pi, { builder: 'f64' }))).toBe(id);
@@ -72,7 +94,7 @@ describe('table keys', () => {
 
 describe('table cache', () => {
   const t: Table = { N: 3, range: [0, 1], data: Float32Array.from({ length: 108 }, (_, i) => i * 0.25) };
-  const key = keyFor({ ...pdInputs(gold, endura), N: 3 } as SpectralInputs, { builder: 'f64' });
+  const key = keyFor({ ...pdi, N: 3 } as SpectralInputs, { builder: 'f64' });
   it('round-trips a table bit for bit and refuses a different key or corrupted payload', () => {
     const b = encodeTable(key, t);
     const back = decodeTable(b, key)!;

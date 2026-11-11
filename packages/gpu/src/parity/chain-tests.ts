@@ -1,15 +1,21 @@
-// Chain and lookup parity tests (stage 4) on synthetic frames. The reference is the CPU f64
-// evaluation of the same program (exact solve, exact spectral integrals): the interim stand-in for
-// CHB-003's reference engine. TODO(CHB-003): evaluate the same graph with core's engine instead.
+// Chain and lookup parity (stage 4) on synthetic Gold 200 frames. The reference is core's reference
+// engine evaluating the SAME graph (CHB-017, one physics): RefEngine exact for the export path and as
+// the preview's ground truth, RefEngine tabulated (core's f64 tables through look3) for the preview's
+// table path. ChainRunner-level tests (the broken variant, the two table builders) run the segment of
+// synthetic.ts scanChain, which is checked to render exactly what GpuEngine lowers the graph to.
+import { Graph, type Node } from '@chromobench/contract';
+import { RefEngine } from '@chromobench/core';
 import { ChainRunner } from '../chain/run.ts';
-import { evalPixelF64, LOOKUP, OP, type Segment } from '../chain/program.ts';
-import { chromogenOracle, look3 } from '../physics/oracle.ts';
+import { LOOKUP, OP, type Segment } from '../chain/program.ts';
+import type { GpuRuntime } from '../device.ts';
+import { GpuEngine } from '../engine-gpu.ts';
+import { defaultPhysicsData } from '../physics/data.ts';
+import { coreOracle, look3 } from '../physics/oracle.ts';
 import { TableManager } from '../tables/manager.ts';
 import { WorkerPool } from '../tables/build-workers.ts';
-import type { GpuRuntime } from '../device.ts';
 import { nodeAt, type Vec3 } from '../tables/inputs.ts';
 import { compare } from './harness.ts';
-import { scanChain, syntheticScan } from './synthetic.ts';
+import { REBATE_W, rebateT, scanChain, syntheticScan } from './synthetic.ts';
 import { gold, ref, runtime } from './page-shared.ts';
 
 let runner: { rt: GpuRuntime; tm: TableManager; ch: ChainRunner; tmGpu: TableManager; chGpu: ChainRunner } | null = null;
@@ -23,7 +29,51 @@ async function chain() {
   return runner;
 }
 
-/** Runs one segment over an interleaved 3-channel frame at full resolution. */
+const W = 96;
+const H = 64;
+
+/** The synthetic scan opened in GpuEngine and in core's reference engine (exact and tabulated), one graph. */
+interface Frame {
+  rt: GpuRuntime;
+  gpu: GpuEngine;
+  exact: RefEngine;
+  tabulated: RefEngine;
+  T: Float32Array;
+  nodes: { dyes: Node; display: Node; displayTanh: Node };
+}
+let frameP: Promise<Frame> | null = null;
+async function frame(): Promise<Frame> {
+  const rt = await runtime();
+  const f = frameP ? await frameP : null;
+  if (f && f.rt === rt) return f;
+  frameP = (async () => {
+    const S = gold();
+    const { T, tiff } = syntheticScan(S.solve, W, H);
+    const data = defaultPhysicsData();
+    const gpu = await GpuEngine.create({ runtime: rt, workers: 4, opfs: false });
+    const exact = new RefEngine({ data });
+    const tabulated = new RefEngine({ data, mode: 'tabulated' });
+    const g = new Graph();
+    let info = null;
+    for (const e of [gpu, exact, tabulated]) info = await e.open({ kind: 'file', sha256: '', bytes: tiff });
+    g.registerSource(info!);
+    const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => g.intern(op, inputs, args).node;
+    const src = I('source.open', [], { source: info!.sha256, encoding: 'linear' });
+    const dens = I('scan.density', [src.id], { rebate: { x: 0, y: 0, w: REBATE_W, h: H } });
+    const dyes = I('invert.dyes', [dens.id], { stock: S.film, scanner: S.scanner });
+    const x = I('print.lights', [I('print.expose', [dyes.id], { paper: S.paper }).id], { logH: [0, 0, 0] });
+    const xyz = I('view.reflect', [I('print.develop', [x.id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
+    const display = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
+    const displayTanh = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0 }).id], { to: 'D65' }).id], { rendering: 'scan-of-print', knee: 'tanh-shoulder' });
+    for (const n of [display, displayTanh]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
+    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh } };
+  })();
+  return frameP;
+}
+
+const read = async (e: GpuEngine | RefEngine, n: Node, precision: 'preview' | 'export'): Promise<ArrayLike<number>> => (await e.evaluate(n, { scale: 'full', precision })).read();
+
+/** Runs one segment over an interleaved 3-channel frame at full resolution (4 floats per pixel out). */
 async function runFrame(ch: ChainRunner, seg: Segment, data: Float32Array, w: number, h: number, t: { precision: 'preview' | 'export'; lookup?: number; exact?: boolean; builder?: 'f64' | 'gpu-f32' }): Promise<Float32Array> {
   const rt = (await chain()).rt;
   const src = ch.upload(data, w, h, 3);
@@ -34,14 +84,19 @@ async function runFrame(ch: ChainRunner, seg: Segment, data: Float32Array, w: nu
   return px;
 }
 
-function refFrame(seg: Segment, data: Float32Array, w: number, h: number): Float64Array {
-  const out = new Float64Array(w * h * 4);
-  for (let i = 0; i < w * h; i++) out.set(evalPixelF64(seg, [data[3 * i]!, data[3 * i + 1]!, data[3 * i + 2]!], [i % w, Math.floor(i / w)], chromogenOracle), 4 * i);
-  return out;
+/** Display differences in 8-bit levels over the RGB channels of two interleaved buffers. */
+function levels(a: ArrayLike<number>, sa: number, b: ArrayLike<number>, sb: number) {
+  let max = 0, sum = 0, n = 0, max8 = 0;
+  for (let i = 0; i < a.length / sa; i++) for (let k = 0; k < 3; k++) {
+    const x = a[i * sa + k]!, y = b[i * sb + k]!;
+    const d = Math.abs(x - y) * 255;
+    max = Math.max(max, d);
+    sum += d;
+    n++;
+    max8 = Math.max(max8, Math.abs(Math.round(x * 255) - Math.round(y * 255)));
+  }
+  return { maxLevels: max, meanLevels: sum / n, max8bit: max8 };
 }
-
-const W = 96;
-const H = 64;
 
 /** Random keys a in "smooth" solve cells: all eight corners reachable and strictly inside the dye box. */
 function smoothKeys(n: number, seed = 1): Vec3[] {
@@ -80,10 +135,10 @@ async function lookupTest(mode: number, n: number): Promise<Record<string, unkno
   const got = await runFrame(ch, seg, D, w, h, { precision: 'preview', lookup: mode, exact: false, builder: 'f64' });
   const T = ref('solve');
   let sq = 0, m = 0, lookMax = 0, flips = 0;
-  const Kinv = invK(S.solve.K);
+  const Kinv = S.physics.env.forward(S.film, S.scanner).Kinv;
   keys.forEach((a, i) => {
     const d32 = [D[3 * i]!, D[3 * i + 1]!, D[3 * i + 2]!];
-    const exact = chromogenOracle.solve(S.solve, [d32[0]! + S.solve.Dbase[0], d32[1]! + S.solve.Dbase[1], d32[2]! + S.solve.Dbase[2]]);
+    const exact = coreOracle.solve(S.solve, [d32[0]! + S.solve.Dbase[0], d32[1]! + S.solve.Dbase[1], d32[2]! + S.solve.Dbase[2]]);
     const a32 = [0, 1, 2].map((r) => Kinv[r]![0]! * d32[0]! + Kinv[r]![1]! * d32[1]! + Kinv[r]![2]! * d32[2]!);
     const l3 = look3(T, a32);
     for (let k = 0; k < 3; k++) {
@@ -97,40 +152,14 @@ async function lookupTest(mode: number, n: number): Promise<Record<string, unkno
   return { mode, keys: keys.length, rms: Math.sqrt(sq / m), maxVsLook3: lookMax, flips };
 }
 
-function invK(K: number[][]): number[][] {
-  const det = K[0]![0]! * (K[1]![1]! * K[2]![2]! - K[1]![2]! * K[2]![1]!) - K[0]![1]! * (K[1]![0]! * K[2]![2]! - K[1]![2]! * K[2]![0]!) + K[0]![2]! * (K[1]![0]! * K[2]![1]! - K[1]![1]! * K[2]![0]!);
-  const c = (i: number, j: number) => {
-    const r = [0, 1, 2].filter((x) => x !== i);
-    const s = [0, 1, 2].filter((x) => x !== j);
-    return K[r[0]!]![s[0]!]! * K[r[1]!]![s[1]!]! - K[r[0]!]![s[1]!]! * K[r[1]!]![s[0]!]!;
-  };
-  return [0, 1, 2].map((i) => [0, 1, 2].map((j) => (((i + j) % 2 ? -1 : 1) * c(j, i)) / det));
-}
-
-const levels = (a: ArrayLike<number>, b: ArrayLike<number>) => {
-  let max = 0, sum = 0, n = 0, max8 = 0;
-  for (let i = 0; i < a.length; i++) {
-    if (i % 4 === 3) continue;
-    const d = Math.abs(a[i]! - b[i]!) * 255;
-    max = Math.max(max, d);
-    sum += d;
-    n++;
-    max8 = Math.max(max8, Math.abs(Math.round(a[i]! * 255) - Math.round(b[i]! * 255)));
-  }
-  return { maxLevels: max, meanLevels: sum / n, max8bit: max8 };
-};
-
 export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Promise<unknown>> = {
   async 'chain:export-dyes'() {
-    const { ch } = await chain();
-    const S = gold();
-    const { T } = syntheticScan(S.solve, W, H);
-    const seg = scanChain(S, 'dyes');
+    const f = await frame();
     const t0 = performance.now();
-    const got = await runFrame(ch, seg, T, W, H, { precision: 'export' });
+    const got = await read(f.gpu, f.nodes.dyes, 'export');
     const ms = performance.now() - t0;
-    const want = refFrame(seg, T, W, H);
-    const r = compare('export film-dyes', got, want, { tolerance: 5e-6, channels: [0, 1, 2], include: (i) => want[4 * i + 3]! < 0.01 });
+    const want = await read(f.exact, f.nodes.dyes, 'export');
+    const r = compare('export film-dyes vs core exact', got, want, { tolerance: 5e-6, channels: [0, 1, 2], include: (i) => want[4 * i + 3]! < 0.01 });
     let flips = 0;
     for (let i = 0; i < W * H; i++) {
       const e = want[4 * i + 3]!;
@@ -140,31 +169,34 @@ export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Prom
   },
 
   async 'chain:preview-display'(o) {
+    const f = await frame();
+    const want = await read(f.exact, f.nodes.display, 'export');
+    if (o['lookup'] !== undefined) {
+      // the broken variant runs the same segment through ChainRunner with the lookup overridden
+      const { ch } = await chain();
+      const got = await runFrame(ch, scanChain(gold(), 'display', 0.48, rebateT(f.T, W, H)), f.T, W, H, { precision: 'preview', lookup: o['lookup'] as number });
+      return levels(got, 4, want, 3);
+    }
+    const got = await read(f.gpu, f.nodes.display, 'preview');
+    const tab = await read(f.tabulated, f.nodes.display, 'export');
     const { ch } = await chain();
-    const S = gold();
-    const { T } = syntheticScan(S.solve, W, H);
-    const seg = scanChain(S, 'display');
-    const got = await runFrame(ch, seg, T, W, H, { precision: 'preview', ...(o['lookup'] !== undefined ? { lookup: o['lookup'] as number } : {}) });
-    const want = refFrame(seg, T, W, H);
-    return levels(got, want);
+    const seg = await runFrame(ch, scanChain(gold(), 'display', 0.48, rebateT(f.T, W, H)), f.T, W, H, { precision: 'preview' });
+    return { ...levels(got, 3, want, 3), vsTabulated: levels(got, 3, tab, 3), tabulatedVsExact: levels(tab, 3, want, 3), segmentVsEngine: levels(seg, 4, got, 3) };
   },
 
   async 'chain:export-display'() {
-    const { ch } = await chain();
-    const S = gold();
-    const { T } = syntheticScan(S.solve, W, H);
-    const seg = scanChain(S, 'display');
-    const got = await runFrame(ch, seg, T, W, H, { precision: 'export' });
-    return levels(got, refFrame(seg, T, W, H));
+    const f = await frame();
+    const got = await read(f.gpu, f.nodes.display, 'export');
+    const tanh = levels(await read(f.gpu, f.nodes.displayTanh, 'export'), 3, await read(f.exact, f.nodes.displayTanh, 'export'), 3);
+    return { ...levels(got, 3, await read(f.exact, f.nodes.display, 'export'), 3), tanhScanOfPrint: tanh };
   },
 
   async 'chain:builders-identical'() {
     const { ch, chGpu } = await chain();
-    const S = gold();
-    const { T } = syntheticScan(S.solve, W, H);
-    const seg = scanChain(S, 'display');
-    const a = await runFrame(ch, seg, T, W, H, { precision: 'preview', builder: 'f64' });
-    const b = await runFrame(chGpu, seg, T, W, H, { precision: 'preview', builder: 'gpu-f32' });
+    const f = await frame();
+    const seg = scanChain(gold(), 'display', 0.48, rebateT(f.T, W, H));
+    const a = await runFrame(ch, seg, f.T, W, H, { precision: 'preview', builder: 'f64' });
+    const b = await runFrame(chGpu, seg, f.T, W, H, { precision: 'preview', builder: 'gpu-f32' });
     let diff8 = 0;
     let maxLevels = 0;
     for (let i = 0; i < a.length; i++) {

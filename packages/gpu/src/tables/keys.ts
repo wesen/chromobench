@@ -3,10 +3,11 @@
 // changes the key without anyone bumping a version; the domain and N are always in the key
 // (the spektrafilm density_min lesson); the scan's sha256 is in it whenever an input is per scan.
 import { canonicalJSON, sha256Hex, type Hash, type TableKey } from '@chromobench/contract';
+import { conventionsKey, DEFAULT_CONVENTIONS } from '@chromobench/core';
 import type { SolveInputs, SpectralInputs } from './inputs.ts';
 
-/** Interim conventions id until CHB-003 publishes PhysicsConventions. */
-export const INTERIM_CONVENTIONS = 'chromogen-interim-0';
+/** core's conventions id (one for every engine, CHB-017): the default TableKey.conventions. */
+export const CORE_CONVENTIONS = conventionsKey(DEFAULT_CONVENTIONS);
 
 /** SHA-256 over the f64 little-endian bytes of the arrays, with their lengths. */
 export function hashArrays(...arrays: ArrayLike<number>[]): Hash {
@@ -32,7 +33,7 @@ export interface KeyOptions { builder: 'f64' | 'gpu-f32'; kernel?: Hash; scan?: 
 /** The key of a table built from `inp`. */
 export function keyFor(inp: SolveInputs | SpectralInputs, o: KeyOptions): TableKey {
   const domain = { lo: inp.range[0], hi: inp.range[1], N: inp.N };
-  const conventions = o.conventions ?? INTERIM_CONVENTIONS;
+  const conventions = o.conventions ?? CORE_CONVENTIONS;
   const extra = { ...(o.kernel ? { kernel: o.kernel } : {}) };
   if (inp.kind === 'solve') {
     return {
@@ -44,8 +45,11 @@ export function keyFor(inp: SolveInputs | SpectralInputs, o: KeyOptions): TableK
   if (inp.kind === 'pd') {
     return { kind: 'pd', schema: 1, film: hashArrays(...inp.E, inp.B), printing: hashArrays(...inp.W), domain, builder: o.builder, ...extra, conventions };
   }
+  // core's print table is XYZ under the viewing light (M = I): adaptTo is that white, Σ W = (X, Y, Z) of a perfect reflector
+  const sum = (w: ArrayLike<number>): number => { let t = 0; for (let i = 0; i < w.length; i++) t += w[i]!; return t; };
+  const white = [0, 1, 2].map((r) => inp.M[r]![0]! * sum(inp.W[0]) + inp.M[r]![1]! * sum(inp.W[1]) + inp.M[r]![2]! * sum(inp.W[2])) as [number, number, number];
   return {
     kind: 'print', schema: 1, paper: hashArrays(...inp.E, inp.B), viewing: hashArrays(...inp.W, ...inp.M),
-    adaptTo: [0.95047, 1, 1.08883], domain, builder: o.builder, ...extra, conventions,
+    adaptTo: white, domain, builder: o.builder, ...extra, conventions,
   };
 }

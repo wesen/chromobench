@@ -8,6 +8,7 @@ import { adaptBradford, addFlare, D50, D65, observe, paperWhiteXYZ, reflectance,
 import { DEFAULT_COMPRESS, type CompressSpec } from '../print/gamut.ts';
 import { displayEncode } from '../print/chain.ts';
 import { gradeToGamma, paperDeveloper } from '../print/paper.ts';
+import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
 import { makeForward, solveDyes, type ForwardModel } from '../scan/solve.ts';
@@ -40,9 +41,14 @@ export class PhysicsEnv {
   private readonly memo = new Map<string, unknown>();
   readonly data: PhysicsData;
   readonly conv: Conventions;
-  constructor(data: PhysicsData, conv: Conventions) {
+  /** 'tabulated': invert.dyes, print.expose and view.reflect read core's f64 tables (tables.ts) through look3. */
+  readonly mode: 'exact' | 'tabulated';
+  readonly N: number;
+  constructor(data: PhysicsData, conv: Conventions, o: { mode?: 'exact' | 'tabulated'; N?: number } = {}) {
     this.data = data;
     this.conv = conv;
+    this.mode = o.mode ?? 'exact';
+    this.N = o.N ?? N3;
   }
   cached<T>(key: string, make: () => T): T {
     if (!this.memo.has(key)) this.memo.set(key, make());
@@ -63,6 +69,16 @@ export class PhysicsEnv {
   }
   viewing(paper: string, illuminant: string): Viewing {
     return this.cached(`view:${paper}:${illuminant}`, () => makePrintChain({ data: this.data, conv: this.conv, film: this.stock('kodak_portra_400'), paper: this.stock(paper), view: illuminant, aim: 'midgray-normalised' }).viewing);
+  }
+  // ---- the f64 tables of the tabulated mode (Studio node order, the GPU's domains) ----
+  solveTable(stock: string, scanner: string): Table3 {
+    return this.cached(`solveT:${stock}:${scanner}:${this.N}`, () => buildSolveTable(this.forward(stock, scanner), { N: this.N }).table);
+  }
+  pdTable(o: ExposeSettings): Table3 {
+    return this.cached(`pdT:${JSON.stringify(o)}:${this.N}`, () => buildPdTable(this.chain(o), { N: this.N }));
+  }
+  printTable(paper: string, illuminant: string): Table3 {
+    return this.cached(`printT:${paper}:${illuminant}:${this.N}`, () => buildPrintTable({ viewing: this.viewing(paper, illuminant) }, { N: this.N }));
   }
 }
 
@@ -93,17 +109,50 @@ function mapPx(src: Img, c: number, f: (px: Float64Array, out: Float64Array, i: 
   return out;
 }
 
-const DEFAULT_FILM = 'kodak_portra_400';
-const DEFAULT_PAPER = 'kodak_portra_endura';
-const filmOf = (ctx: OpCtx): string => (ctx.up('invert.dyes')?.args['stock'] as string | undefined) ?? (ctx.up('capture.expose')?.args['stock'] as string | undefined) ?? DEFAULT_FILM;
-const paperOf = (ctx: OpCtx): string => (ctx.up('print.develop')?.args['paper'] as string | undefined) ?? DEFAULT_PAPER;
-const viewOf = (ctx: OpCtx): string => (ctx.up('view.reflect')?.args['illuminant'] as string | undefined) ?? 'D50';
+// Upstream context, shared with packages/gpu's lowering so both engines read a graph the same way.
+/** What the context helpers need: the upstream walk and the physics environment. */
+export interface ChainCtx {
+  up(op: string): UpNode | undefined;
+  env: PhysicsEnv;
+}
+export const DEFAULT_FILM = 'kodak_portra_400';
+export const DEFAULT_PAPER = 'kodak_portra_endura';
+export const filmOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('invert.dyes')?.args['stock'] as string | undefined) ?? (ctx.up('capture.expose')?.args['stock'] as string | undefined) ?? DEFAULT_FILM;
+export const paperOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('print.develop')?.args['paper'] as string | undefined) ?? DEFAULT_PAPER;
+export const viewOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('view.reflect')?.args['illuminant'] as string | undefined) ?? 'D50';
 
 /** White of print-xyz at this point: the view.adapt target if one is upstream, else the viewing white. */
-function currentWhite(ctx: OpCtx): Vec3 {
+export function whiteAt(ctx: ChainCtx): Vec3 {
   const ad = ctx.up('view.adapt');
   if (ad) return ad.args['to'] === 'D50' ? D50 : D65;
   return whiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx)));
+}
+const currentWhite = whiteAt;
+
+/** view.flare's white: the paper white, adapted when a view.adapt is upstream. */
+export function flareWhite(ctx: ChainCtx): Vec3 {
+  let W = paperWhiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx)));
+  const ad = ctx.up('view.adapt');
+  if (ad) W = adaptBradford(W, whiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx))), ad.args['to'] === 'D50' ? D50 : D65);
+  return W;
+}
+
+/** output.display's gain: 1/Y of the paper white for scan-of-print, 1 for print-as-seen. */
+export function displayGain(ctx: ChainCtx, rendering: unknown): number {
+  return rendering === 'scan-of-print' ? 1 / paperWhiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx)))[1] : 1;
+}
+
+/** scan.density's rebate: the given box, else the brightest 5 % column band (as the mock engine). */
+export function rebateBox(w: number, h: number, c: number, data: ArrayLike<number>, box?: Box): Box {
+  if (box) return box;
+  const lum = Array.from({ length: w }, (_, x) => {
+    let s = 0;
+    for (let y = 0; y < h; y++) for (let k = 0; k < c; k++) s += data[(y * w + x) * c + k]!;
+    return { x, s };
+  });
+  const n = Math.max(1, Math.round(w * 0.05));
+  const cols = lum.sort((a, b) => b.s - a.s || a.x - b.x).slice(0, n).map((q) => q.x).sort((a, b) => a - b);
+  return { x: cols[0]!, y: 0, w: cols[cols.length - 1]! - cols[0]! + 1, h };
 }
 
 export const IMAGE_OPS: Record<string, ImageOp> = {
@@ -116,8 +165,25 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     for (let i = 0; i < out.data.length; i++) out.data[i] = info.domain === 'scan-classes' ? Math.floor(rng.next() * 4) : lo + rng.next() * (hi - lo);
     return out;
   },
+  'scan.density': (ctx) => {
+    // d = −log10(T / T_rebate) per channel (CHB-006's op; the same rule as the mock engine)
+    const r = recv(ctx);
+    const b = rebateBox(r.w, r.h, r.c, r.data, A(ctx, 'rebate') as Box | undefined);
+    const T = [0, 1, 2].map((k) => { const v = values(r, k, b); return v.length ? v.reduce((a, q) => a + q, 0) / v.length : 1; });
+    return mapPx(r, 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = -Math.log10(Math.max(px[Math.min(k, px.length - 1)]!, 1e-8) / T[k]!); });
+  },
   'invert.dyes': (ctx) => {
     const f = ctx.env.forward(A(ctx, 'stock') as string, A(ctx, 'scanner') as string);
+    if (ctx.env.mode === 'tabulated') {
+      const T = ctx.env.solveTable(A(ctx, 'stock') as string, A(ctx, 'scanner') as string);
+      const K = f.Kinv;
+      const out = new Float64Array(4);
+      return mapPx(recv(ctx), 4, (px, o) => {
+        const p = [px[0]!, px[Math.min(1, px.length - 1)]!, px[Math.min(2, px.length - 1)]!];
+        look3(T, [0, 1, 2].map((k) => K[k]![0]! * p[0]! + K[k]![1]! * p[1]! + K[k]![2]! * p[2]!), out);
+        o[0] = out[0]!; o[1] = out[1]!; o[2] = out[2]!; o[3] = out[3]!;
+      });
+    }
     const d = [0, 0, 0];
     return mapPx(recv(ctx), 4, (px, o) => {
       for (let k = 0; k < 3; k++) d[k] = px[Math.min(k, px.length - 1)]! + f.Dbase[k]!;
@@ -127,7 +193,14 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
   'invert.classes': (ctx) => classesOf(ctx),
   'print.expose': (ctx) => {
-    const ch = ctx.env.chain(exposeSettings(ctx.args, filmOf(ctx)));
+    const es = exposeSettings(ctx.args, filmOf(ctx));
+    const ch = ctx.env.chain(es);
+    if (ctx.env.mode === 'tabulated') {
+      const T = ctx.env.pdTable(es);
+      const base = ch.aimLights.apply(ch.enlarger.clear());
+      const out = new Float64Array(4);
+      return mapPx(recv(ctx), 3, (px, o) => { look3(T, px, out); for (let k = 0; k < 3; k++) o[k] = base[k]! - out[k]!; });
+    }
     return mapPx(recv(ctx), 3, (px, o) => {
       const x = ch.xOfDyes(px);
       o[0] = x[0]; o[1] = x[1]; o[2] = x[2];
@@ -149,6 +222,11 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return mapPx(recv(ctx), 3, (px, o) => { const c = dev(px); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; });
   },
   'view.reflect': (ctx) => {
+    if (ctx.env.mode === 'tabulated') {
+      const T = ctx.env.printTable(paperOf(ctx), A(ctx, 'illuminant') as string);
+      const out = new Float64Array(4);
+      return mapPx(recv(ctx), 3, (px, o) => { look3(T, px, out); o[0] = out[0]!; o[1] = out[1]!; o[2] = out[2]!; });
+    }
     const v = ctx.env.viewing(paperOf(ctx), A(ctx, 'illuminant') as string);
     const R = new Float64Array(81);
     return mapPx(recv(ctx), 3, (px, o) => { const X = observe(v, reflectance(v, px, R)); o[0] = X[0]; o[1] = X[1]; o[2] = X[2]; });
@@ -156,9 +234,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   'view.flare': (ctx) => {
     // Percent of the paper white (Chromogen's `Blacks` convention), in the frame where it physically happens.
     const f = num(ctx, 'flare') / 100;
-    let W = paperWhiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx)));
-    const ad = ctx.up('view.adapt');
-    if (ad) W = adaptBradford(W, whiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx))), ad.args['to'] === 'D50' ? D50 : D65);
+    const W = flareWhite(ctx);
     return mapPx(recv(ctx), 3, (px, o) => { const X = addFlare(px, f, W); o[0] = X[0]; o[1] = X[1]; o[2] = X[2]; });
   },
   'view.adapt': (ctx) => {
@@ -172,11 +248,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const kneeArg = A(ctx, 'knee') as string;
     // 'oklch' (contract 0.2; 'cam16-ucs' before): OkLCh with spektrafilm's knee parameters (guide §5.4 decision).
     const compress: CompressSpec = { ...DEFAULT_COMPRESS, algorithm: kneeArg === 'clip' ? 'clip' : kneeArg === 'tanh-shoulder' ? 'tanh-shoulder' : 'oklch' };
-    let gain = 1;
-    if (A(ctx, 'rendering') === 'scan-of-print') {
-      const v = ctx.env.viewing(paperOf(ctx), viewOf(ctx));
-      gain = 1 / paperWhiteXYZ(v)[1];
-    }
+    const gain = displayGain(ctx, A(ctx, 'rendering'));
     return mapPx(recv(ctx), 3, (px, o) => {
       const X = adaptBradford([px[0]! * gain, px[1]! * gain, px[2]! * gain], from, D65);
       const e = displayEncode(X, space, compress);
@@ -228,8 +300,11 @@ function boxMean(img: Img, b: Box): Vec3 {
 }
 
 /** Densities of a mean pixel by domain; Status A data waits for CHB-004, so Status M stands in for paper. */
-function densities(ctx: OpCtx, mean: Vec3): { D: Vec3; visual?: number } {
-  switch (ctx.recvDomain) {
+const densities = (ctx: OpCtx, mean: Vec3): { D: Vec3; visual?: number } => densitiesOf(ctx, ctx.recvDomain, mean);
+
+/** Densities of a mean pixel of `domain` (measure.densitometer / measure.patches; shared with packages/gpu). */
+export function densitiesOf(ctx: ChainCtx, domain: Domain | undefined, mean: Vec3): { D: Vec3; visual?: number } {
+  switch (domain) {
     case 'film-dyes': { const s = ctx.env.stock(filmOf(ctx)); return { D: statusM().masked(s.pass).read(s.spectral(mean)) }; }
     case 'paper-dyes': { const s = ctx.env.stock(paperOf(ctx)); return { D: statusM().masked(s.pass).read(s.spectral(mean)) }; }
     case 'print-xyz': {

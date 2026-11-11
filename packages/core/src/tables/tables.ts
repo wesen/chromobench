@@ -1,8 +1,8 @@
 // f64 builders of the GPU's tables (guide §5.6): the oracle CHB-005 compares node by node.
 // Node order is the Studio's nodeAt (model.js 1660–1663): x fastest; 4 floats per node.
 // look3 reproduces trilinear filtering at texel centres, u' = (u(N − 1) + ½)/N.
-import type { PrintChain } from '../print/chain.ts';
-import { observe, reflectance } from '../print/colour.ts';
+import { observe, reflectance, type Viewing } from '../print/colour.ts';
+import type { Enlarger } from '../print/enlarger.ts';
 import { mulMV, type Vec3 } from '../spectral/linalg.ts';
 import { solveDyes, type ForwardModel, type SolveOptions } from '../scan/solve.ts';
 
@@ -61,7 +61,7 @@ export function solveKeyRange(f: ForwardModel, cRange: [number, number] = C_RANG
 }
 
 /** Printing density table: film dyes → printing density (clear − x) per paper layer. */
-export function buildPdTable(chain: PrintChain, o: { N?: number; range?: [number, number] } = {}): Table3 {
+export function buildPdTable(chain: { enlarger: Enlarger }, o: { N?: number; range?: [number, number] } = {}): Table3 {
   const N = o.N ?? N3;
   const [lo, hi] = o.range ?? C_RANGE;
   const clear = chain.enlarger.clear();
@@ -74,7 +74,7 @@ export function buildPdTable(chain: PrintChain, o: { N?: number; range?: [number
 }
 
 /** Print XYZ table: paper dyes → XYZ under the viewing light. */
-export function buildPrintTable(chain: PrintChain, o: { N?: number; range?: [number, number] } = {}): Table3 {
+export function buildPrintTable(chain: { viewing: Viewing }, o: { N?: number; range?: [number, number] } = {}): Table3 {
   const N = o.N ?? N3;
   const [lo, hi] = o.range ?? CP_RANGE;
   const data = new Float64Array(N * N * N * 4);

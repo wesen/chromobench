@@ -5,14 +5,12 @@
 import type { Stock } from '../spectral/stock.ts';
 import { baseWeightedK, secant, tangentAtZero } from '../spectral/channels.ts';
 import { inv3, minSingular, mulMV, type Mat3, type Vec3 } from '../spectral/linalg.ts';
-import { NW } from '../spectral/spectrum.ts';
 import type { ScannerModel } from './scanner.ts';
 
 export type StartMatrix = 'base-weighted' | 'secant' | 'tangent0';
 
-export interface ForwardModel {
-  stock: Stock;
-  scanner: ScannerModel;
+/** What the solve needs: the fused forward/Jacobian pass, the base reading and the start matrix. */
+export interface ForwardCore {
   /** Absolute scanner densities of dye amounts c. */
   D(c: ArrayLike<number>, out?: Float64Array | number[]): Vec3;
   /** r = D(c) − d and J (row-major, 9) in one pass; returns ‖r‖². */
@@ -21,29 +19,40 @@ export interface ForwardModel {
   Dbase: Vec3;
   K: Mat3;
   Kinv: Mat3;
+}
+
+export interface ForwardModel extends ForwardCore {
+  stock: Stock;
+  scanner: ScannerModel;
   start: StartMatrix;
 }
 
-export function makeForward(s: ScannerModel, stock: Stock, opt: { start?: StartMatrix } = {}): ForwardModel {
-  const start = opt.start ?? 'base-weighted';
-  const ch = s.channels;
-  const K = start === 'secant' ? secant(ch, stock) : start === 'tangent0' ? tangentAtZero(ch, stock) : baseWeightedK(ch, stock);
-  const Kinv = inv3(K);
-  const pass = stock.pass;
-  const P0 = ch.P[0].map((v, i) => v * pass[i]!);
-  const P1 = ch.P[1].map((v, i) => v * pass[i]!);
-  const P2 = ch.P[2].map((v, i) => v * pass[i]!);
-  const E0 = stock.dyes[0]!;
-  const E1 = stock.dyes[1]!;
-  const E2 = stock.dyes[2]!;
-  const B = stock.base;
+type Arr = ArrayLike<number>;
+
+/** The forward model's arrays: channel responsivities with the pass mask folded in, unit dyes, base, start K. */
+export interface ForwardArrays {
+  P: readonly [Arr, Arr, Arr];
+  E: readonly [Arr, Arr, Arr];
+  B: Arr;
+  K: Mat3;
+}
+
+/**
+ * A forward model over plain arrays (the form a worker or a GPU table key receives). makeForward
+ * builds its arrays from a scanner and a stock and calls this, so both give bit-identical solves.
+ */
+export function forwardFromArrays(a: ForwardArrays): ForwardCore {
+  const [P0, P1, P2] = a.P;
+  const [E0, E1, E2] = a.E;
+  const B = a.B;
+  const n = B.length;
   const LN10 = Math.LN10;
   const DJ = (c: ArrayLike<number>, d: ArrayLike<number>, r: Float64Array, J: Float64Array | null): number => {
     const c0 = c[0]!;
     const c1 = c[1]!;
     const c2 = c[2]!;
     let s0 = 0, s1 = 0, s2 = 0, a00 = 0, a01 = 0, a02 = 0, a10 = 0, a11 = 0, a12 = 0, a20 = 0, a21 = 0, a22 = 0;
-    for (let i = 0; i < NW; i++) {
+    for (let i = 0; i < n; i++) {
       const t = Math.exp(-LN10 * (B[i]! + c0 * E0[i]! + c1 * E1[i]! + c2 * E2[i]!));
       const w0 = P0[i]! * t;
       const w1 = P1[i]! * t;
@@ -72,11 +81,31 @@ export function makeForward(s: ScannerModel, stock: Stock, opt: { start?: StartM
     DJ(c, zero, rr, null);
     return [rr[0]!, rr[1]!, rr[2]!];
   };
-  return { stock, scanner: s, D, DJ, Dbase: D(zero), K, Kinv, start };
+  return { D, DJ, Dbase: D(zero), K: a.K, Kinv: inv3(a.K) };
+}
+
+export function makeForward(s: ScannerModel, stock: Stock, opt: { start?: StartMatrix } = {}): ForwardModel {
+  const start = opt.start ?? 'base-weighted';
+  const ch = s.channels;
+  const K = start === 'secant' ? secant(ch, stock) : start === 'tangent0' ? tangentAtZero(ch, stock) : baseWeightedK(ch, stock);
+  const core = forwardFromArrays(forwardArraysOf(s, stock, K));
+  return { ...core, stock, scanner: s, start };
+}
+
+/** A scanner and a stock as forward arrays: the pass mask folded into P, the stock's dyes and base, start K. */
+export function forwardArraysOf(s: ScannerModel, stock: Stock, K: Mat3): ForwardArrays {
+  const pass = stock.pass;
+  const P = [0, 1, 2].map((k) => Float64Array.from(s.channels.P[k]!, (v, i) => v * pass[i]!)) as [Float64Array, Float64Array, Float64Array];
+  return { P, E: [stock.dyes[0]!, stock.dyes[1]!, stock.dyes[2]!], B: stock.base, K };
+}
+
+/** The arrays makeForward solves with (pass folded into P), for workers and table keys. */
+export function forwardArrays(f: ForwardModel): ForwardArrays {
+  return forwardArraysOf(f.scanner, f.stock, f.K);
 }
 
 /** Closed-form J at c (3×3). */
-export function forwardJacobian(f: ForwardModel, c: ArrayLike<number>): Mat3 {
+export function forwardJacobian(f: ForwardCore, c: ArrayLike<number>): Mat3 {
   const r = new Float64Array(3);
   const J = new Float64Array(9);
   f.DJ(c, [0, 0, 0], r, J);
@@ -115,7 +144,7 @@ export interface SolveResult {
 export const SOLVE_DEFAULTS: Required<Omit<SolveOptions, 'trace' | 'heldRule'>> = { lo: 0, hi: 4, activeSet: true, gtol: 1e-9, tolerance: 1e-12, maxIterations: 50, stall: 0, sigma: false };
 
 /** Bounded LM with active set. `d` is ABSOLUTE scanner density (density above rebate + f.Dbase). */
-export function solveDyes(f: ForwardModel, d: ArrayLike<number>, o: SolveOptions = {}): SolveResult {
+export function solveDyes(f: ForwardCore, d: ArrayLike<number>, o: SolveOptions = {}): SolveResult {
   const { lo, hi, activeSet, gtol, tolerance, maxIterations, stall, sigma } = { ...SOLVE_DEFAULTS, ...o };
   const clip = (v: number): number => (v < lo ? lo : v > hi ? hi : v);
   const held = o.heldRule ?? HELD;

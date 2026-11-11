@@ -1,14 +1,15 @@
-// Stage 3 laws (guide §8.2, §8.4): flat field, flat wedge, base relativity, flare fit, σ estimator
-// properties, MAD robustness, stock ranking and the conditioning map — each with a broken variant.
+// Stage 3 laws (guide §8.2, §8.4): flat field, flare fit, σ estimator properties, MAD robustness and the
+// open gate — each with a broken variant. Stock ranking, the base check and the conditioning map need a
+// ScannerForward and run on core's (packages/core/test/ingest-forward.test.ts, CHB-017); the flat-wedge
+// and base-relativity channel laws are core's chapter 1 laws (packages/core/src/laws/ch1.laws.ts).
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Vec3 } from '@chromobench/contract';
 import {
-  baseCheck, cameraLinearFromInterleaved, checkFlat, conditioningMap, detectOpenGate, fitFlare, fitFlareChannel, flatAt, flatGrid,
-  gaussian, madSigma, makeScannerForward, normaliseChannels, openSourceSync, readChannels, rankStocks, rebateAbsoluteD,
-  rebateFromBox, region, sigmaAt, sigmaD, sigmaTable, wedgeReading, type CameraLinear, type StockSpectra,
+  cameraLinearFromInterleaved, checkFlat, detectOpenGate, fitFlare, fitFlareChannel, flatAt, flatGrid,
+  madSigma, openSourceSync, rebateFromBox, region, sigmaD, wedgeReading, type CameraLinear,
 } from '@chromobench/ingest';
-import { C1, GOLD200, ROOT } from './chromogen.ts';
+import { GOLD200, ROOT } from './chromogen.ts';
 
 const laws = JSON.parse(readFileSync(`${ROOT}fixtures/golden/ingest-laws.json`, 'utf8'));
 
@@ -94,42 +95,6 @@ describe('flat field (textbook §3.1, §3.9)', () => {
   });
 });
 
-// Real stock data from Chromogen's bundle and the guide's illustrative X-T5 scanner.
-const stockIds = Object.keys(laws.stockBases.D);
-let fwd: ReturnType<typeof makeScannerForward>;
-let P: [number[], number[], number[]];
-let stocks: Record<string, StockSpectra>;
-beforeAll(() => {
-  const dir = `${C1}/various/extracted/chromogen-studio/st-data/cg`;
-  const cam = JSON.parse(readFileSync(`${dir}/cameras/generic-bayer.json`, 'utf8'));
-  const leds = [678, 532, 472].map((c) => gaussian(cam.wl, c, 20));
-  P = (['R', 'G', 'B'] as const).map((k, i) => (cam[k] as number[]).map((v, j) => v * leds[i]![j]!)) as typeof P;
-  stocks = {};
-  for (const id of stockIds) {
-    const d = JSON.parse(readFileSync(`${dir}/stocks/${id}.json`, 'utf8')).data;
-    const z = (v: number | null): number => v ?? 0; // missing samples below 400 nm: no density
-    stocks[id] = { base: d.base_density.map(z), dyes: [0, 1, 2].map((k) => d.channel_density.map((r: (number | null)[]) => z(r[k]!))) as StockSpectra['dyes'] };
-  }
-  fwd = makeScannerForward('xt5-rgb-led', P, stocks);
-});
-
-describe('channel laws (textbook §1.9, §3.7)', () => {
-  it('a flat wedge step of 1.234 D reads 1.234 in every channel', () => {
-    for (const p of [P, normaliseChannels([gaussian(P[0].map((_, i) => 380 + 5 * i), 600, 80), P[1], P[2]])]) {
-      readChannels(normaliseChannels(p), new Array(p[0].length).fill(laws.flatWedge.d)).forEach((v) => expect(Math.abs(v - laws.flatWedge.d)).toBeLessThan(laws.flatWedge.tol));
-    }
-  });
-  it('base relativity: read(P, D + b) − read(P, b) = read(relativeTo(P, b), D)', () => {
-    const Pn = normaliseChannels(P);
-    const b = stocks.kodak_gold_200!.base;
-    const D = b.map((_, i) => 0.7 * stocks.kodak_gold_200!.dyes[0][i]! + 0.3 * stocks.kodak_gold_200!.dyes[2][i]!);
-    const lhs = readChannels(Pn, D.map((v, i) => v + b[i]!)).map((v, k) => v - readChannels(Pn, b)[k]!);
-    const rel = normaliseChannels(Pn.map((p) => p.map((v, i) => v * 10 ** -b[i]!)) as typeof P);
-    const rhs = readChannels(rel, D);
-    lhs.forEach((v, k) => expect(Math.abs(v - rhs[k]!)).toBeLessThan(laws.baseRelativity.tol));
-  });
-});
-
 describe('flare (textbook §3.1, §3.7)', () => {
   it('f = 0.5 % reproduces the wedge readings', () => {
     laws.flare.steps.forEach((d: number, i: number) => expect(wedgeReading(d, laws.flare.f)).toBeCloseTo(laws.flare.readings[i], 3));
@@ -205,37 +170,6 @@ describe('σ estimator (textbook §1.7)', () => {
   });
 });
 
-describe('stock ranking and the base check (guide §2.3, §5.8)', () => {
-  it('bases read through the X-T5 LED scanner match the guide table', () => {
-    for (const id of stockIds) fwd.readBase(id).forEach((v, k) => expect(Math.abs(v - laws.stockBases.D[id][k])).toBeLessThan(laws.stockBases.tol));
-  });
-  it('ranks Gold 200 first, C200 0.020 D away; consistent ≤ 0.02 D', () => {
-    const r = rankStocks(fwd.readBase('kodak_gold_200'), stockIds, fwd);
-    expect(r[0]!.stock).toBe('kodak_gold_200');
-    expect(r[1]!.stock).toBe('fujifilm_c200');
-    for (const x of r.slice(1)) expect(Math.abs(x.maxDiffD - laws.stockBases.maxDiffFromGold[x.stock])).toBeLessThan(0.001);
-    expect(r.filter((x) => x.consistent).map((x) => x.stock)).toContain('kodak_gold_200');
-    // shapeDiff survives an unknown common factor in the open gate
-    const shifted = rankStocks(fwd.readBase('kodak_gold_200').map((v) => v + 0.1) as Vec3, stockIds, fwd);
-    expect(shifted[0]!.consistent).toBe(false);
-    expect(Math.min(...shifted.map((x) => x.shapeDiffD))).toBeLessThan(1e-9);
-  });
-  it('the base check warns above 0.02 D; without an open gate there is nothing to check', () => {
-    const base = fwd.readBase('kodak_gold_200');
-    const open: Vec3 = [0.9, 0.95, 0.85];
-    const T = base.map((d, k) => open[k]! * 10 ** -d) as Vec3;
-    expect(baseCheck(T, open, 'kodak_gold_200', fwd)!.warn).toBe(false);
-    const wrong = baseCheck(T, open, 'kodak_portra_400', fwd)!;
-    expect(wrong.warn).toBe(true);
-    expect(wrong.notes[0]!.code).toBe('W_BASE_MISMATCH');
-    expect(baseCheck(T, null, 'kodak_gold_200', fwd)).toBeNull();
-    expect(rebateAbsoluteD(T, null)).toBeNull();
-    // Gold 200's sample has no open gate: its counts-scale "rebate" bears no relation to any stock (guide §2.3).
-    const naive = rebateAbsoluteD([0.1205, 0.6793, 0.2139], [1, 1, 1])!;
-    naive.forEach((v, k) => expect(v).toBeCloseTo([0.919, 0.168, 0.670][k]!, 3));
-    expect(rankStocks(naive, stockIds, fwd).some((x) => x.consistent)).toBe(false);
-  });
-});
 
 describe('open gate (guide §5.7)', () => {
   it('finds sprocket-hole pixels with the light\'s colour; rejects bright orange film; W_NO_OPEN_GATE otherwise', () => {
@@ -257,22 +191,4 @@ describe('open gate (guide §5.7)', () => {
   });
 });
 
-describe('conditioning map (textbook §3.2)', () => {
-  it('σ₃ table, trilinear reads, gain map and the ill-conditioned share', () => {
-    const t = sigmaTable(fwd, 'kodak_gold_200', 9, 2.6);
-    expect(sigmaAt(t, 1.3, 0, 2.6)).toBeCloseTo(fwd.sigmaMin('kodak_gold_200', [1.3, 0, 2.6]), 6);
-    expect(Math.abs(sigmaAt(t, 0.5, 0.5, 0.5) / fwd.sigmaMin('kodak_gold_200', [0.5, 0.5, 0.5]) - 1)).toBeLessThan(0.02);
-    const dyes = new Float32Array([0.5, 0.5, 0.5, 1, 1, 1, 0, 0, 2.4]);
-    const { gain, summary } = conditioningMap(t, dyes, 3, 1);
-    expect(gain[0]).toBeCloseTo(1 / sigmaAt(t, 0.5, 0.5, 0.5), 5);
-    expect(summary.size).toEqual([3, 1]);
-    // Narrowband LEDs barely amplify noise; a degenerate forward model is flagged.
-    expect(summary.illConditioned).toBe(0);
-    const flatDyes: StockSpectra = { base: stocks.kodak_gold_200!.base, dyes: [stocks.kodak_gold_200!.dyes[0], stocks.kodak_gold_200!.dyes[0], stocks.kodak_gold_200!.dyes[2]] };
-    const bad = makeScannerForward('degenerate', P, { x: flatDyes });
-    const r = conditioningMap(sigmaTable(bad, 'x', 5), dyes, 3, 1);
-    expect(r.summary.illConditioned).toBe(1);
-    expect(r.summary.notes[0]!.code).toBe('W_ILL_CONDITIONED');
-  });
-});
 
