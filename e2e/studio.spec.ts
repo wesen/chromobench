@@ -44,7 +44,7 @@ test('library: a reload keeps the recipe by hash; re-picking re-attaches it', as
   expect(await units(page)).toBe(0);
   await expect.poll(() => units(page)).toBe(1);
   await expect(y).toHaveAttribute('aria-valuetext', 'Filtration Y 3 CC');
-  await expect(page.locator('#history')).toContainText('Filtration (0, 0, 0) → (0, 0, 3) CC');
+  await expect(page.locator('#history')).toContainText('Filtration (0, 0, 0) → (0, 0, +3) CC');
   await expect(page.locator('.strip .cell .badges')).toContainText('●');
   const h1 = await hash(page);
 
@@ -53,7 +53,7 @@ test('library: a reload keeps the recipe by hash; re-picking re-attaches it', as
   await expect(page.locator('[data-roll]')).toContainText('disconnected');
   await open(page);
   expect(await hash(page)).toBe(h1);
-  await expect(page.locator('#history')).toContainText('(0, 0, 3) CC');
+  await expect(page.locator('#history')).toContainText('(0, 0, +3) CC');
 });
 
 test('import fallback into OPFS, then an offline start opens the imported frame', async ({ page, context }) => {

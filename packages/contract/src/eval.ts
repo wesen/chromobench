@@ -32,7 +32,10 @@ export interface Look {
 export interface ContextBlock {
   frame?: string;
   mode: AgentMode;
-  /** Recipe paths changed by this eval. */
+  /**
+   * Recipe paths this eval's edits touched (set/propose), in order. Not "differs from defaultRecipe":
+   * that would be a separate field (CHB-007 R2, contract 0.2 keeps this meaning).
+   */
   changed: string[];
   /** Pending proposal transaction ids. */
   proposals: string[];

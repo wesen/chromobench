@@ -36,7 +36,7 @@ export const outputOps: OpDef[] = [
     args: {
       space: { type: 'enum', values: [...OUTPUT_SPACES], default: 'srgb', path: '', doc: 'Output colour space (the display space for viewing; export uses view.output.export.space).' },
       rendering: { type: 'enum', values: ['print-as-seen', 'scan-of-print'], default: 'scan-of-print', redirects: { view: { hint: 'The paper-white rendering is called "rendering".' } }, doc: 'Paper white at its own level (as seen) or at display white (scan).', ui: { widget: 'segmented', label: 'Rendering', group: 'Output' } },
-      knee: { type: 'enum', values: ['cam16-ucs', 'tanh-shoulder', 'clip'], default: 'cam16-ucs', path: 'view.output.display.knee.method', doc: 'Gamut compression; always the last colour step.' },
+      knee: { type: 'enum', values: ['oklch', 'tanh-shoulder', 'clip'], default: 'oklch', path: 'view.output.display.knee.method', doc: "Gamut compression; always the last colour step. 'oklch' is the perceptual knee (OkLCh with spektrafilm's parameters; called 'cam16-ucs' before contract 0.2, CAM16-UCS itself is CHB-011's)." },
     },
     doc: "Turns the print's XYZ into encoded RGB in an output space. Finishing ops come before it; the knee is last.",
     see: ['output.encode', 'view.adapt'],
@@ -93,14 +93,17 @@ export const maskOps: OpDef[] = [
   defineOp({
     name: 'mask.ellipse', area: 'mask', owner: 'CHB-010', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
     class: 'pointwise', binding: 'setting',
-    args: { box: { type: 'box', unit: 'px', default: { x: 0, y: 0, w: 16, h: 16 }, doc: 'Bounding box in source px.' } },
+    args: {
+      box: { type: 'box', unit: 'px', default: { x: 0, y: 0, w: 16, h: 16 }, doc: 'Bounding box in source px (before rotation).' },
+      angle_deg: { type: 'number', unit: 'deg', min: -90, max: 90, default: 0, doc: 'Rotation about the box centre.' },
+    },
     doc: 'Elliptical mask.',
   }),
   defineOp({
     name: 'mask.paint', area: 'mask', owner: 'CHB-009', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
     class: 'pointwise', binding: 'setting',
-    args: { strokes: { type: 'string', default: 'none', doc: 'Id of a stroke set stored with mask.set.' } },
-    doc: 'Painted mask.',
+    args: { strokes: { type: 'string', default: '[]', doc: 'Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).' } },
+    doc: 'Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).',
   }),
   defineOp({
     name: 'mask.feather', area: 'mask', owner: 'CHB-010', on: 'Mask', returns: 'Mask', domainIn: 'mask', domainOut: 'mask',

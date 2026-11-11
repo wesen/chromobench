@@ -151,7 +151,8 @@ export const invertOps: OpDef[] = [
   }),
   defineOp({
     name: 'invert.classify', area: 'invert', owner: 'CHB-003', on: 'Image', returns: 'Value', domainIn: 'film-dyes',
-    class: 'measure', binding: 'stock', args: {},
+    class: 'measure', binding: 'stock',
+    args: { sigma: { type: 'vec3', unit: 'D', min: 0, max: 0.2, default: [0.0043, 0.0033, 0.0057], doc: 'Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px).' } },
     fields: [
       { name: 'reachable', type: 'number', unit: 'fraction', doc: 'fraction solved within tolerance' },
       { name: 'blank', type: 'number', unit: 'fraction', doc: 'fraction indistinguishable from blank film' },
@@ -162,7 +163,8 @@ export const invertOps: OpDef[] = [
   }),
   defineOp({
     name: 'invert.classes', area: 'invert', owner: 'CHB-003', on: 'Image', returns: 'Image', domainIn: 'film-dyes', domainOut: 'scan-classes',
-    class: 'pointwise', binding: 'stock', args: {},
+    class: 'pointwise', binding: 'stock',
+    args: { sigma: { type: 'vec3', unit: 'D', min: 0, max: 0.2, default: [0.0043, 0.0033, 0.0057], doc: 'Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px).' } },
     doc: 'Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut.',
   }),
 ];

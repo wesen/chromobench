@@ -22,7 +22,7 @@ Most-used calls:
 - `h.measure.patches({ cols, rows })`
 - `h.look(label)`
 - `cb.testStrip(frame, { vary: 'time', steps, step })`
-- `cb.ringAround(frame, { step_cc })`
+- `cb.ringAround(frame, { step_pt })`
 - `cb.compare([a, b], 'label')`
 - `frame.edit({ 'print.lights.logH': lights }, { why })`
 - `frame.edit.exposure.add({ id, kind, mask, stops })`

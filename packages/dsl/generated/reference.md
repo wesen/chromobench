@@ -16,7 +16,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 - `frame.edit.exposure.add({ id, kind, mask, stops }, { why }) / .remove(id)` — proposes a dodge, burn, flash or split exposure (a mask handle is stored with it)
 - `frame.why('print.lights.logH')` — who set a recipe value, and when
 - `cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })` — a test strip; its look carries one reading per band
-- `cb.ringAround(frame, { step_cc: 10 })` — a 3×3 ring-around; its look carries one reading per cell
+- `cb.ringAround(frame, { step_pt: 4 })` — a 3×3 ring-around; its look carries one reading per cell
 - `cb.compare([a, b], 'label')` — one side-by-side look; each half carries its own numbers
 - `h.look('label' | { label, box, at, size })` — queues an image for you, with the numbers it shows (max 4 per eval)
 - `units.pt(x) · toPt · stops · toStops · stopsFromTime(t1, t2) · stopsFromFstop(n1, n2)` — unit conversions; numbers or arrays
@@ -33,8 +33,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in camera-linear
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -42,8 +43,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -89,8 +90,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - stock: stockId, default "kodak_portra_400", recipe capture.stock — Film stock the scene is shot on.
     - exposureEV: number, stop, [-10, 10], default 0, recipe capture.exposureEV — Exposure relative to the stock reference.
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -98,8 +100,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -125,8 +127,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - stock: stockId, default "kodak_portra_400", recipe scan.stock — Film stock.
     - scanner: string, default "xt5-rgb-led", recipe scan.scanner — Scanner model.
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -134,8 +137,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -188,8 +191,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.film.halation({ strength }) → film-logH — Halation: light scattered back from the film base.`
     - strength: number, fraction, [0, 4], default 1, recipe capture.development.halation.strength — Halation strength relative to the stock.
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -197,8 +201,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -224,8 +228,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.darkroom.lightsToFiltration({ logH }) → value — Expresses printer lights as colour-head filtration plus time.`
     - logH: vec3, logH, [-1.5, 1.5], default [0,0,0] — Printer lights to express as filtration.
     - returns `filtration`, `residual`
-  - `h.darkroom.ringAround({ step_cc, rings }) → print-xyz — A ring-around: the print surrounded by prints with more and less of each filter.`
-    - step_cc: number, CC, [2, 40], default 10 — Filtration step between prints.
+  - `h.darkroom.ringAround({ step_pt, rings }) → print-xyz — A ring-around: the print surrounded by prints moved one step towards and away from each colour, in printer lights.`
+    - step_pt: number, point, [1, 16], default 4 — Printer-light step between prints, in points (2, 4 or 8 are usual).
     - rings: number, [1, 2], default 1 — Number of rings.
   - `h.darkroom.testStrip({ vary, steps, step, direction }) → print-xyz — A test strip of the receiver's print, each band printed with its own setting.`
     - vary: enum time|lights.r|lights.g|lights.b|filtration.c|filtration.m|filtration.y|grade, default "time" — Quantity varied across the strip.
@@ -238,12 +242,15 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - size_um: number, um, [3, 45], default 12, recipe capture.development.grain.size_um — Grain clump size.
     - seed: number, [0, 2147483648], default 1, recipe capture.development.grain.seed — Seed; grain is a pure function of inputs, seed and print grid, independent of tiling.
 - **invert**
-  - `h.invert.classes({  }) → scan-classes — Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut.`
-  - `h.invert.classify({  }) → value — Fractions of the frame per inversion class.`
+  - `h.invert.classes({ sigma }) → scan-classes — Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut.`
+    - sigma: vec3, D, [0, 0.2], default [0.0043,0.0033,0.0057] — Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px).
+  - `h.invert.classify({ sigma }) → value — Fractions of the frame per inversion class.`
+    - sigma: vec3, D, [0, 0.2], default [0.0043,0.0033,0.0057] — Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px).
     - returns `reachable`, `blank`, `belowBase`, `unreachable`
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -251,8 +258,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -273,14 +280,16 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
 - **print**
-  - `h.print.expose({ paper, mode, lamp, filtration, time_s, fstop, magnification }) → paper-logH — Exposes paper through the negative: the per-stock table from dye amounts to paper log exposure, without lights.`
+  - `h.print.expose({ paper, mode, lamp, filtration, time_s, fstop, magnification, aim, aimView }) → paper-logH — Exposes paper through the negative: the per-stock table from dye amounts to paper log exposure, without lights.`
     - paper: stockId, default "kodak_portra_endura", recipe print.paper — Colour paper.
     - mode: enum real|normalised, default "normalised", recipe print.enlarger.mode — normalised: the grey card prints at the aim at lights 0; real: a physical enlarger (CHB-010).
     - lamp: string, default "TH-KG3", recipe print.enlarger.lamp — Enlarger lamp and heat filter.
-    - filtration: cmy, CC, [0, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Dichroic colour-head filtration.
+    - filtration: cmy, CC, [-100, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0.
     - time_s: number, s, [0.1, 600], default 10, recipe print.enlarger.time_s — Exposure time.
     - fstop: number, fstop, [2.8, 45], default 8, recipe print.enlarger.fstop — Enlarger lens aperture.
     - magnification: number, [0.5, 20], optional, recipe print.enlarger.magnification — Enlarger magnification; absent = the calibration's reference (CHB-010).
+    - aim: enum grey-0.184|midgray-normalised, default "grey-0.184", recipe print.aim — What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone.
+    - aimView: string, default "D50", recipe view.illuminant — Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light).
 - **scan**
   - `h.scan.conditioning({  }) → scalar-field — One-channel noise gain 1/σ₃ of the dye solve.`
 - **view**
@@ -290,8 +299,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in printing-density
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -299,8 +309,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -331,8 +341,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in paper-logH
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -340,8 +351,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -375,8 +386,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in paper-dyes
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -384,8 +396,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -421,8 +433,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - family: enum reds|skin|yellows|greens|blues|purples, default "reds" — Hue family.
     - shift_deg: number, deg, [-30, 30], default 0 — Hue shift.
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -430,8 +443,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -455,7 +468,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.output.display({ space, rendering, knee }) → display-rgb — Turns the print's XYZ into encoded RGB in an output space.`
     - space: enum srgb|display-p3|rec2020|adobe-rgb|prophoto, default "srgb" — Output colour space (the display space for viewing; export uses view.output.export.space).
     - rendering: enum print-as-seen|scan-of-print, default "scan-of-print", recipe view.output.rendering — Paper white at its own level (as seen) or at display white (scan).
-    - knee: enum cam16-ucs|tanh-shoulder|clip, default "cam16-ucs", recipe view.output.display.knee.method — Gamut compression; always the last colour step.
+    - knee: enum oklch|tanh-shoulder|clip, default "oklch", recipe view.output.display.knee.method — Gamut compression; always the last colour step. 'oklch' is the perceptual knee (OkLCh with spektrafilm's parameters; called 'cam16-ucs' before contract 0.2, CAM16-UCS itself is CHB-011's).
 - **view**
   - `h.view.adapt({ to }) → print-xyz — Chromatic adaptation of the print XYZ to the output white.`
     - to: enum D50|D65, default "D65", recipe view.output.white — White to adapt to.
@@ -467,8 +480,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in display-rgb
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -476,8 +490,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -502,8 +516,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 - **mask**
   - `h.mask.and({ other }) → mask — Intersection (minimum).`
     - other: Mask — Second mask.
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.feather({ radius_px }) → mask — Feathers (blurs) a mask.`
     - radius_px: number, px, [0, 500], default 10 — Feather radius.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
@@ -516,8 +531,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.mask.not({  }) → mask — Inverse (1 − m).`
   - `h.mask.or({ other }) → mask — Union (maximum).`
     - other: Mask — Second mask.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -539,8 +554,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in scan-classes
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -548,8 +564,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -571,8 +587,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in scalar-field
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -580,8 +597,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -603,8 +620,9 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 ## Handles in silver-density
 
 - **mask**
-  - `h.mask.ellipse({ box }) → mask — Elliptical mask.`
-    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px.
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Elliptical mask.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
@@ -612,8 +630,8 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
     - below: number, fraction, [0, 1], default 1 — Select values below this.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask.`
-    - strokes: string, default "none" — Id of a stroke set stored with mask.set.
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+    - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).

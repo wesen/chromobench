@@ -83,10 +83,14 @@ export const darkroomOps: OpDef[] = [
     name: 'darkroom.ringAround', area: 'darkroom', owner: 'CHB-010', on: 'Image', returns: 'Image', domainIn: 'film-dyes', domainOut: 'print-xyz',
     class: 'decoration', binding: 'setting',
     args: {
-      step_cc: { type: 'number', unit: 'CC', min: 2, max: 40, default: 10, doc: 'Filtration step between prints.' },
+      step_pt: {
+        type: 'number', unit: 'point', min: 1, max: 16, usual: [2, 8], default: 4,
+        redirects: { step_cc: { hint: 'The ring-around steps printer lights in points (1 point = 0.025 log H), as the darkroom guides do; a filtration series is darkroom.testStrip with vary filtration.' } },
+        doc: 'Printer-light step between prints, in points (2, 4 or 8 are usual).',
+      },
       rings: { type: 'number', unit: 'none', min: 1, max: 2, integer: true, default: 1, doc: 'Number of rings.' },
     },
-    doc: 'A ring-around: the print surrounded by prints with more and less of each filter.',
+    doc: 'A ring-around: the print surrounded by prints moved one step towards and away from each colour, in printer lights.',
   }),
   defineOp({
     name: 'darkroom.contactSheet', area: 'darkroom', owner: 'CHB-010', on: 'none', returns: 'Image', domainOut: 'print-xyz',

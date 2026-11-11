@@ -23,8 +23,8 @@ const strip = cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })
 strip.look('time test strip')
 return (await strip.measure.patches({ cols: 7 })).cells`;
 
-const E3 = `const ring = cb.ringAround(frame, { step_cc: 10 })
-ring.look('ring-around, 10 CC')
+const E3 = `const ring = cb.ringAround(frame, { step_pt: 4 })
+ring.look('ring-around, 4 points')
 return (await ring.measure.patches({ cols: 3, rows: 3 })).cells`;
 
 const E4 = `mem.greyD = async (h, at = [48, 32]) => { // print densities at a point, 15 px aperture

@@ -1,5 +1,5 @@
 {
-  "contractVersion": "0.1.0",
+  "contractVersion": "0.2.0",
   "domains": {
     "camera-linear": {
       "channels": 3,
@@ -165,13 +165,19 @@
     "E_UNKNOWN_OP",
     "E_UNKNOWN_OPTION",
     "E_WRONG_KIND",
+    "Error",
     "LOOKS",
     "RANGE",
+    "RangeError",
+    "ReferenceError",
+    "SyntaxError",
+    "TypeError",
     "UNHANDLED",
     "W_BASE_MISMATCH",
     "W_CLIPPED",
     "W_DATA_ILLUSTRATIVE",
     "W_DATA_PACK_CHANGED",
+    "W_DECODE_NOTE",
     "W_DODGE_EXCEEDS_MAIN",
     "W_ENCODING_ASSUMED",
     "W_FLAT_SHAPE",
@@ -292,12 +298,19 @@
           "type": "number",
           "unit": "none"
         },
-        "step_cc": {
-          "default": 10,
-          "max": 40,
-          "min": 2,
+        "step_pt": {
+          "default": 4,
+          "max": 16,
+          "min": 1,
+          "redirects": {
+            "step_cc": null
+          },
           "type": "number",
-          "unit": "CC"
+          "unit": "point",
+          "usual": [
+            2,
+            8
+          ]
         }
       },
       "binding": "setting",
@@ -532,7 +545,19 @@
     },
     "invert.classes": {
       "area": "invert",
-      "args": {},
+      "args": {
+        "sigma": {
+          "default": [
+            0.0043,
+            0.0033,
+            0.0057
+          ],
+          "max": 0.2,
+          "min": 0,
+          "type": "vec3",
+          "unit": "D"
+        }
+      },
       "binding": "stock",
       "class": "pointwise",
       "domainIn": "film-dyes",
@@ -543,7 +568,19 @@
     },
     "invert.classify": {
       "area": "invert",
-      "args": {},
+      "args": {
+        "sigma": {
+          "default": [
+            0.0043,
+            0.0033,
+            0.0057
+          ],
+          "max": 0.2,
+          "min": 0,
+          "type": "vec3",
+          "unit": "D"
+        }
+      },
       "binding": "stock",
       "class": "measure",
       "domainIn": "film-dyes",
@@ -617,6 +654,13 @@
     "mask.ellipse": {
       "area": "mask",
       "args": {
+        "angle_deg": {
+          "default": 0,
+          "max": 90,
+          "min": -90,
+          "type": "number",
+          "unit": "deg"
+        },
         "box": {
           "default": {
             "h": 16,
@@ -750,7 +794,7 @@
       "area": "mask",
       "args": {
         "strokes": {
-          "default": "none",
+          "default": "[]",
           "type": "string"
         }
       },
@@ -941,11 +985,11 @@
       "area": "output",
       "args": {
         "knee": {
-          "default": "cam16-ucs",
+          "default": "oklch",
           "path": "view.output.display.knee.method",
           "type": "enum",
           "values": [
-            "cam16-ucs",
+            "oklch",
             "tanh-shoulder",
             "clip"
           ]
@@ -1164,6 +1208,21 @@
     "print.expose": {
       "area": "print",
       "args": {
+        "aim": {
+          "default": "grey-0.184",
+          "path": "print.aim",
+          "type": "enum",
+          "values": [
+            "grey-0.184",
+            "midgray-normalised"
+          ]
+        },
+        "aimView": {
+          "default": "D50",
+          "path": "view.illuminant",
+          "type": "string",
+          "valuesFrom": "illuminants"
+        },
         "filtration": {
           "default": {
             "c": 0,
@@ -1171,7 +1230,7 @@
             "y": 0
           },
           "max": 200,
-          "min": 0,
+          "min": -100,
           "path": "print.enlarger.filtration",
           "type": "cmy",
           "unit": "CC"
@@ -1908,16 +1967,7 @@
       "kind": "op"
     },
     "print.aim": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "grey-0.184",
-        "midgray-normalised"
-      ]
+      "kind": "op"
     },
     "print.enlarger.filtration": {
       "kind": "op"
@@ -1949,7 +1999,7 @@
     "print.exposures.*.filtration": {
       "kind": "spec",
       "max": 200,
-      "min": 0,
+      "min": -100,
       "nullable": true,
       "type": "cmy",
       "unit": "CC",
@@ -2127,7 +2177,7 @@
       "type": "enum",
       "unit": null,
       "values": [
-        "cam16-ucs",
+        "oklch",
         "tanh-shoulder",
         "clip"
       ]

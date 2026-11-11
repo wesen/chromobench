@@ -1,5 +1,8 @@
 # Contract requests from CHB-009 (studio)
 
+> **Status (CHB-017, contract 0.2.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.2". Kept here as the record of the request.
+
 The studio works against contract v0 as it stands; these are the changes it would like. Each is
 worked around locally until the orchestrator applies or declines it.
 

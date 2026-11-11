@@ -54,7 +54,7 @@ describe('reference engine', () => {
     const pat = I('source.pattern', [], { domain: 'film-dyes', width: 4, height: 3, seed: 5 });
     const x = I('print.lights', [I('print.expose', [pat])], { logH: [0.05, 0, -0.025] });
     const xyz = I('view.reflect', [I('print.develop', [x], { grade: 2 })], { illuminant: 'D50' });
-    const out = I('output.display', [I('view.adapt', [I('view.flare', [xyz], { flare: 0 })])], { rendering: 'print-as-seen', knee: 'cam16-ucs' });
+    const out = I('output.display', [I('view.adapt', [I('view.flare', [xyz], { flare: 0 })])], { rendering: 'print-as-seen', knee: 'oklch' });
     const [dyes, rgb] = [await read(pat), await read(out)];
     const ch = makePrintChain({ data: interimData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' });
     for (let i = 0; i < 12; i++) {
@@ -68,6 +68,41 @@ describe('reference engine', () => {
         expect(rgb[3 * i + k]!).toBeLessThanOrEqual(1);
       }
     }
+  });
+
+  it('contract 0.2: print.expose reads filtration as a shift on the neutral pack, and its aim and aimView args', async () => {
+    const { I, read } = await setup();
+    const pat = I('source.pattern', [], { domain: 'film-dyes', width: 3, height: 2, seed: 9 });
+    const dyes = await read(pat);
+    const data = interimData();
+    const cases: [Record<string, unknown>, Parameters<typeof makePrintChain>[0]][] = [
+      [{}, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' }],
+      [{ filtration: { c: 0, m: -10, y: 5 } }, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50', filtrationShift: { c: 0, m: -10, y: 5 } }],
+      [{ aim: 'midgray-normalised' }, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, aim: 'midgray-normalised' }],
+      [{ aimView: 'D65' }, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D65' }],
+    ];
+    const outs: Float64Array[] = [];
+    for (const [args, chain] of cases) {
+      const x = await read(I('print.expose', [pat], args));
+      const ch = makePrintChain(chain);
+      for (let i = 0; i < 6; i++) {
+        const want = ch.xOfDyes([dyes[3 * i]!, dyes[3 * i + 1]!, dyes[3 * i + 2]!]);
+        for (let k = 0; k < 3; k++) expect(Math.abs(x[3 * i + k]! - want[k]!)).toBeLessThan(1e-12);
+      }
+      outs.push(x);
+    }
+    // the database neutral pack for (Portra Endura, Portra 400) is not 0/0/0, and shift 0 means it
+    expect(data.neutralFilter('kodak_portra_endura', 'kodak_portra_400')).toBeDefined();
+    for (const o of outs.slice(1)) expect(Math.max(...o.map((v, i) => Math.abs(v - outs[0]![i]!)))).toBeGreaterThan(1e-4);
+  });
+
+  it('contract 0.2: invert.classes takes σ from its sigma argument', async () => {
+    const { I, read } = await setup();
+    const pat = I('source.pattern', [], { domain: 'scanner-density', width: 8, height: 8, seed: 3 });
+    const dy = I('invert.dyes', [pat], { stock: 'kodak_portra_400', scanner: 'xt5-rgb-led' });
+    const blank = async (sigma: number[]) => (await read(I('invert.classes', [dy], { sigma }))).filter((c) => c === 1).length;
+    const [small, big] = [await blank([0.0043, 0.0033, 0.0057]), await blank([0.2, 0.2, 0.2])];
+    expect(big).toBeGreaterThan(small);
   });
 
   it('measure.densitometer on print-xyz reports visual density −log10 Y', async () => {

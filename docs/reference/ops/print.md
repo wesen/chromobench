@@ -60,10 +60,12 @@ Exposes paper through the negative: the per-stock table from dye amounts to pape
 | `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
 | `mode` | enum real/normalised |  |  |  | `"normalised"` | print.enlarger.mode | normalised: the grey card prints at the aim at lights 0; real: a physical enlarger (CHB-010). |
 | `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp and heat filter. |
-| `filtration` | cmy | CC | [0, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Dichroic colour-head filtration. |
+| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0. |
 | `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | print.enlarger.time_s | Exposure time. |
 | `fstop` | number | fstop | [2.8, 45] |  | `8` | print.enlarger.fstop | Enlarger lens aperture. |
 | `magnification` (optional) | number | none | [0.5, 20] |  |  | print.enlarger.magnification | Enlarger magnification; absent = the calibration's reference (CHB-010). |
+| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | print.aim | What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone. |
+| `aimView` | string |  |  |  | `"D50"` | view.illuminant | Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light). |
 
 ```js
 const neg = frame.negative(); await neg.print({ time_s: 12.6 }).look("time +1/3 stop")

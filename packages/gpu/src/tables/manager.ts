@@ -2,7 +2,7 @@
 // The builder is part of the key (decision D6): previews may take either; exports name 'f64'.
 import type { TableKey } from '@chromobench/contract';
 import { backendOrder, type AccelChoice, type Backend, type GpuRuntime } from '../device.ts';
-import { buildTableF64, chromogenOracle, type F64Oracle } from '../physics/oracle.ts';
+import { buildTableF64, coreOracle, type F64Oracle } from '../physics/oracle.ts';
 import { buildTableGpu } from './build-gpu.ts';
 import type { WorkerPool } from './build-workers.ts';
 import { TableCache } from './cache.ts';
@@ -51,7 +51,10 @@ export function uploadTable3D(rt: GpuRuntime, t: Table, format: 'rgba32float' | 
 
 export interface TableManagerOptions {
   accel?: AccelChoice;
+  /** The f64 oracle of the main-thread build (default core's; workers always use core's). */
   oracle?: F64Oracle;
+  /** TableKey.conventions (default core's conventions id). */
+  conventions?: string;
   workers?: WorkerPool | null;
   cache?: TableCache;
 }
@@ -73,7 +76,7 @@ export class TableManager {
     const order = o.builder === 'f64' ? (['workers', 'main'] as Backend[]).filter((b) => b !== 'workers' || this.opts.workers)
       : o.builder === 'gpu-f32' ? (['gpu'] as Backend[])
       : backendOrder(this.opts.accel ?? 'auto', this.rt.caps, !!this.opts.workers);
-    const memoKey = `${inp.kind}|${o.builder ?? 'any'}|${tableId(keyFor(inp, { builder: 'f64', ...(o.scan ? { scan: o.scan } : {}) }))}`;
+    const memoKey = `${inp.kind}|${o.builder ?? 'any'}|${tableId(keyFor(inp, { builder: 'f64', ...this.keyOpts(o) }))}`;
     let p = this.live.get(memoKey);
     if (!p) {
       p = this.build(inp, order, o);
@@ -87,7 +90,7 @@ export class TableManager {
     let lastErr: unknown;
     for (const backend of order) {
       const builder = backend === 'gpu' ? 'gpu-f32' : 'f64';
-      const key = keyFor(inp, { builder, ...(o.scan ? { scan: o.scan } : {}) });
+      const key = keyFor(inp, { builder, ...this.keyOpts(o) });
       const id = tableId(key);
       const t0 = performance.now();
       try {
@@ -100,7 +103,7 @@ export class TableManager {
           table = { N: g.N, range: g.range, data: g.data };
           texture = g.texture;
         } else {
-          table = backend === 'workers' ? await this.opts.workers!.build(inp, { urgent: !!o.urgent }) : buildTableF64(this.opts.oracle ?? chromogenOracle, inp);
+          table = backend === 'workers' ? await this.opts.workers!.build(inp, { urgent: !!o.urgent }) : buildTableF64(this.opts.oracle ?? coreOracle, inp);
           texture = uploadTable3D(this.rt, table, 'rgba32float', `${inp.kind}.${backend}`);
         }
         await this.cache.put(key, table);
@@ -111,6 +114,10 @@ export class TableManager {
       }
     }
     throw lastErr;
+  }
+
+  private keyOpts(o: { scan?: string }): { scan?: string; conventions?: string } {
+    return { ...(o.scan ? { scan: o.scan } : {}), ...(this.opts.conventions ? { conventions: this.opts.conventions } : {}) };
   }
 
   clear(): void { this.live.clear(); this.cache.clearMemory(); }

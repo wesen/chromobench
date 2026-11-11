@@ -1,9 +1,9 @@
 // GpuEngine: the Engine interface on WebGPU (guide §3, §5.5). Pointwise chains lower to programs of
 // kernels/pointwise.wgsl (one dispatch per segment); measure() runs GPU reductions.
 //
-// INTERIM physics: op parameters (aim, printer lights from time/f-stop/filtration, flare, illuminants)
-// come from src/physics (a Chromogen port) until CHB-003's core provides them; the GPU only applies
-// the uniforms and tables it is handed. Each interim choice is marked TODO(CHB-0NN).
+// Physics: @chromobench/core's (CHB-017). Stocks come from a PhysicsData (default: core's interim set,
+// physics/data.ts — the CHB-004 switch point); tables, aim, filtration, flare, adaptation and display
+// matrices from physics/core.ts. The GPU only applies the uniforms and tables it is handed.
 import {
   ChromobenchError, DOMAINS, fail, getOp, Graph, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
@@ -14,24 +14,22 @@ import { ChainRunner, POINTWISE_WGSL } from './chain/run.ts';
 import { OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
-import { chromogenOracle } from './physics/oracle.ts';
-import { chainConstants, interimAim, pdInputs, printInputs, solveInputs } from './physics/setup.ts';
-import { scannerChannels, type Stock } from './physics/spectral.ts';
-import { camera, stock } from './physics/stocks.ts';
+import { densitiesOf, rebateBox, type PhysicsData } from '@chromobench/core';
+import { CorePhysics } from './physics/core.ts';
+import { defaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
 import { WorkerPool } from './tables/build-workers.ts';
 import { OpfsStore, TableCache } from './tables/cache.ts';
 import { TableManager } from './tables/manager.ts';
-import type { Vec3 } from './tables/inputs.ts';
+import type { Mat3, Vec3 } from './tables/inputs.ts';
 
 export const GPU_OPS = [
   'source.open', 'source.pattern', 'scan.density', 'invert.dyes', 'print.expose', 'print.lights', 'print.develop',
-  'view.reflect', 'view.flare', 'output.display', 'film.grain',
+  'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
 ] as const;
 
 const DEFAULT_UM_PER_PX = 6;
-const ILLUMINANT_K: Record<string, number> = { D50: 5003, D55: 5503, D65: 6504, A: 2856 };
 
 export interface GpuEngineOptions extends RuntimeOptions {
   runtime?: GpuRuntime;
@@ -42,6 +40,8 @@ export interface GpuEngineOptions extends RuntimeOptions {
   workers?: number;
   /** Compile the chain and reduction pipelines at creation (default true). */
   prewarm?: boolean;
+  /** Stock and reference data (default: core's interim set; CHB-004's packs plug in here). */
+  data?: PhysicsData;
 }
 
 interface SourceImg { w: number; h: number; c: number; data: Float32Array }
@@ -72,6 +72,8 @@ export class GpuEngine implements Engine {
   private readonly opts: GpuEngineOptions;
   private readonly pool: WorkerPool | null;
   private readonly cache: TableCache;
+  /** core's physics for this engine's data and conventions. */
+  readonly physics: CorePhysics;
   private readonly sources = new Map<string, SourceImg>();
   private readonly srcTex = new Map<string, GPUTexture>();
   private readonly results = new Map<string, Cached>();
@@ -84,7 +86,8 @@ export class GpuEngine implements Engine {
     this.ownsRuntime = owns;
     this.pool = (opts.workers ?? 0) > 0 && typeof Worker !== 'undefined' ? new WorkerPool(opts.workers) : null;
     this.cache = new TableCache(opts.opfs !== false && OpfsStore.available() ? new OpfsStore() : null);
-    this.tables = new TableManager(rt, { accel: opts.accel ?? 'auto', workers: this.pool, cache: this.cache });
+    this.physics = new CorePhysics(opts.data ?? defaultPhysicsData());
+    this.tables = new TableManager(rt, { accel: opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
     this.chain = new ChainRunner(rt, this.tables);
     this.reducer = new Reducer(rt);
     rt.onLost(() => this.dropDeviceState());
@@ -112,7 +115,7 @@ export class GpuEngine implements Engine {
       ops: [...GPU_OPS].sort(), maxSize: c.limits.maxTextureDimension2D, f16: c.features.f16, timestamps: c.features.timestamps,
       precision: ['preview', 'export'], available: c.available, adapter: { name: this.rt.name, fallback: c.adapter.fallback },
       maxTextureDimension2D: c.limits.maxTextureDimension2D, maxBufferSize: c.limits.maxBufferSize, float32Filterable: c.features.float32Filterable,
-      budgetBytes: c.budgetBytes, conventions: 'chromogen-interim-0',
+      budgetBytes: c.budgetBytes, conventions: this.physics.conventions,
     };
   }
 
@@ -127,7 +130,7 @@ export class GpuEngine implements Engine {
     this.recreating ??= (async () => {
       const rt = await GpuRuntime.create(this.opts);
       this.rt = rt;
-      this.tables = new TableManager(rt, { accel: this.opts.accel ?? 'auto', workers: this.pool, cache: this.cache });
+      this.tables = new TableManager(rt, { accel: this.opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
       this.chain = new ChainRunner(rt, this.tables);
       this.reducer = new Reducer(rt);
       rt.onLost(() => this.dropDeviceState());
@@ -232,23 +235,26 @@ export class GpuEngine implements Engine {
   }
 
   private lower(nodes: Node[], treb: Map<string, Vec3>): Lowered {
+    // Every parameter comes from core (physics/core.ts): the same chain settings, aim, tables, flare
+    // white, adaptation and display matrix the reference engine uses for the same nodes.
+    const P = this.physics;
     const segments: Segment[] = [];
     const warnings: Diagnostic[] = [];
     let cur: Segment = { ops: [], tables: {} };
-    let film: Stock | null = null;
-    let paper: Stock | null = null;
-    let printInp: ReturnType<typeof printInputs> | null = null;
-    const push = (op: PwOp, need: Partial<SegmentTables> = {}) => {
+    const push = (op: PwOp, need: Partial<SegmentTables> = {}, disp?: Mat3) => {
       const clash = (Object.keys(need) as (keyof SegmentTables)[]).some((k) => cur.tables[k] && cur.tables[k] !== need[k]);
-      if (cur.ops.length >= 12 || clash) {
+      if (cur.ops.length >= 12 || clash || (disp && cur.disp)) {
         segments.push(cur);
         cur = { ops: [], tables: {} };
       }
       Object.assign(cur.tables, need);
+      if (disp) cur.disp = disp;
       cur.ops.push(op);
     };
-    for (const n of nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]!;
       const a = n.args as Record<string, unknown>;
+      const ctx = P.ctx(nodes, i);
       switch (n.op) {
         case 'source.open': {
           const enc = a['encoding'];
@@ -257,53 +263,23 @@ export class GpuEngine implements Engine {
         }
         case 'source.pattern': break;
         case 'scan.density': push({ code: OP.DENSITY, p0: [...(treb.get(n.id) ?? [1, 1, 1])], node: n.id }); break;
-        case 'invert.dyes': {
-          film = stock(a['stock'] as string);
-          // TODO(CHB-003/CHB-004): scanner models come from core and packs; 'xt5-rgb-led' = Chromogen's xt5-fitted LEDs
-          const si = solveInputs(scannerChannels(a['scanner'] as string, camera()), film);
-          push({ code: OP.DYES, node: n.id }, { solve: si });
-          break;
-        }
+        case 'invert.dyes': push({ code: OP.DYES, node: n.id }, { solve: P.solveInputs(a['stock'] as string, a['scanner'] as string) }); break;
         case 'print.expose': {
-          film ??= stock('kodak_portra_400');
-          paper = stock(a['paper'] as string);
-          const pd = pdInputs(film, paper, 3200); // TODO(CHB-010): lamp spectra by id ('TH-KG3' ≈ 3200 K blackbody)
-          const si = solveInputs(scannerChannels('xt5-fitted', camera()), film);
-          const cc = chainConstants(si, paper);
-          const f = a['filtration'] as { c: number; m: number; y: number };
-          // TODO(CHB-010): real enlarger exposure. Interim: time and f-stop scale all layers; CC filters subtract density/100.
-          const t = Math.log10((a['time_s'] as number) / 10) - 2 * Math.log10((a['fstop'] as number) / 8);
-          const filt = [f.c, f.m, f.y].map((v) => -v / 100);
-          const aim = a['mode'] === 'normalised' ? interimAim(film, paper, pd, cc.clear, (c) => chromogenOracle.spectral(pd, c)) : [0, 0, 0];
-          push({ code: OP.EXPOSE, p0: [0, 1, 2].map((k) => cc.clear[k]! + aim[k]! + t + filt[k]!), node: n.id }, { pd });
+          // filtration is a shift on the database neutral pack; the aim lights are core's (aim, aimView)
+          const { pd, offset } = P.expose(P.exposeSettings(ctx, a));
+          push({ code: OP.EXPOSE, p0: [...offset], node: n.id }, { pd });
           break;
         }
         case 'print.lights': push({ code: OP.ADD, p0: [...(a['logH'] as number[])], node: n.id }); break;
-        case 'print.develop': {
-          paper = stock(a['paper'] as string);
-          film ??= stock('kodak_portra_400');
-          if (a['grade'] !== 2) warnings.push({ code: 'W_PREVIEW_APPROX', message: 'print.develop grade is not modelled by the interim GPU physics (grade 2 used)' });
-          push({ code: OP.DEVELOP, node: n.id }, { curves: { film, paper } });
-          break;
-        }
-        case 'view.reflect': {
-          paper ??= stock('kodak_portra_endura');
-          const ill = a['illuminant'] as string;
-          printInp = printInputs(paper, { viewingK: ILLUMINANT_K[ill] ?? 5003 }); // TODO(CHB-003): CIE illuminant spectra
-          push({ code: OP.REFLECT, node: n.id }, { print: printInp });
-          break;
-        }
-        case 'view.flare': {
-          const f = (a['flare'] as number) / 100;
-          const W = chromogenOracle.spectral(printInp ?? printInputs(paper ?? stock('kodak_portra_endura')), [0, 0, 0]);
-          push({ code: OP.FLARE, p0: W.map((w) => w * f), p1: [1 / (1 + f)], node: n.id });
-          break;
-        }
+        case 'print.develop': push({ code: OP.DEVELOP, node: n.id }, { curves: P.developRow(a['paper'] as string, a['grade'] as number) }); break;
+        case 'view.reflect': push({ code: OP.REFLECT, node: n.id }, { print: P.printInputs(P.paperOf(ctx), a['illuminant'] as string) }); break;
+        case 'view.flare': push({ code: OP.FLARE, p0: P.flare(ctx, a['flare'] as number), p1: [1], node: n.id }); break;
+        case 'view.adapt': push({ code: OP.ADAPT, p0: P.adaptGains(ctx, a['to']), node: n.id }); break;
         case 'output.display': {
           if (a['space'] !== 'srgb') fail('E_NOT_IMPLEMENTED', `output.display space ${String(a['space'])} is not implemented by the GPU engine (srgb only)`, { valid: ['srgb'] });
           const knee = a['knee'];
-          if (knee === 'cam16-ucs') warnings.push({ code: 'W_PREVIEW_APPROX', message: 'cam16-ucs knee not implemented on the GPU yet (TODO CHB-011); clipped instead' });
-          push({ code: OP.DISPLAY, flags: knee === 'tanh-shoulder' ? 1 : 0, node: n.id });
+          if (knee === 'oklch') warnings.push({ code: 'W_PREVIEW_APPROX', message: 'the oklch knee is not implemented on the GPU yet (TODO CHB-011); clipped instead' });
+          push({ code: OP.DISPLAY, flags: knee === 'tanh-shoulder' ? 1 : 0, node: n.id }, {}, P.displayMatrix(ctx, a['rendering']));
           break;
         }
         case 'film.grain': {
@@ -315,6 +291,12 @@ export class GpuEngine implements Engine {
     }
     if (cur.ops.length || !segments.length) segments.push(cur);
     return { root: nodes[0]!, segments, warnings };
+  }
+
+  /** The lowered program of a node (tests and the parity page). */
+  lowerNode(ref: NodeRef): Segment[] {
+    const nodes = this.chainOf(this.node(ref).id);
+    return this.lower(nodes, new Map()).segments;
   }
 
   /** Grain σ per output pixel from size_um (Selwyn: σ²·A constant), filled per target. */
@@ -357,9 +339,14 @@ export class GpuEngine implements Engine {
     const out = new Map<string, Vec3>();
     for (const n of nodes) {
       if (n.op !== 'scan.density') continue;
-      const box = n.args['rebate'] as Box | undefined;
-      if (!box) continue; // TODO(CHB-006): a percentile rebate estimate (W_REBATE_PERCENTILE); interim T_reb = 1
-      const r = await this.evaluate({ id: n.inputs[0]!, info: this.graph.get(n.inputs[0]!)!.info }, { scale: 'full', precision: 'export', region: box });
+      let box = n.args['rebate'] as Box | undefined;
+      const recvRef = { id: n.inputs[0]!, info: this.graph.get(n.inputs[0]!)!.info };
+      if (!box) {
+        // no box: the brightest 5 % column band, the rule the mock and reference engines share (core rebateBox)
+        const full = await this.evaluate(recvRef, { scale: 'full', precision: 'export' });
+        box = rebateBox(full.width, full.height, full.info.channels, await full.read());
+      }
+      const r = await this.evaluate(recvRef, { scale: 'full', precision: 'export', region: box });
       const d = await r.read();
       const c = r.info.channels;
       const m = [0, 0, 0];
@@ -429,7 +416,7 @@ export class GpuEngine implements Engine {
     const value = await this.gpu(async () => {
       const tex = this.chain.upload(data, img.width, img.height, info.channels, 'measure');
       try {
-        return await this.reduce(n.op, a, tex, img.width, img.height, info);
+        return await this.reduce(n.op, a, tex, img.width, img.height, info, recvId);
       } finally {
         this.rt.textures.release(tex);
       }
@@ -438,8 +425,13 @@ export class GpuEngine implements Engine {
     return { node: n.id, value, warnings: [] };
   }
 
-  private async reduce(op: string, a: Record<string, unknown>, tex: GPUTexture, w: number, h: number, info: ImageInfo): Promise<Record<string, unknown>> {
+  private async reduce(op: string, a: Record<string, unknown>, tex: GPUTexture, w: number, h: number, info: ImageInfo, recvId: string): Promise<Record<string, unknown>> {
     const full: Box = { x: 0, y: 0, w, h };
+    // densities of a mean pixel are core's (Status M through the stock, or −log10 of XYZ over the white)
+    const densities = (mean: number[]) => {
+      const chain = this.chainOf(recvId);
+      return densitiesOf(this.physics.ctx(chain, chain.length), info.domain, mean as Vec3);
+    };
     const nc = Math.min(3, info.channels);
     const [dlo, dhi] = DOMAINS[info.domain].range;
     switch (op) {
@@ -479,8 +471,8 @@ export class GpuEngine implements Engine {
         for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
           const cb = { x: b.x + Math.floor((i * b.w) / cols), y: b.y + Math.floor((j * b.h) / rows), w: Math.max(1, Math.floor(b.w / cols)), h: Math.max(1, Math.floor(b.h / rows)) };
           const m = await this.reducer.moments(tex, cb);
-          const D = [0, 1, 2].map((k) => m.mean[Math.min(k, info.channels - 1)]!);
-          cells.push({ cell: j * cols + i, D, visual: (D[0]! + D[1]! + D[2]!) / 3 });
+          const d = densities([0, 1, 2].map((k) => m.mean[Math.min(k, info.channels - 1)]!));
+          cells.push({ cell: j * cols + i, D: d.D, visual: d.visual ?? (d.D[0] + d.D[1] + d.D[2]) / 3 });
         }
         return { cells };
       }
@@ -492,14 +484,8 @@ export class GpuEngine implements Engine {
         if (x1 < x0 || y1 < y0) fail('E_ARG_RANGE', 'densitometer aperture lies outside the image');
         const m = await this.reducer.moments(tex, { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }, { cx: at.x, cy: at.y, r });
         if (!m.count) fail('E_ARG_RANGE', 'densitometer aperture lies outside the image');
-        const mean = [0, 1, 2].map((k) => m.mean[Math.min(k, info.channels - 1)]!);
-        if (info.domain === 'print-xyz') {
-          // TODO(CHB-003): status densities of a print; interim: densities of sRGB-linear reflectance
-          const M = [[3.2404542, -1.5371385, -0.4985314], [-0.969266, 1.8760108, 0.041556], [0.0556434, -0.2040259, 1.0572252]];
-          const R = M.map((row) => row[0]! * mean[0]! + row[1]! * mean[1]! + row[2]! * mean[2]!);
-          return { D: R.map((v) => -Math.log10(Math.max(v, 1e-8))), visual: -Math.log10(Math.max(mean[1]!, 1e-8)) };
-        }
-        return { D: mean };
+        const d = densities([0, 1, 2].map((k) => m.mean[Math.min(k, info.channels - 1)]!));
+        return d.visual === undefined ? { D: d.D } : { D: d.D, visual: d.visual };
       }
       default:
         return fail('E_NOT_IMPLEMENTED', `${op} has no GPU reduction`);

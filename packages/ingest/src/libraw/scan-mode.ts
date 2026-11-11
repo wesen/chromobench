@@ -50,7 +50,7 @@ export function scanMode(m: Mosaic, bin: 'none' | 'cfa' | 'cfa-half' = 'cfa'): R
     }
     return n ? s / n : info.black[0]!;
   });
-  const notes = [{ code: 'W_ENCODING_ASSUMED', message: `LibRaw scan mode: raw channels, black (${black3.map((b) => b.toFixed(1)).join(', ')}) and white ${info.white} applied per photosite; no white balance, no matrix.` }];
+  const notes = [{ code: 'W_DECODE_NOTE', message: `LibRaw scan mode: raw channels, black (${black3.map((b) => b.toFixed(1)).join(', ')}) and white ${info.white} applied per photosite; no white balance, no matrix.` }];
   if (bin === 'none') {
     const out = new Float32Array(vw * vh);
     const clipped = new Uint8Array(vw * vh);

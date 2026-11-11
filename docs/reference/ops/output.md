@@ -16,7 +16,7 @@ Turns the print's XYZ into encoded RGB in an output space. Finishing ops come be
 |---|---|---|---|---|---|---|---|
 | `space` | enum srgb/display-p3/rec2020/adobe-rgb/prophoto |  |  |  | `"srgb"` |  | Output colour space (the display space for viewing; export uses view.output.export.space). |
 | `rendering` | enum print-as-seen/scan-of-print |  |  |  | `"scan-of-print"` | view.output.rendering | Paper white at its own level (as seen) or at display white (scan). Redirects: view. |
-| `knee` | enum cam16-ucs/tanh-shoulder/clip |  |  |  | `"cam16-ucs"` | view.output.display.knee.method | Gamut compression; always the last colour step. |
+| `knee` | enum oklch/tanh-shoulder/clip |  |  |  | `"oklch"` | view.output.display.knee.method | Gamut compression; always the last colour step. 'oklch' is the perceptual knee (OkLCh with spektrafilm's parameters; called 'cam16-ucs' before contract 0.2, CAM16-UCS itself is CHB-011's). |
 
 ## `output.encode`
 

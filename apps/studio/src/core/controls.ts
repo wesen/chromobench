@@ -113,11 +113,13 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   const step = isTime ? 1 / 6 : isFstop ? 1 / 3 : ui.step !== undefined ? toDisplay(ui.step) : 1;
   const dec = decimals(step);
   const unitText = UNIT_TEXT[displayUnit] ?? displayUnit;
+  // Signed display for offsets: printer lights (points) and the filtration shift on the neutral pack (CC, contract 0.2).
+  const shift = displayUnit === 'point' || (type === 'cmy' && storageUnit === 'CC');
   const fmtNum = (v: number): string => {
     if (isTime) return `${formatSeconds(v)} s`;
     if (isFstop) return formatFstop(v);
     const d = toDisplay(v);
-    const s = displayUnit === 'point' ? signed(d, dec) : num(d, dec);
+    const s = shift ? signed(d, dec) : num(d, dec);
     return unitText ? `${s} ${unitText}` : s;
   };
   const format = (v: unknown, k?: number): string => {
@@ -126,7 +128,7 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
     if (k !== undefined) return fmtNum(componentOf(type, v, k));
     const parts = [0, 1, 2].map((i) => {
       const d = toDisplay(componentOf(type, v, i));
-      return displayUnit === 'point' ? signed(d, dec) : num(d, dec);
+      return shift ? signed(d, dec) : num(d, dec);
     });
     return `(${parts.join(', ')})${unitText ? ` ${unitText}` : ''}`;
   };

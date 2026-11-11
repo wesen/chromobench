@@ -126,7 +126,7 @@ export class LibRawDecoder implements RawDecoder {
         }
         if (dng?.asShotNeutral) img.meta.camera.asShotNeutral = [dng.asShotNeutral[0]!, dng.asShotNeutral[1]!, dng.asShotNeutral[2]!];
       } catch {
-        img.meta.notes.push({ code: 'W_ENCODING_ASSUMED', message: 'The camera colour matrix is singular; no camera → XYZ mapping.' });
+        img.meta.notes.push({ code: 'W_DECODE_NOTE', message: 'The camera colour matrix is singular; no camera → XYZ mapping.' });
       }
       img.meta.orientationTag = [1, 1, 1, 3, 1, 8, 6][info.flip] ?? 1; // LibRaw flip 0/3/5/6 → EXIF 1/3/8/6
       return img;
@@ -168,7 +168,7 @@ export class LibRawDecoder implements RawDecoder {
       width: w, height: h, channels: 3, planes, sample: 'float', bits: 32,
       levels: { black: [0, 0, 0], white: [0, 1, 2].map((k) => info.white - info.black[k]!), from: 'libraw' },
       encoding: { value: 'linear', evidence: 'format' },
-      meta: { format: 'raw', cfa: 'none', clipped, notes: [{ code: 'W_ENCODING_ASSUMED', message: `Full-colour raw (${n} components per pixel): no binning needed${n === 4 ? '; the two greens are averaged' : ''}.` }] },
+      meta: { format: 'raw', cfa: 'none', clipped, notes: [{ code: 'W_DECODE_NOTE', message: `Full-colour raw (${n} components per pixel): no binning needed${n === 4 ? '; the two greens are averaged' : ''}.` }] },
     };
   }
 
@@ -195,7 +195,7 @@ export class LibRawDecoder implements RawDecoder {
       width: mem.width, height: mem.height, channels: 3, planes, sample: 'uint', bits: 16,
       levels: { black: [0, 0, 0], white: [65535, 65535, 65535], from: 'libraw' },
       encoding: { value: 'linear', evidence: 'format' },
-      meta: { format: 'raw', cfa: info.cfa.kind, notes: [{ code: 'W_ENCODING_ASSUMED', message: 'LibRaw photo mode: demosaiced (AHD), raw camera colour, unit multipliers, linear 16-bit; black subtracted by LibRaw; white balance not applied.' }] },
+      meta: { format: 'raw', cfa: info.cfa.kind, notes: [{ code: 'W_DECODE_NOTE', message: 'LibRaw photo mode: demosaiced (AHD), raw camera colour, unit multipliers, linear 16-bit; black subtracted by LibRaw; white balance not applied.' }] },
     };
   }
 }

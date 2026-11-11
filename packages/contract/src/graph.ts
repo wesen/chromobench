@@ -273,6 +273,7 @@ export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): No
   const e = p.enlarger;
   const exposeArgs = (time_s: number, filtration = e.filtration): Record<string, unknown> => ({
     paper: p.paper, mode: e.mode, lamp: e.lamp, filtration, time_s, fstop: e.fstop, ...(e.magnification !== null ? { magnification: e.magnification } : {}),
+    aim: p.aim, aimView: r.view.illuminant,
   });
   let x = I('print.expose', [dyes], exposeArgs(e.time_s));
   const extra = p.exposures.filter((ex) => ex.enabled);

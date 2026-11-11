@@ -5,7 +5,7 @@
 import { ChromobenchError, diag, fail, type Diagnostic } from './errors.ts';
 import { canonicalJSON, sha256Hex, type Graph } from './graph.ts';
 import { applyMutation, currentValue, mutationPaths, type Author, type LoggedMutation, type Mutation } from './mutations.ts';
-import { assertRecipe, getPath } from './paths.ts';
+import { assertRecipe, getPath, renameLegacyValues } from './paths.ts';
 import type { FrameRecipe } from './recipe.ts';
 
 export type AgentMode = 'read-only' | 'ask' | 'auto';
@@ -76,8 +76,17 @@ export class EditLog {
   private txCounter = 0;
 
   constructor(data: EditLogData, opts: EditLogOptions = {}) {
-    assertRecipe(data.initial);
-    this.data = structuredClone(data);
+    // Logs persisted under contract 0.1 may name the knee 'cam16-ucs' (renamed 'oklch' in 0.2).
+    const initial = renameLegacyValues(data.initial as unknown as Record<string, unknown>) as unknown as FrameRecipe;
+    assertRecipe(initial);
+    this.data = structuredClone({ ...data, initial });
+    for (const e of this.data.entries) {
+      const m = e.m as { op: string; path?: string; value?: unknown };
+      if (m.op === 'set' && /^view\.output\.(display|export)\.knee(\.method)?$/.test(m.path ?? '')) {
+        if (m.value === 'cam16-ucs') m.value = 'oklch';
+        else if (m.value && typeof m.value === 'object' && (m.value as { method?: unknown }).method === 'cam16-ucs') m.value = { ...(m.value as object), method: 'oklch' };
+      }
+    }
     this.modeValue = opts.mode ?? 'ask';
     this.now = opts.now ?? Date.now;
     this.graph = opts.graph;

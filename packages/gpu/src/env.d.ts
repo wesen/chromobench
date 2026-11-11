@@ -8,3 +8,7 @@ declare module '*.json?raw' {
   const text: string;
   export default text;
 }
+// Vite's import.meta.glob (eager JSON), used by physics/data.ts; works in Vitest too.
+interface ImportMeta {
+  glob<T = unknown>(pattern: string, options: { eager: true; import?: string }): Record<string, T>;
+}

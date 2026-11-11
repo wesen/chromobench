@@ -8,18 +8,20 @@ import { OpfsStore, TableCache } from '../tables/cache.ts';
 import { keyFor } from '../tables/keys.ts';
 import type { SolveInputs, SpectralInputs } from '../tables/inputs.ts';
 import { compare, type ParityReport } from './harness.ts';
-import { gold, ref, runtime } from './page-shared.ts';
+import { currentOracle, gold, ref, runtime } from './page-shared.ts';
+import { buildTableF64 } from '../physics/oracle.ts';
+import { bradfordMatrix, D65 } from '@chromobench/core';
 import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 // the conformance generator, imported by path: the package index also exports Vitest wrappers
-import { generateCases, makeEnv } from '../../../conformance/src/generate.ts';
+import { generateCases, makeEnv } from '@chromobench/conformance/generate';
 
-async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, tol: number, name: string): Promise<ParityReport> {
+async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, tol: number, name: string, override?: SpectralInputs): Promise<ParityReport> {
   const rt = await runtime();
   const s = gold();
-  const inp: SolveInputs | SpectralInputs = kind === 'solve' ? s.solve : kind === 'pd' ? s.pd : s.print;
-  const slow = ref(kind);
+  const inp: SolveInputs | SpectralInputs = override ?? (kind === 'solve' ? s.solve : kind === 'pd' ? s.pd : s.print);
+  const slow = override ? buildTableF64(currentOracle(), override) : ref(kind);
   const fast = await buildTableGpu(rt, inp, hooks);
   rt.textures.release(fast.texture);
   if (kind === 'solve') {
@@ -32,6 +34,11 @@ async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, to
   const r = compare(name, fast.data, slow.data, { tolerance: tol, channels: [0, 1, 2] });
   r.extra = { ms: fast.ms };
   return r;
+}
+
+function adaptedPrint(): SpectralInputs {
+  const s = gold();
+  return { ...s.print, M: bradfordMatrix(currentOracle().spectral(s.print, [0, 0, 0]), D65) };
 }
 
 type Test = (opts: Record<string, unknown>) => Promise<unknown>;
@@ -88,7 +95,12 @@ const TESTS: Record<string, Test> = {
   'table:pd': () => tableParity('pd', {}, 7.2e-7, 'pd'),
   'table:pd:log2-10-rounded': () => tableParity('pd', { codeTransform: (c) => c.replace('LOG2_10: f32 = 3.321928094887362', 'LOG2_10: f32 = 3.32') }, 7.2e-7, 'pd LOG2_10 = 3.32'),
   'table:print': () => tableParity('print', {}, 4.2e-7, 'print'),
-  'table:print:row-major': () => tableParity('print', { rowMajor: true }, 4.2e-7, 'print row-major M'),
+  // core's print table is XYZ under the viewing light (M = I since CHB-017), where row- and column-major
+  // packing agree; the broken variant therefore runs a print table with a non-symmetric M (Bradford to
+  // D65), built both ways, so the packing bug still shows.
+  'table:print:row-major': () => tableParity('print', { rowMajor: true }, 4.2e-7, 'print row-major M', adaptedPrint()),
+  // f32 M · Σ with a full Bradford M costs a few ulp more than M = I: 6e-7 measured, so 1e-6 here
+  'table:print:adapted': () => tableParity('print', {}, 1e-6, 'print, M = Bradford to D65', adaptedPrint()),
 
   async 'workers-bitwise'() {
     const pool = new WorkerPool(4);

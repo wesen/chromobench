@@ -1,6 +1,6 @@
-# Contract v0 decisions
+# Contract decisions
 
-`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`). The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
+`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017) is the last section before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
 
 - **accepted**: in v0 as proposed;
 - **adapted**: in v0 in a different shape, with the reason given;
@@ -202,6 +202,105 @@ Until M1 sign-off everything may change, but every change still gets a note.
 | 2 | `finishing: {look, values, hues}` | accepted | `hues: Record<family, [shift_deg, saturation, luminance]>` |
 | 3–6 | E1–E4 (`invert.unfade`, `measure.fade`, `invert.exposures`, `view.reflect.model`, `film.grain.model` …) | deferred | CHB-015 is optional and comes after M6 |
 | 7 | Reserve `print.lights.auto.method: 'learned'` | accepted | |
+
+## Contract 0.2 (CHB-017: the Phase-1 contract requests)
+
+`CONTRACT_VERSION = '0.2.0'`. The 0.1.0 catalog is kept as `baselines/catalog-0.1.0.json`; `pnpm contract:check` compares
+against it while `main` has no snapshot of its own (20 changes, 4 breaking: allowed under 0.x, each with a note below).
+Decisions marked **(review)** were taken with sensible defaults and should be looked at by the user.
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| core R1 | `print.expose.filtration` is a shift on the database neutral pack **(review)** | accepted | `min: −100`, `detents: [0]`, doc says "0 = neutral; neutral + shift must stay ≥ 0". The reference engine already read it this way; the mock has no stock database, so its neutral is 0/0/0 and nothing changes numerically. `print.exposures.*.filtration` gets the same meaning and range (compile passes it to `print.expose.filtration`). The studio shows the shift signed (`+10 CC`) and its test strip may step below 0 (to −100) |
+| core R2 | `print.aim` reaches the engine | accepted | `print.expose.aim` (enum, `path: 'print.aim'`); `print.aim` becomes op-owned in `RECIPE_FIELDS` (same values). `RefEngineOptions.aim` is removed |
+| core R3 | The aim's viewing light **(review)** | accepted | `print.expose.aimView` (`path: 'view.illuminant'`, same spec as `view.reflect.illuminant`), so the grey-0.184 aim is neutral under the recipe's viewing light. Changing the viewing light now changes `print.expose`'s node id, which is correct: its output depends on it |
+| core R4 | Noise σ for `invert.classes` / `invert.classify` | accepted | `sigma` (vec3, D, 0…0.2, default the Gold 200 640-px values). Not recipe-backed: compile does not build these ops; the host fills it from a `scan.noise` measurement. `RefEngineOptions.sigmaD` is removed |
+| core R5 | `output.display.knee: 'cam16-ucs'` **(review)** | adapted | Renamed to what it is: `'oklch'` (default). CAM16-UCS proper is CHB-011's to add as a new value. `migrateRecipe` and the `EditLog` constructor rewrite `'cam16-ucs'` in pre-0.2 recipes and logged sets (`renameLegacyValues`); the binder refuses `'cam16-ucs'` in new calls with the valid values |
+| core R6 | Engine conventions string | accepted | One id for all engines: core's `conventionsKey(conv)`, e.g. `core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean`. `packages/gpu` reports it in `capabilities()` and in every `TableKey` (see "One physics" below) |
+| dsl R1 | JavaScript error names as codes | accepted | `SyntaxError ReferenceError TypeError RangeError Error` are in `ERROR_CODES`; they are errors (the header comment says so) |
+| dsl R2 | `ContextBlock.changed` | decided | The contract meaning stands: the paths this eval's edits touched. The doc comment now says so; "differs from the default, by author" would be a separate field if someone needs it |
+| gpu #1 | `@chromobench/conformance/generate` | accepted | Subpath export of `src/generate.ts` (no Vitest import); the GPU parity page imports it instead of a relative path |
+| gpu #2 | "Within one 8-bit level" / "identical in every 8-bit value" | noted | Readings confirmed: the 8-bit encodings differ by ≤ 1; "identical" is bounded as < 0.01 level continuous difference plus ≤ 1e-3 of values flipping at a rounding boundary |
+| ingest #1 | `W_DECODE_NOTE` | accepted | Ingest's decoder facts (LibRaw scan/photo mode, full-colour raw, singular camera matrix, DNG black-level tags) use it; `W_ENCODING_ASSUMED` is left for real encoding assumptions |
+| ingest #2 | Per-channel flare | deferred | `scan.flare` stays one percent; deferred to CHB-013, which calibrates flare and decides the widening (a breaking type change) |
+| ingest #3 | Engines pass `scan.orientation` to the area resampler | noted | No type change: an engine that uses ingest for statistics passes `FrameRecipe.scan.orientation` as `RegionOptions.orientation` |
+| studio #1 | `mask.paint.strokes` holds the strokes (canonical JSON) | accepted | Default `'[]'` (was `'none'`); the studio already writes it; the mock still returns an empty mask (CHB-010 rasterises) |
+| studio #2 | `mask.ellipse.angle_deg` | accepted | deg, −90…90, default 0, rotation about the box centre. Mock implements it; the studio's `MaskShape` carries `angle` and round-trips it. Per-shape feather stays `mask.feather` |
+| studio #3 | Ring-around step unit **(review)** | adapted | `darkroom.ringAround.step_cc` → `step_pt` (unit point, 1…16, usual 2…8, default 4) with a `step_cc` redirect whose hint explains the change. Mock: cells +Y +R +M / +G current +B / −1 step +C +1 step, offsets (v − mean v)·1.5·step as in the studio. DSL docs and examples use `{ step_pt: 4 }` |
+
+### One physics for all engines (CHB-017 stage 2)
+
+No contract type changed; these are the rules every engine now follows.
+
+| Item | Decision |
+|---|---|
+| Conventions id | One id: core's `conventionsKey(conv)` (`core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean` by default) in `RefEngine` and `GpuEngine` capabilities and in every GPU `TableKey`. `chromogen-interim-0` is gone |
+| Stock and reference data | `PhysicsData` (core `data/provider.ts`) is the only way in. Interim provider: core's `interimFromJson` (browser-safe) and `interimData()` (Node; reaches `node:fs` through `process.getBuiltinModule`, so core's index also loads in a page). **Switch point for CHB-004:** `packages/gpu/src/physics/data.ts` `defaultPhysicsData()` / `GpuEngineOptions.data`, `RefEngineOptions.data` |
+| GPU f64 oracle | core's `solveNode` / `spectralNode` over the table arrays (`@chromobench/core/tables`); worker, main-thread and parity tables are core's tables (solve table bit-identical to `buildSolveTable` in Studio node order, pd/print to f32 rounding). The Chromogen port in `packages/gpu/src/physics/` is deleted, and with it `fixtures/chromogen/` |
+| GPU lowering | Parameters from core for the same nodes: filtration shift on the neutral pack, `aim`/`aimView`, normalised mode ignoring time and f-stop (as core), core's paper developer (grade → gamma morph) as the 1-D curve row, flare white, `view.adapt` (new GPU op, Bradford gains), display matrix `XYZ_TO_SRGB · Bradford(white → D65) · gain`, core's tanh shoulder, densitometer/patch densities (`densitiesOf`) |
+| GPU `print-xyz` | XYZ under the viewing light with Y(perfect white) = 1, as the domain says and core does (it was D65-adapted in the interim chain) |
+| GPU export path **(review)** | Printing density and print XYZ are integrated per pixel on export (exact bits in the pointwise kernel), not looked up tetrahedrally as CHB-005's guide planned. Reason: against core exact, the 33³ tables cost up to 1.8 levels; exact integrals bring export to 0.05 level. Preview still renders through tables |
+| Reference engine | `RefEngine({mode: 'tabulated'})` renders `invert.dyes`, `print.expose` and `view.reflect` through core's f64 tables with the GPU's texel-centre trilinear lookup; `scan.density` is implemented (box mean or the brightest 5 % column band, as the mock; the GPU now uses the same rule when no box is given) |
+| Ingest | `forward-stub.ts` is deleted; hosts pass core's `scannerForward(data, scanner, conv)`. The Gold 200 ranking golden (`fixtures/golden/ingest-laws.json`) reproduces under CHROMOGEN conventions (missing samples = zero density), as it was computed **(review)**: under core's default (missing = opaque) Ektar 100 reads 0.304 instead of 0.202 D in red, because its base data stops at 700 nm inside the 678 nm LED's tail; Gold 200 still ranks first and C200 second. Which convention ingest's ranking should use in the studio is CHB-006/CHB-013's call |
+| Per-channel flare | Deferred to CHB-013 (ingest #2 above) |
+
+GPU parity against core (SwiftShader, synthetic Gold 200 frame 96 × 64, `packages/gpu/test/browser`):
+
+| Check | Interim (Chromogen) | Core (CHB-017) | Tolerance |
+|---|---|---|---|
+| Solve table vs f64 | ≤ 2.2e-6 | 2.15e-6, 0 flips | 2.2e-6 (unchanged) |
+| pd table / print table | ≤ 7.2e-7 / 4.2e-7 | 7.15e-7 / 2.98e-7 | unchanged; print with a Bradford M 6e-7 (new check, 1e-6) |
+| Export film-dyes vs exact | ≤ 5e-6 | 5.3e-7 | 5e-6 (unchanged) |
+| Export display vs exact | 1.10 levels | 0.05 levels (0.06 scan-of-print + tanh) | ≤ 1 in 8 bits, < 0.1 continuous (tightened) |
+| Preview display vs core tabulated | — | 0.046 levels | < 0.1 continuous (new) |
+| Preview display vs core exact | ≤ 1 in 8 bits | 1.59 levels, 2 in 8 bits | ≤ 2 in 8 bits, mean < 0.25 (moved: the 33³ tables' own error, 1.61 levels in core's tabulated mode) |
+
+### Change notes (contract 0.2)
+
+```text
+CC-001  print.expose.filtration: signed shift on the database neutral pack (CHB-003 R1)
+class:     additive (range widened; the meaning was already the reference engine's)
+changes:   min 0 → −100, doc, ui.detents [0]; recipe print.exposures.*.filtration min −100
+consumers: UI (generated control: signed CC, strip below 0), engines (ref: unchanged; mock: unchanged)
+migration: none
+tests:     recipe −10 Y validates, −101 does not; ref engine: shift 0 = neutral pack
+
+CC-002  print.expose.aim, print.expose.aimView: the aim and its viewing light are op arguments (CHB-003 R2, R3)
+class:     additive (defaults grey-0.184, D50); every print.expose node id changes
+changes:   recipe print.aim becomes op-owned; compile passes print.aim and view.illuminant
+consumers: DSL (generated), engines (ref reads them; gpu: grey-0.184 aim from core)
+migration: none
+tests:     compile passes both; ref engine follows aim and aimView
+
+CC-003  invert.classes.sigma, invert.classify.sigma (CHB-003 R4)
+class:     additive; not recipe-backed
+changes:   vec3 D, 0…0.2, default [0.0043, 0.0033, 0.0057]
+consumers: DSL (generated), ref engine
+migration: none
+tests:     larger σ classifies more pixels blank
+
+CC-004  output.display.knee: 'cam16-ucs' renamed 'oklch' (CHB-003 R5)
+class:     breaking (enum value removed, recipe-backed default changed)
+changes:   values ['oklch', 'tanh-shoulder', 'clip'], default 'oklch'; KneeMethod; recipe view.output.export.knee.method
+consumers: DSL (generated), engines (ref: same algorithm; gpu: warning text)
+migration: renameLegacyValues (migrateRecipe, EditLog constructor) rewrites 'cam16-ucs' → 'oklch' in version-1 recipes
+tests:     migrateRecipe and EditLog load pre-0.2 documents
+
+CC-005  darkroom.ringAround.step_cc → step_pt (studio request #3)
+class:     breaking (argument renamed; redirect step_cc with a hint)
+changes:   unit point, 1…16, default 4
+consumers: DSL docs/examples, mock engine
+migration: none (no persisted ring-around nodes)
+tests:     step_cc gives E_UNKNOWN_OPTION with the hint
+
+CC-006  mask.ellipse.angle_deg; mask.paint.strokes canonical JSON (studio requests #1, #2)
+class:     additive (strokes default 'none' → '[]', not recipe-backed)
+consumers: mock engine (rotation), studio (round trip)
+tests:     studio maskSpec/parseMask round trip; a tilted ellipse covers its rotated axis
+
+CC-007  error codes W_DECODE_NOTE, SyntaxError, ReferenceError, TypeError, RangeError, Error (CHB-006 #1, CHB-007 R1)
+class:     additive
+```
 
 ## Change-note template
 

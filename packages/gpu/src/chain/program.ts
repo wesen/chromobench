@@ -1,11 +1,10 @@
-// Pointwise programs for kernels/pointwise.wgsl: op codes, the uniform layout, and a CPU f64
-// evaluator of the same program (the interim chain reference; CHB-003's engine replaces it).
+// Pointwise programs for kernels/pointwise.wgsl: op codes and the uniform layout. The f64 reference of
+// a program is core's reference engine on the same graph (parity/chain-tests.ts, CHB-017).
 import { defineStruct } from '../layout.ts';
-import { chromogenOracle, type F64Oracle } from '../physics/oracle.ts';
-import type { Curve } from '../physics/spectral.ts';
-import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs, type Vec3 } from '../tables/inputs.ts';
+import type { CurveRow } from '../physics/core.ts';
+import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs } from '../tables/inputs.ts';
 
-export const OP = Object.freeze({ DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10 });
+export const OP = Object.freeze({ DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11 });
 export const MAXOPS = 12;
 /** Table lookup modes: hardware trilinear (preview), manual tetrahedral (export), manual trilinear, broken (no half-texel). */
 export const LOOKUP = Object.freeze({ hw: 0, tetra: 1, trilinear: 2, noHalfTexel: 3 });
@@ -32,11 +31,12 @@ export interface SegmentTables {
   solve?: SolveInputs;
   pd?: SpectralInputs;
   print?: SpectralInputs;
-  /** Paper curves (develop): film forward/inverse and paper curves in rows 0..2. */
-  curves?: { film: { curves: Curve[] }; paper: { curves: Curve[] } };
+  /** The paper-curve row of print.develop (core's developer sampled on X_RANGE). */
+  curves?: CurveRow;
 }
 
-export interface Segment { ops: PwOp[]; tables: SegmentTables }
+/** `disp`: output.display's matrix before the knee (default XYZ_TO_SRGB); one per segment. */
+export interface Segment { ops: PwOp[]; tables: SegmentTables; disp?: Mat3 }
 
 export const XYZ_TO_SRGB: Mat3 = [[3.2404542, -1.5371385, -0.4985314], [-0.969266, 1.8760108, 0.041556], [0.0556434, -0.2040259, 1.0572252]];
 
@@ -69,10 +69,38 @@ export function packProgram(a: PackArgs): ArrayBuffer {
     outMap: [a.region.x, a.region.y, a.region.w / a.outW, a.region.h / a.outH],
     frame: [a.outW, a.outH, a.frameW, a.frameH],
     srcOrigin: [a.srcOrigin[0], a.srcOrigin[1], a.srcIsPrev ? 1 : 0, 0],
-    misc: [seg.ops.length, a.lookup, a.exact && s ? 1 : 0, s ? s.B.length : 0],
+    misc: [seg.ops.length, a.lookup, exactBits(seg, a.exact), spectralSamples(seg)],
     solver: s ? [s.tol, Math.max(s.gtol, 1e-6), s.maxIt, s.hi] : [0, 0, 0, 4],
-    disp: XYZ_TO_SRGB,
+    disp: seg.disp ?? XYZ_TO_SRGB,
   });
+}
+
+/** misc.z: which tables the export path replaces by exact integrals (1 solve, 2 pd, 4 print). */
+export function exactBits(seg: Segment, exact: boolean): number {
+  if (!exact) return 0;
+  const t = seg.tables;
+  return (t.solve ? 1 : 0) | (t.pd ? 2 : 0) | (t.print ? 4 : 0);
+}
+
+/** Samples per spectrum (the spectra of one segment share the grid). */
+export function spectralSamples(seg: Segment): number {
+  const t = seg.tables;
+  return (t.solve ?? t.pd ?? t.print)?.B.length ?? 0;
+}
+
+/** The exact path's spectra buffer (layout in kernels/pointwise.wgsl at binding 8). */
+export function packSpectra(seg: Segment): Float32Array<ArrayBuffer> {
+  const n = spectralSamples(seg);
+  const out = new Float32Array(21 * n + 9);
+  const put = (at: number, arrays: readonly ArrayLike<number>[]) => arrays.forEach((a, j) => { for (let q = 0; q < n; q++) out[at + j * n + q] = a[q]!; });
+  const t = seg.tables;
+  if (t.solve) put(0, [...t.solve.P, ...t.solve.E, t.solve.B]);
+  if (t.pd) put(7 * n, [...t.pd.W, ...t.pd.E, t.pd.B]);
+  if (t.print) {
+    put(14 * n, [...t.print.W, ...t.print.E, t.print.B]);
+    out.set(t.print.M.flat(), 21 * n);
+  }
+  return out;
 }
 
 function pad4(v?: number[]): number[] {
@@ -91,11 +119,7 @@ export function inv(K: Mat3): Mat3 {
   return [0, 1, 2].map((i) => [0, 1, 2].map((j) => (((i + j) % 2 ? -1 : 1) * c(j, i)) / det)) as Mat3;
 }
 
-// ---- CPU f64 reference of a program: exact solve and exact spectral integrals, no tables ----
-
-const srgbEnc = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
-const srgbDec = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
-const clampV = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+// ---- grain RNG on the CPU (tests and the spatial parity) ----
 
 /** pcg4d in JS (u32 arithmetic with Math.imul), bit-identical to the WGSL version. */
 export function pcg4d(a: number, b: number, c: number, d: number): [number, number, number, number] {
@@ -113,64 +137,4 @@ export function normal1(px: number, py: number, k: number, seed: number): number
   const u1 = ((r[0] >>> 8) + 0.5) / 16777216;
   const u2 = (r[1] >>> 8) / 16777216;
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-}
-
-/** Evaluates a segment on one pixel in f64 (fp = full-res frame position, for grain). */
-export function evalPixelF64(seg: Segment, v0: number[], fp: [number, number], oracle: F64Oracle = chromogenOracle): number[] {
-  let v = [v0[0] ?? 0, v0[1] ?? 0, v0[2] ?? 0, v0[3] ?? 0];
-  const t = seg.tables;
-  for (const o of seg.ops) {
-    const p0 = o.p0 ?? [];
-    const p1 = o.p1 ?? [];
-    switch (o.code) {
-      case OP.DECODE:
-        if (p0[0] === 1) v = [srgbDec(v[0]!), srgbDec(v[1]!), srgbDec(v[2]!), v[3]!];
-        else if (p0[0] === 2) v = [Math.max(v[0]!, 0) ** 2.2, Math.max(v[1]!, 0) ** 2.2, Math.max(v[2]!, 0) ** 2.2, v[3]!];
-        break;
-      case OP.DENSITY:
-        v = [0, 1, 2].map((k) => -Math.log10(Math.max(v[k]!, 1e-8) / p0[k]!)).concat(v[3]!);
-        break;
-      case OP.DYES: {
-        const s = t.solve!;
-        const D = v.slice(0, 3) as Vec3;
-        const r = oracle.solve(s, [D[0] + s.Dbase[0], D[1] + s.Dbase[1], D[2] + s.Dbase[2]]);
-        v = [...r.c, r.residual];
-        break;
-      }
-      case OP.EXPOSE: {
-        const pd = oracle.spectral(t.pd!, v.slice(0, 3).map((x) => clampV(x, C_RANGE[0], C_RANGE[1])) as Vec3);
-        v = [p0[0]! - pd[0], p0[1]! - pd[1], p0[2]! - pd[2], 0];
-        break;
-      }
-      case OP.ADD:
-        v = [v[0]! + p0[0]!, v[1]! + p0[1]!, v[2]! + p0[2]!, v[3]!];
-        break;
-      case OP.DEVELOP: {
-        const cv = t.curves!.paper.curves;
-        v = [0, 1, 2].map((k) => Math.max(0, cv[k]!.at(clampV(v[k]!, X_RANGE[0], X_RANGE[1])))).concat(0);
-        break;
-      }
-      case OP.REFLECT:
-        v = [...oracle.spectral(t.print!, v.slice(0, 3).map((x) => clampV(x, CP_RANGE[0], CP_RANGE[1])) as Vec3), 0];
-        break;
-      case OP.FLARE:
-        v = [(v[0]! + p0[0]!) * p1[0]!, (v[1]! + p0[1]!) * p1[0]!, (v[2]! + p0[2]!) * p1[0]!, v[3]!];
-        break;
-      case OP.DISPLAY: {
-        const M = XYZ_TO_SRGB;
-        let rgb = [0, 1, 2].map((r) => M[r]![0] * v[0]! + M[r]![1] * v[1]! + M[r]![2] * v[2]!);
-        if (o.flags === 1) rgb = rgb.map((x) => Math.tanh(Math.max(x, 0) * 1.2) / Math.tanh(1.2));
-        v = [...rgb.map((x) => srgbEnc(clampV(x, 0, 1))), 0];
-        break;
-      }
-      case OP.GRAIN: {
-        const seed = o.flags ?? 0;
-        v = [0, 1, 2].map((k) => Math.max(v[k]! + p0[0]! * p0[1]! * Math.sqrt(Math.max(v[k]!, 0) + 0.05) * normal1(fp[0], fp[1], k, seed), 0)).concat(v[3]!);
-        break;
-      }
-      default:
-        throw new Error(`unknown op ${o.code}`);
-    }
-  }
-  return v;
 }

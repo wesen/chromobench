@@ -15,7 +15,7 @@ var<workgroup> sh: array<f32, 896>;
 // op codes (src/chain/program.ts OP)
 const OP_DENSITY: u32 = 1u;   // T → −log10(T / Treb)
 const OP_DYES: u32 = 2u;      // D → (c, residual) by solve table or exact solve
-const OP_EXPOSE: u32 = 3u;    // c → x = clearL − PD(c)
+const OP_EXPOSE: u32 = 3u;    // c → x = clearL − PD(c) (table, or the exact integral on export)
 const OP_ADD: u32 = 4u;       // v.rgb += p0.rgb
 const OP_DEVELOP: u32 = 5u;   // x → paper dyes by the paper curves
 const OP_REFLECT: u32 = 6u;   // c_p → XYZ by the print table
@@ -23,6 +23,14 @@ const OP_FLARE: u32 = 7u;     // XYZ → (XYZ + p0) * p1.x
 const OP_DISPLAY: u32 = 8u;   // XYZ → encoded RGB
 const OP_GRAIN: u32 = 9u;     // c += amount √(c + 0.05) σ N(frame x, y, layer, seed)
 const OP_DECODE: u32 = 10u;   // encoded source → linear (p0.x: 0 linear, 1 sRGB, 2 gamma 2.2)
+const OP_ADAPT: u32 = 11u;    // XYZ → B⁻¹ · diag(p0.xyz) · B · XYZ (Bradford, view.adapt)
+
+// Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
+const BRAD = mat3x3<f32>(vec3<f32>(0.8951, -0.7502, 0.0389), vec3<f32>(0.2664, 1.7135, -0.0685), vec3<f32>(-0.1614, 0.0367, 1.0296));
+const BRAD_INV = mat3x3<f32>(
+  vec3<f32>(0.9869929054667123, 0.43230526972339445, -0.008528664575177328),
+  vec3<f32>(-0.1470542564209901, 0.5183602715367774, 0.04004282165408486),
+  vec3<f32>(0.15996265166373122, 0.049291228212855594, 0.96848669578755));
 
 struct Prog {
   ops: array<vec4<u32>, 12>,
@@ -42,7 +50,8 @@ struct Prog {
 // rangesA = (aLo, aHi, cLo, cHi); rangesB = (cpLo, cpHi, xLo, xHi)
 // outMap  = (region.x, region.y, region.w / outW, region.h / outH): output pixel → full-res frame
 // frame   = (outW, outH, frameW, frameH); srcOrigin = full-res position of source texel (0,0)
-// misc    = (nOps, lookup mode 0 hw-trilinear | 1 tetra | 2 manual trilinear | 3 no half-texel, exactSolve, n spectral)
+// misc    = (nOps, lookup mode 0 hw-trilinear | 1 tetra | 2 manual trilinear | 3 no half-texel,
+//            exact bits: 1 solve, 2 printing density, 4 print XYZ (export, CHB-017), n spectral samples)
 // solver  = (tol, gtol, maxIt, dye hi)
 
 @group(0) @binding(0) var<uniform> U: Prog;
@@ -53,7 +62,9 @@ struct Prog {
 @group(0) @binding(5) var printT: texture_3d<f32>;
 @group(0) @binding(6) var curves: texture_2d<f32>;
 @group(0) @binding(7) var samp: sampler;
-@group(0) @binding(8) var<storage, read> spec: array<f32>;   // P0 P1 P2 E0 E1 E2 B (exact solve)
+// exact spectra, 7n each: [0, 7n) solve P0 P1 P2 E0 E1 E2 B; [7n, 14n) pd W0 W1 W2 E0 E1 E2 B;
+// [14n, 21n) print W0 W1 W2 E0 E1 E2 B; [21n, 21n + 9) the print table's M, row-major
+@group(0) @binding(8) var<storage, read> spec: array<f32>;
 
 fn p10(x: vec3<f32>) -> vec3<f32> { return exp2(LOG2_10 * x); }
 fn lg10(x: vec3<f32>) -> vec3<f32> { return log2(x) * LOG10_2; }
@@ -112,6 +123,22 @@ fn lut1c(row: u32, v: vec3<f32>, lo: f32, hi: f32) -> vec3<f32> {
     out[k] = a + (b - a) * t;
   }
   return out;
+}
+
+// ---- exact spectral integrals of the export path: Σ W 10^−(B + c·E) at spec offset `off` ----
+fn specSum(off: u32, c: vec3<f32>) -> vec3<f32> {
+  let n = U.misc.w;
+  var s = vec3<f32>(0.0);
+  for (var i = 0u; i < n; i++) {
+    let e = vec3<f32>(spec[off + 3u * n + i], spec[off + 4u * n + i], spec[off + 5u * n + i]);
+    let t = exp2(-LOG2_10 * (spec[off + 6u * n + i] + dot(c, e)));
+    s += vec3<f32>(spec[off + i], spec[off + n + i], spec[off + 2u * n + i]) * t;
+  }
+  return s;
+}
+fn printM() -> mat3x3<f32> {
+  let o = 21u * U.misc.w;
+  return mat3x3<f32>(vec3<f32>(spec[o], spec[o + 3u], spec[o + 6u]), vec3<f32>(spec[o + 1u], spec[o + 4u], spec[o + 7u]), vec3<f32>(spec[o + 2u], spec[o + 5u], spec[o + 8u]));
 }
 
 // ---- exact per-pixel solve (kernels/solve.wgsl, spectra staged in workgroup memory) ----
@@ -193,7 +220,7 @@ fn srgbDec(v: vec3<f32>) -> vec3<f32> {
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_index) li: u32) {
   // stage the solve spectra (only when the exact solve runs); barrier before any range check
-  if (U.misc.z == 1u) {
+  if ((U.misc.z & 1u) != 0u) {
     for (var i = li; i < 7u * U.misc.w; i += WG) { sh[i] = spec[i]; }
   }
   workgroupBarrier();
@@ -213,18 +240,26 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       case 2u: {
         let D = v.rgb;
         let a = U.Kinv * D;
-        if (U.misc.z == 1u) { v = exactSolve(a, D + U.Dbase.xyz); }
+        if ((U.misc.z & 1u) != 0u) { v = exactSolve(a, D + U.Dbase.xyz); }
         else { v = lut3(solveT, a, U.rangesA.x, U.rangesA.y); }
       }
-      case 3u: { v = vec4<f32>(p0.rgb - lut3(pdT, v.rgb, U.rangesA.z, U.rangesA.w).xyz, 0.0); }
+      case 3u: {
+        if ((U.misc.z & 2u) != 0u) { v = vec4<f32>(p0.rgb + lg10(specSum(7u * U.misc.w, v.rgb)), 0.0); }
+        else { v = vec4<f32>(p0.rgb - lut3(pdT, v.rgb, U.rangesA.z, U.rangesA.w).xyz, 0.0); }
+      }
       case 4u: { v = vec4<f32>(v.rgb + p0.rgb, v.a); }
-      case 5u: { v = vec4<f32>(lut1c(2u, v.rgb, U.rangesB.z, U.rangesB.w), 0.0); }
-      case 6u: { v = vec4<f32>(lut3(printT, v.rgb, U.rangesB.x, U.rangesB.y).xyz, 0.0); }
+      case 5u: { v = vec4<f32>(lut1c(0u, v.rgb, U.rangesB.z, U.rangesB.w), 0.0); }
+      case 6u: {
+        if ((U.misc.z & 4u) != 0u) { v = vec4<f32>(printM() * specSum(14u * U.misc.w, v.rgb), 0.0); }
+        else { v = vec4<f32>(lut3(printT, v.rgb, U.rangesB.x, U.rangesB.y).xyz, 0.0); }
+      }
       case 7u: { v = vec4<f32>((v.rgb + p0.rgb) * p1.x, v.a); }
       case 8u: {
-        // XYZ (D65) → linear RGB by U.disp; op.y: knee 0 clip, 1 tanh shoulder
+        // XYZ → linear RGB by U.disp (core: XYZ_TO_SRGB · Bradford(white → D65) · gain); op.y: knee 0 clip,
+        // 1 tanh shoulder (core gamut.ts: identity to 0.82, then 0.82 + 0.18 tanh((v − 0.82)/0.18))
         var rgb = U.disp * v.rgb;
-        if (op.y == 1u) { rgb = tanh(max(rgb, vec3<f32>(0.0)) * 1.2) / tanh(1.2); }
+        // (the argument is capped at 20, where tanh is 1 in f32, so an exp-based tanh cannot overflow)
+        if (op.y == 1u) { rgb = select(0.82 + 0.18 * tanh(min((rgb - vec3<f32>(0.82)) / 0.18, vec3<f32>(20.0))), rgb, rgb <= vec3<f32>(0.82)); }
         v = vec4<f32>(srgbEnc(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0))), 0.0);
       }
       case 9u: {
@@ -237,6 +272,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         if (p0.x == 1.0) { v = vec4<f32>(srgbDec(v.rgb), v.a); }
         else if (p0.x == 2.0) { v = vec4<f32>(pow(max(v.rgb, vec3<f32>(0.0)), vec3<f32>(2.2)), v.a); }
       }
+      case 11u: { v = vec4<f32>(BRAD_INV * (p0.xyz * (BRAD * v.rgb)), v.a); }
       default: {}
     }
   }

@@ -1,5 +1,5 @@
 // Stages 1–3 in headless Chromium on SwiftShader: runtime caps, compile diagnostics, device loss,
-// table parity against the f64 oracle (each with a broken variant that must fail), the worker
+// table parity against core's f64 tables (each with a broken variant that must fail), the worker
 // pool's bitwise equality, the OPFS cache across a reload, and the wqul integer/accuracy probe.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -68,8 +68,10 @@ test('stage 3: GPU printing-density table within 7.2e-7; LOG2_10 = 3.32 fails', 
   expect(bad.pass).toBe(false);
 });
 
-test('stage 3: GPU print table within 4.2e-7 in XYZ; a row-major matrix fails', async ({ page }) => {
+// core's print table has M = I (XYZ under the viewing light); the M path is checked with a Bradford M.
+test('stage 3: GPU print table within 4.2e-7 in XYZ (also with a Bradford M); a row-major matrix fails', async ({ page }) => {
   expect((await run(page, 'table:print')).pass).toBe(true);
+  expect((await run(page, 'table:print:adapted')).pass).toBe(true);
   const bad = await run(page, 'table:print:row-major');
   expect(bad.pass).toBe(false);
 });

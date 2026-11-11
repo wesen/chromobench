@@ -1,14 +1,16 @@
 // Synthetic frames with known dye amounts (stand-ins for CHB-004's synthetic fixtures): smooth dye
-// gradients pushed through the scanner forward model, so the scan's transmittance is exact.
+// gradients pushed through core's scanner forward model, so the scan's transmittance is exact. The
+// left REBATE_W columns hold unexposed film (c = 0), so T there is the rebate transmittance.
+import { writeTiff16 } from '@chromobench/engine-mock';
 import type { SolveInputs, Vec3 } from '../tables/inputs.ts';
 import type { Segment } from '../chain/program.ts';
 import { OP } from '../chain/program.ts';
-import { chromogenOracle } from '../physics/oracle.ts';
-import { chainConstants, type Setup } from './fixtures.ts';
+import type { Setup } from './fixtures.ts';
 
 export const TREB: Vec3 = [0.8, 0.75, 0.7];
+export const REBATE_W = 6;
 
-/** Scanner density relative to the base for dye amounts c (d − Dbase). */
+/** Scanner density relative to the base for dye amounts c (d − Dbase), core's forward arrays. */
 export function forwardD(s: SolveInputs, c: readonly number[]): Vec3 {
   const out: number[] = [];
   for (let k = 0; k < 3; k++) {
@@ -19,40 +21,62 @@ export function forwardD(s: SolveInputs, c: readonly number[]): Vec3 {
   return out as Vec3;
 }
 
-/** A w × h camera-linear scan (3 channels) of smooth dye gradients, plus the true dyes. */
-export function syntheticScan(s: SolveInputs, w: number, h: number): { T: Float32Array; dyes: Float64Array } {
+/**
+ * A w × h camera-linear scan (3 channels) of smooth dye gradients, plus the true dyes. T is quantised
+ * to 16 bits, so the float frame and its TIFF (both engines open the TIFF) hold the same values.
+ */
+export function syntheticScan(s: SolveInputs, w: number, h: number): { T: Float32Array; dyes: Float64Array; tiff: Uint8Array } {
   const T = new Float32Array(w * h * 3);
   const dyes = new Float64Array(w * h * 3);
+  const u16 = new Uint16Array(w * h * 3);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const u = x / Math.max(1, w - 1);
     const v = y / Math.max(1, h - 1);
-    const c = [0.15 + 1.6 * u, 0.2 + 1.4 * v, 0.3 + 1.2 * (0.5 + 0.5 * Math.sin(3 * u + 2 * v))];
+    const c = x < REBATE_W ? [0, 0, 0] : [0.15 + 1.6 * u, 0.2 + 1.4 * v, 0.3 + 1.2 * (0.5 + 0.5 * Math.sin(3 * u + 2 * v))];
     const D = forwardD(s, c);
     const i = y * w + x;
     for (let k = 0; k < 3; k++) {
-      T[3 * i + k] = TREB[k]! * 10 ** -D[k]!;
+      const q = Math.round(TREB[k]! * 10 ** -D[k]! * 65535);
+      u16[3 * i + k] = q;
+      T[3 * i + k] = q / 65535;
       dyes[3 * i + k] = c[k]!;
     }
   }
-  return { T, dyes };
+  return { T, dyes, tiff: writeTiff16(w, h, u16) };
 }
 
-/** The negative-scan chain as one segment: density → dyes → expose → develop → reflect → flare → display. */
-export function scanChain(S: Setup, upTo: 'dyes' | 'paper-logH' | 'print-xyz' | 'display' = 'display', flare = 0.0048): Segment {
-  const cc = chainConstants(S.solve, S.paper);
-  // interim aim: the grey card (film.develop(0)) prints at paper density ≈ 0.75 in every layer
-  const cGrey = S.film.curves.map((cv) => cv.at(0));
-  const pdGrey = chromogenOracle.spectral(S.pd, cGrey as Vec3);
-  const xAim = S.paper.curves.map((cv) => cv.inverse(0.75));
-  const L = [0, 1, 2].map((k) => xAim[k]! - (cc.clear[k]! - pdGrey[k]!));
-  const white = chromogenOracle.spectral(S.print, [0, 0, 0]);
-  const ops: Segment['ops'] = [{ code: OP.DENSITY, p0: [...TREB] }, { code: OP.DYES }];
+/** The rebate transmittance as the engines measure it (mean of the quantised strip). */
+export function rebateT(T: Float32Array, w: number, h: number): Vec3 {
+  const m = [0, 0, 0];
+  for (let y = 0; y < h; y++) for (let x = 0; x < REBATE_W; x++) for (let k = 0; k < 3; k++) m[k]! += T[3 * (y * w + x) + k]! / (REBATE_W * h);
+  return m as Vec3;
+}
+
+/**
+ * The negative-scan chain as one segment, every parameter from core: density → dyes → expose → develop
+ * → reflect → flare → adapt (D65) → display (print-as-seen, clip). The engine-level parity tests check
+ * that GpuEngine lowers the same graph to the same ops.
+ */
+export function scanChain(S: Setup, upTo: 'dyes' | 'paper-logH' | 'print-xyz' | 'display' = 'display', flarePercent = 0.48, treb: Vec3 = TREB): Segment {
+  const P = S.physics;
+  const chain = [
+    { op: 'invert.dyes', args: { stock: S.film, scanner: S.scanner }, id: 'dyes', inputs: [] },
+    { op: 'print.develop', args: { paper: S.paper, grade: 2 }, id: 'develop', inputs: [] },
+    { op: 'view.reflect', args: { illuminant: 'D50' }, id: 'reflect', inputs: [] },
+    { op: 'view.adapt', args: { to: 'D65' }, id: 'adapt', inputs: [] },
+  ];
+  const ctxAt = (i: number) => P.ctx(chain, i);
+  const ops: Segment['ops'] = [{ code: OP.DENSITY, p0: [...treb] }, { code: OP.DYES }];
+  let disp: Segment['disp'];
   if (upTo !== 'dyes') {
-    ops.push({ code: OP.EXPOSE, p0: [0, 1, 2].map((k) => cc.clear[k]! + L[k]!) });
+    ops.push({ code: OP.EXPOSE, p0: [...S.offset] });
     if (upTo !== 'paper-logH') {
-      ops.push({ code: OP.DEVELOP }, { code: OP.REFLECT }, { code: OP.FLARE, p0: white.map((w) => w * flare), p1: [1 / (1 + flare)] });
-      if (upTo === 'display') ops.push({ code: OP.DISPLAY });
+      ops.push({ code: OP.DEVELOP }, { code: OP.REFLECT }, { code: OP.FLARE, p0: P.flare(ctxAt(3), flarePercent), p1: [1] });
+      if (upTo === 'display') {
+        ops.push({ code: OP.ADAPT, p0: P.adaptGains(ctxAt(3), 'D65') }, { code: OP.DISPLAY });
+        disp = P.displayMatrix(ctxAt(4), 'print-as-seen');
+      }
     }
   }
-  return { ops, tables: { solve: S.solve, pd: S.pd, print: S.print, curves: { film: S.film, paper: S.paper } } };
+  return { ops, tables: { solve: S.solve, pd: S.pd, print: S.print, curves: S.develop }, ...(disp ? { disp } : {}) };
 }

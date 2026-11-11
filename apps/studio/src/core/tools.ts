@@ -1,7 +1,7 @@
 // Darkroom tool arithmetic and adapters (guide §5.9). Each tool turns a click into one transaction;
 // the op argument shapes are CHB-010's to finalise, so they are kept in this one file.
 import type { Exposure, FrameRecipe, Graph, MaskSpec, Mutation, Vec3 } from '@chromobench/contract';
-import { burnSeconds, dodgeSeconds, formatSeconds, formatStops, PT, timeAtStops } from './units.ts';
+import { burnSeconds, dodgeSeconds, formatSeconds, formatStops, PT, signed, timeAtStops } from './units.ts';
 
 // ---- test strip ----------------------------------------------------------------------------
 
@@ -10,13 +10,16 @@ export type StripVary = 'time' | 'filtration.y' | 'filtration.m' | 'filtration.c
 /** Band offsets centred on the current value: k = −(n−1)/2 … (n−1)/2. */
 export const bandOffsets = (count: number): number[] => Array.from({ length: count }, (_, i) => i - (count - 1) / 2);
 
-/** The value of each band: t·2^(k·step) for time, base + k·step CC for filtration (clamped at 0). */
+/** Lowest filtration shift (contract 0.2: print.enlarger.filtration is a shift on the database neutral pack). */
+export const FILTRATION_MIN_CC = -100;
+
+/** The value of each band: t·2^(k·step) for time, base + k·step CC for the filtration shift (clamped at its minimum). */
 export function stripValues(vary: StripVary, base: number, step: number, count: number): number[] {
-  return bandOffsets(count).map((k) => (vary === 'time' ? timeAtStops(base, k * step) : Math.max(0, base + k * step)));
+  return bandOffsets(count).map((k) => (vary === 'time' ? timeAtStops(base, k * step) : Math.max(FILTRATION_MIN_CC, base + k * step)));
 }
 
 export function stripLabel(vary: StripVary, v: number): string {
-  return vary === 'time' ? `${formatSeconds(v)} s` : `${Number(v.toFixed(1))} CC`;
+  return vary === 'time' ? `${formatSeconds(v)} s` : `${signed(Number(v.toFixed(1)), Number.isInteger(Number(v.toFixed(1))) ? 0 : 1)} CC`;
 }
 
 /** The single mutation a band click writes. */
@@ -142,7 +145,8 @@ export type Pt3 = [number, number, number];
 export type MaskShape =
   | { kind: 'stroke'; points: Pt3[]; radius: number; hardness: number; mode: 'add' | 'erase' }
   | { kind: 'gradient'; from: [number, number]; to: [number, number] }
-  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number };
+  /** angle: rotation about the centre in degrees (mask.ellipse.angle_deg, contract 0.2). */
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; angle?: number };
 
 /** The editor's description of a mask; stored in the recipe as a MaskSpec (mask.* node closure). */
 export interface MaskDoc {
@@ -172,7 +176,7 @@ export function simplify(points: readonly Pt3[], eps = 0.5): Pt3[] {
 
 /**
  * Builds the MaskSpec for a MaskDoc on `receiver` (the frame's source node, which fixes the size).
- * Strokes go into mask.paint's `strokes` argument as canonical JSON (CONTRACT-REQUESTS.md #1), so
+ * Strokes go into mask.paint's `strokes` argument as canonical JSON (contract 0.2, studio request #1), so
  * the recipe stays a small vector document.
  */
 export function maskSpec(graph: Graph, receiver: string, doc: MaskDoc): MaskSpec {
@@ -181,7 +185,7 @@ export function maskSpec(graph: Graph, receiver: string, doc: MaskDoc): MaskSpec
   const strokes = doc.shapes.filter((s) => s.kind === 'stroke');
   const parts: string[] = [];
   for (const s of doc.shapes) {
-    if (s.kind === 'ellipse') parts.push(I('mask.ellipse', [receiver], { box: { x: Math.round(s.cx - s.rx), y: Math.round(s.cy - s.ry), w: Math.max(1, Math.round(2 * s.rx)), h: Math.max(1, Math.round(2 * s.ry)) } }));
+    if (s.kind === 'ellipse') parts.push(I('mask.ellipse', [receiver], { box: { x: Math.round(s.cx - s.rx), y: Math.round(s.cy - s.ry), w: Math.max(1, Math.round(2 * s.rx)), h: Math.max(1, Math.round(2 * s.ry)) }, ...(s.angle ? { angle_deg: s.angle } : {}) }));
     else if (s.kind === 'gradient') parts.push(I('mask.gradient', [receiver], { from: { x: s.from[0], y: s.from[1] }, to: { x: s.to[0], y: s.to[1] } }));
   }
   if (strokes.length) parts.push(I('mask.paint', [receiver], { strokes: JSON.stringify(strokes) }));
@@ -199,7 +203,8 @@ export function parseMask(spec: MaskSpec): MaskDoc {
     const a = n.args as Record<string, unknown>;
     if (n.op === 'mask.ellipse') {
       const b = a['box'] as { x: number; y: number; w: number; h: number };
-      doc.shapes.push({ kind: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: b.w / 2, ry: b.h / 2 });
+      const angle = a['angle_deg'] as number | undefined;
+      doc.shapes.push({ kind: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: b.w / 2, ry: b.h / 2, ...(angle ? { angle } : {}) });
     } else if (n.op === 'mask.gradient') {
       const f = a['from'] as { x: number; y: number };
       const t = a['to'] as { x: number; y: number };
@@ -209,7 +214,7 @@ export function parseMask(spec: MaskSpec): MaskDoc {
         const s = JSON.parse(String(a['strokes'])) as MaskShape[];
         if (Array.isArray(s)) doc.shapes.push(...s);
       } catch {
-        // a paint node from elsewhere (id of a stroke set): nothing to edit
+        // not JSON (a pre-0.2 'none' default): nothing to edit
       }
     } else if (n.op === 'mask.feather') doc.feather = a['radius_px'] as number;
     else if (n.op === 'mask.not') doc.invert = true;

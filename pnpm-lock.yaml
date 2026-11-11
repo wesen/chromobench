@@ -91,6 +91,9 @@ importers:
       '@chromobench/conformance':
         specifier: workspace:*
         version: link:../conformance
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:../ingest
 
   packages/dsl:
     dependencies:
@@ -129,6 +132,9 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/core':
+        specifier: workspace:*
+        version: link:../core
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:../engine-mock
