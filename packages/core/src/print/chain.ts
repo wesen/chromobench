@@ -10,7 +10,7 @@ import {
   adaptBradford, addFlare, D50, D65, encodeSRGB, lab, observe, paperWhiteXYZ, reflectance, whiteXYZ,
   XYZ_TO_P3, XYZ_TO_REC2020, XYZ_TO_SRGB, type Viewing,
 } from './colour.ts';
-import { makeEnlarger, type Enlarger, type RealExposureModel } from './enlarger.ts';
+import { makeEnlarger, REFERENCE_OPTICS, type Enlarger, type EnlargerOptics } from './enlarger.ts';
 import { compressOutput, DEFAULT_COMPRESS, type CompressSpec } from './gamut.ts';
 import { Lights } from './lights.ts';
 import { NO_MORPH, paperDeveloper, preflash, type PaperMorph } from './paper.ts';
@@ -30,8 +30,15 @@ export interface PrintChainOptions {
   /** Absolute filter pack; default the database neutral pack (or [0, 65, 55]) plus `filtrationShift`. */
   filtration?: Cmy;
   filtrationShift?: Cmy;
+  /**
+   * The calibration pack: real mode fixes κ there, and the aim lights are fitted there in both modes,
+   * so a filter change is a change of the print. Default: the absolute `filtration` when given (a
+   * fixed-pack setup such as Chromogen's), else the database neutral pack.
+   */
+  referencePack?: Cmy;
   mode?: 'normalised' | 'real';
-  real?: { model?: RealExposureModel; time_s: number; fstop: number };
+  /** Real mode: time, aperture and magnification (missing fields: REFERENCE_OPTICS). */
+  optics?: Partial<EnlargerOptics>;
   view?: string;
   morph?: PaperMorph;
   aim?: Aim;
@@ -44,9 +51,21 @@ export interface PrintChain {
   paper: Stock;
   enlarger: Enlarger;
   viewing: Viewing;
+  /** Absolute pack of this chain. */
   filtration: Cmy;
-  /** Lights that the aim adds (ℓ = 0 in the recipe means this). */
+  /** The database neutral pack for (paper, film), or DEFAULT_NEUTRAL. */
+  neutral: Cmy;
+  /** The calibration: its pack and its enlarger (REFERENCE_OPTICS, κ fixed). */
+  reference: { pack: Cmy; enlarger: Enlarger };
+  /** Dye amounts of the film's grey card (log H = 0 in every layer). */
+  grey: Vec3;
+  /**
+   * Lights that the aim adds (ℓ = 0 in the recipe means this). Fitted once at the calibration, not per
+   * setting: time, f-stop and filtration then move the print as on an enlarger.
+   */
   aimLights: Lights;
+  /** The aim grey's paper exposure at the calibration (Chromogen aim().g): the grade's pivot. */
+  aimX: Vec3;
   develop(x: ArrayLike<number>): Vec3;
   /** Paper log H → XYZ under the viewing light (Y(perfect white) = 1). */
   xyzOfX(x: ArrayLike<number>): Vec3;
@@ -66,29 +85,33 @@ export function makePrintChain(o: PrintChainOptions): PrintChain {
   const neutral = data.neutralFilter(paper.data.id, film.data.id) ?? DEFAULT_NEUTRAL;
   const sh = o.filtrationShift ?? { c: 0, m: 0, y: 0 };
   const filtration = o.filtration ?? { c: neutral.c + sh.c, m: neutral.m + sh.m, y: neutral.y + sh.y };
+  const refPack = o.referencePack ?? o.filtration ?? neutral;
   const lampName = o.lamp ?? 'TH-KG3';
-  const enlarger = makeEnlarger({
-    film, paper, lamp: data.illuminant(lampName), lampName, dichroic: data.dichroic(), filtration_CC: filtration,
-    mode: o.mode ?? 'normalised', conv,
-    ...(o.real ? { real: { ...o.real, calibrationCC: neutral } } : {}),
-    ...(o.midgray ? { midgray: o.midgray } : {}),
-  });
+  const base = {
+    film, paper, lamp: data.illuminant(lampName), lampName, dichroic: data.dichroic(), conv,
+    calibration: { pack: refPack, optics: REFERENCE_OPTICS }, ...(o.midgray ? { midgray: o.midgray } : {}),
+  };
+  const mode = o.mode ?? 'normalised';
+  const enlarger = makeEnlarger({ ...base, filtration_CC: filtration, mode, ...(o.optics ? { optics: o.optics } : {}) });
+  const atReference = filtration.c === refPack.c && filtration.m === refPack.m && filtration.y === refPack.y && enlarger.optics_logH === 0;
+  const refEnlarger = atReference ? enlarger : makeEnlarger({ ...base, filtration_CC: refPack, mode: 'real' });
   const viewing: Viewing = { illuminant: data.illuminant(o.view ?? paper.data.meta.viewIlluminant ?? 'D50'), cmf: cmfFor(conv, data), paper };
   const develop = paperDeveloper(paper, o.morph ?? NO_MORPH);
   const white = whiteXYZ(viewing);
   const R = new Float64Array(81);
   const xyzOfX = (x: ArrayLike<number>): Vec3 => observe(viewing, reflectance(viewing, develop(x), R));
-  let aimLights = Lights.zero();
-  if ((o.aim ?? 'grey-0.184') === 'grey-0.184') {
-    const xg = enlarger.exposure(film.develop([0, 0, 0]));
-    aimLights = greyPatchX(xg, xyzOfX, white, 0.184);
-  }
+  const grey = film.develop([0, 0, 0]);
+  // The aim is fitted at the calibration (reference pack and optics), where both modes agree. Fitting it
+  // per setting would let three free lights absorb every filter and time change at the grey card.
+  const xRef = refEnlarger.exposure(grey);
+  const aimLights = (o.aim ?? 'grey-0.184') === 'grey-0.184' ? greyPatchX(xRef, xyzOfX, white, 0.184) : Lights.zero();
   const xOfDyes = (c: ArrayLike<number>, lights?: Lights): Vec3 => {
     const x = aimLights.apply(enlarger.exposure(c));
     return lights ? lights.apply(x) : x;
   };
   return {
-    film, paper, enlarger, viewing, filtration, aimLights, develop, xyzOfX, xOfDyes, white, paperWhite: paperWhiteXYZ(viewing),
+    film, paper, enlarger, viewing, filtration, neutral, reference: { pack: refPack, enlarger: refEnlarger }, grey,
+    aimLights, aimX: aimLights.apply(xRef), develop, xyzOfX, xOfDyes, white, paperWhite: paperWhiteXYZ(viewing),
     print(c, lights) {
       const x = xOfDyes(c, lights);
       const cp = develop(x);

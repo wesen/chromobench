@@ -27,7 +27,8 @@ export * from './scan/forward.ts';
 export * from './tables/tables.ts';
 export * from './tables/arrays.ts';
 export {
-  DEFAULT_FILM, DEFAULT_PAPER, DEFAULT_SIGMA_D, densitiesOf, displayGain, exposeSettings, filmOf, flareWhite, paperOf, PhysicsEnv, rebateBox, viewOf, whiteAt,
+  DEFAULT_FILM, DEFAULT_PAPER, DEFAULT_SIGMA_D, densitiesOf, developerAt, displayGain, exposeSettings, filmOf, flareWhite, gradePivot, paperOf, PhysicsEnv,
+  rebateBox, viewOf, whiteAt,
   type ChainCtx, type ExposeSettings, type UpNode,
 } from './ops/ops.ts';
 export * from './engine-ref.ts';
