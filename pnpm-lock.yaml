@@ -111,6 +111,22 @@ importers:
         specifier: workspace:*
         version: link:../conformance
 
+  packages/gpu:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@chromobench/engine-mock':
+        specifier: workspace:*
+        version: link:../engine-mock
+    devDependencies:
+      '@chromobench/conformance':
+        specifier: workspace:*
+        version: link:../conformance
+      '@webgpu/types':
+        specifier: 0.1.74
+        version: 0.1.74
+
   packages/ingest:
     dependencies:
       '@chromobench/contract':
