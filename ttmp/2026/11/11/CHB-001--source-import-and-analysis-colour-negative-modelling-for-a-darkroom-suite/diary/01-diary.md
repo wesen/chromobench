@@ -978,3 +978,64 @@ task/chb-010-masks, which contains the agent's merge 47d983e of the migrated stu
 ### Technical details
 
 - Run the new studio: `cd ../chromobench-integration && pnpm --filter @chromobench/studio dev --port 4180`.
+
+## Step 15: CHB-020 roll workflow merged into phase-2 integration
+
+CHB-020 finished (roll analysis in ingest — holder/veil, sprocket holes, image area, rebate — plus the roll kit with
+the first print, "print the roll like this frame", the contact sheet and a `roll` variant). Merged into
+`task/phase2-integration`: one conflict in `packages/studio-kit/package.json` exports (combined), one expected
+snapshot change. 2350 unit tests pass; the studio builds.
+
+### Prompt Context
+
+**User prompt (verbatim):** see Step 14 ("ok continue, while i'm discussing this with my dad.").
+**Assistant interpretation:** Integrate as agents land, away from the user's working copy.
+**Inferred user intent:** Have the newest work ready when the demo session ends.
+**Commit (code):** 4bf68a9 (merge task/chb-020-roll), 9804178 (roll variant snapshot)
+
+### What I did
+
+- `git merge --no-ff task/chb-020-roll` in `../chromobench-integration`: conflict in studio-kit `package.json`
+  exports (`./variants` from the migration vs `./kits/roll*` from CHB-020) → kept both; `json.load` check.
+- `pnpm install --offline`; typecheck clean; lint "import boundaries ok (266 file checks)"; `pnpm test`: 1 failure,
+  `variants.test.ts > roll: zero errors, explain snapshot` — diff showed only the migration's Tools panel and "Film and
+  viewing" section missing from the roll variant's older snapshot → `vitest -u` on that file; full suite "68 passed
+  (68) files, 2350 passed (2350)"; studio build "✓ built in 3.08s".
+
+### Why
+
+- The snapshot diff was exactly the migration's additions to the shared Print module; nothing roll-specific changed.
+
+### What worked
+
+- Merge and checks.
+
+### What didn't work
+
+- The stale snapshot (above), fixed by update.
+
+### What I learned
+
+- CHB-020's measured base/flare fix the demo's two scan gaps, but apps/studio's host does not call them yet.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- `createCb` now installs the roll kit for every variant (15 passes); `EditLogRoute.applyBatch` was added to
+  studio-kit's bridge by CHB-020.
+
+### What should be done in the future
+
+- Wire `conditionScan` / `rollBase` into `apps/studio/src/host/engines.ts` `decodeScan` (rebate box from layout,
+  veil subtraction), and `scan.flare` in core/gpu (R4); contract 0.3 round.
+
+### Code review instructions
+
+- `packages/ingest/src/conditioning/film-layout.ts`, `roll-base.ts`; `packages/studio-kit/kits/roll/src/kit.ts`.
+
+### Technical details
+
+- Try the roll kit: `pnpm --filter @chromobench/studio-kit demo` → http://localhost:4187/demo/?variant=roll
