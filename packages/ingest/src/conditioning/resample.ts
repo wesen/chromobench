@@ -14,24 +14,48 @@ export interface RegionOptions {
   flare?: Vec3 | number | null | undefined;
   /** Channels to return (default: all of the source's). */
   channels?: 3 | 4;
+  /** Anchor the footprint grid as in this oriented view (Chromogen parity); output stays in sensor layout. */
+  orientation?: Orientation | undefined;
 }
 
-/** Linear values of the sensor box `box`, area-averaged to tw×th, interleaved. */
+/**
+ * Footprints of n outputs over [origin, origin + size) on an axis of `extent` pixels: Chromogen's
+ * floor(xa)..ceil(xb) (neighbouring footprints share a pixel when the factor is not an integer). With
+ * `mirrored`, the grid is laid out from the far end, as Chromogen lays it out in an oriented (flipped)
+ * image, so float rounding at footprint edges picks the same pixels; the result is in sensor order.
+ */
+function footprints(origin: number, size: number, n: number, extent: number, mirrored: boolean): { a: Int32Array; b: Int32Array; c: Int32Array } {
+  const a = new Int32Array(n);
+  const b = new Int32Array(n);
+  const c = new Int32Array(n);
+  const s = size / n;
+  const o = mirrored ? extent - origin - size : origin;
+  for (let t = 0; t < n; t++) {
+    const tt = mirrored ? n - 1 - t : t;
+    const lo = o + tt * s;
+    const pa = Math.max(0, Math.floor(lo));
+    const pb = Math.min(extent, Math.ceil(lo + s));
+    const pc = Math.min(extent - 1, Math.max(0, Math.floor(lo + s / 2)));
+    a[t] = mirrored ? extent - pb : pa;
+    b[t] = mirrored ? extent - pa : pb;
+    c[t] = mirrored ? extent - 1 - pc : pc;
+  }
+  return { a, b, c };
+}
+
+/**
+ * Linear values of the sensor box `box`, area-averaged to tw×th, interleaved, in sensor layout.
+ * `orientation` only anchors the footprint grid as Chromogen does in the oriented image (flips and
+ * 180°; 90° rotations keep the sensor grid), which matters for parity at non-integer factors.
+ */
 export function region(src: CameraLinear, box: Box, tw: number, th: number, o: RegionOptions = {}): Float32Array {
   const nc = o.channels ?? src.channels;
   const out = new Float32Array(tw * th * nc);
-  const { x: x0, y: y0, w, h } = box;
-  const sx = w / tw;
-  const sy = h / th;
   const SW = src.width;
   const SH = src.height;
-  const xa0 = new Int32Array(tw);
-  const xb0 = new Int32Array(tw);
-  for (let tx = 0; tx < tw; tx++) {
-    const xa = x0 + tx * sx;
-    xa0[tx] = Math.max(0, Math.floor(xa));
-    xb0[tx] = Math.min(SW, Math.ceil(xa + sx));
-  }
+  const or = o.orientation ?? 'none';
+  const fx = footprints(box.x, box.w, tw, SW, or === 'flipH' || or === 'rot180');
+  const fy = footprints(box.y, box.h, th, SH, or === 'flipV' || or === 'rot180');
   const rows = Array.from({ length: nc }, () => new Float32Array(SW));
   const acc = new Float64Array(tw * nc);
   const F = new Float64Array(4);
@@ -39,29 +63,24 @@ export function region(src: CameraLinear, box: Box, tw: number, th: number, o: R
   const flare = fl == null ? null : typeof fl === 'number' ? [fl, fl, fl, 0] : [...fl, 0];
   const gate = o.openGate ?? null;
   for (let ty = 0; ty < th; ty++) {
-    const ya = y0 + ty * sy;
-    const yb = ya + sy;
     acc.fill(0);
     let ny = 0;
-    for (let y = Math.max(0, Math.floor(ya)); y < Math.min(SH, Math.ceil(yb)); y++) {
+    for (let y = fy.a[ty]!; y < fy.b[ty]!; y++) {
       ny++;
       for (let c = 0; c < nc; c++) src.row(c, y, rows[c]!);
       for (let tx = 0; tx < tw; tx++) for (let c = 0; c < nc; c++) {
         const r = rows[c]!;
         let s = 0;
-        for (let x = xa0[tx]!; x < xb0[tx]!; x++) s += r[x]!;
+        for (let x = fx.a[tx]!; x < fx.b[tx]!; x++) s += r[x]!;
         acc[tx * nc + c]! += s;
       }
     }
     for (let tx = 0; tx < tw; tx++) {
-      const n = Math.max(1, ny * (xb0[tx]! - xa0[tx]!));
+      const n = Math.max(1, ny * (fx.b[tx]! - fx.a[tx]!));
       const o0 = (ty * tw + tx) * nc;
       for (let c = 0; c < nc; c++) out[o0 + c] = acc[tx * nc + c]! / n;
       if (o.flat) {
-        const xa = x0 + tx * sx;
-        const cx = Math.min(SW - 1, Math.max(0, Math.floor(xa + sx / 2)));
-        const cy = Math.min(SH - 1, Math.max(0, Math.floor(ya + sy / 2)));
-        flatAt(o.flat, (cx + 0.5) / SW, (cy + 0.5) / SH, F);
+        flatAt(o.flat, (fx.c[tx]! + 0.5) / SW, (fy.c[ty]! + 0.5) / SH, F);
         for (let c = 0; c < Math.min(nc, 3); c++) out[o0 + c] = out[o0 + c]! / F[c]!;
       }
       if (gate) for (let c = 0; c < Math.min(nc, 3); c++) out[o0 + c] = out[o0 + c]! / gate[c]!;
