@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "1345cc29e91cdc42233a6dee589cfec0a4c6b30e59814fe28023c6412c049f94",
+  "request": {
+    "ticket": "CHB-005",
+    "status": "complete",
+    "intent": "",
+    "entry": "Closed: 16-bit export path and tiled-export driver moved to CHB-011; GPU reductions to CHB-020; halation/DIR ops to CHB-012"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-11ce06b77527776bb14cebc944917d3e",
+    "state": "committed",
+    "created_at": "2026-11-11T20:38:30.690759673Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "index.md": "a3972c827e950a1f14b38e084cb6560221eb5615d3d20ffff3e846c041efff3a"
+    },
+    "after": {
+      "changelog.md": "1a63e34ae169184596a9ef546dfb976dbd848e5c3768d134206d9606d0fc6f2e",
+      "index.md": "5b5eee9a493fe6ffe0ae49ef44353603cfc9b1542ec14895b7b4a1a75d8516de"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTEKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMQoKQ2xvc2VkOiAxNi1iaXQgZXhwb3J0IHBhdGggYW5kIHRpbGVkLWV4cG9ydCBkcml2ZXIgbW92ZWQgdG8gQ0hCLTAxMTsgR1BVIHJlZHVjdGlvbnMgdG8gQ0hCLTAyMDsgaGFsYXRpb24vRElSIG9wcyB0byBDSEItMDEyCg=="
+    },
+    {
+      "path": "index.md",
+      "before": "a3972c827e950a1f14b38e084cb6560221eb5615d3d20ffff3e846c041efff3a",
+      "after": "LS0tClRpdGxlOiAnV2ViR1BVIGVuZ2luZTogcnVudGltZSwgdGFibGVzLCBwZXItcGl4ZWwgY2hhaW4sIHNwYXRpYWwga2VybmVscywgdGlsZWQgZXhwb3J0JwpUaWNrZXQ6IENIQi0wMDUKU3RhdHVzOiBjb21wbGV0ZQpUb3BpY3M6CiAgICAtIHdlYmdwdQogICAgLSBpbWFnZS1waXBlbGluZQogICAgLSB0ZXN0aW5nCkRvY1R5cGU6IGluZGV4CkludGVudDogbG9uZy10ZXJtCk93bmVyczogW10KUmVsYXRlZEZpbGVzOiBbXQpFeHRlcm5hbFNvdXJjZXM6IFtdClN1bW1hcnk6ICIiCkxhc3RVcGRhdGVkOiAyMDI2LTExLTExVDE1OjM4OjMwLjY5MDcxMzYxOS0wNTowMApXaGF0Rm9yOiAiIgpXaGVuVG9Vc2U6ICIiCi0tLQoKIyBXZWJHUFUgZW5naW5lOiBydW50aW1lLCB0YWJsZXMsIHBlci1waXhlbCBjaGFpbiwgc3BhdGlhbCBrZXJuZWxzLCB0aWxlZCBleHBvcnQKCiMjIE92ZXJ2aWV3Cgo8IS0tIFByb3ZpZGUgYSBicmllZiBvdmVydmlldyBvZiB0aGUgdGlja2V0LCBpdHMgZ29hbHMsIGFuZCBjdXJyZW50IHN0YXR1cyAtLT4KCiMjIEtleSBMaW5rcwoKLSAqKlJlbGF0ZWQgRmlsZXMqKjogU2VlIGZyb250bWF0dGVyIFJlbGF0ZWRGaWxlcyBmaWVsZAotICoqRXh0ZXJuYWwgU291cmNlcyoqOiBTZWUgZnJvbnRtYXR0ZXIgRXh0ZXJuYWxTb3VyY2VzIGZpZWxkCgojIyBTdGF0dXMKCkN1cnJlbnQgc3RhdHVzOiAqKmFjdGl2ZSoqCgojIyBUb3BpY3MKCi0gd2ViZ3B1Ci0gaW1hZ2UtcGlwZWxpbmUKLSB0ZXN0aW5nCgojIyBUYXNrcwoKU2VlIFt0YXNrcy5tZF0oLi90YXNrcy5tZCkgZm9yIHRoZSBjdXJyZW50IHRhc2sgbGlzdC4KCiMjIENoYW5nZWxvZwoKU2VlIFtjaGFuZ2Vsb2cubWRdKC4vY2hhbmdlbG9nLm1kKSBmb3IgcmVjZW50IGNoYW5nZXMgYW5kIGRlY2lzaW9ucy4KCiMjIFN0cnVjdHVyZQoKLSBkZXNpZ24vIC0gQXJjaGl0ZWN0dXJlIGFuZCBkZXNpZ24gZG9jdW1lbnRzCi0gcmVmZXJlbmNlLyAtIFByb21wdCBwYWNrcywgQVBJIGNvbnRyYWN0cywgY29udGV4dCBzdW1tYXJpZXMKLSBwbGF5Ym9va3MvIC0gQ29tbWFuZCBzZXF1ZW5jZXMgYW5kIHRlc3QgcHJvY2VkdXJlcwotIHNjcmlwdHMvIC0gVGVtcG9yYXJ5IGNvZGUgYW5kIHRvb2xpbmcKLSB2YXJpb3VzLyAtIFdvcmtpbmcgbm90ZXMgYW5kIHJlc2VhcmNoCi0gYXJjaGl2ZS8gLSBEZXByZWNhdGVkIG9yIHJlZmVyZW5jZS1vbmx5IGFydGlmYWN0cwo="
+    }
+  ]
+}

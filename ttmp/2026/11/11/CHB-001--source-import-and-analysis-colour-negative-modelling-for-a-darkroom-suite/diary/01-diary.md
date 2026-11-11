@@ -572,3 +572,69 @@ dependency order.
 ### Technical details
 
 - Open tasks after filing: CHB-016 12, CHB-017 9, CHB-018 16, CHB-019 15, CHB-020 15, CHB-021 18, CHB-022 17.
+
+## Step 9: Close CHB-003, -005, -006, -007, -009 by moving their open tasks
+
+The user asked what was missing for the five Phase-1 tickets and whether they could be closed. Every open task was
+either finished, covered by another ticket's result, or belonged to a later ticket; the two errata were one-line
+fixes. This step moved 16 tasks to the tickets that will do them, fixed the errata, checked everything off with a
+note naming where it went, and closed the five tickets with `docmgr ticket close`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "whats missing for the 3, 5, 6, 7, 9. Do we haev to wait? can we close some of them?",
+then "ok, clean up" (taken as approval of the proposal, including the CHB-007 DR-1/DR-2 confirmation).
+**Assistant interpretation:** Move or finish open tasks and close the tickets.
+**Inferred user intent:** A clean board: closed tickets for finished work, open work where it will be done.
+**Commit (code):** see the commit adding this step — "CHB-003/005/006/007/009: close; move open tasks"
+
+### What I did
+
+- Verified CHB-003 d0xa: `classify` (scan/classify.ts), `latd`, `latdFromPD`, `integrateToGrey`, `colourOffset`,
+  `lightsToSliders`, `greyPick` (print/balance.ts), `greyPatchX` (print/chain.ts); `warmPerMired` is a parameter.
+- Errata: CHB-003 guide §8.3 now cites `05-inline.js` `addSample` line 3916 `flipH: true`; CHB-009 guide now says the
+  0.755 grey card is from the chapter-2 introduction.
+- Moves (`docmgr task add` with a "[from CHB-0NN id]" prefix; source tasks annotated "— moved to …" and checked):
+  CHB-005 6bzj → CHB-011, erm0 → CHB-020, plus untracked items (tiled export → CHB-011, halation/DIR ops → CHB-012);
+  CHB-006 w3tp → CHB-013, mnvr+lcz0 → CHB-015, 3wlu → CHB-020, 2c6h → CHB-019, svja → CHB-017;
+  CHB-007 44uo → CHB-008, zr25 confirmed; CHB-009 ey84, kygr, grer → CHB-019, rrhv → CHB-008, ex7d superseded,
+  o944 done; CHB-003 j90u, i839 → CHB-017 (running), 7zy5 covered by CHB-006's goldens.
+- Added a CHB-019 task reconciling CHB-016/CHB-019 on how variants get `ck`/`cb`.
+- `docmgr ticket close` on all five, each with a changelog entry; `docmgr doctor` clean on all five.
+
+### Why
+
+- Tasks live where the work will happen; the closed tickets keep the record of what moved and why.
+
+### What worked
+
+- All annotations matched exactly once; doctor clean.
+
+### What didn't work
+
+- No failures.
+
+### What I learned
+
+- `docmgr ticket close` sets status complete and writes the changelog; it does not touch git.
+
+### What was tricky to build
+
+- CHB-017 runs in a worktree from b5517ca/3c35cf8 and may tick CHB-003/CHB-006 tasks there too; expect small
+  conflicts in those `tasks.md` files at merge (take the checked state).
+
+### What warrants a second pair of eyes
+
+- CHB-003 is closed while its f64 tables and tabulated mode are still being built inside CHB-017.
+
+### What should be done in the future
+
+- Merge CHB-017 and resolve tasks.md conflicts as above.
+
+### Code review instructions
+
+- `grep -n "moved to\|covered by\|superseded" ttmp/2026/11/11/CHB-00{3,5,6,7,9}--*/tasks.md`
+
+### Technical details
+
+- Remaining open tickets: CHB-004, -017, -018 (running); CHB-008, -010..-016, -019..-022.

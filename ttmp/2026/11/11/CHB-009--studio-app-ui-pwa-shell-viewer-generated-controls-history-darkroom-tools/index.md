@@ -1,7 +1,7 @@
 ---
 Title: 'Studio app UI: PWA shell, viewer, generated controls, history, darkroom tools'
 Ticket: CHB-009
-Status: active
+Status: complete
 Topics:
     - ui
     - product
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:24.272041205-05:00
+LastUpdated: 2026-11-11T15:38:31.270190649-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

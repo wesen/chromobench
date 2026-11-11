@@ -726,7 +726,7 @@ The sign convention in step 3 is where an intern is most likely to go wrong. Wri
 - +10 CC yellow: aside "≈ −4.0 pt B" (isolated-band rule, textbook §2.6).
 - dodge −1/4 stop of 12.0 s = 1.91 s withheld; burn +1/2 stop = 4.97 s added.
 
-**Physics checks once the reference engine exists (M2):** on the textbook's setup (Portra 400 on Portra Endura) the probe on the grey card reads visual density 0.755 with the default recipe (§2.6); with the settings of the textbook's "Try it" (§2.7), a printer-lights change of +10 pt red, entered through the lights fields, takes the probe from density 0.746 to 0.956 and a* to −20.7. These test the whole UI → recipe → engine → probe path, not the physics.
+**Physics checks once the reference engine exists (M2):** on the textbook's setup (Portra 400 on Portra Endura) the probe on the grey card reads visual density 0.755 with the default recipe (chapter 2 introduction); with the settings of the textbook's "Try it" (§2.7), a printer-lights change of +10 pt red, entered through the lights fields, takes the probe from density 0.746 to 0.956 and a* to −20.7. These test the whole UI → recipe → engine → probe path, not the physics.
 
 **Scheduler tests** with a fake engine whose `evaluate` returns promises the test resolves by hand: (1) three requests while one is in flight → exactly two evaluations, the second for the newest request; (2) results resolved out of order → the presenter never shows an older generation after a newer one; (3) a superseded in-flight request receives `abort`; (4) a gesture produces draft passes and one screen pass after release.
 

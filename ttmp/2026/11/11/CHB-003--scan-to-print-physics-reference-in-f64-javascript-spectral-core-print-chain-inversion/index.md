@@ -1,7 +1,7 @@
 ---
 Title: 'Scan-to-print physics reference in f64 JavaScript: spectral core, print chain, inversion'
 Ticket: CHB-003
-Status: active
+Status: complete
 Topics:
     - color-science
     - film-emulation
@@ -13,7 +13,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:22.240671654-05:00
+LastUpdated: 2026-11-11T15:38:30.379571521-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

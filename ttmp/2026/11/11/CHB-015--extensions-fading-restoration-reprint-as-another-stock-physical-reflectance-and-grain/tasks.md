@@ -14,3 +14,4 @@
 - [ ] [stage 5 E4] Write a WGSL pixel-wise grain kernel, measure its cost and decide between export-only and preview use <!-- t:wyd3 -->
 - [ ] [stage 6 E6] Build features, a ridge model with the integrate-to-grey prior and synthetic pretraining for the learned light estimator <!-- t:pe3o -->
 - [ ] [stage 6 E6] Build the roll-split evaluation harness with baselines; ship the estimator only if it beats them <!-- t:m1yn -->
+- [ ] [from CHB-006 mnvr, lcz0] Pixel-shift sources: vendor-combined full-colour DNG and Sony ARQ; refuse unmerged sequences with a named diagnostic; verify on real files <!-- t:xgx0 -->

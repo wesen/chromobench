@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "40c0e5c6ac0cbb7ee0a9fd4ac1a0df70fed8ecde7cc4f2b4fdd4275711a9d547",
+  "request": {
+    "ticket": "CHB-007",
+    "status": "complete",
+    "intent": "",
+    "entry": "Closed: DR-1 (QuickJS) and DR-2 (sync build with host promises) confirmed by the user; DSL worker/RPC moved to CHB-008"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-4eee343ed487187a8defec6ae64d4faf",
+    "state": "committed",
+    "created_at": "2026-11-11T20:38:31.065841633Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "index.md": "f7a4141ace7db89262bcb56a07c06e36c01a7d6f28169ef0a0ee9717ff5c3bdc"
+    },
+    "after": {
+      "changelog.md": "1570ba6ef330803b9f538917f838f771f25df0e3d43cf90cd3867ef43312039d",
+      "index.md": "be2291643573dca31f4c49b92273ca9dc8ba03f4e15af09416815146ca4c024c"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTEKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMQoKQ2xvc2VkOiBEUi0xIChRdWlja0pTKSBhbmQgRFItMiAoc3luYyBidWlsZCB3aXRoIGhvc3QgcHJvbWlzZXMpIGNvbmZpcm1lZCBieSB0aGUgdXNlcjsgRFNMIHdvcmtlci9SUEMgbW92ZWQgdG8gQ0hCLTAwOAo="
+    },
+    {
+      "path": "index.md",
+      "before": "f7a4141ace7db89262bcb56a07c06e36c01a7d6f28169ef0a0ee9717ff5c3bdc",
+      "after": "LS0tClRpdGxlOiAnRFNMIHJ1bnRpbWU6IFF1aWNrSlMgc2FuZGJveCwgZ2VuZXJhdGVkIGJpbmRpbmdzLCBhZ2VudCBlcmdvbm9taWNzJwpUaWNrZXQ6IENIQi0wMDcKU3RhdHVzOiBjb21wbGV0ZQpUb3BpY3M6CiAgICAtIGRzbAogICAgLSBqcy1hcGkKICAgIC0gYWdlbnQKRG9jVHlwZTogaW5kZXgKSW50ZW50OiBsb25nLXRlcm0KT3duZXJzOiBbXQpSZWxhdGVkRmlsZXM6IFtdCkV4dGVybmFsU291cmNlczogW10KU3VtbWFyeTogIiIKTGFzdFVwZGF0ZWQ6IDIwMjYtMTEtMTFUMTU6Mzg6MzEuMDY1Nzk0OTU2LTA1OjAwCldoYXRGb3I6ICIiCldoZW5Ub1VzZTogIiIKLS0tCgojIERTTCBydW50aW1lOiBRdWlja0pTIHNhbmRib3gsIGdlbmVyYXRlZCBiaW5kaW5ncywgYWdlbnQgZXJnb25vbWljcwoKIyMgT3ZlcnZpZXcKCjwhLS0gUHJvdmlkZSBhIGJyaWVmIG92ZXJ2aWV3IG9mIHRoZSB0aWNrZXQsIGl0cyBnb2FscywgYW5kIGN1cnJlbnQgc3RhdHVzIC0tPgoKIyMgS2V5IExpbmtzCgotICoqUmVsYXRlZCBGaWxlcyoqOiBTZWUgZnJvbnRtYXR0ZXIgUmVsYXRlZEZpbGVzIGZpZWxkCi0gKipFeHRlcm5hbCBTb3VyY2VzKio6IFNlZSBmcm9udG1hdHRlciBFeHRlcm5hbFNvdXJjZXMgZmllbGQKCiMjIFN0YXR1cwoKQ3VycmVudCBzdGF0dXM6ICoqYWN0aXZlKioKCiMjIFRvcGljcwoKLSBkc2wKLSBqcy1hcGkKLSBhZ2VudAoKIyMgVGFza3MKClNlZSBbdGFza3MubWRdKC4vdGFza3MubWQpIGZvciB0aGUgY3VycmVudCB0YXNrIGxpc3QuCgojIyBDaGFuZ2Vsb2cKClNlZSBbY2hhbmdlbG9nLm1kXSguL2NoYW5nZWxvZy5tZCkgZm9yIHJlY2VudCBjaGFuZ2VzIGFuZCBkZWNpc2lvbnMuCgojIyBTdHJ1Y3R1cmUKCi0gZGVzaWduLyAtIEFyY2hpdGVjdHVyZSBhbmQgZGVzaWduIGRvY3VtZW50cwotIHJlZmVyZW5jZS8gLSBQcm9tcHQgcGFja3MsIEFQSSBjb250cmFjdHMsIGNvbnRleHQgc3VtbWFyaWVzCi0gcGxheWJvb2tzLyAtIENvbW1hbmQgc2VxdWVuY2VzIGFuZCB0ZXN0IHByb2NlZHVyZXMKLSBzY3JpcHRzLyAtIFRlbXBvcmFyeSBjb2RlIGFuZCB0b29saW5nCi0gdmFyaW91cy8gLSBXb3JraW5nIG5vdGVzIGFuZCByZXNlYXJjaAotIGFyY2hpdmUvIC0gRGVwcmVjYXRlZCBvciByZWZlcmVuY2Utb25seSBhcnRpZmFjdHMK"
+    }
+  ]
+}

@@ -16,3 +16,5 @@
 - [ ] [stage 7] Fragments: film-strip roll badge, cb.arg rollScope(), frame handle roll(); inspector form <!-- t:nzkv -->
 - [ ] [stage 7] Playwright smoke per variant: import, first print, flag, set reference, match, approve, undo <!-- t:21al -->
 - [ ] [stage 8] Integrate CHB-010 auto print/filtration and CHB-013 scanner model (per-channel flare); contract additions request to CHB-002/017 <!-- t:wb5j -->
+- [ ] [from CHB-005 erm0] GPU reductions for roll analysis: pairwise means and LATD, median of Y, gamut-class counts (histogram, stats, patches, densitometer already exist); f64 core computes them meanwhile <!-- t:qvyu -->
+- [ ] [from CHB-006 3wlu] Time a 40-megapixel frame through the dust path on the GPU; reuse packages/gpu's Gaussian blur for the trend <!-- t:j972 -->

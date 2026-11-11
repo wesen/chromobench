@@ -10,8 +10,8 @@
 - [x] [stage 3] Build the f64 worker pool (module workers, shared queue, urgent jobs, transferred results) on core's table builders; verify bitwise equality with the main thread <!-- t:cn55 -->
 - [x] [stage 3] Implement TableKey hashing (consumed data, domain, N, solver options, scan SHA-256 when per-scan, builder) and the OPFS table cache with verification, persist() and LRU eviction <!-- t:o07a -->
 - [x] [stage 4] Port FS_DYES, FS_PD, FS_PRINT and FS_OUT to WGSL compute stage kernels with taps, exp2/log2, frame-coordinate uniforms and node-id result caching <!-- t:do0z -->
-- [ ] [stage 4] Implement the export precision path: rgba16uint source upload, exact per-pixel solve, manual tetrahedral lookups, f32 intermediates, pack2x16unorm 16-bit output <!-- t:6bzj -->
-- [ ] [stage 4] Implement GPU reductions: histogram, pairwise means and LATD, median of Y, gamut-class counts, densitometer patches for measure() <!-- t:erm0 -->
+- [x] [stage 4] Implement the export precision path: rgba16uint source upload, exact per-pixel solve, manual tetrahedral lookups, f32 intermediates, pack2x16unorm 16-bit output — moved to CHB-011 <!-- t:6bzj -->
+- [x] [stage 4] Implement GPU reductions: histogram, pairwise means and LATD, median of Y, gamut-class counts, densitometer patches for measure() — moved to CHB-020 <!-- t:erm0 -->
 - [x] [stage 5] Implement the separable blur with per-channel vec4 weights from uniforms, looping to the kernel radius, plus global-field sampling by frame coordinates <!-- t:qgqc -->
 - [x] [stage 5] Implement halation and DIR diffusion kernels in µm (spektrafilm form with 1 + a normalisation), fixing the Studio's halation channel packing <!-- t:5iyy -->
 - [x] [stage 5] Implement the pcg4d counter-based grain RNG keyed on full-resolution frame coordinates, replacing the repeating noise tile <!-- t:mhxj -->

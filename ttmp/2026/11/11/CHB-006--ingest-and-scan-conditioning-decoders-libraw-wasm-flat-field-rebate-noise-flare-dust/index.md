@@ -1,7 +1,7 @@
 ---
 Title: 'Ingest and scan conditioning: decoders, LibRaw WASM, flat field, rebate, noise, flare, dust'
 Ticket: CHB-006
-Status: active
+Status: complete
 Topics:
     - ingest
     - image-pipeline
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:23.035543663-05:00
+LastUpdated: 2026-11-11T15:38:30.91846508-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

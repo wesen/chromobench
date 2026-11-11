@@ -876,7 +876,7 @@ The flat-field law of §3.9 belongs to CHB-006.
 
 - **Conformance:** the reference engine runs CHB-002's generated suite.
 - **Parity (for CHB-005):** `tables/` exports f64 tables; tolerances are stated in 5.6 before any run; flips are counted at random keys between nodes, not only at nodes, because node residuals have a gap from 7.6×10⁻⁴ to 0.047 that makes node flips uninformative (§4.7).
-- **Fixtures needed:** interim stock data (8 films, 3 papers, camera, LED, CMFs, illuminants, dichroic, neutral filters, 3-CDF models); the Gold 200 sample (`sources/chromogen-studio-1.2/samples/gold200.png`, decoded as u/16 − 2, floored at 0.05, divided by 4,000; rebate box [98, 100, 20, 680], frame [126, 60, 1090, 754], scanner `xt5-fitted`, flipped horizontally, `03-inline.js` sample metadata); the six running-example patches (from `facts.py` via the textbook's book-data, or regenerated with `sigmoid`).
+- **Fixtures needed:** interim stock data (8 films, 3 papers, camera, LED, CMFs, illuminants, dichroic, neutral filters, 3-CDF models); the Gold 200 sample (`sources/chromogen-studio-1.2/samples/gold200.png`, decoded as u/16 − 2, floored at 0.05, divided by 4,000; rebate box [98, 100, 20, 680], frame [126, 60, 1090, 754], scanner `xt5-fitted`, flipped horizontally per `05-inline.js` `addSample`, line 3916, `flipH: true`); the six running-example patches (from `facts.py` via the textbook's book-data, or regenerated with `sigmoid`).
 
 ### 8.4 How to know a test can fail
 

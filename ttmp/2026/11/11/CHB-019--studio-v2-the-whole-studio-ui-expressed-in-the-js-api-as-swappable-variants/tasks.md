@@ -16,3 +16,8 @@
 - [ ] [stage 7] lab variant; M1 spec green unchanged; rewrite e2e/studio.spec.ts against the new hook; delete the React UI <!-- t:lv2j -->
 - [ ] [stage 8] classic, darkroom and simple variants with explain snapshots and a Playwright smoke per variant (with axe); shortcut sheet and live regions (CHB-009 grer) <!-- t:qv62 -->
 - [ ] [stage 9] Reference and GPU engines in the host (boundary decision with CHB-017), chat slot contract with CHB-008, recipe sidecars, precache list <!-- t:7bs1 -->
+- [ ] [from CHB-006 2c6h] Playwright test for ingest's browser 8-bit fallback (decodeBrowser) in the studio host <!-- t:tlko -->
+- [ ] [from CHB-009 ey84] RenderScheduler refine pass (draft and screen passes exist) and the drag-latency measurement <!-- t:cebs -->
+- [ ] [from CHB-009 kygr] Printer-lights colour pad with density readout and typed value entry <!-- t:g4p6 -->
+- [ ] [from CHB-009 grer] Keyboard shortcut map, ARIA labels with aria-valuetext in darkroom units, live regions, axe-core checks; build-time precache list for the service worker <!-- t:ktgo -->
+- [ ] [from CHB-016] Variants receive ck/cb as build arguments and import nothing; kits may import ck/cb as pure modules (reconciles CHB-016 and CHB-019 guides) <!-- t:re11 -->

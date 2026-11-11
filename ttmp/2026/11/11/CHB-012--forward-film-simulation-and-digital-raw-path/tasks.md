@@ -15,3 +15,4 @@
 - [ ] [stage 5] Write reference-engine op adapters for capture.sceneXYZ, capture.expose, film.halation, film.couple, film.develop (curves argument) and film.grain <!-- t:mi6k -->
 - [ ] [stage 5] Implement the composition laws with mutants and the synthetic fixtures (edge, red on grey, grey ramp, uniform fields, synthetic RAW chart); render a synthetic RAW end to end to a print <!-- t:sdfs -->
 - [ ] [stage 5] Hand the GPU kernel specifications and tolerances to CHB-005 and file the proposed contract additions with CHB-002 <!-- t:9ses -->
+- [ ] [from CHB-005] Engine ops for halation and DIR on top of packages/gpu Blur.halation and the global fields (primitives tested in CHB-005) <!-- t:6alf -->

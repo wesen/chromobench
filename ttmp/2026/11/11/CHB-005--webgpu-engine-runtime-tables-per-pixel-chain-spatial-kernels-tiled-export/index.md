@@ -1,7 +1,7 @@
 ---
 Title: 'WebGPU engine: runtime, tables, per-pixel chain, spatial kernels, tiled export'
 Ticket: CHB-005
-Status: active
+Status: complete
 Topics:
     - webgpu
     - image-pipeline
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:22.768068599-05:00
+LastUpdated: 2026-11-11T15:38:30.690713619-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

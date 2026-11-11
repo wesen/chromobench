@@ -18,3 +18,5 @@
 - [ ] [stage 5] Implement cancellation and failure clean-up (AbortSignal, sink.abort, unpin) and consistency during edits; add the tiles-vs-one-pass test with and without halo <!-- t:l2dd -->
 - [ ] [stage 5] Add OutputSettings to view.output and the OpDefs for output.display and output.encode, and file the contract proposals in CHB-002's changelog <!-- t:6luo -->
 - [ ] [review] sRGB cICP code (1,13,0,1) is from memory of H.273, unsourced; RELATED note credits paper white Y 0.813 / Dmax 2.37 to the Endura JSON but they come from textbook §2.7 <!-- t:bk2k -->
+- [ ] [from CHB-005 6bzj] Export precision path on the GPU: rgba16uint source upload, pack2x16unorm 16-bit output (exact solve, tetrahedral lookups, f32 intermediates already done in packages/gpu) <!-- t:dajd -->
+- [ ] [from CHB-005] Tiled-export driver: run plan() tiles through the engine's spatial kernels (halo, global fields) and assemble the 16-bit output <!-- t:4x53 -->
