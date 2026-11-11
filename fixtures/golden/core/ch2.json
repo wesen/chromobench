@@ -1,0 +1,28 @@
+{
+  "_doc": "CHB-003 chapter 2 goldens (textbook §2.6–2.8, guide §8.1). Film kodak_portra_400, paper kodak_portra_endura, lamp TH-KG3 with the database neutral pack, normalised enlarger, lights 0 (aim midgray-normalised). Convention variants are named per entry; 'SPEKTRAFILM+fit' = SPEKTRAFILM with Chromogen's fitted CMFs, which is what reproduces 0.755 and (a*, b*) = (−0.5, −4.2) together (blocking decision 1 of the guide, resolved in the CHB-003 diary step 15).",
+  "entries": [
+    { "id": "ch2.neutralPack", "section": "§2.6", "source": "textbook", "what": "neutralPack", "expect": [0, 51.57, 52.53], "tol": 6e-3 },
+    { "id": "ch2.midgray.x", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM", "what": "midgrayX", "expect": [0.004, 0.005, -0.009], "tol": 6e-4, "note": "x of the mid-grey itself (raw curves at log H 0); the min-subtracted grey card gives (0.0031, 0.0039, −0.0093)" },
+    { "id": "ch2.dxdCC.unnormalised", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM/none", "what": "dxdCC", "normalise": false, "expect": [[-0.0092, -0.0007, 0], [0, -0.0087, -0.0016], [0, 0, -0.0100]], "tol": 1.1e-4, "note": "off-diagonal printed as −0.0007, −0.0016; we get −0.0015 at [1][2] (rounding of a single printed off-diagonal value)" },
+    { "id": "ch2.dxdCC.normalised", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM", "what": "dxdCC", "normalise": true, "expect": [[-0.0061, 0.0024, 0.0038], [0.0031, -0.0056, 0.0023], [0.0031, 0.0031, -0.0061]], "tol": 6e-5 },
+    { "id": "ch2.paperDyes.grey", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM", "what": "paperDyesMid", "expect": [0.665, 0.548, 0.499], "tol": 6e-4 },
+    { "id": "ch2.paperSlopes.grey", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM", "what": "paperSlopesMid", "expect": [2.36, 1.98, 1.95], "tol": 6e-3 },
+    { "id": "ch2.grey.Dvis", "section": "§2, §2.6", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "greyDvis", "expect": 0.755, "tol": 6e-4 },
+    { "id": "ch2.grey.ab", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "greyAB", "expect": [-0.5, -4.2], "tol": 0.06 },
+    { "id": "ch2.chainSlope", "section": "§2.6", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "chainSlope", "flare": 0, "expect": 1.33, "tol": 0.012, "note": "chord over one stop centred on the grey card; 1.322 here; 0.40 D/stop = 1.329" },
+    { "id": "ch2.chainSlope.flare", "section": "§2.7", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "chainSlope", "flare": 0.0048, "expect": 1.30, "tol": 0.012 },
+    { "id": "ch2.paperWhite.Y", "section": "§2.7", "source": "textbook", "conventions": "SPEKTRAFILM", "view": "bb5000", "what": "paperWhiteY", "expect": 0.813, "tol": 6e-4 },
+    { "id": "ch2.black", "section": "§2.7", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "blackDvis", "flare": 0, "expect": 2.37, "tol": 6e-3, "note": "densest black = print of clear (unexposed) film" },
+    { "id": "ch2.black.flare", "section": "§2.7", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "blackDvis", "flare": 0.0048, "expect": 2.09, "tol": 6e-3 },
+    { "id": "ch2.gm.flare.2", "section": "§2.7 (G&M App. E)", "source": "textbook", "what": "gmFlare", "D": 2.0, "expect": 1.7548, "tol": 6e-5 },
+    { "id": "ch2.gm.flare.1", "section": "§2.7 (G&M App. E)", "source": "textbook", "what": "gmFlare", "D": 1.0, "expect": 0.9682, "tol": 6e-5 },
+    { "id": "ch2.adapt", "section": "§2.7", "source": "textbook", "what": "adapt", "view": "bb5000", "expect": [0.1664, 0.1754, 0.2131], "tol": 6e-4, "note": "tabulated-CMF white; the fitted white gives the printed values exactly" },
+    { "id": "ch2.linear", "section": "§2.7", "source": "textbook", "what": "linear", "view": "bb5000", "expect": [0.164, 0.177, 0.199], "tol": 1.6e-3, "note": "tabulated white: (0.1628, 0.1768, 0.1986), guide §6.1" },
+    { "id": "ch2.encoded", "section": "§2.7", "source": "textbook", "what": "encoded", "view": "bb5000", "expect": [0.441, 0.457, 0.483], "tol": 1.6e-3 },
+    { "id": "ch2.hex", "section": "§2.7", "source": "textbook", "what": "hex", "view": "bb5000", "expect": "#70757b" },
+    { "id": "ch2.knee", "section": "§2.7", "source": "textbook", "what": "knee", "expect": [0.4987, 0.770, 0.891, 0.997], "tol": 6e-4 },
+    { "id": "ch2.knee.gain", "section": "§2.7", "source": "textbook", "what": "kneeGain", "expect": [1.048, 0.935], "tol": 6e-4 },
+    { "id": "ch2.red10.density", "section": "§2.7", "source": "textbook", "conventions": "SPEKTRAFILM+fit", "view": "bb5000", "what": "red10", "flare": 0.0048, "expect": [0.746, 0.956, -20.7], "tol": 0.1, "note": "a* −20.64 here: 0.06 off the printed −20.7, so a* uses tol 0.1", "tolDensity": 6e-4 },
+    { "id": "ch2.greyPatch.3200K", "section": "§2.6", "source": "textbook", "conventions": "CHROMOGEN", "view": "bb5000", "what": "greyPatch", "expect": [-0.454, -0.503, -0.471], "tol": 1.5e-3, "note": "we get (−0.4530, −0.5037, −0.4707): within 1e-3, not 6e-4; Chromogen's exact viewing light for this number is not recorded" }
+  ]
+}

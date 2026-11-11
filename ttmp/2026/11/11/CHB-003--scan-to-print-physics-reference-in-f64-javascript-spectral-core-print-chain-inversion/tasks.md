@@ -1,11 +1,11 @@
 # Tasks
 
 ## TODO
-- [ ] [stage 1] Write tools/interim-data/ converter: Chromogen st-data stocks/camera/LED and the decoded Filmbench blob (CMFs, illuminants, dichroics, neutral filters, 3-CDF models) into the StockData shape, keeping CC BY-SA 4.0 attribution <!-- t:iv0r -->
-- [ ] [stage 1] Implement spectral/grid, Spectrum kinds, units (stop, point, CC, refusing D + logH) and PhysicsConventions (SPEKTRAFILM, CHROMOGEN) with resolveStock building the NaN pass mask <!-- t:7k4h -->
-- [ ] [stage 1] Implement Channels (read, transmittance, masked, centroids) and the four families: Status M, APD, printing and scanner channels <!-- t:olcg -->
-- [ ] [stage 1] Implement jacobian, hessian, secant, baseWeightedK, relativeTo, solveLinear with minSingular, metamericBlack, sigmoid and exposeSpectral <!-- t:mq5z -->
-- [ ] [stage 1] Build the law harness (mulberry32, generators with shrinking, mutants, checkMutants), the chapter 1 laws and fixtures/golden/core/ch1.json; all goldens pass and every mutant is caught <!-- t:hru7 -->
+- [x] [stage 1] Write tools/interim-data/ converter: Chromogen st-data stocks/camera/LED and the decoded Filmbench blob (CMFs, illuminants, dichroics, neutral filters, 3-CDF models) into the StockData shape, keeping CC BY-SA 4.0 attribution <!-- t:iv0r -->
+- [x] [stage 1] Implement spectral/grid, Spectrum kinds, units (stop, point, CC, refusing D + logH) and PhysicsConventions (SPEKTRAFILM, CHROMOGEN) with resolveStock building the NaN pass mask <!-- t:7k4h -->
+- [x] [stage 1] Implement Channels (read, transmittance, masked, centroids) and the four families: Status M, APD, printing and scanner channels <!-- t:olcg -->
+- [x] [stage 1] Implement jacobian, hessian, secant, baseWeightedK, relativeTo, solveLinear with minSingular, metamericBlack, sigmoid and exposeSpectral <!-- t:mq5z -->
+- [x] [stage 1] Build the law harness (mulberry32, generators with shrinking, mutants, checkMutants), the chapter 1 laws and fixtures/golden/core/ch1.json; all goldens pass and every mutant is caught <!-- t:hru7 -->
 - [ ] [stage 2] Implement filteredLamp and the Enlarger in normalised mode (mid-grey geometric mean, four spektrafilm flag combinations, midgray input) with dxdCC, plus the 'real' mode RealExposureModel stub <!-- t:iwrt -->
 - [ ] [stage 2] Implement Lights (points, logH, unit-checked shift), the aim ('grey-0.184' default and 'midgray-normalised'), the 3-CDF paper model with gamma morph and exhaustion, and preflash (spektrafilm phi and Chromogen slider) <!-- t:72za -->
 - [ ] [stage 2] Implement reflectance and observe with tabulated CIE 1931 CMFs, addFlare before adaptation, Bradford and CAT16, the knee with OkLCh output compression, and sRGB encoding <!-- t:zvl0 -->

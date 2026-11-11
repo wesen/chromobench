@@ -15,3 +15,4 @@ export * from './print/paper.ts';
 export * from './print/colour.ts';
 export * from './print/gamut.ts';
 export * from './scan/scanner.ts';
+export * from './print/chain.ts';
