@@ -2,45 +2,14 @@
 // Loaded by packages/gpu/parity-page/index.html; driven by test/browser/*.spec.ts.
 import { isChromobenchError, toDiagnostic } from '@chromobench/contract';
 import probeCode from '../../kernels/probe.wgsl?raw';
-import { GpuRuntime } from '../device.ts';
-import { buildTableF64, chromogenOracle, type F64Oracle } from '../physics/oracle.ts';
 import { buildTableGpu, type BuildHooks } from '../tables/build-gpu.ts';
 import { WorkerPool } from '../tables/build-workers.ts';
 import { OpfsStore, TableCache } from '../tables/cache.ts';
 import { keyFor } from '../tables/keys.ts';
-import type { SolveInputs, SpectralInputs, Table } from '../tables/inputs.ts';
+import type { SolveInputs, SpectralInputs } from '../tables/inputs.ts';
 import { compare, type ParityReport } from './harness.ts';
-import { setup, type Setup } from './fixtures.ts';
+import { gold, ref, runtime } from './page-shared.ts';
 import { CHAIN_TESTS } from './chain-tests.ts';
-
-/** The f64 oracle the harness compares against. TODO(CHB-003): setOracle(coreOracle). */
-let oracle: F64Oracle = chromogenOracle;
-export function setOracle(o: F64Oracle): void { oracle = o; refs.clear(); }
-
-let rtP: Promise<GpuRuntime> | null = null;
-export function runtime(): Promise<GpuRuntime> {
-  if (!rtP) rtP = GpuRuntime.create();
-  return rtP.then((rt) => {
-    if (rt.lost) {
-      rtP = null;
-      return runtime();
-    }
-    return rt;
-  });
-}
-
-let S: Setup | null = null;
-export const gold = (): Setup => (S ??= setup());
-const refs = new Map<string, Table>();
-export function ref(kind: 'solve' | 'pd' | 'print'): Table {
-  let t = refs.get(kind);
-  if (!t) {
-    const s = gold();
-    t = buildTableF64(oracle, kind === 'solve' ? s.solve : kind === 'pd' ? s.pd : s.print);
-    refs.set(kind, t);
-  }
-  return t;
-}
 
 async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, tol: number, name: string): Promise<ParityReport> {
   const rt = await runtime();
