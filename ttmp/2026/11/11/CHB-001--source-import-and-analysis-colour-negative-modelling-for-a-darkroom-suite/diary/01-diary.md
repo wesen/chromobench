@@ -208,3 +208,102 @@ Earlier turns (summarised, not verbatim):
 
 ### Technical details
 - Ticket directories: `ttmp/2026/11/11/CHB-0NN--<slug>/`; guide docs at `design-doc/01-intern-guide-*.md`.
+
+## Step 5: Skill change, guide batches, wrap-up, and the diary backfill request
+
+This step covers everything from the first finished writer to the request for writer diaries. Twelve of the fourteen guides were filed in four commits. Along the way:
+- the user changed the reMarkable skill to use a cheaper model for uploads, then asked to commit and push;
+- the user asked to stop polishing and "get going";
+- the user asked for detailed diaries from every writer, backfilled, including writers that had already finished.
+
+### Prompt Context
+**User prompts (verbatim, in order):**
+1. "use a cheaper submodel when upload to remarkable, and add that to the skill."
+2. "commit and push"
+3. "how far are we? the guides don't have to be perfect either, i'd like to get going instead of burning so many tokens. we'll figure out the detail as we go."
+4. "ask them to write all detailed diaries for their work and add those to the ticket too, see diary skill for the format. revive older subagents if necessary so that they can do the same"
+5. "and properly backfill, right"
+
+**Assistant interpretation:**
+1. Make the upload skill prefer a small model in Claude Code.
+2. Commit and push what's pending.
+3. Cut the writers short.
+4. Collect and file per-ticket work diaries from all seven writers, reviving finished ones.
+5. Make sure diaries cover past work, mine included.
+
+**Inferred user intent:** Lower token cost, keep momentum, and still keep an auditable trail per ticket.
+
+### What I did
+- **Skill change.** Edited `~/.codex/skills/remarkable-upload/SKILL.md` (the `~/.claude/skills` entry is a symlink into that git repo). In Claude Code the skill now says: use the Agent tool with `model: "haiku"`, `"sonnet"` only as a fallback, never the main model just to upload.
+  - Committed `2d1a529` on a new branch `task/remarkable-upload-cheap-model`; I did not commit to `main`. Pushed it to `origin` (`github.com:wesen/skills`).
+- **Pending chromobench work** committed as `d340a38`. The repo has no remote, so nothing was pushed.
+- **Filed the guides as writers finished,** each with the same three commands:
+  - `python3 -I scripts/07-ingest-intern-guides.py <persisted agent output> .`
+  - `scripts/08-check-guide-markdown.py`
+  - `scripts/09-seed-ticket-diary.sh`
+
+  The ingest results:
+
+  | Commit | Ticket | Guide | Tasks | Related files |
+  |---|---|---|---|---|
+  | `fb6697b` | CHB-006 | 13,764 words | 20 | 8 |
+  | | CHB-013 | 7,437 words | 15 | 8 |
+  | `1a35a0c` | CHB-010 | 11,612 words | 16 | 8 |
+  | | CHB-015 | 8,657 words | 13 | 7 |
+  | `8359caf` | CHB-003 | 13,207 words | 16 | 8 |
+  | | CHB-012 | 11,754 words | 14 | 8 |
+  | `43044ed` | CHB-002 | 13,994 words | 16 | 8 |
+  | | CHB-005 | 13,349 words | 18 | 8 |
+  | | CHB-007 | 10,735 words | 16 | 8 |
+  | | CHB-008 | 13,507 words | 19 | 8 |
+  | | CHB-009 | 11,102 words | 19 | 8 |
+  | | CHB-011 | 9,511 words | 16 | 7 |
+
+  The Markdown check reported no untagged fences, no raw HTML and no `<\` escapes in any guide.
+- **Added scripts** `08-check-guide-markdown.py` and `09-seed-ticket-diary.sh`. The second writes "Step 1: Intern guide written and filed" in milestone format, including the writer's own summary.
+- **After prompt 3,** sent a wrap-up message to the five writers still running. The CHB-003/012 writer had already delivered; it was resumed by the message and only confirmed.
+- **After prompt 4,** extended `07-ingest-intern-guides.py` to accept `=====BEGIN DIARY CHB-0NN=====` blocks, appended to `diary/01-diary.md`, skipping an entry whose first line is already present.
+  - Dry run on a fake block: `CHB-015 | NO GUIDE | 0 tasks | 0 related | diary +5 words, 1 steps`.
+  - Sent all seven writers a diary request: investigation format, numbering from Step 2, the user's verbatim prompts, and their brief labelled as the orchestrator's. The three finished writers (006/013, 010/015, 003/012) were resumed by the message.
+
+### Why
+- Diaries come back as text blocks for the same reason guides do: subagents cannot write report files.
+- The ingest script keeps their text out of the orchestrator's context.
+- Diary blocks are append-only and skip duplicates, so a writer that reports twice cannot double an entry.
+
+### What worked
+- All twelve ingests ran without manual edits.
+- Every guide carries a "Proposed contract additions (for CHB-002)" section where needed, so cross-ticket conflicts are visible rather than silent.
+
+### What didn't work
+- Re-running the ingest on an output that also holds TASKS blocks would add the tasks again; the script does not de-duplicate tasks. The diary-only reruns avoid this because diary replies carry only DIARY blocks. Noted as a limitation, not hit so far.
+
+### What I learned
+- Writers flagged contract conflicts on their own:
+  - **CHB-007** recommends the *sync* QuickJS build with host promises instead of asyncify. Its spike on quickjs-emscripten 0.32.0 found that an asyncified call after an `await` could interleave with a second eval.
+  - **CHB-011** wants `finishing.*` ops before `output.display`, so the gamut knee stays last.
+  - **CHB-002** corrects the vocabulary example to `print.lights.logH`.
+  - **CHB-005 and CHB-011** both propose `EvalTarget.signal` and `Engine.plan`.
+
+  These are inputs for a reconciliation pass in CHB-002, not yet applied to the architecture doc.
+
+### What was tricky to build
+- Agent output too large to return inline is saved to `tool-results/*.txt`. The ingest path depends on that file holding the full blocks. The preview the orchestrator sees is truncated, so all checks run on the file, not on the preview.
+
+### What warrants a second pair of eyes
+- The skill change sits on a branch; it is live locally because the working tree is on that branch. Merging it to `main` is pending a decision from the user.
+- The writers ran verification scripts in the shared session scratchpad (`scratchpad/guides/`). The scratchpad is not persistent. Archiving those scripts into the repo is still to do.
+
+### What should be done in the future
+- File the CHB-004/014 guides and all writer diaries.
+- Archive the writers' verification scripts.
+- Run `docmgr doctor` across tickets.
+- Upload with a Haiku subagent.
+- Commit.
+
+### Code review instructions
+- `git log --oneline task/chb-work-plan`.
+- Spot-check one guide per commit; run `python3 -I scripts/08-check-guide-markdown.py ttmp/2026/11/11/CHB-0*/design-doc/01-intern-guide-*.md`.
+
+### Technical details
+- Agent outputs live under `~/.claude/projects/-home-manuel-code-wesen-chromobench/<session>/tool-results/`. They are the evidence for each ingest; the guide text in the tickets equals the blocks in those files apart from stripped trailing whitespace.
