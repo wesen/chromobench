@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@chromobench/contract": "workspace:*",
+    "@chromobench/data": "workspace:*",
     "@chromobench/engine-mock": "workspace:*"
   },
   "devDependencies": {

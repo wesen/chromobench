@@ -7,6 +7,6 @@
 - [x] [stage 2] Replace packages/ingest forward-stub.ts with core's ScannerForward; re-run the Gold 200 ranking golden <!-- t:b253 -->
 - [x] [stage 2] Finish CHB-003 open items needed by gpu: f64 tables in Studio node order, engine-ref tabulated mode <!-- t:7pka -->
 - [x] [stage 2] Re-run GPU parity against core (reference/tabulated); adjust or explain tolerances that move <!-- t:n3u2 -->
-- [ ] [stage 3] Switch core to CHB-004 data packs when they land (keep the interim provider for tests) <!-- t:bghy -->
+- [x] [stage 3] Switch core to CHB-004 data packs when they land (keep the interim provider for tests) <!-- t:bghy -->
 - [ ] [stage 3] Merge task/phase1-integration (and task/ui-guides) to main; delete merged agent worktrees and branches <!-- t:d98b -->
 - [ ] [stage 3] Smoke on a real GPU in a normal Chromium: WebGPU canvas presentation in apps/studio (SwiftShader loses the device on present) <!-- t:07g7 -->

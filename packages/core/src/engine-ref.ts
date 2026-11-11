@@ -8,7 +8,7 @@ import {
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
 import { readTiff } from '@chromobench/engine-mock';
-import { interimData } from './data/interim.ts';
+import { nodePhysicsData as interimData } from '@chromobench/data/node';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
 import { conventionsKey, DEFAULT_CONVENTIONS, type Conventions } from './spectral/conventions.ts';

@@ -1,26 +1,29 @@
 // Node-only helpers: the file-system DataSource for the packs committed in packages/data/packs, and a
-// drop-in replacement for core's interimData(). Not for the browser bundle (it reads files).
-import { readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+// drop-in replacement for core's interimData(). It reaches node:fs through process.getBuiltinModule
+// rather than a static import, so the module also loads (and bundles) in a browser; calling the file
+// system there fails.
 import { fail } from '@chromobench/contract';
 import { DEFAULT_SCANNER_PACK, DEFAULT_STOCK_PACK } from './index.ts';
 import { Pack, type OpenOptions } from './pack.ts';
 import { physicsData, type CorePhysicsData } from './physics.ts';
 import type { DataSource } from './sources.ts';
 
+type Fs = typeof import('node:fs');
+const fs = (): Fs => (process.getBuiltinModule('node:fs') as Fs | undefined) ?? fail('E_DATA_SCHEMA', 'the file-system pack source needs Node');
+const urlPath = (u: URL): string => (process.getBuiltinModule('node:url') as typeof import('node:url')).fileURLToPath(u);
+
 /** packages/data/packs/ */
 export const PACKS_DIR = new URL('../packs/', import.meta.url);
 
 export function fsSource(root: string | URL = PACKS_DIR): DataSource {
-  const base = typeof root === 'string' ? root.replace(/\/?$/, '/') : fileURLToPath(root);
+  const base = typeof root === 'string' ? root.replace(/\/?$/, '/') : urlPath(root);
   const resolve = (p: string): string => {
     if (p.split('/').some((s) => s === '..' || s === '')) fail('E_DATA_SCHEMA', `invalid pack path ${p}`);
     return base + p;
   };
   return {
-    read: async (p) => new Uint8Array(await readFile(resolve(p))),
-    readSync: (p) => new Uint8Array(readFileSync(resolve(p))),
+    read: async (p) => new Uint8Array(await fs().promises.readFile(resolve(p))),
+    readSync: (p) => new Uint8Array(fs().readFileSync(resolve(p))),
   };
 }
 

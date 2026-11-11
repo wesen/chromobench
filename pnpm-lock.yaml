@@ -84,6 +84,9 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/data':
+        specifier: workspace:*
+        version: link:../data
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:../engine-mock
@@ -103,10 +106,6 @@ importers:
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
-    devDependencies:
-      '@chromobench/core':
-        specifier: workspace:*
-        version: link:../core
 
   packages/dsl:
     dependencies:
@@ -148,6 +147,9 @@ importers:
       '@chromobench/core':
         specifier: workspace:*
         version: link:../core
+      '@chromobench/data':
+        specifier: workspace:*
+        version: link:../data
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:../engine-mock
