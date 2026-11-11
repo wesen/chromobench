@@ -7,8 +7,8 @@ import { lm, mulMV, type Vec3 } from '../spectral/linalg.ts';
 import { resolveStock, type Stock } from '../spectral/stock.ts';
 import { cmfChromogenFit } from '../spectral/spectrum.ts';
 import {
-  adaptBradford, addFlare, D50, D65, encodeSRGB, lab, observe, paperWhiteXYZ, reflectance, whiteXYZ,
-  XYZ_TO_P3, XYZ_TO_REC2020, XYZ_TO_SRGB, type Viewing,
+  adaptBradford, addFlare, D50, D65, lab, observe, outputSpace, paperWhiteXYZ, reflectance, whiteXYZ,
+  type OutputSpaceId, type Viewing,
 } from './colour.ts';
 import { makeEnlarger, REFERENCE_OPTICS, type Enlarger, type EnlargerOptics } from './enlarger.ts';
 import { compressOutput, DEFAULT_COMPRESS, type CompressSpec } from './gamut.ts';
@@ -130,15 +130,17 @@ export function greyPatchX(x: ArrayLike<number>, xyzOfX: (x: ArrayLike<number>) 
   return Lights.fromLogH(r.x);
 }
 
-export type OutputSpace = 'srgb' | 'display-p3' | 'rec2020' | 'adobe-rgb' | 'prophoto';
-const toRGB = (space: OutputSpace) => (space === 'display-p3' ? XYZ_TO_P3 : space === 'rec2020' ? XYZ_TO_REC2020 : XYZ_TO_SRGB);
+export type OutputSpace = OutputSpaceId;
 
-/** Display transform for D65-relative XYZ: matrix → knee (last colour op) → OETF. */
+/**
+ * Display transform for D65-relative XYZ: Bradford to the space's white → the space's matrix → knee
+ * (last colour op) → the space's TRC. Matrices and curves are the bundled ICC profiles' (CHB-011).
+ */
 export function displayEncode(XYZ_D65: ArrayLike<number>, space: OutputSpace = 'srgb', compress: CompressSpec = DEFAULT_COMPRESS): Vec3 {
-  const lin = mulMV(toRGB(space), XYZ_D65);
-  const k = compressOutput(lin, compress);
-  // rec2020/adobe/prophoto use the sRGB OETF here; CHB-011 owns exact per-space encodings.
-  return k.map(encodeSRGB) as Vec3;
+  const S = outputSpace(space);
+  const lin = mulMV(S.fromXYZ, adaptBradford(XYZ_D65, D65, S.white));
+  const k = compressOutput(lin, { ...compress, space });
+  return k.map((v) => S.encode(v)) as Vec3;
 }
 
 /** XYZ under the viewing white → flare → Bradford to D65 → display. */

@@ -46,6 +46,8 @@ struct Prog {
   misc: vec4<u32>,
   solver: vec4<f32>,
   disp: mat3x3<f32>,
+  okM1: mat3x3<f32>,
+  okM1i: mat3x3<f32>,
 };
 // rangesA = (aLo, aHi, cLo, cHi); rangesB = (cpLo, cpHi, xLo, xHi)
 // outMap  = (region.x, region.y, region.w / outW, region.h / outH): output pixel → full-res frame
@@ -210,11 +212,72 @@ fn normal1(px: vec2<u32>, k: u32, seed: u32) -> f32 {
   return sqrt(-2.0 * log(u1)) * cos(6.283185307 * u2);
 }
 
-fn srgbEnc(v: vec3<f32>) -> vec3<f32> {
-  return select(1.055 * pow(max(v, vec3<f32>(0.0031308)), vec3<f32>(1.0 / 2.4)) - 0.055, 12.92 * v, v <= vec3<f32>(0.0031308));
-}
 fn srgbDec(v: vec3<f32>) -> vec3<f32> {
   return select(pow((max(v, vec3<f32>(0.04045)) + 0.055) / 1.055, vec3<f32>(2.4)), v / 12.92, v <= vec3<f32>(0.04045));
+}
+
+// ---- output.display (CHB-011): the output space's TRC and the oklch knee (core print/gamut.ts) ----
+
+// ICC parametric type 3, inverse (core encodeCurve): y < c·d → y/c, else max(d, (y^(1/g) − b)/a).
+// p0 = (g, a, b, c), p1.x = d.
+fn paraEnc(y: vec3<f32>, p0: vec4<f32>, d: f32) -> vec3<f32> {
+  let pw = (pow(max(y, vec3<f32>(1e-30)), vec3<f32>(1.0 / p0.x)) - p0.z) / p0.y;
+  return select(max(vec3<f32>(d), pw), y / p0.w, y < vec3<f32>(p0.w * d));
+}
+
+// OkLab M2 and M2⁻¹ (Ottosson), column by column; LMS = U.okM1 · rgb is the space's own (core oklabFor)
+const OK_M2 = mat3x3<f32>(vec3<f32>(0.2104542553, 1.9779984951, 0.0259040371), vec3<f32>(0.793617785, -2.428592205, 0.7827717662), vec3<f32>(-0.0040720468, 0.4505937099, -0.808675766));
+// OK_M2I is inv(M2) computed in f64 (core M2_INV), not the 10-digit published inverse
+const OK_M2I = mat3x3<f32>(vec3<f32>(0.999999998451, 1.00000000888, 1.00000005467), vec3<f32>(0.396337792174, -0.105561342324, -0.0894841820950), vec3<f32>(0.215803758061, -0.0638541747717, -1.29148553786));
+
+fn cbrt3(v: vec3<f32>) -> vec3<f32> { return sign(v) * pow(abs(v), vec3<f32>(1.0 / 3.0)); }
+fn okFwd(rgb: vec3<f32>) -> vec3<f32> { return OK_M2 * cbrt3(U.okM1 * rgb); }
+fn okInv(lab: vec3<f32>) -> vec3<f32> { let l = OK_M2I * lab; return U.okM1i * (l * l * l); }
+fn inCube(v: vec3<f32>) -> bool { return all(v >= vec3<f32>(-1e-7)) && all(v <= vec3<f32>(1.0 + 1e-7)); }
+
+// Reinhard knee (core knee): identity below t, asymptotic to l; n^p overflows f32 for n > 1e5, where the
+// fraction n/(1 + n^p)^(1/p) is 1 to f32 precision.
+fn kneeR(d: f32, t: f32, l: f32, p: f32) -> f32 {
+  if (d <= t) { return d; }
+  let s = l - t;
+  let n = (d - t) / s;
+  let q = select(n / pow(1.0 + pow(n, p), 1.0 / p), 1.0, n > 1e5);
+  return t + s * q;
+}
+
+// Largest in-gamut OkLab chroma at (L, h) by bisection (core maxChromaOf; 26 halvings reach f32 resolution).
+fn okMaxChroma(L: f32, ca: f32, sa: f32) -> f32 {
+  var lo = 0.0;
+  var hi = 0.5;
+  for (var i = 0; i < 4; i++) {
+    if (inCube(okInv(vec3<f32>(L, hi * ca, hi * sa)))) { lo = hi; hi = 2.0 * hi; }
+  }
+  for (var i = 0; i < 26; i++) {
+    let m = 0.5 * (lo + hi);
+    if (inCube(okInv(vec3<f32>(L, m * ca, m * sa)))) { lo = m; } else { hi = m; }
+  }
+  return lo;
+}
+
+// core compressOutput, algorithm 'oklch': chroma knee (0, 1, 6); lightness knee (t, 1, 2.2) when
+// lightOn (print-as-seen), else a clip at white (scan-of-print).
+fn okKnee(rgb: vec3<f32>, lightOn: bool, lightT: f32) -> vec3<f32> {
+  let lab = okFwd(rgb);
+  let L0 = lab.x;
+  if (!(L0 > 0.0)) { return vec3<f32>(0.0); }
+  var L = min(L0, 1.0);
+  if (lightOn) { L = min(kneeR(L0, lightT, 1.0, 2.2), 1.0); }
+  if (L >= 1.0) { return vec3<f32>(1.0); }
+  // the hue direction as a unit vector, not atan2/cos/sin: WGSL only requires 2^-11 absolute accuracy
+  // of sin/cos, which moved the hue by up to 1.5e-4 in linear RGB on SwiftShader
+  let C = length(lab.yz);
+  var ca = 1.0;
+  var sa = 0.0;
+  if (C > 1e-12) { ca = lab.y / C; sa = lab.z / C; }
+  let Cmax = okMaxChroma(L, ca, sa);
+  var Cn = 0.0;
+  if (Cmax > 0.0) { Cn = Cmax * kneeR(C / Cmax, 0.0, 1.0, 6.0); }
+  return clamp(okInv(vec3<f32>(L, Cn * ca, Cn * sa)), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 @compute @workgroup_size(8, 8)
@@ -260,12 +323,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       }
       case 7u: { v = vec4<f32>((v.rgb + p0.rgb) * p1.x, v.a); }
       case 8u: {
-        // XYZ → linear RGB by U.disp (core: XYZ_TO_SRGB · Bradford(white → D65) · gain); op.y: knee 0 clip,
-        // 1 tanh shoulder (core gamut.ts: identity to 0.82, then 0.82 + 0.18 tanh((v − 0.82)/0.18))
+        // XYZ → linear RGB by U.disp (core displaySetup: fromXYZ(space) · Bradford(source white → space
+        // white)); op.y: knee 0 clip, 1 tanh shoulder at p1.w (core tanhShoulder), 2 oklch (core
+        // compressOutput); then the space's TRC (p0, p1.x). Nothing but the TRC follows the knee.
         var rgb = U.disp * v.rgb;
-        // (the argument is capped at 20, where tanh is 1 in f32, so an exp-based tanh cannot overflow)
-        if (op.y == 1u) { rgb = select(0.82 + 0.18 * tanh(min((rgb - vec3<f32>(0.82)) / 0.18, vec3<f32>(20.0))), rgb, rgb <= vec3<f32>(0.82)); }
-        v = vec4<f32>(srgbEnc(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0))), 0.0);
+        // (the tanh argument is capped at 20, where tanh is 1 in f32, so an exp-based tanh cannot overflow)
+        let s = p1.w;
+        if (op.y == 1u) { rgb = select(s + (1.0 - s) * tanh(min((rgb - vec3<f32>(s)) / (1.0 - s), vec3<f32>(20.0))), rgb, rgb <= vec3<f32>(s)); }
+        if (op.y == 2u) { rgb = okKnee(rgb, p1.z > 0.5, p1.y); }
+        v = vec4<f32>(paraEnc(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), p0, p1.x), 0.0);
       }
       case 9u: {
         let seed = op.y;
