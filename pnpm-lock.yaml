@@ -17,6 +17,9 @@ importers:
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:packages/engine-mock
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:packages/ingest
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -100,12 +103,30 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:../ingest
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*
         version: link:../conformance
 
+  packages/ingest:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@colorhythm/libraw-wasm':
+        specifier: 1.1.1
+        version: 1.1.1
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
+
 packages:
+
+  '@colorhythm/libraw-wasm@1.1.1':
+    resolution: {integrity: sha512-OxqXLhDurX/sM4KL/rR71zjuH0VHBUWCOJ71tLiIxy3ATbIS2KM/8RixT0Gc3RygcsS1T8SXnzdipPqWYSjt9A==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -496,6 +517,9 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -572,6 +596,9 @@ packages:
   tinyrainbow@3.2.0:
     resolution: {integrity: sha512-LgO3D9yZJjApUiuUfl9iFAwrtaX4+lok3wJIqttGoKCHlWUqHqbQpnxCf82L8FjgKsh4iGo78hqJwgL8F6To2A==}
     engines: {node: '>=14.0.0'}
+
+  typed-cstruct@0.10.2:
+    resolution: {integrity: sha512-LRCAO+7CdAczqOW6TW0nxP5lEDUWFp2ORz09A22JN7pIqQyFyyItx/56VfhUV1xO5omzuC/JYqAhqL8Uth6rag==}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -668,6 +695,10 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@colorhythm/libraw-wasm@1.1.1':
+    dependencies:
+      typed-cstruct: 0.10.2
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
@@ -948,6 +979,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.2: {}
+
   fsevents@2.3.3:
     optional: true
 
@@ -1031,6 +1064,8 @@ snapshots:
       picomatch: 4.0.7
 
   tinyrainbow@3.2.0: {}
+
+  typed-cstruct@0.10.2: {}
 
   typescript@5.9.3: {}
 

@@ -22,6 +22,7 @@
     "@chromobench/contract": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",
     "@chromobench/conformance": "workspace:*",
+    "@chromobench/ingest": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@playwright/test": "1.65.0",
     "@types/node": "24.19.2",
