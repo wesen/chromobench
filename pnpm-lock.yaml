@@ -78,6 +78,9 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/engine-mock':
+        specifier: workspace:*
+        version: link:../engine-mock
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*

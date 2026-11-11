@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "parity:serve": "vite --config parity-page/vite.config.ts",
     "test:browser": "playwright test -c playwright.config.ts"
   },
-  "dependencies": { "@chromobench/contract": "workspace:*" },
-  "devDependencies": { "@chromobench/conformance": "workspace:*", "@webgpu/types": "0.1.74" }
+  "dependencies": {
+    "@chromobench/contract": "workspace:*",
+    "@chromobench/engine-mock": "workspace:*"
+  },
+  "devDependencies": {
+    "@chromobench/conformance": "workspace:*",
+    "@webgpu/types": "0.1.74"
+  }
 }

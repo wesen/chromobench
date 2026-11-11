@@ -1,0 +1,21 @@
+// @chromobench/gpu — the WebGPU engine (CHB-005).
+export { GpuEngine, GPU_OPS, type GpuEngineOptions } from './engine-gpu.ts';
+export { GpuRuntime, backendOrder, unavailableCaps, DEFAULT_BUDGET, type GpuCaps, type Backend, type AccelChoice, type RuntimeOptions } from './device.ts';
+export { negotiate, WANT_LIMITS, OPTIONAL_FEATURES } from './limits.ts';
+export { BufferPool, TexturePool, Budget, texBytes, type TexDesc, type BufDesc } from './pool.ts';
+export { PipelineCache, compileDiagnostic, kernelKey, type KernelSpec } from './pipelines.ts';
+export { defineStruct, type StructLayout, type FieldType } from './layout.ts';
+export { GpuTimer, type Timing } from './timing.ts';
+export { planTiles, haloOverhead, type SpatialKernel, type GlobalField, type GpuTilePlan, type PlanOptions } from './tiles.ts';
+export { keyFor, tableId, hashArrays, INTERIM_CONVENTIONS } from './tables/keys.ts';
+export { TableCache, OpfsStore, MemoryStore, encodeTable, decodeTable, type TableStore } from './tables/cache.ts';
+export { TableManager, uploadTable3D, toHalf } from './tables/manager.ts';
+export { buildTableGpu, buildSolveGpu, buildSpectralGpu, SOLVE_PARAMS, SPECTRAL_PARAMS, GPU_GTOL_FLOOR } from './tables/build-gpu.ts';
+export { WorkerPool } from './tables/build-workers.ts';
+export * from './tables/inputs.ts';
+export { chromogenOracle, buildTableF64, tableNodes, look3, tetra3, type F64Oracle, type SolveResult } from './physics/oracle.ts';
+export { ChainRunner } from './chain/run.ts';
+export { OP, LOOKUP, PROG, packProgram, evalPixelF64, pcg4d, normal1, type Segment, type PwOp } from './chain/program.ts';
+export { Reducer, pairwiseSum, histPercentile } from './measure.ts';
+export { gaussianWeights, Blur } from './spatial.ts';
+export { compare, type ParityReport, type CompareOptions } from './parity/harness.ts';

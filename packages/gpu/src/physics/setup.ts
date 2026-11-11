@@ -76,4 +76,17 @@ export function chainConstants(si: SolveInputs, paper: Stock, lampK = 3200): Cha
   return { Kinv, clear: printerClear(paper, lampK) };
 }
 
+/**
+ * INTERIM aim ('normalised' print.expose): log-exposure offsets L so the film's grey card
+ * (film.develop(0)) prints at paper density 0.75 in every layer. TODO(CHB-003/CHB-010): the real aim
+ * is printer.greyPatch(0.184) in core.
+ */
+export function interimAim(film: Stock, paper: Stock, pd: SpectralInputs, clear: Vec3, pdAt: (c: Vec3) => Vec3): Vec3 {
+  void pd;
+  const cGrey = film.curves.map((cv) => cv.at(0)) as Vec3;
+  const pdGrey = pdAt(cGrey);
+  const xAim = paper.curves.map((cv) => cv.inverse(0.75));
+  return [0, 1, 2].map((k) => xAim[k]! - (clear[k]! - pdGrey[k]!)) as Vec3;
+}
+
 export { scannerChannels, type CameraJson };

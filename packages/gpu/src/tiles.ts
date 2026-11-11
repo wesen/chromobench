@@ -25,7 +25,16 @@ export interface SpatialKernel {
   fieldLongSide?: number;
 }
 
-export interface GlobalField { field: string; kernels: string[]; downsample: number; w: number; h: number; sigmaPx: number }
+export interface GlobalField {
+  field: string; kernels: string[]; downsample: number; w: number; h: number;
+  /** σ of the narrowest kernel in field pixels (σ/s). */
+  sigmaPx: number;
+  /**
+   * σ to blur the field with, in field pixels, after removing the variance the s × s box prefilter
+   * ((s² − 1)/12 px²) and the bilinear read-back (s²/6 px²) already add: √(σ² − (s²−1)/12 − s²/6)/s.
+   */
+  blurSigmaPx: number;
+}
 
 export interface GpuTilePlan extends TilePlan {
   fields: GlobalField[];
@@ -99,7 +108,8 @@ export function planTiles(frame: { w: number; h: number; umPerPx: number }, kern
       s = Math.max(1, pow2Floor(sMin / 2)); // largest power of two with σ/s ≥ 2
       while (Math.ceil(frame.w / s) > maxTex || Math.ceil(frame.h / s) > maxTex) s *= 2;
     }
-    fields.push({ field: g, kernels: ks.map((k) => k.id), downsample: s, w: Math.ceil(frame.w / s), h: Math.ceil(frame.h / s), sigmaPx: sMin / s });
+    const blur = Math.sqrt(Math.max(0, sMin * sMin - (s * s - 1) / 12 - (s * s) / 6)) / s;
+    fields.push({ field: g, kernels: ks.map((k) => k.id), downsample: s, w: Math.ceil(frame.w / s), h: Math.ceil(frame.h / s), sigmaPx: sMin / s, blurSigmaPx: blur });
   }
 
   const bpp = opts.bytesPerPixel ?? 80;

@@ -10,6 +10,10 @@ import type { SolveInputs, SpectralInputs } from '../tables/inputs.ts';
 import { compare, type ParityReport } from './harness.ts';
 import { gold, ref, runtime } from './page-shared.ts';
 import { CHAIN_TESTS } from './chain-tests.ts';
+import { SPATIAL_TESTS } from './spatial-tests.ts';
+import { GpuEngine } from '../engine-gpu.ts';
+// the conformance generator, imported by path: the package index also exports Vitest wrappers
+import { generateCases, makeEnv } from '../../../conformance/src/generate.ts';
 
 async function tableParity(kind: 'solve' | 'pd' | 'print', hooks: BuildHooks, tol: number, name: string): Promise<ParityReport> {
   const rt = await runtime();
@@ -175,6 +179,60 @@ const TESTS: Record<string, Test> = {
   },
 
   ...CHAIN_TESTS,
+  ...SPATIAL_TESTS,
+
+  /** CHB-002's generated conformance suite against GpuEngine (fresh engine per case, shared device). */
+  async conformance(o) {
+    const rt = await runtime();
+    const make = () => GpuEngine.create({ runtime: rt, opfs: false });
+    const probe = await make();
+    const cases = generateCases(probe.capabilities().ops);
+    probe.dispose();
+    const only = o['filter'] as string | undefined;
+    const results: { id: string; ok: boolean; error?: string }[] = [];
+    for (const c of cases) {
+      if (only && !c.id.includes(only)) continue;
+      const env = await makeEnv(make);
+      try {
+        await c.run(env);
+        results.push({ id: c.id, ok: true });
+      } catch (e) {
+        results.push({ id: c.id, ok: false, error: e instanceof Error ? e.message : String(e) });
+      } finally {
+        env.engine.dispose();
+      }
+    }
+    return { total: results.length, passed: results.filter((r) => r.ok).length, failures: results.filter((r) => !r.ok) };
+  },
+
+  /** Engine smoke: a negative-scan chain through GpuEngine, every domain tapped. */
+  async 'engine:taps'() {
+    const rt = await runtime();
+    const eng = await GpuEngine.create({ runtime: rt, opfs: false });
+    const g = (await import('@chromobench/contract')).Graph;
+    const graph = new g();
+    const src = graph.intern('source.pattern', [], { domain: 'camera-linear', width: 40, height: 30, seed: 9 }).node;
+    const chainOps: [string, Record<string, unknown>][] = [
+      ['scan.density', {}], ['invert.dyes', { stock: 'kodak_gold_200', scanner: 'xt5-rgb-led' }], ['film.grain', { amount: 0.5 }],
+      ['print.expose', {}], ['print.lights', { logH: [0.1, 0, -0.05] }], ['print.develop', {}], ['view.reflect', {}], ['view.flare', {}], ['output.display', { knee: 'clip' }],
+    ];
+    let prev = src;
+    const out: Record<string, unknown> = {};
+    for (const [op, args] of chainOps) {
+      prev = graph.intern(op, [prev.id], args).node;
+      eng.adopt(graph.closure(prev.id));
+      const r = await eng.evaluate(prev, { scale: 0.5, precision: 'preview' });
+      const d = await r.read();
+      let finite = true;
+      for (const v of d) if (!Number.isFinite(v)) finite = false;
+      out[op] = { domain: r.info.domain, channels: r.info.channels, w: r.width, h: r.height, finite, first: Array.from(d.slice(0, r.info.channels)) };
+    }
+    const stats = graph.intern('measure.stats', [prev.id], {}).node;
+    eng.adopt(graph.closure(stats.id));
+    out['measure.stats'] = (await eng.measure(stats)).value;
+    eng.dispose();
+    return out;
+  },
 };
 
 async function run(name: string, opts: Record<string, unknown> = {}): Promise<unknown> {
