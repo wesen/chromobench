@@ -16,3 +16,4 @@
 - [ ] [stage 4] Implement consent-gated session bundles and tools/beta-analysis usage, error and approval reports <!-- t:1rnt -->
 - [ ] [stage 4] Run sessions B0-B5 with dry runs on the mock engine and keep observation notes per session <!-- t:m4we -->
 - [ ] [stage 4] File the API pruning note to CHB-002 (deletions, redirects from typed names, hint and fix improvements) and the beta report <!-- t:5bpf -->
+- [x] [errata] Line ~279: a 3% camera-curve error moves the fitted LED peak by ~1 nm, not 'several nanometres' (replacement text in diary Step 13) <!-- t:gc6o -->

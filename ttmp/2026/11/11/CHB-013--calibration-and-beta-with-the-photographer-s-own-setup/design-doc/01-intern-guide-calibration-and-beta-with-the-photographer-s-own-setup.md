@@ -276,7 +276,7 @@ Concrete numbers, computed for this guide through Chromogen's illustrative camer
 
 The ratios change by −0.00044 per nm (red LED, green leak), +0.0083 and −0.0049 per nm (green LED) and +0.0166 per nm (blue LED, green leak). With 1 % noise on the ratios and the *exact* camera curves, the fit returns 677.7, 531.9 and 472.0 nm.
 
-Measurement noise is therefore not the limit; **the camera model is**. A 3 % error in the camera's green tail near 678 nm moves the red LED's fitted peak by several nanometres. Hence the order of preference for Q:
+Measurement noise is therefore not the limit; **the camera model is**. A 3 % error in the camera's green tail near 678 nm moves the red LED's fitted peak by about 1 nm (the ratio changes by 2.9 % per nm); tail errors of tens of per cent, common where a curve is near zero, move it by several nanometres. Hence the order of preference for Q:
 
 1. A measured curve for his camera body, if it is among the 28 cameras of Jiang et al. or in other published sets that CHB-004 can package.
 2. The mean plus two principal components (the PCA prior of §6.3), with coefficients fitted jointly with the LED peaks and regularised by the PCA variances. Add the base readings of a known stock's rebate relative to the open gate (three more numbers) as extra constraints.

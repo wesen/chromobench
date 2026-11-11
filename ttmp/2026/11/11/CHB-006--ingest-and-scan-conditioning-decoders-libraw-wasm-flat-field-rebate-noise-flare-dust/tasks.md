@@ -21,3 +21,4 @@
 - [ ] [stage 4] Port DetectSpecks/SpeckBackground and Heal to scanner density with the neutrality score, planted-dust fixtures and goja-cv's heal laws; persist spots in scan.dust <!-- t:nha4 -->
 - [ ] [stage 4] Write WGSL versions of the dense dust kernels (neutral plane, square min/max, box mean, residual threshold) and parity tests against the JS reference <!-- t:70zw -->
 - [ ] [stage 4] Add infrared-channel dust detection for RGBI sources from dedicated film scanners <!-- t:ygqr -->
+- [x] [errata] Apply writer's post-hoc corrections: averaging example 0.2094→0.2140, 0.679→0.670 vs 0.497, 0.18 D→0.17 D (guide lines ~120,123,1172,1215); §6 step 11 blue density +0.012→+0.013 (see diary) <!-- t:b6ny -->

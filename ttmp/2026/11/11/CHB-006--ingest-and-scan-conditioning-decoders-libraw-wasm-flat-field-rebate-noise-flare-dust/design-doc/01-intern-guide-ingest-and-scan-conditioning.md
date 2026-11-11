@@ -117,10 +117,10 @@ Chromogen's `srgbDecode` (`05-inline.js` 2413) implements this. A file can also 
 
 **Order matters: linearise first, average second.** Reducing a scan to a smaller working size averages each output pixel's footprint of source pixels. The average must be taken of light, not of encoded values. Take two neighbouring pixels on an edge, encoded at 0.2 and 0.8:
 
-- Averaging first gives 0.5, which decodes to 0.2094.
+- Averaging first gives 0.5, which decodes to 0.2140.
 - Decoding first gives 0.0331 and 0.6038, whose mean is 0.3185.
 
-As densities, that is 0.679 against 0.497: an error of 0.18 D on one edge pixel. In flat areas the error is second order (Jensen's inequality on the noise), but it is a bias, not noise. Chromogen averages first (§4.2 lists the bug).
+As densities, that is 0.670 against 0.497: an error of 0.17 D on one edge pixel. In flat areas the error is second order (Jensen's inequality on the noise), but it is a bias, not noise. Chromogen averages first (§4.2 lists the bug).
 
 ### 2.2 The scanner is a forward model, so it needs raw channels
 
@@ -1111,7 +1111,7 @@ The sample is `C1/sources/chromogen-studio-1.2/samples/gold200.png`. Its metadat
 8. **Scanner density.** D = −log₁₀(T/T_reb) = (−0.028, −0.034, −0.049).
 9. **Noise at this scale.** Full frame size, scale 1, rebate box: σ = (0.0090, 0.0069, 0.0122) D. A re-implementation of `sigmaD` gives (0.00899, 0.00686, 0.01220).
 10. **Base class.** z = D/σ = (−3.14, −4.96, −4.03). min z < −3, so the class is **below base** in all three layers. It is decided before the solve, whatever residual CHB-003 returns. The pixel lies in the named region "deep shadow beside the stand" [592, 524, 60, 34]. There 54 % of pixels are below base and 29 % blank at full size; the region mean is D = (0.028, 0.031, −0.009).
-11. **What the old default would have said.** With the automatic percentile rebate (0.1345, 0.7722, 0.2465), the same pixel reads D = (+0.019, +0.022, +0.012) and z = (2.1, 3.2, 1.0): **blank film**. The lighting problem that the textbook's shadow-floor analysis finds (0.03–0.04 D) disappears behind a zero that sits 0.05 D too light.
+11. **What the old default would have said.** With the automatic percentile rebate (0.1345, 0.7722, 0.2465), the same pixel reads D = (+0.019, +0.022, +0.013) and z = (2.1, 3.2, 1.0): **blank film**. The lighting problem that the textbook's shadow-floor analysis finds (0.03–0.04 D) disappears behind a zero that sits 0.05 D too light.
 12. **Downstream.** CHB-003 adds D_base from the stock and solves for dyes. `scan.conditioning` reads σ₃ at the solved dyes. Through narrowband channels it is about 1.1 everywhere, so the gain is about 0.9. `scan.specks` finds nothing to heal on this frame unless dust is planted.
 
 The same pixel at the 640-pixel statistics size would use σ = (0.0043, 0.0033, 0.0057). The class percentages then become 12.6 % blank and 9.7 % below, against 21.5 % and 7.2 % at full size (§2.7). This is why every statistic carries its size.
@@ -1169,7 +1169,7 @@ The same pixel at the 640-pixel statistics size would use σ = (0.0043, 0.0033, 
   - an RGBI TIFF keeps its fourth plane;
   - decoding the same buffer twice gives identical results.
 - **Chromogen parity** on inputs Chromogen handles correctly (8/16-bit, LZW, Deflate, PackBits, tiles, planar, linear encoding): bitwise-equal f32. Run Chromogen's `decodeTIFF` and `decodePNG` from the extracted file in Node 24, which has `DecompressionStream`.
-- **The averaging order:** a 2×1 sRGB image (0.2, 0.8) resampled to 1×1 gives linear 0.3185, not 0.2094. The broken variant fails by 0.18 D.
+- **The averaging order:** a 2×1 sRGB image (0.2, 0.8) resampled to 1×1 gives linear 0.3185, not 0.2140. The broken variant fails by 0.17 D.
 
 ### 8.2 Laws and golden numbers
 
@@ -1212,7 +1212,7 @@ Store these as JSON in `fixtures/golden/ingest-gold200.json` and `fixtures/golde
 
 Each test ships with a deliberately broken variant run in CI, which must fail:
 
-- **Averaging before linearising** fails the sRGB edge test by 0.18 D.
+- **Averaging before linearising** fails the sRGB edge test by 0.17 D.
 - **The flat applied in oriented coordinates** fails the flat-field law on a frame rotated by 90°.
 - **f32 summed-area tables** fail the σ golden on a 4096² frame.
 - **Neighbour differences instead of the leave-one-out mean** fail the footprint test at 0.7 (0.754).
