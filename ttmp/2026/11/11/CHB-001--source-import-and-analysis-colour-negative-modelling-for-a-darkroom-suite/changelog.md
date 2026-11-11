@@ -11,3 +11,7 @@ Imported 6 sources; extracted embedded data; analysed textbooks directly and Chr
 ## 2026-11-11
 
 Stored subagent diaries (various/diary-goja-cv-agent.md, various/diary-chromogen-studio-agent.md) and revised reports; Filmbench full report and diary unavailable (API safeguard stop)
+
+## 2026-11-11
+
+Wrote design-doc/01-chromobench-architecture-and-work-plan.md (shared vocabulary, contracts, planned layout, source index, ticket map); created tickets CHB-002..CHB-015 with intern-guide and diary docs

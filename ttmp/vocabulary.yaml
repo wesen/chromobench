@@ -15,6 +15,28 @@ topics:
       description: JavaScript (goja) scripting APIs
     - slug: product
       description: Product scope and user-facing application design
+    - slug: webgpu
+      description: WebGPU compute and rendering
+    - slug: dsl
+      description: The chromobench JavaScript DSL and its runtime
+    - slug: agent
+      description: LLM agent integration and transports
+    - slug: ui
+      description: Studio app user interface
+    - slug: data
+      description: Stock, spectral and reference data
+    - slug: ingest
+      description: Image decoding and scan conditioning
+    - slug: darkroom
+      description: Enlarger, paper and printing workflow
+    - slug: colour-management
+      description: ICC, display and output colour
+    - slug: testing
+      description: Laws, golden numbers, conformance and parity testing
+    - slug: black-and-white
+      description: Black-and-white film and paper
+    - slug: architecture
+      description: System architecture and contracts
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes
