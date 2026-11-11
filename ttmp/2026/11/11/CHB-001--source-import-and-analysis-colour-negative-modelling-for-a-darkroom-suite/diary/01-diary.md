@@ -775,3 +775,65 @@ keep committing and logging.
 ### Technical details
 
 - Running agents: CHB-018 (shell), data switch, CHB-010, CHB-011, CHB-023.
+
+## Step 12: Data switch and shell merged; CHB-019 studio-kit started (outside apps/studio)
+
+The data switch (core and GPU default to CHB-004's packs) and the shell port (CHB-018, stages 1–4) finished and
+were merged into `task/ui-guides`; all 2028 unit tests pass. CHB-019 was started limited to packages/studio-kit and
+its variants, because the demo agent (CHB-023) is editing apps/studio at the same time.
+
+### Prompt Context
+
+**User prompt (verbatim):** "how far is the demo?" (answered from the demo worktree's git log: data switch merged,
+no own commits yet); otherwise continuing the plan from Step 11.
+**Assistant interpretation:** Keep the pipeline moving without colliding with the demo.
+**Inferred user intent:** Demo first, Studio v2 in parallel.
+**Commit (code):** e9b5045 (merge data switch), d492d84 (merge task/chb-018-shell)
+
+### What I did
+
+- Sent the demo agent the data-switch details and asked it to merge `task/chb-017-data-switch` (it did: 9471cfe).
+- Merged `task/chb-017-data-switch` (clean; 1936 tests) and `task/chb-018-shell` (clean; `pnpm lint` "import
+  boundaries ok (221 file checks)"; `pnpm test` "51 passed (51) files, 2028 passed (2028)").
+- Launched CHB-019 (`task/chb-019-studio-kit`) with an explicit lane: packages/studio-kit, four headless variants
+  with explain snapshots, a dev host page with its own Playwright port; no apps/studio edits.
+- Added the session cost to the user's status line (`~/.claude/statusline-command.sh`, `.cost.total_cost_usd`).
+
+### Why
+
+- apps/studio is the demo's file set right now; the studio-kit and variants do not need it to start.
+
+### What worked
+
+- Both merges clean; the ingest dust timeout seen by CHB-018 did not recur on the merged tree (CHB-017 raised that
+  test's timeout to 30 s).
+
+### What didn't work
+
+- No failures.
+
+### What I learned
+
+- CHB-018 API deviations from the CHB-019 guide (fragment methods use `this`; `run(ctx, ...args)`; lr/tb compare as a
+  split; services at start/mount) — passed to the CHB-019 agent.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- CHB-018's playwright change starts the shell demo server on every browser run (Playwright starts all listed
+  servers).
+
+### What should be done in the future
+
+- After CHB-023 lands: a second CHB-019 run migrating apps/studio onto studio-kit.
+
+### Code review instructions
+
+- CHB-018 diary Steps 2–3; `pnpm --filter @chromobench/shell demo` → http://localhost:4186/demo/
+
+### Technical details
+
+- Running: CHB-010, CHB-011, CHB-023, CHB-019 (studio-kit).
