@@ -403,3 +403,89 @@ The earlier prompts are in Step 5.
 ### Technical details
 - reMarkable folder: `/ai/2026/11/11/chromobench`.
 - Writer outputs (evidence): `~/.claude/projects/-home-manuel-code-wesen-chromobench/<session>/tool-results/toolu_*.txt`.
+
+## Step 7: Phase-1 agents finished; merged into task/phase1-integration
+
+Five implementation agents (CHB-003, -005, -006, -007, -009) ran in parallel worktrees from `bd5912a`, each on its own
+`task/chb-0NN-*` branch. CHB-004 never launched: the auto-mode classifier denied it (likely the spektrafilm clone and
+Python venv), and the user has not decided between approving it and an offline variant. This step merges the five
+branches onto `task/chb-002-contract` in a new branch `task/phase1-integration` and runs every check. All green:
+1829 unit tests, 42 browser tests. Contract requests (17 across five files) are not yet applied; they need
+decisions and are listed for the user.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Dodo everything all the way to the 6 agents finishing CHB-009 and co." (earlier
+session; the merge-and-test plan was recorded then).
+**Assistant interpretation:** After the agents finish, merge, resolve conflicts, run tests, record the outcome.
+**Inferred user intent:** One integrated tree with every Phase-1 package to build on.
+**Commit (code):** 74d90f1 — "Merge task/chb-009-studio into phase-1 integration" (merge chain 5c7a5c2, 796f335,
+the CHB-006 merge, 0158441, 74d90f1)
+
+### What I did
+
+- `git switch -c task/phase1-integration task/chb-002-contract`, then `git merge --no-ff` in this order: chb-003-physics,
+  chb-007-dsl, chb-006-ingest, chb-005-webgpu, chb-009-studio.
+- `pnpm-lock.yaml` conflicted on the DSL, GPU and studio merges: resolved each time with `git checkout --ours
+  pnpm-lock.yaml && pnpm install --prefer-offline` (regenerates from the merged `package.json`s; rerere recorded it).
+- The studio merge also conflicted in:
+  - `playwright.config.ts`: kept CHB-009's root-anchored `testIgnore` (`${import.meta.dirname}/.claude/**`) and
+    `STUDIO_PORT`, and CHB-005's `webServer` array with the `gpu-parity` server on 4185; the studio server now uses
+    `${port}`;
+  - `apps/studio/index.html`: took CHB-009's;
+  - `apps/studio/src/main.ts`, `controls.ts`: modify/delete — CHB-009 replaced the M1 page with `main.tsx` (it had
+    already cherry-picked the restyle 14f5419 that HEAD's modification came from), so took the deletion.
+- Checks: `pnpm typecheck` exit 0; `pnpm lint` "import boundaries ok (88 file checks)"; `pnpm gen:check` "ok (18
+  files)"; `pnpm contract:check` "no baseline snapshot (first version); everything is additive"; `pnpm test`
+  "32 passed (32) files, 1829 passed (1829)" in 27 s; `STUDIO_PORT=4397 CI=1 pnpm test:browser` "42 passed (41.0s)"
+  (chromium-webgpu and gpu-parity projects, including conformance 173/173 against `GpuEngine`).
+
+### Why
+
+- `--no-ff` merges keep each ticket's commits and diary steps identifiable.
+- A fresh `STUDIO_PORT` and `CI=1` because a worktree's Vite still listens on 4173 (pid 1347785) and
+  `reuseExistingServer` would have tested the wrong app — the trap CHB-005 and CHB-009 both reported.
+
+### What worked
+
+- Test count adds up: 468 baseline + 282 (CHB-003) + 80 (CHB-007) + 922 (CHB-006) + 43 (CHB-005) + 34 (CHB-009)
+  = 1829.
+
+### What didn't work
+
+- Five merge conflicts on the studio merge (above); no test failures after resolution.
+
+### What I learned
+
+- Agents' package.json edits merge cleanly; only the lockfile conflicts, and regenerating it offline takes ~1 s.
+
+### What was tricky to build
+
+- The studio modify/delete: HEAD's change to `main.ts` was the restyle commit, which CHB-009 had cherry-picked
+  before deleting the file, so taking the deletion loses nothing.
+
+### What warrants a second pair of eyes
+
+- **Two physics implementations.** `packages/gpu` carries an interim f64 port of Chromogen (conventions
+  `chromogen-interim-0`, `src/physics/oracle.ts`, `TODO(CHB-0NN)` markers); `packages/core` is the oracle
+  (`core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean`). Not yet wired together.
+- `packages/ingest/src/conditioning/forward-stub.ts` stands in for core's `ScannerForward`.
+- WebGPU canvas presentation is untested on real hardware (SwiftShader loses the device on first present; the
+  studio falls back to Canvas2D).
+
+### What should be done in the future
+
+- Apply or decide the 17 contract requests: `packages/core` (6), `packages/dsl` (2), `packages/gpu` (2),
+  `packages/ingest` (3), `apps/studio` (4 headings, 3 requests).
+- Wire core's oracle into gpu and ingest; add `optimizeDeps.exclude` for `@colorhythm/libraw-wasm` when the studio
+  imports LibRaw.
+- CHB-004 launch decision; Studio toolkit decision (CHB-016: CraftKit shell vs React 19).
+
+### Code review instructions
+
+- `git log --first-parent task/phase1-integration`; conflicts in `playwright.config.ts`.
+- Re-run: `pnpm typecheck && pnpm lint && pnpm test && STUDIO_PORT=4397 CI=1 pnpm test:browser`.
+
+### Technical details
+
+- Branch heads merged: chb-003 a9888f9, chb-007 9709f62, chb-006 b7eb54d, chb-005 01dfec7, chb-009 aa0c754.
