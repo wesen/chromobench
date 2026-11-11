@@ -598,6 +598,12 @@ module print "Print" key D
                      thumb  image τ
                      button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
   right  dockcol  width 300
+           panel tools "Tools"
+             row  class "cb-tools"
+               button  run tool.probe  small  text "Densitometer"
+               button  run tool.test-strip  small  text "Test strip"
+               button  run tool.ring-around  small  text "Ring-around"
+               button  run view.beforeAfter  small  text "Before / after"
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -612,6 +618,10 @@ module print "Print" key D
                cb.arg  path "print.paper"  rollScope "frame"  select
                cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
                cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
+             section "Film and viewing"
+               cb.arg  path "scan.stock"  rollScope "frame"  select
+               cb.arg  path "scan.scanner"  rollScope "frame"  select
+               cb.arg  path "view.illuminant"  rollScope "frame"  select
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
