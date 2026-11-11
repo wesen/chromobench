@@ -13,8 +13,8 @@
 - [x] [stage 3] Implement ScannerModel with flare, makeForward with the fused closed-form Jacobian (checked against central differences), withFlare, removeFlare and fitFlare <!-- t:of7v -->
 - [x] [stage 3] Port solve.js spectral() to solveDyes (damping, 12 tries, active set, stop reasons, pass counts) with the base-weighted start; reproduce the §3.3 LM trace with start 'secant' and the §3.4 shadow pixel <!-- t:u1h7 -->
 - [ ] [stage 3] Implement classify, latd, latdFromPD, integrateToGrey, greyPatch, warmPerMired, colourOffset, lightsToSliders and greyPick; reproduce the §3.6 balance numbers <!-- t:d0xa -->
-- [ ] [stage 3] Build the f64 tables (solve, printing density, print XYZ, enlarger) with Studio node order and look3 texel mapping; report the key range for the base-weighted key and hand tolerances to CHB-005 <!-- t:j90u -->
-- [ ] [stage 3] Implement engine-ref.ts in exact and tabulated modes with op adapters for invert.*, print.*, view.*, output.display and measure.*; pass the CHB-002 conformance suite <!-- t:i839 -->
+- [x] [stage 3] Build the f64 tables (solve, printing density, print XYZ, enlarger) with Studio node order and look3 texel mapping; report the key range for the base-weighted key and hand tolerances to CHB-005 <!-- t:j90u -->
+- [x] [stage 3] Implement engine-ref.ts in exact and tabulated modes with op adapters for invert.*, print.*, view.*, output.display and measure.*; pass the CHB-002 conformance suite <!-- t:i839 -->
 - [ ] [stage 3] Reproduce the Gold 200 class percentages at 640 x 443 and 1,090 x 754 using test ports of the sample loader and sigmaD <!-- t:7zy5 -->
 - [x] [stage 3] File the proposed contract additions (PhysicsConventions, residual channel, scan-classes, AutoBalance, aim, print-xyz white, scanner flare) with CHB-002 <!-- t:o8al -->
 - [ ] [errata] §8.3 Gold 200 fixture: cite 05-inline.js addSample (line 3916, flipH: true) for the horizontal flip, not 03-inline.js metadata <!-- t:ccc7 -->

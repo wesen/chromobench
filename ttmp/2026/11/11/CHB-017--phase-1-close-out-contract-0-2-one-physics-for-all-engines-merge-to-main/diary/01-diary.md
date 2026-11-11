@@ -201,3 +201,137 @@ round of requests.
 - Ring-around cells (mock): `+Y +R +M / +G current +B / −1 step +C +1 step`, offsets `(v − mean v)·1.5·step·0.025`
   log H, `v` as in the studio's `DIRS`.
 - Error codes are a closed list; the JS names are errors (the `ERROR_CODES` header comment says so), not warnings.
+
+## Step 3: One physics — the GPU engine and ingest on core
+
+Stage 2 wires `packages/core` into `packages/gpu` and `packages/ingest`. The GPU engine's f64 oracle, stock data,
+table inputs and every lowering parameter now come from core, its conventions id is core's, and its parity reference
+is core's `RefEngine` on the same graph (exact, and a new tabulated mode). Ingest's interim forward model is gone;
+its ranking golden runs on core's `ScannerForward`. Parity moved in one place (preview vs exact, table error) and
+improved in another (export now integrates per pixel). 1865 unit tests, 42 browser tests, conformance 179/179.
+
+### Prompt Context
+
+**User prompt (verbatim):** see Step 2.
+**Assistant interpretation:** Stage 2: core as the GPU's oracle and data source (interim provider, clear CHB-004 switch
+point), finish CHB-003's tabulated mode and Studio-order tables, unify the conventions id, re-run GPU parity, replace
+ingest's forward stub and re-run the Gold 200 ranking golden.
+**Inferred user intent:** One implementation of the physics, so the reference engine, the GPU engine and ingest can
+never disagree because they compute different things.
+**Commit (code):** 99b5f57 — "CHB-017: one physics — packages/gpu and packages/ingest run on @chromobench/core"
+
+### What I did
+
+- core:
+  - `data/interim.ts`: `interimFromJson(src)` (pure) and `interimData()` reading files through
+    `process.getBuiltinModule('node:fs')` instead of a static import, so core's index loads in a browser.
+  - `scan/solve.ts`: `ForwardCore`, `forwardFromArrays`, `forwardArraysOf`, `forwardArrays`; `makeForward` builds on
+    them (same arithmetic, so solves are bit-identical); `solveDyes` takes a `ForwardCore`.
+  - `tables/arrays.ts` (new, also the `@chromobench/core/tables` subpath): `SolveArrays`, `SpectralArrays`,
+    `solveArrays`, `pdArrays` (lamp·filters·s_k·pass normalised, so −log10 Σ Ŵ 10^−D = clear − exposure),
+    `printArrays` (E·x̄·pass / Σ E·ȳ), `solveNode`, `spectralNode`.
+  - `scan/forward.ts` (new): `scannerForward(data, scanner, conv)` implementing the contract's `ScannerForward`.
+  - `ops/ops.ts`: `scan.density`; tabulated mode for `invert.dyes`, `print.expose`, `view.reflect`
+    (`PhysicsEnv.solveTable/pdTable/printTable`, look3); exported `ChainCtx`, `filmOf`, `paperOf`, `viewOf`,
+    `whiteAt`, `flareWhite`, `displayGain`, `densitiesOf`, `rebateBox`; `engine-ref.ts` `mode: 'exact' | 'tabulated'`.
+  - Tests: `test/one-physics.test.ts` (solve arrays bit-identical to `buildSolveTable`; pd ≤ 1e-12; print ≤ 1e-14;
+    tabulated vs exact ≤ 5e-3 XYZ inside the table domains), `test/ingest-forward.test.ts` (moved from ingest).
+- gpu:
+  - `physics/oracle.ts`: `coreOracle` (Chromogen solve/spectral port removed); `physics/data.ts`
+    `defaultPhysicsData()` (Vite `import.meta.glob` over `packages/core/data/interim`, the CHB-004 switch point);
+    `physics/core.ts` `CorePhysics` (solve/pd/print inputs, aim offset `clear + aimLights`, paper-curve row, flare,
+    Bradford gains, display matrix, upstream context); deleted `physics/setup.ts`, `spectral.ts`, `stocks.ts` and
+    `fixtures/chromogen/`.
+  - `tables/inputs.ts` extends core's array types; `keys.ts` `CORE_CONVENTIONS`; `manager.ts` default `coreOracle`
+    and a `conventions` option; `table-worker.ts` uses `coreOracle`.
+  - `engine-gpu.ts`: lowering rewritten on `CorePhysics`; `view.adapt` added to `GPU_OPS`; `GpuEngineOptions.data`;
+    auto rebate (core `rebateBox`); `measure.densitometer`/`measure.patches` densities via `densitiesOf`;
+    `capabilities().conventions` = core's id; `lowerNode()` for tests.
+  - `chain/program.ts`: `OP.ADAPT`, `Segment.disp`, curve rows, exact bits and `packSpectra`; `evalPixelF64` removed.
+    `kernels/pointwise.wgsl`: ADAPT (Bradford constants), DEVELOP row 0, core's tanh shoulder (argument capped at
+    20), and exact printing-density / print-XYZ integrals when the export bits are set.
+  - Parity: `fixtures.ts`/`synthetic.ts` build the Gold 200 set-up and segment from core (with a 6-column rebate
+    strip and 16-bit quantised T); `chain-tests.ts` compares `GpuEngine` with `RefEngine` exact and tabulated on one
+    graph; `page.ts` gains a print table with a Bradford M (the row-major broken variant needs a non-symmetric M).
+- ingest: deleted `src/conditioning/forward-stub.ts`; the channel laws it tested are core's ch1 laws (flat wedge,
+  base relativity); ranking, base check and conditioning map moved to core's test with core's forward.
+- `pnpm install --prefer-offline` after adding `@chromobench/core` to gpu and `@chromobench/ingest` to core's
+  devDependencies.
+
+### Why
+
+- Ingest takes a `ScannerForward` by injection (DR-9) and engine-mock already depends on ingest, so ingest depending
+  on core (even as a devDependency) would close a cycle core → engine-mock → ingest → core. The integration tests
+  live in core, which sits above ingest.
+- The GPU tables are built from arrays (worker messages, content keys), so core's tables needed an array form; the
+  solve shares `forwardFromArrays` with `makeForward` so the node values are the same bits.
+- Export: the first parity run gave export display 1.82 levels from core exact, because the 33³ pd and print tables
+  interpolate core's chain worse than the interim one. Exact per-pixel integrals cost ~500 exp2 per pixel and remove
+  the cause (0.05 level). Preview stays on tables by design and is now checked against core's tabulated mode.
+
+### What worked
+
+- `packages/gpu/test/tables.test.ts`: the GPU's f64 solve table equals `Float32Array.from(buildSolveTable(...))`
+  bit for bit; pd and print within f32 rounding.
+- Browser parity (SwiftShader): table:solve maxDiff 2.15e-6 (≤ 2.2e-6), 0 flips; table:pd 7.15e-7; table:print
+  2.98e-7; workers bitwise 0 differing; export film-dyes vs core exact 5.3e-7 (was ≤ 5e-6); export display 0.0505
+  levels, scan-of-print with tanh 0.0604; preview vs core tabulated 0.0464 levels; segment vs engine 0; lookups hw rms
+  5.5e-5, tetra 2.96e-5; conformance 179/179 (view.adapt adds cases).
+- Gold 200 ranking under CHROMOGEN conventions matches `fixtures/golden/ingest-laws.json` (bases within 0.0006 D,
+  maxDiff within 0.001 D).
+
+### What didn't work
+
+- First ranking run on core's forward with the default conventions: "AssertionError: kodak_portra_800[0]: expected
+  0.00144486636481167 to be less than 0.0006" and "kodak_ektar_100: expected 0.018749490963367352 to be less than
+  0.001". The golden is Chromogen's (missing samples = zero density); core's default treats them as opaque, and
+  Ektar's base has no samples from 700 nm, inside the 678 nm LED's tail (red 0.304 instead of 0.202 D). The golden
+  now runs under CHROMOGEN; a second test pins the default-convention numbers.
+- The degenerate-stock conditioning test failed with "ChromobenchError: E_EVAL: singular 3×3 matrix": `makeForward`
+  inverts the start K. `scannerForward` now builds `forwardFromArrays` with K = I (readBase and σ₃ need no start).
+- First tabulated-vs-exact core test: "expected 0.011800787970060678 to be less than 0.005" — the film-dyes domain
+  is [0, 3] and the pd table covers [0, 2.6]; the test now compares inside the table domain.
+- First browser run: preview chain max8bit 2 (test expected ≤ 1), export max8bit 2; then table:print:adapted
+  maxDiff 5.96e-7 against 4.2e-7. Export fixed by the exact integrals; preview tolerance moved with the reason in the
+  spec and in CONTRACT-DECISIONS; the adapted-M check uses 1e-6 (a few f32 ulp more than M = I).
+- `vitest` swallowed `console.log` from a scratch test; I wrote the numbers to a scratchpad file instead.
+
+### What I learned
+
+- `tabulatedVsExact` (1.61 levels) and GPU-vs-exact (1.59) agree: the preview's distance from exact is the tables'
+  interpolation of core's chain, not GPU arithmetic (0.046 level against the same tables in f64).
+- Under core's conventions the GPU's `print-xyz` must be XYZ under the viewing light; the interim chain had folded
+  the D65 adaptation into the print table, which only worked because it had no `view.adapt` op.
+
+### What was tricky to build
+
+- Upstream context: core's ops read film, paper and white from upstream nodes (`ctx.up`). The GPU lowering builds
+  the same context from its receiver chain (`CorePhysics.ctx(chain, i)`), so `view.flare` sees no `view.adapt` (it
+  comes after) and `output.display` sees the D65 adapt (Bradford = I).
+- The exact export path reads 21n + 9 floats from the existing spectra buffer; the solve spectra stay staged in
+  workgroup memory (896 floats), the pd/print ones are read from storage.
+
+### What warrants a second pair of eyes
+
+- The export path no longer follows CHB-005's "tetrahedral lookups" plan; check the cost on a real GPU at 100 MP.
+- `A_RANGE` [−0.25, 2.55] still cuts the base-weighted key's top (2.588 for Gold 200, CHB-003 Step 17); preview
+  pixels beyond it clamp.
+- The convention for ingest's ranking (CHROMOGEN golden vs SPEKTRAFILM default) is a product decision.
+
+### What should be done in the future
+
+- CHB-004: return the pack provider from `packages/gpu/src/physics/data.ts` and pass it to `RefEngine`; drop the
+  interim set when the packs cover the tests (stage-3 task bghy).
+- CHB-011: the OkLCh knee on the GPU (it clips with `W_PREVIEW_APPROX`).
+
+### Code review instructions
+
+- Start at `packages/gpu/src/physics/core.ts` and `GpuEngine.lower`, then `packages/core/src/tables/arrays.ts`.
+- `npx vitest run packages/core packages/gpu packages/ingest`; `STUDIO_PORT=4411 CI=1 npx playwright test --project
+  gpu-parity` (numbers are logged per test).
+
+### Technical details
+
+- Exact bits in `misc.z`: 1 solve, 2 printing density, 4 print XYZ; spectra buffer `[solve P E B | pd W E B | print W E
+  B | M]`, 7n each.
+- Expose: `x = (clear + aimLights) − pd(c)`, `pd = −log10 Σ Ŵ 10^−(B + cE)`; flare `X + f·W_paper`, `p1 = 1`.
