@@ -17,3 +17,4 @@
 - [ ] [stage 6] Implement darkroom.ringAround (lights and filter moves with density hold) and darkroom.contactSheet (single and balanced) <!-- t:d8xc -->
 - [ ] [stage 6] Implement grade as gamma about the aim, preflash as a flash exposure through the base, and the off-by-default reciprocity hook <!-- t:1cg3 -->
 - [ ] [stage 6] Store the test-strip and grade golden numbers and file the contract additions in CHB-002's changelog <!-- t:gqh1 -->
+- [ ] [errata] Tint wording: ±100 raises green 6.7 pt and lowers red/blue 3.3 pt each (green +10 pt relative), not '±10 points of green' (diary Step 17) <!-- t:nxhz -->
