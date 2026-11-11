@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`cb.arg > controls("darkroom") explains as sections of generated controls (snapshot) 1`] = `
+"panel controls-darkroom "Darkroom"
+  section "Exposure"
+    cb.arg  path "print.enlarger.time_s"
+    cb.arg  path "print.enlarger.fstop"
+  section "Filtration"
+    cb.arg  path "print.enlarger.filtration"
+  section "Printer lights"
+    cb.arg  path "print.lights.logH"  widget "pad"
+  section "Paper"
+    cb.arg  path "print.paper"
+    cb.arg  path "print.grade"
+    cb.arg  path "print.preflash""
+`;

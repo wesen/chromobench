@@ -1,0 +1,191 @@
+// Moved from apps/studio/src/core/controls.ts (CHB-009) for CHB-019; the original is deleted when apps/studio migrates.
+// Controls generated from the op registry (guide §5.7): one ControlModel per recipe path that an
+// op argument with `ui` metadata owns. The model converts between the stored unit and the unit the
+// photographer reads; widgets only ever see display values.
+import { argPath, canonicalJSON, convert, type ArgSpec, type OpDef, type Unit } from '@chromobench/contract';
+import {
+  filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopIndex, fstopStops, num, signed, stopsBetween,
+} from './units.ts';
+
+export type Widget = 'slider' | 'wheel' | 'stepper' | 'segmented' | 'toggle' | 'select';
+export type ValueType = 'number' | 'vec3' | 'cmy' | 'enum' | 'string';
+
+export interface ControlModel {
+  path: string;
+  op: string;
+  arg: string;
+  label: string;
+  group: string;
+  doc: string;
+  widget: Widget;
+  type: ValueType;
+  storageUnit: Unit;
+  displayUnit: Unit;
+  scale: 'linear' | 'log2';
+  /** Hard range in storage units. */
+  min?: number;
+  max?: number;
+  usual?: [number, number];
+  usualHint?: string;
+  /** Step in display units (for log2: in stops). */
+  step: number;
+  detents: number[];
+  defaultValue: unknown;
+  values?: string[];
+  components?: [string, string, string];
+  toDisplay(v: number): number;
+  fromDisplay(d: number): number;
+  /** '62.5 CC', '15.12 s', '+4 pt', 'f/8'. Component index for vec3/cmy. */
+  format(v: unknown, component?: number): string;
+  /** Second readout relative to a base value: '+1/3 st', '≈ −4.0 pt B'. */
+  aside?(v: unknown, base: unknown, component?: number): string;
+  /** Spoken value for aria-valuetext. */
+  valueText(v: unknown, component?: number): string;
+}
+
+/** Placeholder stock lists until CHB-004's data packs provide valuesFrom lists. */
+export const KNOWN_VALUES: Record<string, string[]> = {
+  'stocks:film': ['kodak_portra_400', 'kodak_portra_160', 'kodak_gold_200', 'kodak_ektar_100', 'fuji_pro_400h'],
+  'stocks:print': ['kodak_portra_endura', 'kodak_supra_endura', 'fujicolor_crystal_archive_typeII'],
+  illuminants: ['D50', 'D65', 'A', 'F2'],
+  scanners: ['xt5-rgb-led', 'epson-v850', 'frontier-sp3000'],
+  lamps: ['TH-KG3', 'LED-RGB'],
+};
+
+const UNIT_TEXT: Partial<Record<Unit, string>> = {
+  point: 'pt', CC: 'CC', s: 's', stop: 'st', logH: 'log H', percent: '%', fraction: '', um: 'µm', K: 'K', mired: 'mired', deg: '°', none: '', px: 'px',
+};
+const SPOKEN: Partial<Record<Unit, string>> = { point: 'points', CC: 'CC', s: 'seconds', stop: 'stops', percent: 'percent' };
+
+function decimals(step: number): number {
+  if (step >= 1) return 0;
+  return Math.min(3, Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)));
+}
+
+function componentKey(type: ValueType, k: number): string | number {
+  return type === 'cmy' ? (['c', 'm', 'y'] as const)[k]! : k;
+}
+
+/** Reads one component of a vec3 / cmy value (or the number itself). */
+export function componentOf(type: ValueType, v: unknown, k = 0): number {
+  if (type === 'vec3') return (v as number[])[k]!;
+  if (type === 'cmy') return (v as Record<string, number>)[componentKey(type, k) as string]!;
+  return v as number;
+}
+
+/** Returns a copy of v with component k replaced. */
+export function withComponent(type: ValueType, v: unknown, k: number, x: number): unknown {
+  if (type === 'vec3') {
+    const out = [...(v as number[])];
+    out[k] = x;
+    return out;
+  }
+  if (type === 'cmy') return { ...(v as Record<string, number>), [componentKey(type, k)]: x };
+  return x;
+}
+
+function valueTypeOf(spec: ArgSpec): ValueType | null {
+  switch (spec.type) {
+    case 'number': return 'number';
+    case 'vec3': return 'vec3';
+    case 'cmy': return 'cmy';
+    case 'enum': return 'enum';
+    case 'stockId': case 'string': return 'string';
+    default: return null;
+  }
+}
+
+export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): ControlModel | null {
+  const ui = spec.ui;
+  if (!ui) return null;
+  const type = valueTypeOf(spec);
+  if (!type) return null; // box/point arguments are edited with tools, not generated controls
+  const storageUnit = spec.unit ?? 'none';
+  const displayUnit = ui.displayUnit ?? storageUnit;
+  const scale = ui.scale ?? 'linear';
+  const label = ui.label ?? arg;
+  const group = ui.group ?? op.area;
+  const values = spec.values ?? (spec.valuesFrom ? KNOWN_VALUES[spec.valuesFrom] : undefined);
+  const widget: Widget = (ui.widget === 'box' || ui.widget === 'point' ? null : ui.widget) ?? (type === 'enum' || type === 'string' ? 'select' : 'slider');
+  const toDisplay = (v: number): number => (displayUnit === storageUnit ? v : convert(v, storageUnit, displayUnit));
+  const fromDisplay = (d: number): number => (displayUnit === storageUnit ? d : convert(d, displayUnit, storageUnit));
+  const isTime = storageUnit === 's' && scale === 'log2';
+  const isFstop = storageUnit === 'fstop';
+  const step = isTime ? 1 / 6 : isFstop ? 1 / 3 : ui.step !== undefined ? toDisplay(ui.step) : 1;
+  const dec = decimals(step);
+  const unitText = UNIT_TEXT[displayUnit] ?? displayUnit;
+  // Signed display for offsets: printer lights (points) and the filtration shift on the neutral pack (CC, contract 0.2).
+  const shift = displayUnit === 'point' || (type === 'cmy' && storageUnit === 'CC');
+  const fmtNum = (v: number): string => {
+    if (isTime) return `${formatSeconds(v)} s`;
+    if (isFstop) return formatFstop(v);
+    const d = toDisplay(v);
+    const s = shift ? signed(d, dec) : num(d, dec);
+    return unitText ? `${s} ${unitText}` : s;
+  };
+  const format = (v: unknown, k?: number): string => {
+    if (type === 'enum' || type === 'string') return String(v);
+    if (type === 'number') return fmtNum(v as number);
+    if (k !== undefined) return fmtNum(componentOf(type, v, k));
+    const parts = [0, 1, 2].map((i) => {
+      const d = toDisplay(componentOf(type, v, i));
+      return shift ? signed(d, dec) : num(d, dec);
+    });
+    return `(${parts.join(', ')})${unitText ? ` ${unitText}` : ''}`;
+  };
+  let aside: ControlModel['aside'];
+  if (isTime) aside = (v, base) => `${formatStops(stopsBetween(base as number, v as number))} st`;
+  else if (isFstop) aside = (v, base) => `${formatStops(fstopStops(base as number, v as number))} st`;
+  else if (type === 'cmy' && storageUnit === 'CC') {
+    aside = (v, base, k = 0) => filtrationAside((['c', 'm', 'y'] as const)[k]!, componentOf(type, v, k) - componentOf(type, base, k));
+  } else if (displayUnit === 'point') aside = (v, _b, k = 0) => `${signed(componentOf(type, v, k), 3)} log H`;
+  const valueText = (v: unknown, k?: number): string => {
+    const comp = k !== undefined && ui.components ? `${ui.components[k]} ` : '';
+    if (type === 'enum' || type === 'string') return `${label} ${String(v)}`;
+    const x = k !== undefined ? componentOf(type, v, k) : (v as number);
+    if (isTime) return `${label} ${formatSeconds(x)} seconds`;
+    if (isFstop) return `${label} f ${Number(x.toFixed(1))}`;
+    const d = toDisplay(x);
+    return `${label} ${comp}${d < 0 ? 'minus ' : ''}${Math.abs(d).toFixed(dec)} ${SPOKEN[displayUnit] ?? unitText}`.trim();
+  };
+  const model: ControlModel = {
+    path, op: op.name, arg, label, group, doc: spec.doc, widget, type, storageUnit, displayUnit, scale, step,
+    detents: (ui.detents ?? []).map(toDisplay), defaultValue: spec.default, toDisplay, fromDisplay, format, valueText,
+    ...(spec.min !== undefined ? { min: spec.min } : {}),
+    ...(spec.max !== undefined ? { max: spec.max } : {}),
+    ...(spec.usual ? { usual: spec.usual } : {}),
+    ...(spec.usualHint ? { usualHint: spec.usualHint } : {}),
+    ...(values ? { values } : {}),
+    ...(ui.components ? { components: ui.components } : type === 'vec3' ? { components: ['R', 'G', 'B'] as [string, string, string] } : {}),
+    ...(aside ? { aside } : {}),
+  };
+  if (isFstop) model.values = FSTOPS_THIRD.filter((n) => (spec.min === undefined || n >= spec.min - 1e-9) && (spec.max === undefined || n <= spec.max + 1e-9)).map(String);
+  return model;
+}
+
+/** One control per recipe path owned by an argument with ui metadata (first owner wins). */
+export function generateControls(ops: readonly OpDef[]): ControlModel[] {
+  const out: ControlModel[] = [];
+  const seen = new Set<string>();
+  for (const op of ops) {
+    if (op.internal) continue;
+    for (const [arg, spec] of Object.entries(op.args)) {
+      const path = argPath(op, arg, spec);
+      if (!path || seen.has(path)) continue;
+      const m = modelFor(op, arg, spec, path);
+      if (!m) continue;
+      seen.add(path);
+      out.push(m);
+    }
+  }
+  return out;
+}
+
+/** The f-number one third-stop step away (stepper). */
+export function fstopStep(n: number, dir: number): number {
+  const i = Math.max(0, Math.min(FSTOPS_THIRD.length - 1, fstopIndex(n) + dir));
+  return FSTOPS_THIRD[i]!;
+}
+
+/** Equality of recipe values (for skipping no-op commits). */
+export const sameValue = (a: unknown, b: unknown): boolean => canonicalJSON(a) === canonicalJSON(b);

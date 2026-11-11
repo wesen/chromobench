@@ -179,6 +179,25 @@ importers:
         specifier: 21.0.4
         version: 21.0.4
 
+  packages/studio-kit:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@chromobench/shell':
+        specifier: workspace:*
+        version: link:../shell
+    devDependencies:
+      '@chromobench/dsl':
+        specifier: workspace:*
+        version: link:../dsl
+      '@chromobench/engine-mock':
+        specifier: workspace:*
+        version: link:../engine-mock
+      happy-dom:
+        specifier: 21.0.4
+        version: 21.0.4
+
 packages:
 
   '@colorhythm/libraw-wasm@1.1.1':

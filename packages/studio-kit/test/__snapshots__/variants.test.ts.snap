@@ -1,0 +1,664 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1
+module library "Library" key G
+  left   dockcol  width 236
+           panel navigator "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel library "Library"
+             cb.library
+  center column  grow 1
+           cb.filter
+           match  of [grid, loupe, compare, survey]  on τ
+             cases.grid:
+               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+             cases.loupe:
+               column  class "cb-viewer"  grow 1
+                 cb.ribbon
+                 viewport loupe τ  image τ  overlays: 
+             cases.compare:
+               row  grow 1
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-a τ  image τ  overlays: 
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-b τ  image τ  overlays: 
+             cases.survey:
+               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 260
+           panel metadata "Metadata"
+             cb.metadata
+  bottom dockcol  width 124
+           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module print "Print" key D
+  left   dockcol  width 236
+           panel navigator-print "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel snapshots "Snapshots"
+             cb.snapshots
+           panel history "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           match  of [view, ring]  on τ
+             cases.view:
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+                 hud:
+                   cb.readout
+             cases.ring:
+               column  class "cb-ring"  grow 1
+                 text "Ring-around, 4 pt: click the print that looks …  strong
+                 grid  class "cb-ring-grid"  cols 3
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                   column  class "cb-ring-tile is-current"
+                     thumb  image τ
+                     button  run tool.none  small  text "Keep this one"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                   spacer
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                   spacer
+                 row  class "cb-ring-density"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+  right  dockcol  width 300
+           panel densitometer "Densitometer"
+             cb.densitometer
+           panel controls-darkroom "Darkroom"
+             section "Exposure"
+               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+             section "Filtration"
+               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+             section "Printer lights"
+               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             section "Paper"
+               cb.arg  path "print.paper"  select
+               cb.arg  path "print.grade"  slider  step 0.5 none
+               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+           panel exposures "Exposures"
+             cb.exposures
+           panel approvals "Agent proposals"
+             cb.approvals
+  bottom dockcol  width 124
+           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module output "Output" key Mod+Shift+E
+  center gridview picks  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 260
+           panel output "Save"
+             cb.output
+  bottom dockcol  width 124
+           filmstrip strip-output  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+commands
+  frame.pick "Flag as Pick" (Frame) P ← cb.core
+  frame.reject "Reject" (Frame) X ← cb.core
+  frame.unflag "Unflag" (Frame) U ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) \\ ← cb.core
+  view.sideBySide "Side by Side" (View) Y ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) S ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) P ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 60 · keys 51 in 4 scopes · tools 6 · passes 14 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1
+module main "Chromobench"
+  left   dockcol  width 200
+           listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
+           panel history "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           cb.ribbon
+           match  of [view, ring]  on τ
+             cases.view:
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-brush, mask-gradient]
+                 hud:
+                   cb.readout
+             cases.ring:
+               column  class "cb-ring"  grow 1
+                 text "Ring-around, 4 pt: click the print that looks …  strong
+                 grid  class "cb-ring-grid"  cols 3
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                   column  class "cb-ring-tile is-current"
+                     thumb  image τ
+                     button  run tool.none  small  text "Keep this one"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                   spacer
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                   spacer
+                 row  class "cb-ring-density"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+  right  dockcol  width 300
+           panel enlarger "Enlarger"
+             cb.arg  path "print.enlarger.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
+             cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+             cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+             cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+           panel paper "Paper"
+             cb.arg  path "print.paper"  select
+             cb.arg  path "print.grade"  slider  step 0.5 none
+           panel exposures "Exposures"
+             cb.exposures
+           panel approvals "Agent proposals"
+             cb.approvals
+commands
+  frame.pick "Flag as Pick" (Frame) ← cb.core
+  frame.reject "Reject" (Frame) ← cb.core
+  frame.unflag "Unflag" (Frame) ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) \\ ← cb.core
+  view.sideBySide "Side by Side" (View) Y ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) S ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) P ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 57 · keys 25 in 3 scopes · tools 6 · passes 14 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1
+module library "Library" key G
+  left   dockcol  width 236
+           panel navigator "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel library "Library"
+             cb.library
+  center column  grow 1
+           cb.filter
+           match  of [grid, loupe, compare, survey]  on τ
+             cases.grid:
+               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+             cases.loupe:
+               column  class "cb-viewer"  grow 1
+                 cb.ribbon
+                 viewport loupe τ  image τ  overlays: 
+             cases.compare:
+               row  grow 1
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-a τ  image τ  overlays: 
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-b τ  image τ  overlays: 
+             cases.survey:
+               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 260
+           panel metadata "Metadata"
+             cb.metadata
+  bottom dockcol  width 124
+           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module print "Print" key D
+  left   dockcol  width 236
+           panel navigator-print "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel snapshots "Snapshots"
+             cb.snapshots
+           panel history "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           match  of [view, ring]  on τ
+             cases.view:
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+                 hud:
+                   cb.readout
+             cases.ring:
+               column  class "cb-ring"  grow 1
+                 text "Ring-around, 4 pt: click the print that looks …  strong
+                 grid  class "cb-ring-grid"  cols 3
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                   column  class "cb-ring-tile is-current"
+                     thumb  image τ
+                     button  run tool.none  small  text "Keep this one"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                   spacer
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                   spacer
+                 row  class "cb-ring-density"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+  right  dockcol  width 300
+           panel densitometer "Densitometer"
+             cb.densitometer
+           panel controls-darkroom "Darkroom"
+             section "Exposure"
+               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+             section "Filtration"
+               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+             section "Printer lights"
+               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             section "Paper"
+               cb.arg  path "print.paper"  select
+               cb.arg  path "print.grade"  slider  step 0.5 none
+               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+           panel exposures "Exposures"
+             cb.exposures
+           panel approvals "Agent proposals"
+             cb.approvals
+           panel why "Why"
+             cb.why
+  bottom dockcol  width 124
+           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module lab "Lab" key L
+  left   dockcol  width 280
+           panel controls-all "All parameters"
+             section "Capture"
+               cb.arg  path "capture.stock"  select
+               cb.arg  path "capture.exposureEV"  slider  st  step 0.333 st
+               cb.arg  path "capture.whiteBalance.mode"  segmented
+               cb.arg  path "capture.whiteBalance.temperature_K"  slider  K  step 50 K
+               cb.arg  path "capture.whiteBalance.tint"  slider  step 1 none
+             section "Film"
+               cb.arg  path "capture.development.dir.amount"  slider  fraction  step 0.05 fraction
+               cb.arg  path "capture.development.dir.diffusion_um"  slider  um  step 1 um
+               cb.arg  path "capture.development.push"  stepper  st  step 1 st
+               cb.arg  path "capture.development.grain.amount"  slider  fraction  step 0.05 fraction
+               cb.arg  path "capture.development.grain.size_um"  slider  um  step 0.5 um
+               cb.arg  path "capture.development.halation.strength"  slider  fraction  step 0.05 fraction
+             section "Finishing"
+               cb.arg  path "finishing.values.clarity"  slider  fraction  step 0.01 fraction
+             section "Scan"
+               cb.arg  path "scan.stock"  select
+               cb.arg  path "scan.scanner"  select
+               cb.arg  path "scan.flare"  slider  percent  step 0.05 percent
+             section "Output"
+               cb.arg  path "view.output.rendering"  segmented
+             section "Frame"
+               cb.arg  path "scan.orientation"  select
+             section "Print"
+               cb.arg  path "print.grade"  slider  step 0.5 none
+               cb.arg  path "print.paper"  select
+               cb.arg  path "print.enlarger.mode"  segmented
+               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+             section "Source"
+               cb.arg  path "source.decode.encoding"  segmented
+             section "View"
+               cb.arg  path "view.flare"  slider  percent  step 0.01 percent
+               cb.arg  path "view.illuminant"  select
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           match  of [view, ring]  on τ
+             cases.view:
+               viewport lab τ  before τ  compare  image τ  overlays:   tools [probe, test-strip]
+                 hud:
+                   cb.readout
+             cases.ring:
+               column  class "cb-ring"  grow 1
+                 text "Ring-around, 4 pt: click the print that looks …  strong
+                 grid  class "cb-ring-grid"  cols 3
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                   column  class "cb-ring-tile is-current"
+                     thumb  image τ
+                     button  run tool.none  small  text "Keep this one"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                   spacer
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                   spacer
+                 row  class "cb-ring-density"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+  right  dockcol  width 320
+           panel densitometer-lab "Densitometer"
+             cb.densitometer
+           panel history-lab "History"
+             cb.history
+           panel approvals-lab "Agent proposals"
+             cb.approvals
+           panel journal "Journal"
+             cb.journal
+           panel nodes "Nodes"
+             cb.nodes
+           panel explain "Explain"
+             cb.explain
+  bottom dockcol  width 124
+           filmstrip strip-lab  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+commands
+  frame.pick "Flag as Pick" (Frame) P ← cb.core
+  frame.reject "Reject" (Frame) X ← cb.core
+  frame.unflag "Unflag" (Frame) U ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) \\ ← cb.core
+  view.sideBySide "Side by Side" (View) Y ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) S ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) P ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 60 · keys 63 in 5 scopes · tools 6 · passes 14 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1
+module main "Chromobench"
+  top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
+  center match  of [pick, print, save]  on τ
+           cases.pick:
+             gridview pick-grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  keys {P, X, Enter}  select ui.selection  size τ
+           cases.print:
+             row  grow 1
+               column  class "cb-viewer"  grow 1
+                 cb.ribbon
+                 match  of [view, ring]  on τ
+                   cases.view:
+                     viewport main τ  image τ  overlays:   tools []
+                   cases.ring:
+                     column  class "cb-ring"  grow 1
+                       text "Ring-around, 4 pt: click the print that looks …  strong
+                       grid  class "cb-ring-grid"  cols 3
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                         column  class "cb-ring-tile is-current"
+                           thumb  image τ
+                           button  run tool.none  small  text "Keep this one"
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                         spacer
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                         spacer
+                       row  class "cb-ring-density"
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                         column  class "cb-ring-tile"
+                           thumb  image τ
+                           button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+               column  class "cb-simple-side"  width 320
+                 cb.arg  labels [Lighter, Darker]  path "print.enlarger.time_s"  step "1/3 st"  widget "nudge"  nudge  s  log2  step 1/3 st  aside st
+                 cb.arg  axis "yellow-blue"  labels [Warmer, Cooler]  path "print.lights.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
+                 cb.arg  axis "magenta-green"  labels [Greener, More magenta]  path "print.lights.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
+                 cb.arg  labels [Softer, Harder]  path "print.grade"  step 0.5  widget "nudge"  nudge  step 0.5
+                 button  primary  run tool.ring-around  text "Which looks best?"
+                 cb.approvals  compact
+           cases.save:
+             panel output "Save"
+               cb.output  simple
+commands
+  frame.pick "Flag as Pick" (Frame) P ← cb.core
+  frame.reject "Reject" (Frame) X ← cb.core
+  frame.unflag "Unflag" (Frame) ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) ← cb.core
+  view.sideBySide "Side by Side" (View) ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 57 · keys 22 in 3 scopes · tools 6 · passes 14 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme lightroom · kits: cb.core@1
+module main "Chromobench"
+  left   dockcol  width 180
+           listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
+  center column  class "cb-viewer"  grow 1
+           cb.ribbon
+           viewport main τ  image τ  overlays: 
+  right  dockcol  width 300
+           panel controls-darkroom "Darkroom"
+             section "Exposure"
+               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+             section "Filtration"
+               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+             section "Printer lights"
+               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             section "Paper"
+               cb.arg  path "print.paper"  select
+               cb.arg  path "print.grade"  slider  step 0.5 none
+               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+           panel history "History"
+             cb.history
+commands
+  frame.pick "Flag as Pick" (Frame) ← cb.core
+  frame.reject "Reject" (Frame) ← cb.core
+  frame.unflag "Unflag" (Frame) ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) ← cb.core
+  view.sideBySide "Side by Side" (View) ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 57 · keys 19 in 2 scopes · tools 6 · passes 14 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
+{
+  "classic": [],
+  "darkroom": [],
+  "lab": [],
+  "simple": [],
+  "tiny": [],
+}
+`;
