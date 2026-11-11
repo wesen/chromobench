@@ -262,3 +262,140 @@ project"
   (view tier). `ui.approvals[tx] = { off: seqs, stale: diags }`, `ui.showProposal`.
 - The hook: `window.chromobench = { app, rt, studio, variant, explain(), run(id, …), state(), log(f?), propose(ms,
   why), idle(), chainRuns() }`.
+
+## Step 3: apps/studio migrated onto studio-kit, on the real engines (and CHB-011 merged)
+
+The app the photographer opens is now the shell-based studio: `apps/studio/src/main.ts` builds a variant
+(`?variant=`, default `classic`), mounts it with studio-kit's services plus CHB-023's host engines, ingest decoding and
+first print, CHB-009's WebGPU presenter and CHB-011's export, and keeps a thin host frame (files, export, layout menu on
+top; engine, conditioning notes and status at the bottom). The React UI and the CHB-009 core copies are deleted. The
+ported specs passed in the browser: the real-engine, decoder and offline specs on `classic`, the M1 and studio specs on
+`lab`, on the dev server and on the production build.
+
+### Prompt Context
+**User prompt (verbatim):** the orchestrator's task (not the user's own words): "You do the second part of ticket
+CHB-019 […] migrate apps/studio from React onto packages/studio-kit (the shell-based studio), keeping the CHB-023 demo's
+real-engine wiring, so the app the photographer sees becomes the JS-API studio with selectable variants. […] Feature
+parity with the demo is the acceptance bar […] Delete the React UI and the copies studio-kit already took over […] Port
+the M1 spec and studio specs to the new app […] The user is showing the current demo to his father right now, so the
+result must be at least as usable." Mid-task: "CHB-011 has landed on branch task/chb-011-output (8b7700b, 4463f31).
+Merge it into your branch […] and use @chromobench/output for export instead of the demo's 8-bit canvas PNG".
+**Assistant interpretation:** Host boot on studio-kit with the demo's engines, decoding, first print, presenter and
+export; parity with the demo's feature list; delete React; port specs; merge CHB-011 and export through it.
+**Inferred user intent:** One studio codebase (variants in the JS API) that is already good enough for the photographer.
+**Commit (code):** 277bf68 — "Merge task/chb-011-output into task/chb-019-migrate"; 82db912 — "CHB-019: apps/studio on
+studio-kit — the shell-based studio with variants, on the real engines"
+
+### What I did
+- Branch `task/chb-019-migrate`. Merged `task/chb-011-output`: conflicts in `packages/core/src/index.ts`,
+  `core/src/ops/ops.ts`, `gpu/src/physics/core.ts` (import lists: the union, minus `displayGain`, `bradfordMatrix`,
+  `mulMM`, `XYZ_TO_SRGB`, `DEFAULT_COMPRESS`, `displayEncode`, which CHB-011 removed or left unused) and
+  `gpu/src/engine-gpu.ts` (`evaluate()` on CHB-011's `render()`; CHB-023's `cacheLimit` moved into `cacheResult`);
+  lockfile regenerated with `pnpm install --offline`.
+- studio-kit: `Frames.open` / `Studio.open` accept an `InitialRecipe` function (`StudioOptions.initial`), run only when
+  no log is saved for the hash. Render bridge: `testStrip` lowers to bands of ordinary print nodes (`stripRecipe`,
+  `bandBoxes` moved from CHB-023's core/tools.ts; `evaluateBands` from its scheduler), keyed by the band nodes. The
+  test-strip tool draws labelled bands (`.cb-band[data-value]`). Also: `setKnownValues` (CHB-023) in
+  `model/controls.ts`; visual density in the densitometer panel and readout; view labels (Base & gamut);
+  `visibleFrames` hides catalogued frames whose bytes are not open this session; DARKROOM gets a "Film and viewing"
+  group (`scan.stock`, `scan.scanner`, `view.illuminant`); the classic/lab Print module gets a Tools panel
+  (`tool.probe`, `tool.test-strip`, `tool.ring-around`, `view.beforeAfter`); package export `./variants`.
+- apps/studio: `src/main.ts` (boot, host bar, status line, folder open through File System Access with the handle kept
+  in the KV, `window.chromobench`), `src/app.css`, `index.html` (bar / `#app` / status bar);
+  `present/host-presenter.ts` (one shared `GPUDevice`, `WebGpuPresenter.onDevice` on `configureCanvas`, swap to the
+  shell's `Canvas2DPresenter` on a fresh canvas when the device is lost); `presenter-webgpu.ts` (`onDevice`, a shared
+  device is not destroyed on dispose); `host/export.ts` rewritten on `exportNode` / `exportFrame` with `pickerSink`, or
+  `MemorySink` plus a download; `storage/db.ts` on studio-kit's `KV` / `KV_STORES` (DB version 2 adds `workspace`);
+  `engines.ts` drops `nativeSpaces: ['srgb']` (the GPU encodes every space since CHB-011).
+- Deleted: `src/ui/**`, `src/main.tsx`, `src/core/**`, `present/presenter-2d.ts`, `storage/opfs.ts`, both CSS files,
+  `test/core.test.ts` (+ snapshot), `test/units-tools.test.ts`; react, react-dom and their types; `esbuild.jsx`.
+- Specs: `e2e/m1-walking-skeleton.spec.ts` and `e2e/studio.spec.ts` on `?variant=lab&engine=mock`;
+  `e2e/studio-real.spec.ts` and `e2e/studio-decoders.spec.ts` on the default variant. A standalone Playwright config in
+  the scratchpad (`chb019m/pw.config.mts`: the chromium-webgpu and studio-kit projects only, project testDirs absolute)
+  avoids the gpu-parity server on 4185.
+- `apps/studio/DEMO.md` updated (variants, Open folder, export formats, the Tools panel, what is missing).
+
+### Why
+- Default variant `classic`: the demo had history/snapshots on the left, the viewer with view bar and film strip in the
+  middle, the enlarger controls on the right, and file and export actions on top; classic's Print module is that
+  layout. Opening a file switches to Print. `lab` (classic plus why, journal, nodes, all parameters) carries every
+  element the M1 and studio specs address.
+- The host bar and status line stay outside the shell mount: they belong to the host (files, export settings, engine),
+  are the same for every variant, and keep the `#file`, `#undo`, `#status`, `#engine`, `#notes`, `#offline-state` hooks.
+- The test strip is built from bands of print nodes, not `darkroom.testStrip`: CHB-023 found that op takes only the
+  dyes and cannot know the enlarger settings, and neither real engine implements it.
+- One presenter device for all viewports, because the shell asks for a presenter synchronously per viewport canvas.
+
+### What worked
+- After the merge, before migrating: `pnpm test` 65 files, 2219 passed; old app in the browser 24 passed, studio-kit 8.
+- After the migration: `pnpm typecheck` clean; `pnpm lint` "import boundaries ok (248 file checks)"; `pnpm gen:check`
+  "gen:check ok (18 files)"; `pnpm test` 63 files, 2184 passed (35 fewer: CHB-009 core tests deleted together with
+  their subjects: gesture, scheduler, library, frame-session, store).
+- Browser on the dev server (`STUDIO_PORT=4493 STUDIO_KIT_PORT=4494 CI=1 npx playwright test -c …/chb019m/pw.config.mts`):
+  32 passed (chromium-webgpu: M1 2, studio 7, studio-real 3, decoders 3, output, ingest, wgsl; studio-kit 8).
+- Production build (`pnpm --filter @chromobench/studio build`, `vite preview --port 4495`): M1, studio-real (gpu,
+  reference, offline) and decoders (tiff, png, dng): 8 passed.
+- bench on the dev server: GPU (SwiftShader) draft median 192 ms, screen 24 ms, export 5 ms; reference draft 325 ms,
+  screen 91 ms, export 25 ms (96×64 fixture). `idle()` now waits for three runtime settles, so the drafts include that.
+
+### What didn't work
+- `cd apps/studio && git rm …`, and a multi-line `python3 - <<EOF` editing JSON followed by `pnpm install` in one call,
+  were refused by the worktree guard ("too complex to verify that it stays inside the worktree"). I split them into
+  plain commands.
+- The first run of the scratchpad Playwright config found 0 studio-kit tests: a project's relative `testDir` resolves
+  against the config file's directory. Fixed by making it absolute.
+- `pnpm typecheck` after the first main.ts: `Property 'env' does not exist on type 'ImportMeta'` (the dev flag is now
+  `?dev`), and the e2e specs' old hook (`studio.session`, `gesture`, `setTool`, `probeAt`, `s`, `last`), rewritten.
+- studio.spec, first run, 2 of 7 failed: `Expected: 12 Received: 12.59921` after Ctrl+Z. Clicking `#history` to move
+  focus clicked an entry and jumped the frame's history; the spec now clicks the viewer. Also
+  `Expected value: "mask.ellipse" Received array: ["mask.feather"]`: the mask's last node is the feather, so the spec
+  checks all its nodes.
+- A screenshot run without `?canvas2d` showed "WebGPU device lost (Device was destroyed.); presenting with Canvas2D". A
+  `GPUDevice.prototype.destroy` trace showed no call from our code. It is SwiftShader's headless presentation loss, and
+  the fallback took over as designed.
+
+### What I learned
+- studio-kit's range slider commits a script-set value at once unless a `pointerdown` started a drag. The M1 spec now
+  dispatches `pointerdown` first; with that, its preview/commit/undo/approve numbers held exactly on the shell.
+- MockEngine's run counts stay at 1 for the upper chain nodes, even with the navigator and strip thumbnails rendering
+  the same print (same node, full scale on a 96×64 frame).
+- Since CHB-011 the GPU encodes Display P3 itself, so the StudioEngine's sRGB→P3 re-encode is no longer used there.
+
+### What was tricky to build
+- The WebGPU presenter fallback. The shell's viewport owns its canvas and lays it out, and a canvas keeps its first
+  context. So the host presenter puts a fresh canvas element in its place for Canvas2D and copies the laid-out canvas's
+  size and style on every draw.
+- First-print ordering. `Frames.open` computes the initial recipe after `engine.open` (the StudioEngine decodes there)
+  and before `EditLog.create`, and checks the frame map again afterwards in case the same file was opened twice
+  meanwhile.
+
+### What warrants a second pair of eyes
+- `visibleFrames` now hides catalogued frames that have no recipe in this session. Their flags and stars are kept, but
+  stay invisible until the file is opened again.
+- Export runs through the StudioEngine without `evaluateU16` (output.frame is a host op), so the 16-bit path reads
+  floats and quantises them in JS. That is fine at working size and slow at `?long=0` on big scans.
+- The status line's sticky refusal clears when the frame's recipe object changes.
+
+### What should be done in the future
+- Controls for the test-strip options (vary, step, count) and the ring-around step; the Base view's class fractions.
+- Dev hot reload and Load Variant (task xupn); a per-variant smoke test with axe (qv62); the chat slot (7bs1).
+- Restore catalogued frames from their folder on boot instead of hiding them; a full-resolution export path.
+- On a real GPU (CHB-023 task 4h85): check that the shared-device WebGPU presenter holds, then run `chromobench.bench()`.
+
+### Code review instructions
+- Start at `apps/studio/src/main.ts` (`main`, `openFiles`, `exportFrame`, `makeHook`), then
+  `apps/studio/src/present/host-presenter.ts` and `apps/studio/src/host/export.ts`. Then the studio-kit changes:
+  `src/bridge/render-bridge.ts` (`evaluateBands`, the `testStrip` lowering), `src/bridge/frames.ts`, and `src/cb.ts`
+  (the test-strip overlay).
+- `pnpm typecheck && pnpm lint && pnpm test && pnpm gen:check`;
+  `STUDIO_PORT=4493 STUDIO_KIT_PORT=4494 CI=1 npx playwright test -c <scratchpad>/chb019m/pw.config.mts`.
+- Run: `pnpm --filter @chromobench/studio dev` → http://localhost:4173/ (`?variant=lab`, `?engine=reference`, …).
+
+### Technical details
+- Hook: `window.chromobench = { app, rt, studio, variant, engine, engineLabel, log (getter), size(), explain(), run(),
+  state(), idle(), set(path, value, label), tool(id|null), printNode(), pixel(x, y), canvasPixel(x, y), presenter(),
+  chainRuns(), measure(x, y), exportPng(space, format), bench(steps), propose(edits | mutations, why) }`.
+- KV: IndexedDB `chromobench-studio` version 2 (stores `KV_STORES`, adds `workspace`); the last folder handle is
+  stored under `handles/last-folder`.
+- Export file names: `<scan>-print[-<space>].tif|png`. Formats `tiff16`, `png16`, `png8`; spaces sRGB, Display P3,
+  Adobe RGB, ProPhoto RGB; the ICC profile is embedded unless the recipe's export signal is `none`.
