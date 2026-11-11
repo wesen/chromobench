@@ -973,3 +973,59 @@ readback MiB 8.0 bytesPerRow 8192
 ### Technical details
 
 - Diary working files: `$SP/diary/timeline.py`, `$SP/diary/dump.py`, `$SP/diary/timeline.txt`, `$SP/diary/posthoc_plan_numbers.py`.
+
+## Step 15: Implementation start — reading, branch, SwiftShader probe, stage 1 and 2 code
+
+Implementation of `packages/gpu` began. I read the common brief, the intern guide, the contract (`engine.ts`, `errors.ts`, `domains.ts`, `CONTRACT-DECISIONS.md`), the mock engine, the conformance generator, and Chromogen's `gpu.js`, `model.js`, the physics modules (spectrum/stock/channels/linalg/solve/print/colour, 05-inline.js 143–933) and part of `shaders.js`. Then I wrote the stage 1 runtime files, the stage 2 planner, the two table kernels and the interim f64 spectral port. No tests have been run on the new code yet.
+
+### Prompt Context
+
+**User prompt (verbatim, from the orchestrator's brief):** "Implement **CHB-005, the WebGPU engine** (`packages/gpu`). First read the common brief and follow it … Order: do stage 1 (runtime, pools, limits, tile planner) and stage 2 (table building, porting Chromogen's `SOLVE`/`SPECTRAL` WGSL) first and solidly. Then the per-pixel chain and spatial kernels. … Running in parallel with CHB-003 … Write the parity harness against an interface, and use small local f64 ports of the formulas you need as interim oracles. … Testing: headless Chromium with the SwiftShader WebGPU adapter … Also: open task `wqul` (probe WGSL integer wrapping and tolerances)."
+**Mid-task reminder (from the user, via the coordinator):** "keep your CHB diary as you work, in the diary skill format, as a factual log written as you go."
+**Assistant interpretation:** Build the GPU engine stage by stage, with tests at each stage and a running diary.
+**Commit (code):** none yet.
+
+### What I did
+
+- `git checkout -b task/chb-005-webgpu`.
+- `pnpm install --frozen-lockfile; pnpm typecheck; pnpm lint; pnpm test` on the clean branch: 5 test files, 468 tests passed.
+- Probed the SwiftShader adapter with a throwaway Playwright script (`probe-tmp.mjs` at the repo root, deleted afterwards) on port 4191.
+- Copied `kodak_gold_200.json`, `kodak_portra_400.json`, `kodak_portra_endura.json` and `generic-bayer.json` from Chromogen's `st-data/cg` to `fixtures/chromogen/`.
+- Wrote `packages/gpu/package.json`, `src/env.d.ts`, `src/layout.ts` (WGSL struct packer), `src/limits.ts` (`negotiate`), `src/pool.ts` (`Budget`, `TexturePool`, `BufferPool`, OOM retry), `src/pipelines.ts` (`PipelineCache`, `compileDiagnostic`), `src/timing.ts` (`GpuTimer`), `src/device.ts` (`GpuRuntime`, `GpuCaps`, `backendOrder`), `src/tiles.ts` (`planTiles`, `haloOverhead`), `kernels/solve.wgsl`, `kernels/spectral.wgsl`, `src/physics/spectral.ts`, `test/runtime.test.ts`, `test/tiles.test.ts`.
+
+### Why
+
+- Kernels live in `packages/gpu/kernels/` (not `src/kernels/` as the guide sketches) because CHB-002's `tools/wgsl-check/check.spec.ts` compiles every `*.wgsl` under that path. So each kernel file must compile standalone, and shared helpers are duplicated instead of `#include`d.
+- The interim oracle takes the spectral arrays (P, E, B, W, M) as input, not stock names. Then CHB-003's core can replace it behind one interface, and the worker build needs no stock loading.
+
+### What worked
+
+- SwiftShader adapter (headless Chromium, `--use-webgpu-adapter=swiftshader`): vendor `google`, architecture `swiftshader`, `isFallbackAdapter: true`. Features include `float32-filterable` and `timestamp-query`; there is no `shader-f16`. Limits: `maxTextureDimension2D` 8192, `maxTextureDimension3D` 2048, `maxBufferSize` and `maxStorageBufferBindingSize` 1073741824, `maxComputeWorkgroupStorageSize` 32768, `maxStorageTexturesPerShaderStage` 4.
+
+### What didn't work
+
+- Compound Bash commands (heredoc plus `cd` plus `cp`) were refused by the worktree guard: "this command is too complex to verify that it stays inside the worktree". Recovery: I split them into plain commands and wrote files with the Write tool.
+
+### What I learned
+
+- Port 4173, which the root `playwright.config.ts` uses for the studio's Vite server, was already bound by another process (`ss -ltnp`: pid 1347785). Root config sets `reuseExistingServer: !CI`, so running the root browser tests here could hit another worktree's server. The GPU browser tests therefore get their own config and port.
+
+### What was tricky to build
+
+- The planner has to reproduce the guide's 100 MP example, where the three halation bounces share one downsample (4). The per-kernel σ/s ≥ 2 rule alone gives 8 for the 113 µm bounce. So I added a `field` group key and use the narrowest σ in each group.
+
+### What warrants a second pair of eyes
+
+- `planTiles` rounds the halo up to a multiple of 8 (`haloAlign`), following the guide's "6 rounded to 8".
+
+### What should be done in the future
+
+- Run the new unit tests, then add the browser parity page.
+
+### Code review instructions
+
+- Start with `packages/gpu/src/layout.ts`, `src/tiles.ts` and `kernels/solve.wgsl`.
+
+### Technical details
+
+- The SOLVE uniform layout target, from gpu.js 3584–3595: K at 0, Dbase at 48, rng at 64, N/n/total/maxIt at 80–92, tol at 96, gtol at 100, activeSet at 104; 112 bytes.

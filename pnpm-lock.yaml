@@ -73,6 +73,19 @@ importers:
         specifier: workspace:*
         version: link:../conformance
 
+  packages/gpu:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+    devDependencies:
+      '@chromobench/conformance':
+        specifier: workspace:*
+        version: link:../conformance
+      '@webgpu/types':
+        specifier: 0.1.74
+        version: 0.1.74
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.2':
