@@ -6,9 +6,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { FILE_REQUIRED, ITEM_REQUIRED, MANIFEST_REQUIRED, PACK_IDS, type PackManifest } from '../src/index.ts';
+import { aboutData, FILE_REQUIRED, ITEM_REQUIRED, MANIFEST_REQUIRED, PACK_IDS, type PackManifest } from '../src/index.ts';
 import { PACKS_DIR } from '../src/node.ts';
-import { SF } from './helpers.ts';
+import { open, SF } from './helpers.ts';
 
 const root = fileURLToPath(PACKS_DIR);
 const read = (p: string): Buffer => readFileSync(join(root, p));
@@ -73,6 +73,15 @@ describe('licences and attribution', () => {
       if (scannerSide) expect(manifest(id).license.spdx).not.toBe('CC-BY-SA-4.0');
       expect(manifest(id).license.spdx).not.toMatch(/NC/); // no non-commercial data is committed yet (measured cameras: stage 4)
     }
+  });
+
+  it('About-screen data lists every pack with its licence, attribution and source', () => {
+    const about = aboutData(PACK_IDS.map(open));
+    expect(about.map((a) => a.packId)).toEqual([...PACK_IDS]);
+    const sf = about.find((a) => a.packId === SF)!;
+    expect(sf).toMatchObject({ spdx: 'CC-BY-SA-4.0', licenceFile: 'SPEKTRAFILM_LICENSE.txt', changelog: 'CHANGELOG.txt', illustrative: false });
+    expect(sf.source.commit).toBe('3bb2c2d2801ff68b92019cf1dbcbb133d60832bc');
+    expect(about.find((a) => a.packId === 'illustrative@1')!.illustrative).toBe(true);
   });
 
   it('illustrative items are flagged', () => {

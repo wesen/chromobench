@@ -677,3 +677,54 @@ Step 13's code is commit `b62d7ef` ("CHB-004: spektrafilm exporter, four data pa
 ### Technical details
 - `StockData` (pack) fields follow guide §8: `log10Sensitivity`, `sensitivity` (linear, missing → 0), `unitDyes_D`, `base_D`, `midscaleNeutral_D`, `logExposure_logH`, `dyeCurves` (minima not subtracted), `sublayerCurves` ([logH][sublayer][channel] flattened), `curveModel` (`centers`, `amplitudes`, `sigmas`, [channel][sublayer]), `hanatosWindow`, `hanatosSurface`, `missing`, `contentHash`, `knownIssues`, `attribution`, `raw`.
 - Role: `print` when upstream `info.stage == 'printing'`; the core adapter maps it to core's `'paper'`.
+
+## Step 15: Neutral-wedge synthetic frames, About-screen data, determinism across processes, task bookkeeping
+
+Step 14's code is commit `7bad8d6` ("CHB-004: @chromobench/data loader, missing-data laws and PhysicsData adapter"). This step starts stage 5 with the one synthetic set that needs no film simulation: the `neutral-wedge`. Its truth comes from a numpy scanner model in the exporter, and its pixels reproduce the textbook's flare readings. It also adds `aboutData()` for the Studio's About screen and for export headers. It re-runs the whole export in a fresh process to confirm that the committed packs are byte-identical, and checks off the finished tasks.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 13.
+**Assistant interpretation:** Finish the earlier stages solidly, start later ones where cheap, and leave clear TODOs for the rest.
+**Inferred user intent:** Downstream tickets get usable fixtures and the licence surface now; the expensive parts stay visibly open.
+**Commit (code):** the third commit on the branch, "CHB-004: neutral-wedge synthetic frames and About-screen data" (hash in the final report).
+
+### What I did
+- `tools/spektrafilm-export/spektrafilm_export/synthetic.py` (`neutral_wedge`, `flare_read`, `split_bucket`) and the `sfx.py synthetic` command (also run by `all`). It writes `fixtures/synthetic/neutral-wedge/flat-0-3D-flare{000,005}permille/` with `camera_linear.safetensors` (F32, 32 × 224 × 3), `truth.safetensors` (`scanner_density_true`, F64) and `truth.json` (id, group, splitBucket, generator, factors, images with domains, seven regions with true and read densities). The two frames take 0.52 MB.
+- `packages/data/src/about.ts` (`aboutData(packs)` → packId, packHash, title, spdx, licenceFile, changelog, attribution, source, illustrative), exported from the index.
+- Tests: `packages/data/test/synthetic.test.ts` (3 tests), an About test in `licence.test.ts`, and `tools/spektrafilm-export/tests/test_synthetic.py` (2 tests).
+- `python -I tools/spektrafilm-export/sfx.py all --upstream <checkout>` in a fresh process, then `git status`.
+- `docmgr task check --ticket CHB-004 --id` for 0umg, h1jr, k5x0, tycx, 5wa6, 7fie, li8l, x1qh, so1j, o0m6, qqd3 and wlvi; `docmgr changelog update --ticket CHB-004 --entry ...`.
+
+### Why
+- The wedge's truth is pure arithmetic: T = 10^−D, read as (T + f)/(1 + f). So it can be produced now, and it fixes the frame format (guide §11.3) for the other five sets.
+- qqd3 ("submit the contract additions of Section 16") is checked because contract v0 already contains them. `CONTRACT-DECISIONS.md` lists CHB-004 #1–4 as accepted (`FrameRecipe.data`, `ArgSpec.valuesFrom` including `lamps`, content-hash `TableKey`s, and the nine diagnostic codes, all present in `errors.ts`). So no `CONTRACT-REQUESTS.md` is needed.
+
+### What worked
+- Wedge with 0.5 % flare: the pixels read 0, 0.495, 0.981, 1.438, 1.826, 2.090, 2.224 D, matching textbook §3.7 within 0.001 D. Without flare the reading equals the density to 1e-12. The split bucket is checked in TS against `sha256(group) mod 100`.
+- The fresh-process re-export left every committed pack file unchanged. `git status` showed only the new and edited source files: all four packHashes were identical, and all four packs printed `ok` in `verify`.
+- Tests: `npx vitest run packages/data` → 8 files, 71 tests passed; pytest → `15 passed in 1.93s`.
+- Final gate: `pnpm typecheck` 0 errors; `pnpm lint` `import boundaries ok (88 file checks)`; `pnpm test` → `Test Files 40 passed (40)`, `Tests 1900 passed (1900)` (load average 3.9 this time, so no timeouts); `pnpm gen:check` → `gen:check ok (18 files)`.
+
+### What didn't work
+- No failures in this step.
+
+### What I learned
+- N/A beyond Steps 13–14.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The wedge's camera_linear frame is normalised to an open gate of 1 and has no noise. CHB-006 may want counts in sensor units and a TIFF/PNG copy; that is part of the open stage-5 task.
+
+### What should be done in the future
+- Stage 4: fetch Jiang et al. (Zenodo 3245883) and Butcher's four spectroscope measurements into a separately licensed `cameras-measured@2026.1` pack (CC BY-NC-SA 4.0), and reproduce the PCA percentages. Not started: it needs network downloads beyond the approved upstream clone.
+- Stage 5: running-six-patch, grey-ramps, scan-conditions, stock-identity and edges need spektrafilm's `simulate()` (the full runtime dependencies) and the TIFF/PNG subset for CHB-006.
+- Stage 2 leftover: a browser test of the loader over `fetch` (the node test uses a fake `fetch`).
+- Stage 6 leftover: send the owner the decision list of guide §12.4 (commercial use and the NC packs; the GPL question for ported algorithms; licences of the hanatos table, the CIE data and the filter curves; use of the name "spektrafilm"; plus the licence of `illustrative@1`).
+
+### Code review instructions
+- `tools/spektrafilm-export/spektrafilm_export/synthetic.py`, `packages/data/src/about.ts`, `packages/data/test/synthetic.test.ts`.
+
+### Technical details
+- Commands used for the gate: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm gen:check`, `npx vitest run packages/data`, `pnpm --filter @chromobench/data test:core-parity`, and `SPEKTRAFILM_CHECKOUT=/home/manuel/code/wesen/chromobench-ext/spektrafilm /home/manuel/code/wesen/chromobench-ext/venv/bin/python -I -m pytest -q -p no:cacheprovider tools/spektrafilm-export/tests`.

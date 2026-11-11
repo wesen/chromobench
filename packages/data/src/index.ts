@@ -6,6 +6,7 @@ export * from './manifest.ts';
 export * from './sources.ts';
 export * from './pack.ts';
 export * from './physics.ts';
+export * from './about.ts';
 export { sha256Hex } from './hash.ts';
 
 /** The pack engines use by default: spektrafilm at the pinned commit. */

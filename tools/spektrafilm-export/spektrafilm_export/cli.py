@@ -4,6 +4,7 @@
     sfx.py baselines    --upstream PATH   write fixtures/golden/spektrafilm/*.json
     sfx.py interim                        write interim-chromogen@1 and interim-filmbench@1 from CHB-001
     sfx.py illustrative                   write illustrative@1 (camera, LEDs) from stated parameters
+    sfx.py synthetic                      write fixtures/synthetic/neutral-wedge (other sets: TODO, stage 5)
     sfx.py crosscheck   --pack ID         compare a pack against the CHB-001 prototype data (guide §5.3)
     sfx.py verify       [--pack ID ...]   recompute every file hash against the manifests
     sfx.py all          --upstream PATH   everything above, then crosscheck and verify
@@ -22,6 +23,7 @@ REPO = TOOL_DIR.parents[1]
 PACKS = REPO / "packages" / "data" / "packs"
 C1 = REPO / "ttmp/2026/11/11/CHB-001--source-import-and-analysis-colour-negative-modelling-for-a-darkroom-suite"
 GOLDEN = REPO / "fixtures" / "golden" / "spektrafilm"
+SYNTHETIC = REPO / "fixtures" / "synthetic"
 
 
 def _summary(m: dict) -> str:
@@ -57,6 +59,13 @@ def cmd_illustrative(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_synthetic(a: argparse.Namespace) -> int:
+    from . import synthetic
+    for d in synthetic.neutral_wedge(Path(a.synthetic), EXPORTER):
+        print("wrote", d.relative_to(REPO) if d.is_relative_to(REPO) else d)
+    return 0
+
+
 def cmd_crosscheck(a: argparse.Namespace) -> int:
     from . import crosscheck
     report = crosscheck.run(Path(a.packs) / a.pack, Path(a.c1))
@@ -79,7 +88,7 @@ def cmd_verify(a: argparse.Namespace) -> int:
 
 
 def cmd_all(a: argparse.Namespace) -> int:
-    rc = cmd_export(a) or cmd_baselines(a) or cmd_interim(a) or cmd_illustrative(a)
+    rc = cmd_export(a) or cmd_baselines(a) or cmd_interim(a) or cmd_illustrative(a) or cmd_synthetic(a)
     if rc:
         return rc
     from . import spektrafilm_pack  # noqa: F401  (pack id is derived inside export)
@@ -94,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="spektrafilm-export", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--packs", default=str(PACKS), help="packs root (default packages/data/packs)")
     ap.add_argument("--c1", default=str(C1), help="CHB-001 ticket directory (prototype extracts)")
+    ap.add_argument("--synthetic", default=str(SYNTHETIC), help="synthetic frames root (default fixtures/synthetic)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("export")
     e.add_argument("--upstream", required=True)
@@ -105,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     b.set_defaults(fn=cmd_baselines)
     sub.add_parser("interim").set_defaults(fn=cmd_interim)
     sub.add_parser("illustrative").set_defaults(fn=cmd_illustrative)
+    sub.add_parser("synthetic").set_defaults(fn=cmd_synthetic)
     c = sub.add_parser("crosscheck")
     c.add_argument("--pack", required=True)
     c.add_argument("--report", help="write the full report as JSON")
