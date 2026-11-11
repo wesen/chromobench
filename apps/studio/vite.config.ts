@@ -25,12 +25,10 @@ function precachePlugin(): Plugin {
   };
 }
 
-// React 19 through esbuild's automatic JSX runtime (no Fast Refresh plugin: @vitejs/plugin-react 6
-// needs Vite 8, and the studio does not need hot component reload to be correct).
+// The studio is plain TypeScript on the shell and studio-kit (CHB-019; no JSX since the React UI was removed).
 // Workers are ES modules (LibRaw and the GPU table builders import code dynamically).
 export default defineConfig({
   plugins: [packsPlugin(), precachePlugin()],
-  esbuild: { jsx: 'automatic' },
   worker: { format: 'es' },
   // LibRaw's module locates libraw.wasm beside itself; the host passes the URL explicitly (?url), and
   // keeping the package out of the pre-bundle keeps that path valid in the dev server too.

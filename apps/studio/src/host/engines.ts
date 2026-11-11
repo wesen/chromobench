@@ -166,8 +166,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,
-    // GpuEngine encodes sRGB only (CHB-011 adds the other spaces); P3 is re-encoded from it.
-    ...(primary.id === 'gpu' ? { nativeSpaces: ['srgb'] } : {}),
+    // Since CHB-011 GpuEngine encodes every output space itself (nativeSpaces stays unset).
   };
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
   return {

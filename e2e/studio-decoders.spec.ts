@@ -1,4 +1,5 @@
-// CHB-023: the photographer's file types through packages/ingest in the studio, on the GPU engine:
+// CHB-023: the photographer's file types through packages/ingest in the studio (since CHB-019 the shell-based
+// studio, default variant), on the GPU engine:
 // a deflate-compressed 16-bit RGB TIFF, a 16-bit PNG and a Bayer DNG that LibRaw decodes in its worker
 // (scan mode, CFA-binned). Each is a synthetic colour negative (orange mask, a grey ramp, a rebate
 // band on the left) so the first print has something to balance.
@@ -61,14 +62,15 @@ const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 for (const [kind, make] of Object.entries(FILES)) {
   test(`${kind}: decoded by ingest, conditioned, printed on the GPU engine`, async ({ page }) => {
     test.setTimeout(180_000);
-    await page.goto('/?nosw&canvas2d&engine=gpu');
+    await page.goto('/?nosw&canvas2d&fresh&engine=gpu');
     await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+    await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
     await page.setInputFiles('#file', make());
     await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
     await idle(page);
     await expect(page.locator('#notes')).toContainText(kind === 'dng' ? 'camera RAW (Synth Scanner) via LibRaw' : kind.toUpperCase());
     await expect(page.locator('#notes')).toContainText('base');
-    const r = await page.evaluate(() => ({ w: window.chromobench.studio.session!.width, h: window.chromobench.studio.session!.height, auto: window.chromobench.log!.state.print.lights.auto.method }));
+    const r = await page.evaluate(() => ({ w: window.chromobench.size()!.width, h: window.chromobench.size()!.height, auto: window.chromobench.log!.state.print.lights.auto.method }));
     expect(r).toEqual({ w: W, h: H, auto: 'integrate' });
     // the ramp prints: denser negative (right) → lighter print
     const left = (await page.evaluate(() => window.chromobench.pixel(200, 400)))!;

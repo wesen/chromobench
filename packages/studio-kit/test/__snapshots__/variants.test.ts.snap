@@ -91,6 +91,12 @@ module print "Print" key D
                      thumb  image τ
                      button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
   right  dockcol  width 300
+           panel tools "Tools"
+             row  class "cb-tools"
+               button  run tool.probe  small  text "Densitometer"
+               button  run tool.test-strip  small  text "Test strip"
+               button  run tool.ring-around  small  text "Ring-around"
+               button  run view.beforeAfter  small  text "Before / after"
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -105,6 +111,10 @@ module print "Print" key D
                cb.arg  path "print.paper"  select
                cb.arg  path "print.grade"  slider  step 0.5 none
                cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+             section "Film and viewing"
+               cb.arg  path "scan.stock"  select
+               cb.arg  path "scan.scanner"  select
+               cb.arg  path "view.illuminant"  select
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -342,6 +352,12 @@ module print "Print" key D
                      thumb  image τ
                      button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
   right  dockcol  width 300
+           panel tools "Tools"
+             row  class "cb-tools"
+               button  run tool.probe  small  text "Densitometer"
+               button  run tool.test-strip  small  text "Test strip"
+               button  run tool.ring-around  small  text "Ring-around"
+               button  run view.beforeAfter  small  text "Before / after"
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -356,6 +372,10 @@ module print "Print" key D
                cb.arg  path "print.paper"  select
                cb.arg  path "print.grade"  slider  step 0.5 none
                cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+             section "Film and viewing"
+               cb.arg  path "scan.stock"  select
+               cb.arg  path "scan.scanner"  select
+               cb.arg  path "view.illuminant"  select
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -618,6 +638,10 @@ module main "Chromobench"
                cb.arg  path "print.paper"  select
                cb.arg  path "print.grade"  slider  step 0.5 none
                cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+             section "Film and viewing"
+               cb.arg  path "scan.stock"  select
+               cb.arg  path "scan.scanner"  select
+               cb.arg  path "view.illuminant"  select
            panel history "History"
              cb.history
 commands

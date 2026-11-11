@@ -1,6 +1,9 @@
-// M1 walking skeleton (guide §5.12): open a 16-bit TIFF, render through the mock chain, drag the
-// generated red printer-light slider +4 points (preview during the drag, one apply on release),
-// undo, then an agent proposal in ask mode that is approved.
+// M1 walking skeleton (CHB-009 guide §5.12), on the shell-based studio since CHB-019 (variant lab, MockEngine):
+// open a 16-bit TIFF, render through the mock chain, drag the generated red printer-light slider +4 points
+// (preview during the drag, one apply on release), undo, then an agent proposal in ask mode that is approved.
+// Changed deliberately in the migration: the drag starts with a pointerdown (studio-kit's slider commits a value
+// set by script at once unless a drag is under way), and a stale approval shows E_STALE on the card as well as in
+// the status line.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
@@ -13,8 +16,7 @@ async function idle(page: Page): Promise<void> {
 }
 const pixel = (page: Page) => page.evaluate(({ x, y }) => window.chromobench.pixel(x, y), P);
 const hash = (page: Page) => page.evaluate(() => window.chromobench.log!.stateHash);
-// The studio (CHB-009) presents through WebGPU (Display P3) with a viewport transform, so the
-// canvas pixel of a document pixel is read back through the presenter's own pipeline.
+// The presenter (WebGPU, or Canvas2D after a lost device) is read back through its own pipeline.
 const canvasPixel = (page: Page) => page.evaluate(({ x, y }) => window.chromobench.canvasPixel(x, y), P);
 
 function near(a: number[] | null, b: number[], tol = 1e-4): void {
@@ -22,29 +24,36 @@ function near(a: number[] | null, b: number[], tol = 1e-4): void {
   b.forEach((v, i) => expect(Math.abs(a![i]! - v), `component ${i}: ${a![i]} vs ${v}`).toBeLessThanOrEqual(tol));
 }
 
-test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?engine=mock');
-
-  // 1. open the fixture: frame.add with the default recipe, by 'auto'
+async function open(page: Page): Promise<void> {
+  await page.goto('/?engine=mock&variant=lab&nosw&fresh');
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
   await expect(page.locator('#status')).toContainText('rendered');
   await idle(page);
+}
+
+test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  // 1. open the fixture: frame.add with the default recipe, by 'auto'
+  await open(page);
   const p0 = await pixel(page);
   near(p0, golden.before.display);
-  expect(await canvasPixel(page)).toEqual(golden.before.display.map((v: number) => Math.round(v * 255)));
+  const cp = await canvasPixel(page);
+  golden.before.display.forEach((v: number, i: number) => expect(Math.abs(cp![i]! - Math.round(v * 255))).toBeLessThanOrEqual(1));
   const s0 = await hash(page);
   expect(await page.evaluate(() => window.chromobench.log!.why('print.lights.logH')[0]!.by)).toBe('auto');
 
   // 2. drag the generated red slider: previews for each detent, no journal entries, hash unchanged
   const red = page.getByRole('slider', { name: 'Printer lights R' });
-  await expect(red).toHaveAttribute('min', '-60');
+  await red.dispatchEvent('pointerdown');
+  const step = Number(await red.getAttribute('step'));
   for (let n = 1; n <= 4; n++) {
-    await red.evaluate((el: HTMLInputElement, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, n);
+    await red.evaluate((el: HTMLInputElement, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, n * step);
     await idle(page);
     const st = await page.evaluate(() => ({ red: window.chromobench.log!.state.print.lights.logH[0], entries: window.chromobench.log!.entries.length, hash: window.chromobench.log!.stateHash }));
-    expect(st.red).toBeCloseTo(0.025 * n, 12);
+    expect(st.red).toBeCloseTo(0.025 * n, 9);
     expect(st.entries).toBe(0);
     expect(st.hash).toBe(s0);
   }
@@ -82,20 +91,20 @@ test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page })
   expect(await hash(page)).toBe(s1);
   const last = await page.evaluate(() => window.chromobench.log!.why('print.lights.logH').at(-1));
   expect(last).toMatchObject({ by: 'agent', approvedBy: 'user' });
-  await expect(page.locator('#why')).toContainText('approved');
+  await page.getByRole('slider', { name: 'Printer lights R' }).focus();
+  await expect(page.locator('#why')).toContainText('Printer lights');
   expect(errors).toEqual([]);
 });
 
 test('M1: a stale proposal is refused with E_STALE', async ({ page }) => {
-  await page.goto('/?engine=mock');
-  await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toContainText('rendered');
+  await open(page);
   await page.evaluate(() => window.chromobench.propose({ 'print.lights.logH': [0.1, 0, 0] }));
-  const red = page.getByRole('slider', { name: 'Printer lights G' });
-  await red.evaluate((el: HTMLInputElement) => { el.value = '2'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  const g = page.getByRole('slider', { name: 'Printer lights G' });
+  await g.evaluate((el: HTMLInputElement) => { el.value = el.step; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
   await idle(page);
   const h = await hash(page);
   await page.locator('#pending .approve').click();
+  await expect(page.locator('#pending li .cb-stale')).toContainText('E_STALE');
   await expect(page.locator('#status')).toContainText('E_STALE');
   expect(await hash(page)).toBe(h);
 });

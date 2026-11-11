@@ -2,10 +2,10 @@
 // names → display-referred for the presenter → Engine.evaluate at the size the viewport asks → PresentImage.
 // Keys are node ids, so equal recipes mean equal keys (content addressing) and the shell's queue and thumbnail
 // cache dedupe by node. The engine is injected (MockEngine in tests and the dev host; RefEngine / GpuEngine later).
-import { compile, type Engine, type FrameRecipe, type Node, type OutputSpaceId } from '@chromobench/contract';
+import { compile, fail, type Box, type Engine, type FrameRecipe, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
 import type { PresentImage, RenderBridge, RenderTarget, Rendered } from '@chromobench/shell';
 import { effectiveRecipe, isImageHandle, type ImageHandle } from '../handles.ts';
-import { testStripArgs, type StripVary } from '../model/tools.ts';
+import { bandBoxes, stripRecipe, stripValues, type StripVary } from '../model/tools.ts';
 import type { FrameEntry, Frames } from './frames.ts';
 
 export interface Lowered {
@@ -13,6 +13,57 @@ export interface Lowered {
   named: Node;
   /** what is shown: display-referred */
   shown: Node;
+  /** the test strip (CHB-023): each band an ordinary print of the frame with its own value, over its own box */
+  bands?: Band[];
+}
+
+export interface Band {
+  value: number;
+  box: Box;
+  node: Node;
+}
+
+const intersect = (a: Box, b: Box): Box | null => {
+  const x0 = Math.max(a.x, b.x), y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.w, b.x + b.w), y1 = Math.min(a.y + a.h, b.y + b.h);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+};
+
+/**
+ * The test strip as one image: each band's print evaluated over its own box (within `region`), pasted
+ * side by side. The bands are ordinary print nodes, so the strip runs on any engine that prints (CHB-023:
+ * darkroom.testStrip takes only the dyes and cannot know the enlarger settings).
+ */
+export async function evaluateBands(engine: Engine, bands: readonly Pick<Band, 'box' | 'node'>[], target: { scale: number | 'full'; region?: Box; precision: 'preview' | 'export'; signal?: AbortSignal }): Promise<{ result: ImageResult; data: SampleData }> {
+  const first = bands[0] ?? fail('E_ARG_RANGE', 'a test strip needs at least one band');
+  const info = first.node.info as ImageInfo;
+  const region = target.region ?? { x: 0, y: 0, w: info.width, h: info.height };
+  const parts: { box: Box; r: ImageResult; data: SampleData }[] = [];
+  for (const b of bands) {
+    const box = intersect(b.box, region);
+    if (!box) continue;
+    const r = await engine.evaluate(b.node, { scale: target.scale, precision: target.precision, region: box, ...(target.signal ? { signal: target.signal } : {}) });
+    parts.push({ box, r, data: await r.read() });
+  }
+  const p0 = parts[0] ?? fail('E_ARG_RANGE', 'no band lies in the region');
+  const scale = p0.r.scale;
+  const c = p0.r.info.channels;
+  const W = Math.max(1, Math.round(region.w * scale)), H = Math.max(1, Math.round(region.h * scale));
+  // the parts' sample type, so a band is bit-identical to the print it stands for
+  const out = p0.data instanceof Float64Array ? new Float64Array(W * H * c) : new Float32Array(W * H * c);
+  for (const p of parts) {
+    const ox = Math.round((p.box.x - region.x) * scale), oy = Math.round((p.box.y - region.y) * scale);
+    for (let y = 0; y < p.r.height && oy + y < H; y++) {
+      for (let x = 0; x < p.r.width && ox + x < W; x++) {
+        for (let k = 0; k < c; k++) out[((oy + y) * W + ox + x) * c + k] = p.data[(y * p.r.width + x) * c + k]!;
+      }
+    }
+  }
+  const result: ImageResult = {
+    node: p0.r.node, info: p0.r.info, scale, region: { ...region }, width: W, height: H, format: out instanceof Float64Array ? 'f64' : 'f32',
+    read: async () => out.slice(), warnings: parts.flatMap((p) => p.r.warnings),
+  };
+  return { result, data: out };
 }
 
 export class FrameRenderBridge implements RenderBridge<ImageHandle> {
@@ -35,7 +86,12 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     return isImageHandle(x) && !!this.frames.get(x.frame);
   }
   key(h: ImageHandle): string {
-    return this.lower(h).shown.id;
+    const l = this.lower(h);
+    return l.bands ? `strip:${l.bands.map(b => b.node.id.slice(0, 16)).join(':')}` : l.shown.id;
+  }
+  /** the test strip's bands of a handle (values, boxes, nodes), or null */
+  bands(h: ImageHandle): Band[] | null {
+    return this.lower(h).bands ?? null;
   }
   naturalSize(h: ImageHandle): [number, number] | null {
     const e = this.frames.get(h.frame);
@@ -69,7 +125,6 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     const g = e.graph;
     const top = compile(r, g, { displaySpace: this.displaySpace });
     const I = (op: string, inputs: string[], args: Record<string, unknown>): Node => g.intern(op, inputs, args).node;
-    const displayOf = (n: Node): Node => I('output.display', [n.id], { space: this.displaySpace, rendering: r.view.output.rendering, knee: r.view.output.display.knee.method });
     const dyes = (): Node => (r.kind === 'negative-scan' ? this.cut(e, top, 'invert.dyes') : this.cut(e, top, 'film.grain'));
     let out: Lowered;
     switch (h.what) {
@@ -105,8 +160,12 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
       }
       case 'testStrip': {
         const a = h.args as { vary: StripVary; step: number; count: number };
-        const strip = I('darkroom.testStrip', [dyes().id], testStripArgs(a.vary, a.step, a.count));
-        out = { named: strip, shown: displayOf(strip) };
+        const base = a.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[a.vary.slice(-1) as 'c' | 'm' | 'y'];
+        const values = stripValues(a.vary, base, a.step, a.count);
+        const info = top.info as ImageInfo;
+        const boxes = bandBoxes(values.length, info.width, info.height);
+        const bands = values.map((value, i) => ({ value, box: boxes[i]!, node: compile(stripRecipe(a.vary, r, value), g, { displaySpace: this.displaySpace }) }));
+        out = { named: this.cut(e, bands[0]!.node, 'view.adapt'), shown: bands[0]!.node, bands };
         break;
       }
     }
@@ -118,16 +177,22 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   async render(h: ImageHandle, t: RenderTarget): Promise<Rendered> {
     const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const e = this.entry(h);
-    const { shown } = this.lower(h);
-    this.engine.adopt(e.graph.closure(shown.id));
+    const { shown, bands } = this.lower(h);
+    for (const n of bands ? bands.map(b => b.node) : [shown]) this.engine.adopt(e.graph.closure(n.id));
     const W = e.info.width;
     const H = e.info.height;
     const region = t.region;
     const side = region ? Math.max(region.w, region.h) : Math.max(W, H);
     const scale = Math.min(1, t.maxSide / side);
     this.runs.set(shown.id, (this.runs.get(shown.id) ?? 0) + 1);
-    const res = await this.engine.evaluate(shown, { scale: scale >= 1 ? 'full' : scale, precision: 'preview', signal: t.signal, ...(region ? { region } : {}) });
-    const data = await res.read();
+    const target = { scale: scale >= 1 ? ('full' as const) : scale, precision: 'preview' as const, signal: t.signal, ...(region ? { region } : {}) };
+    let res: ImageResult;
+    let data: SampleData;
+    if (bands) ({ result: res, data } = await evaluateBands(this.engine, bands, target));
+    else {
+      res = await this.engine.evaluate(shown, target);
+      data = await res.read();
+    }
     if (t.signal.aborted) throw new DOMException('aborted', 'AbortError');
     const image: PresentImage = { width: res.width, height: res.height, channels: res.info.channels, data, region: res.region, scale: res.scale };
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();

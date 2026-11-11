@@ -9,7 +9,7 @@
 import type { AgentMode, Engine, FrameRecipe, LoggedMutation, Mutation, OutputSpaceId } from '@chromobench/contract';
 import { memoryPersistence, type Runtime, type Services } from '@chromobench/shell';
 import { EditLogRoute } from './bridge/editlog-route.ts';
-import { Frames, type FrameEntry } from './bridge/frames.ts';
+import { Frames, type FrameEntry, type InitialRecipe } from './bridge/frames.ts';
 import type { KV } from './bridge/kv.ts';
 import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
@@ -21,6 +21,8 @@ export interface StudioOptions {
   mode?: AgentMode;
   displaySpace?: OutputSpaceId;
   now?: () => number;
+  /** the first recipe of a frame opened for the first time (the host's automatic first print, CHB-023) */
+  initial?: InitialRecipe;
 }
 
 export class Studio {
@@ -29,6 +31,7 @@ export class Studio {
   readonly frames: Frames;
   readonly route: EditLogRoute;
   readonly bridge: FrameRenderBridge;
+  readonly initial: InitialRecipe | undefined;
   rt: Runtime | null = null;
   private proposeSeq = 0;
   private stops: (() => void)[] = [];
@@ -36,6 +39,7 @@ export class Studio {
   constructor(o: StudioOptions) {
     this.engine = o.engine;
     this.kv = o.kv ?? null;
+    this.initial = o.initial;
     this.frames = new Frames(o.engine, { kv: this.kv, ...(o.mode ? { mode: o.mode } : {}), ...(o.now ? { now: o.now } : {}) });
     this.route = new EditLogRoute(this.frames);
     this.bridge = new FrameRenderBridge(this.frames, o.displaySpace ? { displaySpace: o.displaySpace } : {});
@@ -86,8 +90,9 @@ export class Studio {
   }
 
   /** open a negative's bytes (resumes its EditLog by SHA-256) */
-  async open(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe } = {}): Promise<FrameEntry> {
-    return this.frames.open(bytes, name, o);
+  async open(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe | InitialRecipe } = {}): Promise<FrameEntry> {
+    const initial = o.initial ?? this.initial;
+    return this.frames.open(bytes, name, initial ? { initial } : {});
   }
 
   get current(): string | null {

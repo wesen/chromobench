@@ -1,4 +1,4 @@
-// Moved from apps/studio/src/core/arrangement.ts (CHB-009) for CHB-019; the original is deleted when apps/studio migrates.
+// Moved from apps/studio/src/core/arrangement.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
 // Control arrangements (guide §5.7). "Darkroom" is a hand-written list of recipe paths in groups;
 // "All parameters" is generated from the registry by group. auditArrangement() is Filmbench's
 // Scheme.audit: every path must exist as a generated control.
@@ -16,6 +16,8 @@ export const DARKROOM: Arrangement = {
     { title: 'Filtration', paths: ['print.enlarger.filtration'] },
     { title: 'Printer lights', paths: ['print.lights.logH'] },
     { title: 'Paper', paths: ['print.paper', 'print.grade', 'print.preflash'] },
+    // the negative and the light the print is seen under (CHB-023's demo had them beside the paper)
+    { title: 'Film and viewing', paths: ['scan.stock', 'scan.scanner', 'view.illuminant'] },
   ],
 };
 

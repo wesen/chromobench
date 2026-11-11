@@ -1,0 +1,125 @@
+/* The host frame around the shell-based studio: a bar for files and export on top, a status line at the bottom. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #1d1d1d;
+  color: #ddd;
+  font: 13px system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+#app {
+  position: fixed;
+  top: 38px;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+}
+.hb {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: #262626;
+  border-bottom: 1px solid #3a3a3a;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#bar {
+  top: 0;
+  height: 38px;
+}
+.hb-status {
+  bottom: 0;
+  height: 24px;
+  border-top: 1px solid #3a3a3a;
+  border-bottom: 0;
+  font-size: 12px;
+  color: #aaa;
+}
+.hb .brand {
+  font-weight: 600;
+  margin-right: 8px;
+  color: #eee;
+}
+.hb .brand i {
+  font-weight: normal;
+  color: #999;
+}
+.hb button,
+.hb select,
+.hb .file {
+  font: inherit;
+  font-size: 12px;
+  color: #ddd;
+  background: #333;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.hb button:hover,
+.hb .file:hover {
+  background: #3d3d3d;
+}
+.hb button.primary {
+  background: #b7791f;
+  border-color: #b7791f;
+  color: #fff;
+}
+.hb button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.hb input[type='file'] {
+  display: none;
+}
+.hb .sp {
+  flex: 1;
+}
+.hb .sep {
+  width: 1px;
+  height: 20px;
+  background: #444;
+  margin: 0 4px;
+}
+.hb label {
+  color: #aaa;
+  font-size: 12px;
+}
+.pill {
+  background: #333;
+  border-radius: 9px;
+  padding: 1px 8px;
+  color: #ddd;
+}
+#notes {
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+#status {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#status.is-error {
+  color: #f08070;
+}
+.boot,
+.report {
+  padding: 24px 32px;
+  max-width: 900px;
+}
+.report pre {
+  white-space: pre-wrap;
+  background: #111;
+  padding: 12px;
+}
+.boot a {
+  color: #e8a33c;
+}

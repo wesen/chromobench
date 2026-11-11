@@ -12,5 +12,9 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
   section "Paper"
     cb.arg  path "print.paper"
     cb.arg  path "print.grade"
-    cb.arg  path "print.preflash""
+    cb.arg  path "print.preflash"
+  section "Film and viewing"
+    cb.arg  path "scan.stock"
+    cb.arg  path "scan.scanner"
+    cb.arg  path "view.illuminant""
 `;

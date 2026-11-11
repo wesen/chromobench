@@ -1,4 +1,4 @@
-// Moved from apps/studio/src/core/units.ts (CHB-009) for CHB-019; the original is deleted when apps/studio migrates.
+// Moved from apps/studio/src/core/units.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
 // Darkroom units at the edge of the UI (guide §2.1, §5.7). The recipe stores log H, seconds, CC and
 // f-numbers; the photographer reads points, stops, seconds in stop steps and CC. Nothing here
 // changes what is stored: these are presentations and the arithmetic the tools show.
