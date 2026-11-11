@@ -1,3 +1,24 @@
+---
+Title: "analysis-chromogen-studio-summary"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: analysis
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored analysis stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 I couldn't save `various/analysis-chromogen-studio.md`: the harness refuses report files written by subagents, so the full document is at the end of this message for you to save. The analysis is done. It covers points 1–6; I left out the long list of line references and the reuse assessment, and can add them if you want.
 
 Two files were written:

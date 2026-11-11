@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ingest intern-guide blocks returned by guide-writing subagents into their docmgr tickets.
 
-Usage: python3 -I 07-ingest-intern-guides.py <agent-output-file> <repo-root> [--replace] [--dry-run]
+Usage: python3 -I 07-ingest-intern-guides.py <agent-output-file> <repo-root> [--replace] [--dry-run] [--only=DIARY[,TASKS,...]]
 
 The agent output contains, per ticket:
   =====BEGIN GUIDE CHB-0NN===== ... =====END GUIDE CHB-0NN=====
@@ -38,8 +38,10 @@ def main() -> None:
     out_file, repo = args[0], args[1]
     raw = open(out_file, encoding="utf-8").read()
     blocks = {}
+    only = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--only=")), None)
     for kind, tid, body in BLOCK.findall(raw):
-        blocks.setdefault(tid, {})[kind] = body
+        if only is None or kind in only:
+            blocks.setdefault(tid, {})[kind] = body
     if not blocks:
         print("no blocks found", file=sys.stderr)
         sys.exit(1)
@@ -65,7 +67,7 @@ def main() -> None:
                 words = len(guide.split())
                 escaped = guide.count("<\\")
                 summary.append(f"guide {words} words" + (f", {escaped} escaped '<\\\\'" if escaped else ""))
-        else:
+        elif only is None or "GUIDE" in only:
             summary.append("NO GUIDE")
         n_tasks = 0
         for line in parts.get("TASKS", "").splitlines():

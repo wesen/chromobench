@@ -1,3 +1,24 @@
+---
+Title: "Chromogen Studio 1.2: what it actually computes"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: analysis
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored analysis stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 # Chromogen Studio 1.2: what it actually computes
 
 Reverse-engineering notes for CHB-001. Purpose: decide which parts of Chromogen Studio to carry into a darkroom / print-simulation suite fed by RAWs and negative scans, with a goja JS API underneath.

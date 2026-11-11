@@ -1,0 +1,11 @@
+[
+ ["10 M ≈ −3.4 points green (real filters, §3.2) |", "10 M ≈ −3.4 points green (real filters, §3.3) |"],
+ ["| 340–347 | `neutralFilters`", "| 314–320 | `neutralFilters`"],
+ ["mid-grey normalisation (`fM`, `comp`, `normalize`) |", "mid-grey normalisation (`fM`, `comp`, `normalize`; defaults at 118–122) |"],
+ ["    \"masks\": [ { \"id\": \"cm1\", \"kind\": \"contrast\", \"strength\": 0.3, \"blur_um\": 150 } ],", "    \"densityMasks\": [ { \"id\": \"cm1\", \"kind\": \"contrast\", \"polarity\": \"positive\", \"strength\": 0.3, \"blur_um\": 150 } ],"],
+ ["is the colour vector (−1, ½, ½)·step·1.5 with the mean removed (`05-inline.js` 4329–4347)", "is (−1, ½, ½)·step in log H, the vector (0, 1, 1) with its mean removed and scaled by 1.5 (`05-inline.js` 4329–4347)"],
+ ["the blue layer gets less of the extra light than red and green, so the burned sky darkens and turns slightly less blue than a plain burn would make it.", "the extra light carries less blue than the main exposure, so the blue-sensitive layer forms less extra yellow dye and the burned sky comes out darker and bluer than a plain burn would make it."],
+ ["| a curve does not commute with a shift | the paper dye change for +0.1 log H differs between the paper-white region and the grey card (0.021 vs 0.219 in the textbook) | report, not assert equality | asserting equality would pass on a linearised paper model only |", "| a curve does not commute with a shift | the green paper dye change for +0.1 log H near paper white is less than a fifth of the change at the grey card (0.021 against 0.219 in the textbook) | the ratio | a linearised paper model, or lights applied as density |"],
+ ["6. `print.masks: DensityMask[]` and the op `print.densityMask`", "6. `print.densityMasks: DensityMask[]` and the op `print.densityMask`"],
+ ["01-inline.js` 137–147, 340–381, 1627–1652", "01-inline.js` 118–122, 137–147, 314–320, 352–381, 1627–1652"]
+]

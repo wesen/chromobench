@@ -1,3 +1,24 @@
+---
+Title: "goja-cv: how it works and what chromobench can reuse"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: analysis
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored analysis stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 # goja-cv: how it works and what chromobench can reuse
 
 This document explains goja-cv (`github.com/go-go-golems/goja-cv`, `main` at `5a93095`) for the people

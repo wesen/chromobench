@@ -1,3 +1,24 @@
+---
+Title: "analysis-goja-cv-summary"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: analysis
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored analysis stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 ## goja-cv analysis for chromobench: report
 
 **The analysis file was not written.** The write to `/home/manuel/code/wesen/chromobench/ttmp/2026/11/11/CHB-001--source-import-and-analysis-colour-negative-modelling-for-a-darkroom-suite/various/analysis-goja-cv.md` was refused: subagents may not write report files. I did not work around that. The full markdown is at the end of this report, ready for you to save at that path.

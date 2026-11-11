@@ -1,0 +1,4 @@
+[
+ ["So each reachable c has exactly one u, and Newton's method converges from a good start.", "So each reachable c has exactly one u, and a damped Newton iteration from a good start can find it."],
+ ["Starting Newton there converges in a few steps.", "Starting Newton there should need only a few steps on moderately saturated colours; record the iteration counts when building the table."]
+]

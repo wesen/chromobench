@@ -1,3 +1,24 @@
+---
+Title: "Diary: goja-cv analysis for CHB-001"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: diary
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored diary stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 # Diary: goja-cv analysis for CHB-001
 
 ## Step 1: Orientation, scoping and delegating the ticket-doc reading

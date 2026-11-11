@@ -2,3 +2,6 @@
 .git/
 _templates/
 _guidelines/
+
+# Raw files extracted from imported single-file apps (not ticket docs)
+extracted

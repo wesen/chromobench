@@ -1,0 +1,16 @@
+const fs = require('fs');
+const st = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).data;
+const le = st.log_exposure;
+const raw = [0,1,2].map(j => st.density_curves.map(r => r[j]));
+const f = raw.map(c => { const m = Math.min(...c); return c.map(v => v - m); });
+const M = [[0.336,0.353,0.302],[0.154,0.319,0.353],[0.168,0.226,0.273]];
+const interp = (x, xp, fp) => { if (x <= xp[0]) return fp[0]; if (x >= xp[xp.length-1]) return fp[fp.length-1]; let lo=0, hi=xp.length-1; while (hi-lo>1){const m=(lo+hi)>>1; if(xp[m]<=x) lo=m; else hi=m;} const t=(x-xp[lo])/(xp[hi]-xp[lo]); return fp[lo]+t*(fp[hi]-fp[lo]); };
+const shifted = [0,1,2].map(j => le.map((x,i) => x - (f[0][i]*M[0][j] + f[1][i]*M[1][j] + f[2][i]*M[2][j])));
+const f0 = [0,1,2].map(j => le.map(x => interp(x, shifted[j], f[j])));
+const F = (j,x) => interp(x, le, f[j]), F0 = (j,x) => interp(x, le, f0[j]);
+const raw3 = [2.506, 0.528, 0.690]; const u = raw3.map(Math.log10);
+const d0 = u.map((x,j)=>F(j,x)); const a = [0,1,2].map(m => d0[0]*M[0][m]+d0[1]*M[1][m]+d0[2]*M[2][m]);
+const d = u.map((x,j)=>F0(j,x-a[j]));
+console.log('u', u.map(v=>v.toFixed(4)), 'd0 (no DIR)', d0.map(v=>v.toFixed(4)), 'a', a.map(v=>v.toFixed(4)), 'd (DIR)', d.map(v=>v.toFixed(4)));
+const E = [0,1,2].map(j => st.channel_density.map(r => Number.isFinite(r[j]) ? r[j] : 0)); const i550 = st.wavelengths.indexOf(550), i650 = st.wavelengths.indexOf(650), i450 = st.wavelengths.indexOf(450);
+for (const [nm,i] of [[450,i450],[550,i550],[650,i650]]) console.log('D('+nm+') =', (st.base_density[i] + d[0]*E[0][i]+d[1]*E[1][i]+d[2]*E[2][i]).toFixed(4));

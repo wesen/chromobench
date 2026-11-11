@@ -1,3 +1,24 @@
+---
+Title: "Filmbench IDE — analysis (subagent report, CHB-001)"
+Ticket: CHB-001
+Status: active
+Topics:
+    - color-science
+    - film-emulation
+    - image-pipeline
+    - js-api
+    - product
+DocType: analysis
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Subagent-authored analysis stored for CHB-001"
+LastUpdated: 2026-11-11T11:32:25-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 # Filmbench IDE — analysis (subagent report, CHB-001)
 
 References: `JS:N` = line in `various/extracted/filmbench-ide/01-inline.js`; `vfs/...` = built-in file extracted by `scripts/05-extract-filmbench-vfs.py` to `various/extracted/filmbench-ide/vfs/`; `doc:N` = line in `~/Downloads/Filmbench API v2 — pipelines, control schemes, workspace.md` (context only, not imported). Verified in code unless marked **inferred**. Data blob decoded by `scripts/06-decode-filmbench-film-data.py`; summary in `various/extracted/filmbench-ide/film-data-summary.json`.
