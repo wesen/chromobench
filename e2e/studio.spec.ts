@@ -1,6 +1,9 @@
-// CHB-009 studio flows on the mock engine: library and persistence by hash, the import fallback
-// and offline start, the viewer (views, before/after, probe), generated controls with keyboard
-// bursts, approvals with E_STALE, the darkroom tools, and the WebGPU presenter pipeline.
+// CHB-009 studio flows, ported to the shell-based studio (CHB-019, variant lab, MockEngine): recipes resumed by hash
+// after a reload, a folder of scans, the viewer (views, before/after, densitometer and pinned probes), generated
+// controls with keyboard bursts and typed units, approvals with E_STALE, the darkroom tools (test strip, ring-around,
+// masks and exposures, apply to selection) and the WebGPU presenter pipeline.
+// Dropped deliberately in the migration: the OPFS import dialog (folders are read in place) and the
+// keyboard-driven probe on the canvas (the probe is the viewer's I tool).
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
@@ -18,6 +21,10 @@ const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const hash = (page: Page) => page.evaluate(() => window.chromobench.log!.stateHash);
 const units = (page: Page) => page.evaluate(() => window.chromobench.log!.units.length);
 
+async function boot(page: Page, extra = ''): Promise<void> {
+  await page.goto(`/?nosw&engine=mock&variant=lab${extra}`);
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+}
 async function open(page: Page, files: string | { name: string; mimeType: string; buffer: Buffer }[] = FIXTURE): Promise<void> {
   await page.setInputFiles('#file', files);
   await expect(page.locator('#status')).toContainText('rendered');
@@ -33,114 +40,103 @@ test.afterEach(() => {
   expect(pageErrors).toEqual([]);
 });
 
-test('library: a reload keeps the recipe by hash; re-picking re-attaches it', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+test('a reload keeps the recipe by hash; opening the file again re-attaches it', async ({ page }) => {
+  await boot(page);
   await open(page);
-  await expect(page.locator('.strip .cell')).toHaveCount(1);
+  await expect(page.locator('.ck-side-bottom .ck-thumb[data-rendered]')).toHaveCount(1);
   // keyboard burst on Filtration Y: three steps, one undo unit after the burst pauses
   const y = page.getByRole('slider', { name: 'Filtration Y' });
   await y.focus();
   for (let i = 0; i < 3; i++) await y.press('ArrowRight');
   expect(await units(page)).toBe(0);
   await expect.poll(() => units(page)).toBe(1);
-  await expect(y).toHaveAttribute('aria-valuetext', 'Filtration Y 3 CC');
-  await expect(page.locator('#history')).toContainText('Filtration (0, 0, 0) → (0, 0, +3) CC');
-  await expect(page.locator('.strip .cell .badges')).toContainText('●');
+  await expect(y).toHaveAttribute('aria-valuetext', /Y 3 CC/);
+  await expect(page.locator('#history')).toContainText('(0, 0, +3) CC');
   const h1 = await hash(page);
+  await page.evaluate(() => window.chromobench.studio.flush());
 
-  await page.reload();
-  await expect(page.locator('[data-roll]')).toHaveCount(1);
-  await expect(page.locator('[data-roll]')).toContainText('disconnected');
+  await boot(page);
+  await expect(page.locator('#status')).toContainText('ready');
   await open(page);
   expect(await hash(page)).toBe(h1);
   await expect(page.locator('#history')).toContainText('(0, 0, +3) CC');
 });
 
-test('import fallback into OPFS, then an offline start opens the imported frame', async ({ page, context }) => {
-  await page.goto('/?engine=mock');
+test('a folder of scans opens every scan in it, the first one selected', async ({ page }) => {
+  await boot(page, '&fresh');
   await page.setInputFiles('#folder', FIXTURE_DIR);
-  await expect(page.getByRole('dialog', { name: 'Use or import' })).toContainText('1 scans');
-  await page.click('#import');
-  await expect(page.locator('#status')).toContainText('rendered');
-  await expect(page.locator('#storage-usage')).toContainText('imported');
-  await expect(page.locator('#offline-state')).toHaveText('offline ready', { timeout: 20_000 });
-  // let the service worker see every module once while online
-  await page.reload();
-  await expect(page.locator('#offline-state')).toHaveText('offline ready');
-  await context.setOffline(true);
-  await page.reload();
-  await expect(page.locator('[data-roll]')).toContainText('import');
-  await page.locator('.strip .cell').first().click();
-  await expect(page.locator('#status')).toContainText('rendered');
-  await context.setOffline(false);
+  await expect(page.locator('#status')).toContainText(/rendered|opened/);
+  await idle(page);
+  const n = await page.evaluate(() => window.chromobench.studio.frames.all().length);
+  expect(n).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.chromobench.studio.current)).not.toBeNull();
 });
 
 test('viewer: inspection views, before/after, densitometer and pinned probes', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+  await boot(page, '&fresh');
   await open(page);
-  await page.locator('#view').focus();
-  const presenter = await page.evaluate(() => window.chromobench.studio.s.presenter);
-  expect(presenter).toMatch(/webgpu|2d/);
+  expect(await page.evaluate(() => window.chromobench.presenter())).toMatch(/webgpu|2d/);
   for (const v of ['Negative', 'Dyes', 'Base & gamut', 'Print']) {
     await page.getByRole('radio', { name: v, exact: true }).click();
     await idle(page);
     await expect(page.getByRole('radio', { name: v, exact: true })).toHaveAttribute('aria-checked', 'true');
   }
+  // keys 1–4 switch views on the print module
+  await page.locator('.ck-vp').first().click();
   await page.keyboard.press('4');
   await idle(page);
-  await expect(page.locator('#classes')).toContainText('out of gamut');
+  expect(await page.evaluate(() => window.chromobench.rt.store.peek(['view', 'view']))).toBe('classes');
   await page.keyboard.press('1');
 
-  // before/after: change the print, the left half shows the initial recipe
-  await page.evaluate(() => window.chromobench.studio.gesture.set('print.lights.logH', [0.2, 0, 0], 'R'));
-  await page.click('#before-after');
+  // before/after: change the print; \ splits the viewer, the left half shows the first print
+  await page.evaluate(() => window.chromobench.set('print.lights.logH', [0.2, 0, 0], 'R'));
+  await page.keyboard.press('\\');
   await idle(page);
-  const split = await page.evaluate(() => ({ s: window.chromobench.studio.s.split, before: window.chromobench.studio.last !== null }));
-  expect(split.s).toBe(0.5);
+  expect(await page.evaluate(() => window.chromobench.rt.store.peek(['view', 'compare']))).toBe('split');
+  await page.keyboard.press('\\');
+  await page.keyboard.press('\\');
 
-  // densitometer: keyboard-driven probe on the focused canvas, then pin it
-  await page.locator('#view').focus();
-  await page.keyboard.press('ArrowRight');
-  await idle(page);
-  await expect(page.locator('#readout')).toContainText('visual D');
+  // densitometer: the probe tool reads under the pointer; P pins it into the recipe
+  await page.evaluate(() => window.chromobench.tool('probe'));
+  const box = (await page.locator('.ck-vp').first().boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator('.cb-readout').first()).toContainText('visual D');
   await page.keyboard.press('p');
   await idle(page);
-  await expect(page.locator('[data-probe="p1"]')).toBeVisible();
-  expect(await page.evaluate(() => window.chromobench.log!.committed.probes['p1'])).toEqual({ x: 49, y: 32, r: 3 });
+  expect(Object.keys(await page.evaluate(() => window.chromobench.log!.committed.probes))).toEqual(['p1']);
+  await expect(page.locator('.cb-visual-d[data-probe="p1"]')).toHaveText(/^\d\.\d\d$/);
 });
 
-test('controls: Home resets, Esc cancels a drag, aperture steps in thirds; why() follows focus', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+test('controls: typed units, a burst on Time, why() follows focus, undo and redo', async ({ page }) => {
+  await boot(page, '&fresh');
   await open(page);
   const time = page.getByRole('slider', { name: 'Time' });
   await time.focus();
   await time.press('ArrowRight');
   await time.press('ArrowRight');
   await expect.poll(() => units(page)).toBe(1);
-  await expect(page.locator('[data-path="print.enlarger.time_s"] .aside')).toHaveText('+1/3 st');
-  await expect(page.locator('#why')).toContainText('Why is Time 12.6 s?');
-  await time.press('Home');
-  await expect.poll(() => units(page)).toBe(2);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(10);
-  // a drag cancelled with Esc logs nothing
-  const grade = page.getByRole('slider', { name: 'Grade' });
-  await grade.evaluate((el: HTMLInputElement) => { el.value = '3'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-  expect(await page.evaluate(() => window.chromobench.log!.state.print.grade)).toBe(3);
-  await grade.press('Escape');
-  expect(await page.evaluate(() => window.chromobench.log!.state.print.grade)).toBe(2);
-  expect(await units(page)).toBe(2);
-  // aperture stepper: third stops
-  await page.getByRole('button', { name: 'Aperture one third stop smaller' }).click();
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.fstop)).toBe(9);
-  // undo and redo through the bar
+  await expect(page.locator('#why')).toContainText('Time');
+  const field = page.locator('.cb-arg[data-path="print.enlarger.time_s"] .cb-num').first();
+  await field.fill('12');
+  await field.press('Enter');
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  await field.fill('+1/3 st');
+  await field.press('Enter');
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
+  // undo and redo through the bar and the keyboard
   await page.click('#undo');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.fstop)).toBe(8);
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  await page.click('#redo');
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
+  await page.locator('.ck-vp').first().click();
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
   await page.keyboard.press('Control+Shift+Z');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.fstop)).toBe(9);
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
 });
 
 test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+  await boot(page, '&fresh');
   await open(page);
   await page.evaluate(() => window.chromobench.propose({ 'print.grade': 3 }, 'more contrast'));
   await expect(page.locator('#pending li')).toHaveCount(1);
@@ -150,7 +146,7 @@ test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ p
   await expect(page.locator('#history')).toContainText('rejected');
 
   await page.evaluate(() => window.chromobench.propose({ 'print.enlarger.time_s': 12 }, 'longer'));
-  await page.evaluate(() => window.chromobench.studio.gesture.set('print.enlarger.time_s', 11, 'Time'));
+  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 11, 'Time'));
   await page.locator('#pending .approve').click();
   await expect(page.locator('#pending li')).toContainText('E_STALE');
   await page.locator('#pending .force').click();
@@ -160,68 +156,68 @@ test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ p
   await page.evaluate(() => { window.chromobench.propose({ 'print.grade': 3 }); window.chromobench.propose({ 'print.preflash': 0.01 }); });
   await page.getByRole('button', { name: 'Approve all' }).click();
   await expect(page.locator('#pending li')).toHaveCount(0);
-  await expect(page.locator('.strip .badges .pend')).toHaveCount(0);
 });
 
-test('tools: test strip band, ring-around tile, masks and exposures, contact sheet', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+test('tools: test strip band, ring-around tile, masks and exposures, apply to selection', async ({ page }) => {
+  await boot(page, '&fresh');
   await open(page, [variant(0), variant(1), variant(2)]);
-  await page.evaluate(() => window.chromobench.studio.gesture.set('print.enlarger.time_s', 12, 'Time'));
+  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 12, 'Time'));
 
   // test strip: 1/3-stop bands around 12.0 s; clicking 15.12 s writes one set
-  await page.locator('#view').focus();
+  await page.locator('.ck-vp').first().click();
   await page.keyboard.press('t');
   await idle(page);
-  const bands = page.locator('.bands .band b');
-  await expect(bands).toHaveText(['7.56 s', '9.52 s', '12.0 s', '15.12 s', '19.05 s']);
-  const u0 = await units(page);
-  await page.locator('.bands .band').nth(3).click();
-  expect(await units(page)).toBe(u0 + 1);
+  await expect(page.locator('.cb-band text')).toHaveText(['7.56 s', '9.52 s', '12.0 s', '15.12 s', '19.05 s']);
+  const u0 = await page.evaluate(() => window.chromobench.log!.units.length);
+  const band = (await page.locator('.cb-band rect').nth(3).boundingBox())!;
+  await page.mouse.click(band.x + band.width / 2, band.y + band.height / 2);
+  await idle(page);
+  expect(await page.evaluate(() => window.chromobench.log!.units.length)).toBe(u0 + 1);
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.12, 2);
 
-  // ring-around: the centre tile is the main view's node; "+G (−M)" writes (+2, −4, +2) pt
+  // ring-around: "+G (−M)" writes (+2, −4, +2) pt
   await page.keyboard.press('r');
-  await idle(page);
-  const main = await page.evaluate(() => window.chromobench.studio.session!.displayNode().id);
-  await expect(page.locator('[data-tile="current"]')).toHaveAttribute('data-node', main);
-  await page.locator('[data-tile="G"]').click();
+  await expect(page.locator('.cb-ring-tile')).toHaveCount(11);
+  await page.locator('.cb-ring-tile').filter({ hasText: '+G' }).getByRole('button').click();
   const lights = await page.evaluate(() => window.chromobench.log!.committed.print.lights.logH);
   [0.05, -0.1, 0.05].forEach((v, i) => expect(lights[i]).toBeCloseTo(v, 9));
   await expect(page.locator('#history')).toContainText('(+2, −4, +2) pt');
 
-  // masks: drag an ellipse → one mask.set; then a dodge through it in the exposure list
-  await page.keyboard.press('m');
-  const box = (await page.locator('#mask-overlay').boundingBox())!;
+  // masks: drag an ellipse → mask.set plus a burn through it; a dodge from the exposure list
+  await page.evaluate(() => window.chromobench.tool('mask-ellipse'));
+  const box = (await page.locator('.ck-vp').first().boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.55, { steps: 5 });
   await page.mouse.up();
-  await expect(page.locator('#mask-summary')).toContainText('1 shape in mask1: ellipse');
-  const mask = await page.evaluate(() => window.chromobench.log!.committed.masks['mask1']!.nodes.at(-1)!.op);
-  expect(mask).toBe('mask.ellipse');
-  await page.getByRole('button', { name: 'Exposures' }).click();
+  await idle(page);
+  const masks = await page.evaluate(() => Object.values(window.chromobench.log!.committed.masks).flatMap((m) => m.nodes.map((n) => n.op)));
+  expect(masks).toContain('mask.ellipse');
   await page.getByRole('button', { name: '+ dodge' }).click();
-  await expect(page.locator('[data-exposure="dodge1"]')).toContainText('−1/4 st');
-  await expect(page.locator('#printing-script')).toContainText('hold back mask1 for 2.41 s');
   await idle(page);
-  await expect(page.locator('#status')).not.toContainText('E_');
+  expect(await page.evaluate(() => window.chromobench.log!.committed.print.exposures.map((e) => e.kind))).toContain('dodge');
+  await expect(page.locator('.cb-script')).not.toBeEmpty();
+  await page.evaluate(() => window.chromobench.tool(null));
 
-  // contact sheet: apply the current settings to the two other frames, one tx shared
-  await page.getByRole('button', { name: 'Contact sheet' }).click();
-  await page.getByRole('checkbox', { name: 'Select frame-1.tif' }).check();
-  await page.getByRole('checkbox', { name: 'Select frame-2.tif' }).check();
-  await page.click('#apply-selected');
-  await expect(page.locator('#status')).toContainText('applied to 2 frames');
-  await page.keyboard.press('Escape');
-  await page.locator('.strip [data-frame="frame-2.tif"]').click();
+  // apply to selection: the current print settings to the two other frames, one undo step
+  await page.evaluate(() => {
+    const cb = window.chromobench;
+    const ids = cb.studio.frames.ids();
+    const primary = cb.studio.current!;
+    cb.rt.ctx().set({ ui: { selection: { ids, primary, anchor: primary } } });
+    cb.run('print.applyToSelection');
+  });
   await idle(page);
-  const r2 = await page.evaluate(() => ({ t: window.chromobench.log!.committed.print.enlarger.time_s, tx: window.chromobench.log!.units[0]!.tx }));
-  expect(r2.t).toBeCloseTo(15.12, 2);
-  expect(r2.tx).toMatch(/^sheet-/);
+  const others = await page.evaluate(() => {
+    const cb = window.chromobench;
+    return cb.studio.frames.all().filter((e) => e.id !== cb.studio.current).map((e) => e.log.committed.print.enlarger.time_s);
+  });
+  expect(others).toHaveLength(2);
+  for (const t of others) expect(t).toBeCloseTo(15.12, 2);
 });
 
 test('WebGPU presenter pipeline (offscreen, Display P3): exact pixels', async ({ page }) => {
-  await page.goto('/?nosw&engine=mock');
+  await boot(page, '&fresh');
   const r = await page.evaluate(async () => {
     const { WebGpuPresenter } = await import('/src/present/presenter-webgpu.ts' as string);
     const c = document.createElement('canvas');

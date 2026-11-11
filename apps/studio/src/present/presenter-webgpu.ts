@@ -3,6 +3,7 @@
 // 'standard' tone mapping (prints never exceed paper white). One full-screen triangle samples the
 // engine's result through the viewport transform: nearest at or above 1:1, bilinear below.
 // Before/after binds a second texture and draws the split line in the shader.
+import { configureCanvas, type CanvasConfig, type CanvasSpace } from '@chromobench/output';
 import { fromHalf, toHalf, toRgba, type Colours, type PresentImage, type Presenter, type ViewTransform } from './presenter.ts';
 
 const WGSL = /* wgsl */ `
@@ -53,9 +54,12 @@ fn sample(t: texture_2d<f32>, tc: vec2f, size: vec2f, linear: bool) -> vec4f {
 
 export class WebGpuPresenter implements Presenter {
   readonly kind = 'webgpu' as const;
-  readonly colorSpace: 'display-p3' | 'srgb';
-  readonly format: GPUTextureFormat;
+  private space: 'display-p3' | 'srgb';
+  private fmt: GPUTextureFormat;
   private readonly device: GPUDevice;
+  /** false when the device is shared (one device for every viewport of the studio): dispose() keeps it */
+  private owns = true;
+  private cfg: CanvasConfig | null = null;
   private readonly context: GPUCanvasContext | null;
   private readonly canvas: HTMLCanvasElement;
   private readonly pipelines = new Map<GPUTextureFormat, GPURenderPipeline>();
@@ -71,12 +75,40 @@ export class WebGpuPresenter implements Presenter {
     this.device = device;
     this.context = context;
     this.canvas = canvas;
-    this.format = format;
-    this.colorSpace = colorSpace;
+    this.fmt = format;
+    this.space = colorSpace;
     this.uniform = device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     void device.lost.then((info) => {
       if (!this.disposed) this.onLost(info.message);
     });
+  }
+
+  get colorSpace(): 'display-p3' | 'srgb' {
+    return this.cfg?.space ?? this.space;
+  }
+  get format(): GPUTextureFormat {
+    return this.cfg?.format ?? this.fmt;
+  }
+
+  /**
+   * A presenter on `canvas` with a device the host already holds (the shell asks for presenters synchronously, one
+   * per viewport). The canvas is configured by CHB-011's configureCanvas: the display's widest space (display-p3
+   * where (color-gamut: p3) matches, else srgb), rgba16float, and a reconfiguration when the window moves to a
+   * display of another gamut (`onSpace`). Returns null when the canvas has no WebGPU context.
+   */
+  static onDevice(canvas: HTMLCanvasElement, device: GPUDevice, o: { onSpace?: (s: CanvasSpace) => void; space?: CanvasSpace } = {}): WebGpuPresenter | null {
+    let cfg: CanvasConfig;
+    try {
+      cfg = configureCanvas(canvas, device, { ...(o.onSpace ? { onChange: o.onSpace } : {}), ...(o.space ? { space: o.space } : {}) });
+    } catch {
+      return null;
+    }
+    const context = canvas.getContext('webgpu');
+    if (!context) return null;
+    const p = new WebGpuPresenter(device, context, canvas, cfg.format, cfg.space);
+    p.cfg = cfg;
+    p.owns = false;
+    return p;
   }
 
   /**
@@ -196,6 +228,8 @@ export class WebGpuPresenter implements Presenter {
     this.disposed = true;
     this.main?.tex.destroy();
     this.before?.destroy();
-    this.device.destroy();
+    this.cfg?.dispose();
+    this.uniform.destroy();
+    if (this.owns) this.device.destroy();
   }
 }

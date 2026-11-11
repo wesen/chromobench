@@ -19,6 +19,12 @@ export interface FrameEntry {
   readonly initial: FrameRecipe;
 }
 
+/**
+ * A frame's first recipe computed from the opened frame (CHB-023: the automatic first print). It gets the default
+ * recipe and the frame's graph (the source is registered in it); it runs only when no log is saved for the hash.
+ */
+export type InitialRecipe = (defaults: FrameRecipe, graph: Graph) => Promise<FrameRecipe>;
+
 export interface FramesOptions {
   kv?: KV | null;
   mode?: AgentMode;
@@ -58,7 +64,7 @@ export class Frames {
   }
 
   /** Opens bytes in the engine and creates (or resumes, by hash) the frame's edit log. */
-  async open(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe } = {}): Promise<FrameEntry> {
+  async open(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe | InitialRecipe } = {}): Promise<FrameEntry> {
     const sha = sha256Hex(bytes);
     const existing = this.all().find(e => e.sha === sha);
     if (existing) return existing;
@@ -67,7 +73,10 @@ export class Frames {
     graph.registerSource(info);
     const saved = this.kv ? await this.kv.get<EditLogData>('logs', sha) : undefined;
     const opts = { mode: this.mode, graph, ...(this.now ? { now: this.now } : {}) };
-    const log = saved ? new EditLog(saved, opts) : EditLog.create(o.initial ?? defaultFor(sha, name), { ...opts, by: 'auto' });
+    const first = saved ? null : typeof o.initial === 'function' ? await o.initial(defaultFor(sha, name), graph) : o.initial;
+    const again = this.all().find(e => e.sha === sha);
+    if (again) return again; // opened twice at once: the first open wins
+    const log = saved ? new EditLog(saved, opts) : EditLog.create(first ?? defaultFor(sha, name), { ...opts, by: 'auto' });
     return this.add({ id: log.frame, sha, name, info, graph, log, initial: log.toJSON().initial });
   }
 

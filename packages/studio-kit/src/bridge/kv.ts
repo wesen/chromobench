@@ -1,6 +1,6 @@
 // The storage studio-kit needs (CHB-009's KV from apps/studio/src/storage/db.ts): IndexedDB in the host, a Map in
 // tests and the dev host. The IndexedDB implementation stays in the host as a service.
-// TODO(CHB-019 migration): apps/studio/src/storage/db.ts implements this interface; import its type from here.
+// apps/studio/src/storage/db.ts implements this interface over IndexedDB (CHB-019 migration).
 
 export const KV_STORES = ['projects', 'rolls', 'frames', 'logs', 'snapshots', 'handles', 'settings', 'threads', 'workspace'] as const;
 export type KvStore = (typeof KV_STORES)[number];

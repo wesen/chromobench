@@ -4,7 +4,7 @@
 import { writeTiff16 } from '@chromobench/engine-mock';
 import type { SolveInputs, Vec3 } from '../tables/inputs.ts';
 import type { Segment } from '../chain/program.ts';
-import { OP } from '../chain/program.ts';
+import { lowerDisplay, OP } from '../chain/program.ts';
 import type { Setup } from './fixtures.ts';
 
 export const TREB: Vec3 = [0.8, 0.75, 0.7];
@@ -68,15 +68,18 @@ export function scanChain(S: Setup, upTo: 'dyes' | 'paper-logH' | 'print-xyz' | 
   const ctxAt = (i: number) => P.ctx(chain, i);
   const ops: Segment['ops'] = [{ code: OP.DENSITY, p0: [...treb] }, { code: OP.DYES }];
   let disp: Segment['disp'];
+  let ok: Segment['ok'];
   if (upTo !== 'dyes') {
     ops.push({ code: OP.EXPOSE, p0: [...S.offset] });
     if (upTo !== 'paper-logH') {
       ops.push({ code: OP.DEVELOP }, { code: OP.REFLECT }, { code: OP.FLARE, p0: P.flare(ctxAt(3), flarePercent), p1: [1] });
       if (upTo === 'display') {
-        ops.push({ code: OP.ADAPT, p0: P.adaptGains(ctxAt(3), 'D65') }, { code: OP.DISPLAY });
-        disp = P.displayMatrix(ctxAt(4), 'print-as-seen');
+        const d = lowerDisplay(P.display(ctxAt(4), { rendering: 'print-as-seen', knee: 'clip', space: 'srgb' }));
+        ops.push({ code: OP.ADAPT, p0: P.adaptGains(ctxAt(3), 'D65') }, d.op);
+        disp = d.disp;
+        ok = d.ok;
       }
     }
   }
-  return { ops, tables: { solve: S.solve, pd: S.pd, print: S.print, curves: S.develop }, ...(disp ? { disp } : {}) };
+  return { ops, tables: { solve: S.solve, pd: S.pd, print: S.print, curves: S.develop }, ...(disp ? { disp } : {}), ...(ok ? { ok } : {}) };
 }

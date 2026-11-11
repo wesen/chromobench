@@ -239,15 +239,22 @@ const densitometer = list('cb-densitometer', s => ({ ...frameDeps(s, { props: {}
   const studio = studioOf(m);
   const pins = Object.entries(v.r.probes ?? {}) as [string, { x: number; y: number }][];
   const t = h('table', { class: 'cb-tbl cb-mono' });
-  t.append(h('tr', {}, ...['probe', 'x, y', 'D (R G B)'].map(x => h('th', { text: x }))));
+  t.append(h('tr', {}, ...['probe', 'x, y', 'visual D', 'D (R G B)'].map(x => h('th', { text: x }))));
   const rows: [string, number, number][] = [...(v.probe ? [['cursor', v.probe[0], v.probe[1]] as [string, number, number]] : []), ...pins.map(([id, p]) => [id, p.x, p.y] as [string, number, number])];
   for (const [id, x, y] of rows) {
     const d = h('td', { text: '…' });
-    t.append(h('tr', {}, h('td', { text: id }), h('td', { text: `${x}, ${y}` }), d));
+    const vis = h('td', { class: 'cb-visual-d', 'data-probe': id, text: '…' });
+    t.append(h('tr', {}, h('td', { text: id }), h('td', { text: `${x}, ${y}` }), vis, d));
     studio
       .measure(v.f, v.r, x, y)
-      .then(r => void (d.textContent = r ? r.D.map(z => z.toFixed(2)).join(' ') : '—'))
-      .catch(() => void (d.textContent = '—'));
+      .then(r => {
+        d.textContent = r ? r.D.map(z => z.toFixed(2)).join(' ') : '—';
+        vis.textContent = r && r.visual !== undefined ? r.visual.toFixed(2) : '—';
+      })
+      .catch(() => {
+        d.textContent = '—';
+        vis.textContent = '—';
+      });
   }
   if (!rows.length) el.append(h('p', { class: 'cb-empty', text: 'Probe the print (I), then P pins it' }));
   else el.append(t);
@@ -259,7 +266,7 @@ const readout = list('cb-readout', s => ({ f: cur(s), r: cur(s) ? s.recipes?.[cu
   el.append(span);
   studioOf(m)
     .measure(v.f, v.r, v.probe[0], v.probe[1])
-    .then(r => void (span.textContent = r ? `${v.probe[0]}, ${v.probe[1]} · D ${r.D.map(z => z.toFixed(2)).join(' ')}` : ''))
+    .then(r => void (span.textContent = r ? `${v.probe[0]}, ${v.probe[1]} · ${r.visual !== undefined ? `visual D ${r.visual.toFixed(2)} · ` : ''}D ${r.D.map(z => z.toFixed(2)).join(' ')}` : ''))
     .catch(() => undefined);
 }, same);
 

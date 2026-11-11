@@ -5,7 +5,7 @@
 //
 //   pnpm --filter @chromobench/studio-kit demo        → http://localhost:4187/demo/?variant=classic
 //
-// TODO(CHB-019 migration): the real host is apps/studio (IndexedDB KV, OPFS library, WebGPU presenter, engine choice).
+// The real host is apps/studio (IndexedDB KV, WebGPU presenter, engine choice, ingest, first print, export).
 
 import { closest } from '@chromobench/contract';
 import { m1Codes, MockEngine, M1, writeTiff16 } from '@chromobench/engine-mock';

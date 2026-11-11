@@ -1,5 +1,6 @@
 // Pointwise programs for kernels/pointwise.wgsl: op codes and the uniform layout. The f64 reference of
 // a program is core's reference engine on the same graph (parity/chain-tests.ts, CHB-017).
+import { oklabFor, outputSpace, type DisplaySetup } from '@chromobench/core';
 import { defineStruct } from '../layout.ts';
 import type { CurveRow } from '../physics/core.ts';
 import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs } from '../tables/inputs.ts';
@@ -15,7 +16,33 @@ export const PROG = defineStruct('Prog', [
   ['Kinv', 'mat3x3f'], ['K', 'mat3x3f'], ['Dbase', 'vec4f'],
   ['rangesA', 'vec4f'], ['rangesB', 'vec4f'], ['outMap', 'vec4f'],
   ['frame', 'vec4u'], ['srcOrigin', 'vec4i'], ['misc', 'vec4u'], ['solver', 'vec4f'], ['disp', 'mat3x3f'],
+  ['okM1', 'mat3x3f'], ['okM1i', 'mat3x3f'],
 ]);
+
+/** output.display knee codes (op flags; kernels/pointwise.wgsl op 8). */
+export const KNEE = Object.freeze({ clip: 0, tanh: 1, oklch: 2 });
+
+/**
+ * output.display lowered from core's DisplaySetup (CHB-011): the matrix before the knee, the knee code,
+ * the space's ICC type-3 TRC (p0 = g a b c, p1.x = d), the lightness rule (p1.y threshold, p1.z 1 for
+ * the print-as-seen knee, 0 for the scan-of-print clip), the tanh shoulder start (p1.w), and the
+ * per-space OkLab matrix for the oklch knee. 'cam16-ucs' has no GPU kernel yet: it lowers to oklch.
+ */
+export function lowerDisplay(ds: DisplaySetup, node?: string): { op: PwOp; disp: Mat3; ok: [Mat3, Mat3]; approx: boolean } {
+  const c = ds.compress;
+  const S = outputSpace(ds.space);
+  const cv = S.curve;
+  const approx = c.algorithm === 'cam16-ucs';
+  const flags = c.algorithm === 'clip' ? KNEE.clip : c.algorithm === 'tanh-shoulder' ? KNEE.tanh : KNEE.oklch;
+  const ok = oklabFor(ds.space);
+  const op: PwOp = {
+    code: OP.DISPLAY, flags,
+    p0: [cv.g, cv.a ?? 1, cv.b ?? 0, cv.c ?? 0],
+    p1: [cv.d ?? 0, c.lightness ? c.lightness[0] : 1, c.lightness ? 1 : 0, c.shoulder ?? 0.82],
+    ...(node ? { node } : {}),
+  };
+  return { op, disp: ds.M, ok: [ok.M1s, ok.M1sInv], approx };
+}
 
 export interface PwOp {
   code: number;
@@ -35,8 +62,11 @@ export interface SegmentTables {
   curves?: CurveRow;
 }
 
-/** `disp`: output.display's matrix before the knee (default XYZ_TO_SRGB); one per segment. */
-export interface Segment { ops: PwOp[]; tables: SegmentTables; disp?: Mat3 }
+/**
+ * `disp`: output.display's matrix before the knee (default XYZ_TO_SRGB); `ok`: the space's OkLab LMS
+ * matrix and its inverse (oklch knee). One display per segment.
+ */
+export interface Segment { ops: PwOp[]; tables: SegmentTables; disp?: Mat3; ok?: [Mat3, Mat3] }
 
 export const XYZ_TO_SRGB: Mat3 = [[3.2404542, -1.5371385, -0.4985314], [-0.969266, 1.8760108, 0.041556], [0.0556434, -0.2040259, 1.0572252]];
 
@@ -72,6 +102,7 @@ export function packProgram(a: PackArgs): ArrayBuffer {
     misc: [seg.ops.length, a.lookup, exactBits(seg, a.exact), spectralSamples(seg)],
     solver: s ? [s.tol, Math.max(s.gtol, 1e-6), s.maxIt, s.hi] : [0, 0, 0, 4],
     disp: seg.disp ?? XYZ_TO_SRGB,
+    okM1: seg.ok?.[0] ?? I, okM1i: seg.ok?.[1] ?? I,
   });
 }
 

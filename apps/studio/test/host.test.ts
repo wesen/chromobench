@@ -10,8 +10,7 @@ import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { describe, expect, it } from 'vitest';
 import { firstPrint, gridTime, integratedExposure, measureExposure } from '../src/host/first-print.ts';
 import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
-import { evaluateBands } from '../src/core/scheduler.ts';
-import { bandBoxes, stripRecipe, stripValues } from '../src/core/tools.ts';
+import { bandBoxes, evaluateBands, stripRecipe, stripValues } from '@chromobench/studio-kit';
 
 const bytes = makeM1Tiff();
 const sha = sha256Hex(bytes);

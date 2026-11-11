@@ -6,7 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./dom": "./src/dom/index.ts",
-    "./studio-kit.css": "./src/dom/studio-kit.css"
+    "./studio-kit.css": "./src/dom/studio-kit.css",
+    "./variants": {
+      "types": "./variants/index.d.ts",
+      "default": "./variants/index.js"
+    }
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"

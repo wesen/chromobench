@@ -1,0 +1,19 @@
+{
+  "name": "@chromobench/output",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@chromobench/contract": "workspace:*",
+    "@chromobench/core": "workspace:*",
+    "lcms-wasm": "1.0.5"
+  },
+  "devDependencies": {
+    "@chromobench/engine-mock": "workspace:*",
+    "fast-png": "8.0.0",
+    "utif": "3.1.0"
+  }
+}

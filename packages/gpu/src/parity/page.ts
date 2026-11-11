@@ -13,6 +13,7 @@ import { buildTableF64 } from '../physics/oracle.ts';
 import { bradfordMatrix, D65 } from '@chromobench/core';
 import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
+import { OUTPUT_TESTS } from './output-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { loadDefaultPhysicsData } from '../physics/data.ts';
 // the conformance generator, imported by path: the package index also exports Vitest wrappers
@@ -193,6 +194,7 @@ const TESTS: Record<string, Test> = {
 
   ...CHAIN_TESTS,
   ...SPATIAL_TESTS,
+  ...OUTPUT_TESTS,
 
   /** CHB-002's generated conformance suite against GpuEngine (fresh engine per case, shared device). */
   async conformance(o) {

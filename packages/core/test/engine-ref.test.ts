@@ -5,7 +5,7 @@ import { allOps, Graph, sha256Hex } from '@chromobench/contract';
 import { runConformance } from '@chromobench/conformance';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import {
-  adaptBradford, D65, displayEncode, interimData, makeForward, makePrintChain, makeScanner, REFERENCE_OPS, RefEngine, resolveStock, solveDyes, SPEKTRAFILM,
+  adaptBradford, D65, displayPixel, displaySetup, interimData, makeForward, makePrintChain, makeScanner, REFERENCE_OPS, RefEngine, resolveStock, solveDyes, SPEKTRAFILM,
 } from '../src/index.ts';
 
 runConformance('reference', () => new RefEngine());
@@ -57,11 +57,13 @@ describe('reference engine', () => {
     const out = I('output.display', [I('view.adapt', [I('view.flare', [xyz], { flare: 0 })])], { rendering: 'print-as-seen', knee: 'oklch' });
     const [dyes, rgb] = [await read(pat), await read(out)];
     const ch = makePrintChain({ data: interimData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' });
+    // CHB-011: print-as-seen adapts from print-xyz's white (D65 after view.adapt); its lightness knee starts at the paper white
+    const ds = displaySetup({ rendering: 'print-as-seen', white: D65, paperWhite: adaptBradford(ch.paperWhite, ch.white, D65), space: 'srgb', knee: 'oklch' });
     for (let i = 0; i < 12; i++) {
       const c = [dyes[3 * i]!, dyes[3 * i + 1]!, dyes[3 * i + 2]!];
       const xx = ch.xOfDyes(c).map((v, k) => v + [0.05, 0, -0.025][k]!);
       const X = ch.xyzOfX(xx);
-      const want = displayEncode(adaptBradford(X, ch.white, D65));
+      const want = displayPixel(adaptBradford(X, ch.white, D65), ds);
       for (let k = 0; k < 3; k++) {
         expect(Math.abs(rgb[3 * i + k]! - want[k]!)).toBeLessThan(1e-12);
         expect(rgb[3 * i + k]!).toBeGreaterThanOrEqual(0);
