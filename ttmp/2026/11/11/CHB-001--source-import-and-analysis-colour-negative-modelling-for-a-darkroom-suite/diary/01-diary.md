@@ -907,3 +907,74 @@ studio's production build succeeds. The demo is ready for the user to try on a r
 
 - Run: `pnpm --filter @chromobench/studio build && pnpm --filter @chromobench/studio preview` →
   http://localhost:4173 (Chrome/Edge); `?engine=gpu|reference|mock`, `?long=0` for full size.
+
+## Step 14: Phase-2 integration branch: migrated studio, 16-bit export and masks together
+
+While the user showed the CHB-023 demo to his father, three more agents finished: CHB-011 (encoders, ICC, display
+path, GPU 16-bit export, tiled runner), CHB-019 part 2 (apps/studio migrated from React to studio-kit with demo
+parity) and CHB-010 stages 3–4 (print.combine, mask.*, density mask on both real engines). To leave the user's
+working copy untouched, I integrated them in a separate worktree, `../chromobench-integration`, on
+`task/phase2-integration`. All 2296 unit tests pass and the studio builds.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok continue, while i'm discussing this with my dad."
+**Assistant interpretation:** Keep working; do not disturb the running demo or its working copy.
+**Inferred user intent:** Progress without interrupting the session with the photographer.
+**Commit (code):** 1ee02c9 (merge task/chb-019-migrate, which already contains task/chb-011-output), 72718dd (merge
+task/chb-010-masks, which contains the agent's merge 47d983e of the migrated studio)
+
+### What I did
+
+- Launched CHB-010 stages 3–4, CHB-020 (roll workflow) and CHB-019 part 2 (migration) in worktrees; told the
+  migration agent to merge `task/chb-011-output` and use `@chromobench/output` for export.
+- `git worktree add -b task/phase2-integration ../chromobench-integration task/ui-guides`; merged
+  `task/chb-019-migrate` (clean). Merging `task/chb-010-masks` conflicted in six places in
+  `packages/gpu/src/engine-gpu.ts` (the masks DAG evaluation vs CHB-011's evaluateU16/pack16 and CHB-023's
+  cacheResult); aborted and asked the masks agent to merge the migration branch into its own and resolve (47d983e:
+  `renderGraph` behind the existing `render<T>`, so evaluate and evaluateU16 share it; region-only source upload kept;
+  2296 unit, 68 browser on its run). Then merged `task/chb-010-masks` cleanly.
+- Checks in the integration worktree: `pnpm install --offline`; typecheck clean; lint "import boundaries ok (248
+  file checks)"; `pnpm test` "65 passed (65) files, 2296 passed (2296)"; `pnpm --filter @chromobench/studio build`
+  "✓ built in 2.79s". Browser tests not re-run here (ports 4185/4471 held by stale servers; both agents ran them with
+  temporary configs: 68 and 32+8 passed).
+
+### Why
+
+- The agent that wrote the DAG evaluation is best placed to merge it with the code that changed under it.
+
+### What worked
+
+- Integration without touching the user's checkout.
+
+### What didn't work
+
+- First merge attempt of the masks branch (conflicts above), resolved by delegation.
+
+### What I learned
+
+- Stale Vite servers from agents' timing runs block the fixed gpu-parity port 4185; the port should be configurable
+  like STUDIO_PORT.
+
+### What was tricky to build
+
+- N/A for me; see CHB-010 diary Step 22 for the evaluator merge.
+
+### What warrants a second pair of eyes
+
+- Tiled 16-bit export of prints with wide feathers or density masks will seam at tile edges (blurs stop at the tile).
+- Flash fogs through the negative, not uniformly (contract request C6); the UI should not offer flash yet.
+
+### What should be done in the future
+
+- When the user is done: switch the working copy to `task/phase2-integration` (or merge it into task/ui-guides);
+  merge CHB-020 when it lands; contract 0.3 round (studio-kit R1–R2, core C1–C8, output R1–R3, CHB-020/022 proposals);
+  make the gpu-parity port configurable.
+
+### Code review instructions
+
+- `git -C ../chromobench-integration log --first-parent -4`; `apps/studio/DEMO.md` there.
+
+### Technical details
+
+- Run the new studio: `cd ../chromobench-integration && pnpm --filter @chromobench/studio dev --port 4180`.
