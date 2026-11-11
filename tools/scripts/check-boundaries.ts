@@ -1,7 +1,9 @@
 // Import boundaries (guide §5.1), enforced in CI:
 // - packages/contract imports nothing from the workspace (only @noble/hashes and relative files);
 // - apps/studio and packages/dsl may import @chromobench/contract (and engines through injection),
-//   never @chromobench/core, gpu or ingest directly.
+//   never @chromobench/core, gpu or ingest directly;
+// - packages/shell/src imports only its own files (no @chromobench/*, no dependencies), and its headless half
+//   (core, ir, build, app, themes, testing, index.ts) never imports the DOM half (dom/).
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +14,9 @@ const RULES: { dir: string; forbid: RegExp; why: string }[] = [
   { dir: 'packages/contract/src', forbid: /^(?!@noble\/hashes|\.\.?\/)/, why: 'the contract depends only on @noble/hashes' },
   { dir: 'apps/studio/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the UI never calls physics code directly' },
   { dir: 'packages/dsl/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the DSL never calls physics code directly' },
+  { dir: 'packages/shell/src', forbid: /^(?!\.\.?\/)/, why: 'the shell imports only its own files (generic, no dependencies)' },
+  ...['core', 'ir', 'build', 'app', 'themes', 'testing'].map(d => ({ dir: `packages/shell/src/${d}`, forbid: /(^|\/)dom\//, why: 'the headless half of the shell never imports the DOM half' })),
+  { dir: 'packages/shell/src', forbid: /^\.\/dom\//, why: 'the shell entry point is headless; the DOM half is @chromobench/shell/dom' },
 ];
 
 function* files(dir: string): Generator<string> {

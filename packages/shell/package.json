@@ -1,0 +1,18 @@
+{
+  "name": "@chromobench/shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dom": "./src/dom/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./shell.css": "./src/dom/shell.css"
+  },
+  "scripts": {
+    "demo": "vite --config demo/vite.config.ts"
+  },
+  "devDependencies": {
+    "happy-dom": "21.0.4"
+  }
+}

@@ -1,0 +1,44 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`explain > the mini studio explains deterministically (snapshot) 1`] = `
+"shell "Mini Studio" · theme lightroom · kits: none
+module library "Library" key G
+  left   dockcol  width 220
+           panel navigator "Navigator"
+             stat "Selected"
+  center gridview grid  activate ρ  cell θ  empty "No photos match the filter"  items τ  keys {Enter}  select ui.selection  size τ
+  right  dockcol  width 260
+           panel filter "Filter"
+             slider 0…5 "Minimum rating"  bind view.filter.minRating  reset 0  step 1
+             slider 60…280 "Thumbnail size"  bind view.thumbSize  reset 140  step 10
+  bottom filmstrip strip  cell θ  items τ  select ui.selection
+module develop "Develop" key D
+  left   dockcol  width 220
+           panelref navigator
+             → panel navigator "Navigator"
+               stat "Selected"
+  center viewport main τ  compare  image τ  overlays: grid  tools [probe]
+  right  dockcol  width 280
+           panel basic "Basic"  reset
+             section "Light"  reset
+               slider -5…5 "Exposure"  bind dev.«ui.selection.primary».light.exposure  bipolar  reset 0  step 0.05
+               slider -100…100 "Contrast"  bind dev.«ui.selection.primary».light.contrast  bipolar  reset 0  step 1
+               slider -100…100 "Highlights"  bind dev.«ui.selection.primary».light.highlights  bipolar  reset 0  step 1
+               slider -100…100 "Shadows"  bind dev.«ui.selection.primary».light.shadows  bipolar  reset 0  step 1
+             section "Color"  reset
+               slider 2000…12000 "Temp"  bind dev.«ui.selection.primary».color.temp  reset 5500  step 50  track "temp"
+               slider -100…100 "Tint"  bind dev.«ui.selection.primary».color.tint  bipolar  reset 0  step 1  track "tint"
+               slider -100…100 "Saturation"  bind dev.«ui.selection.primary».color.saturation  bipolar  reset 0  step 1
+             row
+               button  run dev.reset
+               button  run photo.pick
+  bottom filmstrip strip2  cell θ  items τ  select ui.selection
+commands
+  photo.pick "Flag as Pick" (Photo) P
+  photo.reject "Reject" (Photo) X
+  photo.rate "Set Rating" (Photo)
+  dev.reset "Reset Develop Settings" (Settings) Ctrl+Shift+R
+  view.grid "Show Grid Overlay" (View) \\
+tools probe (I)
+commands 31 · keys 29 in 4 scopes · tools 1 · passes 12 · diagnostics ✓ 0 errors · 0 warnings"
+`;
