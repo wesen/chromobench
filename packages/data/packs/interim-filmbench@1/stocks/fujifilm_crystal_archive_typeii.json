@@ -1,0 +1,161 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0, via the Filmbench IDE prototype bundle (an older, rounded snapshot). Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    0.672535,
+    0.910334,
+    0.862327
+   ],
+   [
+    0.61014,
+    0.859936,
+    0.714017
+   ],
+   [
+    0.443855,
+    0.795209,
+    0.718721
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    -0.141217,
+    0.215684,
+    0.311213
+   ],
+   [
+    -0.137443,
+    0.191697,
+    0.465269
+   ],
+   [
+    -0.227419,
+    0.201849,
+    0.207954
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.209123,
+    0.156574,
+    0.218514
+   ],
+   [
+    0.210258,
+    0.154206,
+    0.225951
+   ],
+   [
+    0.20855,
+    0.156457,
+    0.212712
+   ]
+  ]
+ },
+ "hanatos_surface": null,
+ "hanatos_window": null,
+ "id": "fujifilm_crystal_archive_typeii",
+ "info": {
+  "antihalation": "strong",
+  "name": "Fujifilm Crystal Archive Type II",
+  "reference_illuminant": "TH-KG3",
+  "stage": "printing",
+  "stock": "fujifilm_crystal_archive_typeii",
+  "support": "paper",
+  "target_print": null,
+  "type": "negative",
+  "use": "still",
+  "viewing_illuminant": "D50"
+ },
+ "kind": "stock",
+ "metadata": {
+  "license": "spektrafilm profile by Andrea Volpato, CC BY-SA 4.0 (via Filmbench IDE)"
+ },
+ "missingRows_nm": {
+  "base": [
+   380,
+   380,
+   725,
+   780
+  ],
+  "dyes": [
+   380,
+   380,
+   725,
+   780
+  ],
+  "sensitivity": []
+ },
+ "role": "print",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}

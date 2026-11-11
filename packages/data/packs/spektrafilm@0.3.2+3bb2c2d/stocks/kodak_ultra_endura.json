@@ -1,0 +1,189 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0. Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    0.7461744279142581,
+    0.8621427250715494,
+    0.7784238010905383
+   ],
+   [
+    0.4788215939325048,
+    0.5259447068836839,
+    0.5146305650888119
+   ],
+   [
+    0.6561237298240065,
+    0.7611178266254945,
+    0.7131979403713209
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    -0.010789347306107307,
+    0.23660202851317275,
+    0.4274475605754436
+   ],
+   [
+    0.006582722975536385,
+    0.23233357927903378,
+    0.34663770708459546
+   ],
+   [
+    0.04549639398683652,
+    0.2546448490840068,
+    0.25461775645546575
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.2034246049213998,
+    0.1675582159077187,
+    0.23438955507512677
+   ],
+   [
+    0.20091862021738477,
+    0.17059581042616365,
+    0.22765349978043276
+   ],
+   [
+    0.20326164854420176,
+    0.1669089249993151,
+    0.22203881976656226
+   ]
+  ]
+ },
+ "hanatos_surface": null,
+ "hanatos_window": null,
+ "id": "kodak_ultra_endura",
+ "info": {
+  "antihalation": "strong",
+  "channel_model": "color",
+  "densitometer": "status_A",
+  "log_sensitivity_density_over_min": 1.0,
+  "name": "Kodak Professional Ultra Endura",
+  "reference_illuminant": "TH-KG3",
+  "stage": "printing",
+  "stock": "kodak_ultra_endura",
+  "support": "paper",
+  "target_print": null,
+  "type": "negative",
+  "use": "still",
+  "viewing_illuminant": "D50"
+ },
+ "kind": "stock",
+ "metadata": {
+  "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+  "copyright": "Copyright (c) 2026 Andrea Volpato. Licensed under CC BY-SA 4.0.",
+  "created": "2026-05-28",
+  "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+  "license": "spektrafilm profile by Andrea Volpato, licensed under CC BY-SA 4.0. Redistribution and derivatives must credit the author, link the project (https://github.com/andreavolpato/spektrafilm),preserve this license, and remain CC BY-SA 4.0.Modifications must be noted. Full text of the license and attribution requirements: https://github.com/andreavolpato/spektrafilm/blob/main/SPEKTRAFILM_LICENSE.txt.",
+  "version": "0.3.2"
+ },
+ "missingRows_nm": {
+  "base": [],
+  "dyes": [
+   380,
+   400,
+   700,
+   780
+  ],
+  "sensitivity": []
+ },
+ "role": "print",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "note": "as stored upstream; curve minimum NOT subtracted (the film develop op owns that)",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "midscale_neutral_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "sublayer_dye_amount_curves": {
+   "axes": [
+    "logH",
+    "sublayer",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3,
+    3
+   ],
+   "unit": "dye"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}

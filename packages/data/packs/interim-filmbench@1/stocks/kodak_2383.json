@@ -1,0 +1,157 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0, via the Filmbench IDE prototype bundle (an older, rounded snapshot). Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    1.069913,
+    1.406445,
+    1.324722
+   ],
+   [
+    1.049707,
+    1.099825,
+    1.143726
+   ],
+   [
+    0.784717,
+    1.229635,
+    1.008658
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    0.035786,
+    0.318859,
+    0.586756
+   ],
+   [
+    0.023218,
+    0.411448,
+    0.71057
+   ],
+   [
+    -0.004139,
+    0.401593,
+    0.619145
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.345687,
+    0.236664,
+    0.338774
+   ],
+   [
+    0.328339,
+    0.250701,
+    0.335401
+   ],
+   [
+    0.340881,
+    0.226891,
+    0.346559
+   ]
+  ]
+ },
+ "hanatos_surface": null,
+ "hanatos_window": null,
+ "id": "kodak_2383",
+ "info": {
+  "antihalation": "strong",
+  "name": "Kodak Vision 2383",
+  "reference_illuminant": "TH-KG3",
+  "stage": "printing",
+  "stock": "kodak_2383",
+  "support": "film",
+  "target_print": null,
+  "type": "negative",
+  "use": "cine",
+  "viewing_illuminant": "K75P"
+ },
+ "kind": "stock",
+ "metadata": {
+  "license": "spektrafilm profile by Andrea Volpato, CC BY-SA 4.0 (via Filmbench IDE)"
+ },
+ "missingRows_nm": {
+  "base": [
+   750,
+   780
+  ],
+  "dyes": [
+   750,
+   780
+  ],
+  "sensitivity": []
+ },
+ "role": "print",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}

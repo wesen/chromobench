@@ -1,0 +1,17 @@
+{
+  "ticket": "CHB-004",
+  "about": "Golden numbers for the data packs (intern guide §15). Tolerances were fixed before the run. Sources: textbook (The Mathematics of the Colour Negative) and the upstream data; 'recomputed' values come from the CHB-004 guide's own calculation, re-derived by tools/spektrafilm-export crosscheck.",
+  "entries": [
+    {"id": "portra400-greycard-dyes", "what": "Portra 400 dye amounts, curves read at log H 0 (minima not subtracted)", "expect": [0.687, 0.704, 0.864], "tol": 0.0005, "source": "textbook §1.2; CHB-001 script 03"},
+    {"id": "portra400-greycard-D550", "what": "spectral density of the grey card at 550 nm, and its parts (cyan, magenta, yellow, base)", "expect": [1.4662, -0.0264, 0.888, 0.0022, 0.6024], "tol": 0.0005, "source": "textbook §1.2"},
+    {"id": "neutral-pack-portra400-endura", "what": "neutral print filters, Portra 400 on Portra Endura, lamp TH-KG3 (C, M, Y in CC)", "expect": [0, 51.568, 52.534], "tol": 0.0005, "source": "upstream data/filters/neutral_print_filters.json"},
+    {"id": "greycard-paper-logH-opaque", "what": "grey card, normalised paper log H (R, G, B) under the opaque reading", "expect": [0.004, 0.005, -0.009], "tol": 0.001, "source": "textbook §2.6; recomputed"},
+    {"id": "greycard-paper-logH-zero", "what": "same, under the zero-density reading", "expect": [0.111, -0.072, -0.038], "tol": 0.002, "source": "recomputed (guide §6.1)"},
+    {"id": "endura-red-share-705", "what": "share of lamp (TH-KG3) x Portra Endura red sensitivity at >= 705 nm", "expect": 0.268, "tol": 0.001, "source": "textbook §2.6 ('27 %')"},
+    {"id": "cie1931-555", "what": "CIE 1931 2 degree x, y, z at 555 nm", "expect": [0.51205, 1.0, 0.00575], "tol": 5e-06, "source": "CIE table"},
+    {"id": "portra400-erf4-window", "what": "Portra 400 hanatos2025 erf4 window (c_uv, sigma_uv, c_ir, sigma_ir) in nm", "expect": [433.49, 31.56, 593.13, 68.76], "tol": 0.005, "source": "upstream profile"},
+    {"id": "balance-law-opaque", "what": "128 negative-film x print pairs: median normalised spread of the mid-grey's paper log H under opaque (law: <= 0.06)", "expect": 0.032, "tol": 0.002, "source": "guide §6.1 / §15"},
+    {"id": "balance-law-zero-upstream", "what": "same median under zero-density on the spektrafilm pack (law must fail: > 0.06)", "expect": 0.205, "tol": 0.002, "source": "recomputed by CHB-004 implementation; the guide's 0.52 is Filmbench data, where the dye rows marked missing were zeroed"},
+    {"id": "balance-law-zero-filmbench", "what": "same median under zero-density on interim-filmbench@1", "expect": 0.52, "tol": 0.005, "source": "guide §6.1 (Filmbench data)", "checkedBy": "tools/spektrafilm-export crosscheck (interim-filmbench@1 refuses zero-density in the loader: E_DATA_POLICY)"}
+  ]
+}

@@ -1,0 +1,24 @@
+[project]
+name = "spektrafilm-export"
+version = "0.1.0"
+description = "Export pinned spektrafilm data (and the CHB-001 prototype extracts) as chromobench data packs"
+requires-python = "~=3.13"
+license = { text = "GPL-3.0-only" }
+# The exporter imports spektrafilm (GPLv3), so it is GPLv3 itself (LICENSE) and is never bundled
+# into the app. spektrafilm is NOT a dependency here: pass a checkout of the pinned commit with
+# --upstream (it must be at 3bb2c2d2801ff68b92019cf1dbcbb133d60832bc with no local changes).
+# Only what the exporter imports is listed; upstream's image IO, raw decoding, FFT and GUI
+# dependencies (OpenImageIO, exiv2, rawpy, lensfunpy, pyfftw, scikit-image, pyside6, napari, ...)
+# are not installed (see spektrafilm_export/upstream.py). Exact versions: requirements.lock.
+dependencies = [
+    "numpy~=2.4",
+    "scipy~=1.17",
+    "colour-science~=0.4.6",
+    "opt-einsum~=3.4.0",
+    "matplotlib~=3.10",  # imported at module level by spektrafilm.model.color_filters
+    "numba>=0.64",        # imported by the helpers spektrafilm.model.couplers pulls in
+    "safetensors>=0.4",   # tests read packs back with the reference reader
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]

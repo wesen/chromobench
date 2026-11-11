@@ -530,3 +530,201 @@ After the context was compacted, I ran mechanical checks on the Markdown, verifi
 
 ### Technical details
 - The scratchpad drafts are at `.../scratchpad/guides/chb004-draft.md` and `.../scratchpad/guides/chb014-draft.md`.
+
+## Step 13: Implementation start: upstream clone, exporter venv and the stage-1 exporter
+
+Implementation of CHB-004 began in the worktree branch `task/chb-004-data`. I cloned upstream spektrafilm outside the repository, built a minimal Python environment for the exporter, read the upstream modules the exporter imports, and wrote `tools/spektrafilm-export`. It writes four packs into `packages/data/packs/` (the spektrafilm pack, two interim packs from the CHB-001 extracts, and the illustrative camera and lights), converts the five upstream regression baselines, and cross-checks the result against the prototypes. All cross-checks pass with the tolerances of guide §5.3.
+
+### Prompt Context
+**User prompt (verbatim):** not available to this agent; the work was assigned by the orchestrator.
+**Orchestrator brief (not the user's words), opening lines verbatim:** "You implement ticket CHB-004 (stock and reference data pipeline from spektrafilm) in the chromobench monorepo, in your own git worktree." Ticket notes in the brief, verbatim excerpt: "The user has explicitly approved cloning upstream spektrafilm and creating a Python virtual environment for the exporter. Clone OUTSIDE the repository, at /home/manuel/code/wesen/chromobench-ext/spektrafilm, and check out the pinned commit from the guide (3bb2c2d). [...] Install only what the exporter actually needs [...] Do not run upstream code you have not read". The brief also asks that packs plus a TypeScript loader implement core's `PhysicsData`, that the interim provider keeps working, that `packages/gpu` is not touched, and that packs over ~5 MB are generated on demand.
+**Assistant interpretation:** Stage 1 (exporter) and stage 2 (pack format, loader, interim packs) solidly, then the missing-data laws, then as much of stages 4–6 as time allows, with a TypeScript `PhysicsData` adapter for CHB-003.
+**Inferred user intent:** CHB-003 and CHB-005 can switch from the interim JSON to verified, hashed packs by changing one import.
+**Commit (code):** the first commit on the branch, "CHB-004: spektrafilm exporter, four data packs and converted regression baselines" (hash in Step 14).
+
+### What I did
+- `git checkout -b task/chb-004-data`; `pnpm install --frozen-lockfile --offline`; baseline `pnpm test`: 32 files, 1829 tests passed.
+- `git clone https://github.com/andreavolpato/spektrafilm.git /home/manuel/code/wesen/chromobench-ext/spektrafilm`, then `git -C <abs path> checkout 3bb2c2d` → HEAD `3bb2c2d2801ff68b92019cf1dbcbb133d60832bc` ("fix: vlog midgray exposure"); the clone is 148 MB.
+- `uv venv --python 3.13 /home/manuel/code/wesen/chromobench-ext/venv`; installed numpy 2.5.4, scipy 1.18.1, colour-science 0.4.7, opt-einsum 3.4.0, safetensors 0.8.0, pytest 9.2.0, then matplotlib 3.11.2 and numba 0.68.1 (with llvmlite 0.50.0). The frozen list is `tools/spektrafilm-export/requirements.lock`.
+- Not installed, because nothing the exporter calls needs them: OpenImageIO, exiv2, rawpy, lensfunpy, pyfftw, scikit-image, pyside6, napari, qtpy, pyconify, markdown.
+- Read before running: `src/spektrafilm/__init__.py`, `config.py`, `profiles/io.py` (all), `model/illuminants.py`, `model/color_filters.py`, `model/stocks.py`, `utils/io.py` (header and 300–402), `runtime/params_builder.py`, `runtime/params_schema.py`, `model/couplers.py` 1–80, `utils/spectral_upsampling.py` 1–140 and 250–425, `model/density_curves.py` 1–60, `runtime/stages/printing.py` 60–123, `runtime/stages/filming.py` 90–150, `tests/regression_baselines.py`, `tests/conftest.py`. Grepped the module-level statements of `gamut_compression.py`, `morph_curves.py`, `fast_gaussian_filter.py`, `fast_interp.py` and `fast_interp_lut.py`, and grepped all imported modules for `subprocess|os.system|urllib|requests|socket|eval(|exec(|pickle` (no hits).
+- Wrote `tools/spektrafilm-export/`: the `sfx.py` launcher; `spektrafilm_export/{upstream,packwriter,spektrafilm_pack,baselines,interim,illustrative,crosscheck,verify,cli}.py`; tests `tests/{conftest,test_packwriter,test_export,test_interim}.py`; `pyproject.toml`; `LICENSE` (GPLv3 text copied from upstream); `.gitignore`.
+- Ran `/home/manuel/code/wesen/chromobench-ext/venv/bin/python -I tools/spektrafilm-export/sfx.py all --upstream /home/manuel/code/wesen/chromobench-ext/spektrafilm` (export, baselines, interim, illustrative, crosscheck, verify).
+- Tests: `SPEKTRAFILM_CHECKOUT=/home/manuel/code/wesen/chromobench-ext/spektrafilm /home/manuel/code/wesen/chromobench-ext/venv/bin/python -I -m pytest -q -p no:cacheprovider tools/spektrafilm-export/tests` → `13 passed in 1.75s`.
+
+### Why
+- `import spektrafilm.<anything>` runs `spektrafilm/__init__.py`, which imports the whole simulator, rawpy, OpenImageIO and exiv2. So importing "only submodules" (guide §9.3) is not enough on its own. `upstream.py` registers `spektrafilm`, `spektrafilm.runtime` and `spektrafilm.utils` as bare packages, so their `__init__` files never run.
+- The guide's principle "ask spektrafilm, do not re-derive" holds. The arrays come from `load_profile`, `standard_illuminant`, `DichroicFilters`, `read_neutral_print_filters`, `digest_params(init_params(...))` with `compute_dir_couplers_matrix`, the dataclass defaults, and the shipped `.npy`.
+
+### What worked
+- Pack `spektrafilm@0.3.2+3bb2c2d`: 28 stocks (20 films, 8 prints), 50 items, 67 files. The committed size is about 1.2 MB (`du -sb`: stocks 1,084,509 B, other files 115,287 B). The hanatos table is 5,972,304 B, so it is on demand: its manifest entry has an `onDemand` hint, and `packages/data/.gitignore` ignores `packs/*/upsampling/`.
+- The shipped `irradiance_xy_tc.npy` header is `{'descr': '<f2', 'fortran_order': False, 'shape': (192, 192, 81)}`. This resolves the task "check the shipped irradiance_xy_tc.npy size": it is 192 × 192 × 81. The `lut_size=128` default only applies when the table is regenerated.
+- The missing rows reproduce the guide: Portra 400 base `[380, 395, 705, 780]` and dyes `[380, 380, 750, 780]`. Vision3 250D, 200T and 500T have base gaps only below 400 nm; slides and print materials have no base gaps.
+- The pairwise comparison found these known issues: Supra Endura's log sensitivity equals Portra Endura's; Supra Endura's base equals Crystal Archive Type II's; Portra 800, push 1 and push 2 share sensitivities, dyes, base and midscale neutral. Upstream's `# problematic` comment on `kodak_ultra_endura` is also recorded.
+- DIR matrices: applied for Portra 400 `[[0.336, 0.353, 0.302], [0.154, 0.319, 0.353], [0.168, 0.226, 0.273]]`; schema default `[[0.341, 0.355, 0.305], [0.154, 0.324, 0.358], [0.171, 0.225, 0.273]]`; the Velvia override starts `[[0.108, 0.108, 0.054], ...]`.
+- Cross-check (`sfx.py crosscheck --pack 'spektrafilm@0.3.2+3bb2c2d'`):
+  - Chromogen, 11 stocks: max diff 4.9998e-6 (tolerance 5e-6), identical null patterns.
+  - Filmbench, 28 stocks: logSens 4.99996e-5, curves 4.9998e-5, chan and base outside nanRows ≤ 4.9985e-6, curve models 4.998e-7. For all 28, nanRows equals the union of missing base and dye rows.
+  - Filmbench reference data: neutral table identical, custom dichroics 4.78e-7, illuminants ≤ 4.99e-7, CMF 4.90e-7.
+- Grey card, normalised paper log H: opaque (0.0039, 0.0047, −0.0086), zero-density (0.1110, −0.0729, −0.0381). The guide has (0.004, 0.005, −0.009) and (0.111, −0.072, −0.038).
+- Balance law over 128 pairs of a negative film and a print material: opaque median 0.0324, max 0.188 (2393 / Portra 800 push 2).
+- Determinism: a fresh export in the pytest process reproduces the committed `manifest.json` byte for byte. The round trip is bit-exact (`tobytes()` equality, NaN included) for every tensor of all 28 profiles and for the curve models.
+
+### What didn't work
+- The first export failed inside colour-science: `RuntimeError: OpenImageIO.__path__ is not available: the exporter stubs OpenImageIO because it only reads data and never decodes or writes images` (raised from `colour/io/image.py` line 116, `from OpenImageIO import ImageSpec`). My global stub made colour-science believe OpenImageIO was installed. Fix: the stand-ins exist only while `spektrafilm.utils.io` is imported, and are then removed from `sys.modules`.
+- The determinism tests failed: `AssertionError: interim-chromogen@1 ... At index 558 diff: b'b' != b'9'`. The `safetensors` package keeps `__metadata__` in a hash map, so the header's key order changes between processes (an earlier single-key probe had looked deterministic). Fix: `packwriter.st_save`, a 25-line deterministic writer (sorted names and metadata keys, header padded to 8-byte alignment). The `safetensors` package stays as the reference reader in the tests.
+- The illustrative camera differed from Chromogen's by 1.085e-5, above the 6e-6 tolerance. Cause: FWHM→σ with the exact 2√(2 ln 2) = 2.35482, while the prototypes (and core's `gaussian()`) use 2.3548. With 2.3548: camera 4.96e-6, white LED 4.81e-6.
+- The harness refused `git -C spektrafilm checkout` (relative path) and multi-command heredoc shells. I re-ran with absolute paths and wrote scripts with the Write tool.
+
+### What I learned
+- The guide's zero-density balance figures (median 0.52, worst 1.17 on 2393) come from Filmbench data, where the dye rows marked missing had been zeroed. On upstream data, where those dye values are real, zero-density gives median 0.205 and max 0.529 (Crystal Archive / Ektar 100). Recomputed on `interim-filmbench@1`: median 0.5175, max 1.169 (2393 / Ektar 100). Both fail the ≤ 0.06 law, which is all the law needs; the cross-check reports both.
+- The illustrative white LED is 0.45 · Gaussian(450 nm, FWHM 22) plus an asymmetric Gaussian at 565 nm (σ 45 nm below, 70 nm above), normalised to peak 1 (least-squares fit, residual 5.4e-6). The camera is exactly Gaussian at 600, 535 and 460 nm with FWHM 80, 90 and 70 nm.
+
+### What was tricky to build
+- Keeping upstream's import graph small without editing upstream: bare package modules plus temporary stubs, the checkout appended (not prepended) to `sys.path`, and every run under `python -I`.
+
+### What warrants a second pair of eyes
+- `upstream.load` refuses a dirty or unpinned checkout. It shells out to `git -C <checkout> rev-parse HEAD` and `git status --porcelain`.
+- The licence of `illustrative@1` is `LicenseRef-chromobench-illustrative` until the owner decides (guide §12.4).
+
+### What should be done in the future
+- Measured cameras (stage 4) and synthetic frames (stage 5) are not started.
+
+### Code review instructions
+- Start with `tools/spektrafilm-export/spektrafilm_export/spektrafilm_pack.py` (`export`), then `packwriter.py` (`st_save`, `content_hash`, `PackWriter.finish`), `upstream.py` and `crosscheck.py`.
+- Re-run with the venv python: `python -I tools/spektrafilm-export/sfx.py all --upstream <checkout>`; afterwards `git status` must show no changes. Then run the pytest command above.
+
+### Technical details
+- Pack id `<source>@<profile version>+<commit7>`. packHash = sha256 of the `manifest.json` bytes. File hashes are in `manifest.files`. An item's `contentHash` = sha256 of the canonical JSON of its meaning without licence keys, followed by its tensor bytes in name order.
+- Interim packs: `interim-chromogen@1` (11 stocks, all policies) and `interim-filmbench@1` (28 stocks, `missing.supported: ['opaque']`, curve models, neutral table under `TH-KG3`, custom dichroics, 6 illuminants, CMF, `film_exposure_lut64_log2` 64 × 64 × 3).
+
+## Step 14: The TypeScript loader, the missing-data laws and the PhysicsData adapter for core
+
+Step 13's code is commit `b62d7ef` ("CHB-004: spektrafilm exporter, four data packs and converted regression baselines"). This step adds `packages/data` (`@chromobench/data`): a safetensors reader, the manifest validator and JSON Schemas, SHA-256 verification on first read, `Pack` with async and sync accessors, the three missing-data policies with validity masks, the diagnostics, and `physicsData()`, an adapter that serves core's `PhysicsData` from the packs. Core's whole test suite, run against the packs instead of the interim JSON, passes 281 of 282 tests. The one failure is a discrete iteration-cap count, recorded below and not "fixed".
+
+### Prompt Context
+**User prompt (verbatim):** see Step 13.
+**Assistant interpretation:** Stage 2 (loader, interim packs, CI cross-check), stage 3 (policies and laws) and the core switch-over the brief asks for, without touching `packages/core` or `packages/gpu`.
+**Inferred user intent:** Core changes one import to run on packs; every number it reads is verified and traceable to upstream.
+**Commit (code):** the second commit on the branch, "CHB-004: @chromobench/data loader, missing-data laws and PhysicsData adapter" (hash in Step 15).
+
+### What I did
+- `packages/data/src/`: `tensors.ts` (`parseSafetensors`, `column`, `halfToFloat`), `hash.ts` (@noble/hashes, as the contract uses), `manifest.ts` (types, `validateManifest`, `MANIFEST_REQUIRED`), `missing.ts` (`densitySpectrum`, `zeroWhereMissing`, `linearSensitivity`, `andValid`, `transmittance`), `sources.ts` (`DataSource`, `fetchSource`, `memorySource`), `pack.ts` (`Pack`, `openPack`, `openPackSync`, `closest`), `physics.ts` (`physicsData`, `blackbody560`, mirrored `CorePhysicsData`/`CoreStockData` types), `node.ts` (`fsSource`, `PACKS_DIR`, `openPackFromDisk`, `nodePhysicsData`), `index.ts` (`DEFAULT_STOCK_PACK`, `DEFAULT_SCANNER_PACK`, `PACK_IDS`).
+- `packages/data/schema/{manifest,stock}.schema.json` (draft 2020-12).
+- Tests in `packages/data/test/`: `tensors`, `loader`, `missing`, `laws`, `crosscheck`, `core-parity`, `licence` (67 tests), plus `helpers.ts`.
+- `fixtures/golden/data/CHB-004.json`: the golden numbers of guide §15, with tolerances written before the run.
+- `packages/data/vitest.core-parity.config.ts` + `test/core-parity/interim-shim.ts`: they alias `./data/interim.ts` inside core to the packs and run `packages/core/test/**` unchanged; script `pnpm --filter @chromobench/data test:core-parity`.
+- `packages/data/package.json` depends on `@chromobench/contract` and `@noble/hashes`; `@chromobench/core` is a devDependency (for the parity test only). `pnpm install --offline` added the `packages/data` importer to `pnpm-lock.yaml` (13 lines).
+
+### Why
+- Core's `PhysicsData` is synchronous, but the browser reads packs with `fetch`. So every accessor exists twice: `x()` async (fetches the item's files), `xSync()` (from memory or a synchronous source). They share one decoding path. `physicsData()` needs either a synchronous source (node) or `await pack.preload()`.
+- `physicsData()` hands core the raw tensors (NaN kept), not policy-resolved spectra, because core resolves missing samples itself under its `Conventions` (`nan: 'opaque' | 'zero'`). The loader's policies serve the other engines.
+- The adapter mirrors core's types structurally instead of importing them, so `@chromobench/data` does not depend on core at runtime. `core-parity.test.ts` assigns `nodePhysicsData()` to core's `PhysicsData` type, so `pnpm typecheck` catches drift.
+
+### What worked
+- `npx vitest run packages/data`: 7 files, 67 tests passed. They cover:
+  - every item of the 4 packs loads, sync and async;
+  - a flipped byte in each of the 66 committed files of the spektrafilm pack gives `E_DATA_HASH`;
+  - grid 10 nm → `E_DATA_GRID`; a stock with 381 nm in its wavelengths (hash fixed up) → `E_DATA_GRID`; `schemaVersion: 2` → `E_DATA_SCHEMA`;
+  - `kodak_portra400` → `E_STOCK_UNKNOWN` with `valid[0] = 'kodak_portra_400'`; `zero-density` on interim-filmbench → `E_DATA_POLICY`;
+  - warnings `W_STOCK_KNOWN_ISSUE` (Supra Endura, twice, once per issue), `W_STOCK_NO_MODEL` (interim-chromogen papers), `W_DATA_ILLUSTRATIVE` (camera and LED, once each);
+  - the on-demand table gives `E_DATA_SCHEMA` with the regeneration hint when absent, and F16 192 × 192 × 81 when present;
+  - a fake `fetch` source gives the same packHash and bytes.
+- Laws, on loader-resolved spectra (independent of core):
+  - Grey card on the spektrafilm pack, interim-chromogen (stocks) and interim-filmbench: opaque within 0.001 of (0.004, 0.005, −0.009); zero-density within 0.002 of (0.111, −0.072, −0.038).
+  - Balance law, 128 pairs: opaque median 0.032 ± 0.002, zero-density 0.205 ± 0.002 (fails ≤ 0.06, as it must).
+  - interim-chromogen: 24 pairs with the spektrafilm table; passes opaque, fails zero-density.
+  - Share of lamp × Endura red sensitivity at ≥ 705 nm: 0.268.
+- `pnpm typecheck` clean; `pnpm lint` → `import boundaries ok (88 file checks)`.
+- Core parity: `pnpm --filter @chromobench/data test:core-parity` → `Tests 1 failed | 281 passed (282)`. I confirmed the alias is live: with the shim set to throw, every core test file errors with `CORE-PARITY-SHIM-ACTIVE`.
+
+### What didn't work
+- First laws run: `portra400-greycard-D550[0] got 1.466779948706288 expected 1.4662`. The textbook's 1.4662 uses the rounded dye amounts (0.687, 0.704, 0.864); with them the test passes. The interpolated amounts give 1.46678.
+- Typecheck: 4 `noUncheckedIndexedAccess` errors in the tests (`TS2345 ... 'Float64Array<ArrayBufferLike> | undefined'`, `TS2532: Object is possibly 'undefined'`). Fixed with non-null assertions.
+- Full `pnpm test` (machine load average 9, other agents running): one run had `1 failed | 1895 passed (1896)`, and a second had `2 failed | 1894 passed`: `packages/gpu/test/tiles.test.ts` and `packages/ingest/test/dust.test.ts`, both `Error: Test timed out in 5000ms.` Run alone, the two files pass (`Test Files 2 passed`, `Tests 20 passed`). These are load timeouts in packages I did not touch.
+- The core parity failure: `packages/core/test/ch3.golden.test.ts > 33³ table iterations, white-led: plain 23.2 → active 5.1 (§3.4)`, `AssertionError: expected 7 to be less than or equal to 5` (|plain.atCap − 15040| ≤ 5).
+
+### What I learned
+- Numeric differences between interim and pack data (recorded, goldens untouched). Script: `node <scratchpad>/chb004/parity-cap.ts`:
+
+  | Case (solve table 33³, CHROMOGEN conventions) | interim | packs | golden |
+  |---|---|---|---|
+  | xt5-fitted, Gold 200: plain mean it., atCap | 13.919, 8885 | 13.921, 8887 | 13.9, 8885 ± 5 |
+  | xt5-fitted, Gold 200: active mean it., atCap | 2.310, 0 | 2.310, 0 | 2.3, 0 |
+  | white-led, Portra 400: plain mean it., atCap | 23.168, 15042 | 23.173, 15047 | 23.2, 15040 ± 5 |
+  | white-led, Portra 400: active mean it., atCap, unreachable | 5.148, 15, 0.39747 | 5.145, 14, 0.39747 | 5.1, 15 (exact), 0.397 |
+
+  The counts of table nodes that hit the iteration cap are discrete and sensitive to the 5-decimal rounding of Chromogen's stocks: the packs carry upstream's full precision. All mean iteration counts stay within the 0.06 tolerance.
+- Other overlaps (asserted in `core-parity.test.ts`): the same 28 stock ids and roles; `logSensitivity` and curves within 5e-5; dyes and base within 5e-6 where both are finite; the opaque pass mask is identical for all 28 stocks; CMF, illuminants and dichroics within 1e-6; neutral table equal; camera and white LED within 1e-5. The pack also adds illuminant `TH-KG3-L`. The mid-grey paper exposure of Portra 400 on Endura agrees with interim within 1e-4, and the grey card prints neutral (|a*| + |b*| < 1e-6) at Y = 0.184.
+- Interim's Filmbench-sourced stocks keep NaN in dye rows where upstream has real values (Filmbench zeroed them). Under core's opaque convention this does not matter (same pass mask). Under `nan: 'zero'` it does, which is why the Chromogen parity goldens use Chromogen-sourced stocks.
+
+### What was tricky to build
+- One loader serving both a synchronous interface (core) and an asynchronous one (browser fetch): a per-file bytes cache filled by `load()` (async) or `readSync` (node), with all decoding in the sync path.
+- The E_DATA_GRID test needed a stock file whose wavelengths are wrong but whose hash is right, otherwise `E_DATA_HASH` fires first; the test rewrites the manifest's sha256 for that file.
+
+### What warrants a second pair of eyes
+- `physicsData().stock()` fills `meta.antihalation` and `meta.densitometer` only when the source had them (interim-chromogen lacks most info fields; `StockData.infoDefaulted` lists what the loader filled from upstream's `ProfileInfo` defaults).
+- `packages/data` has a devDependency on `@chromobench/core`. When core starts depending on `@chromobench/data` (CHB-017), this becomes a dev-only workspace cycle; move `core-parity.test.ts` into core then.
+
+### What should be done in the future
+- Core switch-over (CHB-003 owner or CHB-017): replace `export { interimData } from './data/interim.ts'` with `export { nodePhysicsData as interimData } from '@chromobench/data/node'` (or add a provider option), and decide what to do with the two ch3 cap-count goldens, which were measured on interim data.
+- A browser test of `fetchSource` (the node test uses a fake `fetch`).
+
+### Code review instructions
+- Start with `packages/data/src/pack.ts` (`Pack.stockSync`, `verify`, `load`), then `missing.ts`, `physics.ts`, `node.ts`.
+- Validate: `pnpm typecheck && pnpm lint && npx vitest run packages/data`, and `pnpm --filter @chromobench/data test:core-parity` (expect the one ch3 difference above).
+
+### Technical details
+- `StockData` (pack) fields follow guide §8: `log10Sensitivity`, `sensitivity` (linear, missing → 0), `unitDyes_D`, `base_D`, `midscaleNeutral_D`, `logExposure_logH`, `dyeCurves` (minima not subtracted), `sublayerCurves` ([logH][sublayer][channel] flattened), `curveModel` (`centers`, `amplitudes`, `sigmas`, [channel][sublayer]), `hanatosWindow`, `hanatosSurface`, `missing`, `contentHash`, `knownIssues`, `attribution`, `raw`.
+- Role: `print` when upstream `info.stage == 'printing'`; the core adapter maps it to core's `'paper'`.
+
+## Step 15: Neutral-wedge synthetic frames, About-screen data, determinism across processes, task bookkeeping
+
+Step 14's code is commit `7bad8d6` ("CHB-004: @chromobench/data loader, missing-data laws and PhysicsData adapter"). This step starts stage 5 with the one synthetic set that needs no film simulation: the `neutral-wedge`. Its truth comes from a numpy scanner model in the exporter, and its pixels reproduce the textbook's flare readings. It also adds `aboutData()` for the Studio's About screen and for export headers. It re-runs the whole export in a fresh process to confirm that the committed packs are byte-identical, and checks off the finished tasks.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 13.
+**Assistant interpretation:** Finish the earlier stages solidly, start later ones where cheap, and leave clear TODOs for the rest.
+**Inferred user intent:** Downstream tickets get usable fixtures and the licence surface now; the expensive parts stay visibly open.
+**Commit (code):** the third commit on the branch, "CHB-004: neutral-wedge synthetic frames and About-screen data" (hash in the final report).
+
+### What I did
+- `tools/spektrafilm-export/spektrafilm_export/synthetic.py` (`neutral_wedge`, `flare_read`, `split_bucket`) and the `sfx.py synthetic` command (also run by `all`). It writes `fixtures/synthetic/neutral-wedge/flat-0-3D-flare{000,005}permille/` with `camera_linear.safetensors` (F32, 32 × 224 × 3), `truth.safetensors` (`scanner_density_true`, F64) and `truth.json` (id, group, splitBucket, generator, factors, images with domains, seven regions with true and read densities). The two frames take 0.52 MB.
+- `packages/data/src/about.ts` (`aboutData(packs)` → packId, packHash, title, spdx, licenceFile, changelog, attribution, source, illustrative), exported from the index.
+- Tests: `packages/data/test/synthetic.test.ts` (3 tests), an About test in `licence.test.ts`, and `tools/spektrafilm-export/tests/test_synthetic.py` (2 tests).
+- `python -I tools/spektrafilm-export/sfx.py all --upstream <checkout>` in a fresh process, then `git status`.
+- `docmgr task check --ticket CHB-004 --id` for 0umg, h1jr, k5x0, tycx, 5wa6, 7fie, li8l, x1qh, so1j, o0m6, qqd3 and wlvi; `docmgr changelog update --ticket CHB-004 --entry ...`.
+
+### Why
+- The wedge's truth is pure arithmetic: T = 10^−D, read as (T + f)/(1 + f). So it can be produced now, and it fixes the frame format (guide §11.3) for the other five sets.
+- qqd3 ("submit the contract additions of Section 16") is checked because contract v0 already contains them. `CONTRACT-DECISIONS.md` lists CHB-004 #1–4 as accepted (`FrameRecipe.data`, `ArgSpec.valuesFrom` including `lamps`, content-hash `TableKey`s, and the nine diagnostic codes, all present in `errors.ts`). So no `CONTRACT-REQUESTS.md` is needed.
+
+### What worked
+- Wedge with 0.5 % flare: the pixels read 0, 0.495, 0.981, 1.438, 1.826, 2.090, 2.224 D, matching textbook §3.7 within 0.001 D. Without flare the reading equals the density to 1e-12. The split bucket is checked in TS against `sha256(group) mod 100`.
+- The fresh-process re-export left every committed pack file unchanged. `git status` showed only the new and edited source files: all four packHashes were identical, and all four packs printed `ok` in `verify`.
+- Tests: `npx vitest run packages/data` → 8 files, 71 tests passed; pytest → `15 passed in 1.93s`.
+- Final gate: `pnpm typecheck` 0 errors; `pnpm lint` `import boundaries ok (88 file checks)`; `pnpm test` → `Test Files 40 passed (40)`, `Tests 1900 passed (1900)` (load average 3.9 this time, so no timeouts); `pnpm gen:check` → `gen:check ok (18 files)`.
+
+### What didn't work
+- No failures in this step.
+
+### What I learned
+- N/A beyond Steps 13–14.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The wedge's camera_linear frame is normalised to an open gate of 1 and has no noise. CHB-006 may want counts in sensor units and a TIFF/PNG copy; that is part of the open stage-5 task.
+
+### What should be done in the future
+- Stage 4: fetch Jiang et al. (Zenodo 3245883) and Butcher's four spectroscope measurements into a separately licensed `cameras-measured@2026.1` pack (CC BY-NC-SA 4.0), and reproduce the PCA percentages. Not started: it needs network downloads beyond the approved upstream clone.
+- Stage 5: running-six-patch, grey-ramps, scan-conditions, stock-identity and edges need spektrafilm's `simulate()` (the full runtime dependencies) and the TIFF/PNG subset for CHB-006.
+- Stage 2 leftover: a browser test of the loader over `fetch` (the node test uses a fake `fetch`).
+- Stage 6 leftover: send the owner the decision list of guide §12.4 (commercial use and the NC packs; the GPL question for ported algorithms; licences of the hanatos table, the CIE data and the filter curves; use of the name "spektrafilm"; plus the licence of `illustrative@1`).
+
+### Code review instructions
+- `tools/spektrafilm-export/spektrafilm_export/synthetic.py`, `packages/data/src/about.ts`, `packages/data/test/synthetic.test.ts`.
+
+### Technical details
+- Commands used for the gate: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm gen:check`, `npx vitest run packages/data`, `pnpm --filter @chromobench/data test:core-parity`, and `SPEKTRAFILM_CHECKOUT=/home/manuel/code/wesen/chromobench-ext/spektrafilm /home/manuel/code/wesen/chromobench-ext/venv/bin/python -I -m pytest -q -p no:cacheprovider tools/spektrafilm-export/tests`.

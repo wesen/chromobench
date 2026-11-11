@@ -1,0 +1,255 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0. Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    0.49586542340457473,
+    0.5478118964905007,
+    0.5371104034555383
+   ],
+   [
+    0.5102964562628955,
+    0.5496882513918127,
+    0.5445293157228371
+   ],
+   [
+    0.6722740645321439,
+    0.7252132018190831,
+    0.7274234122152611
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    -0.9091862962787032,
+    0.16659132788740738,
+    1.2221345649413793
+   ],
+   [
+    -0.8973904040458922,
+    0.19537969964498403,
+    1.3445876230566112
+   ],
+   [
+    -0.803605291789613,
+    0.36529155260599544,
+    1.574815969979018
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.485015696066562,
+    0.5976351156519827,
+    0.6172010486712841
+   ],
+   [
+    0.48321931892807035,
+    0.5989767570007645,
+    0.6158170946709816
+   ],
+   [
+    0.48266917087647226,
+    0.5992964093997187,
+    0.613605268176791
+   ]
+  ]
+ },
+ "hanatos_surface": {
+  "model": "poly4",
+  "params": [
+   [
+    -0.01942355071054085,
+    -0.08074956255677339,
+    -0.723514498845076,
+    12.549927095874558,
+    1.6874945333511022,
+    6.648573661564641,
+    5.086292531247228,
+    8.65152545918239,
+    -15.655636015196285,
+    -6.091781873703495,
+    8.205696688678357,
+    -15.173858640636752,
+    -1.8384244433939234,
+    -5.249984053254882,
+    9.48895849052793
+   ],
+   [
+    -0.016387206512895984,
+    0.08925615560460318,
+    0.062376805980736375,
+    -0.6130892624021838,
+    0.8312644377829115,
+    2.073937036045623,
+    -3.4688248071653223,
+    1.9004260875441008,
+    -0.9219417834582596,
+    0.7460717282860861,
+    1.2240159780876663,
+    0.791606264554804,
+    -0.05925000560963617,
+    -0.8715300344832709,
+    0.6835831035284544
+   ],
+   [
+    0.024629344299915083,
+    -0.270445960033609,
+    -0.11444941262322399,
+    -2.910293139932376,
+    -0.6334773445725087,
+    -2.5829519971066635,
+    14.125770047512365,
+    -3.9820041148685963,
+    5.54710778267729,
+    -9.693330810498757,
+    -2.6713714770933237,
+    -1.2579413954147287,
+    -1.2386596838391948,
+    2.9330042347784966,
+    -0.2915250532031436
+   ]
+  ]
+ },
+ "hanatos_window": {
+  "c_ir_nm": 618.0464207790596,
+  "c_uv_nm": 408.8159179081456,
+  "model": "erf4",
+  "sigma_ir_nm": 48.92989977921233,
+  "sigma_uv_nm": 28.193006074619696
+ },
+ "id": "fujifilm_pro_400h",
+ "info": {
+  "antihalation": "strong",
+  "channel_model": "color",
+  "densitometer": "status_M",
+  "log_sensitivity_density_over_min": 1.0,
+  "name": "Fujifilm Pro 400H",
+  "reference_illuminant": "D55",
+  "stage": "filming",
+  "stock": "fujifilm_pro_400h",
+  "support": "film",
+  "target_print": "fujifilm_crystal_archive_typeii",
+  "type": "negative",
+  "use": "still",
+  "viewing_illuminant": "D50"
+ },
+ "kind": "stock",
+ "metadata": {
+  "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+  "copyright": "Copyright (c) 2026 Andrea Volpato. Licensed under CC BY-SA 4.0.",
+  "created": "2026-05-28",
+  "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+  "license": "spektrafilm profile by Andrea Volpato, licensed under CC BY-SA 4.0. Redistribution and derivatives must credit the author, link the project (https://github.com/andreavolpato/spektrafilm),preserve this license, and remain CC BY-SA 4.0.Modifications must be noted. Full text of the license and attribution requirements: https://github.com/andreavolpato/spektrafilm/blob/main/SPEKTRAFILM_LICENSE.txt.",
+  "version": "0.3.2"
+ },
+ "missingRows_nm": {
+  "base": [
+   380,
+   395,
+   720,
+   780
+  ],
+  "dyes": [
+   380,
+   380,
+   750,
+   780
+  ],
+  "sensitivity": []
+ },
+ "role": "film",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "note": "as stored upstream; curve minimum NOT subtracted (the film develop op owns that)",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "midscale_neutral_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "sublayer_dye_amount_curves": {
+   "axes": [
+    "logH",
+    "sublayer",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3,
+    3
+   ],
+   "unit": "dye"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}

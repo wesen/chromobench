@@ -1,0 +1,435 @@
+{
+ "counts": {
+  "stocks": 11
+ },
+ "files": [
+  {
+   "bytes": 1024,
+   "path": "CHANGELOG.txt",
+   "sha256": "6944048380f790d8c478a71c113365c4453705c0e1b843341982d4730736e87d"
+  },
+  {
+   "bytes": 23677,
+   "path": "SPEKTRAFILM_LICENSE.txt",
+   "sha256": "76d629501783ae52e8d63aee1e054c1e1a9713b9fe7d36fb306e25b1d14b24e9"
+  },
+  {
+   "bytes": 1661,
+   "path": "stocks/fujifilm_c200.json",
+   "sha256": "2f31bf537c2a473896089876f1f82a40780920daa19a61ed4697001393683510"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/fujifilm_c200.safetensors",
+   "sha256": "1588da056ac6fdbc473fe7fafdbdf5579f43a53958f2b30312ca5086dda9ee09"
+  },
+  {
+   "bytes": 1654,
+   "path": "stocks/fujifilm_crystal_archive_typeii.json",
+   "sha256": "81cab756dd96e3ab812e58474a512ee4083fbd5fa686b102e93ec1d516cdfcfb"
+  },
+  {
+   "bytes": 14008,
+   "path": "stocks/fujifilm_crystal_archive_typeii.safetensors",
+   "sha256": "4aaf4e62f25fa69ab561394472a09714423b59401ffd551257289ad26d359ed8"
+  },
+  {
+   "bytes": 1673,
+   "path": "stocks/fujifilm_pro_400h.json",
+   "sha256": "cf87203a0b9ddd305e66dce9277df58c3c2aedd5074ffc047f8d6efcf04fbe0c"
+  },
+  {
+   "bytes": 14000,
+   "path": "stocks/fujifilm_pro_400h.safetensors",
+   "sha256": "4b83ebd18dd97217cfe2abfafe74d821701bc990c97ab3fbe8d2180fc101b669"
+  },
+  {
+   "bytes": 1655,
+   "path": "stocks/kodak_ektar_100.json",
+   "sha256": "f2ea379cd83a6cd702b9b197f93905c86600a617b479accecef2ebd79644c194"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/kodak_ektar_100.safetensors",
+   "sha256": "807f01554dbff84f9666ffce4fdc5103fb4c5bb62fceac465f638010de0c2d9a"
+  },
+  {
+   "bytes": 1652,
+   "path": "stocks/kodak_gold_200.json",
+   "sha256": "83c5d56012263bc12d5c775f32db4fbc22c669be656d638d531ba7221ff5a629"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/kodak_gold_200.safetensors",
+   "sha256": "d18c056f4357b9140936332579c46edd93865522954fa9a32ee5b7335787fbb6"
+  },
+  {
+   "bytes": 1658,
+   "path": "stocks/kodak_portra_160.json",
+   "sha256": "f91b363abdbd5a613b0fb0c4081102f69b52dabb127089105ef9cb5f0bc7e50d"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/kodak_portra_160.safetensors",
+   "sha256": "96fb17dd3b484becf3ba63a2ef81ec32e3378419aff49aef6607abcaeebd28a7"
+  },
+  {
+   "bytes": 1658,
+   "path": "stocks/kodak_portra_400.json",
+   "sha256": "54383a5bc6b9db4025643d873230b411c90b42b2adc71102472bcc1f91dbe72f"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/kodak_portra_400.safetensors",
+   "sha256": "f508ae3e34025397fd8ef3606943f81d9499ae3e6fb04a93ffe75ced682011f3"
+  },
+  {
+   "bytes": 1658,
+   "path": "stocks/kodak_portra_800.json",
+   "sha256": "082fccd60d1abd42a31889bcbb37911c48cde900b9b8b29f55a72556c16db835"
+  },
+  {
+   "bytes": 13992,
+   "path": "stocks/kodak_portra_800.safetensors",
+   "sha256": "b46733823a11f649cbba7a950092b8f6fe1d9be1d0d618a5e2ae01aefd89440b"
+  },
+  {
+   "bytes": 1630,
+   "path": "stocks/kodak_portra_endura.json",
+   "sha256": "7910dbad1a59cfa80d330dcc0b91dc05b0153be8cf2f34dcddbcef3369308e3c"
+  },
+  {
+   "bytes": 14000,
+   "path": "stocks/kodak_portra_endura.safetensors",
+   "sha256": "369a19c6dbed190654d3e012df9377f266b5e7eaa88ddb55ec0d1e980b1c3939"
+  },
+  {
+   "bytes": 1627,
+   "path": "stocks/kodak_supra_endura.json",
+   "sha256": "33fe57e34ad98c8f14d075143e49f35e84e1f2784480800b0a125b629355bf20"
+  },
+  {
+   "bytes": 14000,
+   "path": "stocks/kodak_supra_endura.safetensors",
+   "sha256": "2bddecbd463dd32b2f8e8964ca9b0e514e6f3d5c7a758055f29a3b3bd93bf99a"
+  },
+  {
+   "bytes": 1664,
+   "path": "stocks/kodak_ultramax_400.json",
+   "sha256": "8582fdb2177c596642804666dfd23e6b94d98f8d6dc4fb5a5e95d93c2e308adc"
+  },
+  {
+   "bytes": 14000,
+   "path": "stocks/kodak_ultramax_400.safetensors",
+   "sha256": "74a6d1fec2835371459cb0f92896e8bd0a1806af7d62d0a533ae0fad83b61236"
+  }
+ ],
+ "grid": {
+  "count": 81,
+  "start_nm": 380,
+  "step_nm": 5
+ },
+ "items": [
+  {
+   "contentHash": "sha256:175fee770290c643339f54350979f98a853bdde997b461d8f1a5aad61ca4700e",
+   "files": [
+    "stocks/fujifilm_c200.json",
+    "stocks/fujifilm_c200.safetensors"
+   ],
+   "id": "fujifilm_c200",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     720,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:437cac9269214b8ffc828a4ecfd15c4af5e2b27a5958d585525d3799e5bb4a17",
+   "files": [
+    "stocks/fujifilm_crystal_archive_typeii.json",
+    "stocks/fujifilm_crystal_archive_typeii.safetensors"
+   ],
+   "id": "fujifilm_crystal_archive_typeii",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     380,
+     725,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:5054f12eb04ca4589690e5c0a980fe1e587ebeae424ea6589a2c8e434b2a2fce",
+   "files": [
+    "stocks/fujifilm_pro_400h.json",
+    "stocks/fujifilm_pro_400h.safetensors"
+   ],
+   "id": "fujifilm_pro_400h",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     720,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:6d098ed447db0d45138dcb3edb8bf24abf9941d80df5f11c72eb981b8d71b279",
+   "files": [
+    "stocks/kodak_ektar_100.json",
+    "stocks/kodak_ektar_100.safetensors"
+   ],
+   "id": "kodak_ektar_100",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     685,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:648e3ce16fb165f07fff86c0c5dbf577359663bf8dd885df3106d00f08a6324f",
+   "files": [
+    "stocks/kodak_gold_200.json",
+    "stocks/kodak_gold_200.safetensors"
+   ],
+   "id": "kodak_gold_200",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:6830ef72793dba0e5c21aa97ecc0823cdb707f21e94df82f36c33d56f5fa2b9d",
+   "files": [
+    "stocks/kodak_portra_160.json",
+    "stocks/kodak_portra_160.safetensors"
+   ],
+   "id": "kodak_portra_160",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:6bc36ccb60885731317db97357a57ef9906830f2d7d59c72ab2bbe22e434b333",
+   "files": [
+    "stocks/kodak_portra_400.json",
+    "stocks/kodak_portra_400.safetensors"
+   ],
+   "id": "kodak_portra_400",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:dea9756e349593545920e3f38de163fdae9afbf1d64063dc3e43ea1d985bfe69",
+   "files": [
+    "stocks/kodak_portra_800.json",
+    "stocks/kodak_portra_800.safetensors"
+   ],
+   "id": "kodak_portra_800",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:1990f1ca04fd5c34898f03aa6bc09b4a7583fccbde827708952788d5ea2b8ce3",
+   "files": [
+    "stocks/kodak_portra_endura.json",
+    "stocks/kodak_portra_endura.safetensors"
+   ],
+   "id": "kodak_portra_endura",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:ccc2f807e61b71d2700da91c7a6de8f8f43ff69ec91096c79e6ed8b8232f3156",
+   "files": [
+    "stocks/kodak_supra_endura.json",
+    "stocks/kodak_supra_endura.safetensors"
+   ],
+   "id": "kodak_supra_endura",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:399bfa6ea53c83e744e74a3f547d73e63183862a4b877fda81d7a570c5c92767",
+   "files": [
+    "stocks/kodak_ultramax_400.json",
+    "stocks/kodak_ultramax_400.safetensors"
+   ],
+   "id": "kodak_ultramax_400",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  }
+ ],
+ "knownIssues": [],
+ "license": {
+  "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0, via the Chromogen Studio prototype bundle (an older, rounded snapshot). Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+  "changelog": "CHANGELOG.txt",
+  "file": "SPEKTRAFILM_LICENSE.txt",
+  "spdx": "CC-BY-SA-4.0"
+ },
+ "logExposureGrid": {
+  "count": 256,
+  "start_logH": -3,
+  "stop_logH": 4
+ },
+ "missing": {
+  "default": "opaque",
+  "supported": [
+   "opaque",
+   "zero-density",
+   "extend-flat"
+  ]
+ },
+ "packId": "interim-chromogen@1",
+ "schemaVersion": 1,
+ "source": {
+  "exporter": "spektrafilm-export 0.1.0",
+  "from": "various/extracted/chromogen-studio/st-data/cg/stocks",
+  "kind": "interim",
+  "note": "sha256 over (file name, NUL, bytes) of every stock file in name order",
+  "sha256": "0aa818fa345d400c12169b56a798ff80418fb909ccd78b7512502c4de798c524"
+ },
+ "title": "Interim: Chromogen Studio stocks (11)"
+}

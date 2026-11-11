@@ -95,6 +95,19 @@ importers:
         specifier: workspace:*
         version: link:../ingest
 
+  packages/data:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
+    devDependencies:
+      '@chromobench/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/dsl:
     dependencies:
       '@chromobench/contract':

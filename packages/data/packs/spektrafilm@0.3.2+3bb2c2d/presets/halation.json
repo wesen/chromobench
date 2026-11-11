@@ -1,0 +1,409 @@
+{
+ "applied": {
+  "fujifilm_c200": {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  },
+  "fujifilm_pro_400h": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "fujifilm_provia_100f": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "fujifilm_velvia_100": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "fujifilm_xtra_400": {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_ektachrome_100": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_ektar_100": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_gold_200": {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_kodachrome_64": {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_portra_160": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_portra_400": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_portra_800": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_portra_800_push1": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_portra_800_push2": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_ultramax_400": {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  },
+  "kodak_verita_200d": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  },
+  "kodak_vision3_200t": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  },
+  "kodak_vision3_250d": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  },
+  "kodak_vision3_500t": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  },
+  "kodak_vision3_50d": {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  }
+ },
+ "defaults": {
+  "active": true,
+  "boost_ev": 0.0,
+  "boost_range": 0.3,
+  "halation_amount": 1.0,
+  "halation_bounce_decay": 0.5,
+  "halation_first_sigma_um": [
+   65.0,
+   65.0,
+   65.0
+  ],
+  "halation_n_bounces": 3,
+  "halation_renormalize": true,
+  "halation_spatial_scale": 1.0,
+  "halation_strength": [
+   0.05,
+   0.015,
+   0.0
+  ],
+  "protect_ev": 4.0,
+  "scatter_amount": 1.0,
+  "scatter_core_um": [
+   2.2,
+   2.0,
+   1.6
+  ],
+  "scatter_spatial_scale": 1.0,
+  "scatter_tail_um": [
+   9.3,
+   9.7,
+   9.1
+  ],
+  "scatter_tail_weight": [
+   0.78,
+   0.65,
+   0.67
+  ]
+ },
+ "notes": "presets: runtime/params_builder.py _HALATION_PRESETS keyed by (use, antihalation); defaults: HalationParams() in runtime/params_schema.py (scatter_* is in-emulsion scatter). Lengths in um.",
+ "presets": [
+  {
+   "antihalation": "no",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.3,
+    0.1,
+    0.015
+   ],
+   "use": "cine"
+  },
+  {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "cine"
+  },
+  {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    50.0,
+    50.0,
+    50.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "cine"
+  },
+  {
+   "antihalation": "no",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.3,
+    0.1,
+    0.015
+   ],
+   "use": "still"
+  },
+  {
+   "antihalation": "strong",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.015,
+    0.005,
+    0.0
+   ],
+   "use": "still"
+  },
+  {
+   "antihalation": "weak",
+   "halation_first_sigma_um": [
+    65.0,
+    65.0,
+    65.0
+   ],
+   "halation_strength": [
+    0.08,
+    0.02,
+    0.0
+   ],
+   "use": "still"
+  }
+ ]
+}

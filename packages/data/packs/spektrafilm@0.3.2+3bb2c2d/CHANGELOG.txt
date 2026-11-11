@@ -1,0 +1,30 @@
+chromobench changes to the spektrafilm data in this pack
+==========================================================
+
+Source: https://github.com/andreavolpato/spektrafilm at commit 3bb2c2d2801ff68b92019cf1dbcbb133d60832bc
+(profile metadata version 0.3.2). Licence: CC BY-SA 4.0, see SPEKTRAFILM_LICENSE.txt
+(copied verbatim, unchanged). Exported by spektrafilm-export 0.1.0.
+
+What was changed
+----------------
+1. Format. Each profile's JSON was split into a JSON sidecar (info, metadata, fitted curve model,
+   hanatos2025 adaptation parameters) and a safetensors file with the numeric arrays in IEEE
+   float64, little-endian. Values are bit-identical to what spektrafilm's load_profile() returns.
+2. Missing values. Upstream writes NaN as JSON null; this pack stores them as IEEE NaN. The
+   meaning is documented per array in the sidecar ("missing": "opaque" for densities,
+   "zero-sensitivity" for log sensitivities), following how spektrafilm uses them.
+3. Names. Arrays were renamed to carry their unit (log_sensitivity -> log10_sensitivity,
+   channel_density -> unit_dye_density_D, base_density -> base_density_D,
+   midscale_neutral_density -> midscale_neutral_density_D, log_exposure -> log_exposure_logH,
+   density_curves -> dye_amount_curves, density_curves_layers -> sublayer_dye_amount_curves).
+   A wavelengths_nm array was added to each stock file.
+4. Computed light and filter data. Illuminants (mean-1 normalised), dichroic filter sets, the
+   Schott KG heat filters, the Canon lens transmission and the CIE 1931 2-degree CMFs are the
+   arrays spektrafilm's own functions return on the 380-780 nm / 5 nm grid (filters resampled by
+   upstream's Akima interpolation; colour-science provides the CIE tables).
+5. Parameters. DIR-coupler, halation and grain parameters live in spektrafilm's code, not in its
+   data; they were extracted by calling upstream's parameter builder and written as JSON presets.
+6. Neutral print filter table: copied unchanged (re-serialised as canonical JSON).
+7. Spectral upsampling table (hanatos2025 irradiance_xy_tc): stored as float16, as shipped.
+
+No values were corrected, smoothed or resampled by chromobench.

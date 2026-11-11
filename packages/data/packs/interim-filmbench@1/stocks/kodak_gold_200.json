@@ -1,0 +1,176 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0, via the Filmbench IDE prototype bundle (an older, rounded snapshot). Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    0.518089,
+    0.555416,
+    0.553401
+   ],
+   [
+    0.480799,
+    0.517659,
+    0.515165
+   ],
+   [
+    0.551069,
+    0.566744,
+    0.568358
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    -0.772132,
+    0.306344,
+    1.018792
+   ],
+   [
+    -0.906755,
+    0.156208,
+    0.918817
+   ],
+   [
+    -0.83322,
+    0.159656,
+    0.939036
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.472824,
+    0.682937,
+    0.69727
+   ],
+   [
+    0.473403,
+    0.68271,
+    0.697451
+   ],
+   [
+    0.468692,
+    0.685133,
+    0.694633
+   ]
+  ]
+ },
+ "hanatos_surface": null,
+ "hanatos_window": null,
+ "id": "kodak_gold_200",
+ "info": {
+  "antihalation": "weak",
+  "name": "Kodak Gold 200",
+  "reference_illuminant": "D55",
+  "stage": "filming",
+  "stock": "kodak_gold_200",
+  "support": "film",
+  "target_print": "kodak_portra_endura",
+  "type": "negative",
+  "use": "still",
+  "viewing_illuminant": "D50"
+ },
+ "kind": "stock",
+ "metadata": {
+  "license": "spektrafilm profile by Andrea Volpato, CC BY-SA 4.0 (via Filmbench IDE)"
+ },
+ "missingRows_nm": {
+  "base": [
+   380,
+   395,
+   705,
+   780
+  ],
+  "dyes": [
+   380,
+   395,
+   705,
+   780
+  ],
+  "sensitivity": []
+ },
+ "role": "film",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "film_exposure_lut64_log2": {
+   "axes": [
+    "filmbench lut u",
+    "filmbench lut v",
+    "layer R,G,B"
+   ],
+   "missing": "none",
+   "note": "Filmbench FB.decodeLuts (01-inline.js 96-106): int16 / 1024; substitute for the hanatos table",
+   "shape": [
+    64,
+    64,
+    3
+   ],
+   "unit": "log2"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}
