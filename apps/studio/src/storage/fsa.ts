@@ -4,6 +4,11 @@
 
 export const SCAN_EXTENSIONS = ['tif', 'tiff', 'dng', 'png', 'jpg', 'jpeg'];
 
+/** Adds the extensions the host's decoder accepts (camera RAW, CHB-023). */
+export function addScanExtensions(exts: readonly string[]): void {
+  for (const e of exts) if (!SCAN_EXTENSIONS.includes(e.toLowerCase())) SCAN_EXTENSIONS.push(e.toLowerCase());
+}
+
 export const isScan = (name: string): boolean => SCAN_EXTENSIONS.includes((/\.([^.]+)$/.exec(name)?.[1] ?? '').toLowerCase());
 
 /** A file in a picked folder or a fallback input, before its hash is known. */

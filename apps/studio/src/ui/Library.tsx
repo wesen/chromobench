@@ -1,7 +1,7 @@
 // Library panel and film strip (guide §5.5): projects, rolls, folder access with the
 // session/import fallback, reconnect after reload, and the film strip of the current roll.
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { fromFileList, hasDirectoryPicker, listScans, pickDirectory, type PickedFile } from '../storage/fsa.ts';
+import { fromFileList, hasDirectoryPicker, listScans, pickDirectory, SCAN_EXTENSIONS, type PickedFile } from '../storage/fsa.ts';
 import { useStore, useStudio, useStudioState } from './hooks.ts';
 
 const mb = (n: number): string => `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB`;
@@ -10,7 +10,7 @@ export function OpenFilesButton(): ReactElement {
   const st = useStudio();
   return (
     <label className="btn">Open files…
-      <input id="file" type="file" multiple accept=".tif,.tiff,.dng,.png,.jpg,.jpeg,image/tiff"
+      <input id="file" type="file" multiple accept={[...SCAN_EXTENSIONS.map((e) => `.${e}`), 'image/tiff'].join(',')}
         onChange={(e) => {
           const files = fromFileList(e.target.files ?? []);
           e.target.value = '';
@@ -92,8 +92,20 @@ export function LibraryPanel(): ReactElement {
           </div>
         ))}
       </div>
+      {st.host.settings && <DustToggle />}
       {usage && <p className="small mut" id="storage-usage">{usage}</p>}
     </section>
+  );
+}
+
+/** Scan conditioning on open (CHB-023): dust detection and healing in scanner density, off by default. */
+function DustToggle(): ReactElement {
+  const st = useStudio();
+  const [on, setOn] = useState(st.host.settings?.dust ?? false);
+  return (
+    <label className="small mut" title="Detects dust specks in scanner density and heals them when a file is opened (packages/ingest). Slow on big scans; applies to files opened afterwards.">
+      <input type="checkbox" id="dust" checked={on} onChange={(e) => { if (st.host.settings) st.host.settings.dust = e.target.checked; setOn(e.target.checked); }} /> heal dust when opening
+    </label>
   );
 }
 

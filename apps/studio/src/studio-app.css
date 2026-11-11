@@ -61,3 +61,6 @@ table.exp select { max-width: 70px; font-size: 11px; }
 @media (max-width: 1279px) {
   #studio { grid-template-columns: 240px minmax(0, 1fr) 300px; }
 }
+
+/* CHB-023: boot message while the engine starts */
+.boot { font: 14px/1.5 system-ui, sans-serif; padding: 24px; color: var(--ink, #222); }

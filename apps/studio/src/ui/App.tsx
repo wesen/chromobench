@@ -5,6 +5,7 @@ import type { AgentMode } from '@chromobench/contract';
 import { useEffect, useState, type ReactElement } from 'react';
 import { actionFor, isTyping, SHORTCUTS } from '../core/keyboard.ts';
 import type { Studio } from '../core/studio.ts';
+import { download } from '../host/export.ts';
 import { ControlPanel } from './Controls.tsx';
 import { HistoryList, PendingCards, Snapshots, WhyPanel } from './History.tsx';
 import { useLogVersion, useStore, useStudio, useStudioState } from './hooks.ts';
@@ -19,7 +20,18 @@ function TopBar({ onHelp }: { onHelp: () => void }): ReactElement {
   const mode = useStudioState((s) => s.mode);
   const offline = useStudioState((s) => s.offline);
   const update = useStudioState((s) => s.updateReady);
+  const busy = useStudioState((s) => s.busy);
+  const hasFrame = useStudioState((s) => s.frameKey !== null);
+  const [space, setSpace] = useState<'srgb' | 'display-p3'>('srgb');
   const log = st.session?.log;
+  const exportPng = async (): Promise<void> => {
+    const x = await st.exportPng(space);
+    if (x) download(x.blob, x.fileName);
+  };
+  const saveRecipe = (): void => {
+    const r = st.recipeJson();
+    if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
+  };
   const project = lib.projects.find((p) => p.id === lib.currentProject)?.name;
   const roll = lib.rolls.find((r) => r.id === lib.currentRoll)?.name;
   const theme = (): void => {
@@ -39,6 +51,11 @@ function TopBar({ onHelp }: { onHelp: () => void }): ReactElement {
       <OpenFilesButton />
       <button id="undo" className="btn sm" disabled={!log?.canUndo()} onClick={() => st.undo()} title="Undo (Ctrl+Z)">Undo</button>
       <button id="redo" className="btn sm" disabled={!log?.canRedo()} onClick={() => st.redo()} title="Redo (Shift+Ctrl+Z)">Redo</button>
+      <button id="export" className="btn sm primary" disabled={!hasFrame || busy !== null} onClick={() => void exportPng()} title="Export the print as an 8-bit PNG at the working size">Export PNG</button>
+      <select id="export-space" className="bar-select" aria-label="Export colour space" value={space} onChange={(e) => setSpace(e.target.value as 'srgb' | 'display-p3')}>
+        <option value="srgb">sRGB</option><option value="display-p3">Display P3</option>
+      </select>
+      <button id="save-recipe" className="btn sm" disabled={!hasFrame} onClick={saveRecipe} title="Download the recipe and its history as JSON (it is also kept in the browser, by the file's hash)">Save recipe</button>
       <span className="sp" />
       {update && <button className="btn sm" onClick={() => location.reload()}>A new version is ready; reload when convenient</button>}
       <span className="small mut" id="offline-state">{offline === 'ready' ? 'offline ready' : offline === 'installing' ? 'caching…' : ''}</span>

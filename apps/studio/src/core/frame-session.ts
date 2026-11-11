@@ -7,6 +7,9 @@ import {
 
 export type ViewMode = 'print' | 'negative' | 'dyes' | 'classes';
 
+/** Computes a frame's first recipe from the default one (the source is registered in `graph`). */
+export type InitialRecipe = (defaults: FrameRecipe, graph: Graph) => Promise<FrameRecipe>;
+
 export interface Snapshot {
   id: string;
   frame: string;
@@ -35,15 +38,19 @@ export class FrameSession {
     this.log = log;
   }
 
-  /** Opens bytes in the engine and creates (or resumes, by hash) the frame's edit log. */
-  static async open(engine: Engine, bytes: Uint8Array, name: string, opts: { mode: AgentMode; saved?: EditLogData | null; initial?: FrameRecipe }): Promise<FrameSession> {
-    const sha = sha256Hex(bytes);
+  /**
+   * Opens bytes in the engine and creates (or resumes, by hash) the frame's edit log. `initial` may
+   * compute the first recipe from the opened frame (CHB-023: the automatic first print).
+   */
+  static async open(engine: Engine, bytes: Uint8Array, name: string, opts: { mode: AgentMode; saved?: EditLogData | null; initial?: FrameRecipe | InitialRecipe; sha256?: string }): Promise<FrameSession> {
+    const sha = opts.sha256 ?? sha256Hex(bytes);
     const info = await engine.open({ kind: 'file', sha256: sha, name, bytes });
     const graph = new Graph();
     graph.registerSource(info);
+    const first = typeof opts.initial === 'function' ? (opts.saved ? null : await opts.initial(defaultFor(sha, name), graph)) : opts.initial;
     const log = opts.saved
       ? new EditLog(opts.saved, { mode: opts.mode, graph })
-      : EditLog.create(opts.initial ?? defaultFor(sha, name), { mode: opts.mode, by: 'auto', graph });
+      : EditLog.create(first ?? defaultFor(sha, name), { mode: opts.mode, by: 'auto', graph });
     return new FrameSession(engine, info, name, log, graph);
   }
 

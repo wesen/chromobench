@@ -4,8 +4,9 @@ import type { Exposure, Vec3 } from '@chromobench/contract';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FrameSession } from '../../core/frame-session.ts';
 import type { Studio, Tool } from '../../core/studio.ts';
+import { readProbe } from '../../core/probe.ts';
 import {
-  addLights, exposureRows, nextExposureId, printingScript, ringTiles, stripLabel, stripMutation, stripValues, testStripArgs, type StripVary,
+  addLights, exposureRows, nextExposureId, printingScript, ringTiles, stripLabel, stripMutation, stripRecipe, stripValues, type StripVary,
 } from '../../core/tools.ts';
 import type { PresentImage } from '../../present/presenter.ts';
 import { useLogVersion, useStore, useStudio, useStudioState } from '../hooks.ts';
@@ -51,7 +52,7 @@ function TestStripPanel(): ReactElement {
   const steps = strip.vary === 'time' ? TIME_STEPS : CC_STEPS;
   return (
     <section className="sec">
-      <div className="h"><b>Test strip</b><span className="tag op">darkroom.testStrip</span></div>
+      <div className="h"><b>Test strip</b><span className="tag op">print.expose</span></div>
       <div className="sel-row"><label>Vary</label>
         <div className="seg" role="radiogroup" aria-label="Vary">
           {(['time', 'filtration.y', 'filtration.m', 'filtration.c'] as StripVary[]).map((v) => (
@@ -68,14 +69,14 @@ function TestStripPanel(): ReactElement {
       <div className="sel-row"><label htmlFor="strip-count">Count</label>
         <input id="strip-count" type="number" min={3} max={9} value={strip.count} onChange={(e) => st.setStrip({ count: Math.min(9, Math.max(3, Number(e.target.value) || 5)) })} style={{ width: 60 }} />
       </div>
-      <p className="about">Click a band under the strip to use its value. The mock engine prints bands around its own reference; densities are illustrative until CHB-010.</p>
+      <p className="about">Each strip of the frame is printed with its own {strip.vary === 'time' ? 'time' : 'filtration'}, centred on the current value, as on a strip of paper under the enlarger. D is the visual density at the centre of each band. Click a band to use its value.</p>
     </section>
   );
 }
 
 export function StripBands(): ReactElement {
   const st = useStudio();
-  useLogVersion();
+  const v = useLogVersion();
   const strip = useStudioState((s) => s.strip);
   const [readings, setReadings] = useState<number[]>([]);
   const s = st.session;
@@ -84,18 +85,20 @@ export function StripBands(): ReactElement {
     if (!s) return;
     let alive = true;
     void (async () => {
-      const dyes = s.chainNode('invert.dyes') ?? s.chainNode('film.grain')!;
-      const node = s.graph.intern('darkroom.testStrip', [dyes.id], testStripArgs(strip.vary, strip.step, strip.count)).node;
-      const m = s.graph.intern('measure.patches', [node.id], { cols: strip.count, rows: 1 }).node;
-      st.engine.adopt(s.graph.closure(m.id));
-      const r = await st.engine.measure(m, { precision: 'preview' });
-      const cells = r.value['cells'] as { D: number[] }[];
-      if (alive) setReadings(cells.map((c) => -Math.log10(Math.max(c.D[1]!, 1e-6))));
+      // visual density of each band's print at the band's centre (the densitometer on its print-xyz)
+      const out: number[] = [];
+      for (const b of st.stripBands()) {
+        const at = { x: Math.round(b.box.x + b.box.w / 2), y: Math.round(b.box.y + b.box.h / 2), r: Math.max(1, Math.round(Math.min(b.box.w, b.box.h) / 10)) };
+        const p = await readProbe(st.engine, s.graph, { printXyz: s.printXyzNode(stripRecipe(strip.vary, s.log.state, b.value)), dyes: null }, at);
+        out.push(p.visual ?? (p.D[0] + p.D[1] + p.D[2]) / 3);
+        if (!alive) return;
+      }
+      if (alive) setReadings(out);
     })().catch((e) => st.report(e));
     return () => {
       alive = false;
     };
-  }, [st, s, strip.vary, strip.step, strip.count]);
+  }, [st, s, v, strip.vary, strip.step, strip.count]);
   if (!s) return <></>;
   const base = stripBase(st, strip.vary);
   return (

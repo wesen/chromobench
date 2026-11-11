@@ -26,6 +26,27 @@ export interface RefEngineOptions {
   mode?: 'exact' | 'tabulated';
   /** Table size in tabulated mode (default 33). */
   N?: number;
+  /**
+   * Most full-resolution node images and most results kept, least recently used dropped first
+   * (default: unbounded). An interactive host sets it: every slider step makes new nodes (CHB-023).
+   */
+  cacheLimit?: number;
+}
+
+/** LRU helpers over a Map's insertion order (CHB-023 host glue). */
+function recall<K, V>(m: Map<K, V>, k: K): V | undefined {
+  const v = m.get(k);
+  if (v !== undefined) {
+    m.delete(k);
+    m.set(k, v);
+  }
+  return v;
+}
+function remember<K, V>(m: Map<K, V>, k: K, v: V, limit: number): V {
+  m.delete(k);
+  m.set(k, v);
+  while (m.size > limit) m.delete(m.keys().next().value as K);
+  return v;
 }
 
 /** Every op the reference engine implements. */
@@ -43,8 +64,10 @@ export class RefEngine implements Engine {
   private readonly full = new Map<string, Img>();
   private readonly results = new Map<string, { data: Float64Array; width: number; height: number; region: Box; scale: number; warnings: Diagnostic[] }>();
   private disposed = false;
+  private readonly limit: number;
 
   constructor(o: RefEngineOptions = {}) {
+    this.limit = Math.max(4, o.cacheLimit ?? Infinity);
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
     this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
@@ -79,6 +102,19 @@ export class RefEngine implements Engine {
       encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [max, max, max], from: 'default' },
       cfa: 'none', clippedFraction: clipped / (raw.width * raw.height * 3), notes: [],
     };
+    this.graph.registerSource(info);
+    return info;
+  }
+
+  /**
+   * Host glue (CHB-023): registers a source a host decoded itself (ingest: TIFF, PNG, DNG, camera RAW),
+   * as interleaved linear RGB (0 = black, 1 = white level), under `info.sha256`. open() only reads TIFF.
+   */
+  openDecoded(info: SourceInfo, data: Float32Array | Float64Array): SourceInfo {
+    if (data.length !== info.width * info.height * 3) fail('E_FORMAT', `openDecoded: ${data.length} samples for ${info.width}×${info.height}×3`);
+    const img = newImg(info.width, info.height, 3);
+    img.data.set(data);
+    this.sources.set(info.sha256, img);
     this.graph.registerSource(info);
     return info;
   }
@@ -138,14 +174,12 @@ export class RefEngine implements Engine {
   }
 
   private compute(id: string): Img {
-    const hit = this.full.get(id);
+    const hit = recall(this.full, id);
     if (hit) return hit;
     const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
     this.check(n);
     const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no reference image implementation`);
-    const img = f(this.ctx(n, true));
-    this.full.set(id, img);
-    return img;
+    return remember(this.full, id, f(this.ctx(n, true)), this.limit);
   }
 
   async evaluate(ref: NodeRef, target: EvalTarget): Promise<ImageResult> {
@@ -161,7 +195,7 @@ export class RefEngine implements Engine {
     const scale = quantizeScale(target.scale);
     if (!(scale > 0 && scale <= 1)) fail('E_ARG_RANGE', `scale ${target.scale} must be in (0, 1] or 'full'`);
     const key = `${n.id}|${scale}|${region.x},${region.y},${region.w},${region.h}|${target.precision}`;
-    let res = this.results.get(key);
+    let res = recall(this.results, key);
     if (!res) {
       await Promise.resolve();
       if (target.signal?.aborted) throw cancelled();
@@ -177,8 +211,7 @@ export class RefEngine implements Engine {
         }
       }
       if (target.signal?.aborted) throw cancelled();
-      res = { data, width, height, region, scale, warnings: [] };
-      this.results.set(key, res);
+      res = remember(this.results, key, { data, width, height, region, scale, warnings: [] as Diagnostic[] }, this.limit);
     }
     const r = res;
     return {

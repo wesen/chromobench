@@ -1,0 +1,175 @@
+// The studio's host file (CHB-023; CHB-019 guide §7.1): the one module in apps/studio allowed to
+// import @chromobench/core, gpu and ingest (tools/scripts/check-boundaries.ts names it). It builds the
+// physics engine — GpuEngine when WebGPU works, else core's RefEngine on a small working image — on
+// CHB-004's data packs, decodes scans through packages/ingest (TIFF, PNG, DNG, camera RAW via LibRaw
+// in a worker), conditions them on open, and hands the UI a StudioEngine plus a few injected
+// functions. Nothing else in the studio sees physics code.
+import type { Engine, SourceInfo, Vec3 } from '@chromobench/contract';
+import {
+  CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine, rebateBox, SCANNER_IDS, type PhysicsData,
+} from '@chromobench/core';
+import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
+import {
+  decodeAsync, detectSpecks, heal, linearise, RAW_EXTENSIONS, region, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type RawDecoder,
+} from '@chromobench/ingest';
+import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
+import type { IntegrateToGrey } from './first-print.ts';
+import { StudioEngine, type Decoded, type HostServices } from './studio-engine.ts';
+
+export type EngineChoice = 'auto' | 'gpu' | 'reference';
+
+export interface HostOptions {
+  want: EngineChoice;
+  /** Working image long side for the GPU engine (default 4000; 0 = the file's own size). */
+  long?: number;
+  /** Working image long side for the reference engine (default 512: it computes every pixel in f64 on the CPU). */
+  refLong?: number;
+  /** Status callback while the engine starts. */
+  onStatus?: (s: string) => void;
+}
+
+/** Settings the UI may change; they apply to files opened afterwards. */
+export interface HostSettings {
+  /** Detect dust specks in scanner density and heal them on open (ingest; off by default, slow on big scans). */
+  dust: boolean;
+}
+
+export interface HostEngine {
+  engine: StudioEngine;
+  /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
+  catalog: Record<string, string[]>;
+  integrate: IntegrateToGrey;
+  settings: HostSettings;
+  /** File extensions the decoder accepts. */
+  extensions: string[];
+}
+
+const DEFAULT_LONG = 4000;
+const DEFAULT_REF_LONG = 512;
+
+let rawDecoder: RawDecoder | null = null;
+/** LibRaw in a module worker, started on the first camera RAW file. */
+function libraw(): RawDecoder {
+  if (!rawDecoder) {
+    const w = new Worker(new URL('../../../../packages/ingest/src/libraw/worker-entry.ts', import.meta.url), { type: 'module' });
+    rawDecoder = workerRawDecoder(w as never, { wasmUrl: librawWasmUrl });
+  }
+  return rawDecoder;
+}
+
+const LAZY_LIBRAW: RawDecoder = { name: 'libraw', decode: (b, o) => libraw().decode(b, o) };
+
+const fmt3 = (v: ArrayLike<number>): string => Array.from(v, (x) => x.toFixed(2)).join(' ');
+
+/** Dust in scanner density: detect (ingest detectSpecks), heal (patch), back to transmittance. */
+function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
+  const n = w * h;
+  const D = [0, 1, 2].map((k) => {
+    const p = new Float32Array(n);
+    for (let i = 0; i < n; i++) p[i] = -Math.log10(Math.max(rgb[i * 3 + k]!, 1e-6) / Treb[k]!);
+    return p;
+  });
+  const sigma = sigmaD(rgb, w, h, Treb) ?? DEFAULT_SIGMA_D;
+  const found = detectSpecks(D, w, h, sigma).spots.filter((s) => s.score >= 0.5);
+  if (!found.length) return 0;
+  const healed = heal(D, w, h, spotsMask(found, w, h), { marginPx: 1, method: 'patch' }).planes;
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) rgb[i * 3 + k] = Treb[k]! * 10 ** -healed[k]![i]!;
+  return found.length;
+}
+
+/** Decode → linear → area-averaged working image → conditioning. */
+async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long: number, settings: HostSettings): Promise<Decoded> {
+  // Camera RAW (and CFA DNG) go to LibRaw in scan mode: linear camera RGB, no white balance, CFA-binned.
+  const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'scan', bin: 'cfa' }, raw: LAZY_LIBRAW });
+  const lin = linearise(raw, { sha256, ir: false });
+  const W = lin.width, H = lin.height;
+  const s = long > 0 ? Math.min(1, long / Math.max(W, H)) : 1;
+  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  const notes: string[] = [`${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
+  if (s < 1) notes.push(`working image ${w}×${h}`);
+  // The film base (rebate): the brightest 5 % column band, the rule scan.density uses with no box.
+  const rb = rebateBox(w, h, 3, data);
+  const Treb = [0, 1, 2].map((k) => {
+    let t = 0, m = 0;
+    for (let y = rb.y; y < rb.y + rb.h; y++) for (let x = rb.x; x < rb.x + rb.w; x++) { t += data[(y * w + x) * 3 + k]!; m++; }
+    return Math.max(t / Math.max(m, 1), 1e-6);
+  }) as Vec3;
+  notes.push(`base ${fmt3(Treb.map((t) => -Math.log10(t)))} D (columns ${rb.x}–${rb.x + rb.w - 1})`);
+  if (Treb.every((t) => t > 0.97)) notes.push('the brightest columns are at the white level: open gate? set a rebate box');
+  if (settings.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
+  notes.push('scanner flare not corrected');
+  const info0 = sourceInfo(sha256, raw, lin);
+  const info: SourceInfo = {
+    ...info0, width: w, height: h, channels: 3,
+    notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
+  };
+  return { info, data, full: { width: W, height: H }, notes };
+}
+
+function catalogOf(data: PhysicsData): Record<string, string[]> {
+  const films: string[] = [];
+  const papers: string[] = [];
+  for (const id of data.stockIds()) {
+    try {
+      const s = data.stock(id);
+      if (s.role === 'film' && s.type !== 'positive') films.push(id);
+      else if (s.role === 'paper') papers.push(id);
+    } catch {
+      // a stock the pack lists but cannot serve stays out of the menus
+    }
+  }
+  const lights = data.illuminantNames();
+  return {
+    'stocks:film': films.sort(), 'stocks:print': papers.sort(), scanners: [...SCANNER_IDS],
+    illuminants: lights.filter((n) => /^(D\d\d|A|F\d+)$/.test(n)), lamps: lights.filter((n) => /^TH|LED/i.test(n)),
+  };
+}
+
+/** Builds the studio's physics engine. Throws only when no engine at all can start. */
+export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
+  const say = o.onStatus ?? (() => undefined);
+  say('loading data packs…');
+  const data = await loadDefaultPhysicsData();
+  const settings: HostSettings = { dust: false };
+  let primary: Engine | null = null;
+  let label = '';
+  let long = o.long ?? DEFAULT_LONG;
+  let why = '';
+  if (o.want !== 'reference') {
+    say('starting WebGPU…');
+    try {
+      const g = await GpuEngine.create({ data, cacheLimit: 24 });
+      const caps = g.capabilities();
+      if (caps.available) {
+        primary = g;
+        label = `GPU · ${caps.adapter?.name ?? 'WebGPU'}${caps.adapter?.fallback ? ' (software)' : ''}`;
+      } else {
+        why = caps.why ?? 'WebGPU unavailable';
+        g.dispose();
+      }
+    } catch (e) {
+      why = e instanceof Error ? e.message : String(e);
+    }
+    if (!primary && o.want === 'gpu') throw new Error(`WebGPU engine requested but unavailable: ${why}`);
+  }
+  if (!primary) {
+    primary = new RefEngine({ data, cacheLimit: 48 });
+    long = o.refLong ?? DEFAULT_REF_LONG;
+    label = `reference · CPU f64${why ? ` (no WebGPU: ${why})` : ''}`;
+  }
+  const host: HostServices = {
+    decode: (bytes, sha, name) => decodeScan(bytes, sha, name, long, settings),
+    register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
+    classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
+    defaultSigma: DEFAULT_SIGMA_D,
+    // GpuEngine encodes sRGB only (CHB-011 adds the other spaces); P3 is re-encoded from it.
+    ...(primary.id === 'gpu' ? { nativeSpaces: ['srgb'] } : {}),
+  };
+  const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
+  return {
+    engine, catalog: catalogOf(data), settings,
+    integrate: (latd, alpha) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3,
+    extensions: ['tif', 'tiff', 'dng', 'png', 'jpg', 'jpeg', ...RAW_EXTENSIONS],
+  };
+}

@@ -34,7 +34,7 @@ test.afterEach(() => {
 });
 
 test('library: a reload keeps the recipe by hash; re-picking re-attaches it', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   await open(page);
   await expect(page.locator('.strip .cell')).toHaveCount(1);
   // keyboard burst on Filtration Y: three steps, one undo unit after the burst pauses
@@ -57,7 +57,7 @@ test('library: a reload keeps the recipe by hash; re-picking re-attaches it', as
 });
 
 test('import fallback into OPFS, then an offline start opens the imported frame', async ({ page, context }) => {
-  await page.goto('/');
+  await page.goto('/?engine=mock');
   await page.setInputFiles('#folder', FIXTURE_DIR);
   await expect(page.getByRole('dialog', { name: 'Use or import' })).toContainText('1 scans');
   await page.click('#import');
@@ -76,7 +76,7 @@ test('import fallback into OPFS, then an offline start opens the imported frame'
 });
 
 test('viewer: inspection views, before/after, densitometer and pinned probes', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   await open(page);
   await page.locator('#view').focus();
   const presenter = await page.evaluate(() => window.chromobench.studio.s.presenter);
@@ -110,7 +110,7 @@ test('viewer: inspection views, before/after, densitometer and pinned probes', a
 });
 
 test('controls: Home resets, Esc cancels a drag, aperture steps in thirds; why() follows focus', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   await open(page);
   const time = page.getByRole('slider', { name: 'Time' });
   await time.focus();
@@ -140,7 +140,7 @@ test('controls: Home resets, Esc cancels a drag, aperture steps in thirds; why()
 });
 
 test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   await open(page);
   await page.evaluate(() => window.chromobench.propose({ 'print.grade': 3 }, 'more contrast'));
   await expect(page.locator('#pending li')).toHaveCount(1);
@@ -164,7 +164,7 @@ test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ p
 });
 
 test('tools: test strip band, ring-around tile, masks and exposures, contact sheet', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   await open(page, [variant(0), variant(1), variant(2)]);
   await page.evaluate(() => window.chromobench.studio.gesture.set('print.enlarger.time_s', 12, 'Time'));
 
@@ -221,7 +221,7 @@ test('tools: test strip band, ring-around tile, masks and exposures, contact she
 });
 
 test('WebGPU presenter pipeline (offscreen, Display P3): exact pixels', async ({ page }) => {
-  await page.goto('/?nosw');
+  await page.goto('/?nosw&engine=mock');
   const r = await page.evaluate(async () => {
     const { WebGpuPresenter } = await import('/src/present/presenter-webgpu.ts' as string);
     const c = document.createElement('canvas');

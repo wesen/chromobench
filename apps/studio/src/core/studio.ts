@@ -2,22 +2,39 @@
 // probes and gestures. React components subscribe to its stores and call its methods; nothing on
 // the pointer path goes through a React render.
 import {
-  allOps, ChromobenchError, type AgentMode, type Diagnostic, type Engine, type FrameRecipe, type LoggedMutation, type Mutation, type Node, type SampleData, type Vec3,
+  allOps, ChromobenchError, type AgentMode, type Box, type Diagnostic, type Engine, type FrameRecipe, type Graph, type ImageInfo, type LoggedMutation, type Mutation,
+  type Node, type SampleData, type Vec3,
 } from '@chromobench/contract';
 import type { KV } from '../storage/db.ts';
 import { thumbPath, type Opfs } from '../storage/opfs.ts';
 import type { PickedFile } from '../storage/fsa.ts';
 import type { Colours, Presenter, PresentImage, ViewTransform } from '../present/presenter.ts';
+import { exportPrint, type ExportedImage, type ExportSpace } from '../host/export.ts';
 import { generateControls, type ControlModel } from './controls.ts';
-import { diffRecipes, FrameSession, PRINT_SETTINGS, type Snapshot, type ViewMode } from './frame-session.ts';
+import { diffRecipes, FrameSession, PRINT_SETTINGS, type InitialRecipe, type Snapshot, type ViewMode } from './frame-session.ts';
 import { GestureController } from './gesture.ts';
 import { LibraryStore, type FrameRecord } from './library.ts';
 import { LatestWins, readProbe, type ProbeAt, type ProbeReading } from './probe.ts';
 import { draftScale, RenderScheduler, type PresentFrame, type RenderRequest } from './scheduler.ts';
 import { Signal, Store } from './store.ts';
-import { testStripArgs, type StripVary } from './tools.ts';
+import { bandBoxes, stripRecipe, stripValues, type StripVary } from './tools.ts';
 
 export type Tool = 'testStrip' | 'ringAround' | 'contactSheet' | 'mask' | 'exposures';
+
+/** What the host (main.tsx, from host/engines.ts) gives the studio besides the engine (CHB-023). */
+export interface StudioHost {
+  /** Status-line name of the engine: kind, adapter, working size. */
+  label: string;
+  /** The automatic first print of a frame opened for the first time (real engines). */
+  firstPrint?: (engine: Engine, graph: Graph, defaults: FrameRecipe) => Promise<FrameRecipe>;
+  /** Conditioning notes of the last open of a source. */
+  notes?: (sha256: string) => string[] | null;
+  /** Settings for files opened afterwards. */
+  settings?: { dust: boolean };
+}
+
+/** One band of the test strip: its value, the document box it covers and the node it prints with. */
+export interface StripBand { value: number; box: Box; node: Node }
 
 export interface Viewport { fit: boolean; zoom: number; cx: number; cy: number }
 
@@ -47,6 +64,11 @@ export interface StudioState {
   updateReady: boolean;
   /** Last E_STALE (or other) refusal per pending tx, for "apply anyway". */
   refused: Record<string, Diagnostic[]>;
+  /** The engine in use (status line). */
+  engineLabel: string;
+  /** Conditioning notes of the open frame. */
+  notes: string[];
+  busy: string | null;
 }
 
 export const FOCUS_DEFAULT = 'print.lights.logH';
@@ -62,8 +84,9 @@ export class Studio {
     strip: { vary: 'time', step: 1 / 3, count: 5 }, ringStep: 4,
     viewport: { fit: true, zoom: 1, cx: 0, cy: 0 }, canvas: { w: 0, h: 0, dpr: 1 },
     status: 'no frame', error: null, rendered: 0, presenter: '—', mode: 'ask', probe: null, pinned: {}, classes: null,
-    focusPath: FOCUS_DEFAULT, offline: 'none', updateReady: false, refused: {},
+    focusPath: FOCUS_DEFAULT, offline: 'none', updateReady: false, refused: {}, engineLabel: '', notes: [], busy: null,
   });
+  readonly host: StudioHost;
   /** Bumped on every edit-log event of the open frame (history, controls, pending cards). */
   readonly logSignal = new Signal();
   readonly thumbs = new Store<Record<string, string>>({});
@@ -77,11 +100,15 @@ export class Studio {
   private readonly probes: LatestWins<ProbeReading>;
   private readonly pins: LatestWins<Record<string, ProbeReading>>;
   private readonly measures: LatestWins<Record<string, number> | null>;
+  /** A refusal (E_STALE…) stays in the status line until the log changes, not until the next render. */
+  private sticky = false;
   /** The last presented main image (for the pixel hook and the tools). */
   last: { node: string; image: PresentImage } | null = null;
 
-  constructor(engine: Engine, kv: KV, opfs: Opfs | null) {
+  constructor(engine: Engine, kv: KV, opfs: Opfs | null, host: StudioHost = { label: `${engine.id} engine` }) {
     this.engine = engine;
+    this.host = host;
+    this.state.update({ engineLabel: host.label });
     this.kv = kv;
     this.opfs = opfs;
     this.library = new LibraryStore(kv, opfs);
@@ -147,10 +174,13 @@ export class Studio {
         return false;
       }
       try {
-        s = await FrameSession.open(this.engine, bytes, fr.name, { mode: this.s.mode, saved: await this.library.loadLog(fr.sha256) });
+        this.update({ busy: `opening ${fr.name}…`, status: `opening ${fr.name}…` });
+        s = await this.openSession(fr, bytes);
       } catch (e) {
         this.report(e);
         return false;
+      } finally {
+        this.update({ busy: null });
       }
       s.snapshots = (await this.kv.get<Snapshot[]>('snapshots', fr.sha256)) ?? [];
       this.sessions.set(fr.sha256, s);
@@ -160,12 +190,15 @@ export class Studio {
     s.log.setMode(this.s.mode);
     s.displaySpace = this.presenter?.colorSpace === 'display-p3' ? 'display-p3' : 'srgb';
     this.unsub = s.log.on((e) => {
-      if (e.type !== 'preview') void this.persist(s);
+      if (e.type !== 'preview') {
+        this.sticky = false;
+        void this.persist(s);
+      }
       this.logSignal.bump();
       this.requestRender();
     });
     this.library.selectRoll(fr.rollId);
-    this.update({ frameKey: key, error: null, viewport: { ...this.s.viewport, fit: true, cx: s.width / 2, cy: s.height / 2 }, probe: null, classes: null, refused: {} });
+    this.update({ frameKey: key, error: null, viewport: { ...this.s.viewport, fit: true, cx: s.width / 2, cy: s.height / 2 }, probe: null, classes: null, refused: {}, notes: this.host.notes?.(s.sha) ?? [] });
     this.logSignal.bump();
     this.requestRender();
     return true;
@@ -175,12 +208,23 @@ export class Studio {
     await this.library.saveLog(s.sha, s.log.toJSON());
   }
 
+  /** Opens a frame's session: decode in the engine, resume its log by hash, or make its first print. */
+  private async openSession(fr: FrameRecord, bytes: Uint8Array): Promise<FrameSession> {
+    const fp = this.host.firstPrint;
+    const initial: InitialRecipe | undefined = fp ? (d, g) => fp(this.engine, g, d) : undefined;
+    const s = await FrameSession.open(this.engine, bytes, fr.name, {
+      mode: this.s.mode, saved: await this.library.loadLog(fr.sha256), sha256: fr.sha256, ...(initial ? { initial } : {}),
+    });
+    if (fp && s.log.toJSON().entries.length === 0) await this.persist(s);
+    return s;
+  }
+
   async sessionFor(fr: FrameRecord): Promise<FrameSession | null> {
     const have = this.sessions.get(fr.sha256);
     if (have) return have;
     const bytes = await this.library.bytes(fr);
     if (!bytes) return null;
-    const s = await FrameSession.open(this.engine, bytes, fr.name, { mode: this.s.mode, saved: await this.library.loadLog(fr.sha256) });
+    const s = await this.openSession(fr, bytes);
     s.displaySpace = this.session?.displaySpace ?? 'srgb';
     this.sessions.set(fr.sha256, s);
     return s;
@@ -345,16 +389,24 @@ export class Studio {
     return s.snapshots.find((x) => x.id === this.s.compare)?.recipe ?? s.initial;
   }
 
-  /** The node the main viewer shows now (tool or view). */
+  /** The test strip's bands on the current state: each prints its own value over its own strip (CHB-023). */
+  stripBands(): StripBand[] {
+    const s = this.session;
+    if (!s) return [];
+    const st = this.s.strip;
+    const r = s.log.state;
+    const base = st.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[st.vary.slice(-1) as 'c' | 'm' | 'y'];
+    const values = stripValues(st.vary, base, st.step, st.count);
+    const info = s.displayNode(r).info as ImageInfo;
+    const boxes = bandBoxes(values.length, info.width, info.height);
+    return values.map((value, i) => ({ value, box: boxes[i]!, node: s.displayNode(stripRecipe(st.vary, r, value)) }));
+  }
+
+  /** The node the main viewer shows now (tool or view); for the test strip, its first band. */
   mainNode(): Node | null {
     const s = this.session;
     if (!s) return null;
-    if (this.s.tool === 'testStrip') {
-      const st = this.s.strip;
-      const dyes = s.chainNode('invert.dyes') ?? s.chainNode('film.grain')!;
-      const strip = s.graph.intern('darkroom.testStrip', [dyes.id], testStripArgs(st.vary, st.step, st.count)).node;
-      return s.displayOf(strip);
-    }
+    if (this.s.tool === 'testStrip') return this.stripBands()[0]?.node ?? null;
     return s.viewNode(this.s.view);
   }
 
@@ -380,8 +432,10 @@ export class Studio {
     if (!s) return;
     let node: Node | null;
     let before: Node | null = null;
+    let bands: StripBand[] | undefined;
     try {
-      node = this.mainNode();
+      bands = this.s.tool === 'testStrip' ? this.stripBands() : undefined;
+      node = bands ? (bands[0]?.node ?? null) : this.mainNode();
       const cmp = this.compareRecipe();
       if (this.s.split !== null && !this.s.tool && cmp) before = s.viewNode(this.s.view, cmp);
     } catch (e) {
@@ -394,7 +448,7 @@ export class Studio {
     const pass = this.gesture.isActive ? 'draft' : 'screen';
     const region = this.region(screen);
     const scale = pass === 'draft' ? draftScale(screen, region?.w ?? s.width, region?.h ?? s.height) : screen;
-    this.scheduler.request({ node, before, pass, scale: scale >= 1 ? 'full' : scale, ...(region ? { region } : {}), tag: this.s.tool ?? this.s.view });
+    this.scheduler.request({ node, before, pass, scale: scale >= 1 ? 'full' : scale, ...(region ? { region } : {}), tag: this.s.tool ?? this.s.view, ...(bands ? { bands } : {}) });
     this.refreshPins();
     if (this.s.view === 'classes' && !this.s.tool) this.measureClasses();
   }
@@ -408,7 +462,9 @@ export class Studio {
       this.redraw();
     }
     const n = this.s.rendered + 1;
-    this.update({ rendered: n, status: `rendered ${n} · ${f.req.pass}${f.main.result.warnings.length ? ` · ${f.main.result.warnings[0]!.code}` : ''}`, error: null });
+    const w = f.main.result.warnings.find((x) => x.code !== 'W_DECODE_NOTE');
+    if (this.sticky) this.update({ rendered: n });
+    else this.update({ rendered: n, status: `rendered ${n} · ${f.req.pass}${w ? ` · ${w.code}` : ''}`, error: null });
   }
 
   redraw(): void {
@@ -496,6 +552,7 @@ export class Studio {
     this.gesture.commit();
     const r = log.approve(seqs, { force });
     if (Array.isArray(r)) {
+      this.sticky = true;
       this.update({ refused: { ...this.s.refused, [tx]: r }, status: r.map((d) => `${d.code}: ${d.message}`).join('; '), error: r[0]?.code ?? 'refused' });
       this.logSignal.bump();
       return false;
@@ -568,6 +625,33 @@ export class Studio {
     }
     this.update({ status: `applied to ${n} frame${n === 1 ? '' : 's'}` });
     return n;
+  }
+
+  // ---- export ------------------------------------------------------------------------------
+
+  /** The committed print at working resolution, export precision, as an 8-bit PNG (CHB-023). */
+  async exportPng(space: ExportSpace = 'srgb'): Promise<ExportedImage | null> {
+    const s = this.session;
+    if (!s) return null;
+    this.gesture.commit();
+    this.update({ busy: 'exporting…', status: 'exporting…', error: null });
+    try {
+      const x = await exportPrint(this.engine, s.graph, s.log.committed, s.name, space);
+      this.update({ status: `exported ${x.fileName} · ${x.width}×${x.height} · ${space === 'srgb' ? 'sRGB' : 'Display P3'} 8-bit` });
+      return x;
+    } catch (e) {
+      this.report(e);
+      return null;
+    } finally {
+      this.update({ busy: null });
+    }
+  }
+
+  /** The frame's edit log as JSON (the recipe and its history), for saving beside the scan. */
+  recipeJson(): { json: string; fileName: string } | null {
+    const s = this.session;
+    if (!s) return null;
+    return { json: JSON.stringify(s.log.toJSON(), null, 2), fileName: `${s.name.replace(/\.[^.]+$/, '')}.chromobench.json` };
   }
 
   /** Ring-around / test strip helpers: one `set` from a tool click. */

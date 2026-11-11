@@ -44,6 +44,11 @@ export interface GpuEngineOptions extends RuntimeOptions {
   data?: PhysicsData;
   /** URL of the packs directory when `data` is not given and the engine runs in a browser (default `<origin>/packs/`). */
   packsBase?: string;
+  /**
+   * Most evaluation results kept, least recently used dropped first (default: unbounded). An
+   * interactive host sets it: every slider step makes new nodes and a new cached result (CHB-023).
+   */
+  cacheLimit?: number;
 }
 
 interface SourceImg { w: number; h: number; c: number; data: Float32Array }
@@ -79,6 +84,8 @@ export class GpuEngine implements Engine {
   private readonly sources = new Map<string, SourceImg>();
   private readonly srcTex = new Map<string, GPUTexture>();
   private readonly results = new Map<string, Cached>();
+  /** Rebate transmittance per scan.density node id (the brightest-columns rule reads the whole receiver). */
+  private readonly rebateT = new Map<string, Vec3>();
   private disposed = false;
   private recreating: Promise<void> | null = null;
 
@@ -173,6 +180,17 @@ export class GpuEngine implements Engine {
       encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [max, max, max], from: 'default' },
       cfa: 'none', clippedFraction: clipped / (raw.width * raw.height * 3), notes: [],
     };
+    this.graph.registerSource(info);
+    return info;
+  }
+
+  /**
+   * Host glue (CHB-023): registers a source a host decoded itself (ingest: TIFF, PNG, DNG, camera RAW),
+   * as interleaved linear RGB (0 = black, 1 = white level), under `info.sha256`. open() only reads TIFF.
+   */
+  openDecoded(info: SourceInfo, data: Float32Array | Float64Array): SourceInfo {
+    if (data.length !== info.width * info.height * 3) fail('E_FORMAT', `openDecoded: ${data.length} samples for ${info.width}×${info.height}×3`);
+    this.sources.set(info.sha256, { w: info.width, h: info.height, c: 3, data: data instanceof Float32Array ? data : Float32Array.from(data) });
     this.graph.registerSource(info);
     return info;
   }
@@ -341,6 +359,11 @@ export class GpuEngine implements Engine {
     const out = new Map<string, Vec3>();
     for (const n of nodes) {
       if (n.op !== 'scan.density') continue;
+      const known = this.rebateT.get(n.id);
+      if (known) {
+        out.set(n.id, known);
+        continue;
+      }
       let box = n.args['rebate'] as Box | undefined;
       const recvRef = { id: n.inputs[0]!, info: this.graph.get(n.inputs[0]!)!.info };
       if (!box) {
@@ -354,6 +377,7 @@ export class GpuEngine implements Engine {
       const m = [0, 0, 0];
       for (let i = 0; i < r.width * r.height; i++) for (let k = 0; k < 3; k++) m[k]! += d[i * c + Math.min(k, c - 1)]! / (r.width * r.height);
       out.set(n.id, m.map((v) => Math.max(v, 1e-8)) as Vec3);
+      this.rebateT.set(n.id, out.get(n.id)!);
     }
     return out;
   }
@@ -372,7 +396,10 @@ export class GpuEngine implements Engine {
     if (!(scale > 0 && scale <= 1)) fail('E_ARG_RANGE', `scale ${target.scale} must be in (0, 1] or 'full'`);
     const key = `${n.id}|${scale}|${region.x},${region.y},${region.w},${region.h}|${target.precision}`;
     let res = this.results.get(key);
-    if (!res) {
+    if (res) {
+      this.results.delete(key);
+      this.results.set(key, res);
+    } else {
       const nodes = this.chainOf(n.id);
       const treb = await this.rebates(nodes);
       const low = this.lower(nodes, treb);
@@ -394,6 +421,8 @@ export class GpuEngine implements Engine {
       for (let i = 0; i < width * height; i++) for (let k = 0; k < c; k++) data[i * c + k] = px[4 * i + k]!;
       res = { data, width, height, region, scale, warnings: low.warnings };
       this.results.set(key, res);
+      const limit = Math.max(4, this.opts.cacheLimit ?? Infinity);
+      while (this.results.size > limit) this.results.delete(this.results.keys().next().value!);
     }
     const r = res;
     return {
@@ -413,6 +442,28 @@ export class GpuEngine implements Engine {
     const a = n.args as Record<string, unknown>;
     const precision = spec.precision ?? 'export';
     const scale = spec.scale ?? 'full';
+    if (n.op === 'measure.densitometer' && scale === 'full') {
+      // Only the aperture is evaluated (CHB-023): a probe must not read back the whole frame.
+      const at = a['at'] as { x: number; y: number };
+      const r = (a['aperture_px'] as number) / 2;
+      const x0 = Math.max(0, Math.floor(at.x - r)), y0 = Math.max(0, Math.floor(at.y - r));
+      const x1 = Math.min(info.width - 1, Math.ceil(at.x + r)), y1 = Math.min(info.height - 1, Math.ceil(at.y + r));
+      if (x1 < x0 || y1 < y0) fail('E_ARG_RANGE', 'densitometer aperture lies outside the image');
+      const box = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+      const img = await this.evaluate(recv, { scale: 'full', precision, region: box });
+      const data = await img.read();
+      const local = { ...a, at: { x: at.x - x0, y: at.y - y0 } };
+      const value = await this.gpu(async () => {
+        const tex = this.chain.upload(data, img.width, img.height, info.channels, 'measure');
+        try {
+          return await this.reduce(n.op, local, tex, img.width, img.height, info, recvId);
+        } finally {
+          this.rt.textures.release(tex);
+        }
+      });
+      if (spec.signal?.aborted) throw cancelled();
+      return { node: n.id, value, warnings: [] };
+    }
     const img = await this.evaluate(recv, { scale, precision });
     const data = await img.read();
     const value = await this.gpu(async () => {
