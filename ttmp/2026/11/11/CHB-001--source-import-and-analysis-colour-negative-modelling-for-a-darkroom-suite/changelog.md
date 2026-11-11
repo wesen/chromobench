@@ -15,3 +15,7 @@ Stored subagent diaries (various/diary-goja-cv-agent.md, various/diary-chromogen
 ## 2026-11-11
 
 Wrote design-doc/01-chromobench-architecture-and-work-plan.md (shared vocabulary, contracts, planned layout, source index, ticket map); created tickets CHB-002..CHB-015 with intern-guide and diary docs
+
+## 2026-11-11
+
+Delivered work plan: 14 intern guides (CHB-002..015) + architecture doc uploaded to reMarkable /ai/2026/11/11/chromobench; writer diaries backfilled into each ticket; errata applied or tasked

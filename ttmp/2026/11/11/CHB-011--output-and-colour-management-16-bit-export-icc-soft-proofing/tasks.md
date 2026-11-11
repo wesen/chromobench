@@ -17,3 +17,4 @@
 - [ ] [stage 5] Implement the tiled export runner (plan, pinned fields, row bands, encoder, finalise) with progress events <!-- t:7iba -->
 - [ ] [stage 5] Implement cancellation and failure clean-up (AbortSignal, sink.abort, unpin) and consistency during edits; add the tiles-vs-one-pass test with and without halo <!-- t:l2dd -->
 - [ ] [stage 5] Add OutputSettings to view.output and the OpDefs for output.display and output.encode, and file the contract proposals in CHB-002's changelog <!-- t:6luo -->
+- [ ] [review] sRGB cICP code (1,13,0,1) is from memory of H.273, unsourced; RELATED note credits paper white Y 0.813 / Dmax 2.37 to the Endura JSON but they come from textbook §2.7 <!-- t:bk2k -->

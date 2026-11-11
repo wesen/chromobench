@@ -307,3 +307,99 @@ This step covers everything from the first finished writer to the request for wr
 
 ### Technical details
 - Agent outputs live under `~/.claude/projects/-home-manuel-code-wesen-chromobench/<session>/tool-results/`. They are the evidence for each ingest; the guide text in the tickets equals the blocks in those files apart from stripped trailing whitespace.
+
+## Step 6: Upload, writer diaries filed, errata, close-out
+
+This step finishes the work-plan delivery:
+- all 15 documents were uploaded to reMarkable by a Haiku subagent;
+- every writer's backfilled diary was filed into its ticket;
+- the small guide errata the writers reported were applied or recorded as tasks;
+- every ticket passes `docmgr doctor` with no errors.
+
+### Prompt Context
+**User prompts (verbatim, after Step 5):**
+- "no need to crosscheck diaries, it's not that deep"
+- "tell the subagents too, no need to edit and revise diaries, it's a log"
+
+The earlier prompts are in Step 5.
+**Assistant interpretation:**
+- File the diaries as they arrive, without checking them.
+- Tell the writers still working to log, not revise.
+
+**Inferred user intent:** Finish cheaply and move on to building.
+
+### What I did
+- **Upload.** Delegated to a background subagent with `model: "haiku"`, per the updated `remarkable-upload` skill. Its receipt shows 15 × `OK: uploaded … -> /ai/2026/11/11/chromobench`:
+  - CHB-001 "Architecture and work plan";
+  - CHB-002 … CHB-015, one guide each.
+
+  No `--force`, no reauthentication, no renders.
+- **Diaries.** Filed each writer's diary with `python3 -I scripts/07-ingest-intern-guides.py <output> . --only=DIARY`:
+
+  | Ticket | Words | Steps | Commit |
+  |---|---|---|---|
+  | CHB-006 | 6,122 | 12 | `b49ee56` |
+  | CHB-013 | 4,370 | 12 | `b49ee56` |
+  | CHB-003 | 6,829 | 12 | `2eba418` |
+  | CHB-012 | 6,999 | 14 | `2eba418` |
+  | CHB-008 | 7,293 | 14 | `2eba418` |
+  | CHB-009 | 6,384 | 14 | `2eba418` |
+  | CHB-004 | 5,093 | 11 | `5bc1eb2` |
+  | CHB-014 | 3,848 | 9 | `5bc1eb2` |
+  | CHB-010 | 10,035 | 16 | `cbbe60b` |
+  | CHB-015 | 7,823 | 15 | `cbbe60b` |
+  | CHB-002 | 5,164 | 9 | `8e327b9` |
+  | CHB-007 | 6,124 | 14 | `8e327b9` |
+  | CHB-005 | 8,317 | 13 | final commit |
+  | CHB-011 | 7,131 | 14 | final commit |
+
+- **Errata applied** with `sed` at the writer-given lines:
+  - CHB-006: 0.2140, 0.670, 0.17 D, +0.013;
+  - CHB-013: LED peak about 1 nm;
+  - CHB-012: push-1 shift −0.02…0.00.
+- **Errata recorded as tasks:**
+  - CHB-003: flipH citation;
+  - CHB-004: shipped spectra table size, 192 vs 128;
+  - CHB-005: unconfirmed WGSL tolerances;
+  - CHB-007: four spike-evidence wordings;
+  - CHB-008 and CHB-009: textbook section citations;
+  - CHB-010: tint wording;
+  - CHB-011: unsourced cICP value and a RELATED note.
+- **Hygiene.** Added frontmatter to the stored subagent reports and diaries in `various/`. Added `extracted` to `ttmp/.docmgrignore`, so raw files extracted from the imported apps are not treated as ticket docs. Synced the writers' scripts into `various/guide-verification-scripts/` with a README.
+
+### Why
+- The upload went to a small model, as the user asked.
+- Errata that need a one-line change at a given line were applied immediately. Anything that needs judgment or research became a task, following the user's "it's not that deep".
+
+### What worked
+- The `--only=DIARY` filter prevented duplicate tasks when writers re-sent their guide blocks; four writers re-sent at least once.
+- `docmgr doctor` reports zero errors on CHB-001 … CHB-015.
+
+### What didn't work
+- The first `docmgr doctor` on CHB-001 reported `[error] YAML/frontmatter syntax error … frontmatter delimiters '---' not found` for the files in `various/`. Fixed with frontmatter and the ignore entry.
+- The first ignore line, `various/extracted/`, did not match. The file takes globs or names, so I changed it to `extracted`.
+- CHB-001 still has `missing_numeric_prefix` warnings for `various/*.md`. I accepted them, because renaming would break references.
+
+### What I learned
+- Several writers found their own errors only while writing diaries (post-hoc checks). The diary request had value beyond record-keeping.
+
+### What was tricky to build
+- Writer messages crossed: a wrap-up or diary request often arrived after the writer had already handed back, so each writer resumed and re-sent. Idempotent ingestion was the remedy: guide blocks are not refiled if the doc has a body, diaries are skipped if their first line is present, and the `--only` filter keeps tasks from being re-added.
+
+### What warrants a second pair of eyes
+- The reMarkable PDFs for CHB-006 and CHB-013 predate their errata. Replacing them needs `--force`, which deletes annotations, or a new name. That is the user's decision.
+- The guides' "Proposed contract additions (for CHB-002)" sections have not been reconciled.
+- The `remarkable-upload` skill change is on branch `task/remarkable-upload-cheap-model` in `wesen/skills`, not merged.
+- chromobench has no git remote, so nothing is pushed.
+
+### What should be done in the future
+- Start CHB-002 (contract and walking skeleton), with a contract reconciliation pass over all the proposed additions as its first task.
+- Settle the open decisions in the architecture doc §8.4.
+
+### Code review instructions
+- Run `git log --oneline task/chb-work-plan`.
+- Read `design-doc/01-chromobench-architecture-and-work-plan.md`, then any ticket's `design-doc/01-intern-guide-*.md` and `diary/01-diary.md`.
+
+### Technical details
+- reMarkable folder: `/ai/2026/11/11/chromobench`.
+- Writer outputs (evidence): `~/.claude/projects/-home-manuel-code-wesen-chromobench/<session>/tool-results/toolu_*.txt`.

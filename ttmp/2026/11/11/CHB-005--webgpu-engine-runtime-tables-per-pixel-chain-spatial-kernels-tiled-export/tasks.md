@@ -19,3 +19,4 @@
 - [ ] [stage 6] Set up the Playwright and Vite parity page with headless Chromium WebGPU flags (SwiftShader) in CI <!-- t:8zuv -->
 - [ ] [stage 6] Table parity tests: solve ≤ 2.2e-6 with 0 flips, PD ≤ 7.2e-7, XYZ ≤ 4.2e-7, between-node lookup tests, each with a broken variant that fails <!-- t:06qm -->
 - [ ] [stage 6] Chain and tile parity tests: 8-px halo within 1 level, no halo fails, per-tile wide kernel fails, grain tile-invariant; run the CHB-002 conformance suite against GpuEngine <!-- t:s2jl -->
+- [ ] [review] Unconfirmed: WGSL accuracy table (hardware tolerance 1e-5 is a guess) and integer wrapping rule; verify with a probe kernel <!-- t:wqul -->
