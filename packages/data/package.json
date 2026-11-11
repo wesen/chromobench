@@ -1,0 +1,22 @@
+{
+  "name": "@chromobench/data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./schema/manifest.schema.json": "./schema/manifest.schema.json",
+    "./schema/stock.schema.json": "./schema/stock.schema.json"
+  },
+  "scripts": {
+    "test:core-parity": "vitest run --config vitest.core-parity.config.ts"
+  },
+  "dependencies": {
+    "@chromobench/contract": "workspace:*",
+    "@noble/hashes": "2.4.0"
+  },
+  "devDependencies": {
+    "@chromobench/core": "workspace:*"
+  }
+}

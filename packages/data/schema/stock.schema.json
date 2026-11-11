@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chromobench.local/schema/data/stock.schema.json",
+  "title": "chromobench stock sidecar (stocks/<id>.json, schemaVersion 1)",
+  "description": "The JSON half of a stock; its numbers are in stocks/<id>.safetensors. Tensor names carry their unit: wavelengths_nm [81], log10_sensitivity [81,3] (layers R,G,B; missing = zero sensitivity), unit_dye_density_D [81,3] (dyes C,M,Y; missing = opaque), base_density_D [81] (missing = opaque), midscale_neutral_density_D [81], log_exposure_logH [256], dye_amount_curves [256,3] (minima NOT subtracted), sublayer_dye_amount_curves [256,3,3] ([logH][sublayer][channel]), film_exposure_lut64_log2 [64,64,3] (interim-filmbench only). All F64, NaN where the source had no value.",
+  "type": "object",
+  "required": ["kind", "id", "info", "role", "tensors", "attribution", "missingRows_nm"],
+  "properties": {
+    "kind": { "const": "stock" },
+    "id": { "type": "string" },
+    "role": { "enum": ["film", "print"] },
+    "info": {
+      "type": "object",
+      "description": "Upstream ProfileInfo verbatim (spektrafilm profiles/io.py); interim packs carry the subset their source had.",
+      "properties": {
+        "stock": { "type": "string" }, "name": { "type": "string" },
+        "type": { "enum": ["negative", "positive"] }, "support": { "enum": ["film", "paper"] },
+        "stage": { "enum": ["filming", "printing"] }, "use": { "enum": ["still", "cine"] },
+        "antihalation": { "enum": ["strong", "weak", "no"] }, "target_print": { "type": ["string", "null"] },
+        "channel_model": { "enum": ["color", "bw"] }, "densitometer": { "enum": ["status_M", "status_A"] },
+        "log_sensitivity_density_over_min": { "type": "number" },
+        "reference_illuminant": { "type": "string" }, "viewing_illuminant": { "type": "string" }
+      }
+    },
+    "curve_model": {
+      "type": ["object", "null"],
+      "description": "Fitted 3-CDF characteristic curve, c(x) = sum_i A_i Phi((x - mu_i)/sigma_i) per channel; spektrafilm prints with it.",
+      "properties": {
+        "model_type": { "const": "cdfs" },
+        "axes": { "const": ["channel", "sublayer"] },
+        "centers": { "$ref": "#/$defs/mat" }, "amplitudes": { "$ref": "#/$defs/mat" }, "sigmas": { "$ref": "#/$defs/mat" }
+      }
+    },
+    "hanatos_window": {
+      "type": ["object", "null"],
+      "properties": { "model": { "const": "erf4" }, "c_uv_nm": { "type": "number" }, "sigma_uv_nm": { "type": "number" }, "c_ir_nm": { "type": "number" }, "sigma_ir_nm": { "type": "number" } }
+    },
+    "hanatos_surface": { "type": ["object", "null"], "properties": { "model": { "const": "poly4" }, "params": { "type": "array" } } },
+    "tensors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["unit", "missing", "shape"],
+        "properties": {
+          "unit": { "type": "string" }, "axes": { "type": "array" },
+          "missing": { "enum": ["none", "opaque", "zero-sensitivity"] },
+          "shape": { "type": "array", "items": { "type": "integer" } }, "note": { "type": "string" }
+        }
+      }
+    },
+    "metadata": { "type": "object", "description": "Upstream ProfileMetadata verbatim (version, copyright, created, license, citation, datasource)." },
+    "attribution": { "type": "string", "minLength": 1 },
+    "missingRows_nm": {
+      "type": "object",
+      "properties": { "base": { "$ref": "#/$defs/runs" }, "dyes": { "$ref": "#/$defs/runs" }, "sensitivity": { "$ref": "#/$defs/runs" } }
+    }
+  },
+  "$defs": {
+    "mat": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } },
+    "runs": { "type": "array", "items": { "type": "integer" }, "description": "[first_nm, last_nm, ...] of NaN runs" }
+  }
+}

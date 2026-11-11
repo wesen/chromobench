@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chromobench.local/schema/data/manifest.schema.json",
+  "title": "chromobench data pack manifest (schemaVersion 1)",
+  "description": "manifest.json at the root of every pack in packages/data/packs/<packId>/. Written by tools/spektrafilm-export (canonical JSON: sorted keys, one-space indent); enforced by validateManifest in src/manifest.ts. The pack hash is sha256 of these bytes.",
+  "type": "object",
+  "required": ["schemaVersion", "packId", "source", "grid", "missing", "license", "items", "files", "knownIssues"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1, "description": "Pack format version; the loader refuses a newer one (E_DATA_SCHEMA)." },
+    "packId": { "type": "string", "pattern": "^[a-z0-9-]+@[0-9A-Za-z.+-]+$", "description": "<source>@<source version>[+<commit7>], e.g. spektrafilm@0.3.2+3bb2c2d; also the directory name." },
+    "title": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["upstream", "interim", "measured", "illustrative"] },
+        "repo": { "type": "string" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "profileVersion": { "type": "string" },
+        "exporter": { "type": "string" },
+        "from": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Interim packs: hash of the CHB-001 file(s) they were converted from." },
+        "note": { "type": "string" }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "required": ["start_nm", "step_nm", "count"],
+      "properties": { "start_nm": { "const": 380 }, "step_nm": { "const": 5 }, "count": { "const": 81 } },
+      "description": "Any other grid is refused with E_DATA_GRID."
+    },
+    "logExposureGrid": {
+      "type": "object",
+      "properties": { "start_logH": { "type": "number" }, "stop_logH": { "type": "number" }, "count": { "type": "integer" } }
+    },
+    "missing": {
+      "type": "object",
+      "required": ["default", "supported"],
+      "properties": {
+        "default": { "$ref": "#/$defs/policy" },
+        "supported": { "type": "array", "items": { "$ref": "#/$defs/policy" }, "minItems": 1 },
+        "note": { "type": "string" }
+      },
+      "description": "Missing-data policies the pack's source can honour (guide §6.4); others are refused with E_DATA_POLICY."
+    },
+    "license": {
+      "type": "object",
+      "required": ["spdx", "file", "attribution"],
+      "properties": {
+        "spdx": { "type": "string" },
+        "file": { "type": "string", "description": "Licence text shipped unchanged in the pack; must be listed in files." },
+        "changelog": { "type": "string", "description": "CHANGELOG.txt listing chromobench's modifications (required by the spektrafilm licence preamble)." },
+        "attribution": { "type": "string", "minLength": 1 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "id", "files", "contentHash"],
+        "properties": {
+          "kind": { "enum": ["stock", "illuminant", "filter", "dichroics", "cmf", "neutral-print-filters", "preset", "upsampling", "camera", "light"] },
+          "id": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$", "description": "sha256 over the item's canonical JSON meaning (licence keys excluded) followed by its tensor bytes in name order; what TableKeys carry." },
+          "role": { "enum": ["film", "print"], "description": "Stocks: 'print' when upstream info.stage == 'printing' (2383/2393 are print films)." },
+          "type": { "enum": ["negative", "positive"] },
+          "tensor": { "type": "string" },
+          "illustrative": { "type": "boolean", "description": "Not measured; the loader warns W_DATA_ILLUSTRATIVE." },
+          "missingRows_nm": { "description": "Run-length summary [first, last, ...] of NaN rows per array." }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "onDemand": { "type": "string", "description": "The file is not committed; this says how to generate it." }
+        }
+      }
+    },
+    "knownIssues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "items", "text"],
+        "properties": { "id": { "type": "string" }, "items": { "type": "array", "items": { "type": "string" } }, "text": { "type": "string" } }
+      }
+    },
+    "counts": { "type": "object" },
+    "scanners": { "type": "object", "description": "Camera/light packs: scanner setups built from their items." }
+  },
+  "$defs": { "policy": { "enum": ["opaque", "zero-density", "extend-flat"] } }
+}

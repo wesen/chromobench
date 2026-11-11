@@ -597,3 +597,83 @@ Implementation of CHB-004 began in the worktree branch `task/chb-004-data`. I cl
 ### Technical details
 - Pack id `<source>@<profile version>+<commit7>`. packHash = sha256 of the `manifest.json` bytes. File hashes are in `manifest.files`. An item's `contentHash` = sha256 of the canonical JSON of its meaning without licence keys, followed by its tensor bytes in name order.
 - Interim packs: `interim-chromogen@1` (11 stocks, all policies) and `interim-filmbench@1` (28 stocks, `missing.supported: ['opaque']`, curve models, neutral table under `TH-KG3`, custom dichroics, 6 illuminants, CMF, `film_exposure_lut64_log2` 64 × 64 × 3).
+
+## Step 14: The TypeScript loader, the missing-data laws and the PhysicsData adapter for core
+
+Step 13's code is commit `b62d7ef` ("CHB-004: spektrafilm exporter, four data packs and converted regression baselines"). This step adds `packages/data` (`@chromobench/data`): a safetensors reader, the manifest validator and JSON Schemas, SHA-256 verification on first read, `Pack` with async and sync accessors, the three missing-data policies with validity masks, the diagnostics, and `physicsData()`, an adapter that serves core's `PhysicsData` from the packs. Core's whole test suite, run against the packs instead of the interim JSON, passes 281 of 282 tests. The one failure is a discrete iteration-cap count, recorded below and not "fixed".
+
+### Prompt Context
+**User prompt (verbatim):** see Step 13.
+**Assistant interpretation:** Stage 2 (loader, interim packs, CI cross-check), stage 3 (policies and laws) and the core switch-over the brief asks for, without touching `packages/core` or `packages/gpu`.
+**Inferred user intent:** Core changes one import to run on packs; every number it reads is verified and traceable to upstream.
+**Commit (code):** the second commit on the branch, "CHB-004: @chromobench/data loader, missing-data laws and PhysicsData adapter" (hash in Step 15).
+
+### What I did
+- `packages/data/src/`: `tensors.ts` (`parseSafetensors`, `column`, `halfToFloat`), `hash.ts` (@noble/hashes, as the contract uses), `manifest.ts` (types, `validateManifest`, `MANIFEST_REQUIRED`), `missing.ts` (`densitySpectrum`, `zeroWhereMissing`, `linearSensitivity`, `andValid`, `transmittance`), `sources.ts` (`DataSource`, `fetchSource`, `memorySource`), `pack.ts` (`Pack`, `openPack`, `openPackSync`, `closest`), `physics.ts` (`physicsData`, `blackbody560`, mirrored `CorePhysicsData`/`CoreStockData` types), `node.ts` (`fsSource`, `PACKS_DIR`, `openPackFromDisk`, `nodePhysicsData`), `index.ts` (`DEFAULT_STOCK_PACK`, `DEFAULT_SCANNER_PACK`, `PACK_IDS`).
+- `packages/data/schema/{manifest,stock}.schema.json` (draft 2020-12).
+- Tests in `packages/data/test/`: `tensors`, `loader`, `missing`, `laws`, `crosscheck`, `core-parity`, `licence` (67 tests), plus `helpers.ts`.
+- `fixtures/golden/data/CHB-004.json`: the golden numbers of guide §15, with tolerances written before the run.
+- `packages/data/vitest.core-parity.config.ts` + `test/core-parity/interim-shim.ts`: they alias `./data/interim.ts` inside core to the packs and run `packages/core/test/**` unchanged; script `pnpm --filter @chromobench/data test:core-parity`.
+- `packages/data/package.json` depends on `@chromobench/contract` and `@noble/hashes`; `@chromobench/core` is a devDependency (for the parity test only). `pnpm install --offline` added the `packages/data` importer to `pnpm-lock.yaml` (13 lines).
+
+### Why
+- Core's `PhysicsData` is synchronous, but the browser reads packs with `fetch`. So every accessor exists twice: `x()` async (fetches the item's files), `xSync()` (from memory or a synchronous source). They share one decoding path. `physicsData()` needs either a synchronous source (node) or `await pack.preload()`.
+- `physicsData()` hands core the raw tensors (NaN kept), not policy-resolved spectra, because core resolves missing samples itself under its `Conventions` (`nan: 'opaque' | 'zero'`). The loader's policies serve the other engines.
+- The adapter mirrors core's types structurally instead of importing them, so `@chromobench/data` does not depend on core at runtime. `core-parity.test.ts` assigns `nodePhysicsData()` to core's `PhysicsData` type, so `pnpm typecheck` catches drift.
+
+### What worked
+- `npx vitest run packages/data`: 7 files, 67 tests passed. They cover:
+  - every item of the 4 packs loads, sync and async;
+  - a flipped byte in each of the 66 committed files of the spektrafilm pack gives `E_DATA_HASH`;
+  - grid 10 nm → `E_DATA_GRID`; a stock with 381 nm in its wavelengths (hash fixed up) → `E_DATA_GRID`; `schemaVersion: 2` → `E_DATA_SCHEMA`;
+  - `kodak_portra400` → `E_STOCK_UNKNOWN` with `valid[0] = 'kodak_portra_400'`; `zero-density` on interim-filmbench → `E_DATA_POLICY`;
+  - warnings `W_STOCK_KNOWN_ISSUE` (Supra Endura, twice, once per issue), `W_STOCK_NO_MODEL` (interim-chromogen papers), `W_DATA_ILLUSTRATIVE` (camera and LED, once each);
+  - the on-demand table gives `E_DATA_SCHEMA` with the regeneration hint when absent, and F16 192 × 192 × 81 when present;
+  - a fake `fetch` source gives the same packHash and bytes.
+- Laws, on loader-resolved spectra (independent of core):
+  - Grey card on the spektrafilm pack, interim-chromogen (stocks) and interim-filmbench: opaque within 0.001 of (0.004, 0.005, −0.009); zero-density within 0.002 of (0.111, −0.072, −0.038).
+  - Balance law, 128 pairs: opaque median 0.032 ± 0.002, zero-density 0.205 ± 0.002 (fails ≤ 0.06, as it must).
+  - interim-chromogen: 24 pairs with the spektrafilm table; passes opaque, fails zero-density.
+  - Share of lamp × Endura red sensitivity at ≥ 705 nm: 0.268.
+- `pnpm typecheck` clean; `pnpm lint` → `import boundaries ok (88 file checks)`.
+- Core parity: `pnpm --filter @chromobench/data test:core-parity` → `Tests 1 failed | 281 passed (282)`. I confirmed the alias is live: with the shim set to throw, every core test file errors with `CORE-PARITY-SHIM-ACTIVE`.
+
+### What didn't work
+- First laws run: `portra400-greycard-D550[0] got 1.466779948706288 expected 1.4662`. The textbook's 1.4662 uses the rounded dye amounts (0.687, 0.704, 0.864); with them the test passes. The interpolated amounts give 1.46678.
+- Typecheck: 4 `noUncheckedIndexedAccess` errors in the tests (`TS2345 ... 'Float64Array<ArrayBufferLike> | undefined'`, `TS2532: Object is possibly 'undefined'`). Fixed with non-null assertions.
+- Full `pnpm test` (machine load average 9, other agents running): one run had `1 failed | 1895 passed (1896)`, and a second had `2 failed | 1894 passed`: `packages/gpu/test/tiles.test.ts` and `packages/ingest/test/dust.test.ts`, both `Error: Test timed out in 5000ms.` Run alone, the two files pass (`Test Files 2 passed`, `Tests 20 passed`). These are load timeouts in packages I did not touch.
+- The core parity failure: `packages/core/test/ch3.golden.test.ts > 33³ table iterations, white-led: plain 23.2 → active 5.1 (§3.4)`, `AssertionError: expected 7 to be less than or equal to 5` (|plain.atCap − 15040| ≤ 5).
+
+### What I learned
+- Numeric differences between interim and pack data (recorded, goldens untouched). Script: `node <scratchpad>/chb004/parity-cap.ts`:
+
+  | Case (solve table 33³, CHROMOGEN conventions) | interim | packs | golden |
+  |---|---|---|---|
+  | xt5-fitted, Gold 200: plain mean it., atCap | 13.919, 8885 | 13.921, 8887 | 13.9, 8885 ± 5 |
+  | xt5-fitted, Gold 200: active mean it., atCap | 2.310, 0 | 2.310, 0 | 2.3, 0 |
+  | white-led, Portra 400: plain mean it., atCap | 23.168, 15042 | 23.173, 15047 | 23.2, 15040 ± 5 |
+  | white-led, Portra 400: active mean it., atCap, unreachable | 5.148, 15, 0.39747 | 5.145, 14, 0.39747 | 5.1, 15 (exact), 0.397 |
+
+  The counts of table nodes that hit the iteration cap are discrete and sensitive to the 5-decimal rounding of Chromogen's stocks: the packs carry upstream's full precision. All mean iteration counts stay within the 0.06 tolerance.
+- Other overlaps (asserted in `core-parity.test.ts`): the same 28 stock ids and roles; `logSensitivity` and curves within 5e-5; dyes and base within 5e-6 where both are finite; the opaque pass mask is identical for all 28 stocks; CMF, illuminants and dichroics within 1e-6; neutral table equal; camera and white LED within 1e-5. The pack also adds illuminant `TH-KG3-L`. The mid-grey paper exposure of Portra 400 on Endura agrees with interim within 1e-4, and the grey card prints neutral (|a*| + |b*| < 1e-6) at Y = 0.184.
+- Interim's Filmbench-sourced stocks keep NaN in dye rows where upstream has real values (Filmbench zeroed them). Under core's opaque convention this does not matter (same pass mask). Under `nan: 'zero'` it does, which is why the Chromogen parity goldens use Chromogen-sourced stocks.
+
+### What was tricky to build
+- One loader serving both a synchronous interface (core) and an asynchronous one (browser fetch): a per-file bytes cache filled by `load()` (async) or `readSync` (node), with all decoding in the sync path.
+- The E_DATA_GRID test needed a stock file whose wavelengths are wrong but whose hash is right, otherwise `E_DATA_HASH` fires first; the test rewrites the manifest's sha256 for that file.
+
+### What warrants a second pair of eyes
+- `physicsData().stock()` fills `meta.antihalation` and `meta.densitometer` only when the source had them (interim-chromogen lacks most info fields; `StockData.infoDefaulted` lists what the loader filled from upstream's `ProfileInfo` defaults).
+- `packages/data` has a devDependency on `@chromobench/core`. When core starts depending on `@chromobench/data` (CHB-017), this becomes a dev-only workspace cycle; move `core-parity.test.ts` into core then.
+
+### What should be done in the future
+- Core switch-over (CHB-003 owner or CHB-017): replace `export { interimData } from './data/interim.ts'` with `export { nodePhysicsData as interimData } from '@chromobench/data/node'` (or add a provider option), and decide what to do with the two ch3 cap-count goldens, which were measured on interim data.
+- A browser test of `fetchSource` (the node test uses a fake `fetch`).
+
+### Code review instructions
+- Start with `packages/data/src/pack.ts` (`Pack.stockSync`, `verify`, `load`), then `missing.ts`, `physics.ts`, `node.ts`.
+- Validate: `pnpm typecheck && pnpm lint && npx vitest run packages/data`, and `pnpm --filter @chromobench/data test:core-parity` (expect the one ch3 difference above).
+
+### Technical details
+- `StockData` (pack) fields follow guide §8: `log10Sensitivity`, `sensitivity` (linear, missing → 0), `unitDyes_D`, `base_D`, `midscaleNeutral_D`, `logExposure_logH`, `dyeCurves` (minima not subtracted), `sublayerCurves` ([logH][sublayer][channel] flattened), `curveModel` (`centers`, `amplitudes`, `sigmas`, [channel][sublayer]), `hanatosWindow`, `hanatosSurface`, `missing`, `contentHash`, `knownIssues`, `attribution`, `raw`.
+- Role: `print` when upstream `info.stage == 'printing'`; the core adapter maps it to core's `'paper'`.
