@@ -20,3 +20,7 @@ export * from './conditioning/opengate.ts';
 export * from './conditioning/rank.ts';
 export * from './conditioning/conditioning-map.ts';
 export * from './conditioning/forward-stub.ts';
+export * from './conditioning/dust/kernels.ts';
+export * from './conditioning/dust/specks.ts';
+export * from './conditioning/dust/heal.ts';
+export * from './conditioning/dust/planted.ts';
