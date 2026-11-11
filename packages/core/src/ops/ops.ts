@@ -3,11 +3,12 @@
 // node's inputs (`ctx.up`), because a pointwise op's own args do not name it.
 import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Domain, type ImageInfo, type Point } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
+import { filtrationForLights } from '../print/balance.ts';
 import { makePrintChain, type Aim, type OutputSpace, type PrintChain } from '../print/chain.ts';
 import { adaptBradford, addFlare, D50, D65, observe, paperWhiteXYZ, reflectance, whiteXYZ, type Viewing } from '../print/colour.ts';
 import { DEFAULT_COMPRESS, type CompressSpec } from '../print/gamut.ts';
 import { displayEncode } from '../print/chain.ts';
-import { gradeToGamma, paperDeveloper } from '../print/paper.ts';
+import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
@@ -60,11 +61,17 @@ export class PhysicsEnv {
   forward(stock: string, scanner: string): ForwardModel {
     return this.cached(`fwd:${stock}:${scanner}`, () => makeForward(makeScanner(this.data, scanner), this.stock(stock)));
   }
-  /** The print chain of a print.expose node: filtration is a shift on the database neutral pack; the aim is neutral under `aimView`. */
+  /**
+   * The print chain of a print.expose node: filtration is a shift on the database neutral pack, the
+   * calibration is that neutral pack at REFERENCE_OPTICS, the aim is neutral under `aimView`. Normalised
+   * mode ignores the optics, so they are left out of its key.
+   */
   chain(o: ExposeSettings): PrintChain {
-    return this.cached(`chain:${JSON.stringify(o)}`, () => makePrintChain({
+    const k = o.mode === 'real' ? o : { ...o, time_s: null, fstop: null, magnification: null };
+    return this.cached(`chain:${JSON.stringify(k)}`, () => makePrintChain({
       data: this.data, conv: this.conv, film: this.stock(o.film), paper: this.stock(o.paper), lamp: o.lamp, filtrationShift: o.filtration,
-      mode: o.mode, ...(o.mode === 'real' ? { real: { time_s: o.time_s, fstop: o.fstop } } : {}), aim: o.aim, view: o.aimView,
+      mode: o.mode, ...(o.mode === 'real' ? { optics: { time_s: o.time_s, fstop: o.fstop, ...(o.magnification !== null ? { magnification: o.magnification } : {}) } } : {}),
+      aim: o.aim, view: o.aimView,
     }));
   }
   viewing(paper: string, illuminant: string): Viewing {
@@ -74,8 +81,10 @@ export class PhysicsEnv {
   solveTable(stock: string, scanner: string): Table3 {
     return this.cached(`solveT:${stock}:${scanner}:${this.N}`, () => buildSolveTable(this.forward(stock, scanner), { N: this.N }).table);
   }
+  /** Printing density = clear − x depends on film, paper, lamp and pack only (not on κ, optics, aim or mode). */
   pdTable(o: ExposeSettings): Table3 {
-    return this.cached(`pdT:${JSON.stringify(o)}:${this.N}`, () => buildPdTable(this.chain(o), { N: this.N }));
+    const key = JSON.stringify([o.film, o.paper, o.lamp, o.filtration]);
+    return this.cached(`pdT:${key}:${this.N}`, () => buildPdTable(this.chain(o), { N: this.N }));
   }
   printTable(paper: string, illuminant: string): Table3 {
     return this.cached(`printT:${paper}:${illuminant}:${this.N}`, () => buildPrintTable({ viewing: this.viewing(paper, illuminant) }, { N: this.N }));
@@ -84,7 +93,10 @@ export class PhysicsEnv {
 
 /** print.expose's arguments plus the upstream film: everything its chain depends on. */
 export interface ExposeSettings {
-  film: string; paper: string; lamp: string; mode: 'normalised' | 'real'; filtration: Cmy; time_s: number; fstop: number; aim: Aim; aimView: string;
+  film: string; paper: string; lamp: string; mode: 'normalised' | 'real'; filtration: Cmy; time_s: number; fstop: number;
+  /** null: the calibration's reference magnification (the arg is optional in the contract). */
+  magnification: number | null;
+  aim: Aim; aimView: string;
 }
 
 /** Contract defaults for nodes adopted from an older contract (args are filled by bindArgs otherwise). */
@@ -216,10 +228,8 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return mapPx(recv(ctx), 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = Math.log10(10 ** px[k]! + phi); });
   },
   'print.develop': (ctx) => {
-    const paper = A(ctx, 'paper') as string;
-    const grade = num(ctx, 'grade');
-    const dev = ctx.env.cached(`dev:${paper}:${grade}`, () => paperDeveloper(ctx.env.stock(paper), { gamma: gradeToGamma(grade), fast: 1, slow: 1, rgb: [1, 1, 1], exhaustion: 0 }));
-    return mapPx(recv(ctx), 3, (px, o) => { const c = dev(px); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; });
+    const { develop } = developerAt(ctx, A(ctx, 'paper') as string, num(ctx, 'grade'));
+    return mapPx(recv(ctx), 3, (px, o) => { const c = develop(px); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; });
   },
   'view.reflect': (ctx) => {
     if (ctx.env.mode === 'tabulated') {
@@ -262,8 +272,31 @@ export function exposeSettings(a: Readonly<Record<string, unknown>>, film: strin
   return {
     film, paper: a['paper'] as string, lamp: a['lamp'] as string, mode: a['mode'] as 'normalised' | 'real',
     filtration: a['filtration'] as Cmy, time_s: a['time_s'] as number, fstop: a['fstop'] as number,
+    magnification: (a['magnification'] as number | undefined) ?? null,
     aim: (a['aim'] as Aim | undefined) ?? 'grey-0.184', aimView: (a['aimView'] as string | undefined) ?? 'D50',
   };
+}
+
+/**
+ * The grade's pivot: the aim grey's paper exposure of the upstream print.expose (Chromogen aim().g),
+ * so a grade change leaves the grey card where it is. [0, 0, 0] (spektrafilm's morph centre) when no
+ * print.expose is upstream.
+ */
+export function gradePivot(ctx: ChainCtx): Vec3 {
+  const ex = ctx.up('print.expose');
+  return ex ? ctx.env.chain(exposeSettings(ex.args, filmOf(ctx))).aimX : [0, 0, 0];
+}
+
+/**
+ * print.develop's developer, shared with packages/gpu: the paper curve after the grade,
+ * x′ = pivot + γ(grade)·(x − pivot) (CHB-010 guide §6.8). `id` names the function for caches.
+ */
+export function developerAt(ctx: ChainCtx, paper: string, grade: number): { id: string; develop: (x: ArrayLike<number>) => Vec3 } {
+  const g = gradeToGamma(grade);
+  const dev = ctx.env.cached(`dev:${paper}`, () => paperDeveloper(ctx.env.stock(paper)));
+  if (g === 1) return { id: `${paper}|1`, develop: dev };
+  const pivot = gradePivot(ctx);
+  return { id: `${paper}|${g}|${pivot.join(',')}`, develop: (x) => dev(gradeX(x, g, pivot)) };
 }
 
 /** Per-pixel class codes. Needs the upstream invert.dyes input (density above rebate); σ from the sigma argument. */
@@ -378,6 +411,24 @@ export const VALUE_OPS: Record<string, ValueOp> = {
       }
     }
     return { cells };
+  },
+  'darkroom.lightsToFiltration': (ctx) => {
+    // Contract 0.2 gives this op only `logH` on a film-dyes receiver, so the print settings are not
+    // visible: the defaults of print.expose are used (Portra Endura, TH-KG3, the database neutral pack,
+    // real mode, 10 s at f/8) unless the args carry them (CHB-010 CONTRACT-REQUESTS R1 adds them).
+    const a = ctx.args;
+    const es = exposeSettings({
+      paper: a['paper'] ?? DEFAULT_PAPER, mode: a['mode'] ?? 'real', lamp: a['lamp'] ?? 'TH-KG3', filtration: a['filtration'] ?? { c: 0, m: 0, y: 0 },
+      time_s: a['time_s'] ?? 10, fstop: a['fstop'] ?? 8, magnification: a['magnification'], aim: a['aim'], aimView: a['aimView'],
+    }, filmOf(ctx));
+    const fit = filtrationForLights({
+      data: ctx.env.data, conv: ctx.env.conv, film: ctx.env.stock(es.film), paper: ctx.env.stock(es.paper), lamp: es.lamp, filtrationShift: es.filtration, mode: es.mode,
+      optics: { time_s: es.time_s, fstop: es.fstop, ...(es.magnification !== null ? { magnification: es.magnification } : {}) }, aim: es.aim, view: es.aimView,
+    }, A(ctx, 'logH') as Vec3);
+    return {
+      filtration: fit.shift, residual: Math.max(...fit.residual_pt.map(Math.abs)) * 0.025,
+      time_s: fit.time_s, stops: fit.stops, lights: fit.lights, residual_pt: fit.residual_pt,
+    };
   },
   'invert.classify': (ctx) => {
     const cls = classesOf(ctx);

@@ -3,8 +3,8 @@
 // paper, which white) all come from core. This file only turns them into what the kernels consume:
 // table arrays, uniforms and the 1-D paper-curve row.
 import {
-  bradfordMatrix, BRADFORD, conventionsKey, D50, D65, DEFAULT_CONVENTIONS, displayGain, exposeSettings, filmOf, flareWhite,
-  gradeToGamma, mulMM, mulMV, paperDeveloper, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt, XYZ_TO_SRGB,
+  bradfordMatrix, BRADFORD, conventionsKey, D50, D65, DEFAULT_CONVENTIONS, developerAt, displayGain, exposeSettings, filmOf, flareWhite,
+  gradePivot, gradeToGamma, mulMM, mulMV, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt, XYZ_TO_SRGB,
   type ChainCtx, type Conventions, type ExposeSettings, type PhysicsData, type UpNode,
 } from '@chromobench/core';
 import { A_RANGE, CP_RANGE, C_RANGE, N3, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs, type Vec3 } from '../tables/inputs.ts';
@@ -48,18 +48,28 @@ export class CorePhysics {
     return this.cached(`print:${paper}:${illuminant}:${N}`, () => ({ kind: 'print', ...printArrays(this.env.viewing(paper, illuminant)), range: CP_RANGE, N }));
   }
 
-  /** print.develop: core's paper developer (3-CDF model, grade → gamma morph) sampled on X_RANGE. */
-  developRow(paper: string, grade: number): CurveRow {
-    return this.cached(`dev:${paper}:${grade}`, () => {
-      const dev = paperDeveloper(this.env.stock(paper), { gamma: gradeToGamma(grade), fast: 1, slow: 1, rgb: [1, 1, 1], exhaustion: 0 });
+  /**
+   * print.develop: core's paper developer (3-CDF model) at grade 2, sampled on X_RANGE. The grade is
+   * not baked into the row: the kernel applies core's x′ = pivot + γ·(x − pivot) first (`grade`), so a
+   * steeper grade does not magnify the row's interpolation error.
+   */
+  developRow(paper: string): CurveRow {
+    const { id, develop } = developerAt({ env: this.env, up: () => undefined }, paper, 2);
+    return this.cached(`dev:${id}`, () => {
       const data = new Float32Array(N1 * 4);
       for (let i = 0; i < N1; i++) {
         const x = X_RANGE[0] + ((X_RANGE[1] - X_RANGE[0]) * i) / (N1 - 1);
-        const c = dev([x, x, x]);
+        const c = develop([x, x, x]);
         data.set([c[0], c[1], c[2], 1], 4 * i);
       }
-      return { id: `${paper}|${grade}`, data };
+      return { id, data };
     });
+  }
+
+  /** print.develop's grade in context: γ (Filmbench GRADE) and the pivot, the upstream print.expose's aim grey (core `gradePivot`). */
+  grade(ctx: ChainCtx, grade: number): { gamma: number; pivot: Vec3 } | null {
+    const gamma = gradeToGamma(grade);
+    return gamma === 1 ? null : { gamma, pivot: gradePivot(ctx) };
   }
 
   /** view.flare: X + f·W, W the paper white (adapted when a view.adapt is upstream). */

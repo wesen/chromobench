@@ -361,7 +361,8 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       if (vary === 'time') s.time_s = 10 * 2 ** o;
       else if (vary === 'grade') s.grade = clamp(2 + o, 0, 5);
       else if (vary.startsWith('lights.')) s.lights['rgb'.indexOf(vary.slice(-1))] = o * 0.025;
-      else s.filtration[vary.slice(-1) as keyof Cmy] = band * step;
+      // filtration is a signed shift on the neutral pack (contract 0.2): bands step it around 0, as the studio labels them
+      else s.filtration[vary.slice(-1) as keyof Cmy] = o;
       return printPixel(rgb3(px), s);
     });
   },

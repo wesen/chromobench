@@ -39,7 +39,7 @@ interface Frame {
   exact: RefEngine;
   tabulated: RefEngine;
   T: Float32Array;
-  nodes: { dyes: Node; display: Node; displayTanh: Node };
+  nodes: { dyes: Node; display: Node; displayTanh: Node; darkroom: Node };
 }
 let frameP: Promise<Frame> | null = null;
 async function frame(): Promise<Frame> {
@@ -65,8 +65,12 @@ async function frame(): Promise<Frame> {
     const xyz = I('view.reflect', [I('print.develop', [x.id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
     const display = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
     const displayTanh = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0 }).id], { to: 'D65' }).id], { rendering: 'scan-of-print', knee: 'tanh-shoulder' });
-    for (const n of [display, displayTanh]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
-    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh } };
+    // CHB-010: a real-mode print (14 s, f/8, +10 M on the neutral pack) on grade 4 (γ 1.45 about the aim grey)
+    const xr = I('print.lights', [I('print.expose', [dyes.id], { paper: S.paper, mode: 'real', time_s: 14, filtration: { c: 0, m: 10, y: 0 } }).id], { logH: [0.02, 0, -0.01] });
+    const xyzR = I('view.reflect', [I('print.develop', [xr.id], { paper: S.paper, grade: 4 }).id], { illuminant: 'D50' });
+    const darkroom = I('output.display', [I('view.adapt', [I('view.flare', [xyzR.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
+    for (const n of [display, displayTanh, darkroom]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
+    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh, darkroom } };
   })();
   return frameP;
 }
@@ -189,6 +193,15 @@ export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Prom
     const got = await read(f.gpu, f.nodes.display, 'export');
     const tanh = levels(await read(f.gpu, f.nodes.displayTanh, 'export'), 3, await read(f.exact, f.nodes.displayTanh, 'export'), 3);
     return { ...levels(got, 3, await read(f.exact, f.nodes.display, 'export'), 3), tanhScanOfPrint: tanh };
+  },
+
+  async 'chain:darkroom'() {
+    // CHB-010 real mode and grade: export against core exact, preview against core tabulated
+    const f = await frame();
+    const exp = levels(await read(f.gpu, f.nodes.darkroom, 'export'), 3, await read(f.exact, f.nodes.darkroom, 'export'), 3);
+    const pre = levels(await read(f.gpu, f.nodes.darkroom, 'preview'), 3, await read(f.tabulated, f.nodes.darkroom, 'export'), 3);
+    const differs = levels(await read(f.exact, f.nodes.darkroom, 'export'), 3, await read(f.exact, f.nodes.display, 'export'), 3);
+    return { export: exp, preview: pre, vsDefaultPrint: differs };
   },
 
   async 'chain:builders-identical'() {

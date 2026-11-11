@@ -291,7 +291,13 @@ export class GpuEngine implements Engine {
           break;
         }
         case 'print.lights': push({ code: OP.ADD, p0: [...(a['logH'] as number[])], node: n.id }); break;
-        case 'print.develop': push({ code: OP.DEVELOP, node: n.id }, { curves: P.developRow(a['paper'] as string, a['grade'] as number) }); break;
+        case 'print.develop': {
+          // the grade as x′ = pivot + γ(x − pivot) before the paper row (flag 1), as core's developerAt
+          const gr = P.grade(ctx, a['grade'] as number);
+          const curves = P.developRow(a['paper'] as string);
+          push(gr ? { code: OP.DEVELOP, flags: 1, p0: [...gr.pivot], p1: [gr.gamma, gr.gamma, gr.gamma], node: n.id } : { code: OP.DEVELOP, node: n.id }, { curves });
+          break;
+        }
         case 'view.reflect': push({ code: OP.REFLECT, node: n.id }, { print: P.printInputs(P.paperOf(ctx), a['illuminant'] as string) }); break;
         case 'view.flare': push({ code: OP.FLARE, p0: P.flare(ctx, a['flare'] as number), p1: [1], node: n.id }); break;
         case 'view.adapt': push({ code: OP.ADAPT, p0: P.adaptGains(ctx, a['to']), node: n.id }); break;

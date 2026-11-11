@@ -248,7 +248,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         else { v = vec4<f32>(p0.rgb - lut3(pdT, v.rgb, U.rangesA.z, U.rangesA.w).xyz, 0.0); }
       }
       case 4u: { v = vec4<f32>(v.rgb + p0.rgb, v.a); }
-      case 5u: { v = vec4<f32>(lut1c(0u, v.rgb, U.rangesB.z, U.rangesB.w), 0.0); }
+      case 5u: {
+        // op.y & 1: the grade (CHB-010), x′ = pivot + γ·(x − pivot) with p0 = pivot (the aim grey), p1 = γ
+        var x = v.rgb;
+        if ((op.y & 1u) != 0u) { x = p0.rgb + p1.rgb * (x - p0.rgb); }
+        v = vec4<f32>(lut1c(0u, x, U.rangesB.z, U.rangesB.w), 0.0);
+      }
       case 6u: {
         if ((U.misc.z & 4u) != 0u) { v = vec4<f32>(printM() * specSum(14u * U.misc.w, v.rgb), 0.0); }
         else { v = vec4<f32>(lut3(printT, v.rgb, U.rangesB.x, U.rangesB.y).xyz, 0.0); }

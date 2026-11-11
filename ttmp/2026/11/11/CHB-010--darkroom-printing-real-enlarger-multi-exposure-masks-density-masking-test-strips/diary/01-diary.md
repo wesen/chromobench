@@ -1140,3 +1140,115 @@ SHA-256 prefixes (first 16 hex digits) on 2026-11-11:
 | secfix.py | 07815f0d6e878855 |
 | chb010.md | 3197760d6e84dd3e |
 | chb015.md | 0b5ee9bc6282eb3a |
+
+## Step 18: M2 implementation: real-mode enlarger, calibration, grade and balance tools (stages 1–2)
+
+This step implements stages 1 and 2 of the guide in `packages/core` and lowers the result into `packages/gpu`, on the worktree branch `task/chb-010-printing`. The real-mode enlarger now has time, f-stop and magnification as exact log-exposure offsets, κ is one scalar fixed at the calibration, the grade is a gamma about the aim grey, and the balance tools (aim, warmth, integrate-to-grey, roll tools, grey pick, hold density, lights → filtration, Bake) exist as tested core functions.
+
+The main finding was a bug that made the filter dials and the timer useless at the grey card: core fitted the aim lights per chain, so three free per-layer lights absorbed every filter and time change. The aim is now fitted once at the calibration. A second finding corrects the guide's warmth vector.
+
+### Prompt Context
+**Orchestrator brief (verbatim):** "You implement the M2 slice of ticket CHB-010 (darkroom printing) in the chromobench monorepo, in your own git worktree. Read the common brief and follow its rules (branch `task/chb-010-printing`, commits at milestones with green checks, Co-Authored-By trailer, no push/merge, stay in your lane, CONTRACT-REQUESTS.md instead of contract edits, investigation-format diary appended to the ticket diary, check off tasks with docmgr, short final reply): /tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/impl-brief-common.md
+
+Spec: ttmp/2026/11/11/CHB-010--*/design-doc/01-intern-guide.md and its tasks (`docmgr task list --ticket CHB-010`).
+
+Scope for now (milestone M2, "the photographer converts his own roll"): **Stage 1 (the real-mode enlarger) and Stage 2 (printer lights and balance)** — enlarger time in seconds/stops, signed filtration, paper grade, printer lights/balance, replacing core's `RealExposureModel` stub and the `gradeToGamma` placeholder, in the reference engine (packages/core) first and, where the op already exists there, the GPU engine (packages/gpu) so both stay in conformance. Stages 3–6 (multi-exposure, density masks, fast filter path, procedures) stay open unless they fall out cheaply.
+
+Context you need (things changed since the guide was written):
+- Contract is now 0.2 (CHB-017): `print.expose.filtration` is a **signed shift on the database neutral pack** (range −100…200 CC); `print.expose` gained `aim` and `aimView` arguments; the ring-around takes `step_pt` (printer points, default 4); `cam16-ucs` was renamed `oklch`. See packages/contract/CONTRACT-DECISIONS.md "Contract 0.2".
+- One physics: packages/gpu now uses packages/core as its oracle and data source (CHB-017 diary Steps 2–3 in ttmp/2026/11/11/CHB-017--*/diary/01-diary.md).
+- Known gaps CHB-017 left for you: the mock's `testStrip` filtration vary still steps an absolute pack from 0 while the studio steps the shift; `mask.paint` is empty in the mock.
+- A parallel agent is switching core/gpu default data to CHB-004's packs (packages/data); don't do that switch yourself, use the PhysicsData interface as it is.
+- Stage tasks moved here from other tickets are marked "[from CHB-0NN …]".
+
+Checks green at each commit: pnpm typecheck, pnpm lint, pnpm test (baseline 1936 on this tree), pnpm gen:check, pnpm contract:check, and `STUDIO_PORT=4451 CI=1 pnpm test:browser` (baseline 42; never reuse port 4173). Use the textbook numbers from the guide as goldens. Be pragmatic; the user asked not to overdo polish.
+
+Final reply (short): branch and commits, test counts, stages done/open, contract requests, what CHB-019/CHB-020 (studio and roll workflow) can now rely on."
+**Assistant interpretation:** Make the enlarger's time, aperture, magnification, signed filtration and grade physically meaningful in core and the GPU engine, port the balance tools, prove them with the guide's numbers, and leave stages 3–6 open.
+**Inferred user intent:** The photographer can print his own roll on the darkroom's terms (seconds, CC, grade, printer lights), and the studio and roll-workflow tickets get a stable physics API to build on.
+**Commit (code):** bfe7258 — "CHB-010: real-mode enlarger, calibration, grade and balance tools (stages 1-2, core + gpu)"
+
+### What I did
+- Read the common brief, the guide (all 763 lines), the tasks, `CONTRACT-DECISIONS.md` "Contract 0.2", core's `print/*.ts`, `ops/ops.ts`, `engine-ref.ts`, the contract's print and darkroom catalog, `graph.ts` compile, the mock's darkroom ops and `packages/gpu/src/physics/core.ts`. No `[from CHB-0NN]` tasks are in CHB-010's `tasks.md` on this tree.
+- Baseline: `pnpm install --frozen-lockfile --offline`, then `pnpm test`: 42 files, 1936 tests passed.
+- Probe (scratch file `packages/core/probe.tmp.ts`, deleted): with the default aim `grey-0.184`, a +10 M or +10 Y shift and real-mode time left the grey card at D_vis 0.7352, L* 49.98, a* 0.00, b* 0.00 in both modes; only `aim: 'midgray-normalised'` showed filter effects.
+- `packages/core/src/print/enlarger.ts`: removed `RealExposureModel`/`STUB_REAL_EXPOSURE`; added `EnlargerOptics`, `REFERENCE_OPTICS` (10 s, f/8, ×8), `opticsLogH` (log10 t/t_ref − 2 log10 N/N_ref − 2 log10 (m+1)/(m_ref+1)), `EnlargerSetup.optics` and `.calibration`, `Enlarger.kappa`, `.optics_logH`, `.printingDensity`; real mode fixes κ at the calibration pack; `dxdCC` pins that pack for its shifted enlargers.
+- `print/chain.ts`: `referencePack` option (default the absolute `filtration` when given, else the database neutral), `optics` option; the aim lights are fitted on the reference enlarger (reference pack, reference optics); new fields `neutral`, `reference`, `grey`, `aimX`.
+- `print/paper.ts`: `GRADE_GAMMA` (Filmbench `vfs/controls.js` GRADE: 0.7, 0.82, 1, 1.2, 1.45, 1.8), `gradeToGamma` by interpolation, `gradeX` (x′ = pivot + γ(x − pivot)).
+- `ops/ops.ts`: `ExposeSettings.magnification`; `PhysicsEnv.chain` passes optics in real mode and drops them from the key in normalised mode; the tabulated pd table is keyed by film, paper, lamp and pack only; `gradePivot` and `developerAt` (shared with the GPU); `print.develop` uses them; new value op `darkroom.lightsToFiltration`.
+- `print/balance.ts`: `frameStats`, `warmthVector`, `printWindow`, `aimOf`, `autoLights`, `rollMean`, `rollConsistency`, `meanX`, `matchFrame`, `greyPickSliders`, `holdDensity`, `lightsToFiltration`, `filtrationForLights`, `bakeMutations`, `chainOptionsOf`, `bakeRecipe`.
+- `packages/gpu`: `CorePhysics.developRow(paper)` is the grade-2 paper row and `CorePhysics.grade(ctx, grade)` gives γ and the pivot; `print.develop` lowers to `OP.DEVELOP` with flag 1, p0 = pivot, p1 = γ; `kernels/pointwise.wgsl` case 5 applies x′ = p0 + p1·(x − p0) before `lut1c`. The parity frame gained a real-mode node (14 s, +10 M, lights (0.02, 0, −0.01), grade 4) and the spec `darkroom chain (real mode, 14 s, +10 M, grade 4)`.
+- `packages/engine-mock/src/ops.ts`: the filtration test strip steps the signed shift `(band − (steps − 1)/2)·step` instead of `band·step` (the gap CHB-017 left).
+- Tests: `fixtures/golden/chb010-enlarger.json` + `packages/core/test/chb010.golden.test.ts` (20), `packages/core/test/chb010.balance.test.ts` (15), `packages/core/src/laws/chb010.laws.ts` (4 laws, 4 mutants, n = 100), `packages/gpu/test/darkroom.test.ts` (3), `packages/engine-mock/test/test-strip.test.ts` (1).
+- `packages/core/CONTRACT-REQUESTS.md`: C1–C4 appended.
+- Guide errata: the §6.4 Tint sentence (task nxhz) and the warmth vector in §6.4 and §9.2 (new task hjan).
+
+### Why
+- Fitting the aim at the calibration is the guide's own design (§3.1: κ fixed "at the reference time, aperture, magnification and the database's neutral pack"; §6.3: "the aim lights absorb that residual"). Per-setting aim lights are exactly the per-layer κ that the guide says "would absorb whatever colour the filters produce".
+- The pd table depends on film, paper, lamp and pack only (PD = clear − x), so keying it on time or mode rebuilt a 33³ table on every timer change.
+- The grade pivots about the aim grey so it needs no time compensation (guide §6.8); applying it in the kernel before the grade-2 row keeps the row's interpolation error at its grade-2 size.
+- `filtrationForLights` iterates the first-order solve on the exact chain (≤ 4 Newton steps) and rounds the dials to 0.1 CC and 0.01 s, so Bake's residual is measured, not assumed.
+
+### What worked
+- Golden numbers (all within the guide's tolerances): grey card D_vis 0.7562 (guide 0.758), L*a*b* 48.92, −0.33, −4.36; paper white Y 0.8130; J real and normalised to the 4th decimal (G/Y −0.0015); +10 Y/M/C: Δx (−0.02, −0.56, −4.00), (−0.26, −3.43, −0.00), (−3.64, 0.00, 0.00) points, real ΔD_vis −0.0383/−0.1104/−0.0756, normalised +0.0524/−0.0423/−0.0069, time factors ×1.0387/×1.1193/×1.0797; +10 red points 0.9699, a* −21.98; f/8 → f/11.31 −0.30103, f/11 −0.277, m 7.06 → 14.1 ×3.510; the time strip of §6.8 within 0.0065 D; grade 0/2/4: 0.279/0.756/1.685, 0.180/0.756/1.998, 0.112/0.756/2.268.
+- §3.6 balance: lights 2.427 ΔE00 (textbook 2.4); density shift 14.50 (textbook 14.6), 13.97 from 1 log H above the grey to white ("near 14"), with paper dye amounts floored at 0.
+- Bake on a recipe with lights (0.05, −0.025, 0.04): one undo unit, the grey card's x moves < 0.5 points, `undo()` restores the recipe exactly. `filtrationForLights` residuals 0.004–0.027 points.
+- Grey pick on the sliders converged in 2 iterations (|a*, b*| 1.8e-4) on a cast patch.
+- GPU parity (SwiftShader): darkroom chain export 0.057 levels, preview vs core tabulated 0.059 levels, max 1 in 8 bits; it differs from the default print by up to 138 levels, so the settings do reach the GPU.
+
+### What didn't work
+- `node packages/core/probe.tmp.ts` written through a heredoc in Bash was refused: "This agent is isolated in the worktree …, but this command is too complex to verify that it stays inside the worktree." Recovery: write files with the Write tool and run plain commands. The same guard refused appending this diary step with a heredoc; it is appended with the Edit tool.
+- First browser run: 2 failed, 41 passed, both with `Error: page.evaluate: Execution context was destroyed, most likely because of a navigation.` (chain.spec.ts `darkroom chain …` and spatial.spec.ts `GpuEngine evaluates every domain …`). Cause: I edited `packages/engine-mock/src/ops.ts` while Playwright ran, and Vite reloaded the parity page. Recovery: rerun without edits.
+- Second browser run: 42 passed, 1 failed: `chain:darkroom {"export":{"maxLevels":0.12924633410865496,…,"max8bit":1},"preview":{"maxLevels":0.13649460169095382,…,"max8bit":1},…}` against my bound of 0.1 levels. Cause: the grade was baked into the 512-sample develop row, whose linear-interpolation error grows with γ² (×2.1 at γ 1.45). Fix: grade-2 row plus the affine step in the kernel (flag 1); after it 0.057/0.059 levels.
+- Mock test first run: `ChromobenchError: E_ARG_RANGE: darkroom.testStrip: step for time must be in (0, 2]` (I used step 10 for both strips). Fixed by step 0.5 for time.
+
+### What I learned
+- The guide's warmth vector, (−0.00124, 0, +0.00124), does not reproduce: core gives (−0.00107, 0.00001, +0.00106). Rerunning the guide's `extra.py` on `data.json` reproduces −0.00124. The film side agrees (mean-removed ∂u/∂mired (0.00205, 0.00023, −0.00228) in both, consistent with the textbook's 3,800 K shift (0.166, 0.021, −0.187) over 81.3 mired), film gamma at 0 agrees (0.4876, 0.4939, 0.5262), ∂PD/∂c agrees to 4 decimals. The difference: `extra.py`'s `bb(T)` is absolute Planck radiance, while Chromogen's `blackbody` (05-inline.js 301–309) and core's divide by the value at 560 nm. With absolute radiance the ±20 mired exposures sit −0.41/−0.48/−0.58 log H away from the grey card, on a non-linear part of the curves. Core's number is the faithful port; the fixture stores it with this note.
+- The textbook's 14.6 needs the paper dye amounts to stay ≥ 0; without that floor the density shift reaches 19.6 ΔE00 (its yellow correction is −0.176 dye, which a paper cannot have).
+- The guide's §3.3 numbers are without aim lights (`aim: 'midgray-normalised'`): the grey card has b* −4.4 there. With the default aim it prints neutral at 0.184 by construction.
+
+### What was tricky to build
+- The calibration has to be the same in both modes or "real − normalised is a scalar" fails: real mode uses κ at the calibration pack plus optics, normalised mode κ at the current pack; at the calibration they coincide, and the aim lights are fitted on a real-mode reference enlarger, so one set serves both modes.
+- `dxdCC` in real mode built shifted enlargers without a calibration, so each re-normalised at its own pack and returned the normalised J. It now passes the calibration pack explicitly.
+- `lightsToFiltration` with a dial at its floor: M+Y free with cyan held; if M or Y would go below 0, that dial is pinned at 0 and cyan is freed (Kodak's "no three-colour packs").
+
+### What warrants a second pair of eyes
+- The calibration semantics for absolute `filtration`: `makePrintChain({ filtration })` takes that pack as the reference unless `referencePack` is given (keeps fixed-pack setups such as Chromogen's neutral at lights 0). The engines always pass a shift, so their reference is the database neutral.
+- Recipes with `mode: 'real'` or a filtration shift now print differently (that was the bug). No stored value changed.
+- `darkroom.lightsToFiltration` in the reference engine uses print.expose's defaults until request C1 gives it the print settings.
+
+### What should be done in the future
+- Stages 3–6 (multi-exposure, density masks, filter fast path, procedures), `mask.paint` rasterisation, preflash through the base and the reciprocity hook (task 1cg3: the grade part is done).
+- Contract requests C1–C4 (task gbmp).
+- Roll analysis on real frames (LATD from the GPU, CHB-020) to feed `autoLights`, `rollConsistency` and `matchFrame`.
+
+### Code review instructions
+- Start with `packages/core/src/print/chain.ts` (`makePrintChain`: reference enlarger and aim), then `print/enlarger.ts`, `print/balance.ts` (from "the aim, warmth and the darkroom tools"), `ops/ops.ts` (`gradePivot`, `developerAt`, `darkroom.lightsToFiltration`), `packages/gpu/src/engine-gpu.ts` (`print.develop` case) and `kernels/pointwise.wgsl` case 5.
+- `pnpm vitest run packages/core/test/chb010.golden.test.ts packages/core/test/chb010.balance.test.ts packages/core/test/laws.test.ts packages/gpu/test/darkroom.test.ts`
+- `STUDIO_PORT=4451 CI=1 pnpm test:browser` (the `darkroom chain` spec prints its numbers).
+
+### Technical details
+- x_k = log10 Σ L·F_pack·pass·10^−D·s_k + κ + optics + ℓ_aim,k + ℓ_k, with κ = −mean_k log10 raw_k(mid-grey) at the calibration pack (real) or the current pack (normalised); optics = 0 in normalised mode.
+- Grade: x′ = x*_k + γ(x_k − x*_k), x* = `chain.aimX` of the upstream print.expose (for the default aim, the x that prints a neutral 0.184 under `aimView`), [0, 0, 0] without one.
+- GPU DEVELOP op: `flags = 1`, `p0 = pivot`, `p1 = [γ, γ, γ]`; the curve row id is `${paper}|1`.
+- Warmth vector with TH-KG3 and the neutral pack: (−0.001069, 0.000007, 0.001063) log H per mired; +100 = (−5.56, 0.04, +5.53) points.
+- Bake example (real mode, lights (0.1, 0, −0.05) log H): pack C 0, M 61.2, Y 68.2 (shift M +9.6, Y +15.7), 12.79 s (+0.355 stop), residual (0.004, 0.004, −0.008) points.
+
+## Step 19: Validation gate and an intermittent timeout in a GPU tiling test
+
+Milestone entry for the checks on bfe7258 and the follow-up commit. All checks pass; one pre-existing unit test timed out intermittently and now has an explicit timeout.
+
+### Prompt Context
+**Orchestrator brief:** see Step 18.
+**Commit (code):** see the commit after bfe7258 ("CHB-010: diary steps 18–19, tasks, guide errata; tiles test timeout").
+
+### What I did
+- `pnpm typecheck` (clean), `pnpm lint` ("import boundaries ok (88 file checks)"), `pnpm gen:check` ("ok (18 files)"), `pnpm contract:check` ("20 change(s), 4 breaking", exit 0: the same 0.1.0 → 0.2.0 list as on main, no contract file touched).
+- `pnpm test` five times: 1989 passed three times; twice "1 failed | 1988 passed". The saved run (`scratchpad/probe/unit-loop-2.txt`) names it: `FAIL packages/gpu/test/tiles.test.ts > planTiles: properties > every pixel belongs to exactly one tile core; read rects stay in the frame` with `Error: Test timed out in 5000ms.` (it took 5251 ms).
+- Gave that test a 30 s timeout. It is CHB-005's pure tile-planning property test (60 random frames up to 3000², a coverage array per frame); nothing in it changed in this ticket, and it was close to vitest's 5 s default under parallel load.
+- `STUDIO_PORT=4451 CI=1 pnpm test:browser`: 43 passed (baseline 42 + the darkroom chain).
+- Tasks checked: ljn7, oldo, cr9o, do56, i6gs, 33os, nxhz, hjan. Added gbmp (contract requests C1–C4).
+
+### What warrants a second pair of eyes
+- The tiles test timeout is a test-only change in packages/gpu; CHB-005 may prefer fewer random frames instead.
+
