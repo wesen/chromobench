@@ -25,6 +25,9 @@ const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?:
   // half never imports the DOM half; variants import nothing but their sibling parts
   { dir: 'packages/studio-kit/src', forbid: /^@chromobench\/(?!contract$|shell(\/dom)?$)/, why: 'studio-kit imports only the contract and the shell (engines are injected)' },
   { dir: 'packages/studio-kit/src', skip: /\/src\/dom\//, forbid: /^(@chromobench\/shell\/dom|\.\.?\/dom\/)/, why: 'the headless half of studio-kit never imports the DOM half (@chromobench/studio-kit/dom)' },
+  // CHB-020 kits on cb.core: the same rule (physics is injected as services.rollPhysics); headless files never import dom.ts
+  { dir: 'packages/studio-kit/kits', forbid: /^@chromobench\/(?!contract$|shell(\/dom)?$)/, why: 'studio-kit kits import only the contract and the shell (physics is injected)' },
+  { dir: 'packages/studio-kit/kits', skip: /\/dom\.ts$/, forbid: /^(@chromobench\/shell\/dom|\.\.?\/.*dom(\.ts|\/))/, why: 'the headless half of a kit never imports the DOM half' },
   { dir: 'packages/studio-kit/variants', skip: /\.d\.ts$/, forbid: /^(?!\.\/)/, why: 'a variant receives ck and cb and imports nothing (only sibling variant parts)' },
 ];
 

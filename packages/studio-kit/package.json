@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./dom": "./src/dom/index.ts",
-    "./studio-kit.css": "./src/dom/studio-kit.css"
+    "./studio-kit.css": "./src/dom/studio-kit.css",
+    "./kits/roll": "./kits/roll/src/index.ts",
+    "./kits/roll/dom": "./kits/roll/src/dom.ts"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"
@@ -16,8 +18,10 @@
     "@chromobench/shell": "workspace:*"
   },
   "devDependencies": {
+    "@chromobench/core": "workspace:*",
     "@chromobench/dsl": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",
+    "@chromobench/ingest": "workspace:*",
     "happy-dom": "21.0.4"
   }
 }

@@ -200,12 +200,18 @@ importers:
         specifier: workspace:*
         version: link:../shell
     devDependencies:
+      '@chromobench/core':
+        specifier: workspace:*
+        version: link:../core
       '@chromobench/dsl':
         specifier: workspace:*
         version: link:../dsl
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:../engine-mock
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:../ingest
       happy-dom:
         specifier: 21.0.4
         version: 21.0.4

@@ -5,5 +5,6 @@ export const VARIANTS = {
   simple: () => import('./simple.js'),
   lab: () => import('./lab.js'),
   tiny: () => import('./tiny.js'),
+  roll: () => import('./roll.js'),
 };
 export const DEFAULT_VARIANT = 'classic';
