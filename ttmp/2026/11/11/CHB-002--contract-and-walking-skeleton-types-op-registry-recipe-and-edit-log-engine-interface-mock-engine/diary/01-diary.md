@@ -10,7 +10,23 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://e2e/m1-walking-skeleton.spec.ts
+      Note: M1 end-to-end test
+    - Path: repo://packages/conformance/src/generate.ts
+      Note: generated conformance cases
+    - Path: repo://packages/contract/CONTRACT-DECISIONS.md
+      Note: settled proposals and change-note template
+    - Path: repo://packages/contract/src/editlog.ts
+      Note: EditLog (units, ask mode, expect/E_STALE, why, hashes)
+    - Path: repo://packages/contract/src/graph.ts
+      Note: nodeId, Graph.intern/closure/adopt, compile
+    - Path: repo://packages/contract/src/index.ts
+      Note: contract v0 entry point (CONTRACT_VERSION, exports)
+    - Path: repo://packages/contract/src/registry.ts
+      Note: registerOp, bindArgs, closest
+    - Path: repo://packages/engine-mock/src/engine-mock.ts
+      Note: MockEngine
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-11T10:38:22.139464058-05:00
@@ -648,3 +664,58 @@ Implementation started on a new branch `task/chb-002-contract` (from `task/chb-w
 - `pnpm test` → `Test Files 5 passed (5) / Tests 468 passed (468)`, 0.9 s.
 - `pnpm test:browser` (before the studio page existed) → 4 passed (1.9 s).
 - `contract:check` against a doctored baseline printed `breaking print.lights.logH range narrowed` and `breaking op print.old removed`.
+
+## Step 12: Stage 9: the M1 page, the end-to-end test, and the contract decisions
+
+This step builds the minimal `apps/studio` page and the Playwright M1 test, and adds a headless demo of the same flow. It also settles every guide's proposed contract additions in `packages/contract/CONTRACT-DECISIONS.md` and records them in the ticket changelog. All 16 ticket tasks are checked off. Commit `5999a26`.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 11.
+**Assistant interpretation:** One small M1 demo with clean extension points for CHB-009 (UI) and CHB-007 (DSL), and a written decision for each proposed addition.
+**Inferred user intent:** The other tickets can start against a frozen, documented v0.
+**Commit (code):** 5999a26 — "CHB-002: M1 walking skeleton page, e2e test, contract decisions"
+
+### What I did
+- `apps/studio/src/session.ts`: `openFrame()` runs sha256 → `engine.open` → `graph.registerSource` → `EditLog.create(defaultRecipe(...), {by: 'auto'})`.
+- `viewer.ts`: `Viewer.render()` with "last request wins": it aborts the previous `AbortController`.
+- `controls.ts`: `vec3Slider()` builds the three R/G/B sliders from `getOp('print.lights').args.logH.ui`, in display unit points: range ±60, step 1. `input` calls `log.preview`, and `change` calls `log.apply` once.
+- `main.ts`: Undo/Redo buttons, a mode select and the pending list with Approve/Reject. `window.chromobench` exposes `log`, `idle()`, `pixel()`, `chainRuns()` and `propose()`. `propose()` stands in for CHB-007's `frame.edit`.
+- `e2e/m1-walking-skeleton.spec.ts`:
+  - test 1 runs open → preview ×4 (no journal entries, hash unchanged) → release (1 entry, 1 unit) → upper chain run counts all 1 → Undo (exact pixel and hash) → proposal pending (pixel unchanged) → Approve (pixel and hash equal step 3; `why` says agent, approved);
+  - test 2 checks that a stale proposal returns `E_STALE` and leaves the hash unchanged.
+- `tools/scripts/m1-headless.ts` (`pnpm demo:m1`).
+- `CONTRACT-DECISIONS.md`: a table for each of CHB-002…015, plus the §8.4 defaults and the change-note template. Ran `docmgr changelog update`, `docmgr task check` for all 16 ids, and `docmgr doc relate` on this diary (8 files).
+
+### Why
+- The page keeps its pieces apart (`session`, `viewer`, `controls`, `main`), so CHB-009 can replace each one separately. The hook is the only way in for an "agent" until CHB-007 exists, and it enters through `propose`, so `by: 'agent'` is set by the host.
+- Decisions that would be expensive to change later were made now: `KneeSpec` as `{method, strength}`, `scan.flare` as one number (widening deferred and flagged), and `output.display.space` not recipe-backed.
+
+### What worked
+- `pnpm test:browser`: 6 passed (2.4 s). Both M1 tests passed on the first run.
+- `pnpm demo:m1`: S0 `d0fa2457ebca…` patch (0.3703, 0.4339, 0.5484); +4 pt red S1 `60cf716c9506…` (0.3133, 0.4339, 0.5484); undo back to S0; approved proposal → S1 again.
+- Full gate: `typecheck` ok; `lint` ok (50 file checks); `gen:check` ok (14 files); `contract:check` (no baseline: first version); `test` 468 passed.
+
+### What didn't work
+- `tsc` reported `apps/studio/src/viewer.ts(10,15): error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is enabled.` The cause was a constructor parameter property. I replaced it with an explicit field.
+
+### What I learned
+- Playwright's `getByRole('slider', {name})` finds range inputs by `aria-label`, so generated controls are addressable by their `ui.label` without test ids.
+
+### What was tricky to build
+- The preview and render ordering. Every log event (including `preview`) triggers a render, and the e2e test waits with `window.chromobench.idle()`. That awaits the in-flight render twice around a macrotask, because an event can start a new render while the old one resolves.
+
+### What warrants a second pair of eyes
+- `window.chromobench.propose` is a test and agent stand-in on a public `window` property. CHB-007/008 should replace it with the sandboxed eval channel and remove the global.
+- `.github/workflows/ci.yml` has never run on GitHub (nothing was pushed). It mirrors the local gate.
+
+### What should be done in the future
+- CHB-009: replace the page; keep `idle()`/`pixel()`-style hooks or an equivalent for the M1 e2e test.
+- Decide `scan.flare` per channel before CHB-013 (it would be a breaking type change).
+
+### Code review instructions
+- `apps/studio/src/*.ts`, `e2e/m1-walking-skeleton.spec.ts`, `packages/contract/CONTRACT-DECISIONS.md`.
+- `pnpm test:browser` (it starts Vite on :4173 through the Playwright `webServer`) and `pnpm demo:m1`.
+
+### Technical details
+- Canvas check: the grey-patch canvas pixel equals `round(display × 255)` of the golden values: (94, 111, 140) before.
+- Run counts after the lights change: `source.open`, `scan.density`, `invert.dyes` and `print.expose` were each computed once.
