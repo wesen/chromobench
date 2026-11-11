@@ -63,6 +63,19 @@ importers:
         specifier: 2.4.0
         version: 2.4.0
 
+  packages/core:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@chromobench/engine-mock':
+        specifier: workspace:*
+        version: link:../engine-mock
+    devDependencies:
+      '@chromobench/conformance':
+        specifier: workspace:*
+        version: link:../conformance
+
   packages/engine-mock:
     dependencies:
       '@chromobench/contract':

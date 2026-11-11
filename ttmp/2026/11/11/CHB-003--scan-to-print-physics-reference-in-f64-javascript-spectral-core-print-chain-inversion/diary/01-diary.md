@@ -805,3 +805,64 @@ Cross-checking turned up one citation to correct in the CHB-003 guide (the Gold 
 
 ### Technical details
 - Transcript: `/home/manuel/.claude/projects/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/subagents/agent-a942cef5b48559a44.jsonl`.
+
+## Step 14: Implementation start: orientation, interim data converter, stage 1 spectral core
+
+Implementation of CHB-003 began on branch `task/chb-003-physics` in the agent worktree. I read the common implementation brief, the intern guide (all 925 lines), the frozen contract v0 (`engine.ts`, `domains.ts`, `CONTRACT-DECISIONS.md`, the catalog files for invert/print/view/output/measure), the mock engine and the conformance generator. Then I wrote the interim data converter and the stage 1 spectral core, and checked the chapter 1 numbers with an exploration script before writing tests.
+
+All chapter 1 goldens from guide §8.1 reproduce on the first run under CHROMOGEN conventions (see Technical details).
+
+### Prompt Context
+**User prompt (verbatim):** (orchestrator brief, not the user's words) "Implement **CHB-003, the scan-to-print physics reference in f64 JavaScript** (`packages/core`, plus a `RefEngine` that implements `Engine`). This ticket is the critical path: the WebGPU engine (CHB-005) uses it as its oracle." Mid-task reminder relayed from the user: "keep your CHB diary as you work, in the diary skill format, as a factual log written as you go."
+**Assistant interpretation:** Build `@chromobench/core` stages 1–3 with tests against the guide's goldens and laws, plus a reference engine passing `runConformance`.
+**Inferred user intent:** A trustworthy f64 oracle so CHB-005 and other tickets can proceed.
+**Commit (code):** none yet.
+
+### What I did
+- `git checkout -b task/chb-003-physics`; `pnpm install --offline`; baseline `pnpm test`: 5 files, 468 tests passed.
+- Inspected data: Chromogen st-data (11 stocks, `generic-bayer` camera, `white-led`), the Filmbench blob (`00-film-data.bin.txt`, 28 profiles with 3-CDF `model`), `guide-verification-scripts/data.json`.
+- Compared Chromogen and Filmbench arrays with a `python3 -I` one-off: for all 11 shared stocks dye and base differ by 0, sensitivities and curves by ≤ 5e-5 (rounding: 5 vs 4 decimals), and Chromogen's null rows equal Filmbench `nanRows`.
+- Wrote `tools/interim-data/convert.ts` (Node, `zlib.inflateSync` on the blob): Chromogen arrays where available (real nulls, 5 decimals), Filmbench otherwise (nanRows → null base and dyes), Filmbench 3-CDF model and meta for every profile. Output `packages/core/data/interim/{stocks/*.json, reference.json, index.json}` (28 stocks, 480K), each carrying the CC BY-SA 4.0 notice.
+- Wrote `packages/core/src/data/provider.ts` (`PhysicsData` interface: stock, cmf, illuminant incl. `bb<T>`, dichroic, neutralFilter, camera, light) and `data/interim.ts` (fs loader). CHB-004 replaces the implementation, not the interface.
+- Stage 1 modules: `spectral/spectrum.ts` (GRID, Spectrum using the contract's `productKind`/`sumKind`, interp, tabulate, blackbody, gaussian, sigmoid, `sigmoidFlatC2`, `cmfChromogenFit`), `units.ts`, `conventions.ts` (SPEKTRAFILM, CHROMOGEN, `conventionsKey`), `stock.ts` (`Curve`, `resolveStock` with NaN pass mask, min subtraction), `linalg.ts` (inv3, Jacobi eigen/SVD, generic bounded `lm`, `solveN`), `channels.ts` (Channels, statusM, printing/scanner channels, jacobian, hessian, secant, tangentAtZero, baseWeightedK, relativeTo, solveLinear), `metamer.ts` (metamericBlack, exposeSpectral), `scan/scanner.ts` (xt5-fitted, rgb-led-book, white-led, status-m, custom-led).
+- Started stage 2: `print/enlarger.ts` (filteredLamp, normalised mode with the four spektrafilm flag combinations, real mode with a fixed calibration pack plus the time/f-stop stub, dxdCC).
+
+### Why
+- Chromogen's copies of the stock arrays are more precise and keep the real nulls, so they define the NaN mask exactly; the 3-CDF paper model exists only in the Filmbench blob.
+- Physics functions read the stock's pass mask internally (P·pass, not renormalised), so 'opaque' and 'zero' differ only in the mask, as guide §5.2 prescribes.
+- The contract's `PhysicsConventions` type (version/grid/greyCard/aim) differs from the guide's sketch; the contract wins, so core calls its richer object `Conventions` and exports `conventionsKey()` for `EngineCaps.conventions`.
+
+### What worked
+- `node packages/core/explore/e1.ts` (scratch script, not committed) printed, under CHROMOGEN conventions on Portra 400:
+  - grey card narrowband green 1.53836 (golden 1.538); red 0.97653 (0.977); white LED (0.87643, 1.23350, 1.66513); rebate (0.31998, 0.55471, 0.78086);
+  - spectral density at 550 nm 1.46624 (1.4662); narrowband centroids 656.47, 530.36, 450.75 (656.5, 530.4, 450.8);
+  - K secant (0.2526 0.3298 0.0129 | 0.0361 0.7485 0.0323 | 0.0068 0.1178 0.5917) and base-weighted (0.4557 0.3499 0.0127 | 0.1066 0.8559 0.0390 | 0.0084 0.2754 0.8035), both as in guide §2.4;
+  - singular values narrowband secant 1.2259, 1.1440, 1.1295; white LED 0.8531, 0.5709, 0.2134;
+  - white-LED red Hessian eigenvalues −0.3640, −0.0239, −0.000116;
+  - solve errors: secant (0.407, 0.093, 0.459), tangent0 (0.006, −0.083, 0.006), base-weighted (−0.003, −0.035, 0.000);
+  - J at the exact grey (0.4468 0.3200 0.0139 | 0.1598 0.7238 0.0334 | 0.0134 0.3358 0.7278);
+  - grey dyes at log H 0: raw curves (0.6865, 0.7044, 0.8635), min-subtracted (0.6872, 0.7051, 0.8642).
+
+### What didn't work
+- `cat > packages/core/package.json <<'EOF' … EOF` and a heredoc for a scratch script were refused by the worktree isolation guard: "this command is too complex to verify that it stays inside the worktree". I switched to the Write tool for all files.
+- A compound `C1=$(ls -d …); ls $C1 …; git ls-files $C1 …` was refused ("names git in a form too complex to verify"). I split it into plain commands.
+
+### What I learned
+- The contract already ships a law harness (`law`, `check`, `mulberry32`, shrinking); core reuses it and adds mutants on top.
+- `invert.dyes`' default scanner id is `xt5-rgb-led`, which Chromogen calls `xt5-fitted`; core accepts both.
+- `print.expose.filtration` defaults to {0,0,0} with min 0, so core reads it as a shift on top of the database neutral pack (to be filed as a contract clarification).
+
+### What was tricky to build
+- N/A so far beyond the data merge; see the numbers above.
+
+### What warrants a second pair of eyes
+- Real mode keeps the mid-grey calibration at the database neutral pack (as `guide-verification-scripts/printchain.py` does) instead of absolute lamp power; this is a placeholder for CHB-010.
+
+### What should be done in the future
+- Turn the exploration numbers into `fixtures/golden/core/ch1.json` and tests; continue stage 2.
+
+### Code review instructions
+- `node tools/interim-data/convert.ts` regenerates the data; start at `packages/core/src/spectral/channels.ts`.
+
+### Technical details
+- Grey card c = (0.687, 0.704, 0.864); rgb-led-book = Gaussians 660/530/450 nm, FWHM 20/25/20 behind generic-bayer (Chromogen model.js 1648).

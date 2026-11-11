@@ -1,0 +1,31 @@
+{
+  "_doc": "CHB-003 chapter 1 goldens (textbook §1.x and guide §8.1). Tolerance rule: 0.6e-k for k printed decimals unless stated. source: textbook | derived (computed for the CHB-003 guide by an independent re-implementation; regenerated here). Inputs: stock kodak_portra_400, grey card c = (0.687, 0.704, 0.864), conventions CHROMOGEN unless noted.",
+  "greyC": [0.687, 0.704, 0.864],
+  "entries": [
+    { "id": "ch1.greycard.narrowband.green", "section": "§1.1", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "read", "channel": 1, "expect": 1.538, "tol": 6e-4 },
+    { "id": "ch1.greycard.narrowband.green.meanT", "section": "§1.1", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "transmittance", "channel": 1, "expect": 0.02895, "tol": 6e-6 },
+    { "id": "ch1.greycard.550", "section": "§1.2", "source": "textbook", "conventions": "CHROMOGEN", "what": "spectral550", "expect": 1.4662, "tol": 6e-5 },
+    { "id": "ch1.greycard.550.terms", "section": "§1.2", "source": "textbook", "conventions": "CHROMOGEN", "what": "terms550", "expect": [-0.0264, 0.888, 0.0022, 0.6024], "tol": 6e-4 },
+    { "id": "ch1.softmin.two", "section": "§1.3", "source": "textbook", "what": "softmin", "expect": 0.297, "tol": 6e-4 },
+    { "id": "ch1.red.narrowband", "section": "§1.3", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "read", "channel": 0, "expect": 0.977, "tol": 6e-4 },
+    { "id": "ch1.red.narrowband.mean", "section": "§1.3", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "meanD", "channel": 0, "expect": 0.981, "tol": 6e-4 },
+    { "id": "ch1.red.white", "section": "§1.3", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "read", "channel": 0, "expect": 0.876, "tol": 6e-4 },
+    { "id": "ch1.red.white.mean", "section": "§1.3", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "meanD", "channel": 0, "expect": 0.940, "tol": 6e-4 },
+    { "id": "ch1.hessian.white.red", "section": "§1.3", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "hessianEig", "channel": 0, "expect": [-0.364, -0.024, -0.0001], "tol": 6e-4 },
+    { "id": "ch1.centroids.narrowband", "section": "§1.4", "source": "textbook", "scanner": "rgb-led-book", "what": "centroids", "expect": [656.5, 530.4, 450.8], "tol": 0.06 },
+    { "id": "ch1.diag.narrowband.tangent", "section": "§1.4", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "tangent0Diag", "expect": [1.142, 1.239, 1.149], "tol": 6e-4 },
+    { "id": "ch1.diag.narrowband.secant", "section": "§1.4", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "secantDiag", "expect": [1.131, 1.222, 1.146], "tol": 6e-4 },
+    { "id": "ch1.K.white.secant", "section": "§1.4", "source": "derived", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "secant", "expect": [[0.2526, 0.3298, 0.0129], [0.0361, 0.7485, 0.0323], [0.0068, 0.1178, 0.5917]], "tol": 6e-5, "note": "textbook prints 0.7485 as 0.749 (§1.4) and 0.748 (§3.2)" },
+    { "id": "ch1.K.white.tangent0", "section": "§1.4", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "tangent0", "expect": [[0.360, 0.476, 0.013], [0.055, 0.950, 0.058], [0.007, 0.243, 0.837]], "tol": 6e-4 },
+    { "id": "ch1.K.white.baseWeighted", "section": "guide §2.4", "source": "derived", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "baseWeighted", "expect": [[0.456, 0.350, 0.013], [0.107, 0.856, 0.039], [0.008, 0.275, 0.803]], "tol": 6e-4 },
+    { "id": "ch1.solve.errors.secant", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "solveErr", "K": "secant", "expect": [0.407, 0.093, 0.459], "tol": 6e-4 },
+    { "id": "ch1.solve.errors.onBase", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "solveErr", "K": "onBase", "expect": [0.225, 0.198, 0.503], "tol": 6e-4 },
+    { "id": "ch1.solve.errors.tangent0", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "solveErr", "K": "tangent0", "expect": [0.006, -0.083, 0.006], "tol": 6e-4 },
+    { "id": "ch1.solve.errors.baseWeighted", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "solveErr", "K": "baseWeighted", "expect": [-0.003, -0.035, 0.0], "tol": 6e-4 },
+    { "id": "ch1.sv.narrowband.secant", "section": "§1.4", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "rgb-led-book", "what": "svSecant", "expect": [1.226, 1.144, 1.130], "cond": 1.09, "tol": 6e-4 },
+    { "id": "ch1.sv.white.secant", "section": "§1.4", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "svSecant", "expect": [0.853, 0.571, 0.213], "cond": 4.00, "tol": 6e-4 },
+    { "id": "ch1.white.greyMinusRebate", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "aboveRebate", "expect": [0.556, 0.679, 0.884], "tol": 6e-4 },
+    { "id": "ch1.white.dyesAlone", "section": "§1.6", "source": "textbook", "conventions": "CHROMOGEN", "scanner": "white-led", "what": "dyesAlone", "expect": [0.576, 0.731, 0.890], "tol": 6e-4 },
+    { "id": "ch1.sigmoid.c2.grey", "section": "§1.8", "source": "textbook", "what": "sigmoidC2", "input": 0.184, "expect": -0.816, "tol": 6e-4 }
+  ]
+}
