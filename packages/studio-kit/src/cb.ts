@@ -17,7 +17,7 @@ import { frameRef, isImageHandle, type FrameRef, type ImageHandle } from './hand
 import { DARKROOM, allParameters, type Arrangement } from './model/arrangement.ts';
 import { controlModels } from './kit/args.ts';
 import { diffRecipes, PRINT_SETTINGS, VIEW_MODES, type ViewMode } from './model/recipes.ts';
-import { ringTiles, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
+import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
 import type { Studio } from './studio.ts';
 
 // variants' lines, not studio-kit's, are the call sites of their nodes
@@ -68,7 +68,8 @@ export const current = (s: any): string | null => s?.ui?.selection?.primary ?? n
 const sel = (s: any): string[] => s?.ui?.selection?.ids ?? [];
 const targets = (ctx: any): string[] => (sel(ctx.state).length ? sel(ctx.state) : [current(ctx.state)].filter((x): x is string => !!x));
 
-/** the frames of the catalog in roll order, after the library filter */
+/** the frames of the catalog in roll order, after the library filter; frames not open in this session (their bytes
+ *  were not opened since a reload, so there is no recipe to show) are left out until their file is opened again */
 export function visibleFrames(s: any): CatalogFrame[] {
   const c = s?.catalog;
   if (!c) return [];
@@ -76,7 +77,7 @@ export function visibleFrames(s: any): CatalogFrame[] {
   const text = String(f.text ?? '').toLowerCase();
   return (c.order as string[])
     .map(id => c.frames[id])
-    .filter((x: CatalogFrame | undefined): x is CatalogFrame => !!x)
+    .filter((x: CatalogFrame | undefined): x is CatalogFrame => !!x && (!s.recipes || !!s.recipes[x.id]))
     .filter(x => (!text || x.name.toLowerCase().includes(text) || x.keywords.some(k => k.toLowerCase().includes(text))) && (!f.flag || (f.flag === 'unflagged' ? !x.flag : x.flag === f.flag)));
 }
 
@@ -388,6 +389,33 @@ export function createCb(ck: Ck) {
             key: 'T',
             cursor: 'pointer',
             image: (r, s: any) => (isImageHandle(r) && r.what === 'print' ? frameRef(r.frame, r.recipe).testStrip(s.ui?.toolOptions?.['test-strip']) : r),
+            // the bands' edges and values over the print (click a band to use its value)
+            overlay: (g: any, vp: any, s: any) => {
+              const f = current(s);
+              const r = f ? s.recipes?.[f] : undefined;
+              const [w, h] = vp.natural();
+              if (!r || !w) return;
+              const o = s.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
+              const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
+              const vals = stripValues(o.vary, base, o.step, o.count);
+              const doc = g.ownerDocument as Document;
+              const el = (tag: string, a: Record<string, string | number>) => {
+                const x = doc.createElementNS('http://www.w3.org/2000/svg', tag);
+                for (const [k, v] of Object.entries(a)) x.setAttribute(k, String(v));
+                return x;
+              };
+              vals.forEach((v, i) => {
+                const [x0, y0] = vp.toScreen(i / vals.length, 0);
+                const [x1, y1] = vp.toScreen((i + 1) / vals.length, 1);
+                const band = el('g', { class: `cb-band${i === (vals.length - 1) / 2 ? ' is-current' : ''}`, 'data-value': v });
+                band.append(el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'cb-band-r' }));
+                const t = el('text', { x: (x0 + x1) / 2, y: y1 - 8, 'text-anchor': 'middle', class: 'cb-band-t' });
+                t.textContent = stripLabel(o.vary, v);
+                band.append(t);
+                g.append(band);
+              });
+              void h;
+            },
             on: {
               down: (e, ctx) => {
                 const f = current(ctx.state);
@@ -513,7 +541,7 @@ export function createCb(ck: Ck) {
       } as any,
     );
     const parts: any[] = [];
-    if (views) parts.push(ck.ui.segmented(views.map(v => ({ value: v, label: v[0]!.toUpperCase() + v.slice(1) })), { bind: (s: any) => s.view.view, label: 'View', small: true } as any));
+    if (views) parts.push(ck.ui.segmented(views.map(v => ({ value: v, label: VIEW_LABELS[v] ?? v })), { bind: (s: any) => s.view.view, label: 'View', small: true } as any));
     parts.push(node('cb.ribbon', {}));
     const ring = o.tools?.includes('ring-around');
     const centre = ring ? ck.match((s: any) => (s.ui?.tool === 'ring-around' ? 'ring' : 'view'), { view: vp, ring: ring_({}) }, { of: ['view', 'ring'] }) : vp;
@@ -648,6 +676,8 @@ export function createCb(ck: Ck) {
 }
 
 export type Cb = ReturnType<typeof createCb>;
+
+const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negative', dyes: 'Dyes', classes: 'Base & gamut' };
 
 const badgeOf = (s: any, id: string): string => {
   const pending = s.proposals?.[id]?.length ?? 0;

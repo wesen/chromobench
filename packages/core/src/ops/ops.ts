@@ -4,10 +4,9 @@
 import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type Point } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { filtrationForLights } from '../print/balance.ts';
-import { makePrintChain, type Aim, type OutputSpace, type PrintChain } from '../print/chain.ts';
-import { adaptBradford, addFlare, D50, D65, observe, paperWhiteXYZ, reflectance, whiteXYZ, type Viewing } from '../print/colour.ts';
-import { DEFAULT_COMPRESS, type CompressSpec } from '../print/gamut.ts';
-import { displayEncode } from '../print/chain.ts';
+import { makePrintChain, type Aim, type PrintChain } from '../print/chain.ts';
+import { adaptBradford, addFlare, D50, D65, observe, OUTPUT_SPACE_IDS, paperWhiteXYZ, reflectance, whiteXYZ, type OutputSpaceId, type Viewing } from '../print/colour.ts';
+import { displayPixel, displaySetup, type DisplaySetup, type KneeName } from '../print/gamut.ts';
 import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { combinePixel, combineRatio, type CombineTerm } from '../print/exposures.ts';
 import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gradientAt, gridCentres, luminanceAt, paintMask, parseStrokes } from '../print/masks.ts';
@@ -154,9 +153,18 @@ export function flareWhite(ctx: ChainCtx): Vec3 {
   return W;
 }
 
-/** output.display's gain: 1/Y of the paper white for scan-of-print, 1 for print-as-seen. */
-export function displayGain(ctx: ChainCtx, rendering: unknown): number {
-  return rendering === 'scan-of-print' ? 1 / paperWhiteXYZ(ctx.env.viewing(paperOf(ctx), viewOf(ctx)))[1] : 1;
+/**
+ * output.display's setup (CHB-011, guide §5.2), shared with packages/gpu's lowering: the rendering's
+ * Bradford source white (print-xyz's white for print-as-seen, the paper white for scan-of-print), the
+ * output space's matrix and TRC, and the knee with its lightness rule. The paper white is
+ * flareWhite(ctx): the paper's white in print-xyz's frame, without flare.
+ */
+export function displaySetupAt(ctx: ChainCtx, args: Readonly<Record<string, unknown>>): DisplaySetup {
+  const k = args['knee'];
+  // 'cam16-ucs' and 'cam16ucs' select CAM16-UCS once the contract allows them (packages/output/CONTRACT-REQUESTS.md R1)
+  const knee: KneeName = k === 'clip' || k === 'tanh-shoulder' ? k : k === 'cam16-ucs' || k === 'cam16ucs' ? 'cam16-ucs' : 'oklch';
+  const space = (OUTPUT_SPACE_IDS as readonly unknown[]).includes(args['space']) ? (args['space'] as OutputSpaceId) : 'srgb';
+  return displaySetup({ rendering: args['rendering'] === 'print-as-seen' ? 'print-as-seen' : 'scan-of-print', white: whiteAt(ctx), paperWhite: flareWhite(ctx), space, knee });
 }
 
 /** scan.density's rebate: the given box, else the brightest 5 % column band (as the mock engine). */
@@ -310,15 +318,11 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return mapPx(recv(ctx), 3, (px, o) => { const X = adaptBradford(px, from, to); o[0] = X[0]; o[1] = X[1]; o[2] = X[2]; });
   },
   'output.display': (ctx) => {
-    const from = currentWhite(ctx);
-    const space = A(ctx, 'space') as OutputSpace;
-    const kneeArg = A(ctx, 'knee') as string;
-    // 'oklch' (contract 0.2; 'cam16-ucs' before): OkLCh with spektrafilm's knee parameters (guide §5.4 decision).
-    const compress: CompressSpec = { ...DEFAULT_COMPRESS, algorithm: kneeArg === 'clip' ? 'clip' : kneeArg === 'tanh-shoulder' ? 'tanh-shoulder' : 'oklch' };
-    const gain = displayGain(ctx, A(ctx, 'rendering'));
+    // rendering → Bradford to the space's white → matrix → knee (last colour step) → TRC (CHB-011).
+    // 'oklch' (contract 0.2; 'cam16-ucs' before): OkLCh with spektrafilm's knee parameters (guide §5.4).
+    const s = displaySetupAt(ctx, ctx.args);
     return mapPx(recv(ctx), 3, (px, o) => {
-      const X = adaptBradford([px[0]! * gain, px[1]! * gain, px[2]! * gain], from, D65);
-      const e = displayEncode(X, space, compress);
+      const e = displayPixel(px, s);
       o[0] = e[0]; o[1] = e[1]; o[2] = e[2];
     });
   },

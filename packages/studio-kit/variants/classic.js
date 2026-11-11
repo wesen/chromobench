@@ -1,6 +1,20 @@
 // classic: Lightroom's layout (guide §8.1). Modules across the top (Library G, Print D, Output), panels left and
 // right, the film strip of print thumbnails at the bottom. Receives ck and cb; imports nothing.
 
+/** the darkroom's tools as buttons (each is also a key: I, T, R, \) */
+export const toolsPanel = ck =>
+  ck.panel(
+    'tools',
+    { title: 'Tools' },
+    ck.row(
+      { class: 'cb-tools' },
+      ck.ui.command('tool.probe', { text: 'Densitometer', small: true }),
+      ck.ui.command('tool.test-strip', { text: 'Test strip', small: true }),
+      ck.ui.command('tool.ring-around', { text: 'Ring-around', small: true }),
+      ck.ui.command('view.beforeAfter', { text: 'Before / after', small: true }),
+    ),
+  );
+
 /** the Print module, shared with lab */
 export const printModule = (ck, cb, o = {}) => m =>
   m
@@ -17,7 +31,7 @@ export const printModule = (ck, cb, o = {}) => m =>
         hud: cb.hud.readout(),
       }),
     )
-    .right(ck.dock.column({ width: 300 }, cb.panel.densitometer(), cb.panel.controls('darkroom'), cb.panel.exposures(), cb.panel.approvals(), ...(o.extraRight ?? [])))
+    .right(ck.dock.column({ width: 300 }, toolsPanel(ck), cb.panel.densitometer(), cb.panel.controls('darkroom'), cb.panel.exposures(), cb.panel.approvals(), ...(o.extraRight ?? [])))
     .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-print' })))
     .keys({ ...cb.keys.views, ...cb.keys.darkroom });
 

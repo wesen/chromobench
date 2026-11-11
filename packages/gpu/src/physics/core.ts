@@ -3,9 +3,9 @@
 // paper, which white) all come from core. This file only turns them into what the kernels consume:
 // table arrays, uniforms and the 1-D paper-curve row.
 import {
-  bradfordMatrix, BRADFORD, conventionsKey, D50, D65, DEFAULT_CONVENTIONS, developerAt, displayGain, exposeSettings, filmOf, flareWhite,
-  gradePivot, gradeToGamma, mulMM, mulMV, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt, XYZ_TO_SRGB,
-  type ChainCtx, type Conventions, type ExposeSettings, type PhysicsData, type UpNode,
+  BRADFORD, conventionsKey, D50, D65, DEFAULT_CONVENTIONS, developerAt, displaySetupAt, exposeSettings, filmOf, flareWhite,
+  gradePivot, gradeToGamma, mulMV, paperDeveloper, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt,
+  type ChainCtx, type Conventions, type DisplaySetup, type ExposeSettings, type PhysicsData, type UpNode,
 } from '@chromobench/core';
 import { A_RANGE, CP_RANGE, C_RANGE, N3, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs, type Vec3 } from '../tables/inputs.ts';
 
@@ -85,11 +85,18 @@ export class CorePhysics {
     return [d[0] / s[0], d[1] / s[1], d[2] / s[2]];
   }
 
-  /** output.display before the knee: XYZ_TO_SRGB · Bradford(current white → D65) · gain. */
-  displayMatrix(ctx: ChainCtx, rendering: unknown): Mat3 {
-    const gain = displayGain(ctx, rendering);
-    const M = mulMM(XYZ_TO_SRGB, bradfordMatrix(whiteAt(ctx), D65));
-    return M.map((r) => r.map((v) => v * gain)) as Mat3;
+  /**
+   * output.display (CHB-011): core's display setup for the node — the matrix before the knee
+   * (fromXYZ(space) · Bradford(rendering's source white → space white)), the knee and its lightness
+   * rule, and the space's TRC.
+   */
+  display(ctx: ChainCtx, args: Readonly<Record<string, unknown>>): DisplaySetup {
+    return displaySetupAt(ctx, args);
+  }
+
+  /** output.display's matrix before the knee (see display()). */
+  displayMatrix(ctx: ChainCtx, rendering: unknown, space: unknown = 'srgb'): Mat3 {
+    return displaySetupAt(ctx, { rendering, space, knee: 'clip' }).M;
   }
 
   /** The upstream context of node `i` of a receiver chain (core's ctx.up: nearest earlier node with that op). */

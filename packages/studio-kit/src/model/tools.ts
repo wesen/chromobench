@@ -1,4 +1,4 @@
-// Moved from apps/studio/src/core/tools.ts (CHB-009) for CHB-019; the original is deleted when apps/studio migrates.
+// Moved from apps/studio/src/core/tools.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
 // Darkroom tool arithmetic and adapters (guide §5.9). Each tool turns a click into one transaction;
 // the op argument shapes are CHB-010's to finalise, so they are kept in this one file.
 import type { Exposure, FrameRecipe, Graph, MaskSpec, Mutation, Vec3 } from '@chromobench/contract';
@@ -28,6 +28,22 @@ export function stripMutation(vary: StripVary, r: FrameRecipe, v: number): Mutat
   if (vary === 'time') return { op: 'set', path: 'print.enlarger.time_s', value: Number(v.toFixed(4)) };
   const k = vary.slice(-1) as 'c' | 'm' | 'y';
   return { op: 'set', path: 'print.enlarger.filtration', value: { ...r.print.enlarger.filtration, [k]: Number(v.toFixed(2)) } };
+}
+
+/** The recipe one band of the strip prints with (the same change stripMutation writes; CHB-023). */
+export function stripRecipe(vary: StripVary, r: FrameRecipe, v: number): FrameRecipe {
+  const e = r.print.enlarger;
+  if (vary === 'time') return { ...r, print: { ...r.print, enlarger: { ...e, time_s: Number(v.toFixed(4)) } } };
+  const k = vary.slice(-1) as 'c' | 'm' | 'y';
+  return { ...r, print: { ...r.print, enlarger: { ...e, filtration: { ...e.filtration, [k]: Number(v.toFixed(2)) } } } };
+}
+
+/** Band boxes across a frame of width w: vertical strips, left to right (the order of stripValues; CHB-023). */
+export function bandBoxes(count: number, w: number, h: number): { x: number; y: number; w: number; h: number }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const x0 = Math.floor((i * w) / count), x1 = Math.floor(((i + 1) * w) / count);
+    return { x: x0, y: 0, w: Math.max(1, x1 - x0), h };
+  });
 }
 
 /** Arguments of the mock/CHB-010 darkroom.testStrip op (step in the varied quantity's display unit). */

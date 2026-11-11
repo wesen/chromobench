@@ -13,7 +13,7 @@
 - [x] [stage 5] History, approvals (Show, Approve all, E_STALE Apply anyway), why and snapshots panels <!-- t:zfyu -->
 - [x] [stage 6] Darkroom tools as viewport tools plus panels: test strip with .testStrip() fragment, ring-around (identity and sign tests), masks, exposure list <!-- t:mabn -->
 - [ ] [stage 7] Host: boot, services, engine choice, variant registry, ?variant=, menu, dev hot reload, Load Variant, Build Report, explain, window.chromobench hook <!-- t:xupn -->
-- [ ] [stage 7] lab variant; M1 spec green unchanged; rewrite e2e/studio.spec.ts against the new hook; delete the React UI <!-- t:lv2j -->
+- [x] [stage 7] lab variant; M1 spec green unchanged; rewrite e2e/studio.spec.ts against the new hook; delete the React UI <!-- t:lv2j -->
 - [ ] [stage 8] classic, darkroom and simple variants with explain snapshots and a Playwright smoke per variant (with axe); shortcut sheet and live regions (CHB-009 grer) <!-- t:qv62 -->
 - [ ] [stage 9] Reference and GPU engines in the host (boundary decision with CHB-017), chat slot contract with CHB-008, recipe sidecars, precache list <!-- t:7bs1 -->
 - [ ] [from CHB-006 2c6h] Playwright test for ingest's browser 8-bit fallback (decodeBrowser) in the studio host <!-- t:tlko -->

@@ -1,0 +1,50 @@
+{
+  "ticket": "CHB-011",
+  "note": "Acceptance numbers of the output and colour-management guide (§2.1, §2.5, §8) and reference values computed outside chromobench. Sources: 'guide' = design-doc/01-intern-guide-output-and-colour-management.md; 'textbook' = The Mathematics of the Colour Negative §2.7; 'colour-science' = colour-science 0.4.6 (Python), script in the CHB-011 diary.",
+  "crc": { "source": "guide §5.6", "ascii123456789": "0xCBF43926", "iend": "0xAE426082" },
+  "greyCard": {
+    "source": "guide §2.1 (textbook §2.7 for sRGB #70757b)",
+    "xyzD65": [0.1664, 0.1754, 0.2131],
+    "tolCodes16": 2,
+    "spaces": {
+      "srgb": { "linear": [0.1634, 0.1766, 0.1988], "encoded": [0.4409, 0.4573, 0.4831], "u16": [28895, 29969, 31663], "u8": [112, 117, 123], "hex": "#70757b" },
+      "display-p3": { "linear": [0.1657, 0.1762, 0.1966], "encoded": [0.4439, 0.4568, 0.4806], "u16": [29089, 29934, 31499], "u8": [113, 116, 123] },
+      "rec2020": { "linear": [0.1693, 0.176, 0.1962], "encoded": [0.395, 0.4037, 0.429], "u16": [25885, 26455, 28114], "u8": [101, 103, 109] },
+      "adobe-rgb": { "linear": [0.1671, 0.1766, 0.1979], "encoded": [0.4433, 0.4546, 0.4787], "u16": [29054, 29792, 31370], "u8": [113, 116, 122],
+        "note": "The guide encodes with v^(256/563). The bundled AdobeCompat-v4 profile declares gamma 2.2 with a linear toe (para type 3: g 2.2, c 1/32, d 0.0557); encoding follows the embedded profile (decision D3), which gives 29062, 29800, 31378 (+8 codes)",
+        "u16Profile": [29062, 29800, 31378] },
+      "prophoto": { "linear": [0.1727, 0.1759, 0.1956], "encoded": [0.377, 0.3809, 0.4039], "u16": [24704, 24959, 26469], "u8": [96, 97, 103] }
+    }
+  },
+  "brokenP3Matrix": {
+    "source": "guide §4 bug 5 (Chromogen 05-inline.js 3102)",
+    "note": "The Studio's constant XYZ→P3 matrix (outUniforms toRGB, GLSL column-major, transposed here to rows); its first entry 2.4934969 against 2.4931808 derived from the primaries",
+    "studioXyzToP3": [[2.4934969, -0.9313836, -0.4027108], [-0.8294890, 1.7626641, 0.0236247], [0.0358458, -0.0761724, 0.9568845]]
+  },
+  "renderings": {
+    "source": "guide §2.5, textbook §2.7",
+    "paperWhiteScanOfPrintU16": 65535,
+    "studioPaperWhiteLinear": 0.957,
+    "studioPaperWhite8": 250,
+    "printAsSeenPaperWhiteY": 0.813,
+    "blackDensityFlare048": 2.09,
+    "blackDensityK1": 1.35,
+    "k1": 0.04,
+    "scanOfPrintBlackBelowPaperWhite": 2.28,
+    "scanOfPrintBlackLuminance": 0.0052,
+    "tolDensity": 0.01
+  },
+  "knee": { "source": "textbook §2.7", "d": [0.5, 0.8, 1, 2], "out": [0.4987, 0.77, 0.891, 0.997], "tol": 0.0006, "gainAfter": 1.048, "gainBefore": 0.935 },
+  "cam16ucs": {
+    "source": "colour-science 0.4.6 XYZ_to_CAM16UCS(XYZ, XYZ_w = sRGB white at Y = 1, L_A = 64, Y_b = 20, Average) — spektrafilm's call; ucsD1 = XYZ_to_CAM16(100·XYZ, 100·XYZ_w, discount_illuminant = True) then JMh_CAM16_to_CAM16UCS",
+    "white": [0.9504559270516716, 1.0, 1.0890577507598784],
+    "samples": [
+      { "XYZ": [0.2, 0.3, 0.4], "ucs": [63.151387315242225, -28.665296767309655, -7.402310719447117], "ucsD1": [63.149478260793515, -28.41221589801834, -7.18377910298656] },
+      { "XYZ": [0.5, 0.5, 0.5], "ucs": [79.06758970145415, 6.012799775787747, 3.1852617608518905], "ucsD1": [79.06828883938859, 6.489307622504534, 3.4467269061653565] },
+      { "XYZ": [0.9, 0.1, 0.05], "ucs": [35.04575745223287, 138.5855278776538, -3.256423459027468], "ucsD1": [35.087644720751214, 138.62578951281313, -3.2218969056639737] },
+      { "XYZ": [0.05, 0.6, 0.2], "ucs": [78.34145613296982, -60.97387818628457, 17.04872968088436], "ucsD1": [78.33766917607863, -60.80201939553907, 17.193617462211293] },
+      { "XYZ": [0.01, 0.02, 0.5], "ucs": [0.3323109821447927, -22.69075570839468, -8.711407937356524], "ucsD1": [0.323860073992797, -22.517484069467653, -8.614446238773484] },
+      { "XYZ": [0.9504559270516716, 1.0, 1.0890577507598784], "ucs": [100.0, -1.3316837250332838, -0.7562995504481864], "ucsD1": [100.0, 2.274314431249118e-12, 5.054032069442486e-13] }
+    ]
+  }
+}

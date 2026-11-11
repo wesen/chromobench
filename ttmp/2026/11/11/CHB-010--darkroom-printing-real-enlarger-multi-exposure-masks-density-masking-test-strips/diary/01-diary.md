@@ -1364,3 +1364,32 @@ Milestone entry for the checks on 3d0a100 and a635673, and the bookkeeping commi
 
 ### What warrants a second pair of eyes
 - 428q is checked for the contrast/unsharp mask that contract 0.2 defines (blur in linear light, the neutral-mask law); the highlight mask and the recipe wiring are the new follow-up task, blocked on C5.
+
+## Step 22: Merge of task/chb-019-migrate (CHB-011 output, CHB-023 glue, new apps/studio)
+
+At the coordinator's request I merged `task/chb-019-migrate` into `task/chb-010-masks`. The only conflict was `packages/gpu/src/engine-gpu.ts` (six hunks). Both sides' behaviour is kept: the CHB-010 whole-graph DAG evaluation now sits under CHB-011's `checkTarget` / `render` / `evaluateU16` / `cacheResult`. So the 16-bit export and the result cache go through the same evaluation as masks and `print.combine`.
+
+### Prompt Context
+**Coordinator message (verbatim):** "Thanks, well done. One follow-up: please merge `task/chb-019-migrate` into your branch `task/chb-010-masks` in your worktree and resolve the conflicts. That branch includes CHB-011 (`@chromobench/output`, GPU 16-bit export via `GpuEngine.evaluateU16` with `kernels/pack16.wgsl`, unpack LUTs, `lowerDisplay`) and CHB-023's engine glue (`openDecoded`, `cacheLimit`/`cacheResult`, film base computed once per frame, aperture-only densitometer). Its new `apps/studio` uses the shell-based studio-kit. Merging it into an integration branch conflicts in `packages/gpu/src/engine-gpu.ts` in six places: imports, `dispose`/unpack-LUT cleanup, `checkTarget` vs your DAG `render`/`planNode`/`execute`, and evaluate/caching. Keep both behaviours: your whole-graph DAG evaluation with masks and `print.combine`; their caching with a cache limit, `evaluateU16` 16-bit export through the same evaluation path, the region/aperture densitometer, and the per-frame base. Then run pnpm typecheck, lint, test, gen:check, and the browser suite (`STUDIO_PORT=4491 CI=1`, with your temporary port override for gpu-parity because 4185 is still held). Commit with the Co-Authored-By trailer and append a short diary step. Reply with the merge commit and the test counts."
+**Assistant interpretation:** Merge, resolve `engine-gpu.ts` so the DAG evaluation serves `evaluate` and `evaluateU16`, keep the result cache and the region-only source upload, run every check.
+**Commit (code):** the merge commit "Merge task/chb-019-migrate into task/chb-010-masks".
+
+### What I did
+- `git merge --no-ff --no-commit task/chb-019-migrate`: core `index.ts`/`ops.ts`, `pointwise.wgsl` and `program.ts` merged automatically. There were no op-code collisions: masks are 12–15, and CHB-011 extended `DISPLAY` and the segment's `ok` matrices. Only `engine-gpu.ts` conflicted.
+- Resolution (scripted over the six diff3 hunks):
+  - Imports from both sides (`type RunTarget` and `pack16Code`, `lowerDisplay`).
+  - `dropDeviceState` and `dispose` clear both the dummy texture and the unpack LUTs.
+  - My DAG entry point renamed `renderGraph(id, grid)`. CHB-011's `render<T>(n, info, region, scale, precision, read)` keeps its signature and now builds the grid, calls `renderGraph` inside `this.gpu()`, and hands the output texture to `read` (f32 readback for `evaluate`, `readU16` for `evaluateU16`).
+  - `checkTarget` and `cacheResult` taken as they are.
+  - Source tails in `execute` call CHB-011's async `sourceTexture(root, region)` (region-only upload, `srcOrigin` = the region corner, released when owned) instead of the full-frame texture at origin [0, 0].
+- `pnpm install --frozen-lockfile --offline` (the merge adds `packages/output`; before it, typecheck failed on `packages/output/test/icc.test.ts` with "TS7006: Parameter 'i' implicitly has an 'any' type", because the new workspace package was not linked).
+
+### What worked
+- typecheck clean, "import boundaries ok (248 file checks)", "gen:check ok (18 files)", contract:check "20 change(s), 4 breaking" (unchanged), `pnpm test` 2296 passed.
+- Browser (`STUDIO_PORT=4491 CI=1`, uncommitted `playwright.tmp.config.ts` moving gpu-parity from the held 4185 to 4579): 68 passed, including CHB-011's output specs, GPU conformance 253/253 and `chain:masks` (combined x 6.9e-7 log H, display export 0.047 levels, as before the merge).
+
+### What didn't work
+- Port 4491 showed as LISTEN by a process that had already exited (`ps` printed nothing); two seconds later it was free and the run started normally.
+
+### What warrants a second pair of eyes
+- `evaluateU16` now runs the DAG evaluation, so a tile of a masked print computes its masks on the tile's grid. Feather and density-mask blurs clamp at the tile edge (Step 20). A tiled 16-bit export of a print with wide feathers therefore shows seams until spatial barriers get a halo or a whole-frame field (CHB-005's `sampleField` pattern).

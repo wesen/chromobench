@@ -34,6 +34,9 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "lcms-wasm>tape": "-"
+    }
   }
 }

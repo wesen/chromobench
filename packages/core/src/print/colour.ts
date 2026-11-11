@@ -128,3 +128,109 @@ export function deltaE2000(a: ArrayLike<number>, b: ArrayLike<number>): number {
   const RT = -Math.sin(2 * dTh * rad) * RC;
   return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
 }
+
+// ---- Output spaces (CHB-011, guide §2.1 and §5.3) ------------------------------------------------
+// "Profiles from files, maths from profiles" (decision D3): the numbers below are the bundled CC0
+// Compact ICC v4 profiles' own s15Fixed16 integers (÷ 65536): colorants (rXYZ gXYZ bXYZ, D50-adapted),
+// the chromatic adaptation `chad` and the parametric TRC. Encoding with them and embedding the profile
+// therefore agree exactly; @chromobench/output parses the files and checks these constants against them
+// (and the matrices against the analytic ones from the primaries, within 1e-4).
+
+export type OutputSpaceId = 'srgb' | 'display-p3' | 'rec2020' | 'adobe-rgb' | 'prophoto';
+export const OUTPUT_SPACE_IDS: readonly OutputSpaceId[] = ['srgb', 'display-p3', 'rec2020', 'adobe-rgb', 'prophoto'];
+
+/** ICC parametricCurveType (ICC.1 §10.18): encoded X → linear Y. */
+export interface ParametricCurve { type: 0 | 1 | 2 | 3 | 4; g: number; a?: number; b?: number; c?: number; d?: number; e?: number; f?: number }
+
+/** Linear Y of an encoded value X (what a CMM computes from the profile's TRC). */
+export function decodeCurve(cv: ParametricCurve, X: number): number {
+  const { g, a = 1, b = 0, c = 0, d = 0, e = 0, f = 0 } = cv;
+  const pw = (v: number): number => (v > 0 ? v ** g : 0);
+  switch (cv.type) {
+    case 0: return pw(X);
+    case 1: return X >= -b / a ? pw(a * X + b) : 0;
+    case 2: return X >= -b / a ? pw(a * X + b) + c : c;
+    case 3: return X >= d ? pw(a * X + b) : c * X;
+    case 4: return X >= d ? pw(a * X + b) + e : c * X + f;
+  }
+}
+
+/**
+ * Encoded X of a linear Y: the inverse of decodeCurve. Where the profile's two segments do not meet
+ * exactly at d (s15Fixed16 rounding leaves gaps of ~1e-6), values inside the gap map to d.
+ */
+export function encodeCurve(cv: ParametricCurve, Y: number): number {
+  const { g, a = 1, b = 0, c = 0, d = 0, e = 0, f = 0 } = cv;
+  const root = (v: number): number => (v > 0 ? v ** (1 / g) : 0);
+  switch (cv.type) {
+    case 0: return root(Y);
+    case 1: return (root(Y) - b) / a;
+    case 2: return Y <= c ? -b / a : (root(Y - c) - b) / a;
+    case 3: return Y < c * d ? Y / c : Math.max(d, (root(Y) - b) / a);
+    case 4: return Y < c * d + f ? (Y - f) / c : Math.max(d, (root(Y - e) - b) / a);
+  }
+}
+
+const S15 = (v: readonly number[]): number[] => v.map((x) => x / 65536);
+const m3 = (v: readonly number[]): Mat3 => [[v[0]!, v[1]!, v[2]!], [v[3]!, v[4]!, v[5]!], [v[6]!, v[7]!, v[8]!]];
+const cols = (r: readonly number[], g: readonly number[], b: readonly number[]): Mat3 => [[r[0]!, g[0]!, b[0]!], [r[1]!, g[1]!, b[1]!], [r[2]!, g[2]!, b[2]!]];
+
+/** The profiles' raw s15Fixed16 tag values (see the block comment above). `para` is type 3: g a b c d. */
+export const ICC_V4_RAW: Record<OutputSpaceId, { rXYZ: number[]; gXYZ: number[]; bXYZ: number[]; chad: number[]; para: number[] }> = {
+  'srgb': { rXYZ: [28576, 14578, 911], gXYZ: [25238, 46985, 6362], bXYZ: [9376, 3973, 46788], chad: [68671, 1501, -3290, 1936, 64914, -1119, -606, 988, 49265], para: [157289, 62119, 3417, 5072, 2651] },
+  'display-p3': { rXYZ: [33759, 15807, -69], gXYZ: [19135, 45367, 2745], bXYZ: [10296, 4362, 51385], chad: [68674, 1502, -3291, 1939, 64912, -1119, -606, 988, 49262], para: [157289, 62119, 3417, 5072, 2651] },
+  'rec2020': { rXYZ: [44137, 18288, -127], gXYZ: [10858, 44259, 1965], bXYZ: [8195, 2989, 52223], chad: [68674, 1502, -3291, 1939, 64912, -1119, -606, 988, 49262], para: [145637, 59616, 5920, 14564, 5309] },
+  'adobe-rgb': { rXYZ: [39960, 20389, 1276], gXYZ: [13453, 41004, 3989], bXYZ: [9777, 4143, 48796], chad: [68674, 1502, -3291, 1939, 64912, -1119, -606, 988, 49262], para: [144179, 65536, 0, 2048, 3649] },
+  'prophoto': { rXYZ: [52279, 18878, 0], gXYZ: [8858, 46653, 1], bXYZ: [2053, 5, 54060], chad: [65533, -2, -2, -3, 65539, -1, -1, 1, 65519], para: [117965, 65536, 0, 4096, 2048] },
+};
+
+/** Primaries and white (x, y) of guide §2.1, for the analytic check. */
+export const OUTPUT_PRIMARIES: Record<OutputSpaceId, { rgb: [[number, number], [number, number], [number, number]]; white: [number, number] }> = {
+  'srgb': { rgb: [[0.64, 0.33], [0.3, 0.6], [0.15, 0.06]], white: [0.3127, 0.329] },
+  'display-p3': { rgb: [[0.68, 0.32], [0.265, 0.69], [0.15, 0.06]], white: [0.3127, 0.329] },
+  'rec2020': { rgb: [[0.708, 0.292], [0.17, 0.797], [0.131, 0.046]], white: [0.3127, 0.329] },
+  'adobe-rgb': { rgb: [[0.64, 0.33], [0.21, 0.71], [0.15, 0.06]], white: [0.3127, 0.329] },
+  'prophoto': { rgb: [[0.7347, 0.2653], [0.1596, 0.8404], [0.0366, 0.0001]], white: [0.3457, 0.3585] },
+};
+
+/** Linear RGB → XYZ matrix from primaries and white chromaticities (Y of white = 1). */
+export function rgbToXYZFromPrimaries(p: { rgb: [[number, number], [number, number], [number, number]]; white: [number, number] }): Mat3 {
+  const xyz = ([x, y]: [number, number]): Vec3 => [x / y, 1, (1 - x - y) / y];
+  const P = cols(xyz(p.rgb[0]), xyz(p.rgb[1]), xyz(p.rgb[2]));
+  const S = mulMV(inv3(P), xyz(p.white));
+  return P.map((row) => [row[0] * S[0], row[1] * S[1], row[2] * S[2]]) as Mat3;
+}
+
+export interface OutputSpaceDef {
+  id: OutputSpaceId;
+  /** Linear RGB → XYZ relative to `white` (colorants un-adapted with chad⁻¹). */
+  toXYZ: Mat3;
+  fromXYZ: Mat3;
+  /** The space's white: toXYZ · (1, 1, 1). */
+  white: Vec3;
+  curve: ParametricCurve;
+  /** Encoded value of a linear one, and back (the profile's TRC). */
+  encode(v: number): number;
+  decode(v: number): number;
+}
+
+function makeSpace(id: OutputSpaceId): OutputSpaceDef {
+  const r = ICC_V4_RAW[id];
+  const chadInv = inv3(m3(S15(r.chad)));
+  const toXYZ = mulMM(chadInv, cols(S15(r.rXYZ), S15(r.gXYZ), S15(r.bXYZ)));
+  const [g, a, b, c, d] = S15(r.para) as [number, number, number, number, number];
+  const curve: ParametricCurve = { type: 3, g, a, b, c, d };
+  return {
+    id, toXYZ, fromXYZ: inv3(toXYZ), white: mulMV(toXYZ, [1, 1, 1]), curve,
+    encode: (v) => encodeCurve(curve, v), decode: (v) => decodeCurve(curve, v),
+  };
+}
+
+const SPACES = new Map<OutputSpaceId, OutputSpaceDef>();
+/** One of the five output spaces (memoised). Unknown ids fall back to sRGB. */
+export function outputSpace(id: string): OutputSpaceDef {
+  const k = (OUTPUT_SPACE_IDS as readonly string[]).includes(id) ? (id as OutputSpaceId) : 'srgb';
+  let s = SPACES.get(k);
+  if (!s) SPACES.set(k, (s = makeSpace(k)));
+  return s;
+}

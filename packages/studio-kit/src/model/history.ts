@@ -1,4 +1,4 @@
-// Moved from apps/studio/src/core/history.ts (CHB-009) for CHB-019; the original is deleted when apps/studio migrates.
+// Moved from apps/studio/src/core/history.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
 // History (guide §5.8): a view of the frame's edit log. Applied units in order with the undo cursor,
 // pending agent transactions, rejected entries, and labels in darkroom words from the registry.
 import { applyMutation, canonicalJSON, getPath, type Author, type EditLog, type FrameRecipe, type LoggedMutation, type Mutation, type Provenance } from '@chromobench/contract';
