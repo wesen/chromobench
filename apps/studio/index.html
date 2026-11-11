@@ -3,35 +3,63 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chromobench M1</title>
-    <style>
-      body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; background: #1b1b1b; color: #ddd; }
-      canvas { image-rendering: pixelated; width: 384px; height: 256px; background: #000; border: 1px solid #444; }
-      .row { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
-      fieldset { border: 1px solid #444; }
-      label { display: grid; grid-template-columns: 2em 12em 5em; align-items: center; gap: 6px; }
-      pre { font-size: 12px; background: #111; padding: 6px; max-width: 640px; overflow: auto; }
-      button { margin: 2px; }
-    </style>
+    <title>Chromobench</title>
+    <link rel="stylesheet" href="/src/studio.css" />
   </head>
   <body>
-    <h1>Chromobench M1 walking skeleton</h1>
-    <p>Open a 16-bit RGB TIFF (e.g. <code>fixtures/synthetic/m1-negative-96x64.tif</code>). Mock engine; the real studio is CHB-009.</p>
-    <input id="file" type="file" accept=".tif,.tiff,image/tiff" />
-    <div class="row">
-      <canvas id="view" width="96" height="64"></canvas>
-      <div>
-        <div id="controls"></div>
-        <div>
-          <button id="undo" disabled>Undo</button><button id="redo" disabled>Redo</button>
-          <select id="mode"><option value="ask" selected>agent: ask</option><option value="auto">agent: auto</option><option value="read-only">agent: read-only</option></select>
+    <div id="studio">
+      <header class="st-bar">
+        <div class="brand">Chromobench <i>M1 · mock engine</i></div>
+        <div class="frame-t"><small>Frame</small><b id="frame-name">no frame</b></div>
+        <label class="btn">Open TIFF…<input id="file" type="file" accept=".tif,.tiff,image/tiff" /></label>
+        <span class="sp"></span>
+        <span class="pill" title="SHA-256 of the committed recipe"><span>state</span><b id="hash">—</b></span>
+      </header>
+
+      <aside class="st-left">
+        <section class="sec">
+          <div class="h"><b>Print</b><span class="tag op">print.lights</span></div>
+          <p class="about">Printer lights shift the paper's log exposure per layer, shown in points (1 pt = 0.025 log H). Dragging previews; releasing records one edit.</p>
+          <div id="controls"></div>
+        </section>
+        <section class="sec">
+          <div class="h"><b>Agent</b></div>
+          <div class="sel-row"><label for="mode">Agent edits</label>
+            <select id="mode"><option value="ask" selected>ask first</option><option value="auto">apply at once</option><option value="read-only">read-only</option></select>
+          </div>
+          <p class="about">Until the DSL lands (CHB-007), try <code>chromobench.propose({'print.lights.logH': [0.1, 0, 0]}, 'warmer')</code> in the console.</p>
+        </section>
+      </aside>
+
+      <main class="st-mid">
+        <div class="tools">
+          <button id="undo" class="btn sm" disabled>Undo</button>
+          <button id="redo" class="btn sm" disabled>Redo</button>
+          <span class="sp"></span>
+          <span class="lbl" id="status">no frame</span>
         </div>
-        <fieldset><legend>Pending agent changes</legend><ul id="pending"></ul></fieldset>
-        <div>state hash: <code id="hash">—</code></div>
-        <div>status: <span id="status">no frame</span></div>
-      </div>
+        <div class="canvas-wrap">
+          <div class="drop" id="drop"><div><b>Open a 16-bit RGB TIFF</b><br />e.g. fixtures/synthetic/m1-negative-96x64.tif</div></div>
+          <canvas id="view" width="96" height="64" hidden></canvas>
+        </div>
+        <div class="sreadout" id="readout"><span>move over the print to read values</span></div>
+      </main>
+
+      <aside class="st-right">
+        <section class="sec">
+          <div class="h"><b>Pending</b><span class="tag" id="pending-count">0</span></div>
+          <ul id="pending" style="list-style: none; margin: 0; padding: 0"></ul>
+        </section>
+        <section class="sec">
+          <div class="h"><b>History</b></div>
+          <div id="history"></div>
+        </section>
+        <section class="sec">
+          <div class="h"><b>Provenance</b><span class="tag">why</span></div>
+          <pre class="why" id="why"></pre>
+        </section>
+      </aside>
     </div>
-    <pre id="why"></pre>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
