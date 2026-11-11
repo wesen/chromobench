@@ -8,7 +8,8 @@
     "./dom": "./src/dom/index.ts",
     "./studio-kit.css": "./src/dom/studio-kit.css",
     "./kits/roll": "./kits/roll/src/index.ts",
-    "./kits/roll/dom": "./kits/roll/src/dom.ts"
+    "./kits/roll/dom": "./kits/roll/src/dom.ts",
+    "./kits/roll/roll.css": "./kits/roll/src/roll.css"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"

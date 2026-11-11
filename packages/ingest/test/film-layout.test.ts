@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Box, Vec3 } from '@chromobench/contract';
 import {
-  filmLayout, frameBaseOf, openSourceSync, orientedToSensorBox, plantedStrip, rebateFromBox, region, rollBase, subtractVeil,
+  conditionScan, filmLayout, frameBaseOf, openSourceSync, orientedToSensorBox, plantedStrip, rebateFromBox, region, rollBase, subtractVeil,
   type FilmLayout, type PlantedStrip,
 } from '@chromobench/ingest';
 
@@ -170,5 +170,36 @@ describe('roll base (guide §4.2, §11)', () => {
     expect(rb.notes.map((n) => n.code)).toEqual(['W_ROLL_BASE_WEAK']);
     expect(rb.T).not.toBeNull();
     expect(rb.absD).toBeNull();
+  });
+});
+
+describe("conditionScan: the host's one call at decode", () => {
+  it("subtracts the frame's own veil in place and returns the film-edge box for scan.rebate", () => {
+    const p = plantedStrip({ pxPerMm: 6, seed: 9 });
+    const rgb = Float32Array.from(p.rgb);
+    const c = conditionScan(rgb, p.w, p.h, { id: 'a' });
+    expect(c.veilFrom).toBe('frame');
+    expect(c.rebate).toEqual(c.layout.rebate!.box);
+    expect(dD(c.baseT!, p.truth.baseT)).toBeLessThan(0.002);
+    // the pixels are veil-corrected now: the rebate box's mean is the planted base
+    const b = c.rebate!;
+    const T = [0, 0, 0];
+    for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) for (let k = 0; k < 3; k++) T[k]! += rgb[(y * p.w + x) * 3 + k]!;
+    expect(dD(T.map((t) => t / (b.w * b.h)), p.truth.baseT)).toBeLessThan(0.002);
+    expect(c.frame).toMatchObject({ id: 'a', from: 'edge' });
+  });
+  it("without a holder it uses the roll's veil; a blank-film base is not a scan.rebate box", () => {
+    const p = plantedStrip({ pxPerMm: 6, seed: 4, holder: false, holes: false });
+    const c = conditionScan(Float32Array.from(p.rgb), p.w, p.h, { rollVeil: p.truth.veil });
+    expect(c.veilFrom).toBe('roll');
+    expect(c.notes.map((n) => n.code)).toContain('W_VEIL_FROM_ROLL');
+    expect(dD(c.baseT!, p.truth.baseT)).toBeLessThan(0.002);
+    const k = p.truth.crop;
+    const crop = new Float32Array(k.w * k.h * 3);
+    for (let y = 0; y < k.h; y++) crop.set(p.rgb.subarray(((k.y + y) * p.w + k.x) * 3, ((k.y + y) * p.w + k.x + k.w) * 3), y * k.w * 3);
+    const lab = conditionScan(Float32Array.from(crop), k.w, k.h);
+    expect(lab.layout.rebate!.from).toBe('blank');
+    expect(lab.rebate).toBeNull();
+    expect(conditionScan(Float32Array.from(crop), k.w, k.h, { blankBox: true }).rebate).not.toBeNull();
   });
 });

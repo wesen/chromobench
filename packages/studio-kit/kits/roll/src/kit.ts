@@ -18,7 +18,7 @@ import type { Cb, CatalogFrame } from '../../../src/cb.ts';
 import { frameRef } from '../../../src/handles.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { analyseRoll } from './engine/analyse.ts';
-import { buildBatch, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
+import { buildBatch, plain, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
 import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, SHARED_PATHS } from './engine/constants.ts';
 import { clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
 import { divergence, fragmentOf, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
@@ -120,7 +120,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
   function applyBatch(ctx: any, b: MutationBatch, o: { force?: boolean } = {}): Diagnostic[] | true {
     const stale = staleOf(b, recipeOf(ctx));
     if (stale.length && !o.force) return staleDiagnostics(stale);
-    const entries = b.frames.map((f) => ({ frame: f.frame, mutations: o.force ? f.mutations.map((m): Mutation => (m.op === 'set' ? { op: 'set', path: m.path, value: m.value } : m)) : f.mutations }));
+    const entries = plain(b.frames).map((f) => ({ frame: f.frame, mutations: o.force ? f.mutations.map((m): Mutation => (m.op === 'set' ? { op: 'set', path: m.path, value: m.value } : m)) : f.mutations }));
     studioOf(ctx).route.applyBatch(entries, b.label, { by: b.by, tx: b.id.startsWith(ROLL_TX) ? b.id : `${ROLL_TX}${b.id}`, detail: b.why });
     return true;
   }
@@ -262,7 +262,14 @@ export function createRollKit(ck: Ck, cb: Cb) {
             return o.analyse === false ? id : analyse(ctx, { firstPrint: true }).then(() => id);
           },
         })
-          .add('roll.select', { label: 'Select Roll', palette: false, run: (ctx: any, id: string) => ctx.tx('Select roll', (t: any) => t.$set(['roll', 'current'], id)) })
+          .add('roll.select', {
+            label: 'Select Roll',
+            palette: false,
+            // a selection, not an edit: no undo step
+            run: (ctx: any, id: string) => {
+              if (ctx.state.roll?.current !== id) ctx.rt.store.writeDoc([{ path: ['roll', 'current'], value: id }], { tier: 'document' });
+            },
+          })
           .add('roll.analyse', {
             label: 'Analyse Roll',
             menu: 'Roll',
@@ -321,9 +328,10 @@ export function createRollKit(ck: Ck, cb: Cb) {
             enabled: (s: any) => !!s.rollView?.pending,
             why: 'Nothing pending',
             run: (ctx: any, force = false) => {
-              const b = ctx.state.rollView?.pending as MutationBatch | null;
+              // plain copies: the state hands out read-only proxies, which the logs (and their KV) cannot clone
+              const b = plain(ctx.state.rollView?.pending as MutationBatch | null);
               if (!b) return null;
-              const res = applyBatch(ctx, withoutFrames(b, ctx.state.rollView.off ?? []), { force: !!force });
+              const res = applyBatch(ctx, withoutFrames(b, plain(ctx.state.rollView.off ?? [])), { force: !!force });
               if (res !== true) {
                 setView(ctx, 'stale', res.map((d) => ({ code: d.code, message: d.message })));
                 return res;
@@ -352,8 +360,9 @@ export function createRollKit(ck: Ck, cb: Cb) {
             label: 'Set on the Roll',
             palette: false,
             ...hasRoll,
-            run: (ctx: any, path: string, value: unknown) => {
+            run: (ctx: any, path: string, v: unknown) => {
               const roll = rollOf(ctx.state)!;
+              const value = plain(v);
               // the roll's value and every frame's copy in one transaction: one undo step
               ctx.tx(`Roll: ${path}`, (t: any) => {
                 t.$set(['roll', 'rolls', roll.id, 'fragment', path], value);

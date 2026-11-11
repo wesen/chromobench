@@ -118,7 +118,8 @@ const setup = panelOf('cb-roll-setup', (s) => {
       const f0 = ss[0];
       el.append(row('Noise σ', f0?.sigma ? d3(f0.sigma) + ' D' : '–', f0 ? `at ${f0.size[0]}×${f0.size[1]} (σ depends on the size)` : null, null));
     } else if (sec === 'frames' && a) {
-      const notes = a.diagnostics.map((d) => `${d.code}: ${d.message}`);
+      const named = (t: string): string => r.frames.reduce((x, f) => x.split(f).join(nameOf(s, f)), t);
+      const notes = a.diagnostics.map((d) => `${d.code}: ${named(d.message)}`);
       if (notes.length) el.append(h('ul', { class: 'cb-roll-diags' }, ...notes.map((t) => h('li', { class: 'cb-warn', text: t }))));
     }
   }

@@ -15,6 +15,10 @@ import { buildVariant, createStudio, localStorageKV, memoryKV, type Studio } fro
 import { mountStudio } from '../src/dom/index.ts';
 import '../src/dom/studio-kit.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '../variants/index.js';
+import { ROLL_RENDERERS } from '../kits/roll/src/dom.ts';
+import '../kits/roll/src/roll.css';
+import { plantedStrip } from '@chromobench/ingest';
+import { rollPhysics } from './roll-physics.ts';
 import fixtureUrl from '../../../fixtures/synthetic/m1-negative-96x64.tif?url';
 
 const q = new URLSearchParams(location.search);
@@ -33,6 +37,17 @@ function report(title: string, lines: string[]): void {
   div.append(h, pre);
   root.append(div);
   document.body.dataset['ready'] = 'report';
+}
+
+/** ?variant=roll: planted 135 frames in a holder (sprocket holes, veil), differently exposed, one frame with a
+ *  mixed base — what the roll kit's analysis is for (CHB-020) */
+function plantedRoll(): { name: string; bytes: Uint8Array }[] {
+  return [0, 0.004, 0.008, 0.002, 0.04, 0.006].map((off, i) => {
+    const p = plantedStrip({ pxPerMm: 6, seed: 101 + i, scene: i, baseOffsetD: off, exposureD: 0.35 * Math.sin(1.7 * i), castD: [0.04 * Math.cos(i), 0, -0.03 * Math.sin(i)] });
+    const c = new Uint16Array(p.rgb.length);
+    for (let j = 0; j < c.length; j++) c[j] = Math.max(0, Math.min(65535, Math.round(p.rgb[j]! * 65535)));
+    return { name: `roll-${String(i + 1).padStart(2, '0')}.tif`, bytes: writeTiff16(p.w, p.h, c) };
+  });
 }
 
 /** more frames of the roll: the M1 negative exposed a little differently each time */
@@ -97,10 +112,14 @@ async function main(): Promise<void> {
     a.href = cv.toDataURL('image/png');
     a.click();
   };
-  const { rt } = await mountStudio(built.app, root, studio, { save });
-  const fixture = new Uint8Array(await (await fetch(fixtureUrl)).arrayBuffer());
-  await studio.open(fixture, 'm1-negative-96x64.tif');
-  for (const fr of rollFrames()) await studio.open(fr.bytes, fr.name);
+  const { rt } = await mountStudio(built.app, root, studio, { save, rollPhysics: rollPhysics(), renderers: ROLL_RENDERERS });
+  if (def.id === 'roll') {
+    for (const fr of plantedRoll()) await studio.open(fr.bytes, fr.name);
+  } else {
+    const fixture = new Uint8Array(await (await fetch(fixtureUrl)).arrayBuffer());
+    await studio.open(fixture, 'm1-negative-96x64.tif');
+    for (const fr of rollFrames()) await studio.open(fr.bytes, fr.name);
+  }
   hook(rt, studio, def.id);
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';

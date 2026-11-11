@@ -7,7 +7,7 @@ import { plantedStrip, type PlantedStrip } from '@chromobench/ingest';
 import { CHROMOGEN, interimData, scannerForward } from '@chromobench/core';
 import { manualClock, type ManualClock } from '@chromobench/shell/testing';
 import type { Runtime } from '@chromobench/shell';
-import { buildVariant, createStudio, type Studio } from '../../src/index.ts';
+import { buildVariant, createStudio, memoryKV, type Studio } from '../../src/index.ts';
 import type { RollPhysics } from '../../kits/roll/src/index.ts';
 import { rollPhysics } from '../../demo/roll-physics.ts';
 import { VARIANTS } from '../../variants/index.js';
@@ -54,7 +54,8 @@ export interface StartedRoll extends RollStudio {
 /** the 'roll' variant booted headless on MockEngine with the planted frames open */
 export async function startedRoll(offsets: number[]): Promise<StartedRoll> {
   const clock = manualClock(1_000);
-  const studio = createStudio({ engine: new MockEngine(), kv: null, now: () => clock.now() });
+  // a KV, as in the browser: the logs are saved (structured-cloned) on every unit
+  const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), now: () => clock.now() });
   const { app } = buildVariant((await VARIANTS.roll()).default);
   const rt = await app.boot(studio.services({ clock, rollPhysics: physics() }));
   studio.attach(rt);
