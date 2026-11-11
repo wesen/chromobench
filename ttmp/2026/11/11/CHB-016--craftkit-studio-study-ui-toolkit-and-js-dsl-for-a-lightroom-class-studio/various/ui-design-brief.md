@@ -1,3 +1,22 @@
+---
+Title: UI design brief
+Ticket: CHB-016
+Status: active
+Topics:
+    - ui
+    - dsl
+    - architecture
+DocType: reference
+Intent: long-term
+Owners: []
+RelatedFiles: []
+ExternalSources: []
+Summary: "Shared decisions for the UI guides (CHB-016, CHB-018..022): layers, grammar, kits, fragments, passes, EditLog bridge"
+LastUpdated: 2026-11-11T14:30:00-05:00
+WhatFor: ""
+WhenToUse: ""
+---
+
 # UI design brief: the studio expressed entirely in the JS API
 
 Shared brief for the guides of CHB-016, CHB-018, CHB-019, CHB-020, CHB-021 and CHB-022. It fixes names, layers

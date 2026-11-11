@@ -396,3 +396,69 @@ chromobench/CraftKit parts, and an order of work.
   strips, ring-around, looks, roll sync, compare), M4 film look for digital (CHB-012 forward sim, halation, grain),
   M5 Lightroom parity (finishing, heal, keywords/search, print with soft proof), M6 assistant (CHB-008 chat,
   playbooks).
+
+## Step 5: Intern guide written
+
+This step wrote the CHB-016 implementation guide, "API design: one grammar for the studio UI, looks and the agent". It is the spine that the CHB-018 to CHB-022 guides build on. It fixes the vocabulary and binding times, the registry with its two modes (build mode in the page, runtime mode in QuickJS), seven IRs and the pass API, fragments with deferred calls, kits, one diagnostics producer with computed fixes, `explain`, the recipes projection over per-frame EditLogs with a unified undo, the `defineVariant` contract and host lifecycle, a `ck`/`cb` reference sketch, fourteen examples and five decision records.
+
+The guide follows the shared UI design brief and marks its refinements: a separate patch IR, a shared vocabulary module extracted from `packages/dsl/src/host.ts`, the variant `cb` as a superset of the agent's `cb` (with `compare` left agent-only), projected store keys in the shell, and a host propose hook in the DSL session.
+
+### Prompt Context
+
+**User prompt (verbatim):** "before we move on, now that we have worked out what to do with craftkit, let's create the tickets and design guides (remember, no need to be overly correct in the guides, they are \"guides for impementation\" after all, and we'll sort out details as we work) for the proper UI. Allow the UI to be entirely expressed using the JS API, so that we can create many different versions of it."
+**Assistant interpretation:** Write CHB-016's guide, the API design shared by the five UI tickets, with examples from simple to complex, and file tasks, related files and this diary step.
+**Inferred user intent:** One coherent API that the parallel UI tickets can implement against, so that whole studios can be written as JS variants.
+**Commit (code):** none (the orchestrator commits all guides together).
+
+### What I did
+
+- Read the writer brief, the UI design brief, the earlier guide brief, the writing-style guide, CHB-016 diary Steps 1–4, CraftKit `docs/SHELL.md`, `src/shell/{index,shell}.js`, `ui/node.js`, `core/{diag,store,history,engine}.js`, `src/app/{main,develop,develop-model,develop-tools,engine-graphs}.js`.
+- Read `packages/contract/src/{spec,registry,editlog,mutations,errors,graph,recipe,eval,engine}.ts` and the catalog, `packages/dsl/src/prelude/prelude.ts`, the `host.ts` method list, the docs topics (getting-started, darkroom-vocabulary, editing-and-approval, balancing-colour), CHB-007 guide §2.5 and §5.7–5.8, CHB-009 guide §5.1–5.4 and §5.7–5.9, and `apps/studio/src/core/{frame-session,gesture,controls}.ts` and `present/presenter.ts`.
+- Wrote `design-doc/01-intern-guide.md`, then did one review pass and fixed the problems it found (listed under What was tricky).
+- `08-check-guide-markdown.py`: 9985 words, 30 code blocks, no problems reported.
+- `docmgr task add` ×12 (stages 1–5); `docmgr doc relate` with 8 files.
+
+### Why
+
+- Examples carry the explanation. They use one frame (`f12`, 12.0 s) so the numbers line up: Amount 50 % gives 13.47 s, and the traced flow goes to 15.12 s.
+- The guide runs over the 7,000-word target because it has to cover fourteen examples, the reference sketch and five decision records; about 2,900 of its words are code.
+
+### What worked
+
+- The contract already provides most of what the bridge needs: `EditLog.state` caches its fold, so identity works as a change test; `propose` fills `expect`; `approve` returns `E_STALE`; `probes.*` is a settable path.
+- The `ArgSpec` (`ui.scale: 'log2'`) can decide how preset Amount interpolates, which replaces CraftKit's hand-written `KEEP` list.
+
+### What didn't work
+
+- No command failures. The first draft had an Example 1 that gave the shell slider an `aside` slot it does not have (the build would report `B130` for it); it was rewritten so that `cb.arg` owns the extra slots.
+
+### What I learned
+
+- The agent DSL's global is already named `cb` (`prelude.ts`), so "one grammar" covers names as well as concepts; the guide makes the variant `cb` a superset.
+- `EditLog.preview` takes a single mutation, but looks and proposals need batch previews.
+- The DSL `Host` (`host.ts`: `cut`, `printChain`, `vocab`) is the only implementation of `frame.print()` expansion. Studio-kit handles must share it, or node ids will diverge.
+
+### What was tricky to build
+
+- Fragment methods from kits must work no matter when the kit is installed, and a typo must still give a computed diagnostic. Solution: elements and builders are proxies that record unknown calls (`{ name, args, at }`), and the first UI pass (`ck.fragments`) resolves them after all kits are installed (`CK-X120`/`X121`).
+- Module-level `ck`/`cb` imports versus `build(ck, cb)`: the namespaces are pure (records and definitions), registries live on the builder and the App, and τ/ρ helpers reach services through the running app.
+
+### What warrants a second pair of eyes
+
+- `UnifiedHistory` interleaving a global stack with per-frame EditLog cursors (§9.3). Stepping a frame back in its History panel can leave stale references on the global stack.
+- Proposal preview through the `recipes` projection (§9.4), and the rule that a user gesture hides it.
+- Partial approval of one card across many frames' logs (Example 10).
+
+### What should be done in the future
+
+- The 12 tasks in `tasks.md`. The DR-2 measurement and the bridge prototype come first.
+
+### Code review instructions
+
+- Read guide §5 (registry, two modes), §7.1 (deferred fragment calls), §9 (EditLog bridge) and §10 (variant contract), then Examples 9–13.
+- Run `python3 -I ttmp/2026/11/11/CHB-001--source-import-and-analysis-colour-negative-modelling-for-a-darkroom-suite/scripts/08-check-guide-markdown.py ttmp/2026/11/11/CHB-016--craftkit-studio-study-ui-toolkit-and-js-dsl-for-a-lightroom-class-studio/design-doc/01-intern-guide.md`.
+
+### Technical details
+
+- IR kinds: `ui`, `recipe`, `patch`, `dag`, `kernel`, `tiles`, `mutations`. Code prefixes: `CK-` (I B K D L M T S V P X), `CB-` (A H L R V), and contract codes unchanged.
+- Contract requests: `EditLog.preview(ms: Mutation[] | null)`; `Diagnostic.where.file`. DSL requests: a shared vocabulary module; a host `propose(batch)` hook.
