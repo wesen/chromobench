@@ -1,0 +1,9 @@
+{
+  "name": "@chromobench/conformance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@chromobench/contract": "workspace:*" },
+  "peerDependencies": { "vitest": "4.1.12" }
+}

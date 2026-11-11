@@ -1,0 +1,20 @@
+{
+  "_doc": "CHB-002 golden numbers: unit conversions (textbook §1.1, §1.2, §2.6) and the §6 trace (mock engine, M1 fixture, grey-patch centre). Tolerance 1e-4.",
+  "units": {
+    "stopToLogH": 0.30103,
+    "pointsPerStop": 12.04,
+    "plus4ptLogH": 0.1,
+    "time10to12_6": { "stops": 0.3334, "logH": 0.1004, "points": 4.01 },
+    "fstop8to11_3137": -1.0,
+    "cc50": { "D": 0.5, "T": 0.3162 },
+    "beerLambert550": { "T": [1.0626, 0.1294, 0.9950, 0.2498], "product": 0.03418, "density": 1.4662 },
+    "zeroTransmittanceDensity": 8
+  },
+  "m1Trace": {
+    "patchT": [0.2, 0.1, 0.05],
+    "rebateT": [0.8, 0.5, 0.35],
+    "scannerDensity": [0.6021, 0.6990, 0.8451],
+    "before": { "x": [-0.6021, -0.6990, -0.8451], "paperDyes": [0.9469, 0.8015, 0.5824], "R": [0.1130, 0.1579, 0.2616], "display": [0.3703, 0.4340, 0.5484] },
+    "after": { "lightsLogH": [0.1, 0, 0], "x": [-0.5021, -0.6990, -0.8451], "paperDyes": [1.0969, 0.8015, 0.5824], "R": [0.0800, 0.1579, 0.2616], "display": [0.3133, 0.4340, 0.5484] }
+  }
+}

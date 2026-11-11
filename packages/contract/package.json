@@ -1,0 +1,8 @@
+{
+  "name": "@chromobench/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./catalog.snapshot.json": "./catalog.snapshot.json" },
+  "dependencies": { "@noble/hashes": "2.4.0" }
+}

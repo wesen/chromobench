@@ -1,0 +1,38 @@
+{
+  "name": "chromobench",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "node tools/scripts/check-boundaries.ts",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "e2e": "playwright test",
+    "gen": "node tools/gen-docs/main.ts",
+    "gen:check": "node tools/gen-docs/main.ts --check",
+    "contract:check": "node tools/gen-docs/contract-check.ts",
+    "fixtures": "node tools/fixtures/make-m1.ts",
+    "demo:m1": "node tools/scripts/m1-headless.ts"
+  },
+  "devDependencies": {
+    "@chromobench/contract": "workspace:*",
+    "@chromobench/engine-mock": "workspace:*",
+    "@chromobench/conformance": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.2",
+    "@webgpu/types": "0.1.74",
+    "typescript": "5.9.3",
+    "vite": "7.3.8",
+    "vitest": "4.1.12"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
