@@ -1,0 +1,38 @@
+<!doctype html><meta charset=utf-8><body style="font:12px sans-serif"><script type="module">
+// Print Shop's engine probes (build with TESTPAGES=1, open /test/printshop-graph.html; the title turns 'done').
+// What it showed: inputs work inside separate/solid/grain/translate/levels/duotone; a stack does not re-render when
+// only an input inside a layer's options (visible, opacity) changes, so the module picks among recorded stacks.
+import { ck } from '../shell/index.js';
+import { Engine } from '../shell/core/engine.js';
+const P = new URLSearchParams(location.search);
+const file = (P.get('photo') || 'kodim21') + '.jpg';
+const img = ck.image(file);
+const show = [];
+const flat = x => ck.source('stack', ck.solid('#f6f5f0')).layer(x);
+const SK = [1, -0.6, 0.8, -1, 0.5, -0.8, 1, -0.4];
+let gen = img; const gens = [];
+for (let g = 1; g <= 8; g++) { gen = flat(gen.blackWhite().levels({ in: s => [s.c, 1 - s.c] }).threshold(s => s.toner).noise({ amount: s => s.speck, mono: true, seed: g * 7 }).blur(s => s.soft).rotate(s => s.skew * SK[g - 1])).vignette({ amount: s => s.burn }); gens.push(gen); }
+const plates = img.separate(2, { inks: s => s.inks });
+const lum = h => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+const master = [0, 1].map(k => plates.at(k).duotone('#000000', '#ffffff').levels({ in: s => [Math.min(0.96, lum(s.inks[k])), 1] }));
+const ANG = [15, 75];
+const tex = [0, 1].map(k => ({ grain: master[k].grain({ amount: s => s.g }), halftone: master[k].filter('colorHalftone', { maxRadius: s => s.dot, channel1: ANG[k], channel2: ANG[k], channel3: ANG[k], channel4: ANG[k] }) }));
+const tint = (x, k) => x.duotone(s => (s.on[k] ? s.inks[k] : '#ffffff'), '#ffffff').translate(s => s.off[k]);
+const riso = t => ck.source('stack', ck.solid(s => s.paper)).layer(tint(tex[0][t[0]], 0), { blend: 'multiply' }).layer(tint(tex[1][t[1]], 1), { blend: 'multiply' });
+const R1 = riso(['grain', 'halftone']), R2 = riso(['halftone', 'halftone']), R3 = riso(['grain', 'grain']);
+const E = new Engine({ base: '../', script: 'engine.js', workers: 1 });
+E.declareAsset(file, '../photos/' + file);
+const r = await E.compile();
+const out = ['compile ' + (r.ok ? 'ok' : JSON.stringify(r.errors))];
+const S = { c: +(P.get('c') || 0.12), toner: +(P.get('toner') || 0.45), speck: +(P.get('speck') || 30), soft: +(P.get('soft') || 0.8), skew: 0.6, burn: +(P.get('burn') || 0.2), inks: ['#ff48b0', '#0078bf'], g: 0.35, dot: 5, on: [true, true], off: [[0, 0], [5, -3]], paper: '#f4efe1' };
+const shot = async (name, x, st, max = 512) => { const t0 = performance.now(); const rr = await E.render(x, E.values(x, st), { max }); if (rr.error) { out.push(name + ' ERROR ' + rr.error); return; } const c = document.createElement('canvas'); c.width = rr.w; c.height = rr.h; c.getContext('2d').drawImage(rr.bmp, 0, 0); show.push([name + ' ' + Math.round(performance.now() - t0) + 'ms', c]); };
+for (const g of [1, 3, 5, 8]) await shot('copy ' + g, gens[g - 1], S);
+await shot('riso grain/halftone', R1, S);
+await shot('riso halftone×2 yellow/teal', R2, Object.assign({}, S, { inks: ['#ffe800', '#00838a'] }));
+await shot('riso grain×2 drum2 off', R3, Object.assign({}, S, { on: [true, false] }));
+await shot('master 0 halftone', tex[0].halftone, S);
+document.body.textContent = out.join(' · ');
+const box = document.createElement('div'); box.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;background:#777;padding:6px';
+for (const [n, c] of show) { const f = document.createElement('figure'); f.style.margin = 0; c.style.width = '400px'; f.append(c, Object.assign(document.createElement('figcaption'), { textContent: n })); box.append(f); }
+document.body.append(box); document.title = 'done';
+</script>

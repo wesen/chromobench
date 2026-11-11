@@ -1,0 +1,104 @@
+/* Export: the batch desk. Shell tokens only, so the four interface grays and both themes work. */
+.exp-center { flex: 1; min-height: 0; }
+.exp-center > .ck-gridview { flex: 1; }
+.exp-head { background: var(--panel2); border-bottom: 1px solid var(--line); gap: 8px; min-height: 32px; }
+.exp-head-t { font-size: 12.5px; }
+
+/* grid cells */
+.exp-cell { position: relative; width: 100%; height: 100%; background: var(--cell); border-radius: 2px; display: flex; flex-direction: column; overflow: hidden; }
+.ck-coll-cell:hover .exp-cell, .ck-coll-cell.is-sel .exp-cell { background: var(--cellsel); }
+.ck-coll-cell.is-primary .exp-cell { background: var(--cellhi); }
+.exp-cell-n { position: absolute; left: 6px; top: 3px; font-size: 17px; font-weight: 700; color: var(--text3); opacity: .4; pointer-events: none; line-height: 1; font-variant-numeric: tabular-nums; }
+.exp-cell-p { flex: 1; min-height: 0; padding: 24px 9px 2px; }
+.exp-cell-p img, .exp-cell-p canvas { filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+.exp-cell.is-rejected .exp-cell-p { opacity: .45; }
+.exp-cell-f { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; flex: none; font-size: 11px; color: var(--text2); }
+.exp-cell-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-cell-e { font-size: 10px; color: var(--text2); border: 1px solid var(--line2); border-radius: 2px; padding: 0 3px; line-height: 12px; flex: none; }
+
+/* status badges: a dot of the status colour on a tint of it; Ready stays quiet, the rest ask for attention */
+.exp-badge { --c: var(--text3); position: absolute; right: 5px; top: 4px; display: inline-flex; align-items: center; gap: 4px; height: 17px; padding: 0 7px 0 6px; border-radius: 9px; font-size: 10.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; color: var(--text); background: color-mix(in srgb, var(--c) 24%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c) 65%, transparent); }
+.exp-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex: none; }
+.exp-badge.is-ready { --c: var(--ok); background: color-mix(in srgb, var(--panel) 80%, transparent); border-color: var(--line2); color: var(--text2); font-weight: 500; }
+.exp-badge.is-review { --c: var(--warn); }
+.exp-badge.is-exported { --c: var(--info); }
+.exp-badge.is-failed { --c: var(--err); }
+.exp-badge.is-queued { --c: var(--text3); font-weight: 500; }
+.exp-badge.is-active { --c: var(--accent); }
+.exp-badge.is-active::before { animation: exp-pulse .9s ease-in-out infinite; }
+.exp-badge.is-done { --c: var(--ok); }
+@keyframes exp-pulse { 50% { opacity: .25; transform: scale(.7); } }
+
+/* toolbar under the grid */
+.exp-tb { gap: 8px; }
+.exp-tb .ck-toolbar { padding: 0; min-height: 0; }
+.exp-counts { color: var(--text2); font-variant-numeric: tabular-nums; }
+.exp-tb-size { width: 170px; }
+
+/* source lists (Export Set) and preset list: the current one is marked, the list's own selection stays quiet */
+.exp-srcs .ck-coll-row.is-sel, .exp-presets .ck-coll-row.is-sel { background: none; }
+.exp-srcs .ck-coll-row:has(.is-on), .exp-presets .ck-coll-row:has(.is-on) { background: var(--sel); }
+.exp-src { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0 2px; color: var(--text); }
+.exp-src .ck-icon { color: var(--text2); }
+.exp-src-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.exp-src.is-on { color: var(--strong); font-weight: 600; }
+.exp-count { color: var(--text3); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 400; }
+.ck-panel[data-panel="export-set"] .ck-section-t { font-weight: 600; }
+
+/* recipe */
+.exp-recipe { gap: 8px; align-items: center; padding: 2px 0; }
+.exp-recipe-p { width: 56px; height: 42px; flex: none; background: var(--canvas); border-radius: 2px; }
+.exp-recipe .ck-col { min-width: 0; }
+.exp-from .ck-field-l { width: 62px; text-align: right; }
+.exp-groups { gap: 0 8px; }
+.exp-groups .ck-check { min-height: 19px; font-size: 11.5px; min-width: 0; }
+.exp-groups .ck-check-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-wide { width: 100%; margin-top: 4px; }
+
+/* export settings */
+.exp-presets .ck-coll-row { padding: 0 4px; }
+.exp-preset { display: flex; align-items: center; gap: 5px; width: 100%; }
+.exp-preset-c { width: 12px; display: flex; color: var(--accent); visibility: hidden; flex: none; }
+.exp-preset.is-on .exp-preset-c { visibility: visible; }
+.exp-preset-n { flex: none; }
+.exp-preset.is-on .exp-preset-n { color: var(--strong); font-weight: 600; }
+.exp-preset-s { flex: 1; min-width: 0; text-align: right; color: var(--text3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-field { gap: 8px; min-height: 22px; }
+.exp-field > .ck-text:first-child, .exp-num .ck-field-l, .exp-name .ck-field-l { width: 62px; flex: none; text-align: right; color: var(--text2); }
+.exp-num .ck-number { flex: none; }
+.exp-name .ck-textfield { flex: 1; }
+.exp-name .ck-field-i { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; }
+.exp-tokens { gap: 0; flex-wrap: wrap; margin-top: -2px; }
+.exp-tokens > .ck-text:first-child { margin-right: 6px; }
+.exp-tokens .ck-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; padding: 0 5px; color: var(--accent); }
+.exp-first .ck-text:last-child { min-width: 0; flex: 1; }
+.exp-warn { color: var(--warn); font-size: 11px; }
+.exp-note { font-size: 11px; line-height: 1.4; margin-top: 4px; }
+
+/* queue */
+.exp-q-act { gap: 6px; }
+.exp-prog-w { display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
+.exp-prog { height: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.exp-prog-f { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.exp-prog.is-done .exp-prog-f { background: var(--ok); }
+.exp-prog.is-partial .exp-prog-f { background: var(--warn); }
+.exp-prog.is-cancelled .exp-prog-f { background: var(--text3); }
+.exp-prog-t { font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; user-select: text; }
+.exp-q .ck-coll-row { padding: 0 4px; }
+.exp-qr { display: flex; align-items: center; gap: 6px; width: 100%; }
+.exp-qs { width: 8px; height: 8px; border-radius: 50%; flex: none; border: 1.5px solid var(--text3); }
+.exp-qr.is-planned .exp-qs { border-style: dotted; }
+.exp-qr.is-active .exp-qs { border-color: var(--accent); border-top-color: transparent; animation: ck-spin .8s linear infinite; }
+.exp-qr.is-done .exp-qs { background: var(--ok); border-color: var(--ok); }
+.exp-qr.is-failed .exp-qs { background: var(--err); border-color: var(--err); }
+.exp-qr.is-cancelled { color: var(--text3); }
+.exp-qr-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; }
+.exp-qr-m { flex: none; color: var(--text3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.exp-qr.is-failed .exp-qr-m { color: var(--err); }
+.exp-q-more { gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+  .exp-tb-size { display: none; }
+  .exp-head .ck-seg-b { padding: 2px 5px; }
+}
+.exp-tb-prog { width: 120px; flex: none; }

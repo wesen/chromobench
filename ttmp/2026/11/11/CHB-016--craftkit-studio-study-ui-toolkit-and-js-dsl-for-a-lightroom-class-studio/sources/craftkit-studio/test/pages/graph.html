@@ -1,0 +1,24 @@
+<!doctype html><meta charset=utf-8><body><script type="module">
+import { ck } from '../shell/index.js';
+import { Engine, compileGraph, ALL } from '../shell/core/engine.js';
+const out = [];
+const img = ck.image('kodim23.jpg');
+const plates = img.separate(2, { inks: ['#ff48b0', '#0078bf'] });
+const pink = plates.at(0), blue = plates.at(1);
+const stack = ck.source('stack', ck.solid('#f4efe6', [768, 512])).layer(pink.grain({ amount: 0.4 }), { blend: 'multiply' }).layer(blue.translate([4, -3]), { blend: 'multiply' });
+const copy = img.blackWhite().levels({ in: [0.18, 0.72] }).threshold(s => s.t).addNoise ? null : null;
+const bw = img.blackWhite().threshold(s => s.t);
+const proof = img.softProof('Coated FOGRA39');
+const ht = img.halftone(6);
+const E = new Engine({ base: '../', script: 'engine.js', workers: 1 });
+E.declareAsset('kodim23.jpg', '../photos/kodim23.jpg');
+const r = await E.compile();
+out.push('compile ' + JSON.stringify(r).slice(0, 400));
+out.push(compileGraph([...ALL]).code);
+for (const [name, x, vals] of [['pink', pink, {}], ['stack', stack, {}], ['bw', bw, { t: 0.5 }], ['proof', proof, {}], ['ht', ht, {}]]) {
+  const t0 = performance.now();
+  const res = await E.render(x, E.values(x, { t: 0.5 }), { max: 512 });
+  out.push(name + ' ' + (res.error || `${res.w}x${res.h}`) + ' ' + Math.round(performance.now() - t0) + 'ms');
+}
+document.body.textContent = out.join('\n'); document.title = 'done';
+</script>

@@ -1,0 +1,18 @@
+<!doctype html><meta charset=utf-8><body><script type="module">
+// a stack whose layer options read state: changing the option must change the picture
+import { ck } from '../shell/index.js';
+import { Engine } from '../shell/core/engine.js';
+const out = [];
+const img = ck.image('kodim23.jpg');
+const stack = ck.source('stack', ck.solid('#ffffff', [768, 512])).layer(img, { blend: 'normal', opacity: s => s.op, visible: s => s.on });
+const E = new Engine({ base: '../', script: 'engine.js', workers: 1 });
+E.declareAsset('kodim23.jpg', '../photos/kodim23.jpg');
+await E.compile();
+for (const st of [{ op: 0.2, on: true }, { op: 1, on: false }, { op: 1, on: true }]) {
+  const v = E.values(stack, st);
+  const r = await E.pixels(stack, v, { max: 128 });
+  let sum = 0; for (let i = 0; i < r.data.length; i += 4) sum += r.data[i];
+  out.push(JSON.stringify(st) + ' values ' + JSON.stringify(v) + ' mean R ' + (sum / (r.data.length / 4)).toFixed(1));
+}
+document.body.textContent = out.join('\n'); document.title = 'done';
+</script>
