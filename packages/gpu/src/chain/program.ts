@@ -4,7 +4,11 @@ import { defineStruct } from '../layout.ts';
 import type { CurveRow } from '../physics/core.ts';
 import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs } from '../tables/inputs.ts';
 
-export const OP = Object.freeze({ DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11 });
+export const OP = Object.freeze({
+  DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11,
+  // CHB-010 masks
+  MASK_LUM: 12, MASK_GRADIENT: 13, MASK_ELLIPSE: 14, MASK_NOT: 15,
+});
 export const MAXOPS = 12;
 /** Table lookup modes: hardware trilinear (preview), manual tetrahedral (export), manual trilinear, broken (no half-texel). */
 export const LOOKUP = Object.freeze({ hw: 0, tetra: 1, trilinear: 2, noHalfTexel: 3 });

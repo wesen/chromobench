@@ -24,6 +24,11 @@ const OP_DISPLAY: u32 = 8u;   // XYZ → encoded RGB
 const OP_GRAIN: u32 = 9u;     // c += amount √(c + 0.05) σ N(frame x, y, layer, seed)
 const OP_DECODE: u32 = 10u;   // encoded source → linear (p0.x: 0 linear, 1 sRGB, 2 gamma 2.2)
 const OP_ADAPT: u32 = 11u;    // XYZ → B⁻¹ · diag(p0.xyz) · B · XYZ (Bradford, view.adapt)
+// masks (CHB-010; core print/masks.ts): one value replicated in rgb, a = 1
+const OP_MASK_LUM: u32 = 12u;      // mean rgb normalised to p1.xy, band p0 = (above, below, softness)
+const OP_MASK_GRADIENT: u32 = 13u; // p0 = (from.x, from.y, to.x, to.y), at the frame pixel centre
+const OP_MASK_ELLIPSE: u32 = 14u;  // p0 = (cx, cy, a, b), p1 = (cos, sin): antialiased tilted ellipse
+const OP_MASK_NOT: u32 = 15u;      // 1 − m
 
 // Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
 const BRAD = mat3x3<f32>(vec3<f32>(0.8951, -0.7502, 0.0389), vec3<f32>(0.2664, 1.7135, -0.0685), vec3<f32>(-0.1614, 0.0367, 1.0296));
@@ -278,6 +283,38 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         else if (p0.x == 2.0) { v = vec4<f32>(pow(max(v.rgb, vec3<f32>(0.0)), vec3<f32>(2.2)), v.a); }
       }
       case 11u: { v = vec4<f32>(BRAD_INV * (p0.xyz * (BRAD * v.rgb)), v.a); }
+      case 12u: {
+        // above ≤ 0 / below ≥ 1 leave that side open (core luminanceAt)
+        let L = ((v.r + v.g + v.b) / 3.0 - p1.x) / (p1.y - p1.x);
+        let s = max(p0.z, 1e-9);
+        var up = 1.0;
+        if (p0.x > 0.0) { up = clamp((L - p0.x) / s + 0.5, 0.0, 1.0); }
+        var dn = 1.0;
+        if (p0.y < 1.0) { dn = clamp((p0.y - L) / s + 0.5, 0.0, 1.0); }
+        let m = min(up, dn);
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 13u: {
+        let X = vec2<f32>(fp) + 0.5;
+        let d = p0.zw - p0.xy;
+        let l2 = dot(d, d);
+        var m = 1.0;
+        if (l2 > 0.0) { m = clamp(1.0 - dot(X - p0.xy, d) / l2, 0.0, 1.0); }
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 14u: {
+        let d = vec2<f32>(fp) + 0.5 - p0.xy;
+        let u = (p1.x * d.x + p1.y * d.y) / p0.z;
+        let w = (-p1.y * d.x + p1.x * d.y) / p0.w;
+        let rho = sqrt(u * u + w * w);
+        var m = 1.0;
+        if (rho >= 1e-6) {
+          let g = vec2<f32>(u * p1.x / p0.z - w * p1.y / p0.w, u * p1.y / p0.z + w * p1.x / p0.w) / rho;
+          m = clamp(0.5 - (rho - 1.0) / max(length(g), 1e-12), 0.0, 1.0);
+        }
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 15u: { let m = 1.0 - v.r; v = vec4<f32>(m, m, m, 1.0); }
       default: {}
     }
   }
