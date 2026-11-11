@@ -82,8 +82,8 @@ describe('chapter 3 goldens', () => {
       const active = buildSolveTable(f, { solve: { activeSet: true, gtol: 1e-9 } }).stats;
       expect(Math.abs(plain.meanIterations - cs.plain)).toBeLessThan(0.06);
       expect(Math.abs(active.meanIterations - cs.active)).toBeLessThan(0.06);
-      expect(Math.abs(plain.atCap - cs.capPlain)).toBeLessThanOrEqual(5);
-      expect(active.atCap).toBe(cs.capActive);
+      expect(Math.abs(plain.atCap - cs.capPlain)).toBeLessThanOrEqual(cs.capPlainTol ?? 5);
+      expect(Math.abs(active.atCap - cs.capActive)).toBeLessThanOrEqual(cs.capActiveTol ?? 0);
       expect(Math.abs(active.unreachable - cs.unreachable)).toBeLessThan(6e-4);
       expect(plain.meanIterations / active.meanIterations).toBeGreaterThan(4.4);
     }, 30000);

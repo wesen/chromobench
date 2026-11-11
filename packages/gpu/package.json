@@ -13,7 +13,8 @@
   "dependencies": {
     "@chromobench/contract": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",
-    "@chromobench/core": "workspace:*"
+    "@chromobench/core": "workspace:*",
+    "@chromobench/data": "workspace:*"
   },
   "devDependencies": {
     "@chromobench/conformance": "workspace:*",

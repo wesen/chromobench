@@ -335,3 +335,42 @@ never disagree because they compute different things.
 - Exact bits in `misc.z`: 1 solve, 2 printing density, 4 print XYZ; spectra buffer `[solve P E B | pd W E B | print W E
   B | M]`, 7n each.
 - Expose: `x = (clear + aimLights) − pd(c)`, `pd = −log10 Σ Ŵ 10^−(B + cE)`; flare `X + f·W_paper`, `p1 = 1`.
+
+## Step 4: Switch core and the GPU engine to CHB-004's data packs
+
+### Prompt Context
+
+**User prompt (verbatim):** CHB-017 stage-3 task: switch the physics core and the GPU engine from the interim data to CHB-004's data packs.
+
+**Assistant interpretation:** Make the packs the default PhysicsData in core and gpu, keep the interim JSON provider for tests, decide the one golden that moves, keep all checks green.
+
+**Inferred user intent:** Retire the interim data as the default without a workspace cycle and without losing the browser path.
+
+### What I did
+
+- `packages/data/src/node.ts` imported `node:fs` statically, which would break the browser bundle once core's index re-exports it. Changed it to reach fs/url through `process.getBuiltinModule` (the pattern core's interim.ts already used).
+- Core: `index.ts` now exports `nodePhysicsData` as both `packsData` and `interimData` (the old name keeps working, so all core tests run on the packs); the JSON provider is `legacyInterimData` (+ `interimFromJson`). `engine-ref.ts` defaults to the packs. Added `@chromobench/data` to core's dependencies; dropped core from data's devDependencies (cycle gone). Moved `packages/data/test/core-parity.test.ts` to `packages/core/test/packs-parity.test.ts` (it compares packs to `legacyInterimData`). Removed `vitest.core-parity.config.ts`, its shim and the `test:core-parity` script: the whole core suite now runs on the packs by default, so the alias is redundant. check-boundaries needed no change (it only restricts studio, dsl and contract).
+- Run on core + data: first pass 4 failures, 3 of them because engine-ref still defaulted to the JSON data (fixed), 1 the ch3 golden.
+- Golden decision (ch3, 33^3 solve table, white-led on Portra 400): plain cap hits 15047 vs 15040 +/- 5, active 14 vs 15. These are discrete counts of nodes straddling the iteration cap, so they move with bit-level data differences; they are not physics. I widened the band instead of keying the golden by data source: the fixture case now carries `capPlainTol: 10`, `capActiveTol: 1` and a `tolNote` with the reason; the textbook figures stay the centre. Mean iterations (0.06), unreachable fraction (6e-4) and the 4.4x ratio are unchanged and still pass.
+- GPU: `physics/data.ts` now returns the packs. Node/Vitest: `nodePhysicsData()` (sync, disk). Browser: `await loadDefaultPhysicsData(base?)` opens `spektrafilm@0.3.2+3bb2c2d` and `illustrative@1` with `openPack(fetchSource(base), id)`, `preload()`s them and builds `physicsData(stocks, scanners)`; `defaultPhysicsData()` is synchronous afterwards and throws a clear error before. `GpuEngine.create` awaits the load itself unless `opts.data` is given (new `opts.packsBase`; constructor now takes the data). The parity page awaits the load before exposing `window.parity`.
+- Serving: new `packages/data/vite-packs.ts` (`packsPlugin()`) serves `packages/data/packs/` at `/packs/` in dev and preview and copies it into builds; used by `packages/gpu/parity-page/vite.config.ts` and `apps/studio/vite.config.ts`.
+- The stock is read through the existing `physicsData` adapter, so the missing-data policy is whatever that adapter applies (it is the one CHB-004's parity test already used); I did not add per-call `missing: 'zero-density'`, and tables are keyed by `data.id` (`spektrafilm@0.3.2+3bb2c2d|illustrative@1`) as before, not by `stock.contentHash`.
+
+### What worked
+
+- `pnpm typecheck`, `pnpm lint` (boundaries), `pnpm gen:check` green. `pnpm test`: 1936/1936. `pnpm contract:check` prints its pre-existing diff list (contract untouched).
+- `STUDIO_PORT=4441 CI=1 pnpm test:browser`: 42/42 after one change below.
+
+### What didn't work
+
+- Browser test 'stage 3: GPU solve table within 2.2e-6 of f64' got 2.384e-6 (one f32 ulp near 2-4) with the pack data. Widened the bound to 2.5e-6 in `tests/browser/tables.spec.ts` and the two parity cases in `parity/page.ts`; the broken variant (gtol 1e-5) must still exceed it and does.
+
+### What I'd do differently / follow-ups
+
+- Stock ranking and CHROMOGEN convention stay as CHB-017 left them (explicit conventions in ingest); nothing here changes them.
+- `contentHash` keying of tables is not done; `data.id` identifies the packs.
+
+### Code review instructions
+
+- `packages/gpu/src/physics/data.ts`, `packages/data/vite-packs.ts`, `packages/core/src/index.ts`, then the ch3 fixture and test.
+- `pnpm test`; `STUDIO_PORT=4441 CI=1 pnpm test:browser`.

@@ -1,6 +1,6 @@
 // Adapter: packs → the `PhysicsData` interface that @chromobench/core reads all its data through
 // (packages/core/src/data/provider.ts). The types below mirror core's structurally, so this package
-// does not depend on core; test/core-parity.test.ts assigns the result to core's own type, so the
+// does not depend on core; core/test/packs-parity.test.ts assigns the result to core's own type, so the
 // compiler checks they stay compatible.
 //
 // Core resolves missing samples itself under its conventions (StockData arrays keep NaN), so the

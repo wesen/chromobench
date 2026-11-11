@@ -15,7 +15,7 @@ export { WorkerPool } from './tables/build-workers.ts';
 export * from './tables/inputs.ts';
 export { coreOracle, buildTableF64, tableNodes, look3, tetra3, type F64Oracle, type SolveResult } from './physics/oracle.ts';
 export { CorePhysics, N1, type CurveRow } from './physics/core.ts';
-export { defaultPhysicsData } from './physics/data.ts';
+export { defaultPhysicsData, loadDefaultPhysicsData } from './physics/data.ts';
 export { ChainRunner } from './chain/run.ts';
 export { OP, LOOKUP, PROG, packProgram, pcg4d, normal1, type Segment, type PwOp } from './chain/program.ts';
 export { Reducer, pairwiseSum, histPercentile } from './measure.ts';
