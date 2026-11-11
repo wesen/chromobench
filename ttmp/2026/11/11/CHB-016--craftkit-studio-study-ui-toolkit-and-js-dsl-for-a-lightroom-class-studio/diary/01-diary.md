@@ -240,3 +240,93 @@ cross-validation before any design doc.
   - port as patterns: Library, Cull, Develop panels, presets with Amount, Sync, snapshots, compare/survey,
     reference + Match, Export queue, Prepress;
   - keep out of the colour core: `vendor/wb` (sRGB float); candidate for a retouch layer after the print.
+
+## Step 3: Check the user's API guidelines against CraftKit and chromobench
+
+Manuel shared the guidelines he uses for JS APIs and asked how they fit what exists. This step compares each
+guideline with the CraftKit shell, the CraftKit engine language and chromobench (contract, CHB-007 DSL, CHB-009
+Studio), by reading the DSL's prelude proxies and doc topics on `task/phase1-integration`. Result: the guidelines
+describe CraftKit almost exactly; chromobench's agent DSL already follows the runtime half (handles → DAG, edits →
+mutations, proxy diagnostics with fixes), and lacks the build half (a builder for UI and for parameterised
+looks/presets), user-declared parameters, lambda holes and fragments. The answer went to chat with examples.
+
+### Prompt Context
+
+**User prompt (verbatim):** "here's the guidelines i usually use for apis: Create a JS API based on a fluent builder
+pattern around a core grammar of composable components that can be customized with lambdas (that can be run at
+build time, but also at runtime depending on the component / grammar), with an IR / DAG pattern, or a more direct
+one (say, mutations) if used for runtime stuff like an agent interacting with the environment. You don't need to
+build your own parser or interpreter, JS even if not sandboxed is fine. The JS can define parameters (sliders,
+etc...). Implementation can use proxy objects to return better diagnostics when the API is used improperly. You
+can use \"fragments\" to extend individual components methods / attributes. Output only examples, from simple to
+complex, on how to manage this. --- How does that fit what you have." Then, mid-turn: "fluent builder because it
+allows us to give back custom feedback that's not just static, but can be richer"
+**Assistant interpretation:** Map the guidelines onto the existing code, name the gaps, and show (with examples,
+simple to complex) what the API would look like if it followed them.
+**Inferred user intent:** Converge on one API philosophy for the UI toolkit, the pipeline and the agent DSL before
+the real design.
+**Commit (code):** see the commit adding this step — "CHB-016: diary step 3, API guidelines fit"
+
+### What I did
+
+- Read `packages/dsl/src/prelude/prelude.ts` lines 80–175 (handle, namespace, frozen-view and guarded proxies) and
+  the `js` blocks of `packages/dsl/src/docs/topics/{getting-started,darkroom-vocabulary,editing-and-approval}.md`.
+- `grep -ril fragment` over CraftKit (`src`, `vendor/wb`) and `packages/*/src`: no fragment mechanism in either;
+  the only hits are filter names in the Workbench catalog.
+
+### Why
+
+- The DSL's doc examples are executed in CI (49 blocks), so they are the reliable statement of today's API.
+
+### What worked
+
+- Clear mapping; see Technical details.
+
+### What didn't work
+
+- `grep -n Proxy -r packages/dsl/src --include=*.ts` failed in zsh with `no matches found: --include=*.ts` (unquoted
+  glob); used `grep -rln "new Proxy" packages/dsl/src` instead. The first attempt also looked for the CHB-016
+  sources on `task/phase1-integration`, where the ticket does not exist (`no matches found: ttmp/.../CHB-016--*`);
+  used the scratchpad copy.
+
+### What I learned
+
+- The DSL's namespace proxy resolves `area.key` against the op registry (`T.ops[area + '.' + key]`), so adding an
+  OpDef already adds a method to every handle of the right domain — registry-driven extension, not user fragments.
+- Diagnostics in the DSL are computed from the receiver (`E_DOMAIN` names the fix by how the handle was made,
+  `E_NOT_AWAITED`, `E_IMMUTABLE`, did-you-mean on unknown members) — the "richer feedback" the user wants from a
+  fluent builder.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Whether parameters inside look/preset lambdas should be symbolic (traced once into a DAG with holes, as CraftKit's
+  px lambdas are traced to WGSL) or concrete (re-run per change, cheap because chromobench nodes are
+  content-addressed). The examples show the concrete form.
+
+### What should be done in the future
+
+- Design doc for the unified API: one registry (ops, ArgSpecs, components, fragments), two modes (build: DAG + β/τ
+  lambdas; runtime: handles + mutations), one diagnostics producer.
+
+### Code review instructions
+
+- Compare `packages/dsl/src/prelude/prelude.ts` (handle/namespace proxies) with CraftKit `src/shell/core/engine.js`
+  (`mkExpr`) and `src/shell/ui/node.js` (`defineForm`, slot binding times).
+
+### Technical details
+
+| Guideline | CraftKit shell (UI) | CraftKit engine language | chromobench today |
+|---|---|---|---|
+| fluent builder | `ck.shell().state().commands().module()` | `ck.image().develop().softProof()` | agent DSL yes; Studio no (React) |
+| grammar of components | forms + places | op catalog by kind | 54 ops / 12 areas, domains as kinds |
+| lambdas, build vs runtime | β/τ/bind/θ/ƒ/ρ, checked (CK-B140) | holes → inputs; px → WGSL | none; args are values |
+| IR / DAG | recorded nodes with call site | typed DAG IR | `Graph.intern`, `compile(recipe)` |
+| mutations for runtime | `ctx.tx`, preview/commit | — | `EditLog`, `frame.edit`, approvals |
+| no own parser | plain JS | plain JS | plain JS in QuickJS (agent code) |
+| JS-defined parameters | `ck.ui.slider(...)` | `ck.ui.input(name, v)` | no; ArgSpec only in contract |
+| proxy diagnostics | expr + tracking proxies, build report | suggestions | handle/namespace proxies, fixes |
+| fragments | `defineForm`, habits (new components only) | `*.` ops, SUGAR | registry-driven methods only |
