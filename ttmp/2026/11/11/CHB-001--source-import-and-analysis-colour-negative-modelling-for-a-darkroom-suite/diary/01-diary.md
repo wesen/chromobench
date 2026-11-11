@@ -837,3 +837,73 @@ no own commits yet); otherwise continuing the plan from Step 11.
 ### Technical details
 
 - Running: CHB-010, CHB-011, CHB-023, CHB-019 (studio-kit).
+
+## Step 13: CHB-010, CHB-019 (studio-kit) and the CHB-023 demo merged
+
+Three agents finished and were merged into `task/ui-guides`: CHB-010's printing slice (real-mode enlarger, grade,
+balance tools; it fixed a bug where filters and time had no effect at the grey card), CHB-019's studio-kit (the
+shell-based studio with four variants on the mock engine), and CHB-023, the demo: the existing studio on the real
+engine, opening real scans and printing them through the film model. The merged tree passes 2141 unit tests and the
+studio's production build succeeds. The demo is ready for the user to try on a real GPU.
+
+### Prompt Context
+
+**User prompt (verbatim):** "how far is the demo?", "how far now?", "was that the demo?"
+**Assistant interpretation:** Report progress; merge as agents land; get the demo into the user's hands.
+**Inferred user intent:** Show the photographer something real soon.
+**Commit (code):** 8c1c50e (merge CHB-010), e98c23f (merge CHB-019 studio-kit), 7b2959a (merge CHB-023 demo)
+
+### What I did
+
+- Merged `task/chb-010-printing` (clean; 2081 tests) and told the demo agent to merge it (it did: 901b576).
+- Relayed the user's shell-demo feedback (no film strip, text-only cells, label-only Navigator) to the CHB-019 agent;
+  its host now shows print thumbnails and a Navigator picture; it could not reproduce the hidden strip in Chromium
+  (likely a saved hidden-panels workspace; `?fresh` avoids it).
+- Merged `task/chb-019-studio-kit` (clean; lint 266 file checks; 2131 tests).
+- Merged `task/chb-023-demo`: conflict in `tools/scripts/check-boundaries.ts` (HEAD added a shell rule with `skip`,
+  the demo added a host-file `except` list); kept both fields and both checks. Then lint "import boundaries ok (270
+  file checks)", typecheck clean, `pnpm test` "61 passed (61) files, 2141 passed (2141)",
+  `pnpm --filter @chromobench/studio build` "✓ built in 2.24s".
+
+### Why
+
+- Merge as soon as each lands, so later agents start from the integrated tree.
+
+### What worked
+
+- All merges; the demo builds.
+
+### What didn't work
+
+- The boundary-checker merge conflict above (resolved by combining).
+- Browser tests were not re-run on the merged tree: the demo agent's timing run left Vite servers on 4471 and 4185
+  (pids 2027709, 2027766) that the agent was not permitted to kill; I left them for the user to decide.
+
+### What I learned
+
+- The demo agent added engine glue: `openDecoded()`, an optional `cacheLimit` (unbounded per-step image caches),
+  film base computed once per frame on the GPU, and an aperture-only GPU densitometer.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Demo gaps: dodge/burn/masks unimplemented in both real engines (`print.combine`, `mask.*`); 8-bit export at
+  working size; rotation/crop not wired; film base from the brightest 5 % of columns (wrong with sprocket holes); no
+  scanner flare correction; reference-engine fallback takes seconds per change and blocks the UI.
+
+### What should be done in the future
+
+- User tries the demo on a real GPU (CHB-023 diary Step 3 checklist); then CHB-019's apps/studio migration run; merge
+  CHB-011 when it lands.
+
+### Code review instructions
+
+- `apps/studio/DEMO.md`, `apps/studio/src/host/{engines,studio-engine,first-print,export}.ts`.
+
+### Technical details
+
+- Run: `pnpm --filter @chromobench/studio build && pnpm --filter @chromobench/studio preview` →
+  http://localhost:4173 (Chrome/Edge); `?engine=gpu|reference|mock`, `?long=0` for full size.
