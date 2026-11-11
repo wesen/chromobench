@@ -1,0 +1,31 @@
+{
+  "source": "CHB-009 intern guide §2.1, §5.9, §6, §8 (golden numbers); textbook §2.6 (isolated-band rule, 0.4 pt per CC)",
+  "units": {
+    "logHPerPoint": 0.025,
+    "logHPerStop": 0.30103,
+    "pointsPerStop": 12.04,
+    "fourPointsLogH": 0.1
+  },
+  "time": {
+    "base_s": 12.0,
+    "plusThirdStop_s": 15.12,
+    "plusSixthStop_s": 13.47,
+    "strip": { "step": 0.3333333333333333, "count": 5, "values_s": [7.56, 9.52, 12.0, 15.12, 19.05] }
+  },
+  "aperture": {
+    "f8ToF11_logH": -0.277,
+    "f8ToF11_stops": -0.92,
+    "thirdStopLabels": [5.6, 6.3, 7.1, 8, 9, 10, 11]
+  },
+  "filtration": { "plus10Y_aside": "≈ −4.0 pt B" },
+  "exposures": {
+    "main_s": 12.0,
+    "dodgeQuarterStop_withheld_s": 1.91,
+    "burnHalfStop_added_s": 4.97
+  },
+  "ringAround": {
+    "step_pt": 4,
+    "plusGreen_logH": [0.05, -0.1, 0.05],
+    "plusGreen_points": [2, -4, 2]
+  }
+}
