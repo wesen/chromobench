@@ -1,8 +1,8 @@
 # Tasks
 
 ## TODO
-- [ ] [stage 1] Apply or decide the contract requests (packages/core 6, dsl 2, gpu 2, ingest 3, apps/studio 3); bump CONTRACT_VERSION to 0.2.0; regenerate docs and the DSL d.ts; record decisions in CONTRACT-DECISIONS.md <!-- t:5618 -->
-- [ ] [stage 1] Signed filtration: print.expose.filtration as a shift on the database neutral pack (CHB-003 R1); update ArgSpec ranges, mock and reference engines, studio controls <!-- t:tobr -->
+- [x] [stage 1] Apply or decide the contract requests (packages/core 6, dsl 2, gpu 2, ingest 3, apps/studio 3); bump CONTRACT_VERSION to 0.2.0; regenerate docs and the DSL d.ts; record decisions in CONTRACT-DECISIONS.md <!-- t:5618 -->
+- [x] [stage 1] Signed filtration: print.expose.filtration as a shift on the database neutral pack (CHB-003 R1); update ArgSpec ranges, mock and reference engines, studio controls <!-- t:tobr -->
 - [ ] [stage 2] Wire packages/core into packages/gpu: F64Oracle via setOracle()/TableManager({oracle})/table-worker, evalPixelF64 → reference engine output, stocks from PhysicsData; one conventions id <!-- t:ofpq -->
 - [ ] [stage 2] Replace packages/ingest forward-stub.ts with core's ScannerForward; re-run the Gold 200 ranking golden <!-- t:b253 -->
 - [ ] [stage 2] Finish CHB-003 open items needed by gpu: f64 tables in Studio node order, engine-ref tabulated mode <!-- t:7pka -->
