@@ -148,3 +148,108 @@ and DSL calls without `mode` would change. Proposed when the photographer confir
 +      mode: { type: 'enum', values: ['real', 'normalised'], default: 'real', ...
 ```
 (and `defaultRecipe`'s `print.enlarger.mode: 'real'`).
+
+---
+
+# Contract requests from CHB-010 stages 3–4 (multi-exposure printing, masks, density masks)
+
+Status: open. Core and the GPU engine implement `print.combine`, every `mask.*` op and
+`print.densityMask` as contract 0.2 defines them; nothing here blocks merging. Guide sections refer to
+`ttmp/2026/11/11/CHB-010--*/design-doc/01-intern-guide-darkroom-printing.md`.
+
+## C5. Density masks reach the print: `print.densityMasks`, and a neutral mask as a print.expose input
+
+**Need.** `print.densityMask` maps `printing-density → printing-density`, but no op produces or consumes
+`printing-density`, and the recipe has no field for it (CONTRACT-DECISIONS CHB-010 #6 "deferred: it will
+come with CHB-010's compile rule"). So the op works on a pattern but cannot reach a print. The guide's
+mask is neutral silver, so it is exactly a per-pixel printer light −d_m on every exposure *through the
+negative* (and not on a flash through the base, §6.5): the clean place for it is `print.expose`.
+
+**Proposed diff.**
+
+```diff
+ // catalog/capture-film-print.ts
+   defineOp({
+-    name: 'print.densityMask', … domainIn: 'printing-density', domainOut: 'printing-density',
++    name: 'print.densityMask', … domainIn: 'film-dyes', domainOut: 'scalar-field',
+     class: 'spatial', binding: 'scan',
+     args: {
+-      amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0, doc: 'Strength of the unsharp density mask.' },
+-      radius_um: { type: 'number', unit: 'um', min: 0, max: 5000, default: 500, doc: 'Blur radius on the film.' },
++      kind: { type: 'enum', values: ['contrast', 'unsharp', 'highlight'], default: 'contrast', doc: 'Contrast (wide blur), unsharp (thin spacer) or highlight (threshold) mask.' },
++      polarity: { type: 'enum', values: ['positive', 'same'], default: 'positive', doc: 'positive lowers large-area contrast; same raises it (a two-step mask).' },
++      amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0, doc: 'Mask gamma γ_m (Chromogen 100 % = 0.6: large-area contrast falls to 40 %).' },
++      radius_um: { type: 'number', unit: 'um', min: 0, max: 5000, default: 500, doc: 'Gaussian σ of the blur on the film (spacer and diffuser).' },
++      threshold: { type: 'number', unit: 'logH', min: -4, max: 0, optional: true, doc: 'Highlight masks: the mask film log H where density starts.' },
++      paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', path: 'print.paper', doc: 'Paper whose sensitivities weight the printing density the mask is made from.' },
+     },
+-    doc: 'Contrast-reducing density mask (unsharp mask in printing density).',
++    doc: 'The density d_m ≥ 0 of a neutral silver mask made from the negative (blur of its transmittance). print.expose subtracts it from every layer.',
+   }),
+ // print.expose args
++      densityMask: { type: 'Image', optional: true, doc: 'A print.densityMask d_m (scalar-field): x_k −= d_m (neutral, exact).' },
+ // recipe.ts FrameRecipe.print
++    densityMasks: { id: string; kind: 'contrast' | 'unsharp' | 'highlight'; polarity: 'positive' | 'same'; amount: number; radius_um: number; threshold: number | null; enabled: boolean }[];
+ // graph.ts compile(): one mask node (the masks multiply: densities add), passed to the main and every
+ // extra print.expose except flashes
++  const dm = enabledMasks.length ? enabledMasks.reduce(…, I('print.densityMask', [dyes], {...first})) : null;
++  const exposeArgs = (…) => ({ …, ...(dm ? { densityMask: dm } : {}) });
+```
+
+Core already has the pieces (`maskExposure`, `maskDensity`, `applyDensityMask` in
+`packages/core/src/print/densityMask.ts`), the GPU the passes (transmittance, blur, min reduction,
+density); the change moves the PD computation to the main pack's table (core `chain.enlarger.printingDensity`).
+
+## C6. A flash goes through the film base
+
+**Need.** `compile()` builds every extra exposure as `print.expose` on the negative's dyes, a flash
+included, so a flash exposes the image instead of fogging uniformly. Guide §6.5 finding 3: a flash must go
+through the film **base** (through an empty gate the neutral pack fogs the print orange-red by
+(−8.6, +1.5, +7.0) points). `Exposure.through` exists but nothing reads it. Core's `compileExposures`
+reports `W_PREVIEW_APPROX` for a base flash meanwhile.
+
+**Proposed diff** (`print.combine` and `compile()`):
+
+```diff
+-      modes: { type: 'string[]', default: [], doc: "Per exposure: 'add' (burn, flash, split) or 'subtract' (dodge)." },
++      modes: { type: 'string[]', default: [], doc: "Per exposure: 'add' (burn, split), 'subtract' (dodge), 'flash-base' or 'flash-open' (the exposure's print.expose settings, uniform: through the film base with no image, or through an empty gate)." },
+ …
+-      return modes.every((m) => m === 'add' || m === 'subtract') ? null : "modes must be 'add' or 'subtract'";
++      return modes.every((m) => ['add', 'subtract', 'flash-base', 'flash-open'].includes(m)) ? null : "modes must be 'add', 'subtract', 'flash-base' or 'flash-open'";
+ // graph.ts compile()
+-      modes.push(ex.kind === 'dodge' ? 'subtract' : 'add');
++      modes.push(ex.kind === 'dodge' ? 'subtract' : ex.kind === 'flash' ? (ex.through === 'open' ? 'flash-open' : 'flash-base') : 'add');
+```
+
+Engines then evaluate the flash's chain at dye amounts 0 (base) or with no film (open gate): one
+constant per layer, H += r·m·10^x_flash. Contract law to add: an unmasked base flash adds the same H to
+every pixel.
+
+## C7. `print.combine` in normalised mode weights by seconds (doc)
+
+Doc only. In normalised mode `print.expose` ignores time (the grey card prints at the aim whatever the
+time), so `compile()`'s burn of t_main·(2^s − 1) seconds would otherwise weigh as much as the main
+exposure. Core and the GPU weight each extra exposure that is a normalised `print.expose` by
+t_i / t_main (core `combineRatio`); in real mode the time is already in x.
+
+```diff
+-    doc: 'Sums several exposures in linear H (dodge, burn, flash, split; CHB-010).',
++    doc: 'Sums several exposures in linear H (dodge, burn, flash, split; CHB-010): H = max(10^x − Σ_dodge m·10^x_i, 0) + Σ_add m·10^x_i, one log at the end. In normalised mode each print.expose term is weighted by its seconds over the main time.',
+```
+
+## C8. Mask op docs: what the numbers mean (doc)
+
+Doc only; the engines implement this.
+
+```diff
+ mask.luminance.above: 'Select values above this (normalised to the domain range).'
++  + ' 0 means no lower bound (values below the domain range stay selected).'
+ mask.luminance.below: 'Select values below this.'
++  + ' 1 means no upper bound.'
+ mask.ellipse doc: 'Elliptical mask.'
++  + ' The edge is antialiased over one pixel; use mask.feather for a soft edge.'
+ mask.feather.radius_px: 'Feather radius.'
++  → 'Feather radius in source px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide).'
+ mask.paint doc
++  + ' Pressure is recorded but does not modulate the brush; add takes the maximum, erase multiplies by 1 − coverage.'
+```

@@ -207,6 +207,47 @@ function crop(img: Img, b: Box): Img {
   return out;
 }
 
+interface MockStroke { points: number[][]; radius: number; hardness?: number; mode?: string }
+
+/**
+ * mask.paint (the same rule as core's paintMask, kept here because the mock cannot import core): each
+ * stroke covers the pixels within `radius` of its polyline, 1 inside hardness·radius with a smoothstep
+ * edge at least one pixel wide; `add` takes the maximum, `erase` multiplies by 1 − coverage.
+ */
+function paint(r: Img, json: string): Img {
+  let strokes: MockStroke[];
+  try {
+    strokes = JSON.parse(json) as MockStroke[];
+  } catch {
+    return fail('E_ARG_TYPE', 'mask.paint.strokes is not valid JSON');
+  }
+  if (!Array.isArray(strokes)) fail('E_ARG_TYPE', 'mask.paint.strokes must be a JSON array');
+  const out = newImg(r.w, r.h, 1);
+  for (const s of strokes) {
+    const pts = s.points ?? [];
+    if (!pts.length || !(s.radius > 0)) continue;
+    const ew = Math.max((1 - (s.hardness ?? 0.5)) * s.radius, 1);
+    for (let y = 0; y < r.h; y++) {
+      for (let x = 0; x < r.w; x++) {
+        const X = x + 0.5, Y = y + 0.5;
+        let d = Infinity;
+        for (let i = 0; i < Math.max(1, pts.length - 1); i++) {
+          const a = pts[i]!, b = pts[Math.min(i + 1, pts.length - 1)]!;
+          const dx = b[0]! - a[0]!, dy = b[1]! - a[1]!;
+          const l2 = dx * dx + dy * dy;
+          const t = l2 > 0 ? clamp(((X - a[0]!) * dx + (Y - a[1]!) * dy) / l2, 0, 1) : 0;
+          d = Math.min(d, Math.hypot(X - a[0]! - t * dx, Y - a[1]! - t * dy));
+        }
+        const t = clamp((s.radius - d) / ew, 0, 1);
+        const c = t * t * (3 - 2 * t);
+        const k = y * r.w + x;
+        out.data[k] = s.mode === 'erase' ? out.data[k]! * (1 - c) : Math.max(out.data[k]!, c);
+      }
+    }
+  }
+  return out;
+}
+
 const norm = (v: number, d: Domain | undefined): number => {
   const [lo, hi] = DOMAINS[d ?? 'mask'].range;
   return (v - lo) / (hi - lo);
@@ -316,10 +357,11 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return orient(r, A(ctx, 'orientation') as string);
   },
   'mask.luminance': (ctx) => map(recv(ctx), 1, (px) => {
+    // above ≤ 0 / below ≥ 1 leave that side open (core's rule: compile's whole-frame mask stays 1 off-range)
     const L = norm(rgb3(px).reduce((s, v) => s + v, 0) / 3, ctx.recvDomain);
     const s = Math.max(num(ctx, 'softness'), 1e-9);
-    const up = clamp((L - num(ctx, 'above')) / s + 0.5, 0, 1);
-    const down = clamp((num(ctx, 'below') - L) / s + 0.5, 0, 1);
+    const up = num(ctx, 'above') <= 0 ? 1 : clamp((L - num(ctx, 'above')) / s + 0.5, 0, 1);
+    const down = num(ctx, 'below') >= 1 ? 1 : clamp((num(ctx, 'below') - L) / s + 0.5, 0, 1);
     return [Math.min(up, down)];
   }),
   'mask.gradient': (ctx) => {
@@ -327,7 +369,8 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const t = A(ctx, 'to') as Point;
     const dx = t.x - f.x, dy = t.y - f.y;
     const len2 = dx * dx + dy * dy || 1;
-    return map(recv(ctx), 1, (_, x, y) => [clamp(1 - ((x - f.x) * dx + (y - f.y) * dy) / len2, 0, 1)]);
+    // at pixel centres, as core and the GPU
+    return map(recv(ctx), 1, (_, x, y) => [clamp(1 - ((x + 0.5 - f.x) * dx + (y + 0.5 - f.y) * dy) / len2, 0, 1)]);
   },
   'mask.ellipse': (ctx) => {
     const b = A(ctx, 'box') as Box;
@@ -342,8 +385,8 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       return [u * u + v * v <= 1 ? 1 : 0];
     });
   },
-  // strokes is canonical JSON (contract 0.2); the mock leaves painting to CHB-010 and returns an empty mask
-  'mask.paint': (ctx) => map(recv(ctx), 1, () => [0]),
+  // strokes is canonical JSON (contract 0.2): round brushes along each polyline, as core's paintMask (CHB-010)
+  'mask.paint': (ctx) => paint(recv(ctx), String(A(ctx, 'strokes'))),
   'mask.feather': (ctx) => boxBlur(recv(ctx), num(ctx, 'radius_px') / 2),
   'mask.and': (ctx) => map(recv(ctx), 1, (px, x, y) => [Math.min(px[0]!, ctx.extra[0]!.data[y * ctx.extra[0]!.w + x]!)]),
   'mask.or': (ctx) => map(recv(ctx), 1, (px, x, y) => [Math.max(px[0]!, ctx.extra[0]!.data[y * ctx.extra[0]!.w + x]!)]),

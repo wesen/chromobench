@@ -56,6 +56,22 @@ test('darkroom chain (real mode, 14 s, +10 M, grade 4): export and preview match
   expect(r.vsDefaultPrint.max8bit).toBeGreaterThan(10); // the settings do change the print
 });
 
+// CHB-010 stages 3–4: two packs and three masks (feathered gradient, tilted ellipse, painted strokes AND the
+// inverse of a luminance band), dodge and burns summed in linear H; a density mask (guide §9.3).
+test('multi-exposure print with masks: masks within 1e-5, paper log H within 2e-4, display within one 8-bit level of core', async ({ page }) => {
+  const r = await run(page, 'chain:masks');
+  for (const m of r.masks) expect(m.maxDiff, m.name).toBeLessThanOrEqual(1e-5);
+  expect(r.x.maxDiff).toBeLessThanOrEqual(2e-4);
+  expect(r.xPre.maxDiff).toBeLessThanOrEqual(2e-4);
+  expect(r.export.max8bit).toBeLessThanOrEqual(1);
+  expect(r.export.maxLevels).toBeLessThan(0.1);
+  expect(r.preview.max8bit).toBeLessThanOrEqual(1);
+  expect(r.preview.maxLevels).toBeLessThan(0.1);
+  expect(r.vsDarkroomPrint.max8bit).toBeGreaterThan(10); // the exposures do change the print
+  expect(r.densityMask.maxDiff).toBeLessThanOrEqual(1e-4);
+  expect(r.densityMaskMax).toBeGreaterThan(0.05);
+});
+
 test('broken variant: lookups without the half-texel mapping fail the preview chain', async ({ page }) => {
   const r = await run(page, 'chain:preview-display', { lookup: 3 });
   expect(r.max8bit).toBeGreaterThan(1);

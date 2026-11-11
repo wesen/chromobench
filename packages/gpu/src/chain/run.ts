@@ -65,9 +65,10 @@ export class ChainRunner {
 
   /**
    * Runs the segments; returns the output texture (owned by the caller: release to rt.textures).
-   * `src` is a full-res (or read-rect) texture whose texel (0,0) is frame position srcOrigin.
+   * `src` is a full-res (or read-rect) texture whose texel (0,0) is frame position srcOrigin, or, with
+   * `srcOnGrid`, a texture already on the output grid (read at the output pixel, CHB-010 DAG evaluation).
    */
-  async run(segments: Segment[], src: GPUTexture, srcOrigin: [number, number], t: RunTarget, opts: { code?: string } = {}): Promise<GPUTexture> {
+  async run(segments: Segment[], src: GPUTexture, srcOrigin: [number, number], t: RunTarget, opts: { code?: string; srcOnGrid?: boolean } = {}): Promise<GPUTexture> {
     const rt = this.rt;
     rt.check();
     const dev = rt.device;
@@ -98,7 +99,7 @@ export class ChainRunner {
         specBuf = ownSpec;
       }
       const out = rt.textures.acquire({ format: 'rgba32float', w: t.outW, h: t.outH, usage }, `pointwise.${i}`);
-      const prog = packProgram({ seg, outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region, srcOrigin, srcIsPrev: i > 0, lookup, exact });
+      const prog = packProgram({ seg, outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region, srcOrigin, srcIsPrev: i > 0 || !!opts.srcOnGrid, lookup, exact });
       const ub = rt.buffers.acquire({ size: prog.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pointwise.prog');
       dev.queue.writeBuffer(ub, 0, prog);
       const bg = dev.createBindGroup({

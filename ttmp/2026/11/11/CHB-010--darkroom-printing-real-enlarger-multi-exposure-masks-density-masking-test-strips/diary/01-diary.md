@@ -1252,3 +1252,144 @@ Milestone entry for the checks on bfe7258 and the follow-up commit. All checks p
 ### What warrants a second pair of eyes
 - The tiles test timeout is a test-only change in packages/gpu; CHB-005 may prefer fewer random frames instead.
 
+
+## Step 20: Stages 3–4 on the real engines: print.combine, mask.* and print.densityMask in core and on the GPU
+
+This step makes dodge, burn, split filtration and masks work on the reference engine and the GPU engine; before it only the mock implemented `print.combine` and `mask.*`. Core got the f64 reference (`print/exposures.ts`, `print/masks.ts`, `print/densityMask.ts`), the mock got a real `mask.paint`, the conformance generator got engine-independent semantic cases, and the GPU engine learned to evaluate graphs (not only receiver chains) with a new `combine.wgsl` kernel and four mask ops in `pointwise.wgsl`.
+
+The guide's stage-3 numbers reproduce: a one-stop burn at mask 0.5 adds 0.17609 log H, split filtration is equivalent to lights (−0.32, −4.26, −0.01) points with a 0.36-point deviation (bound 0.48), and the feathered burn prints the grey card at D_vis 1.2446 against 1.1676 log-domain (guide 1.247 / 1.170). On SwiftShader the GPU matches core on a two-pack, three-mask print to 6.9e-7 log H and 0.047 display levels.
+
+### Prompt Context
+**Orchestrator brief (verbatim):** "You continue ticket CHB-010 (darkroom printing) in the chromobench monorepo, in your own git worktree: **stages 3 and 4 — multi-exposure printing and density masks**, so dodge, burn and masks work on the real engines (they currently only work in the mock: neither RefEngine nor GpuEngine implements `print.combine` or `mask.*`).
+
+Read the common brief and follow its rules (branch `task/chb-010-masks`, commits at milestones with green checks, Co-Authored-By trailer, no push/merge, CONTRACT-REQUESTS.md instead of contract edits, investigation-format diary appended to the CHB-010 diary after Step 19, check off tasks with docmgr, short final reply): /tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/impl-brief-common.md
+
+Spec: ttmp/2026/11/11/CHB-010--*/design-doc/01-intern-guide.md §6.5–6.6 and the stage 3–4 tasks; CHB-010 diary Steps 18–19 for what stages 1–2 built. Masks are stored as vector MaskSpecs in the recipe (CHB-009's mask editor writes them: brush strokes as canonical JSON, gradient, ellipse with angle — contract 0.2); implement `mask.*` rasterisation and `print.combine` (exposures with masks, in log-exposure space) in packages/core (reference, f64) and packages/gpu (WGSL), with conformance cases and GPU-vs-core parity. Also `mask.paint` in the mock, which CHB-017 noted is empty.
+
+Lane: packages/core, packages/gpu, packages/engine-mock, packages/conformance (cases), tests. Do not edit apps/studio or packages/studio-kit (other agents work there).
+Checks green at each commit: pnpm typecheck, pnpm lint, pnpm test (baseline 2141), pnpm gen:check, pnpm contract:check, and `STUDIO_PORT=4491 CI=1 pnpm test:browser` — ports 4471 and 4185 are held by stale servers: if the gpu-parity project can't start its server on 4185, run your parity checks with a temporary port override and say so. Be pragmatic.
+
+Final reply (short): branch and commits, test counts, what works on the real engines now, contract requests, what the studio/demo needs to do to use it."
+**Assistant interpretation:** Implement the contract-0.2 `print.combine`, every `mask.*` op and `print.densityMask` in the f64 reference and in WGSL, prove them with the guide's numbers, laws, conformance cases and GPU-vs-core parity, fill the mock's empty `mask.paint`, and file what the contract lacks.
+**Inferred user intent:** The photographer's dodges, burns and painted masks, made in the studio's mask editor, print the same on the reference and the GPU engine as the physics says, so the studio can leave the mock for darkroom work.
+**Commit (code):** 3d0a100 — "CHB-010: print.combine, mask.* and print.densityMask in core (f64), mock mask.paint, semantic conformance cases"; a635673 — "CHB-010: GPU multi-exposure printing, masks and density masks (DAG evaluation on the output grid)"
+
+### What I did
+- Read the common brief, guide §4, §6.1–6.6, §9–11, tasks, diary Steps 18–19, the contract (`recipe.ts` Exposure/MaskSpec, `graph.ts` compile, `catalog/view-output-mask.ts`, `catalog/capture-film-print.ts` print.combine/densityMask, `domains.ts`, `errors.ts`), CONTRACT-DECISIONS (CHB-009/010 rows, "Contract 0.2" studio #1/#2), the mock's ops, `conformance/src/generate.ts`, core `engine-ref.ts`/`ops/ops.ts`, GPU `engine-gpu.ts`, `chain/run.ts`, `chain/program.ts`, `kernels/pointwise.wgsl`, `spatial.ts`, `physics/core.ts`, `parity/chain-tests.ts`, and the studio-kit `maskSpec()` that writes the MaskSpecs.
+- Branch `task/chb-010-masks`; `pnpm install --frozen-lockfile --offline`; baseline `pnpm test`: 61 files, 2141 passed.
+- `packages/core/src/print/masks.ts`: `MaskGrid`/`gridCentres` (the engines' nearest-sample rule, pixel centres), `gradientAt`, `ellipseAt` (tilted, one-pixel antialiased edge), `parseStrokes` (E_ARG_TYPE on malformed JSON), `brushCoverage`, `paintMask` (distance to the polyline, bounding-box limited), `luminanceAt`, `gaussianTaps`/`gaussianBlur1` (⌈3σ⌉, clamp-to-edge), `featherSigma` (radius = 2σ).
+- `print/exposures.ts`: `combinePixel` (H = max(10^x − Σ dodge, 0) + Σ add, H_FLOOR 1e-8, returns whether the clamp engaged), `combineRatio`, `exposureSeconds`, `compileExposures` (dodge filtration → E_RECIPE, more than 4 packs → E_TOO_MANY_PACKS, W_DODGE_EXCEEDS_MAIN, W_PREVIEW_APPROX for base flashes).
+- `print/densityMask.ts`: `maskExposure` (blur of the mean transmittance), `maskDensity` (γ·(log10 H_m − log10 min H_m)), `applyDensityMask`, `densityMaskSigma` (radius_um as σ on the film, 6 µm/px default).
+- `ops/ops.ts`: image ops `print.combine`, `print.densityMask`, `mask.luminance/gradient/ellipse/paint/feather/and/or/not`; `OpCtx.node(id)`; `Img.warnings`. `engine-ref.ts`: `node()` in the ctx; `warningsOf` collects op warnings over the closure into `ImageResult.warnings`.
+- `laws/chb010.laws.ts`: five laws with mutants (linear sum / log-domain burns; same-pack merge / summed logs; dodge-burn cancel / sequential log-domain application; neutral mask is a light / red-end-only mask; mask blur in linear light / blurring density).
+- `fixtures/golden/chb010-exposures.json` + `packages/core/test/chb010.exposures.test.ts` (21 tests: goldens, rasterisation, exposure semantics, the reference engine on M1 including a recipe compiled from `mask.set` + `exposure.add`).
+- `packages/engine-mock/src/ops.ts`: `mask.paint` rasterises strokes (same rule as core; the mock cannot import core); `mask.gradient` at pixel centres; `mask.luminance` open bounds. `test/masks.test.ts`.
+- `packages/conformance/src/semantics.ts`: six cases of kind `semantics` (combine identity; burn = log10(1 + m) with the engine's own mask; dodge/burn cancel; and/or/not = min/max/1 − m with an ellipse check; a painted stroke; feather keeps a flat mask flat), run for every engine that implements the ops.
+- `packages/gpu`: `kernels/combine.wgsl` (modes EXP, ADD, LOG, MIN, MAX, TRANSMITTANCE, DENSITY_MASK, COPY); `pointwise.wgsl` ops 12–15 (MASK_LUM, MASK_GRADIENT, MASK_ELLIPSE, MASK_NOT); `ChainRunner.run(…, { srcOnGrid })`; `GpuEngine.render/planNode/execute/mix/gaussian` (DAG evaluation); GPU_OPS + 10 ops; parity frame nodes, `chain:masks` and its spec.
+- `packages/core/CONTRACT-REQUESTS.md`: C5–C8.
+
+### Why
+- One log at the end, and dodges taken off the main exposure, is the guide's physics (§6.5); clamping the main exposure at 0 is "you cannot hold back more light than the main exposure gives", and keeps "dodge and burn cancel" exact whenever the dodge is physical.
+- Normalised mode: `print.expose` ignores time there (Step 18), so compile's burn of t_main(2^s − 1) seconds would print as a full extra main exposure. Weighting each normalised `print.expose` term by t_i/t_main (`combineRatio`) gives the f-stop printer's stops in both modes; in real mode the time is already in x.
+- Masks at pixel centres on the evaluation grid: the reference engine computes full resolution and samples nearest; the GPU rasterises on the output grid with the same formula at the same frame pixels, so pointwise masks are identical, not resampled.
+- Antialiased ellipse edge instead of the mock's hard step: a hard step flips whole pixels between f32 and f64 on the edge; the one-pixel ramp is continuous, so parity is a rounding question.
+- Painted strokes as the distance to the polyline: independent of dab spacing and of the RDP simplification the studio applies. Pressure is ignored because the studio fills mouse strokes with 0.5 (`e.pressure || 0.5`) and its overlay draws them at full strength.
+- `mask.luminance` above ≤ 0 / below ≥ 1 open: compile's "whole frame" mask for an unmasked exposure is `mask.luminance(x_main, above 0, below 1, softness 0)`; with closed bounds any x below −4 log H (the bottom of the paper-logH range) would silently drop out of the burn.
+- Density mask reference H_ref = the frame's smallest blurred transmittance: d_m ≥ 0 (a physical mask) and the highlights unchanged; the overall level shift is what the printer re-times. Contract 0.2 has only `amount` and `radius_um`, so only the positive contrast/unsharp mask exists, and `printing-density` is produced by no op, hence C5.
+- GPU DAG evaluation with materialised textures on the output grid (rather than full-resolution intermediates): a preview at 0.25 of a 24 MP frame would otherwise hold several 384 MB rgba32f textures.
+
+### What worked
+- Goldens: feathered burn +0.17609 (log-domain 0.15051); feathered burn D_vis 1.2446 / 1.1676 (guide 1.247 / 1.170; the grey card itself is 0.7562 vs 0.758, Step 18); split lights (−0.3206, −4.2596, −0.0057) points, worst deviation 0.36 points over film log H −1.5…+2.0 (guide ≤ 0.48); a contrast mask of γ 0.6 leaves exactly 0.4 of a large-area step.
+- `pnpm vitest run packages/core/test/laws.test.ts`: 44 passed (the five new laws hold at n = 100 and catch their mutants).
+- Reference engine on M1: a burn through a gradient = x + log10(1 + m) to 1e-12 in both modes; 2.5 s on a 10 s normalised main = +log10 1.25; dodge 4 s + burn 4 s under a tilted ellipse = main to 1e-12; dodge 15 s of 10 s → W_DODGE_EXCEEDS_MAIN and x = −8 inside the mask; a recipe with `mask.set` (gradient) + `exposure.add` (burn, 1 stop) compiles to `print.combine` and prints.
+- Conformance: reference and mock, 724 tests including 12 semantic cases; GPU in the browser "conformance {"total":253,"passed":253,"failures":[]}".
+- GPU parity `chain:masks` (96×64 synthetic Gold 200, real mode, main 12 s; burn 6 s through +15 Y under a feathered gradient; dodge 3 s under a 25° ellipse; burn 4 s under strokes AND NOT a luminance band): masks feather 1.1e-7, ellipse 2.6e-6, and 7.2e-7, not 8.6e-7; combined x export 6.9e-7, preview vs core tabulated 7.2e-7 log H; display export 0.047 levels (max 1 in 8 bits), preview 0.048; it differs from the plain darkroom print by 134 levels; density mask 3.9e-7 D (the mask moves PD by up to 0.15); half scale vs core tabulated half scale 0.42 levels (max 1 in 8 bits).
+- Final checks: typecheck clean, "import boundaries ok (270 file checks)", "gen:check ok (18 files)", contract:check "20 change(s), 4 breaking" (unchanged; no contract file touched), `pnpm test` 63 files / 2253 passed, browser 61 passed.
+
+### What didn't work
+- `git checkout -b task/chb-010-masks && D=… && ls -R $D …` was refused: "this command names git in a form too complex to verify that it stays inside the worktree". Recovery: plain `git checkout -b task/chb-010-masks`, the rest separately. Appending this diary step with a Bash heredoc was refused the same way ("this command is too complex to verify that it stays inside the worktree"); it is appended from a scratch file.
+- The first version of the masks module used `fail('E_ARG', …)`; there is no `E_ARG` code (errors.ts has E_ARG_TYPE, E_ARG_RANGE). Replaced by E_ARG_TYPE (malformed strokes) and E_RECIPE (dodge with a filtration) before the first typecheck.
+- `chb010.exposures.test.ts`, first run: "AssertionError: expected 0.03845878935180969 to be 0.038458789351809686 // Object.is equality" — outside a mask, log10(10^x + 0) is not bit-identical to x. Changed to `toBeCloseTo(…, 13)`. Second run: "ChromobenchError: E_NOT_IMPLEMENTED: output.frame is not implemented by the reference engine" — compile's root is `output.frame` (CHB-011); the test evaluates its input, `output.display`.
+- `pnpm typecheck` after the GPU edit: "packages/gpu/src/engine-gpu.ts(234,9): error TS2393: Duplicate function implementation." — my `plan()` collided with `GpuEngine.plan(ref, target)` (the TilePlan API). Renamed to `planNode`.
+- Port 4185 is held (pid 2027766, a stale vite) and the root `playwright.config.ts` hard-codes 4185 for gpu-parity (`GPU_PARITY_PORT` exists only in packages/gpu's own config). Every browser check ran through an uncommitted `playwright.tmp.config.ts` that imports the root config and moves gpu-parity to another port. 4495 was taken by another agent's `vite preview` ("Error: http://localhost:4495 is already used"); 4579 worked. A run without STUDIO_PORT failed with "http://localhost:4173 is already used".
+- First full browser run on 3d0a100: 59 passed, 1 failed — `e2e/m1-walking-skeleton.spec.ts:25 › M1: open, drag +4 pt red, undo, agent proposal approved` with "AbortError: Failed to execute 'mapAsync' on 'GPUBuffer': Buffer was unmapped before mapping was resolved. at WebGpuPresenter.dispose (…/src/present/presenter-webgpu.ts:199:17)". That is the studio's presenter, not my lane; `--repeat-each=3` of the spec passed 6/6 and the next full run (a635673) passed 61/61. Recorded as a cold-start flake in the studio presenter.
+
+### What I learned
+- The contract's `MaskSpec` is the closure of `mask.*` nodes (CONTRACT-DECISIONS CHB-009 #5), not the guide's vector shapes in long-side fractions; geometry is in sensor px. The studio's `maskSpec()` builds `mask.or` of the shapes, then `mask.feather`, then `mask.not`, every shape on the source node.
+- In `compile()` every unmasked extra exposure gets `mask.luminance(x_main, 0, 1, 0)`, and every exposure is a full `print.expose` at its own seconds and pack, so `print.combine` sees several images of the same dyes: the GPU must share `invert.dyes` between them (it is materialised once because it has several consumers).
+- No op produces `printing-density`, so `print.densityMask` is testable on a pattern but unreachable from a recipe (C5).
+- The guide's "mask 0.5, one-stop burn: D_vis 1.247 against 1.170" is at the `midgray-normalised` aim; with the default `grey-0.184` aim the pair is 1.218 / 1.141 (the same 0.077 gap).
+
+### What was tricky to build
+- The GPU engine lowered only single-receiver chains (`chainOf` walks `inputs[0]` to the source); `print.combine` has 1 + 2N inputs. The new `render()` walks the closure (skipping the receivers of coordinate masks), marks materialised nodes (the target, barrier ops and all their inputs, `mask.paint`, nodes with ≥ 2 consumers), plans each (a barrier reads its inputs; a tail starts at the source, at a materialised texture or at a coordinate mask), reference-counts the textures and releases each after its last reader. The physics context of a tail still comes from the full receiver chain (`lower(nodes, treb, from)` lowers only `nodes[from…]`), so `print.develop`'s grade pivot still finds the main `print.expose` through the combine.
+- Textures read "on the grid" need the first segment to read at the output pixel, not through `outMap`: `ChainRunner.run(…, { srcOnGrid: true })` sets `srcIsPrev` for segment 0 as well. Coordinate masks start from a 1×1 dummy texture whose value they overwrite.
+- The order of the combine passes on the GPU: all dodges first, then the clamp at 0 on the first add, then the adds, then the log — the order of `combinePixel`, so a dodge longer than the main exposure clamps identically.
+- A per-pixel `mask.paint` loop over every stroke segment would cost W·H·segments; core limits each segment to its bounding box on the grid (the inverse of the nearest-sample map, ±1 px).
+
+### What warrants a second pair of eyes
+- Spatial steps on the GPU (`mask.feather`, the density mask's blur and its min reduction) run on the output grid and clamp at its edge. For a full-frame evaluation they equal core; for a region (a densitometer probe) or a downscaled preview they approximate it (half scale: 0.42 levels). Core computes them at full resolution over the whole frame.
+- GPU blurs wider than σ = 32 output px run several passes (σ² adds; each truncated at 3σ), so a 500 px feather at full scale is ~60 passes: previews are cheap, a full-resolution export of a very wide feather is slow.
+- `W_DODGE_EXCEEDS_MAIN` is reported by the reference engine (per evaluated closure), not by the GPU (it would need a reduction over the clamp).
+- `combineRatio` gives compile's graph a different weight in normalised mode than the mock, which adds every extra exposure at full weight (the mock's `print.expose` has the time in x anyway).
+- The density mask's H_ref is frame-global, so `print.densityMask` is not local; a region evaluation on the GPU uses the region's minimum.
+
+### What should be done in the future
+- C5 (density masks in the recipe through `print.expose`), C6 (flash through the base), C7–C8 (docs); then a flash law ("an unmasked base flash adds the same H to every pixel") and the highlight / same-polarity masks.
+- E_TOO_MANY_PACKS at evaluation time; `compileExposures` checks it on the recipe only.
+- The studio can now run dodge and burn on RefEngine/GpuEngine; CHB-019/023 decide when it switches.
+
+### Code review instructions
+- Start with `packages/core/src/print/exposures.ts` (`combinePixel`, `combineRatio`), `print/masks.ts`, `print/densityMask.ts`, then `ops/ops.ts` (`print.combine`, `mask.*`), `packages/gpu/src/engine-gpu.ts` (`render`, `planNode`, `execute`, `mix`), `kernels/combine.wgsl`, `kernels/pointwise.wgsl` cases 12–15.
+- `pnpm vitest run packages/core/test/chb010.exposures.test.ts packages/core/test/laws.test.ts packages/core/test/engine-ref.test.ts packages/engine-mock`
+- Browser: `STUDIO_PORT=4491 CI=1 pnpm test:browser` when 4185 is free, else a config that moves gpu-parity's port; `chain:masks` prints its numbers.
+
+### Technical details
+- combine: H_k = max(10^x_k − Σ_dodge r_i m_i 10^x_i,k, 0) + Σ_add r_i m_i 10^x_i,k; x = log10 max(H, 1e-8); r_i = t_i/t_main for a normalised `print.expose` term, else 1.
+- Grid: fp = region.x + ⌊(p + ½)·region.w/w⌋, coordinate fp + ½. Gradient m = clamp(1 − (X − f)·(t − f)/|t − f|²). Ellipse m = clamp(½ − (ρ − 1)/|∇ρ|). Brush coverage = smoothstep((r − d)/max((1 − hardness)·r, 1)); add = max, erase = ×(1 − c). Feather σ = radius/2.
+- Density mask: T = mean_k 10^−PD_k, H_m = G_σ * T with σ = radius_um / umPerPx.film (6 µm default), d_m = amount·(log10 H_m − log10 min H_m), PD′ = PD + d_m.
+- GPU: combine.wgsl uniform {mode, flags, pad, pad, w: vec4f}; ADD w.x = sign·ratio, flags 1 clamps the running H at 0; DENSITY_MASK w = (amount, log10 min H_m).
+
+## Step 21: Validation gate for stages 3–4
+
+Milestone entry for the checks on 3d0a100 and a635673, and the bookkeeping commit.
+
+### Prompt Context
+**Orchestrator brief:** see Step 20.
+**Commit (code):** the commit after a635673 ("CHB-010: diary steps 20–21, tasks, contract requests C5–C8").
+
+### What I did
+- On 3d0a100: typecheck, lint, gen:check and contract:check clean; `pnpm test` 63 files / 2253 passed (+112 over the baseline 2141); browser (port override) 59 passed + 1 studio flake; the flaky spec passed `--repeat-each=3`.
+- On a635673: the same non-browser checks (2253 passed); browser 61 passed (60 + `multi-exposure print with masks`), including the GPU conformance 253/253 and the WGSL compile check of `combine.wgsl`.
+- Tasks: checked a4as, nufr, gmae, 428q; added follow-ups for C5–C8, the flash through the base, and the highlight / same-polarity masks.
+
+### What warrants a second pair of eyes
+- 428q is checked for the contrast/unsharp mask that contract 0.2 defines (blur in linear light, the neutral-mask law); the highlight mask and the recipe wiring are the new follow-up task, blocked on C5.
+
+## Step 22: Merge of task/chb-019-migrate (CHB-011 output, CHB-023 glue, new apps/studio)
+
+At the coordinator's request I merged `task/chb-019-migrate` into `task/chb-010-masks`. The only conflict was `packages/gpu/src/engine-gpu.ts` (six hunks). Both sides' behaviour is kept: the CHB-010 whole-graph DAG evaluation now sits under CHB-011's `checkTarget` / `render` / `evaluateU16` / `cacheResult`. So the 16-bit export and the result cache go through the same evaluation as masks and `print.combine`.
+
+### Prompt Context
+**Coordinator message (verbatim):** "Thanks, well done. One follow-up: please merge `task/chb-019-migrate` into your branch `task/chb-010-masks` in your worktree and resolve the conflicts. That branch includes CHB-011 (`@chromobench/output`, GPU 16-bit export via `GpuEngine.evaluateU16` with `kernels/pack16.wgsl`, unpack LUTs, `lowerDisplay`) and CHB-023's engine glue (`openDecoded`, `cacheLimit`/`cacheResult`, film base computed once per frame, aperture-only densitometer). Its new `apps/studio` uses the shell-based studio-kit. Merging it into an integration branch conflicts in `packages/gpu/src/engine-gpu.ts` in six places: imports, `dispose`/unpack-LUT cleanup, `checkTarget` vs your DAG `render`/`planNode`/`execute`, and evaluate/caching. Keep both behaviours: your whole-graph DAG evaluation with masks and `print.combine`; their caching with a cache limit, `evaluateU16` 16-bit export through the same evaluation path, the region/aperture densitometer, and the per-frame base. Then run pnpm typecheck, lint, test, gen:check, and the browser suite (`STUDIO_PORT=4491 CI=1`, with your temporary port override for gpu-parity because 4185 is still held). Commit with the Co-Authored-By trailer and append a short diary step. Reply with the merge commit and the test counts."
+**Assistant interpretation:** Merge, resolve `engine-gpu.ts` so the DAG evaluation serves `evaluate` and `evaluateU16`, keep the result cache and the region-only source upload, run every check.
+**Commit (code):** the merge commit "Merge task/chb-019-migrate into task/chb-010-masks".
+
+### What I did
+- `git merge --no-ff --no-commit task/chb-019-migrate`: core `index.ts`/`ops.ts`, `pointwise.wgsl` and `program.ts` merged automatically. There were no op-code collisions: masks are 12–15, and CHB-011 extended `DISPLAY` and the segment's `ok` matrices. Only `engine-gpu.ts` conflicted.
+- Resolution (scripted over the six diff3 hunks):
+  - Imports from both sides (`type RunTarget` and `pack16Code`, `lowerDisplay`).
+  - `dropDeviceState` and `dispose` clear both the dummy texture and the unpack LUTs.
+  - My DAG entry point renamed `renderGraph(id, grid)`. CHB-011's `render<T>(n, info, region, scale, precision, read)` keeps its signature and now builds the grid, calls `renderGraph` inside `this.gpu()`, and hands the output texture to `read` (f32 readback for `evaluate`, `readU16` for `evaluateU16`).
+  - `checkTarget` and `cacheResult` taken as they are.
+  - Source tails in `execute` call CHB-011's async `sourceTexture(root, region)` (region-only upload, `srcOrigin` = the region corner, released when owned) instead of the full-frame texture at origin [0, 0].
+- `pnpm install --frozen-lockfile --offline` (the merge adds `packages/output`; before it, typecheck failed on `packages/output/test/icc.test.ts` with "TS7006: Parameter 'i' implicitly has an 'any' type", because the new workspace package was not linked).
+
+### What worked
+- typecheck clean, "import boundaries ok (248 file checks)", "gen:check ok (18 files)", contract:check "20 change(s), 4 breaking" (unchanged), `pnpm test` 2296 passed.
+- Browser (`STUDIO_PORT=4491 CI=1`, uncommitted `playwright.tmp.config.ts` moving gpu-parity from the held 4185 to 4579): 68 passed, including CHB-011's output specs, GPU conformance 253/253 and `chain:masks` (combined x 6.9e-7 log H, display export 0.047 levels, as before the merge).
+
+### What didn't work
+- Port 4491 showed as LISTEN by a process that had already exited (`ps` printed nothing); two seconds later it was free and the run started normally.
+
+### What warrants a second pair of eyes
+- `evaluateU16` now runs the DAG evaluation, so a tile of a masked print computes its masks on the tile's grid. Feather and density-mask blurs clamp at the tile edge (Step 20). A tiled 16-bit export of a print with wide feathers therefore shows seams until spatial barriers get a halo or a whole-frame field (CHB-005's `sampleField` pattern).

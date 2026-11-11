@@ -1,13 +1,16 @@
 // Op adapters for the reference engine (guide §5.7): one per catalog op CHB-003 owns, applying core's
 // pure functions to f64 images. Upstream context (stock, paper, viewing light) is found by walking the
 // node's inputs (`ctx.up`), because a pointwise op's own args do not name it.
-import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Domain, type ImageInfo, type Point } from '@chromobench/contract';
+import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type Point } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { filtrationForLights } from '../print/balance.ts';
 import { makePrintChain, type Aim, type PrintChain } from '../print/chain.ts';
 import { adaptBradford, addFlare, D50, D65, observe, OUTPUT_SPACE_IDS, paperWhiteXYZ, reflectance, whiteXYZ, type OutputSpaceId, type Viewing } from '../print/colour.ts';
 import { displayPixel, displaySetup, type DisplaySetup, type KneeName } from '../print/gamut.ts';
 import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
+import { combinePixel, combineRatio, type CombineTerm } from '../print/exposures.ts';
+import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gradientAt, gridCentres, luminanceAt, paintMask, parseStrokes } from '../print/masks.ts';
+import { applyDensityMask, densityMaskSigma } from '../print/densityMask.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
@@ -17,7 +20,7 @@ import type { Conventions } from '../spectral/conventions.ts';
 import type { Vec3 } from '../spectral/linalg.ts';
 import { resolveStock, type Stock } from '../spectral/stock.ts';
 
-export interface Img { w: number; h: number; c: number; data: Float64Array }
+export interface Img { w: number; h: number; c: number; data: Float64Array; warnings?: Diagnostic[] }
 export const newImg = (w: number, h: number, c: number): Img => ({ w, h, c, data: new Float64Array(w * h * c) });
 
 export interface UpNode { op: string; args: Readonly<Record<string, unknown>>; id: string; inputs: readonly string[] }
@@ -33,6 +36,8 @@ export interface OpCtx {
   up(op: string): UpNode | undefined;
   /** Evaluates an upstream node by id (full resolution). */
   image(id: string): Img;
+  /** The definition of any node the engine knows (print.combine reads its exposures' print.expose args). */
+  node(id: string): UpNode | undefined;
   env: PhysicsEnv;
 }
 
@@ -239,6 +244,58 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const { develop } = developerAt(ctx, A(ctx, 'paper') as string, num(ctx, 'grade'));
     return mapPx(recv(ctx), 3, (px, o) => { const c = develop(px); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; });
   },
+  'print.combine': (ctx) => {
+    // CHB-010 §6.5: exposures add in linear H on the main exposure (dodges withheld from it), one log at the end
+    const r = recv(ctx);
+    const ids = A(ctx, 'exposures') as string[];
+    const maskIds = A(ctx, 'masks') as string[];
+    const modes = A(ctx, 'modes') as string[];
+    if (ids.length === 0) return r;
+    const main = ctx.up('print.expose')?.args;
+    const ex = ids.map((id) => ctx.image(id));
+    const ms = maskIds.map((id) => ctx.image(id));
+    const ratio = ids.map((id) => combineRatio(main, ctx.node(id)?.op === 'print.expose' ? ctx.node(id)!.args : undefined));
+    const terms: CombineTerm[] = ids.map((_, i) => ({ x: [0, 0, 0], m: 0, sign: modes[i] === 'subtract' ? -1 : 1, ratio: ratio[i]! }));
+    let clamped = 0;
+    const out = mapPx(r, 3, (px, o, i) => {
+      terms.forEach((t, j) => {
+        const e = ex[j]!;
+        t.x = e.data.subarray(i * e.c, i * e.c + 3);
+        t.m = ms[j]!.data[i * ms[j]!.c]!;
+      });
+      if (combinePixel(px, terms, o)) clamped++;
+    });
+    if (clamped) out.warnings = [{ code: 'W_DODGE_EXCEEDS_MAIN', message: `dodges hold back more than the main exposure at ${clamped} pixel(s); clamped at no light` }];
+    return out;
+  },
+  'print.densityMask': (ctx) => {
+    // CHB-010 §6.6: a neutral silver mask from the blurred transmittance, added to every layer
+    const r = recv(ctx);
+    const sigma = densityMaskSigma(num(ctx, 'radius_um'), ctx.info?.umPerPx.film);
+    return { w: r.w, h: r.h, c: r.c, data: applyDensityMask(r.data, r.w, r.h, r.c, num(ctx, 'amount'), sigma) };
+  },
+  'mask.luminance': (ctx) => {
+    const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;
+    const above = num(ctx, 'above'), below = num(ctx, 'below'), soft = num(ctx, 'softness');
+    return mapPx(recv(ctx), 1, (px, o) => {
+      const n = px.length;
+      const L = (px[0]! + px[Math.min(1, n - 1)]! + px[Math.min(2, n - 1)]!) / 3;
+      o[0] = luminanceAt((L - lo) / (hi - lo), above, below, soft);
+    });
+  },
+  'mask.gradient': (ctx) => coordMask(ctx, (X, Y) => gradientAt(X, Y, A(ctx, 'from') as Point, A(ctx, 'to') as Point)),
+  'mask.ellipse': (ctx) => coordMask(ctx, (X, Y) => ellipseAt(X, Y, A(ctx, 'box') as Box, (A(ctx, 'angle_deg') as number | undefined) ?? 0)),
+  'mask.paint': (ctx) => {
+    const info = ctx.info!;
+    return { w: info.width, h: info.height, c: 1, data: paintMask(parseStrokes(A(ctx, 'strokes') as string), fullGrid(info.width, info.height)) };
+  },
+  'mask.feather': (ctx) => {
+    const r = recv(ctx);
+    return { w: r.w, h: r.h, c: 1, data: gaussianBlur1(r.data, r.w, r.h, featherSigma(num(ctx, 'radius_px'))) };
+  },
+  'mask.and': (ctx) => maskPair(ctx, Math.min),
+  'mask.or': (ctx) => maskPair(ctx, Math.max),
+  'mask.not': (ctx) => mapPx(recv(ctx), 1, (px, o) => { o[0] = 1 - px[0]!; }),
   'view.reflect': (ctx) => {
     if (ctx.env.mode === 'tabulated') {
       const T = ctx.env.printTable(paperOf(ctx), A(ctx, 'illuminant') as string);
@@ -270,6 +327,20 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     });
   },
 };
+
+/** A mask from frame coordinates (pixel centres, source px) at the node's size. */
+function coordMask(ctx: OpCtx, f: (X: number, Y: number) => number): Img {
+  const info = ctx.info!;
+  const { xs, ys } = gridCentres(fullGrid(info.width, info.height));
+  const out = newImg(info.width, info.height, 1);
+  for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) out.data[y * info.width + x] = f(xs[x]!, ys[y]!);
+  return out;
+}
+
+function maskPair(ctx: OpCtx, f: (a: number, b: number) => number): Img {
+  const o = ctx.image(A(ctx, 'other') as string);
+  return mapPx(recv(ctx), 1, (px, out, i) => { out[0] = f(px[0]!, o.data[i * o.c]!); });
+}
 
 /** print.expose arguments → chain settings (shared with the tabulated mode and packages/gpu). */
 export function exposeSettings(a: Readonly<Record<string, unknown>>, film: string): ExposeSettings {

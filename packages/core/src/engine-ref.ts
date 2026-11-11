@@ -169,6 +169,10 @@ export class RefEngine implements Engine {
       source: (sha) => this.sources.get(sha) ?? fail('E_NO_SOURCE', `source ${sha.slice(0, 12)}… is not open in the reference engine`),
       up,
       image: (id) => this.compute(id),
+      node: (id) => {
+        const m = this.graph.get(id);
+        return m ? { op: m.op, args: m.args, id: m.id, inputs: m.inputs } : undefined;
+      },
       env: this.env,
     };
   }
@@ -180,6 +184,25 @@ export class RefEngine implements Engine {
     this.check(n);
     const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no reference image implementation`);
     return remember(this.full, id, f(this.ctx(n, true)), this.limit);
+  }
+
+  /** Warnings the ops of a node's closure attached to their images (e.g. W_DODGE_EXCEEDS_MAIN), deduplicated. */
+  private warningsOf(id: string): Diagnostic[] {
+    const out: Diagnostic[] = [];
+    const seen = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (nid: string): void => {
+      if (visited.has(nid)) return;
+      visited.add(nid);
+      const m = this.graph.get(nid);
+      for (const i of m?.inputs ?? []) visit(i);
+      for (const w of this.full.get(nid)?.warnings ?? []) {
+        const k = `${w.code}|${w.message}`;
+        if (!seen.has(k)) { seen.add(k); out.push(w); }
+      }
+    };
+    visit(id);
+    return out;
   }
 
   async evaluate(ref: NodeRef, target: EvalTarget): Promise<ImageResult> {
@@ -211,7 +234,7 @@ export class RefEngine implements Engine {
         }
       }
       if (target.signal?.aborted) throw cancelled();
-      res = remember(this.results, key, { data, width, height, region, scale, warnings: [] as Diagnostic[] }, this.limit);
+      res = remember(this.results, key, { data, width, height, region, scale, warnings: this.warningsOf(n.id) }, this.limit);
     }
     const r = res;
     return {

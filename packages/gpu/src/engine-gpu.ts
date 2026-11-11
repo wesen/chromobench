@@ -10,12 +10,14 @@ import {
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
 import { readTiff } from '@chromobench/engine-mock';
-import { ChainRunner, POINTWISE_WGSL } from './chain/run.ts';
+import { ChainRunner, POINTWISE_WGSL, type RunTarget } from './chain/run.ts';
 import pack16Code from '../kernels/pack16.wgsl?raw';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
-import { densitiesOf, rebateBox, type PhysicsData } from '@chromobench/core';
+import { combineRatio, densitiesOf, densityMaskSigma, featherSigma, paintMask, parseStrokes, rebateBox, type PhysicsData } from '@chromobench/core';
+import combineCode from '../kernels/combine.wgsl?raw';
+import { Blur } from './spatial.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
@@ -28,7 +30,25 @@ export const GPU_OPS = [
   'source.open', 'source.pattern', 'scan.density', 'invert.dyes', 'print.expose', 'print.lights', 'print.develop',
   'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
+  // CHB-010: multi-exposure printing, masks and density masks
+  'print.combine', 'print.densityMask', 'mask.luminance', 'mask.gradient', 'mask.ellipse', 'mask.paint', 'mask.feather', 'mask.and', 'mask.or', 'mask.not',
 ] as const;
+
+/** Multi-input or spatial ops: always materialised, computed from materialised inputs (combine.wgsl, blur.wgsl). */
+const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or']);
+/** Masks from coordinates (or strokes): their receiver's values are never read. */
+const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.gradient', 'mask.ellipse', 'mask.paint']);
+/** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run several passes. */
+const MAX_PASS_SIGMA = 32;
+export const COMBINE_WGSL = combineCode;
+const COMBINE = Object.freeze({ EXP: 0, ADD: 1, LOG: 2, MIN: 3, MAX: 4, TRANSMITTANCE: 5, DENSITY_MASK: 6, COPY: 7 });
+
+/** The output grid every materialised texture of one evaluation shares. */
+interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export'; umOut: number }
+/** How one materialised node is computed: a barrier from its inputs, or a pointwise tail from a root. */
+type Plan =
+  | { kind: 'barrier'; reads: string[] }
+  | { kind: 'tail'; reads: string[]; nodes: Node[]; from: number; root: 'source' | 'texture' | 'none'; rootId?: string };
 
 const DEFAULT_UM_PER_PX = 6;
 const PACK16_WGSL: string = pack16Code;
@@ -88,6 +108,8 @@ export class GpuEngine implements Engine {
   private tables: TableManager;
   private chain: ChainRunner;
   private reducer: Reducer;
+  private blur: Blur;
+  private dummyTex: GPUTexture | null = null;
   private readonly opts: GpuEngineOptions;
   private readonly pool: WorkerPool | null;
   private readonly cache: TableCache;
@@ -113,6 +135,7 @@ export class GpuEngine implements Engine {
     this.tables = new TableManager(rt, { accel: opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
     this.chain = new ChainRunner(rt, this.tables);
     this.reducer = new Reducer(rt);
+    this.blur = new Blur(rt);
     rt.onLost(() => this.dropDeviceState());
   }
 
@@ -125,6 +148,7 @@ export class GpuEngine implements Engine {
         { name: 'pointwise', code: POINTWISE_WGSL },
         { name: 'reduce.moments', code: REDUCE_WGSL, entryPoint: 'moments' },
         { name: 'reduce.histogram', code: REDUCE_WGSL, entryPoint: 'histogram' },
+        { name: 'combine', code: COMBINE_WGSL },
       ]);
     }
     return e;
@@ -145,6 +169,7 @@ export class GpuEngine implements Engine {
   // ---- device loss: drop GPU state, keep CPU state; recreate on the next call ----
   private dropDeviceState(): void {
     this.srcTex.clear();
+    this.dummyTex = null;
     this.unpackLut.clear();
   }
 
@@ -157,6 +182,7 @@ export class GpuEngine implements Engine {
       this.tables = new TableManager(rt, { accel: this.opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
       this.chain = new ChainRunner(rt, this.tables);
       this.reducer = new Reducer(rt);
+      this.blur = new Blur(rt);
       rt.onLost(() => this.dropDeviceState());
     })().finally(() => { this.recreating = null; });
     await this.recreating;
@@ -240,6 +266,7 @@ export class GpuEngine implements Engine {
     this.pool?.terminate();
     for (const t of this.srcTex.values()) t.destroy();
     this.srcTex.clear();
+    this.dummyTex?.destroy();
     for (const b of this.unpackLut.values()) b.destroy();
     this.unpackLut.clear();
     this.chain.destroy();
@@ -273,7 +300,8 @@ export class GpuEngine implements Engine {
     return out;
   }
 
-  private lower(nodes: Node[], treb: Map<string, Vec3>): Lowered {
+  /** Lowers nodes[from…] to segments; nodes[0…from) are upstream context only (ctx.up). */
+  private lower(nodes: Node[], treb: Map<string, Vec3>, from = 0): Lowered {
     // Every parameter comes from core (physics/core.ts): the same chain settings, aim, tables, flare
     // white, adaptation and display matrix the reference engine uses for the same nodes.
     const P = this.physics;
@@ -291,7 +319,7 @@ export class GpuEngine implements Engine {
       if (ok) cur.ok = ok;
       cur.ops.push(op);
     };
-    for (let i = 0; i < nodes.length; i++) {
+    for (let i = from; i < nodes.length; i++) {
       const n = nodes[i]!;
       const a = n.args as Record<string, unknown>;
       const ctx = P.ctx(nodes, i);
@@ -332,7 +360,26 @@ export class GpuEngine implements Engine {
           push({ code: OP.GRAIN, flags: (a['seed'] as number) >>> 0, p0: [a['amount'] as number, 0], node: n.id });
           break;
         }
-        default: fail('E_NOT_IMPLEMENTED', `${n.op} has no GPU lowering`);
+        // CHB-010 masks (core print/masks.ts on the grid)
+        case 'mask.luminance': {
+          const rd = this.graph.get(n.inputs[0]!)?.info;
+          const [lo, hi] = DOMAINS[rd && rd.kind === 'Image' ? rd.domain : 'mask'].range;
+          push({ code: OP.MASK_LUM, p0: [a['above'] as number, a['below'] as number, a['softness'] as number], p1: [lo, hi], node: n.id });
+          break;
+        }
+        case 'mask.gradient': {
+          const f = a['from'] as { x: number; y: number }, t = a['to'] as { x: number; y: number };
+          push({ code: OP.MASK_GRADIENT, p0: [f.x, f.y, t.x, t.y], node: n.id });
+          break;
+        }
+        case 'mask.ellipse': {
+          const b = a['box'] as Box;
+          const th = (((a['angle_deg'] as number | undefined) ?? 0) * Math.PI) / 180;
+          push({ code: OP.MASK_ELLIPSE, p0: [b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w / 2, 1e-9), Math.max(b.h / 2, 1e-9)], p1: [Math.cos(th), Math.sin(th)], node: n.id });
+          break;
+        }
+        case 'mask.not': push({ code: OP.MASK_NOT, node: n.id }); break;
+        default: fail('E_INTERNAL', `${n.op} has no pointwise GPU lowering (barrier ops are materialised)`);
       }
     }
     if (cur.ops.length || !segments.length) segments.push(cur);
@@ -510,6 +557,221 @@ export class GpuEngine implements Engine {
     return out;
   }
 
+  // ---- DAG evaluation (CHB-010): materialised nodes on the output grid ----
+  //
+  // A graph is cut into pointwise tails that end at a materialised node: the target, every multi-input
+  // or spatial op (print.combine, mask.and/or/feather/paint, print.densityMask), every input of one,
+  // and every node read by two consumers (so a shared invert.dyes runs once). Each tail starts at the
+  // source (read through outMap at full resolution, as before), at a materialised texture (read at the
+  // output pixel), or at a coordinate mask (mask.gradient/ellipse, which ignore their receiver's values).
+  // All materialised textures share the target's grid: pointwise steps commute with nearest sampling, so
+  // they equal the reference engine's sampled full-resolution result; spatial steps (feather, the
+  // density mask's blur) run on the grid with σ scaled to it and clamp at its edge.
+
+  private async renderGraph(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
+    const order: string[] = [];
+    const seen = new Set<string>();
+    const consumers = new Map<string, number>();
+    const visit = (nid: string): void => {
+      if (seen.has(nid)) return;
+      seen.add(nid);
+      const n = this.graph.get(nid) ?? fail('E_NO_NODE', `unknown node ${nid.slice(0, 12)}…`);
+      this.check(n);
+      if (!GENERATOR_OPS.has(n.op)) {
+        for (const i of n.inputs) {
+          consumers.set(i, (consumers.get(i) ?? 0) + 1);
+          visit(i);
+        }
+      }
+      order.push(nid);
+    };
+    visit(id);
+    const mat = new Set<string>([id]);
+    for (const nid of order) {
+      const n = this.graph.get(nid)!;
+      if ((consumers.get(nid) ?? 0) >= 2 || n.op === 'mask.paint') mat.add(nid);
+      if (BARRIER_OPS.has(n.op)) {
+        mat.add(nid);
+        for (const i of n.inputs) mat.add(i);
+      }
+    }
+    // plan: what each materialised node reads, for reference counts
+    const plans = new Map<string, Plan>();
+    const refs = new Map<string, number>([[id, 1]]);
+    for (const nid of order) {
+      if (!mat.has(nid)) continue;
+      const p = this.planNode(nid, mat);
+      plans.set(nid, p);
+      for (const r of p.reads) refs.set(r, (refs.get(r) ?? 0) + 1);
+    }
+    const texs = new Map<string, GPUTexture>();
+    const warnings: Diagnostic[] = [];
+    const done = (r: string): void => {
+      const left = (refs.get(r) ?? 1) - 1;
+      refs.set(r, left);
+      if (left <= 0) {
+        const tx = texs.get(r);
+        if (tx) this.rt.textures.release(tx);
+        texs.delete(r);
+      }
+    };
+    try {
+      for (const nid of order) {
+        const p = plans.get(nid);
+        if (!p) continue;
+        const tex = await this.execute(nid, p, texs, t, warnings);
+        texs.set(nid, tex);
+        for (const r of p.reads) done(r);
+      }
+      const out = texs.get(id)!;
+      texs.delete(id);
+      return { tex: out, warnings };
+    } finally {
+      for (const tx of texs.values()) this.rt.textures.release(tx);
+    }
+  }
+
+  /** What a materialised node reads, and from where its pointwise tail starts. */
+  private planNode(nid: string, mat: ReadonlySet<string>): Plan {
+    const n = this.graph.get(nid)!;
+    if (BARRIER_OPS.has(n.op)) return { kind: 'barrier', reads: [...n.inputs] };
+    const nodes = this.chainOf(nid);
+    for (let i = nodes.length - 1; ; i--) {
+      const m = nodes[i]!;
+      if (getOp(m.op).on === 'none') return { kind: 'tail', reads: [], nodes, from: 0, root: 'source' };
+      if (GENERATOR_OPS.has(m.op)) return { kind: 'tail', reads: [], nodes, from: i, root: 'none' };
+      const r = nodes[i - 1]!;
+      if (mat.has(r.id)) return { kind: 'tail', reads: [r.id], nodes, from: i, root: 'texture', rootId: r.id };
+    }
+  }
+
+  private async execute(nid: string, p: Plan, texs: ReadonlyMap<string, GPUTexture>, t: GridTarget, warnings: Diagnostic[]): Promise<GPUTexture> {
+    const n = this.graph.get(nid)!;
+    const tex = (id: string): GPUTexture => texs.get(id) ?? fail('E_INTERNAL', `GPU render: ${id.slice(0, 12)}… was not materialised`);
+    const run: RunTarget = { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region, precision: t.precision };
+    if (p.kind === 'tail') {
+      if (n.op === 'mask.paint') {
+        // strokes are rasterised by core on this grid (the same f64 function as the reference engine) and uploaded
+        const m = paintMask(parseStrokes(String(n.args['strokes'])), { w: t.outW, h: t.outH, region: t.region });
+        return this.chain.upload(m, t.outW, t.outH, 1, 'mask.paint');
+      }
+      const treb = await this.rebates(p.nodes.slice(p.from));
+      const low = this.lower(p.nodes, treb, p.from);
+      warnings.push(...low.warnings);
+      this.fillGrain(low.segments, p.nodes, t.umOut);
+      const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
+      if (p.root === 'source') {
+        // pointwise tails read only their own pixels: the source is uploaded for the region alone (CHB-011)
+        const { tex: st, owned } = await this.sourceTexture(p.nodes[0]!, t.region);
+        try {
+          return await this.chain.run(segs, st, [t.region.x, t.region.y], run);
+        } finally {
+          if (owned) this.rt.textures.release(st);
+        }
+      }
+      return this.chain.run(segs, p.root === 'texture' ? tex(p.rootId!) : this.dummy(), [0, 0], run, { srcOnGrid: true });
+    }
+    const a = n.args as Record<string, unknown>;
+    const recv = tex(n.inputs[0]!);
+    const scale = t.outW / t.region.w;
+    switch (n.op) {
+      case 'print.combine': {
+        // core combinePixel: H = max(10^x − Σ dodge, 0) + Σ add, one log at the end
+        const ids = a['exposures'] as string[], masks = a['masks'] as string[], modes = a['modes'] as string[];
+        if (!ids.length) return this.mix(COMBINE.COPY, recv);
+        const chain = this.chainOf(nid);
+        const main = this.physics.ctx(chain, chain.length - 1).up('print.expose')?.args;
+        const terms = ids.map((id, i) => {
+          const e = this.graph.get(id);
+          return { e: tex(id), m: tex(masks[i]!), sign: modes[i] === 'subtract' ? -1 : 1, ratio: combineRatio(main, e?.op === 'print.expose' ? e.args : undefined) };
+        });
+        let H = await this.mix(COMBINE.EXP, recv);
+        let firstAdd = true;
+        for (const term of [...terms.filter((x) => x.sign < 0), ...terms.filter((x) => x.sign > 0)]) {
+          const next = await this.mix(COMBINE.ADD, H, term.e, term.m, term.sign > 0 && firstAdd ? 1 : 0, [term.sign * term.ratio]);
+          if (term.sign > 0) firstAdd = false;
+          this.rt.textures.release(H);
+          H = next;
+        }
+        const out = await this.mix(COMBINE.LOG, H, null, null, 1);
+        this.rt.textures.release(H);
+        return out;
+      }
+      case 'mask.and': return this.mix(COMBINE.MIN, recv, tex(a['other'] as string));
+      case 'mask.or': return this.mix(COMBINE.MAX, recv, tex(a['other'] as string));
+      case 'mask.feather': return this.gaussian(recv, featherSigma(a['radius_px'] as number) * scale);
+      case 'print.densityMask': {
+        // core maskDensity: blur the mean transmittance, d = γ·(log10 H_m − log10 min H_m), added to every layer
+        const amount = a['amount'] as number;
+        if (amount === 0) return this.mix(COMBINE.COPY, recv);
+        const info = n.info as ImageInfo;
+        const T = await this.mix(COMBINE.TRANSMITTANCE, recv);
+        const Hm = await this.gaussian(T, densityMaskSigma(a['radius_um'] as number, info.umPerPx.film) * scale);
+        this.rt.textures.release(T);
+        const ref = (await this.reducer.moments(Hm, { x: 0, y: 0, w: t.outW, h: t.outH })).min[0]!;
+        const out = await this.mix(COMBINE.DENSITY_MASK, recv, Hm, null, 0, [amount, Math.log10(ref)]);
+        this.rt.textures.release(Hm);
+        return out;
+      }
+      default: return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
+    }
+  }
+
+  /** A Gaussian blur of σ output px (several passes beyond MAX_PASS_SIGMA: σ² adds); a new texture. */
+  private async gaussian(src: GPUTexture, sigma: number): Promise<GPUTexture> {
+    if (!(sigma > 0)) return this.mix(COMBINE.COPY, src);
+    const passes = Math.max(1, Math.ceil((sigma / MAX_PASS_SIGMA) ** 2));
+    const s = sigma / Math.sqrt(passes);
+    let cur = await this.blur.gaussian(src, [s, s, s, s]);
+    for (let i = 1; i < passes; i++) {
+      const next = await this.blur.gaussian(cur, [s, s, s, s]);
+      this.rt.textures.release(cur);
+      cur = next;
+    }
+    return cur;
+  }
+
+  private dummy(): GPUTexture {
+    this.dummyTex ??= this.rt.device.createTexture({ size: [1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    return this.dummyTex;
+  }
+
+  /** One pass of kernels/combine.wgsl on output-grid textures; returns a new texture (release it). */
+  private async mix(mode: number, a: GPUTexture, b: GPUTexture | null = null, m: GPUTexture | null = null, flags = 0, w: number[] = []): Promise<GPUTexture> {
+    const rt = this.rt;
+    rt.check();
+    const dev = rt.device;
+    const pipe = await rt.pipelines.get({ name: 'combine', code: COMBINE_WGSL });
+    const W = a.width, H = a.height;
+    const out = rt.textures.acquire({ format: 'rgba32float', w: W, h: H, usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC }, `combine.${mode}`);
+    const u = new ArrayBuffer(32);
+    new Uint32Array(u, 0, 4).set([mode, flags, 0, 0]);
+    new Float32Array(u, 16, 4).set([w[0] ?? 0, w[1] ?? 0, w[2] ?? 0, w[3] ?? 0]);
+    const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'combine.u');
+    dev.queue.writeBuffer(ub, 0, u);
+    const bg = dev.createBindGroup({
+      layout: pipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: ub, size: 32 } },
+        { binding: 1, resource: a.createView() },
+        { binding: 2, resource: (b ?? this.dummy()).createView() },
+        { binding: 3, resource: (m ?? this.dummy()).createView() },
+        { binding: 4, resource: out.createView() },
+      ],
+    });
+    const enc = dev.createCommandEncoder();
+    const pass = enc.beginComputePass(rt.timer.pass(`combine.${mode}`));
+    pass.setPipeline(pipe);
+    pass.setBindGroup(0, bg);
+    pass.dispatchWorkgroups(Math.ceil(W / 8), Math.ceil(H / 8));
+    pass.end();
+    rt.timer.resolve(enc);
+    dev.queue.submit([enc.finish()]);
+    await rt.timer.flush();
+    rt.buffers.release(ub);
+    return out;
+  }
+
   private checkTarget(n: Node, target: EvalTarget): { info: ImageInfo; region: Box; scale: number } {
     if (target.signal?.aborted) throw cancelled();
     if (n.info.kind !== 'Image') fail('E_WRONG_KIND', `${n.op} returns a value; use measure()`);
@@ -524,31 +786,24 @@ export class GpuEngine implements Engine {
     return { info, region, scale };
   }
 
-  /** Lowers and runs a node's chain over `region`; `read` turns the output texture into the result. */
+  /**
+   * Evaluates a node over `region` at `scale` through the DAG evaluation (renderGraph, CHB-010); `read`
+   * turns the output texture into the result (f32 readback, or CHB-011's 16-bit pack).
+   */
   private async render<T>(n: Node, info: ImageInfo, region: Box, scale: number, precision: EvalTarget['precision'], read: (tex: GPUTexture, w: number, h: number) => Promise<T>): Promise<{ px: T; width: number; height: number; warnings: Diagnostic[] }> {
-    const nodes = this.chainOf(n.id);
-    const treb = await this.rebates(nodes);
-    const low = this.lower(nodes, treb);
     const width = Math.max(1, Math.round(region.w * scale));
     const height = Math.max(1, Math.round(region.h * scale));
     const um = (info.umPerPx.film ?? DEFAULT_UM_PER_PX) * (region.w / width);
-    this.fillGrain(low.segments, nodes, um);
-    const px = await this.gpu(async () => {
-      // pointwise chains read only their own pixels: the source is uploaded for the region alone
-      const { tex, owned } = await this.sourceTexture(low.root, region);
+    const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision, umOut: um };
+    const r = await this.gpu(async () => {
+      const g = await this.renderGraph(n.id, grid);
       try {
-        const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
-        const out = await this.chain.run(segs, tex, [region.x, region.y], { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision });
-        try {
-          return await read(out, width, height);
-        } finally {
-          this.rt.textures.release(out);
-        }
+        return { px: await read(g.tex, width, height), warnings: g.warnings };
       } finally {
-        if (owned) this.rt.textures.release(tex);
+        this.rt.textures.release(g.tex);
       }
     });
-    return { px, width, height, warnings: low.warnings };
+    return { px: r.px, width, height, warnings: r.warnings };
   }
 
   /**
