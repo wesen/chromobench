@@ -587,3 +587,64 @@ The guide text in every handback is byte-identical to the scratchpad file. The d
 ### Technical details
 - Handback sizes: 175,708 characters for the first and 175,791 for the re-send.
 - Repository HEAD when this diary was written: `b49ee56`. That commit is the orchestrator's; this agent made none.
+
+## Step 11: Implementation, stages 1–8: workspace, contract v0, mock engine, conformance
+
+Implementation started on a new branch `task/chb-002-contract` (from `task/chb-work-plan`). This step covers the guide's stages 1 to 8: the toolchain, the whole `@chromobench/contract` package, `engine-mock`, `conformance` and `tools/gen-docs`. It ends with the first milestone commit `a3eca46`, with 468 Vitest tests and 4 Playwright tests passing.
+
+### Prompt Context
+**User prompt (verbatim):** (orchestrator brief, summarised) Implement ticket CHB-002 "Contract and walking skeleton" in `/home/manuel/code/wesen/chromobench`: read the architecture doc §3–6 and §8 and the CHB-002 intern guide, settle every other guide's "Proposed contract additions" into contract v0 and record each decision in `packages/contract/CONTRACT-DECISIONS.md`; defaults for the §8.4 open questions (both RAW kinds, all capture setups, B&W later with `silver-density` reserved, files + ICC first, static PWA); stages 1–6 of the guide plus a minimal M1 demo; branch `task/chb-002-contract`, commit at milestones, no push; keep this diary.
+**Assistant interpretation:** Build working code for every stage, keep the contract stable enough for 003/004/005/006/007/009 to start in parallel; the guide is a map, not law.
+**Inferred user intent:** Unblock six parallel tickets with one compiled vocabulary, a mock engine and a conformance suite.
+**Commit (code):** a3eca46 — "CHB-002: workspace, contract v0, engine-mock, conformance suite, gen-docs"
+
+### What I did
+- Read the guide in full, the architecture doc §3–6 and §8, and every `Proposed contract additions` section (CHB-003…015; CHB-013 has none).
+- Toolchain: pnpm 10.15.1, Node 24.18. Pinned TypeScript 5.9.3 (not 7.0.2, the native port), Vitest 4.1.12, Vite 7.3.8, Playwright 1.65.0, @noble/hashes 2.4.0, @webgpu/types 0.1.74. `tsconfig.base.json` has the guide's flags plus `erasableSyntaxOnly` and `allowImportingTsExtensions`. Every relative import carries `.ts`, so Node runs the tools directly with type stripping; no tsx or build step.
+- `pnpm exec playwright install chromium` downloaded chromium-1254 (Playwright 1.65 does not use the cached 1181–1234 builds).
+- `tools/wgsl-check/check.spec.ts`: adapter + device, compile every WGSL file (the smoke kernel plus `packages/gpu/kernels/**` when it exists), a broken-WGSL case that must report an error, and the `[0,1,2,3] → [1,2,3,4]` compute kernel.
+- Contract files: `errors.ts units.ts domains.ts spectrum.ts spec.ts source.ts recipe.ts graph-types.ts registry.ts catalog/*.ts graph.ts paths.ts mutations.ts editlog.ts engine.ts eval.ts laws.ts index.ts`.
+- `engine-mock`: `tiff16.ts` (reader + writer), `ops.ts` (every op), `engine-mock.ts`, `m1.ts`. `tools/fixtures/make-m1.ts` wrote `fixtures/synthetic/m1-negative-96x64.tif` (37004 bytes, sha256 `29ffc4d5…`).
+- `conformance`: `generate.ts` (14 case kinds), `run.ts` (`runCases` without a framework, `runConformance` for Vitest), `mutants.ts` (5 mutants), `tiny-tiff.ts`.
+- `tools/gen-docs/main.ts` (+ `--check`), `snapshot.ts`, `contract-check.ts`; `tools/scripts/check-boundaries.ts`; `.github/workflows/ci.yml`.
+
+### Why
+- One file per catalog *group* rather than per area (four files). This is a cosmetic deviation; the generated docs are still one page per area.
+- Lint: a 40-line boundary script instead of ESLint + `no-restricted-imports`, which keeps the dependency count down. The rules are the guide's two plus "contract depends only on @noble/hashes".
+- Engines learn nodes through `Engine.adopt(defs)`. The architecture doc's `evaluate(NodeRef)` alone cannot give an engine the node definitions, and the guide's cross-realm rule ("send `closure(id)`, receiver calls `adopt`") made this the natural method.
+
+### What worked
+- WebGPU on SwiftShader headless: `adapter: google swiftshader`; 4/4 browser tests passed in 1.9 s.
+- The §6 trace numbers came out first time. Patch centre before: (0.3703, 0.4339, 0.5484); after +4 pt red: (0.3133, 0.4339, 0.5484). Every upper node had a run count of 1 after the lights change.
+- First full `pnpm test`: 465/468 passed. All 5 mutants were caught on the first run.
+
+### What didn't work
+- Scratch typecheck with a tsconfig in the scratchpad: `error TS2688: Cannot find type definition file for 'node'` (type roots resolve relative to the config). I switched to the root `tsc -p tsconfig.json` and filtered the output.
+- `tsc` then reported `mutations.ts(59,32): error TS2783: 'enabled' is specified more than once`. Fixed by adding `ExposureInput` (id + kind required, the rest optional) and building the full `Exposure` explicitly.
+- Runtime smoke: `EditLog.create` threw `E_RECIPE: missing finishing.values.clarity (+1 more)`. `defaultRecipe` now writes `finishing.values = {clarity: 0, clarity_radius_px: 40}`, so recipes are complete.
+- Conformance: `scan.flatField shape/region/determinism` failed with `Cannot read properties of undefined (reading 'slice')`. The mock read an absent optional `flat`. It is now an identity when `flat` is absent.
+
+### What I learned
+- The G channel of the trace is 0.43394 with the fixture's 16-bit codes (6554/65535 ≠ 0.1) and 0.43396 with exact T. Both are within 1e-4 of the guide's 0.4340, so the golden file keeps 0.4340 with tolerance 1e-4.
+- The "unsorted canonicalJSON" mutant only fails when a *user-supplied* object (cmy/box/point) arrives in another key order. `bindArgs` already fixes the top-level key order. The canonical-id case therefore reverses the keys of object-valued defaults.
+
+### What was tricky to build
+- Recipe paths and the registry referenced each other: `registerOp` checks that each argument's recipe path exists, while `settablePaths()` derives from the op arguments. The cycle is broken by `recipe.ts` holding `RECIPE_FIELDS` as plain data, with op-owned leaves marked `{kind:'op'}`. `registry.ts` imports that, and `paths.ts` imports both. A test asserts that every op-owned path has an owner, and `registerOp` refuses two owners of one path whose specs differ (for example `print.paper` on `print.expose` and `print.develop`).
+- Node-typed args (`Mask`, `Image[]`) hold node ids in `args` and are appended to `inputs` after the receiver. `adopt` therefore re-interns with only `inputs[0]` as the receiver, and the recomputed id must match.
+
+### What warrants a second pair of eyes
+- `checkArgValue` freezes the user's object for cmy/box/point without reordering its keys. Ids stay canonical because `canonicalJSON` sorts them, but the recipe stores the user's key order.
+- `EditLog.approve` mutates journal entries in place (`status`, `approvedBy`). The journal is append-only in membership, not in entry contents.
+
+### What should be done in the future
+- CHB-007: `defineOp` examples are only *parsed*; executing them is the DSL's job.
+- Real `E_STOCK_UNKNOWN` checks need CHB-004 packs (`ArgSpec.valuesFrom` is in place).
+
+### Code review instructions
+- Start at `packages/contract/src/index.ts`, then `registry.ts` (`registerOp`, `bindArgs`), `graph.ts` (`nodeId`, `Graph.intern`, `compile`), `editlog.ts`.
+- Validate with `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test && pnpm test:browser`.
+
+### Technical details
+- `pnpm test` → `Test Files 5 passed (5) / Tests 468 passed (468)`, 0.9 s.
+- `pnpm test:browser` (before the studio page existed) → 4 passed (1.9 s).
+- `contract:check` against a doctored baseline printed `breaking print.lights.logH range narrowed` and `breaking op print.old removed`.
