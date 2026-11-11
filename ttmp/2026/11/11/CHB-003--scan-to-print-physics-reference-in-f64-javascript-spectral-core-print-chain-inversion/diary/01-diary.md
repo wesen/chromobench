@@ -977,3 +977,52 @@ Stage 2 went in as commit 20e9c81. Stage 3 ported Chromogen's `spectral()` solve
 
 ### Technical details
 - Table node order: q → (q mod N, ⌊q/N⌋ mod N, ⌊q/N²⌋), 4 floats per node (c0, c1, c2, residual D).
+
+## Step 17: Reference engine, conformance, key range for CHB-005, §3.6 balance, contract requests
+
+Stage 3 went in as commit 5addf8e. I wrote the reference engine (`RefEngine`, exact mode) with one adapter per CHB-003 op, and it passes CHB-002's generated conformance suite on the first run (commit 9586105). After that I measured the solve-table key range under the base-weighted key for CHB-005, reproduced the §3.6 balance experiment's light numbers, and wrote the contract requests.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 14.
+**Assistant interpretation:** Finish stage 3: engine, conformance, balance, contract requests.
+**Inferred user intent:** see Step 14.
+**Commit (code):** 9586105 — "CHB-003: reference engine (exact mode) with op adapters; passes the conformance suite" (balance tests and the contract requests follow in the next commit).
+
+### What I did
+- `packages/core/src/ops/ops.ts`: `PhysicsEnv` (memoised stocks, forward models, print chains, viewings) and adapters for `source.open`, `source.pattern`, `invert.dyes`, `invert.classes`, `print.expose` (database neutral pack + filtration shift, aim lights), `print.lights`, `print.preflash`, `print.develop` (grade → morph gamma), `view.reflect`, `view.flare` (percent of paper white, adapted if downstream of view.adapt), `view.adapt`, `output.display` (scan-of-print gain 1/Y_paperwhite, Bradford to D65, OkLCh knee, sRGB OETF), and the values `measure.stats`, `measure.histogram`, `measure.densitometer`, `measure.patches`, `invert.classify`. Upstream context (film, paper, viewing light) comes from walking the receiver chain (`ctx.up(op)`).
+- `packages/core/src/engine-ref.ts`: `RefEngine` (same caching and region/scale sampling as the mock, so a region is bit-identical to the crop of the full result); `source.open` uses `readTiff` from `@chromobench/engine-mock`.
+- `test/engine-ref.test.ts`: `runConformance('reference', () => new RefEngine())` plus cross-checks: invert.dyes output equals `solveDyes` per pixel and channel 4 equals the residual; the print/view/output ops reproduce `makePrintChain` + `displayEncode` to 1e-12; densitometer visual = −log10 Y.
+- `explore/e6.ts` (scratch): `solveKeyRange` for dyes in [0, 2.6]³ with both keys. `explore/e7.ts`: the §3.6 balance experiment, then `test/balance.test.ts`.
+- `packages/core/CONTRACT-REQUESTS.md` with R1–R6.
+
+### Why
+- `print.lights.logH` is relative to the aim (contract CHB-003 #5), but no argument carries the aim, so the engine applies the aim lights inside `print.expose` and takes the aim as an engine option (R2).
+
+### What worked
+- `npx vitest run packages/core/test/engine-ref.test.ts`: 183 passed (the conformance cases plus 4). Full `pnpm test`: 741 passed, `pnpm typecheck` and `pnpm lint` clean.
+- Key range a = K⁻¹(D − D_base) over c ∈ [0, 2.6]³ (same under CHROMOGEN and SPEKTRAFILM): xt5-fitted/Gold 200 secant [−0.026, 2.694], base-weighted [−0.099, 2.588]; xt5/Portra 400 secant [−0.041, 2.686], base-weighted [−0.073, 2.587]; status-m secant [−0.019, 2.654], base-weighted [−0.038, 2.583]; white-led secant [−0.232, 5.125], base-weighted [−0.394, 3.069]. The Studio's A_RANGE [−0.25, 2.55] cuts the top of the secant key's range for narrowband scanners.
+- §3.6: the cast as a pure colour shift (mean removed) gives layer shifts (+0.166, +0.021, −0.187), lights fitted on the grey card move by (+0.085, +0.002, −0.079), and the worst ΔE00 along the scale is 2.43 (textbook 2.4), all as printed.
+
+### What didn't work
+- First balance run applied the 3,800 K cast with its mean: lights moved (0.042, −0.040, −0.117), the textbook values minus 0.038 in every layer. The textbook states the shifts "mean removed", and removing the mean reproduced its numbers exactly.
+- The density-shift arm does not reproduce: a constant paper-dye offset fitted to match the grey card leaves up to 19.6 ΔE00 (plateau 19.2 from +1 log H to white), not 14.6. The shape matches (plateau "near 14" in the text), the magnitude does not; Lab relative to the paper white gives 19.7. Left as an open question; no test asserts 14.6.
+- `pnpm typecheck` failed once: "packages/core/src/ops/ops.ts(41,15): error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is enabled." (constructor parameter properties). Rewrote `PhysicsEnv` with explicit fields.
+
+### What I learned
+- The repo's tsconfig forbids TS parameter properties (`erasableSyntaxOnly`).
+
+### What was tricky to build
+- `view.flare` and `output.display` need the paper and viewing light, which are upstream; walking `inputs[0]` back through the graph finds them. Without them (conformance patterns) the defaults Portra Endura / D50 apply.
+
+### What warrants a second pair of eyes
+- `print.preflash` takes `amount` as φ relative to H = 1 at the aim's grey card (x ≈ 0); spektrafilm's base-only φ (`preflashPhi`) is available but not wired to the op.
+- `measure.densitometer` uses Status M for paper dyes until CHB-004 ships Status A.
+
+### What should be done in the future
+- The tabulated reference mode, the Gold 200 class percentages, and the 14.6 density-shift number.
+
+### Code review instructions
+- `npx vitest run packages/core`; start at `packages/core/src/engine-ref.ts` and `packages/core/src/ops/ops.ts`.
+
+### Technical details
+- `EngineCaps.conventions` = `core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean` by default.
