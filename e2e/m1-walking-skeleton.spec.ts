@@ -25,7 +25,7 @@ function near(a: number[] | null, b: number[], tol = 1e-4): void {
 test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?engine=mock');
 
   // 1. open the fixture: frame.add with the default recipe, by 'auto'
   await page.setInputFiles('#file', FIXTURE);
@@ -87,7 +87,7 @@ test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page })
 });
 
 test('M1: a stale proposal is refused with E_STALE', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?engine=mock');
   await page.setInputFiles('#file', FIXTURE);
   await expect(page.locator('#status')).toContainText('rendered');
   await page.evaluate(() => window.chromobench.propose({ 'print.lights.logH': [0.1, 0, 0] }));

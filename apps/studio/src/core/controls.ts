@@ -42,7 +42,7 @@ export interface ControlModel {
   valueText(v: unknown, component?: number): string;
 }
 
-/** Placeholder stock lists until CHB-004's data packs provide valuesFrom lists. */
+/** valuesFrom lists: placeholders for the mock engine; the host replaces them from the data packs (setKnownValues). */
 export const KNOWN_VALUES: Record<string, string[]> = {
   'stocks:film': ['kodak_portra_400', 'kodak_portra_160', 'kodak_gold_200', 'kodak_ektar_100', 'fuji_pro_400h'],
   'stocks:print': ['kodak_portra_endura', 'kodak_supra_endura', 'fujicolor_crystal_archive_typeII'],
@@ -50,6 +50,11 @@ export const KNOWN_VALUES: Record<string, string[]> = {
   scanners: ['xt5-rgb-led', 'epson-v850', 'frontier-sp3000'],
   lamps: ['TH-KG3', 'LED-RGB'],
 };
+
+/** Replaces valuesFrom lists before controls are generated (CHB-023: from CHB-004's packs). */
+export function setKnownValues(lists: Record<string, string[]>): void {
+  for (const [k, v] of Object.entries(lists)) if (v.length) KNOWN_VALUES[k] = [...v];
+}
 
 const UNIT_TEXT: Partial<Record<Unit, string>> = {
   point: 'pt', CC: 'CC', s: 's', stop: 'st', logH: 'log H', percent: '%', fraction: '', um: 'µm', K: 'K', mired: 'mired', deg: '°', none: '', px: 'px',

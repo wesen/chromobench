@@ -1,9 +1,15 @@
-// Boot: open storage, create the core, render <App/>, register the service worker, and expose the
-// test/agent hook `window.chromobench` (CHB-007/008 replace `propose` with a real DSL eval).
-import type { EditLog, LoggedMutation, Mutation } from '@chromobench/contract';
+// Boot: open storage, build the engine, create the core, render <App/>, register the service worker,
+// and expose the test/agent hook `window.chromobench` (CHB-007/008 replace `propose` with a real DSL eval).
+// Engine (CHB-023): ?engine=auto (default: GPU when WebGPU works, else the reference engine) | gpu |
+// reference | mock. ?long=N sets the GPU working image's long side (0 = the file's own size).
+import type { EditLog, Engine, LoggedMutation, Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { createRoot } from 'react-dom/client';
-import { Studio } from './core/studio.ts';
+import { setKnownValues } from './core/controls.ts';
+import { Studio, type StudioHost } from './core/studio.ts';
+import { firstPrint } from './host/first-print.ts';
+import type { StudioEngine } from './host/studio-engine.ts';
+import { addScanExtensions } from './storage/fsa.ts';
 import { memoryKV, openIdb, type KV } from './storage/db.ts';
 import { Opfs } from './storage/opfs.ts';
 import { App } from './ui/App.tsx';
@@ -18,14 +24,43 @@ try {
   // no stored preference
 }
 
-const engine = new MockEngine();
+const params = new URLSearchParams(location.search);
+const want = params.get('engine') ?? 'auto';
+const rootEl = document.getElementById('root')!;
+let engine: Engine;
+let host: StudioHost;
+if (want === 'mock') {
+  engine = new MockEngine();
+  host = { label: 'mock engine (no physics)' };
+} else {
+  rootEl.innerHTML = '<p class="boot">Starting the engine…</p>';
+  const say = (s: string): void => { rootEl.innerHTML = `<p class="boot">${s}</p>`; };
+  try {
+    const { createHostEngine } = await import('./host/engines.ts');
+    const long = params.get('long');
+    const h = await createHostEngine({ want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), onStatus: say });
+    setKnownValues(h.catalog);
+    addScanExtensions(h.extensions);
+    engine = h.engine;
+    const se: StudioEngine = h.engine;
+    host = {
+      label: se.label,
+      firstPrint: (e, g, d) => firstPrint(e, g, d, { integrate: h.integrate }),
+      notes: (sha) => se.notes.get(sha)?.notes ?? null,
+      settings: h.settings,
+    };
+  } catch (e) {
+    rootEl.innerHTML = `<p class="boot">The engine did not start: ${e instanceof Error ? e.message : String(e)}.<br/>Try <a href="?engine=reference">the reference engine</a> or <a href="?engine=mock">the mock engine</a>.</p>`;
+    throw e;
+  }
+}
 let kv: KV;
 try {
   kv = await openIdb();
 } catch {
   kv = memoryKV();
 }
-const studio = new Studio(engine, kv, await Opfs.open(kv));
+const studio = new Studio(engine, kv, await Opfs.open(kv), host);
 await studio.init();
 
 createRoot(document.getElementById('root')!).render(
@@ -55,6 +90,13 @@ const hook = {
   studio,
   get log(): EditLog | null { return studio.session?.log ?? null; },
   get engine() { return engine; },
+  /** Engine label as the status line shows it. */
+  get engineLabel(): string { return studio.s.engineLabel; },
+  /** Exports the current print (sRGB or Display P3, 8-bit PNG); returns its size, not the bytes. */
+  async exportPng(space: 'srgb' | 'display-p3' = 'srgb') {
+    const x = await studio.exportPng(space);
+    return x ? { width: x.width, height: x.height, bytes: x.blob.size, type: x.blob.type, fileName: x.fileName } : null;
+  },
   /** Waits for renders, probes and measurements in flight. */
   idle: (): Promise<void> => studio.idle(),
   /** Display-encoded value of a document pixel in the last presented result. */
@@ -62,6 +104,36 @@ const hook = {
   /** 8-bit value the presenter shows for a document pixel, read back from the canvas pipeline. */
   canvasPixel: (x: number, y: number): Promise<number[] | null> => studio.canvasPixel(x, y),
   chainRuns: () => studio.chainRuns(),
+  /**
+   * Frame times on this machine (CHB-023 stage 5): `steps` drag previews of the enlarger time
+   * (draft pass, ≈ 0.5 MP), one full screen pass after release, and an export at the working size.
+   * Run in the console with a scan open: `await chromobench.bench()`.
+   */
+  async bench(steps = 12) {
+    const s = studio.session;
+    if (!s) return null;
+    await studio.idle();
+    const t0 = s.log.state.print.enlarger.time_s;
+    const drafts: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      const a = performance.now();
+      studio.gesture.drag('print.enlarger.time_s', Number((t0 * 2 ** ((i % 2 ? 1 : -1) / 6)).toFixed(3)), 'bench');
+      await studio.idle();
+      drafts.push(performance.now() - a);
+    }
+    const b = performance.now();
+    studio.gesture.cancel();
+    await studio.idle();
+    const screen = performance.now() - b;
+    const c = performance.now();
+    const x = await studio.exportPng('srgb');
+    const exportMs = performance.now() - c;
+    drafts.sort((p, q) => p - q);
+    return {
+      engine: studio.s.engineLabel, frame: `${s.width}×${s.height}`, draftMedianMs: Math.round(drafts[drafts.length >> 1]!), draftMaxMs: Math.round(drafts.at(-1)!),
+      screenMs: Math.round(screen), exportMs: Math.round(exportMs), exported: x ? `${x.width}×${x.height}` : null,
+    };
+  },
   /** frame.edit({path: value}) from an eval: one tx, by 'agent'. */
   propose(edits: Record<string, unknown>, why?: string): LoggedMutation[] {
     const ms: Mutation[] = Object.entries(edits).map(([path, value]) => ({ op: 'set', path, value }));

@@ -27,6 +27,8 @@ export function ViewBar(): ReactElement {
   const fit = useStudioState((s) => s.viewport.fit);
   const status = useStudioState((s) => s.status);
   const error = useStudioState((s) => s.error);
+  const engineLabel = useStudioState((s) => s.engineLabel);
+  const notes = useStudioState((s) => s.notes);
   return (
     <div className="tools">
       <div className="seg" role="radiogroup" aria-label="View">
@@ -38,6 +40,7 @@ export function ViewBar(): ReactElement {
         {[1, 2, 4].map((z) => <button key={z} onClick={() => st.zoomPreset(z)}>{z}:1</button>)}
       </div>
       <span className="sp" />
+      <span className="pill" id="engine" title={notes.length ? notes.join('\n') : 'engine'}><span>engine</span><b>{engineLabel}</b></span>
       <span className="lbl" id="status" role="status" style={error ? { color: 'var(--accent)' } : undefined}>{status}</span>
     </div>
   );
@@ -168,7 +171,7 @@ export function Viewer(): ReactElement {
   return (
     <div className="canvas-wrap" ref={wrap}>
       {!hasFrame && (
-        <div className="drop" id="drop"><div><b>Open a scan</b><br />16-bit RGB TIFF, e.g. fixtures/synthetic/m1-negative-96x64.tif<br />or add a folder of scans in the library.</div></div>
+        <div className="drop" id="drop"><div><b>Open a scan</b><br />TIFF or PNG (16-bit), DNG or camera RAW<br />with Open files…, or add a folder of scans in the library.</div></div>
       )}
       <canvas key={fallback ?? 'gpu'} id="view" ref={canvas} className="viewer" tabIndex={0} role="img"
         aria-label={hasFrame ? `${frameName}, ${tool ?? view} view` : 'no frame'}
@@ -188,9 +191,11 @@ export function Readout(): ReactElement {
   const pinned = useStudioState((s) => s.pinned);
   const classes = useStudioState((s) => s.classes);
   const view = useStudioState((s) => s.view);
+  const notes = useStudioState((s) => s.notes);
   return (
     <div className="sreadout" id="readout" aria-live="off">
       {!p && <span>move over the print to read values · arrows move the probe · p pins it</span>}
+      {!p && notes.length > 0 && <span className="mut" id="notes">{notes.join(' · ')}</span>}
       {p && (
         <>
           <span>x <b>{p.at.x}</b> y <b>{p.at.y}</b></span>

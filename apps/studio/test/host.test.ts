@@ -1,0 +1,192 @@
+// CHB-023 host pieces without a browser: the StudioEngine's host ops (output.frame orientation and
+// crop, view.inspect, P3 re-encode) against the mock engine's own implementations, the automatic first
+// print on core's RefEngine (the frame integrates to grey), the test-strip bands and the time grid.
+import {
+  compile, defaultRecipe, Graph, ORIENTATIONS, sha256Hex,
+  type Engine, type EngineCaps, type EvalTarget, type FrameRecipe, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
+} from '@chromobench/contract';
+import { CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine } from '@chromobench/core';
+import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
+import { describe, expect, it } from 'vitest';
+import { firstPrint, gridTime, integratedExposure, measureExposure } from '../src/host/first-print.ts';
+import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
+import { evaluateBands } from '../src/core/scheduler.ts';
+import { bandBoxes, stripRecipe, stripValues } from '../src/core/tools.ts';
+
+const bytes = makeM1Tiff();
+const sha = sha256Hex(bytes);
+
+/** The mock engine without the ops the StudioEngine provides, so the wrapper must compute them. */
+class Without implements Engine {
+  readonly id = 'mock' as const;
+  readonly inner = new MockEngine();
+  private readonly drop: Set<string>;
+  constructor(drop: string[]) {
+    this.drop = new Set(drop);
+  }
+  capabilities(): EngineCaps {
+    const c = this.inner.capabilities();
+    return { ...c, ops: c.ops.filter((o) => !this.drop.has(o)) };
+  }
+  open(s: SourceRef): Promise<SourceInfo> { return this.inner.open(s); }
+  adopt(d: readonly NodeDef[]): void { this.inner.adopt(d); }
+  evaluate(n: NodeRef, t: EvalTarget): Promise<ImageResult> { return this.inner.evaluate(n, t); }
+  measure(n: NodeRef): Promise<Measurement> { return this.inner.measure(n); }
+  prepare(): Promise<void> { return Promise.resolve(); }
+  dispose(): void {}
+}
+
+const services = (primary: Without): HostServices => ({
+  decode: async (b, s, name) => {
+    const info = await primary.inner.open({ kind: 'file', sha256: s, name, bytes: b });
+    return { info, data: new Float32Array(0), full: { width: info.width, height: info.height }, notes: ['test'] };
+  },
+  register: () => undefined,
+  classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
+  defaultSigma: DEFAULT_SIGMA_D,
+});
+
+async function both(drop: string[]): Promise<{ wrap: StudioEngine; mock: MockEngine; g: Graph; info: SourceInfo }> {
+  const p = new Without(drop);
+  const wrap = new StudioEngine(p, services(p), 'test');
+  const info = await wrap.open({ kind: 'file', sha256: sha, name: 'm1.tif', bytes });
+  const mock = new MockEngine();
+  await mock.open({ kind: 'file', sha256: sha, bytes });
+  const g = new Graph();
+  g.registerSource(info);
+  return { wrap, mock, g, info };
+}
+
+const read = async (e: Engine, g: Graph, id: string, t: EvalTarget): Promise<{ w: number; h: number; d: number[] }> => {
+  e.adopt(g.closure(id));
+  const r = await e.evaluate(g.get(id)!, t);
+  return { w: r.width, h: r.height, d: Array.from(await r.read()) };
+};
+
+describe('StudioEngine host ops', () => {
+  it('output.frame: every orientation, with a crop and a region, equals the mock engine', async () => {
+    const { wrap, mock, g } = await both(['output.frame']);
+    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    for (const o of ORIENTATIONS) {
+      const rr: FrameRecipe = { ...r, scan: { ...r.scan!, orientation: o, crop: { x: 10, y: 6, w: 70, h: 50 } } };
+      const n = compile(rr, g);
+      const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
+      expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
+      const info = n.info as { width: number; height: number };
+      const region = { x: 3, y: 5, w: info.width - 9, h: info.height - 11 };
+      const part = await read(wrap, g, n.id, { scale: 'full', precision: 'preview', region });
+      expect(part, `${o} region`).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview', region }));
+    }
+  });
+
+  it('unorientBox maps the whole oriented frame onto the whole receiver', () => {
+    for (const o of ORIENTATIONS) {
+      const swap = ['cw90', 'ccw90', 'transpose', 'transverse'].includes(o);
+      expect(unorientBox(o, { x: 0, y: 0, w: swap ? 40 : 60, h: swap ? 60 : 40 }, 60, 40), o).toEqual({ x: 0, y: 0, w: 60, h: 40 });
+    }
+  });
+
+  it('view.inspect: every inspection view renders as display RGB in [0, 1]', async () => {
+    const { wrap, g } = await both(['view.inspect']);
+    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const top = compile(r, g);
+    const def = (op: string) => g.closure(top.id).find((x) => x.op === op)!;
+    const src = g.intern(def('source.open').op, def('source.open').inputs, def('source.open').args).node;
+    const dyes = g.intern(def('invert.dyes').op, def('invert.dyes').inputs, def('invert.dyes').args).node;
+    const classes = g.intern('invert.classes', [dyes.id], {}).node;
+    for (const [inner, mode] of [[src, 'negative'], [dyes, 'dyes'], [classes, 'classes']] as const) {
+      const n = g.intern('view.inspect', [inner.id], { mode }).node;
+      const px = await read(wrap, g, n.id, { scale: 0.5, precision: 'preview' });
+      expect(px.d.length, mode).toBe(px.w * px.h * 3);
+      expect(px.d.every((v) => v >= 0 && v <= 1), mode).toBe(true);
+    }
+  });
+
+  it('P3 re-encode keeps white and black and greys, and widens nothing inside sRGB', () => {
+    const out = srgbToP3(Float32Array.from([1, 1, 1, 0, 0, 0, 0.5, 0.5, 0.5, 1, 0, 0]), 4, 3);
+    for (const k of [0, 1, 2]) {
+      expect(out[k]).toBeCloseTo(1, 5);
+      expect(out[3 + k]).toBeCloseTo(0, 6);
+      expect(out[6 + k]).toBeCloseTo(0.5, 4);
+    }
+    // sRGB red is inside P3: less saturated there (r < 1, g > 0)
+    expect(out[9]!).toBeLessThan(1);
+    expect(out[10]!).toBeGreaterThan(0);
+  });
+
+  it('a node the engine cannot compute names the missing ops', async () => {
+    const { wrap, g } = await both(['mask.paint']);
+    const n = g.intern('mask.paint', [g.intern('source.open', [], { source: sha, encoding: 'linear' }).node.id], { strokes: '[]' }).node;
+    wrap.adopt(g.closure(n.id));
+    await expect(wrap.evaluate(n, { scale: 'full', precision: 'preview' })).rejects.toMatchObject({ code: 'E_NOT_IMPLEMENTED', message: expect.stringContaining('mask.paint') });
+  });
+});
+
+describe('first print (core RefEngine)', () => {
+  const integrate = (latd: number[], alpha: number) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as [number, number, number];
+
+  it('integrates the frame to grey: real mode, time on the 1/6-stop grid, exposure ≈ aim', async () => {
+    const e = new RefEngine();
+    const info = await e.open({ kind: 'file', sha256: sha, bytes });
+    const g = new Graph();
+    g.registerSource(info);
+    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const r = await firstPrint(e, g, r0, { integrate });
+    expect(r.print.enlarger.mode).toBe('real');
+    expect(gridTime(r.print.enlarger.time_s)).toBe(r.print.enlarger.time_s);
+    expect(r.print.lights.auto).toMatchObject({ method: 'integrate', alpha: 1, applied: true, logH: r.print.lights.logH });
+    const x = await measureExposure(e, g, r);
+    for (const v of x) expect(Math.abs(v)).toBeLessThan(0.01);
+    // the colour remainder is in the lights, the density in the time: the lights' mean is within half a grid step
+    const m = (r.print.lights.logH[0] + r.print.lights.logH[1] + r.print.lights.logH[2]) / 3;
+    expect(Math.abs(m)).toBeLessThanOrEqual(Math.log10(2) / 12 + 1e-9);
+  });
+
+  it('integratedExposure: log of the mean of 10^x, clamped, NaN skipped', () => {
+    expect(integratedExposure([0, 0, 0, 0, 0, 0], 2)).toEqual([0, 0, 0]);
+    const v = integratedExposure([1, 0, -1, NaN, 0, 0, -1, 0, 1], 3);
+    expect(v[0]).toBeCloseTo(Math.log10((10 + 0.1) / 2), 12);
+    expect(integratedExposure([9, 9, 9], 1)[0]).toBeCloseTo(2, 12);
+  });
+
+  it('gridTime: 10 s · 2^(k/6), clamped to 2…120 s', () => {
+    expect(gridTime(10)).toBe(10);
+    expect(gridTime(11.3)).toBe(11.225);
+    expect(gridTime(0.5)).toBe(gridTime(2));
+    expect(gridTime(1000)).toBeLessThanOrEqual(120);
+  });
+});
+
+describe('test strip bands', () => {
+  it('bands tile the frame; each band of the composite is the print with its own value', async () => {
+    const e = new MockEngine();
+    const info = await e.open({ kind: 'file', sha256: sha, bytes });
+    const g = new Graph();
+    g.registerSource(info);
+    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const values = stripValues('time', r.print.enlarger.time_s, 1 / 3, 5);
+    const boxes = bandBoxes(5, info.width, info.height);
+    expect(boxes.reduce((s, b) => s + b.w, 0)).toBe(info.width);
+    const bands = values.map((v, i) => {
+      const n = compile(stripRecipe('time', r, v), g);
+      e.adopt(g.closure(n.id));
+      return { node: n, box: boxes[i]! };
+    });
+    const c = await evaluateBands(e, bands, { scale: 'full', precision: 'preview' });
+    expect([c.result.width, c.result.height]).toEqual([info.width, info.height]);
+    for (const b of bands) {
+      const own = await e.evaluate(b.node, { scale: 'full', precision: 'preview', region: b.box });
+      const d = await own.read();
+      const x = b.box.x + 1, y = 7;
+      const i = (y * info.width + x) * 3, j = (y * b.box.w + 1) * 3;
+      expect(Array.from(c.data.slice(i, i + 3))).toEqual(Array.from(d.slice(j, j + 3)));
+    }
+  });
+
+  it('stripRecipe changes only the varied quantity', () => {
+    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    expect(stripRecipe('time', r, 12.3).print.enlarger.time_s).toBe(12.3);
+    const f = stripRecipe('filtration.m', r, 5).print.enlarger.filtration;
+    expect(f).toEqual({ ...r.print.enlarger.filtration, m: 5 });
+  });
+});

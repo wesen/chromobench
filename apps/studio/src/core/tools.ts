@@ -29,6 +29,22 @@ export function stripMutation(vary: StripVary, r: FrameRecipe, v: number): Mutat
   return { op: 'set', path: 'print.enlarger.filtration', value: { ...r.print.enlarger.filtration, [k]: Number(v.toFixed(2)) } };
 }
 
+/** The recipe one band of the strip prints with (the same change stripMutation writes). */
+export function stripRecipe(vary: StripVary, r: FrameRecipe, v: number): FrameRecipe {
+  const e = r.print.enlarger;
+  if (vary === 'time') return { ...r, print: { ...r.print, enlarger: { ...e, time_s: Number(v.toFixed(4)) } } };
+  const k = vary.slice(-1) as 'c' | 'm' | 'y';
+  return { ...r, print: { ...r.print, enlarger: { ...e, filtration: { ...e.filtration, [k]: Number(v.toFixed(2)) } } } };
+}
+
+/** Band boxes across a frame of width w: vertical strips, left to right (the order of stripValues). */
+export function bandBoxes(count: number, w: number, h: number): { x: number; y: number; w: number; h: number }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const x0 = Math.floor((i * w) / count), x1 = Math.floor(((i + 1) * w) / count);
+    return { x: x0, y: 0, w: Math.max(1, x1 - x0), h };
+  });
+}
+
 /** Arguments of the mock/CHB-010 darkroom.testStrip op (step in the varied quantity's display unit). */
 export function testStripArgs(vary: StripVary, step: number, count: number): Record<string, unknown> {
   return { vary, steps: count, step, direction: 'vertical' };
