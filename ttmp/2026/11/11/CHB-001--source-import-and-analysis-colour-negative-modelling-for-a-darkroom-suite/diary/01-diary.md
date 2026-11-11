@@ -693,3 +693,85 @@ confirmation"; the DSL worker task stays moved to CHB-008.
 
 - DR-1: QuickJS-in-WASM (in a worker) vs plain Web Worker + CSP in a sandboxed iframe. DR-2: QuickJS sync build with
   deferred host promises vs the asyncify build.
+
+## Step 11: CHB-017 and CHB-004 merged; data switch, CHB-010, CHB-011 and the demo (CHB-023) started
+
+CHB-017 (contract 0.2, one physics) and CHB-004 (spektrafilm data packs) finished. This step merged both into
+`task/ui-guides`, ran every check (1936 unit, 42 browser, all green), and started four implementation agents: the
+data switch (CHB-017 stage 3), the M2 slices of CHB-010 (enlarger, printer lights) and CHB-011 (encoders, colour
+management, display, 16-bit GPU export), and a new ticket CHB-023, a demo that puts the real engine behind the
+existing React studio so the user can show his father something soon and iterate.
+
+### Prompt Context
+
+**User prompt (verbatim):** "how far are we? at what point can I show something to my dad (even incomplete, but
+showcasing some of the functionality) so we can iterate?", then "do we need to wait for subagents or so?", then
+"commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)".
+**Assistant interpretation:** Get to a demo as early as possible without waiting for the shell-based studio;
+keep committing and logging.
+**Inferred user intent:** Put real functionality in front of the photographer early and let his feedback steer.
+**Commit (code):** db11105 — "CHB-023: demo ticket (current studio on the real engine)"; merges 5d8ec90
+(task/chb-017-closeout), 09733fe (task/chb-004-data)
+
+### What I did
+
+- `git merge --no-ff task/chb-017-closeout`: one conflict in CHB-003 `tasks.md` (my Step-9 annotations vs CHB-017
+  checking j90u/i839); took ours and rewrote "moved to CHB-017 (stage 2, running)" → "done in CHB-017 (99b5f57)".
+- `git merge --no-ff task/chb-004-data`: clean. `pnpm install --prefer-offline`.
+- Checks: typecheck clean; lint "import boundaries ok (88 file checks)"; gen:check ok (18 files); contract:check
+  "20 change(s), 4 breaking" (0.1.0 → 0.2.0, allowed under 0.x, each with a change note); `pnpm test` "42 passed
+  (42) files, 1936 passed (1936)" (1865 from CHB-017 + 71 from packages/data); `STUDIO_PORT=4431 CI=1 pnpm
+  test:browser` "42 passed (47.8s)".
+- Read the CHB-010 and CHB-011 guides' stage lists to scope the M2 slices (CHB-010 stages 1–2; CHB-011 stages 1–3
+  plus the moved GPU 16-bit export and tiled driver).
+- Created CHB-023 with 9 tasks and committed before launching (lesson from Step 8), then launched four worktree
+  agents: data switch (sonnet; `task/chb-017-data-switch`), CHB-010 (`task/chb-010-printing`), CHB-011
+  (`task/chb-011-output`), CHB-023 (`task/chb-023-demo`). Each got its own browser-test port (4441, 4451, 4461,
+  4471) because of the stale server on 4173.
+
+### Why
+
+- The demo does not need to wait: signed filtration and the shared physics are merged, so the print ops work on the
+  real engine now; CHB-010's refinements and CHB-011's 16-bit export slot in when they land (the demo exports 8-bit
+  PNG behind a swappable function).
+- The demo uses the React studio although CHB-019 replaces it: its engine wiring, storage and presenter carry over,
+  and the photographer's feedback shapes CHB-019/CHB-020.
+
+### What worked
+
+- Both merges and all checks.
+
+### What didn't work
+
+- No failures.
+
+### What I learned
+
+- CHB-017 report: export display vs core exact improved from 1.10 to 0.05 levels by integrating per pixel; preview
+  vs core exact is 1.59 levels, the same as core's own tabulated mode (table interpolation, not GPU error).
+
+### What was tricky to build
+
+- Four agents touch neighbouring areas: data switch (core index, gpu data.ts), CHB-010 (core print chain), CHB-011
+  (new packages/output, core print/colour.ts and gamut.ts, output.wgsl), CHB-023 (apps/studio, boundary exception).
+  Each prompt names the others' areas; the demo passes `data:` explicitly rather than changing defaults.
+
+### What warrants a second pair of eyes
+
+- CHB-017's six "(review)" decisions in packages/contract/CONTRACT-DECISIONS.md (signed filtration range −100…200;
+  aimView duplicating view.illuminant in node ids; cam16-ucs renamed to oklch; ring-around default 4 pt; per-pixel GPU
+  export cost unmeasured; stock ranking golden only under Chromogen conventions).
+- CHB-004's licence questions for the user (commercial use, GPL reach of TS ports, hanatos/CIE/filter licences, the
+  name, illustrative pack licence).
+
+### What should be done in the future
+
+- Merge the four branches as they land; then CHB-019 when CHB-018 lands; try the demo on a real GPU.
+
+### Code review instructions
+
+- `git log --first-parent task/ui-guides`; CHB-017 diary Steps 2–3; CHB-004 diary Steps 13–15.
+
+### Technical details
+
+- Running agents: CHB-018 (shell), data switch, CHB-010, CHB-011, CHB-023.
