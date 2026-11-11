@@ -5,3 +5,6 @@ export { Host, PRINT_OPTIONS, dslOps, suggest, type HandleInfo } from './host.ts
 export { renderYaml, fmtNum, params, docLine } from './results/yaml.ts';
 export { assemble } from './results/assemble.ts';
 export { encodePng } from './results/png.ts';
+export { usageReport, formatUsage, type UsageReport } from './telemetry.ts';
+export { docsProvider } from './docs/provider.ts';
+export { VOCABULARY } from './docs/vocabulary.ts';
