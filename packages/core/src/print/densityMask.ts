@@ -10,7 +10,7 @@
 // H_ref = the frame's smallest H_m (the densest area of the negative, the print's brightest highlight)
 // gets no mask density, so d_m ≥ 0 everywhere: a physical mask that keeps the highlights and lifts the
 // shadows; the printer re-times the overall density, as in the darkroom. The `same`-polarity and
-// highlight (threshold) masks need arguments contract 0.2 does not have (CHB-010 contract request C7).
+// highlight (threshold) masks need arguments contract 0.2 does not have (CHB-010 contract request C5).
 import { gaussianBlur1 } from './masks.ts';
 
 /** Default film pixel pitch when an image carries no umPerPx.film (packages/gpu DEFAULT_UM_PER_PX). */
