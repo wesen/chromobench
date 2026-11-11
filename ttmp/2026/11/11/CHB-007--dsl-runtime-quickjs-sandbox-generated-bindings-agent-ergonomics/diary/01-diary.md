@@ -836,3 +836,201 @@ The handed-back CHB-007 guide equals the scratchpad file except for whitespace o
 
 ### Technical details
 - The CHB-007 guide in the handback hashes to `e0263a03…f4`, and the file to `e0772376…8e`. The only difference is two spaces on line 78 of the file.
+
+## Step 16: Implementation start: branch, package, orientation, and the four cg16 spike claims as tests
+
+Implementation of CHB-007 starts here (Phase 1 parallel track). I created the branch, read the common brief, the intern guide, the frozen contract v0 (registry, graph, editlog, mutations, eval, errors), the mock engine and the spike scripts, created `packages/dsl` with the pinned QuickJS 0.32.0 packages, and settled the four claims of task cg16 with tests before building anything on the library.
+
+### Prompt Context
+**User prompt (verbatim):** not available to this agent; the orchestrator's task message (not the user's words) was: "Implement CHB-007, the DSL runtime (`packages/dsl`). First read the common brief and follow it … Stages: 1. the QuickJS sandbox: `quickjs-emscripten`, using the sync build with host promises as the guide's DR-2 recommends; 2. a prelude generated from the registry via `allOps()`, `bindArgs` and `Graph.intern`; 3. result shaping: YAML, tables, looks, context block, structured errors with a fix; 4. generated docs/reference, extending `tools/gen-docs`. Engine and edits: run everything against the mock engine. Edits go through `EditLog.propose`. … open task `cg16` lists four spike claims. Turn them into tests that settle each one." A later coordinator reminder: "keep your CHB diary as you work, in the diary skill format, as a factual log written as you go."
+**Assistant interpretation:** Build packages/dsl in four stages against engine-mock, with tests; settle cg16 by tests.
+**Inferred user intent:** A working, tested DSL runtime CHB-008/009 can call, without changing the contract.
+
+### What I did
+- `git checkout -b task/chb-007-dsl`.
+- Dumped the registry (temporary script `packages/engine-mock/dump.tmp.ts`, deleted after) to see every op's `on`, `domainIn`, `domainOut`, `dsl`, recipe paths and defaults.
+- Wrote `packages/dsl/package.json`: deps `@chromobench/contract`, `quickjs-emscripten-core@0.32.0`, `@jitl/quickjs-wasmfile-release-sync@0.32.0`; dev deps `@chromobench/engine-mock`, `@jitl/quickjs-wasmfile-release-asyncify@0.32.0` (only for the cg16 test). `pnpm install` → done in 977 ms; lockfile changed.
+- Wrote `packages/dsl/test/spike-claims.test.ts`, one `describe` per cg16 claim.
+- `npx vitest run packages/dsl/test/spike-claims.test.ts` → 5 passed (7.06 s).
+
+### Why
+- The guide's §5.3 rests on library behaviour; testing it first means a variant upgrade that changes it fails in one obvious place.
+
+### What worked
+- Claim 1 (asyncify after an await): confirmed. The first `executePendingJobs()` returns without error while the promise is `pending`; after a 50 ms sleep and a second pump it is `fulfilled` with 10. So the call completes, but the host gets no signal of when; DR-2 (sync variant) stands.
+- Claim 2 (`import('x')`): `import('x')` does not throw synchronously; it returns a promise that rejects after `executePendingJobs` with an `*Error` whose message names `x`.
+- Claim 3 (OOM limit): with `memoryLimitBytes` of both 32 MiB and 64 MiB, `const a=[]; for(...) a.push({i})` fails with exactly `InternalError: out of memory`, and `rt.dispose()` does not throw. The diary's "observed at 64 MiB not 32" does not reproduce: 32 MiB works too.
+- Claim 4 (WRITE_RE): the source line 4449 is `const WRITE_RE = /\blab\s*\.\s*(write|remove|export|useAsScene)\b/;`. The test parses it from the file and matches `lab.write(`, `lab.remove(`, `lab.export(`, `lab.useAsScene(`, and shows `lab["wr" + "ite"]` is not matched.
+
+### What didn't work
+- My first attempts to run a multi-command shell line (heredoc + cp + node) were refused by the worktree guard: "this command is too complex to verify that it stays inside the worktree". Recovered by using the Write tool and plain single commands.
+
+### What I learned
+- `darkroom.testStrip` in the mock varies bands along x when `direction: 'vertical'` (cols = steps); ring-around is 3×3. Needed for look numbers.
+- `print.lights.logH` has the redirect `points` (scale 0.025); `time` is not a redirect of `time_s`, and `closest('time', …)` has a budget of 1 edit, so a prefix rule is needed for the guide's `time → time_s` did-you-mean.
+
+### What was tricky to build
+- Nothing yet.
+
+### What warrants a second pair of eyes
+- The cg16 test reads a CHB-001 source file by relative path from `packages/dsl/test`; it fails if `ttmp/` moves.
+
+### What should be done in the future
+- Check task cg16 once committed.
+
+### Code review instructions
+- `npx vitest run packages/dsl/test/spike-claims.test.ts`.
+
+### Technical details
+- Node v24.18.0, pnpm 10.15.1, vitest 4.1.12.
+
+## Step 17: Stage 1 and most of stages 2–3: sandbox, pump, prelude, host bridge, YAML results
+
+I wrote the runtime in one pass: the prelude (guest code), the host dispatcher, the session with its pump, YAML rendering, looks, PNG encoding and diagnostics. A probe test that ran 29 typical agent mistakes and idioms printed sensible results on the first run; three small fixes followed. Then the stage 1 sandbox tests: 12 pass.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Commit (code):** cc04013 — "CHB-007: QuickJS sandbox, eval pump, prelude, host bindings, results; spike-claim tests (cg16)"
+
+### What I did
+- `src/prelude/prelude.ts`: the prelude as a `String.raw` template (no backticks or `${` inside). It is evaluated once to a function and called with two host functions, `host(name, json) → json` and `hostEval(id) → Promise<json>`, which stay in its closure; it returns private hooks `{begin, run, memInfo, probe}` that only the host holds. It installs `cb`, `frame` (getter; `E_NO_FRAME` when unbound), `units`, `mem`, `console`, and a seeded mulberry32 `Math.random` defined non-writable, non-configurable.
+- Handle proxies per goja-cv: `then` awaitable, `Symbol.toPrimitive` (string hint → label, else `E_NOT_AWAITED`), set/define/delete → `E_IMMUTABLE`, PROBES pass through, namespaces per area as callable proxies (`neg.print(...)` is the macro, `neg.print.expose` the op), hash-consed handles cached so equal nodes are `===`. `frame.recipe` is a read-only proxy view whose assignments throw `E_IMMUTABLE` with a `frame.edit` fix.
+- `src/host.ts` (`Host.dispatch`): `call` (unmarshal, fill recipe-backed args from the frame's eval-start snapshot, `Graph.intern`, rewrite contract fixes to the agent's receiver), `macro`/`vocab` (`printChain` mirrors the print part of `compile`), `look`, `edit` (validated with `applyMutation` against a per-eval draft), and the structured errors.
+- `src/session.ts` (`DslSession`): `newRuntime({memoryLimitBytes: 64 MiB, maxStackSizeBytes: 1 MiB})`, `Date: false`, one interrupt handler reading `this.deadline`. The pump: `evalCode('(async function () {\n' + code + '\n})', 'eval-N.js')`, `callFunction(hooks.run, fn)`, then loop `executePendingJobs` / `getPromiseState` / `E_STALLED` when nothing is outstanding / wait on the next host settlement or the deadline. Unawaited host work is killed (abort + dispose the deferred) and reported `UNHANDLED`. After `E_TIMEOUT`/`E_MEMORY` the session probes the VM and restarts it if the probe fails. Closure shipping: `ship(id)` sends only not-yet-sent defs via `engine.adopt`.
+- `src/results/`: `yaml.ts` (5 significant digits, compact tables, signature/doc-line parser), `assemble.ts` (value/error, edits, looks with numbers, console, warnings, context; value capped with reserved tail), `looks.ts`, `png.ts` (stored-deflate PNG, 3×5 digit font burn-in), `diagnostics.ts` (stack → line, `eval-N` mapping, `E_SANDBOX`, mem hints).
+- `src/docs/provider.ts`, `vocabulary.ts` (14 entries), `topics.generated.ts` (empty for now).
+- `test/sandbox.test.ts` (12 tests), `test/helpers.ts` (session on engine-mock with the M1 negative as `frame_m1`).
+
+### Why
+- One dispatcher with JSON in/out keeps handle disposal to one string per call.
+- Returning hooks from the prelude instead of globals means the agent cannot reseed `Math.random` or reach the host functions.
+
+### What worked
+- Probe output (selected): `neg.pirnt` → `E_UNKNOWN_METHOD`, hint `Did you mean "print"?`, fix `frame.negative().print(…)`; `neg.print.lights({logH})` → `E_DOMAIN` fix `frame.negative().print({lights: [0.1, 0, 0]})`; `g.D` on an unawaited densitometer → `E_NOT_AWAITED` fix `(await frame.print().measure.densitometer({at: [48, 32]})).D`; `neg.print({lights: [4,0,0]})` → `E_ARG_RANGE` fix `frame.negative().print({lights: [0.1, 0, 0]})`; `print.light.logH` → `E_PATH` fix `frame.edit({ 'print.lights.logH': [0.1, 0, 0] })`; `mem.f` with a body comment → context `new functions: mem.f(h, at = [48, 32]): print densities at a point`.
+- `npx vitest run packages/dsl/test/sandbox.test.ts` → 12 passed (4.3 s), including the 1000-eval leak test followed by a clean `rt.dispose()`, the 100 MB allocation → `E_MEMORY`, and `while(true){}` with `timeoutMs: 400` stopped in under 500 ms.
+- Full suite: 7 files, 485 tests passed. `pnpm typecheck` and `pnpm lint` clean.
+
+### What didn't work
+- `return await import("x")` came back as `ReferenceError: could not load module 'x'` with the generic mem hint: my module check ran after the `ReferenceError` branch. Moved it first → `E_SANDBOX`.
+- `pnpm typecheck`: `spike-claims.test.ts(40,34): error TS2339: Property 'value' does not exist on type 'JSPromiseState'` (and the matching `error` case). Narrowed on `st.type`.
+- Two sandbox assertions expected quoted YAML for `'undefined undefined …'`; the emitter prints it plain. Test expectations fixed, not the emitter.
+
+### What I learned
+- The M1 fixture's grey patch reads `D = [0.94691, 0.80158, 0.58241]` on the print, not the guide's `[0.94691, 0.80154, 0.58235]`: the 16-bit fixture codes (6554/65535 is not exactly 0.1) shift the third digit. Golden tests must pin the observed values.
+- `quickjs-emscripten` keeps working after an interrupt inside a promise job: the "loop after await" test reuses the same VM.
+
+### What was tricky to build
+- Killing outstanding host promises at eval end: a late settlement must not resolve into the next eval. Each pending entry has a `dead` flag; `kill` aborts the engine call and disposes the deferred at once; the `.then` checks `dead` before touching the VM.
+- Host reads after the eval (memInfo for the context block) need their own deadline, or the expired eval deadline interrupts them.
+
+### What warrants a second pair of eyes
+- `printChain` duplicates the print section of `compile()`; a cache-identity test (next step) guards it.
+- The VM runs on the calling thread, not a Web Worker (see future).
+
+### What should be done in the future
+- The Web Worker + RPC wrapper (task 44uo) is not built; the session's only engine contact is `adopt`/`measure`/`evaluate`, so it is a transport change.
+
+### Code review instructions
+- Start at `packages/dsl/src/session.ts` `pump()` and `runEval()`, then `src/prelude/prelude.ts` `wrap()`.
+- `npx vitest run packages/dsl`.
+
+### Technical details
+- Wrapper: agent line N = source line N + 1 in `eval-N.js`; `locate()` takes the first `eval-(\d+)\.js:(\d+)` in the stack.
+- Seed: first 32 bits of `sha256(stateHash + code)`.
+
+## Step 18: Stage 2–3 tests: §5.9 errors, modes, cache identity, E1–E6, the §7 golden
+
+I turned the guide's acceptance lists into tests: 21 mistake rows plus 7 behaviour tests, 8 mutation tests, the guide examples E1–E4 and E6, the §7 balance with a pinned `test/representative.result`, and result-shaping unit tests. Writing the golden exposed one real bug (a handle cache that outlived its eval). The DSL suite is 68 tests, all passing.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Commit (code):** afe8c80 — "CHB-007: stage 2-3 tests: §5.9 errors, mutations and modes, cache identity, E1-E6, §7 golden, results"
+
+### What I did
+- `test/errors.test.ts`: a table of rows `{code, error, fix, hint}`; each asserts the exact code and fix, an `error:` YAML block, and an agent line.
+- `test/mutations.test.ts`: ask (two edits → one pending unit by agent, `expect` filled, state hash unchanged, approve, next context `eval-1 approved`, one undo removes both), stale (`E_STALE`, context `eval-1 stale, not applied (the photographer changed print.lights.logH)`), receipt preview vs eval-start snapshot, auto (one unit), failing eval (`EDITS_DROPPED`, no entries), invalid edit, author tag, and cache identity.
+- `test/examples.test.ts`: E1–E4, E6 and §7 with coordinates `[48, 32]` (the M1 grey patch). The golden is written when missing or with `UPDATE_GOLDEN=1`.
+- `test/results.test.ts`: `fmtNum`, table paging, signature/doc-line parser, the 9000 cap, looks (limit, dedupe, LOOKS line, region + `at`, compare, size), context (accessor not run, quoted frame name).
+
+### Why
+- The guide asks for "one test per row of §5.9 asserting code and fix" and a reviewed golden of the result format.
+
+### What worked
+- Cache identity: `frame.print().id` equals the `view.adapt` id of `compile(log.committed)` in a fresh `Graph` for the default recipe, with `print.preflash: 0.02`, and with a dodge exposure through a stored mask; `frame.negative().print() === frame.print()` is `true`.
+- §7: `slope [1.5, 1.5, 1.5]`, `points [-4.5, -0.5, 5]`, mutation value `[-0.1125, -0.0125, 0.125]` exactly as the guide; `before`/`after` within 2e-4 of the guide (observed `[0.94691, 0.80158, 0.58241]` and `[0.77816, 0.78283, 0.76991]`, fixture quantisation).
+- `npx vitest run packages/dsl` → 68 passed; typecheck and lint clean.
+
+### What didn't work
+- `import()` row: `expected undefined to be greater than 0` for `where.line`. The rejection QuickJS creates for a failed module load has no stack frame in `eval-N.js`. Marked that row `noLine`.
+- Identity test: `Expected: "7f50ef3b…" Received: "'7f50ef3b…'"`: the YAML emitter quotes strings that start with a digit. Unquoted in the test.
+- The first golden showed `fix: '(await receipt.preview.measure.densitometer({at: [48, 32]})).D'` in an eval that never made a receipt. Cause: the prelude's `id|frame → proxy` cache lived across evals; after approval, `frame.print()` is the same node as the earlier `receipt.preview`, so it got the old proxy and its `expr`. Fix: reset the cache in `hooks.begin`. Handles kept on `mem` keep their own info.
+- Table paging note said `rows.rows.slice(…)`: the root path name was prefixed twice. Fixed in `renderYaml` (`join`).
+- `mem: 'keep (number)'` regex: the emitter prints it unquoted. Test regex relaxed.
+
+### What I learned
+- Hash-consing makes "which expression produced this node" ambiguous across evals; per-eval caches are the right scope for anything describing the agent's code.
+
+### What was tricky to build
+- The golden flow mixes approval between evals; it needed the log's injected clock (`now: () => t++`) for byte-stable output, which `helpers.ts` provides.
+
+### What warrants a second pair of eyes
+- Fix strings use `frame.negative()` where the guide shows `neg.`: the prelude cannot see local variable names. The test file header records this.
+- `E_PATH`'s `valid` comes from the contract and lists all 72 paths when the parent has no siblings; the error block shows 24 and "… 48 more".
+
+### What should be done in the future
+- N/A for this step.
+
+### Code review instructions
+- `npx vitest run packages/dsl`; read `packages/dsl/test/representative.result`.
+
+### Technical details
+- Golden regeneration: `UPDATE_GOLDEN=1 npx vitest run packages/dsl/test/examples.test.ts`.
+
+## Step 19: Stage 4: topic pages, gen-docs targets, the docs test, telemetry; close-out
+
+I wrote seven topic pages with 49 executed `js` blocks, extended `tools/gen-docs` with four DSL targets, ported goja-cv's docs test, and added `EvalTrace` aggregation with `tools/dsl-usage`. All 49 blocks and both catalog examples passed on their first run. Full suite: 13 files, 548 tests; typecheck, lint and `gen:check` clean. I checked off 15 tasks; two remain open.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Commit (code):** f2429e2 — "CHB-007: stage 4: topic pages, gen-docs DSL targets (reference, instructions, .d.ts, topics), docs test, telemetry and dsl-usage; contract requests"
+
+### What I did
+- Topics in `packages/dsl/src/docs/topics/`: getting-started, darkroom-vocabulary, measuring, test-strips, balancing-colour, editing-and-approval, errors. Info strings `js`, `js error=CODE`, `js warns=CODE`, `js looks=N`, `js fragment`.
+- `src/docs/generate.ts`: `genReference` (by handle domain, then area; one line per op plus one per argument), `genInstructions` (2256 characters, under the 4000 limit), `genDts` (one interface per domain over `OpArgs`), `genTopicsModule` (bundles the pages into `topics.generated.ts` so `cb.docs` needs no file access in the browser).
+- `tools/gen-docs/dsl.ts` and two lines in `tools/gen-docs/main.ts` (`...dslFiles(root)`). `pnpm gen` wrote `topics.generated.ts`, `generated/reference.md` (45 375 bytes), `generated/instructions.md`, `generated/chromobench-dsl.d.ts`.
+- `test/docs.test.ts`: one fresh session per page, blocks in order; every `OpDef.examples` entry; a check that the bundled topics equal the files; an `afterAll` floor of 30 executed blocks.
+- `src/telemetry.ts` (`usageReport`, `formatUsage`), `tools/dsl-usage/main.ts`, `test/telemetry.test.ts`.
+- `packages/dsl/CONTRACT-REQUESTS.md`: R1 (JS error names as codes), R2 (`ContextBlock.changed` meaning).
+- `packages/dsl/tsconfig.generated.json`: `npx tsc -p packages/dsl/tsconfig.generated.json --noEmit` checks the generated `.d.ts`. It printed nothing (clean).
+- `docmgr task check --ticket CHB-007 --id kfdz,gjoh,2ki7,fynm,ul4y,278b,2rii,l7o8,udc7,6umn,07ft,2og2,bg07,h52b,cg16`.
+
+### Why
+- Generated topics as a TS module: the browser has no `fs`, and `?raw` imports would break `node tools/gen-docs/main.ts`.
+
+### What worked
+- `npx vitest run` → 13 files, 548 tests passed (8.1 s). `pnpm gen:check` → `gen:check ok (18 files)`.
+
+### What didn't work
+- The worktree guard refused a multi-command shell line containing a heredoc plus `pnpm gen`, and later a `git commit` chained with a `for` loop over `docmgr`. I split them into single commands; `docmgr task check` accepts a comma-separated id list.
+
+### What I learned
+- The DSL's error codes for JavaScript exceptions (`SyntaxError`, `ReferenceError`, `TypeError`, `Error`) are outside the contract's closed `ERROR_CODES` list; filed as R1.
+
+### What was tricky to build
+- Nothing beyond what earlier steps describe.
+
+### What warrants a second pair of eyes
+- `tools/gen-docs/main.ts` is shared with CHB-002; the change is two lines.
+- The generated `.d.ts` is not in the root `tsc` run (root tsconfig is shared); it is checked only by the extra tsconfig above.
+
+### What should be done in the future
+- Task 44uo: the Web Worker and RPC wrapper. `DslSession` runs on the calling thread today; its only engine contacts are `engine.adopt`, `measure` and `evaluate`.
+- Task zr25: DR-1/DR-2 need the steward's confirmation. The cg16 tests are the evidence.
+- A headless-Chromium test of the session (guide stage 1 "done when"). It needs a page to host it, which belongs to apps/studio (CHB-009 lane).
+- Looks are always PNG (no JPEG encoder); `cb.load` (playbooks) is not implemented.
+
+### Code review instructions
+- `npx vitest run packages/dsl`; `pnpm gen:check`; read `packages/dsl/generated/instructions.md` and `packages/dsl/test/representative.result`.
+
+### Technical details
+- Commits on `task/chb-007-dsl`: cc04013, afe8c80, f2429e2 (plus this diary commit).
