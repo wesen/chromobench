@@ -44,7 +44,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
 
   // ---- handles -------------------------------------------------------------------------------
   const handles = new WeakMap();   // proxy → info
-  const cache = new Map();         // id|frame → proxy (hash-consed nodes are ===)
+  let cache = new Map();           // id|frame → proxy (hash-consed nodes are === within an eval)
   const looks = new WeakSet();
 
   function isHandle(x) { return (typeof x === 'object' || typeof x === 'function') && x !== null && handles.has(x); }
@@ -324,7 +324,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
   }
 
   return {
-    begin(frameId, seed) { BOUND = frameId; frameCache = new Map(); seedState = seed | 0; },
+    begin(frameId, seed) { BOUND = frameId; frameCache = new Map(); cache = new Map(); seedState = seed | 0; },
     run: async function (fn) {
       try { const v = await fn(); return JS({ ok: true, value: shape(v, 0, []) }); }
       catch (e) { return JS({ ok: false, error: errInfo(e) }); }

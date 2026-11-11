@@ -1,0 +1,67 @@
+### §7 grey-card balance
+before: [0.94691, 0.80158, 0.58241]
+slope: [1.5, 1.5, 1.5]
+points: [-4.5, -0.5, 5]
+after: [0.77816, 0.78283, 0.76991]
+
+edits:
+  - 'e1 pending: set print.lights.logH = [-0.1125, -0.0125, 0.125] (was [0, 0, 0]); why: neutral grey card: -4.5 / -0.5 / 5 pt'
+
+looks:
+  - look: '[look 1: proposed balance — frame_m1 print-xyz (96×64, 1 px = 1 source px)]'
+    numbers:
+      mean: [0.3931, 0.41052, 0.36684]
+      p01: [0.015522, 0.01564, 0.010878]
+      p99: [0.95047, 1, 1.0888]
+      clipLow: 0
+      clipHigh: 0
+
+context:
+  frame: 'frame_m1 (M1 test negative) · negative-scan · kodak_portra_400 → kodak_portra_endura · mode ask'
+  changed: print.lights.logH
+  proposals: eval-1 pending
+
+### E_NOT_AWAITED
+error:
+  code: E_NOT_AWAITED
+  message: 'measure.densitometer() is a lazy node: read .D after awaiting it.'
+  where: 'line 3: return g.D'
+  path: '[value #15c1 measure.densitometer] → ✗ D'
+  hint: 'Nothing has been computed yet; awaiting the node evaluates it.'
+  fix: '(await frame.print().measure.densitometer({at: [48, 32]})).D'
+  valid: [D, visual]
+
+context:
+  frame: 'frame_m1 (M1 test negative) · negative-scan · kodak_portra_400 → kodak_portra_endura · mode ask'
+  changed: none
+  proposals: eval-1 approved
+
+### E_ARG_RANGE (points)
+error:
+  code: E_ARG_RANGE
+  message: 'print.lights.logH = [4, 0, 0] is outside the allowed range [-1.5, 1.5] (logH).'
+  where: 'line 2: return neg.print({ lights: [4, 0, 0] })'
+  path: print.lights
+  hint: 'Printer lights are stored in log H: 1 point = 0.025 log H.'
+  fix: 'frame.negative().print({lights: [0.1, 0, 0]})'
+  valid: ['[-1.5, 1.5]']
+
+context:
+  frame: 'frame_m1 (M1 test negative) · negative-scan · kodak_portra_400 → kodak_portra_endura · mode ask'
+  changed: none
+  proposals: eval-1 approved
+
+### E_PATH
+error:
+  code: E_PATH
+  message: 'unknown recipe path "print.light.logH"'
+  where: 'line 1: frame.edit({ ''print.light.logH'': [0.1, 0, 0] })'
+  path: print.light.logH
+  hint: 'did you mean print.lights.logH?'
+  fix: 'frame.edit({ ''print.lights.logH'': [0.1, 0, 0] })'
+  valid: [capture.adapt, capture.autoExposure.analysisLongSide_px, capture.autoExposure.method, capture.development.dir.amount, capture.development.dir.diffusion_um, capture.development.grain.amount, capture.development.grain.seed, capture.development.grain.size_um, capture.development.halation.strength, capture.development.push, capture.exposureEV, capture.format.longEdge_mm, capture.stock, capture.whiteBalance.mode, capture.whiteBalance.temperature_K, capture.whiteBalance.tint, data, 'finishing.hues.*', finishing.look, finishing.values.clarity, finishing.values.clarity_radius_px, print.aim, print.enlarger.filtration, print.enlarger.fstop, … 48 more]
+
+context:
+  frame: 'frame_m1 (M1 test negative) · negative-scan · kodak_portra_400 → kodak_portra_endura · mode ask'
+  changed: none
+  proposals: eval-1 approved

@@ -109,11 +109,12 @@ export interface RenderOptions {
 /** Renders a shaped value as YAML lines. `path` names the value for paging hints. */
 export function renderYaml(v: unknown, opts: RenderOptions, rootName = 'rows'): string[] {
   const budget: TableBudget = { chars: opts.tableChars };
+  const join = (path: string, k: string): string => (path ? `${path}.${k}` : k);
   const out: string[] = [];
   const emit = (val: unknown, indent: string, path: string): void => {
     if (isTable(val)) {
       out.push(`${indent}|`);
-      for (const l of tableLines(val, budget, path)) out.push(`${indent}  ${l}`);
+      for (const l of tableLines(val, budget, path || rootName)) out.push(`${indent}  ${l}`);
       return;
     }
     out.push(...block(val, indent, path));
@@ -140,7 +141,7 @@ export function renderYaml(v: unknown, opts: RenderOptions, rootName = 'rows'): 
         }
         const sub: string[] = [];
         const saved = out.length;
-        emitInto(sub, item, `${indent}  `, `${path}[${i}]`);
+        emitInto(sub, item, `${indent}  `, `${path || rootName}[${i}]`);
         void saved;
         sub[0] = `${indent}- ${sub[0]!.slice(indent.length + 2)}`;
         lines.push(...sub);
@@ -162,13 +163,13 @@ export function renderYaml(v: unknown, opts: RenderOptions, rootName = 'rows'): 
         for (const l of x.split('\n')) lines.push(`${indent}  ${l}`);
       } else if (isTable(x)) {
         lines.push(`${key} |`);
-        for (const l of tableLines(x, budget, `${path}.${k}`)) lines.push(`${indent}  ${l}`);
+        for (const l of tableLines(x, budget, join(path, k))) lines.push(`${indent}  ${l}`);
       } else if ((Array.isArray(x) && x.length === 0) || (isObj(x) && Object.keys(x).length === 0)) {
         lines.push(`${key} ${Array.isArray(x) ? '[]' : '{}'}`);
       } else {
         lines.push(key);
         const sub: string[] = [];
-        emitInto(sub, x, `${indent}  `, `${path}.${k}`);
+        emitInto(sub, x, `${indent}  `, join(path, k));
         lines.push(...sub);
       }
     }
@@ -177,12 +178,12 @@ export function renderYaml(v: unknown, opts: RenderOptions, rootName = 'rows'): 
   const emitInto = (sink: string[], val: unknown, indent: string, path: string): void => {
     if (isTable(val)) {
       sink.push(`${indent}|`);
-      for (const l of tableLines(val, budget, path)) sink.push(`${indent}  ${l}`);
+      for (const l of tableLines(val, budget, path || rootName)) sink.push(`${indent}  ${l}`);
       return;
     }
     sink.push(...block(val, indent, path));
   };
-  emit(v, '', rootName);
+  emit(v, '', '');
   return out;
 }
 
