@@ -923,3 +923,57 @@ The guide's blocking question ("which conventions reproduce 0.755") has an answe
 
 ### Technical details
 - Neutral pack Portra 400 / Portra Endura from the Filmbench database: C 0, M 51.568, Y 52.534.
+
+## Step 16: Stage 3 inversion: forward model, LM solve with active set, classify, balance, tables, ch3 goldens and laws
+
+Stage 2 went in as commit 20e9c81. Stage 3 ported Chromogen's `spectral()` solver line by line into `scan/solve.ts` (fused forward/Jacobian pass, damping μ(1 + A_ii), 12 tries, active set, stop rules), adding the stop reason, pass count and an optional trace. Every chapter 3 number I could test reproduced on the first run, including the full §3.3 LM trace and the §3.4 table statistics.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 14.
+**Assistant interpretation:** Continue with stage 3 of the guide.
+**Inferred user intent:** see Step 14.
+**Commit (code):** 20e9c81 — "CHB-003: stage 2 print chain, ch2 goldens and laws" (the stage 3 commit follows this entry).
+
+### What I did
+- Added `preflashPhi` (spektrafilm base-only flash) to `print/chain.ts`; checked tasks zvl0, zj3d, iwrt, 72za.
+- `scan/solve.ts`: `makeForward` (P·pass folded into the weights, start matrix 'base-weighted' | 'secant' | 'tangent0'), `forwardJacobian`, `solveDyes`, `SOLVE_DEFAULTS` (Studio's activeSet + gtol 1e-9), `withFlare`, `removeFlare`, `fitFlare` (golden-section on RMS).
+- `scan/classify.ts` (`classify`, `CLASS_CODE` = contract scan-classes codes), `print/balance.ts` (`latd`, `latdFromPD`, `integrateToGrey`, `colourOffset`, `lightsToSliders`, `greyPick` by Newton in the colour plane of the lights).
+- `tables/tables.ts`: `nodeAt`, `buildSolveTable` (with iteration statistics), `solveKeyRange`, `buildPdTable`, `buildPrintTable`, `look3` with the texel-centre mapping.
+- `node packages/core/explore/e5.ts` (scratch) for the numbers below, then `fixtures/golden/core/ch3.json`, `test/ch3.golden.test.ts` (13 tests), `laws/ch3.laws.ts` (round trip, active set never worse, classify order).
+- Added a `heldRule` hook to `SolveOptions` so the active-set law can inject its mutant.
+
+### Why
+- The iteration-count semantics must match Chromogen exactly for the trace and pass counts: a break on "no improvement" or stall does not increment the iteration counter. My first draft incremented it; I removed the `it++` before running anything.
+
+### What worked
+- LM trace from the secant start (white LED, CHROMOGEN): rows (1.0936 0.7974 1.3228, 4.24e-1, μ 1.0e-3), (0.6734 0.7010 0.8136, 3.94e-2, 3.3e-4, 1 try), (0.6865 0.7044 0.8628, 5.08e-4, 1.1e-4, 1), (0.6865 0.7044 0.8635, 3.09e-7, 3.7e-5, 1); 3 iterations, 7 passes, stop 'tolerance'. Identical to guide §6.2.
+- Base-weighted start (0.6833, 0.6688, 0.8639), residual 0.0318 → 2 iterations, 5 passes.
+- Shadow pixel (0.02, 0.35, 0.45) above rebate: active set 0.10646 D, 4 iterations, 9 passes, cyan held; plain LM 50 iterations, 146 passes, 0.10661 D (secant start) / 0.10654 D (base-weighted start).
+- 33³ table on A_RANGE with the secant key: xt5-fitted/Gold 200 13.92 → 2.31 (cap 8885 → 0, unreachable 24.9 %); rgb-led-book 13.90 → 2.24 (8906 → 0); status-m 14.09 → 2.51 (8908 → 0); white-led 23.17 → 5.15 (15042 → 15, unreachable 39.7 %). Textbook: 13.9 → 2.3, 13.9 → 2.2, 14.1 → 2.5, 23.2 → 5.1; 8885/8906/8908/15040 → 0/0/0/15. Build time 2.4–4.1 s per table pair on this machine.
+- White patch with 0.5 % flare, narrowband blue: 1.429 → 1.1718 D (1.172). Wedge 0…3 D with f = 0.005 reproduces (0, 0.495, 0.981, 1.438, 1.826, 2.090, 2.224); `fitFlare` recovers 0.005 to 1e-7 without noise.
+- J at grey matches (0.447 0.320 0.014 | 0.160 0.724 0.033 | 0.013 0.336 0.728); central differences agree within 1e-9 on 50 triples.
+- `pnpm test`: 558 passed (laws 26: 13 laws, each holding and each catching its mutant).
+
+### What didn't work
+- The plain-LM cap count for the white LED is 15042 against the printed 15040; the test allows ±5 nodes.
+- A clean mutant for "held dye not masked" was hard to make fail reliably, so the active-set law's mutant inverts the held rule's gradient sign and also holds any dye within 1e-3 of the lower bound. It is caught, but it is a stronger break than the guide's example.
+
+### What I learned
+- The textbook's xt5 and book-LED numbers are reproducible with the illustrative generic-bayer camera; nothing needs measured camera data.
+
+### What was tricky to build
+- `solveDyes` keeps Chromogen's quirk that a stalled accepted step ends the solve without counting the iteration; the trace records it with `tries + 1`.
+
+### What warrants a second pair of eyes
+- `greyPick` iterates to |(a*, b*)| < 1e-6 instead of Chromogen's 0.05.
+- `fitFlare` searches f in [0, 0.1] only.
+
+### What should be done in the future
+- Gold 200 class percentages (task 7zy5) need the sample decoder and `sigmaD`; the 3,800 K balance test needs `exposeSpectral` grey scales. Both open.
+- `solveKeyRange` exists but I have not yet reported the base-weighted key range for CHB-005.
+
+### Code review instructions
+- `npx vitest run packages/core/test/ch3.golden.test.ts packages/core/test/laws.test.ts`; start at `solveDyes` in `packages/core/src/scan/solve.ts`.
+
+### Technical details
+- Table node order: q → (q mod N, ⌊q/N⌋ mod N, ⌊q/N²⌋), 4 floats per node (c0, c1, c2, residual D).

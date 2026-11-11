@@ -16,3 +16,7 @@ export * from './print/colour.ts';
 export * from './print/gamut.ts';
 export * from './scan/scanner.ts';
 export * from './print/chain.ts';
+export * from './print/balance.ts';
+export * from './scan/solve.ts';
+export * from './scan/classify.ts';
+export * from './tables/tables.ts';

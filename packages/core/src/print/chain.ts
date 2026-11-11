@@ -125,4 +125,9 @@ export function viewToDisplay(XYZ: ArrayLike<number>, viewWhite: ArrayLike<numbe
   return displayEncode(o.to === 'D50' ? adaptBradford(a, D50, D65) : a, o.space ?? 'srgb', o.compress ?? DEFAULT_COMPRESS);
 }
 
+/** spektrafilm _compute_raw_preflash: φ_k = amount · H_k through the base alone (c = 0) with the filtered lamp. */
+export function preflashPhi(enl: Enlarger, amount: number): Vec3 {
+  return enl.exposure([0, 0, 0]).map((x) => amount * 10 ** x) as Vec3;
+}
+
 export { preflash };

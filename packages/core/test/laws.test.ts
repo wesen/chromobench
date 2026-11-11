@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { interimData } from '../src/index.ts';
 import { ch1Laws } from '../src/laws/ch1.laws.ts';
 import { ch2Laws } from '../src/laws/ch2.laws.ts';
+import { ch3Laws } from '../src/laws/ch3.laws.ts';
 import { checkLaws, checkMutants, type CoreLaw } from '../src/laws/harness.ts';
 
 const data = interimData();
-const suites: [string, () => CoreLaw[], number][] = [['chapter 1', () => ch1Laws(data), 200], ['chapter 2', () => ch2Laws(data), 200]];
+const suites: [string, () => CoreLaw[], number][] = [['chapter 1', () => ch1Laws(data), 200], ['chapter 2', () => ch2Laws(data), 200], ['chapter 3', () => ch3Laws(data), 200]];
 
 for (const [name, make, n] of suites) {
   describe(`${name} laws`, () => {
