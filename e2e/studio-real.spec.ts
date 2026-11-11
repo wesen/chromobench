@@ -13,7 +13,7 @@ let pageErrors: string[] = [];
 test.beforeEach(async ({ page }) => {
   pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') console.log(`[console] ${m.text()}`); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|\[vite\]/.test(m.text())) console.log(`[console] ${m.text()}`); });
 });
 test.afterEach(() => {
   expect(pageErrors).toEqual([]);
@@ -80,9 +80,40 @@ for (const engine of ['gpu', 'reference'] as const) {
     const darker = (await centre(page))!;
     expect(darker[1]!).toBeLessThan(p0[1]!);
 
+    // ring-around: eleven tiles of the real chain; the centre tile is the main print's node
+    await page.evaluate(() => window.chromobench.studio.setTool('ringAround'));
+    await expect(page.locator('.ring-tile')).toHaveCount(11);
+    await expect(page.locator('.ring-tile[data-tile="current"]')).not.toHaveAttribute('data-node', '', { timeout: 120_000 });
+    const main = await page.evaluate(() => window.chromobench.studio.session!.displayNode().id);
+    await expect(page.locator('.ring-tile[data-tile="current"]')).toHaveAttribute('data-node', main);
+    await page.locator('.ring-tile[data-tile="Y"]').click();
+    expect(await page.evaluate(() => window.chromobench.log!.state.print.lights.logH[2])).toBeGreaterThan(r0.lights.logH[2]);
+    await page.evaluate(() => window.chromobench.studio.setTool(null));
+    await page.click('#undo');
+    await idle(page);
+
     // export: an 8-bit PNG at the working size
     const x = await page.evaluate(() => window.chromobench.exportPng('srgb'));
     expect(x).toMatchObject({ width: 96, height: 64, type: 'image/png' });
     expect(x!.bytes).toBeGreaterThan(100);
+
+    // the frame-time benchmark for a real GPU runs here too (numbers are SwiftShader's / the CPU's)
+    const b = await page.evaluate(() => window.chromobench.bench(4));
+    console.log(`bench ${engine}: ${JSON.stringify(b)}`);
+    expect(b).toMatchObject({ frame: '96×64', exported: '96×64' });
   });
 }
+
+test('offline: after one online visit the real engine starts without a network (packs from the service worker)', async ({ page, context }) => {
+  test.setTimeout(180_000);
+  await page.goto('/?canvas2d&engine=gpu');
+  await expect(page.locator('#offline-state')).toHaveText('offline ready', { timeout: 60_000 });
+  await page.reload(); // now controlled: modules and packs pass through the worker's caches
+  await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+  await page.setInputFiles('#file', FIXTURE);
+  await expect(page.locator('#status')).toContainText('rendered', { timeout: 60_000 });
+  await context.setOffline(false);
+});

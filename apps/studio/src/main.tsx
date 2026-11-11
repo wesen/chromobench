@@ -104,6 +104,36 @@ const hook = {
   /** 8-bit value the presenter shows for a document pixel, read back from the canvas pipeline. */
   canvasPixel: (x: number, y: number): Promise<number[] | null> => studio.canvasPixel(x, y),
   chainRuns: () => studio.chainRuns(),
+  /**
+   * Frame times on this machine (CHB-023 stage 5): `steps` drag previews of the enlarger time
+   * (draft pass, ≈ 0.5 MP), one full screen pass after release, and an export at the working size.
+   * Run in the console with a scan open: `await chromobench.bench()`.
+   */
+  async bench(steps = 12) {
+    const s = studio.session;
+    if (!s) return null;
+    await studio.idle();
+    const t0 = s.log.state.print.enlarger.time_s;
+    const drafts: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      const a = performance.now();
+      studio.gesture.drag('print.enlarger.time_s', Number((t0 * 2 ** ((i % 2 ? 1 : -1) / 6)).toFixed(3)), 'bench');
+      await studio.idle();
+      drafts.push(performance.now() - a);
+    }
+    const b = performance.now();
+    studio.gesture.cancel();
+    await studio.idle();
+    const screen = performance.now() - b;
+    const c = performance.now();
+    const x = await studio.exportPng('srgb');
+    const exportMs = performance.now() - c;
+    drafts.sort((p, q) => p - q);
+    return {
+      engine: studio.s.engineLabel, frame: `${s.width}×${s.height}`, draftMedianMs: Math.round(drafts[drafts.length >> 1]!), draftMaxMs: Math.round(drafts.at(-1)!),
+      screenMs: Math.round(screen), exportMs: Math.round(exportMs), exported: x ? `${x.width}×${x.height}` : null,
+    };
+  },
   /** frame.edit({path: value}) from an eval: one tx, by 'agent'. */
   propose(edits: Record<string, unknown>, why?: string): LoggedMutation[] {
     const ms: Mutation[] = Object.entries(edits).map(([path, value]) => ({ op: 'set', path, value }));

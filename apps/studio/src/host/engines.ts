@@ -86,7 +86,10 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
   const s = long > 0 ? Math.min(1, long / Math.max(W, H)) : 1;
   const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
   const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
-  const notes: string[] = [`${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
+  const cam = raw.meta.camera ? ` (${raw.meta.camera.make} ${raw.meta.camera.model})` : '';
+  const notes: string[] = [raw.meta.format === 'raw'
+    ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
+    : `${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
   // The film base (rebate): the brightest 5 % column band, the rule scan.density uses with no box.
   const rb = rebateBox(w, h, 3, data);
