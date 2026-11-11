@@ -42,6 +42,10 @@ export interface SourceMeta {
   linearization?: number[];
   /** Index of the infrared plane, when one is kept. */
   irPlane?: number;
+  /** Per-pixel clipping computed by the decoder (binned RAW: any photosite at its white level). */
+  clipped?: Uint8Array;
+  /** CFA map (colour 0 R, 1 G, 2 B per cell of the period) for unbinned photosite planes. */
+  cfaMap?: { period: number; map: number[] };
   notes: Diagnostic[];
 }
 

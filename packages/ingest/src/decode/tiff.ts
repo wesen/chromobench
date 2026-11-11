@@ -369,26 +369,7 @@ export function decodeTiff(bytes: Uint8Array, o: TiffDecodeOptions = {}): RawIma
   const ifd0 = ifds[0]!;
   const tagOf = (tag: number): number[] | undefined => d.tags.get(tag) ?? ifd0.tags.get(tag);
   const str = (tag: number): string | undefined => d.strings.get(tag) ?? ifd0.strings.get(tag);
-  let dng: DngColour | undefined;
-  if (isDng) {
-    dng = {};
-    const set = <K extends keyof DngColour>(k: K, tag: number, f: (v: number[]) => DngColour[K]): void => {
-      const v = tagOf(tag);
-      if (v) dng![k] = f(v);
-    };
-    set('colorMatrix1', T.ColorMatrix1, (v) => v);
-    set('colorMatrix2', T.ColorMatrix2, (v) => v);
-    set('cameraCalibration1', T.CameraCalibration1, (v) => v);
-    set('cameraCalibration2', T.CameraCalibration2, (v) => v);
-    set('forwardMatrix1', T.ForwardMatrix1, (v) => v);
-    set('forwardMatrix2', T.ForwardMatrix2, (v) => v);
-    set('analogBalance', T.AnalogBalance, (v) => v);
-    set('asShotNeutral', T.AsShotNeutral, (v) => v);
-    set('asShotWhiteXY', T.AsShotWhiteXY, (v) => [v[0]!, v[1]!]);
-    set('baselineExposure', T.BaselineExposure, (v) => v[0]);
-    set('calibrationIlluminant1', T.CalibrationIlluminant1, (v) => v[0]);
-    set('calibrationIlluminant2', T.CalibrationIlluminant2, (v) => v[0]);
-  }
+  const dng = isDng ? dngColourOf(tagOf) : undefined;
   const make = str(T.Make);
   const model = str(T.Model) ?? str(T.UniqueCameraModel);
   const orientation = tagOf(T.Orientation)?.[0];
@@ -411,4 +392,34 @@ export function decodeTiff(bytes: Uint8Array, o: TiffDecodeOptions = {}): RawIma
     width: w, height: h, channels: keep as 1 | 3 | 4, planes, sample: isFloat ? 'float' : 'uint', bits: outBits,
     levels: { black, white, from }, encoding: { value: enc.value, evidence: enc.evidence }, meta,
   };
+}
+
+/** DNG colour tags from a tag lookup (the chosen IFD first, then IFD0). */
+export function dngColourOf(tagOf: (tag: number) => number[] | undefined): DngColour {
+  const dng: DngColour = {};
+  const set = <K extends keyof DngColour>(k: K, tag: number, f: (v: number[]) => DngColour[K]): void => {
+    const v = tagOf(tag);
+    if (v) dng[k] = f(v);
+  };
+  set('colorMatrix1', T.ColorMatrix1, (v) => v);
+  set('colorMatrix2', T.ColorMatrix2, (v) => v);
+  set('cameraCalibration1', T.CameraCalibration1, (v) => v);
+  set('cameraCalibration2', T.CameraCalibration2, (v) => v);
+  set('forwardMatrix1', T.ForwardMatrix1, (v) => v);
+  set('forwardMatrix2', T.ForwardMatrix2, (v) => v);
+  set('analogBalance', T.AnalogBalance, (v) => v);
+  set('asShotNeutral', T.AsShotNeutral, (v) => v);
+  set('asShotWhiteXY', T.AsShotWhiteXY, (v) => [v[0]!, v[1]!]);
+  set('baselineExposure', T.BaselineExposure, (v) => v[0]);
+  set('calibrationIlluminant1', T.CalibrationIlluminant1, (v) => v[0]);
+  set('calibrationIlluminant2', T.CalibrationIlluminant2, (v) => v[0]);
+  return dng;
+}
+
+/** DNG colour tags of a DNG file (any image type, including CFA), or null for other files. */
+export function readDngColour(bytes: Uint8Array): DngColour | null {
+  if (!isTiff(bytes)) return null;
+  const ifds = readIfds(bytes);
+  if (!ifds.some((t) => t.tags.has(T.DNGVersion))) return null;
+  return dngColourOf((tag) => ifds.find((d) => d.tags.has(tag))?.tags.get(tag));
 }

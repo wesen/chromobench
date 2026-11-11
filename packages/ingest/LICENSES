@@ -1,0 +1,15 @@
+Third-party code used by @chromobench/ingest
+============================================
+
+@colorhythm/libraw-wasm 1.1.1 (npm)
+  Wrapper: MIT (Colorhythm). Bundles LibRaw 0.22.1 compiled to WebAssembly (dist/libraw.wasm).
+  LibRaw is dual-licensed LGPL 2.1 or CDDL 1.0; chromobench uses it under LGPL 2.1.
+  LibRaw stays a separate .wasm file, loaded at runtime by a dynamic import (src/libraw/adapter.ts),
+  so it can be replaced by a user-built LibRaw (the LGPL relinking route, guide CHB-006 §9).
+  Upstream: https://github.com/colorhythm/libraw-wasm, https://www.libraw.org/
+
+fflate 0.8.2 (npm)
+  MIT. zlib/deflate for TIFF and PNG.
+
+Ported logic (no code copied verbatim beyond small functions, see the source comments):
+  Chromogen Studio decode.js / source.js (CHB-001 extraction), goja-cv kernels (specks, heal).

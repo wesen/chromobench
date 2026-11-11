@@ -66,9 +66,10 @@ export function linearise(img: RawImage, o: LineariseOptions): CameraLinear {
   }
 
   // Clipping: a stored sample at or above its white level.
-  let clipped: Uint8Array | null = null;
+  let clipped: Uint8Array | null = img.meta.clipped ?? null;
   let nClipped = 0;
-  for (let c = 0; c < Math.min(3, img.planes.length); c++) {
+  if (clipped) for (let i = 0; i < w * h; i++) nClipped += clipped[i]! ? 1 : 0;
+  for (let c = 0; c < (img.meta.clipped ? 0 : Math.min(3, img.planes.length)); c++) {
     const p: Plane = img.planes[c]!;
     const wl = img.levels.white[Math.min(c, img.levels.white.length - 1)]!;
     const lim = o.levels?.white?.[c] ?? wl;
