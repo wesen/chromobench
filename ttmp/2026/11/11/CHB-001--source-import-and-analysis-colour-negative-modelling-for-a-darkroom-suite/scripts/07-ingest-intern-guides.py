@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-BLOCK = re.compile(r"^=====BEGIN (GUIDE|TASKS|RELATED) (CHB-\d{3})=====\n(.*?)^=====END \1 \2=====$", re.S | re.M)
+BLOCK = re.compile(r"^=====BEGIN (GUIDE|TASKS|RELATED|DIARY) (CHB-\d{3})=====\n(.*?)^=====END \1 \2=====$", re.S | re.M)
 
 
 def split_frontmatter(text: str):
@@ -50,7 +50,7 @@ def main() -> None:
             continue
         doc = docs[0]
         summary = [tid]
-        if "GUIDE" in parts:
+        if "GUIDE" in parts and parts.keys() >= {"GUIDE"}:
             fm, body = split_frontmatter(open(doc, encoding="utf-8").read())
             # docmgr's design-doc template body is only headings and <!-- --> placeholders: treat as empty
             substantive = [l for l in body.splitlines()
@@ -91,6 +91,19 @@ def main() -> None:
                 cmd += ["--file-note", f"{path}:{reason}"]
             subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
         summary.append(f"{len(related)} related" + (f", {len(skipped)} missing: {[p for p, _ in skipped]}" if skipped else ""))
+        if "DIARY" in parts:
+            diaries = glob.glob(os.path.join(os.path.dirname(os.path.dirname(doc)), "diary", "01-diary.md"))
+            entry = parts["DIARY"].strip()
+            marker = entry.splitlines()[0] if entry else ""
+            if len(diaries) != 1:
+                summary.append(f"diary doc not found: {diaries}")
+            elif marker and marker in open(diaries[0], encoding="utf-8").read():
+                summary.append("diary SKIPPED (first line already present)")
+            else:
+                if not dry:
+                    with open(diaries[0], "a", encoding="utf-8") as f:
+                        f.write("\n" + entry + "\n")
+                summary.append(f"diary +{len(entry.split())} words, {len(re.findall(r'^## Step', entry, re.M))} steps")
         print(" | ".join(summary))
 
 
