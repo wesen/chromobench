@@ -813,3 +813,65 @@ The orchestrator then asked for these diaries. I rebuilt the timeline from the s
 ### Technical details
 - Scratch folder: `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/guides/`.
 - This work wrote nothing under `ttmp/` or goja-cv. All its writes went to the scratch folder.
+
+## Step 16: Starting the implementation: branch, dependencies, core modules, restyle cherry-pick
+
+Implementation of CHB-009 begins on `task/chb-009-studio` (worktree `agent-aeb28d11cd9e9eb7e`), from `bd5912a`. The orchestrator's brief (`scratchpad/impl-brief-common.md`) and this ticket's task: stages 1–4 of the user's numbering (shell and library; viewer; generated controls, history and approvals with `E_STALE`; darkroom tool UIs on the mock ops), replacing the CHB-002 M1 page while keeping `e2e/m1-walking-skeleton.spec.ts` passing.
+
+### What I did
+- `git checkout -b task/chb-009-studio`; `pnpm install --frozen-lockfile` (fresh worktree had no node_modules).
+- Read the intern guide, `CONTRACT-DECISIONS.md`, `editlog.ts`, `mutations.ts`, `engine.ts`, `recipe.ts`, `registry.ts`, the catalog, `engine-mock.ts`/`ops.ts` and the M1 page and spec.
+- Dependencies: `pnpm --filter @chromobench/studio add react@19.3.1 react-dom@19.3.1` and `-D @types/react@19.3.0 @types/react-dom@19.3.0`.
+- Config: `tsconfig.json` includes `apps/*/src/**/*.tsx` and `apps/*/test/**/*.ts`; `tsconfig.base.json` gets `"jsx": "react-jsx"`; `vitest.config.ts` includes `apps/*/test/**/*.test.ts`; `apps/studio/vite.config.ts` sets `esbuild.jsx: 'automatic'`.
+- Wrote framework-free core: `core/units.ts`, `controls.ts`, `arrangement.ts`, `store.ts`, `gesture.ts`, `scheduler.ts`, `probe.ts`, `frame-session.ts`, `history.ts`.
+- Coordinator message mid-work: bring in CHB-002's restyle commit `14f5419` (Chromogen Studio look, `apps/studio/src/studio.css`). My work was uncommitted and deleted the M1 files, so: temporary WIP commit → branch `wip-chb009-tmp` → `git reset --hard HEAD~1` → `git cherry-pick 14f5419` (clean, now `f6290c0`) → `git cherry-pick -n wip-chb009-tmp` → modify/delete conflicts on `src/main.ts` and `src/controls.ts`, resolved with `git rm` after copying the restyled versions to `scratchpad/m1-restyled/` for reference → `git reset`, branch deleted.
+
+### What didn't work
+- `@vitejs/plugin-react@6.3.0` warns `unmet peer vite@^8.0.0: found 7.3.8`. Removed it; esbuild's automatic JSX runtime suffices (no Fast Refresh).
+- A single `mkdir -p` with brace expansion over the worktree path was refused by the harness ("too complex to verify that it stays inside the worktree"); split into plain commands.
+
+### Decisions
+- **No vite-plugin-pwa, no React Aria, no idb** (brief: minimal dependency changes). A hand-written service worker (network-first with cache fallback, so it is harmless under the Vite dev server), native `<input type=range>` with `aria-valuetext`, and a small IndexedDB wrapper.
+- **Keyboard bursts** are coalesced before logging (preview, then one `set` after 800 ms idle, blur or another control) instead of one `set` per step sharing a tx: `EditLog.apply` makes every call its own undo unit, so a shared tx would not give one undo step.
+- Slider widgets listen with native `input`/`change` listeners, not React `onChange`: the M1 spec sets `el.value` and dispatches synthetic events, which React's value tracker would swallow; it also keeps drags out of React renders.
+
+## Step 17: The studio end to end — UI, presenters, tests, and the headless WebGPU surprise
+
+The studio now runs on the mock engine with every stage the brief asked for: library and film strip with persistence by hash and the OPFS import fallback, the viewer with WebGPU/Display-P3 presentation and a Canvas2D fallback, generated controls with gestures, history and approvals with `E_STALE`, and the five darkroom tool UIs. Commit `7185e57` (studio) plus a follow-up fixing the ring-around signs. Most of the time went into one environment problem (WebGPU canvas presentation in headless Chromium) and two test-infrastructure issues in the shared Playwright config.
+
+### What I did
+- UI in `apps/studio/src/ui/` (App, Controls, History, Library, Viewer, tools/Tools, tools/Masks), presenters in `src/present/`, storage in `src/storage/`, boot in `src/main.tsx` (top-level await: IndexedDB, OPFS, `Studio.init()`, service worker, `window.chromobench` hook with `idle`, `pixel`, `canvasPixel`, `chainRuns`, `propose`, `studio`).
+- Layout and look from CHB-002's `studio.css`; additions in `studio-app.css` (tabs, film strip, bands, ring grid, contact sheet, exposure table, modal).
+- `e2e/m1-walking-skeleton.spec.ts`: one change — `canvasPixel` now calls `window.chromobench.canvasPixel(x, y)` (the canvas is a WebGPU canvas with a viewport transform, so `getContext('2d').getImageData` no longer applies).
+- New `e2e/studio.spec.ts` (7 tests), `apps/studio/test/core.test.ts` and `units-tools.test.ts` (34 tests), `fixtures/golden/CHB-009.json`.
+- `apps/studio/CONTRACT-REQUESTS.md`: `mask.paint.strokes` as canonical JSON; `mask.ellipse.angle_deg`; ring-around step in points (CHB-010).
+
+### What didn't work
+- `pnpm test:browser e2e/m1-walking-skeleton.spec.ts` → `Error: No tests found.` CHB-002's `testIgnore: ['**/node_modules/**', '.claude/**']` matches the absolute path of every file in an agent worktree (`…/.claude/worktrees/…`). Fixed by anchoring: `` `${import.meta.dirname}/.claude/**` ``.
+- Next run: `TypeError: window.chromobench.canvasPixel is not a function`. Port 4173 was already served by another worktree's Vite (`ss -ltnp` showed pid 1347785) and `reuseExistingServer` silently tested *that* app. Added `STUDIO_PORT` to `playwright.config.ts`; I ran everything with `STUDIO_PORT=4391`.
+- `AbortError: Failed to execute 'mapAsync' on 'GPUBuffer': A valid external Instance reference no longer exists.` Bisecting with throw-away scripts (`e2e/_dbg*.mjs`, deleted): the device was lost (`reason: destroyed`) with no `dispose()` call, independent of format (`rgba16float`/`rgba8unorm`), colour space (`display-p3`/`srgb`), tone mapping, upload format and shader body. A minimal page with a fresh device and a trivial pipeline reproduced it: `plain → "A valid external Instance reference no longer exists."`, `tonemap/p3 → "Device was destroyed."`, `offscreen-only → ok`. In headless Chromium on SwiftShader, **presenting to a WebGPU canvas loses the device**; offscreen rendering and readback work.
+- The tools e2e test hung in `locator.click` on a ring tile: `<canvas … aria-label="+2 step"> … intercepts pointer events`. CHB-002's rule `.canvas-wrap canvas { position: absolute; inset: 16px; … }` stretched every tile canvas over the whole viewer. Scoped my tile canvases with `.canvas-wrap canvas.tile-img { position: static; … }`.
+- An earlier `page.on('pageerror', (e) => { throw e; })` in the spec turned that hang into a timeout without a location; replaced by collecting errors and asserting in `afterEach`.
+- Screenshot review showed the ring-around **+Y and +B tiles swapped**: I had `+Y: (1,1,0)`, `+B: (0,0,1)`. A yellower print needs more yellow dye, i.e. more blue light: `+Y: (0,0,1)`, `+B: (1,1,0)`. Added sign assertions (+Y raises blue light, +B lowers it, +R lowers red, +C raises red) that fail on the old vectors.
+
+### Decisions
+- **Presenter fallback.** `WebGpuPresenter.onLost` → the viewer remounts a fresh `<canvas>` (a canvas keeps its first context) with `Canvas2dPresenter` and says so in the status line. `WebGpuPresenter.create(canvas, {offscreen: true})` draws to an offscreen texture; an e2e test imports the module in the page and checks exact pixels through it (`display-p3`, `[94, 111, 140]` for the M1 display value).
+- **Ring-around tiles are ordinary display nodes** with a lights offset, not `darkroom.ringAround` (which takes `step_cc`). The centre tile is the main node by hash-consing — tested (`data-node` equals `session.displayNode().id`).
+- **Time slider grid** is anchored at the default time (10 s), so 1/6-stop steps land on 10·2^(k/6).
+- **Masks** are vector MaskSpecs built from `mask.ellipse`/`mask.gradient`/`mask.paint` (strokes as JSON) combined with `mask.or`, then `mask.feather`, `mask.not`; `parseMask()` reads them back.
+- **Edit logs** are stored as one `EditLogData` per source hash (no per-entry rows or checkpoints yet).
+
+### Results
+- `pnpm typecheck` ok; `pnpm lint` ok (74 file checks); `pnpm test` 502 passed (34 new); `STUDIO_PORT=4391 pnpm test:browser` 13 passed (7 new, M1 ×2, wgsl-check ×4); `pnpm --filter @chromobench/studio build` ok (413 kB JS).
+- Screenshots: `scratchpad/studio-light.png`, `studio-dark.png`, `studio-ring.png`.
+
+### Open
+- `ex7d`: the drag-latency spike (pointer move → presented draft) is not measured.
+- `ey84`: no `refine` pass (draft and screen only).
+- `kygr`: no printer-lights pad (three sliders only); typed value entry is missing.
+- Stage 6 (`grer`, `rrhv`, `o944`): shortcut map and `aria-valuetext` exist; axe checks, live regions beyond the pending list, and the chat panel do not.
+- Precache list for builds (`/precache.json`) is not generated; the service worker caches at runtime.
+
+### Code review instructions
+- Start at `apps/studio/src/core/studio.ts` (`requestRender`, `onPresent`, `approve`, `applyToFrames`), then `gesture.ts`, `scheduler.ts`, `ui/Controls.tsx` (`RangeControl` native listeners).
+- Run: `STUDIO_PORT=4391 pnpm test:browser e2e/studio.spec.ts` and `pnpm vitest run apps/studio`.

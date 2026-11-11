@@ -49,11 +49,11 @@ export interface RingTile {
  * Offset = (v − mean v) · 1.5 · step: the dominant component equals the step.
  */
 const DIRS: { id: string; label: string; v: Vec3; row: number; col: number }[] = [
-  { id: 'Y', label: '+Y (−B)', v: [1, 1, 0], row: 0, col: 0 },
+  { id: 'Y', label: '+Y (−B)', v: [0, 0, 1], row: 0, col: 0 },
   { id: 'R', label: '+R (−C)', v: [0, 1, 1], row: 0, col: 1 },
   { id: 'M', label: '+M (−G)', v: [0, 1, 0], row: 0, col: 2 },
   { id: 'G', label: '+G (−M)', v: [1, 0, 1], row: 1, col: 0 },
-  { id: 'B', label: '+B (−Y)', v: [0, 0, 1], row: 1, col: 2 },
+  { id: 'B', label: '+B (−Y)', v: [1, 1, 0], row: 1, col: 2 },
   { id: 'C', label: '+C (−R)', v: [1, 0, 0], row: 2, col: 1 },
 ];
 

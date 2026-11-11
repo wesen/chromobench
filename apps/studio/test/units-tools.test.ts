@@ -95,6 +95,11 @@ describe('test strip and ring-around', () => {
     // opposite directions are opposite offsets
     const off = (id: string): number[] => tiles.find((t) => t.id === id)!.offset;
     for (const [a, b] of [['G', 'M'], ['R', 'C'], ['B', 'Y']] as const) off(a).forEach((v, i) => expect(v).toBeCloseTo(-off(b)[i]!, 12));
+    // more light of a colour makes more of its complementary dye: +Y needs more blue light, +B less
+    expect(off('Y')[2]).toBeGreaterThan(0);
+    expect(off('B')[2]).toBeLessThan(0);
+    expect(off('R')[0]).toBeLessThan(0);
+    expect(off('C')[0]).toBeGreaterThan(0);
     expect(tiles.filter((t) => t.row === 3).map((t) => t.label)).toEqual(['−2 step', '−1 step', '+1 step', '+2 step']);
   });
 });
