@@ -122,3 +122,89 @@ The goja-cv and Chromogen Studio agents were resumed with the diary request. Eac
 
 ### What should be done in the future
 - Tasks `0d32` (user questions) and `f9dt` (architecture design doc) remain open.
+
+## Step 4: Architecture doc, 14 tickets, and parallel guide writing
+
+The user asked for a ticket per work item, each with a detailed intern guide, stored in the tickets and uploaded to reMarkable, with commits along the way and a detailed diary. I wrote the shared architecture and work-plan doc myself first, so 14 independently written guides would use one vocabulary, one set of contracts and one planned repository layout. Then I created the tickets and started seven writer agents, two related tickets each.
+
+### Prompt Context
+**User prompt (verbatim):** "k, create the docmgr ticket, and for each ticket, Create  a detailed analysis / design / implementation guide that is for a new intern, explaining all the parts of the system needed to understand what it is, with prose paragraphs and bullet point sand pseudocode and diagrams and api references and file references. It should be very clear and technical. Store in the ticket and the nupload to remarkable.
+
+commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)"
+Earlier turns (summarised, not verbatim):
+- The user narrowed the stack to WebGPU, WebAssembly, HTML and JS, with the Go/goja reference being "mostly for the DSL itself".
+- They asked for "chunkier" tickets split by domain and parallelism.
+**Assistant interpretation:**
+- Create tickets CHB-002 to CHB-015 matching the 14-ticket plan.
+- Write one intern guide per ticket (prose, bullets, pseudocode, diagrams, API and file references).
+- Store the guides, upload them to reMarkable, commit at milestones, and keep this diary.
+
+**Inferred user intent:** A complete, onboarding-quality work breakdown that people or agents can pick up in parallel.
+
+### What I did
+- Created branch `task/chb-work-plan` and committed the CHB-001 import (`75a7d90`).
+- Wrote `design-doc/01-chromobench-architecture-and-work-plan.md` (≈5,100 words). It covers:
+  - the product;
+  - the one-page physics;
+  - the system diagram;
+  - vocabulary;
+  - contract sketches (`Domain`, `Unit`, `OpDef`, `ArgSpec`, `NodeRef`, `Engine`, `FrameRecipe`, `Mutation`, `EvalResult`, `Diagnostic`);
+  - the planned repo layout;
+  - a source index with line ranges;
+  - the ticket table, milestones and critical path;
+  - rules and open decisions.
+- Before citing goja-cv paths I checked them with a loop of `[ -e "$f" ]`. One path was too short (`look/golden_test.go`) and became `pkg/cv/look/golden_test.go`.
+- Added 11 topic vocabulary entries.
+- Created CHB-002 to CHB-015 from a TSV with `docmgr ticket create-ticket`, plus `doc add` for an intern guide (design-doc) and a diary in each.
+- Committed `a731130`.
+- Wrote the shared writer brief `scratchpad/guide-brief-common.md`. It covers:
+  - must-read docs (the architecture doc and the writing-style reference with its two-pass procedure);
+  - required content;
+  - pandoc-safe Markdown rules;
+  - read-only constraints;
+  - a return format with `=====BEGIN/END GUIDE|TASKS|RELATED CHB-0NN=====` blocks.
+- Launched seven background writers:
+  - 002 + 007 (contract and DSL);
+  - 003 + 012 (physics);
+  - 004 + 014 (data and black and white);
+  - 005 + 011 (GPU and output);
+  - 006 + 013 (ingest and calibration);
+  - 008 + 009 (agent and UI);
+  - 010 + 015 (darkroom and extensions).
+- Wrote `scripts/07-ingest-intern-guides.py`. It parses the blocks, writes each guide after its doc's frontmatter, adds tasks with `docmgr task add`, and relates existing paths with `docmgr doc relate --doc`.
+
+### Why
+- **The architecture doc comes first** because parallel writers would otherwise invent conflicting type names and paths. Each guide must propose contract additions explicitly, not redefine shared types.
+- **Two tickets per writer, grouped by domain,** keeps related context in one agent (for example, the contract and the DSL that consumes it) and keeps the number of parallel agents at seven.
+- **The writers return text, and a script files it,** because subagents cannot write report files. The script keeps roughly 150 KB of guide text out of the orchestrator's context.
+- **The writers were not asked for diaries.** The earlier Filmbench agent was stopped by an API safeguard when asked for an investigation diary (Step 3). This diary records their work instead.
+
+### What worked
+- The dry run of the ingest script on a fake block printed `CHB-015 | guide 7 words, 1 escaped '<\\' | 2 tasks | 1 related, 1 missing: ['/nonexistent/x']` and left `git status` unchanged apart from the new script.
+
+### What didn't work
+- The first dry run printed `guide SKIPPED (doc has a body; use --replace)`. docmgr's design-doc template adds placeholder headings and `<!-- … -->` comments. Fixed: a body made only of headings, comments and blank lines counts as empty.
+
+### What I learned
+- docmgr's `doc add` for `design-doc` seeds a template body. Tools that fill docs must recognise it.
+
+### What was tricky to build
+- Keeping 14 guides consistent without the orchestrator reading all of them. The solution has three parts:
+  - **one authoritative contract doc** with exact names;
+  - **a brief that forbids silent redefinition;**
+  - **an ingest script that reports escaped `<\` sequences,** which the harness's filter adds when it neutralises tag-like text, so I can spot damaged code samples.
+
+### What warrants a second pair of eyes
+- The contract sketches in the architecture doc are proposals. CHB-002's guide may refine them, and other guides may propose additions. A reconciliation pass after all guides land is worthwhile.
+
+### What should be done in the future
+- Ingest each writer's output, then run `docmgr doctor` on all tickets.
+- Commit in batches.
+- Upload to reMarkable under `/ai/2026/11/11/chromobench/`.
+
+### Code review instructions
+- Read `design-doc/01-chromobench-architecture-and-work-plan.md` first.
+- Check the ingest script with `python3 -I scripts/07-ingest-intern-guides.py <file> <repo> --dry-run`.
+
+### Technical details
+- Ticket directories: `ttmp/2026/11/11/CHB-0NN--<slug>/`; guide docs at `design-doc/01-intern-guide-*.md`.
