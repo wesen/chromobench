@@ -20,3 +20,4 @@ export * from './print/balance.ts';
 export * from './scan/solve.ts';
 export * from './scan/classify.ts';
 export * from './tables/tables.ts';
+export * from './engine-ref.ts';
