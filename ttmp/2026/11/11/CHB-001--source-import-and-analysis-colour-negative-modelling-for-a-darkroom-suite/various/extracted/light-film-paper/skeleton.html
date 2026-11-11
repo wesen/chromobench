@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Light, Film, Paper</title>
+
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="brand">Light, Film, Paper <i>the mathematics of a spectral film simulator</i></div>
+    <div class="chap">
+      <button class="chapbtn" id="chapbtn" aria-haspopup="true" aria-expanded="false"><span class="pcode" id="pcode"></span><span class="ptitle" id="ptitle"></span><span class="caret">▾</span></button>
+      <div class="menu" id="chapmenu" hidden></div>
+    </div>
+    <div class="sp"></div>
+    <button class="btn sm theme" id="theme" title="Switch light and dark">Theme</button>
+    <button class="btn" id="benchbtn">Bench</button>
+  </header>
+  <main id="work">
+    <nav class="pane" id="toc" aria-label="Contents">
+      <div class="search"><input id="q" type="search" placeholder="Search the book" autocomplete="off"></div>
+      <div class="scroll"><div class="toclist" id="toclist"></div></div>
+    </nav>
+    <section class="pane" id="reader"><div class="scroll" id="readscroll"><article class="doc" id="doc"></article></div></section>
+    <aside class="pane" id="bench" aria-label="Bench">
+      <div class="ptabs"><button id="tab-sketch" class="on">Sketch</button><button id="tab-src">Source</button><button class="closebench btn sm" id="closebench" style="margin:6px 4px 6px auto">Close</button></div>
+      <div class="scroll" id="bench-sketch">
+        <div class="bhead">
+          <div class="row"><select id="sketchsel" aria-label="Sketch"></select></div>
+          <p class="about" id="sabout"></p>
+        </div>
+        <div class="stage"><canvas id="cv" width="480" height="320"></canvas></div>
+        <div class="btools">
+          <button class="btn sm" id="play">Pause</button>
+          <button class="btn sm" id="restart">Restart</button>
+          <button class="btn sm primary" id="run" title="Run the edited source (Ctrl/Cmd + Enter)">Run</button>
+          <button class="btn sm" id="revert" disabled>Revert</button>
+          <span class="stat" id="stat"></span>
+        </div>
+        <div class="params" id="params"></div>
+        <div class="ed"><div class="gutter"><div class="gutter-in" id="gutter"></div></div><div class="code"><pre id="hl" aria-hidden="true"></pre><textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Sketch source"></textarea></div></div>
+        <div class="efoot" id="efoot"></div>
+      </div>
+      <div class="scroll" id="bench-src" hidden><p class="empty">Links marked ▸ in the text open a source card here.</p></div>
+    </aside>
+  </main>
+</div>
+
+
+</body>
+</html>

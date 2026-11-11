@@ -1,0 +1,2580 @@
+{
+ "top": {
+  "wl": "list[81] range [380, 780]",
+  "cmf": "list[81, 3] range [0.0, 1.7826]",
+  "illuminant": {
+   "D50": "list[81] range [0.28501, 1.19882]",
+   "D55": "list[81] range [0.37928, 1.21302]",
+   "D65": "list[81] range [0.5301, 1.34543]",
+   "T": "list[81] range [0.04429, 2.00294]",
+   "K75P": "list[81] range [0.01591, 1.99687]",
+   "TH-KG3": "list[81] range [0.27115, 1.55403]"
+  },
+  "dichroic": "list[81, 3] range [0.0, 1.0]",
+  "rgb2xyz_cat16": {
+   "D55": "list[3, 3] range [0.01497, 0.80989]",
+   "T": "list[3, 3] range [2e-05, 0.70549]",
+   "TH-KG3": "list[3, 3] range [0.00413, 0.70898]",
+   "D65": "list[3, 3] range [0.01929, 0.95028]",
+   "D50": "list[3, 3] range [0.01248, 0.72918]"
+  },
+  "xyz2rgb": {
+   "D50": "list[3, 3] range [-1.63261, 3.14256]",
+   "K75P": "list[3, 3] range [-1.53491, 3.23224]",
+   "D65": "list[3, 3] range [-1.53718, 3.24053]",
+   "D55": "list[3, 3] range [-1.59187, 3.17863]"
+  },
+  "illuminant_xyz": {
+   "D50": "list[3] range [0.82512, 1.0]",
+   "K75P": "list[3] range [0.94709, 1.05719]",
+   "D65": "list[3] range [0.95043, 1.0888]",
+   "D55": "list[3] range [0.92137, 1.0]"
+  },
+  "neutral_filters": {
+   "kodak_ultra_endura": "dict(20 keys)",
+   "kodak_endura_premier": "dict(20 keys)",
+   "kodak_ektacolor_edge": "dict(20 keys)",
+   "kodak_supra_endura": "dict(20 keys)",
+   "kodak_portra_endura": "dict(20 keys)",
+   "fujifilm_crystal_archive_typeii": "dict(20 keys)",
+   "kodak_2383": "dict(20 keys)",
+   "kodak_2393": "dict(20 keys)"
+  }
+ },
+ "profiles": {
+  "fujifilm_c200": {
+   "meta": {
+    "stock": "fujifilm_c200",
+    "name": "Fujifilm C200",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "weak",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "fujifilm_crystal_archive_typeii",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     17
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-1.1829, 2.08396]",
+     "amps": "list[3, 3] range [0.53368, 0.90276]",
+     "sigmas": "list[3, 3] range [0.58682, 0.81792]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.0,
+     1.704
+    ],
+    [
+     -0.001,
+     2.04
+    ],
+    [
+     -0.001,
+     2.642
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -6.695,
+     3.002
+    ]
+   }
+  },
+  "fujifilm_crystal_archive_typeii": {
+   "meta": {
+    "stock": "fujifilm_crystal_archive_typeii",
+    "name": "Fujifilm Crystal Archive Type II",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     13
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.22742, 0.46527]",
+     "amps": "list[3, 3] range [0.44385, 0.91033]",
+     "sigmas": "list[3, 3] range [0.15421, 0.22595]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.446
+    ],
+    [
+     -0.001,
+     2.185
+    ],
+    [
+     -0.001,
+     1.959
+    ]
+   ],
+   "lut": null
+  },
+  "fujifilm_pro_400h": {
+   "meta": {
+    "stock": "fujifilm_pro_400h",
+    "name": "Fujifilm Pro 400H",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "fujifilm_crystal_archive_typeii",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     17
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.90919, 1.57482]",
+     "amps": "list[3, 3] range [0.49587, 0.72742]",
+     "sigmas": "list[3, 3] range [0.48267, 0.6172]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.581
+    ],
+    [
+     -0.001,
+     1.605
+    ],
+    [
+     -0.001,
+     2.126
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -7.302,
+     2.796
+    ]
+   }
+  },
+  "fujifilm_provia_100f": {
+   "meta": {
+    "stock": "fujifilm_provia_100f",
+    "name": "Fujifilm Provia 100F",
+    "type": "positive",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": null,
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     14
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-1.03724, 0.09559]",
+     "amps": "list[3, 3] range [0.65752, 0.88333]",
+     "sigmas": "list[3, 3] range [0.37083, 0.42785]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.002,
+     2.556
+    ],
+    [
+     -0.001,
+     2.545
+    ],
+    [
+     -0.001,
+     2.076
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.612,
+     3.661
+    ]
+   }
+  },
+  "fujifilm_velvia_100": {
+   "meta": {
+    "stock": "fujifilm_velvia_100",
+    "name": "Fujifilm Velvia 100",
+    "type": "positive",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": null,
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     19
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.86593, 0.0789]",
+     "amps": "list[3, 3] range [0.80944, 1.29035]",
+     "sigmas": "list[3, 3] range [0.31594, 0.34326]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.002,
+     2.731
+    ],
+    [
+     -0.001,
+     3.573
+    ],
+    [
+     -0.001,
+     2.859
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.839,
+     3.583
+    ]
+   }
+  },
+  "fujifilm_xtra_400": {
+   "meta": {
+    "stock": "fujifilm_xtra_400",
+    "name": "Fujifilm X-Tra 400",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "weak",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "fujifilm_crystal_archive_typeii",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     17
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.92274, 2.09729]",
+     "amps": "list[3, 3] range [0.65224, 0.97018]",
+     "sigmas": "list[3, 3] range [0.59165, 0.82009]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.132
+    ],
+    [
+     -0.001,
+     2.249
+    ],
+    [
+     -0.001,
+     2.862
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -6.69,
+     2.767
+    ]
+   }
+  },
+  "kodak_2383": {
+   "meta": {
+    "stock": "kodak_2383",
+    "name": "Kodak Vision 2383",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "K75P",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     7
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.00414, 0.71057]",
+     "amps": "list[3, 3] range [0.78472, 1.40644]",
+     "sigmas": "list[3, 3] range [0.22689, 0.34656]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     3.802
+    ],
+    [
+     -0.001,
+     3.294
+    ],
+    [
+     -0.001,
+     3.024
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_2393": {
+   "meta": {
+    "stock": "kodak_2393",
+    "name": "Kodak Vision Premier 2393",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "K75P",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     7
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [0.00099, 0.80382]",
+     "amps": "list[3, 3] range [0.99576, 1.70753]",
+     "sigmas": "list[3, 3] range [0.27773, 0.36543]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     4.627
+    ],
+    [
+     -0.001,
+     4.48
+    ],
+    [
+     -0.001,
+     4.231
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_ektachrome_100": {
+   "meta": {
+    "stock": "kodak_ektachrome_100",
+    "name": "Kodak Ektachrome 100",
+    "type": "positive",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": null,
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     21
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.8906, 0.12661]",
+     "amps": "list[3, 3] range [0.72562, 1.01803]",
+     "sigmas": "list[3, 3] range [0.43243, 0.4439]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.002,
+     2.511
+    ],
+    [
+     -0.001,
+     2.805
+    ],
+    [
+     -0.001,
+     2.812
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -7.052,
+     3.383
+    ]
+   }
+  },
+  "kodak_ektacolor_edge": {
+   "meta": {
+    "stock": "kodak_ektacolor_edge",
+    "name": "Kodak Ektacolor Edge",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [0.10567, 0.39771]",
+     "amps": "list[3, 3] range [0.59932, 0.79755]",
+     "sigmas": "list[3, 3] range [0.18268, 0.32846]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.252
+    ],
+    [
+     -0.001,
+     2.019
+    ],
+    [
+     -0.001,
+     1.845
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_ektar_100": {
+   "meta": {
+    "stock": "kodak_ektar_100",
+    "name": "Kodak Ektar 100",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     25
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.96557, 1.61936]",
+     "amps": "list[3, 3] range [0.56436, 0.79816]",
+     "sigmas": "list[3, 3] range [0.44215, 0.55631]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.89
+    ],
+    [
+     -0.001,
+     1.78
+    ],
+    [
+     -0.001,
+     2.27
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -6.257,
+     3.618
+    ]
+   }
+  },
+  "kodak_endura_premier": {
+   "meta": {
+    "stock": "kodak_endura_premier",
+    "name": "Kodak Professional Endura Premier",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.0583, 0.30558]",
+     "amps": "list[3, 3] range [0.5932, 0.8622]",
+     "sigmas": "list[3, 3] range [0.17339, 0.20712]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.426
+    ],
+    [
+     -0.001,
+     1.891
+    ],
+    [
+     -0.001,
+     1.92
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_gold_200": {
+   "meta": {
+    "stock": "kodak_gold_200",
+    "name": "Kodak Gold 200",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "weak",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     20
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.90675, 1.01879]",
+     "amps": "list[3, 3] range [0.4808, 0.56836]",
+     "sigmas": "list[3, 3] range [0.46869, 0.69745]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.627
+    ],
+    [
+     -0.001,
+     1.514
+    ],
+    [
+     -0.001,
+     1.687
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -5.106,
+     4.185
+    ]
+   }
+  },
+  "kodak_kodachrome_64": {
+   "meta": {
+    "stock": "kodak_kodachrome_64",
+    "name": "Kodak Kodachrome 64",
+    "type": "positive",
+    "support": "film",
+    "use": "still",
+    "antihalation": "weak",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": null,
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     26
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.95608, 0.10406]",
+     "amps": "list[3, 3] range [0.64307, 1.02968]",
+     "sigmas": "list[3, 3] range [0.42044, 0.44696]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.002,
+     2.91
+    ],
+    [
+     -0.001,
+     2.804
+    ],
+    [
+     -0.001,
+     2.259
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.511,
+     3.796
+    ]
+   }
+  },
+  "kodak_portra_160": {
+   "meta": {
+    "stock": "kodak_portra_160",
+    "name": "Kodak Portra 160",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-1.0827, 1.50163]",
+     "amps": "list[3, 3] range [0.52249, 0.71332]",
+     "sigmas": "list[3, 3] range [0.42432, 0.53785]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.67
+    ],
+    [
+     -0.001,
+     1.744
+    ],
+    [
+     -0.001,
+     2.025
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.255,
+     2.753
+    ]
+   }
+  },
+  "kodak_portra_400": {
+   "meta": {
+    "stock": "kodak_portra_400",
+    "name": "Kodak Portra 400",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     20
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.92397, 1.67379]",
+     "amps": "list[3, 3] range [0.56227, 0.75988]",
+     "sigmas": "list[3, 3] range [0.44365, 0.53228]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.991
+    ],
+    [
+     -0.001,
+     1.798
+    ],
+    [
+     -0.001,
+     2.163
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -3.916,
+     3.414
+    ]
+   }
+  },
+  "kodak_portra_800": {
+   "meta": {
+    "stock": "kodak_portra_800",
+    "name": "Kodak Portra 800",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.93412, 1.65112]",
+     "amps": "list[3, 3] range [0.56025, 0.71161]",
+     "sigmas": "list[3, 3] range [0.4952, 0.61665]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.898
+    ],
+    [
+     -0.001,
+     1.731
+    ],
+    [
+     -0.001,
+     2.025
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.628,
+     3.779
+    ]
+   }
+  },
+  "kodak_portra_800_push1": {
+   "meta": {
+    "stock": "kodak_portra_800_push1",
+    "name": "Kodak Portra 800 (Push 1)",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.68607, 1.77344]",
+     "amps": "list[3, 3] range [0.63138, 0.80216]",
+     "sigmas": "list[3, 3] range [0.484, 0.62433]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.296
+    ],
+    [
+     -0.001,
+     1.959
+    ],
+    [
+     -0.001,
+     2.256
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.628,
+     3.779
+    ]
+   }
+  },
+  "kodak_portra_800_push2": {
+   "meta": {
+    "stock": "kodak_portra_800_push2",
+    "name": "Kodak Portra 800 (Push 2)",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.56024, 1.84706]",
+     "amps": "list[3, 3] range [0.66065, 0.91449]",
+     "sigmas": "list[3, 3] range [0.51115, 0.70055]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.518
+    ],
+    [
+     -0.001,
+     2.01
+    ],
+    [
+     -0.001,
+     2.523
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.628,
+     3.779
+    ]
+   }
+  },
+  "kodak_portra_endura": {
+   "meta": {
+    "stock": "kodak_portra_endura",
+    "name": "Kodak Professional Portra Endura",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.0896, 0.5983]",
+     "amps": "list[3, 3] range [0.5503, 0.90097]",
+     "sigmas": "list[3, 3] range [0.19224, 0.32045]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.463
+    ],
+    [
+     -0.001,
+     2.069
+    ],
+    [
+     -0.001,
+     1.822
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_supra_endura": {
+   "meta": {
+    "stock": "kodak_supra_endura",
+    "name": "Kodak Professional Supra Endura",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.22878, 0.46672]",
+     "amps": "list[3, 3] range [0.43595, 0.93031]",
+     "sigmas": "list[3, 3] range [0.15513, 0.22443]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.478
+    ],
+    [
+     -0.001,
+     2.009
+    ],
+    [
+     -0.001,
+     1.924
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_ultra_endura": {
+   "meta": {
+    "stock": "kodak_ultra_endura",
+    "name": "Kodak Professional Ultra Endura",
+    "type": "negative",
+    "support": "paper",
+    "use": "still",
+    "antihalation": "strong",
+    "ref": "TH-KG3",
+    "view": "D50",
+    "target_print": null,
+    "role": "print"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.01079, 0.42745]",
+     "amps": "list[3, 3] range [0.47882, 0.86214]",
+     "sigmas": "list[3, 3] range [0.16691, 0.23439]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     2.388
+    ],
+    [
+     -0.001,
+     1.52
+    ],
+    [
+     -0.001,
+     2.131
+    ]
+   ],
+   "lut": null
+  },
+  "kodak_ultramax_400": {
+   "meta": {
+    "stock": "kodak_ultramax_400",
+    "name": "Kodak Ultramax 400",
+    "type": "negative",
+    "support": "film",
+    "use": "still",
+    "antihalation": "weak",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_portra_endura",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     21
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.97706, 1.63128]",
+     "amps": "list[3, 3] range [0.54393, 0.72438]",
+     "sigmas": "list[3, 3] range [0.49036, 0.60506]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.803
+    ],
+    [
+     -0.001,
+     1.703
+    ],
+    [
+     -0.001,
+     2.057
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.317,
+     3.989
+    ]
+   }
+  },
+  "kodak_verita_200d": {
+   "meta": {
+    "stock": "kodak_verita_200d",
+    "name": "Kodak Verita 200D",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_2383",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     22
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.92635, 1.57338]",
+     "amps": "list[3, 3] range [0.54793, 0.74387]",
+     "sigmas": "list[3, 3] range [0.45565, 0.62703]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.803
+    ],
+    [
+     -0.001,
+     1.681
+    ],
+    [
+     -0.001,
+     1.979
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.606,
+     3.27
+    ]
+   }
+  },
+  "kodak_vision3_200t": {
+   "meta": {
+    "stock": "kodak_vision3_200t",
+    "name": "Kodak Vision3 200T",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "T",
+    "view": "D50",
+    "target_print": "kodak_2383",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     5
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-1.01411, 1.40167]",
+     "amps": "list[3, 3] range [0.51514, 0.62996]",
+     "sigmas": "list[3, 3] range [0.5286, 0.71548]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.667
+    ],
+    [
+     -0.001,
+     1.635
+    ],
+    [
+     -0.001,
+     1.845
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -8.395,
+     3.798
+    ]
+   }
+  },
+  "kodak_vision3_250d": {
+   "meta": {
+    "stock": "kodak_vision3_250d",
+    "name": "Kodak Vision3 250D",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_2383",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     5
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.90593, 1.41016]",
+     "amps": "list[3, 3] range [0.546, 0.64339]",
+     "sigmas": "list[3, 3] range [0.63178, 0.91699]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.694
+    ],
+    [
+     -0.0,
+     1.777
+    ],
+    [
+     -0.0,
+     1.907
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -5.486,
+     3.552
+    ]
+   }
+  },
+  "kodak_vision3_500t": {
+   "meta": {
+    "stock": "kodak_vision3_500t",
+    "name": "Kodak Vision3 500T",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "T",
+    "view": "D50",
+    "target_print": "kodak_2383",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     5
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.96679, 1.35553]",
+     "amps": "list[3, 3] range [0.5232, 0.64742]",
+     "sigmas": "list[3, 3] range [0.63592, 0.93662]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.0,
+     1.745
+    ],
+    [
+     -0.0,
+     1.639
+    ],
+    [
+     -0.0,
+     1.921
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -4.24,
+     4.066
+    ]
+   }
+  },
+  "kodak_vision3_50d": {
+   "meta": {
+    "stock": "kodak_vision3_50d",
+    "name": "Kodak Vision3 50D",
+    "type": "negative",
+    "support": "film",
+    "use": "cine",
+    "antihalation": "strong",
+    "ref": "D55",
+    "view": "D50",
+    "target_print": "kodak_2383",
+    "role": "film"
+   },
+   "arrays": {
+    "logSens": [
+     81,
+     3
+    ],
+    "nanRows": [
+     10
+    ],
+    "chan": [
+     81,
+     3
+    ],
+    "base": [
+     81
+    ],
+    "curves": [
+     256,
+     3
+    ]
+   },
+   "dicts": {
+    "model": {
+     "centers": "list[3, 3] range [-0.97886, 1.42767]",
+     "amps": "list[3, 3] range [0.52483, 0.66925]",
+     "sigmas": "list[3, 3] range [0.46703, 0.62583]"
+    }
+   },
+   "curves_range": [
+    [
+     -0.001,
+     1.624
+    ],
+    [
+     -0.001,
+     1.695
+    ],
+    [
+     -0.001,
+     1.912
+    ]
+   ],
+   "lut": {
+    "int16_count": 12288,
+    "as_64x64x3": true,
+    "log2_range": [
+     -8.077,
+     3.352
+    ]
+   }
+  }
+ },
+ "illuminants": {
+  "D50": 81,
+  "D55": 81,
+  "D65": 81,
+  "T": 81,
+  "K75P": 81,
+  "TH-KG3": 81
+ },
+ "neutral_filters": {
+  "kodak_ultra_endura": {
+   "kodak_ektar_100": [
+    0.0,
+    71.21744659598852,
+    55.58437666939118
+   ],
+   "kodak_portra_160": [
+    0.0,
+    57.15404858114955,
+    48.86375299925418
+   ],
+   "kodak_portra_400": [
+    0.0,
+    49.87607851171529,
+    49.48862882891022
+   ],
+   "kodak_portra_800": [
+    0.0,
+    62.82050090101132,
+    61.33524653263038
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    63.01707290339426,
+    63.341840688215036
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    63.24764178690047,
+    64.92347607764701
+   ],
+   "kodak_gold_200": [
+    0.0,
+    56.83283789272736,
+    52.113935228338335
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    57.14447877951919,
+    55.99816241983575
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    43.63996923605612,
+    43.993446806316754
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    44.03753025409039,
+    40.56777056432539
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    59.4196323981214,
+    61.804125668579864
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    38.012649720349025,
+    40.47047953657534
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    37.59673761574073,
+    42.8090387587452
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    37.473152752169256,
+    27.254559336057
+   ],
+   "fujifilm_c200": [
+    0.0,
+    73.83619426231039,
+    86.39873181097255
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    76.53352313032582,
+    89.28151831725619
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_endura_premier": {
+   "kodak_ektar_100": [
+    0.0,
+    76.47176325797557,
+    62.00773389524774
+   ],
+   "kodak_portra_160": [
+    0.0,
+    62.41753451557521,
+    55.31696280834853
+   ],
+   "kodak_portra_400": [
+    0.0,
+    55.159115960782316,
+    55.88320270882486
+   ],
+   "kodak_portra_800": [
+    0.0,
+    68.14641888187258,
+    67.76653926744103
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    68.35603710281812,
+    69.77179224849915
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    68.596178085291,
+    71.35177971672023
+   ],
+   "kodak_gold_200": [
+    0.0,
+    62.006563465462065,
+    58.50681413364681
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    62.38920029643245,
+    62.3950991058811
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    48.85103178639727,
+    50.42804903364359
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    49.260656119347274,
+    47.015416690610614
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    64.80005022857895,
+    68.21703030156958
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    43.264551859314196,
+    46.92250618785083
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    42.85744063677658,
+    49.256733463166356
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    42.46137935126085,
+    33.65909329661797
+   ],
+   "fujifilm_c200": [
+    0.0,
+    79.11727872653833,
+    92.74786549749487
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    81.80757186375037,
+    95.61636078745556
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_ektacolor_edge": {
+   "kodak_ektar_100": [
+    0.0,
+    75.38398624290706,
+    62.341366114794795
+   ],
+   "kodak_portra_160": [
+    0.0,
+    60.904472895492454,
+    55.85258722326597
+   ],
+   "kodak_portra_400": [
+    0.0,
+    52.96348527906009,
+    55.76819181785559
+   ],
+   "kodak_portra_800": [
+    0.0,
+    66.85501523501935,
+    68.16385880144078
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    67.03377617367711,
+    70.17380288517296
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    67.25940060174264,
+    71.76607384713158
+   ],
+   "kodak_gold_200": [
+    0.0,
+    60.0708941355756,
+    57.98996979780347
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    60.15018987769184,
+    61.801219109473614
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    40.046364508335664,
+    43.11083255462687
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    40.26144698848645,
+    39.58977179633663
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    63.95605920606377,
+    69.55501683475497
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    34.16274717351099,
+    39.57256045789436
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    33.61747616792058,
+    41.74915765764524
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    36.85069389916268,
+    29.32162784701236
+   ],
+   "fujifilm_c200": [
+    0.0,
+    73.72887771588616,
+    88.81344209864636
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    75.43975300901954,
+    90.63376105194935
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_supra_endura": {
+   "kodak_ektar_100": [
+    0.0,
+    73.52502872080292,
+    63.780743444646085
+   ],
+   "kodak_portra_160": [
+    0.0,
+    59.05922059358109,
+    56.23982107310164
+   ],
+   "kodak_portra_400": [
+    0.0,
+    50.73008094647558,
+    55.565052688261595
+   ],
+   "kodak_portra_800": [
+    0.0,
+    65.03221778735372,
+    69.11854976882074
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    65.2159041847446,
+    71.0751040935516
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    65.44456161157092,
+    72.62721174213124
+   ],
+   "kodak_gold_200": [
+    0.0,
+    57.71493266136707,
+    58.5840694289496
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    57.77714508440625,
+    62.20172219844264
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    34.855088273343966,
+    40.22277900858396
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    34.98874864766345,
+    36.44340840967178
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    62.523888334802514,
+    70.19992115790784
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    29.00608877050712,
+    36.27473719784964
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    28.407409379750717,
+    38.43548008272094
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    32.491626805578825,
+    27.66345239097052
+   ],
+   "fujifilm_c200": [
+    0.0,
+    68.89063668710793,
+    86.90540903505348
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    70.13845553967305,
+    88.46653303159177
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_portra_endura": {
+   "kodak_ektar_100": [
+    0.0,
+    74.44438537985663,
+    60.742113278496966
+   ],
+   "kodak_portra_160": [
+    0.0,
+    59.967376846322814,
+    53.21333784015279
+   ],
+   "kodak_portra_400": [
+    0.0,
+    51.56801468495496,
+    52.53400422349596
+   ],
+   "kodak_portra_800": [
+    0.0,
+    65.88803030875636,
+    66.08336378019627
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    66.06061571084823,
+    68.03951693663969
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    66.28037920033391,
+    69.59113087748631
+   ],
+   "kodak_gold_200": [
+    0.0,
+    58.66106013923236,
+    55.551852192967594
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    58.66256771946224,
+    59.17049757909685
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    35.790412428626226,
+    37.18546238914089
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    35.92707336791271,
+    33.40446154092658
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    63.310290665924306,
+    67.15899587174609
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    29.914847434343923,
+    33.23710739005801
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    29.29767022986046,
+    35.395462500720996
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    33.5382820851517,
+    24.634719861246765
+   ],
+   "fujifilm_c200": [
+    0.0,
+    69.70755596152058,
+    83.85195736345584
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    70.96000681404018,
+    85.41217000239546
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "fujifilm_crystal_archive_typeii": {
+   "kodak_ektar_100": [
+    0.0,
+    88.5260928648234,
+    85.89530169206753
+   ],
+   "kodak_portra_160": [
+    0.0,
+    75.46826954799748,
+    77.6877694801623
+   ],
+   "kodak_portra_400": [
+    0.0,
+    68.40746921919916,
+    76.8000492666656
+   ],
+   "kodak_portra_800": [
+    0.0,
+    81.62719047053119,
+    91.0683381064372
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    81.88476720726455,
+    92.8315546726862
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    82.1709963322015,
+    94.23122418599812
+   ],
+   "kodak_gold_200": [
+    0.0,
+    74.42012357903677,
+    82.41968465083302
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    74.94556657950359,
+    85.09873154243432
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    47.56093233973917,
+    58.340609950473684
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    47.44329080215578,
+    54.19807046751071
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    79.79452543531895,
+    90.50071484579706
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    41.72265189689145,
+    53.33186580787951
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    41.13232799730229,
+    55.30446940687522
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    48.15365594794165,
+    50.73525280937112
+   ],
+   "fujifilm_c200": [
+    0.0,
+    85.91380393854578,
+    108.32018060451946
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    85.85051495120246,
+    109.0956393008583
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_2383": {
+   "kodak_ektar_100": [
+    0.0,
+    79.47109863006611,
+    69.94810698605633
+   ],
+   "kodak_portra_160": [
+    0.0,
+    65.24831555241266,
+    64.09539803840772
+   ],
+   "kodak_portra_400": [
+    0.0,
+    57.808691056343356,
+    63.611095246127
+   ],
+   "kodak_portra_800": [
+    0.0,
+    70.89483492876074,
+    74.40319521268877
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    71.16868392324596,
+    76.53774810733435
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    71.4336563564753,
+    78.21340066771599
+   ],
+   "kodak_gold_200": [
+    0.0,
+    63.9623079571011,
+    64.03487618133764
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    65.10227063326569,
+    68.73495995838842
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    50.56998940268494,
+    57.61856208793342
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    50.75474630493298,
+    54.476948425062304
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    67.05962987951338,
+    75.58490842343356
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    45.02759015375407,
+    54.77922859283038
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    44.613539160437185,
+    56.764119641390934
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    42.573151305991296,
+    39.944105518902376
+   ],
+   "fujifilm_c200": [
+    0.0,
+    78.60584268221757,
+    100.12236156288677
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    81.53485436775092,
+    102.67153403678776
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  },
+  "kodak_2393": {
+   "kodak_ektar_100": [
+    0.0,
+    91.09770349066147,
+    84.71116209646266
+   ],
+   "kodak_portra_160": [
+    0.0,
+    72.36379077332406,
+    75.75029049237953
+   ],
+   "kodak_portra_400": [
+    0.0,
+    65.1566496976183,
+    75.53371406317152
+   ],
+   "kodak_portra_800": [
+    0.0,
+    77.93397089363184,
+    85.00585492951933
+   ],
+   "kodak_portra_800_push1": [
+    0.0,
+    78.204298007858,
+    87.18833764545202
+   ],
+   "kodak_portra_800_push2": [
+    0.0,
+    78.46577201065426,
+    88.89546526146941
+   ],
+   "kodak_gold_200": [
+    0.0,
+    71.9418812377999,
+    75.25102583029546
+   ],
+   "kodak_ultramax_400": [
+    0.0,
+    72.9795875850475,
+    80.25933022776934
+   ],
+   "kodak_vision3_50d": [
+    0.0,
+    60.15255680401095,
+    70.85597546370028
+   ],
+   "kodak_vision3_250d": [
+    0.0,
+    60.29353116594252,
+    67.78133140792906
+   ],
+   "kodak_verita_200d": [
+    0.0,
+    72.95357999558908,
+    85.83040574083843
+   ],
+   "kodak_vision3_200t": [
+    0.0,
+    54.32385084848879,
+    68.21451403644409
+   ],
+   "kodak_vision3_500t": [
+    0.0,
+    53.949684028878856,
+    70.0917481854984
+   ],
+   "fujifilm_pro_400h": [
+    0.0,
+    51.748561163671276,
+    52.70482912253071
+   ],
+   "fujifilm_c200": [
+    0.0,
+    88.80807789876364,
+    113.31231038112658
+   ],
+   "fujifilm_xtra_400": [
+    0.0,
+    92.10701822640735,
+    116.0274063891466
+   ],
+   "kodak_ektachrome_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "kodak_kodachrome_64": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_velvia_100": [
+    0.0,
+    50.0,
+    50.0
+   ],
+   "fujifilm_provia_100f": [
+    0.0,
+    50.0,
+    50.0
+   ]
+  }
+ }
+}

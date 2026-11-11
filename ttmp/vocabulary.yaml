@@ -5,6 +5,16 @@ topics:
       description: Backend services
     - slug: websocket
       description: WebSocket lifecycle & events
+    - slug: color-science
+      description: Colour science, film/paper sensitometry and spectral modelling
+    - slug: film-emulation
+      description: Negative film and darkroom print simulation
+    - slug: image-pipeline
+      description: RAW/scan ingest and image processing pipelines
+    - slug: js-api
+      description: JavaScript (goja) scripting APIs
+    - slug: product
+      description: Product scope and user-facing application design
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes
@@ -16,6 +26,10 @@ docTypes:
       description: Ticket landing page
     - slug: skill
       description: Skill documentation (what it's for and when to use it)
+    - slug: analysis
+      description: Analysis of sources, algorithms or code
+    - slug: diary
+      description: Chronological work diary
 intent:
     - slug: long-term
       description: Likely to persist
