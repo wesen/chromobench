@@ -35,7 +35,6 @@ for (const engine of ['gpu', 'reference'] as const) {
     // the first print: enlarger in 'real' mode, integrated to grey (recorded in print.lights.auto)
     const r0 = await page.evaluate(() => window.chromobench.log!.state.print);
     expect(r0.enlarger.mode).toBe('real');
-    expect(r0.aim).toBe('midgray-normalised');
     expect(r0.lights.auto.method).toBe('integrate');
     expect(r0.lights.auto.applied).toBe(true);
     const p0 = (await centre(page))!;

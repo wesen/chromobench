@@ -38,7 +38,7 @@ export function integratedExposure(x: ArrayLike<number>, n: number, stride = 3):
 
 /** Time on the time slider's grid: 10 s · 2^(k/6), clamped to 2…120 s. */
 export function gridTime(t: number): number {
-  const k = Math.round(6 * Math.log2(Math.min(120, Math.max(2, t)) / 10));
+  const k = Math.min(Math.floor(6 * Math.log2(12)), Math.max(Math.ceil(6 * Math.log2(0.2)), Math.round(6 * Math.log2(t / 10))));
   return Number((10 * 2 ** (k / 6)).toFixed(3));
 }
 
@@ -64,10 +64,9 @@ export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, 
 export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, o: FirstPrintOptions): Promise<FrameRecipe> {
   const alpha = o.alpha ?? 1;
   const N = o.analysisPixels ?? 200_000;
-  // 'real' with the 'midgray-normalised' aim: calibrated at 10 s, f/8 and the neutral pack, so time,
-  // f-number and filtration move the print. With the 'grey-0.184' aim core recomputes the aim lights
-  // from the exposure itself and they cancel the time (CHB-023 diary step 2; reported to CHB-010).
-  let r: FrameRecipe = { ...recipe, print: { ...recipe.print, aim: 'midgray-normalised', enlarger: { ...recipe.print.enlarger, mode: 'real' } } };
+  // 'real' (set explicitly: contract request C4 on the default is open). Since CHB-010 the aim is fitted
+  // once, at calibration, so time, f-number and the filtration shift move the print as at an enlarger.
+  let r: FrameRecipe = { ...recipe, print: { ...recipe.print, enlarger: { ...recipe.print.enlarger, mode: 'real' } } };
   let lights = [...r.print.lights.logH] as Vec3;
   let t = r.print.enlarger.time_s;
   for (let pass = 0; pass < (o.passes ?? 2); pass++) {

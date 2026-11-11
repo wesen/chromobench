@@ -93,9 +93,10 @@ export function unorientBox(o: Orientation, b: Box, w: number, h: number): Box {
 const swaps = (o: Orientation): boolean => o === 'cw90' || o === 'ccw90' || o === 'transpose' || o === 'transverse';
 
 /** Reorients interleaved pixels (w × h, c channels) for display: output pixel (x′, y′) reads input (x, y). */
-export function orientPixels(o: Orientation, src: SampleData, w: number, h: number, c: number): { data: Float32Array; width: number; height: number } {
+export function orientPixels(o: Orientation, src: SampleData, w: number, h: number, c: number): { data: Float32Array | Float64Array; width: number; height: number } {
   const [W, H] = swaps(o) ? [h, w] : [w, h];
-  const out = new Float32Array(W * H * c);
+  // the engine's sample type, so a reoriented pixel is bit-identical
+  const out = src instanceof Float64Array ? new Float64Array(W * H * c) : new Float32Array(W * H * c);
   for (let y2 = 0; y2 < H; y2++) {
     for (let x2 = 0; x2 < W; x2++) {
       let x = x2, y = y2;
@@ -144,7 +145,7 @@ export function inspectPixels(mode: string, domain: Domain, src: SampleData, n: 
 }
 
 const result = (n: Node, info: ImageInfo, base: { region: Box; scale: number; warnings: ImageResult['warnings'] }, data: SampleData, width: number, height: number): ImageResult => ({
-  node: n.id, info, scale: base.scale, region: { ...base.region }, width, height, format: 'f32',
+  node: n.id, info, scale: base.scale, region: { ...base.region }, width, height, format: data instanceof Float64Array ? 'f64' : 'f32',
   read: async () => data.slice(), warnings: [...base.warnings],
 });
 
