@@ -1,11 +1,8 @@
-// The packs implement core's PhysicsData (packages/core/src/data/provider.ts), so core can switch from
-// its interim JSON to the packs by changing one import. This file checks the type, the data overlap
-// with core's interim provider, and core's print chain on pack data. The full core suite against the
-// packs runs with `pnpm --filter @chromobench/data test:core-parity` (vitest.core-parity.config.ts);
-// its result is in the CHB-004 diary.
+// The packs implement core's PhysicsData (packages/core/src/data/provider.ts). This file checks the type, the data overlap
+// with the retired interim JSON provider, and core's print chain on pack data. (Moved here from packages/data to avoid a workspace cycle.)
 import { describe, expect, it } from 'vitest';
-import { interimData, makePrintChain, resolveStock, SPEKTRAFILM, type PhysicsData } from '@chromobench/core';
-import { nodePhysicsData } from '../src/node.ts';
+import { legacyInterimData as interimData, makePrintChain, resolveStock, SPEKTRAFILM, type PhysicsData } from '@chromobench/core';
+import { nodePhysicsData } from '@chromobench/data/node';
 
 const packs: PhysicsData = nodePhysicsData(); // compile-time check: the adapter satisfies core's interface
 const interim = interimData();

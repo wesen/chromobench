@@ -20,7 +20,8 @@
     "section": "§3.4", "note": "mean iterations plain → active set over the Studio's 33³ secant-keyed table on A_RANGE; nodes at the cap; unreachable fraction",
     "cases": [
       { "scanner": "xt5-fitted", "stock": "kodak_gold_200", "plain": 13.9, "active": 2.3, "capPlain": 8885, "capActive": 0, "unreachable": 0.249 },
-      { "scanner": "white-led", "stock": "kodak_portra_400", "plain": 23.2, "active": 5.1, "capPlain": 15040, "capActive": 15, "unreachable": 0.397 }
+      { "scanner": "white-led", "stock": "kodak_portra_400", "plain": 23.2, "active": 5.1, "capPlain": 15040, "capActive": 15, "unreachable": 0.397,
+        "capPlainTol": 10, "capActiveTol": 1, "tolNote": "CHB-017 data switch: on the spektrafilm pack the cap hits are 15047 (plain) and 14 (active), the interim JSON gave 15042 and 15. They are discrete counts of nodes that straddle the iteration cap, so they move with bit-level differences in the data; they are not physics. Textbook figures stay the centre of the band." }
     ]
   },
   "flatWedge": { "section": "§3.7", "D": 1.234, "expect": 1.234, "tol": 6e-7 },

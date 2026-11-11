@@ -8,7 +8,11 @@ export * from './spectral/linalg.ts';
 export * from './spectral/channels.ts';
 export * from './spectral/metamer.ts';
 export * from './data/provider.ts';
-export { interimData, interimFromJson, type InterimJson } from './data/interim.ts';
+// Default data: CHB-004's packs (spektrafilm + illustrative@1), served synchronously from disk in Node.
+// `interimData` is kept as the old name of this default; the retired CHB-001 JSON set stays as
+// `legacyInterimData` / `interimFromJson` for tests that pin it.
+export { nodePhysicsData as packsData, nodePhysicsData as interimData } from '@chromobench/data/node';
+export { interimData as legacyInterimData, interimFromJson, type InterimJson } from './data/interim.ts';
 export * from './print/enlarger.ts';
 export * from './print/lights.ts';
 export * from './print/paper.ts';

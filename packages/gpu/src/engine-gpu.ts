@@ -1,7 +1,7 @@
 // GpuEngine: the Engine interface on WebGPU (guide §3, §5.5). Pointwise chains lower to programs of
 // kernels/pointwise.wgsl (one dispatch per segment); measure() runs GPU reductions.
 //
-// Physics: @chromobench/core's (CHB-017). Stocks come from a PhysicsData (default: core's interim set,
+// Physics: @chromobench/core's (CHB-017). Stocks come from a PhysicsData (default: CHB-004's packs,
 // physics/data.ts — the CHB-004 switch point); tables, aim, filtration, flare, adaptation and display
 // matrices from physics/core.ts. The GPU only applies the uniforms and tables it is handed.
 import {
@@ -16,7 +16,7 @@ import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
 import { densitiesOf, rebateBox, type PhysicsData } from '@chromobench/core';
 import { CorePhysics } from './physics/core.ts';
-import { defaultPhysicsData } from './physics/data.ts';
+import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
 import { WorkerPool } from './tables/build-workers.ts';
 import { OpfsStore, TableCache } from './tables/cache.ts';
@@ -40,8 +40,10 @@ export interface GpuEngineOptions extends RuntimeOptions {
   workers?: number;
   /** Compile the chain and reduction pipelines at creation (default true). */
   prewarm?: boolean;
-  /** Stock and reference data (default: core's interim set; CHB-004's packs plug in here). */
+  /** Stock and reference data (default: CHB-004's packs). */
   data?: PhysicsData;
+  /** URL of the packs directory when `data` is not given and the engine runs in a browser (default `<origin>/packs/`). */
+  packsBase?: string;
 }
 
 interface SourceImg { w: number; h: number; c: number; data: Float32Array }
@@ -80,13 +82,13 @@ export class GpuEngine implements Engine {
   private disposed = false;
   private recreating: Promise<void> | null = null;
 
-  private constructor(rt: GpuRuntime, opts: GpuEngineOptions, owns: boolean) {
+  private constructor(rt: GpuRuntime, opts: GpuEngineOptions, owns: boolean, data: PhysicsData) {
     this.rt = rt;
     this.opts = opts;
     this.ownsRuntime = owns;
     this.pool = (opts.workers ?? 0) > 0 && typeof Worker !== 'undefined' ? new WorkerPool(opts.workers) : null;
     this.cache = new TableCache(opts.opfs !== false && OpfsStore.available() ? new OpfsStore() : null);
-    this.physics = new CorePhysics(opts.data ?? defaultPhysicsData());
+    this.physics = new CorePhysics(data);
     this.tables = new TableManager(rt, { accel: opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
     this.chain = new ChainRunner(rt, this.tables);
     this.reducer = new Reducer(rt);
@@ -95,7 +97,7 @@ export class GpuEngine implements Engine {
 
   static async create(opts: GpuEngineOptions = {}): Promise<GpuEngine> {
     const rt = opts.runtime ?? (await GpuRuntime.create(opts));
-    const e = new GpuEngine(rt, opts, !opts.runtime);
+    const e = new GpuEngine(rt, opts, !opts.runtime, opts.data ?? (await loadDefaultPhysicsData(opts.packsBase)));
     // prewarm (guide §5.2): compile the chain and reduction kernels now, not on the first slider move
     if (opts.prewarm !== false) {
       await rt.pipelines.prewarm([

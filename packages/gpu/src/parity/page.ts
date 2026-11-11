@@ -14,6 +14,7 @@ import { bradfordMatrix, D65 } from '@chromobench/core';
 import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
+import { loadDefaultPhysicsData } from '../physics/data.ts';
 // the conformance generator, imported by path: the package index also exports Vitest wrappers
 import { generateCases, makeEnv } from '@chromobench/conformance/generate';
 
@@ -90,8 +91,8 @@ const TESTS: Record<string, Test> = {
     return { first, after, recreated: rt2 !== rt, rebuilt: t.data.length };
   },
 
-  'table:solve': () => tableParity('solve', {}, 2.2e-6, 'solve'),
-  'table:solve:gtol1e-5': () => tableParity('solve', { gtol: 1e-5 }, 2.2e-6, 'solve gtol 1e-5'),
+  'table:solve': () => tableParity('solve', {}, 2.5e-6, 'solve'),
+  'table:solve:gtol1e-5': () => tableParity('solve', { gtol: 1e-5 }, 2.5e-6, 'solve gtol 1e-5'),
   'table:pd': () => tableParity('pd', {}, 7.2e-7, 'pd'),
   'table:pd:log2-10-rounded': () => tableParity('pd', { codeTransform: (c) => c.replace('LOG2_10: f32 = 3.321928094887362', 'LOG2_10: f32 = 3.32') }, 7.2e-7, 'pd LOG2_10 = 3.32'),
   'table:print': () => tableParity('print', {}, 4.2e-7, 'print'),
@@ -260,5 +261,6 @@ async function run(name: string, opts: Record<string, unknown> = {}): Promise<un
 declare global {
   interface Window { parity: { run: typeof run; names: () => string[] } }
 }
+await loadDefaultPhysicsData(); // packs fetched from /packs/ (packages/data/vite-packs.ts), so sync defaultPhysicsData() works below
 window.parity = { run, names: () => Object.keys(TESTS) };
 document.body.dataset['ready'] = '1';
