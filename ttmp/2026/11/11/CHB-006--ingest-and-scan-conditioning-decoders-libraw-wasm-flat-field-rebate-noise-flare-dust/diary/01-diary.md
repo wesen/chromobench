@@ -788,3 +788,49 @@ leak rel change per nm, red LED green leak -0.029
 
 ### Technical details
 - sRGB decode of 0.5 is ((0.5 + 0.055)/1.055)^2.4 = 0.2140. −log₁₀ 0.2140 = 0.670 and −log₁₀ 0.3185 = 0.497.
+
+## Step 14: Implementation start — orientation, branch, package scaffold, first decoders
+
+I started implementing CHB-006 in the worktree. I read the common implementation brief, the intern guide (all of it), the contract (`source.ts`, `errors.ts`, `recipe.ts` ScanSettings, CONTRACT-DECISIONS CHB-006 rows), the mock engine with its temporary `tiff16.ts`, and Chromogen's `decode.js`/`source.js` (05-inline.js 2195–2692). Then I created `packages/ingest` and wrote the first stage-1 modules: codecs, encoding rules, the TIFF/DNG decoder, the TIFF writer, the PNG decoder/writer and the CameraLinear LUT layer.
+
+### Prompt Context
+**User prompt (verbatim, as relayed by the orchestrator):** "Implement **CHB-006, ingest and scan conditioning** (`packages/ingest`). First read the common brief and follow it … Stages: 1. decoders: TIFF, PNG16, LinearRaw DNG, triplet, SHA-256; replace the mock's temporary `tiff16.ts`; 2. LibRaw WASM in a worker; if building or installing it proves hard, ship a clean adapter interface plus one working path and leave the rest as tasks; 3. conditioning: flat field, rebate, σ, flare, classify, conditioning map, stock ranking; 4. dust. Test fixture: the Gold 200 sample … The textbook's σ and rebate numbers are your golden values. Interim helpers: ranking needs a scanner forward model … Use a minimal local helper behind the contract's `ScannerForward` type." Mid-task reminder from the user: "keep your CHB diary as you work, in the diary skill format, as a factual log written as you go."
+**Assistant interpretation:** Build `@chromobench/ingest` stage by stage with tests on real golden numbers, commit on a task branch, keep this diary.
+**Inferred user intent:** A trustworthy ingest layer that later tickets (003, 005, 009, 012, 013) can build on.
+
+### What I did
+- `git checkout -b task/chb-006-ingest`; `pnpm install --frozen-lockfile --offline` (node_modules were missing in the worktree).
+- Baseline: `pnpm typecheck && pnpm lint && pnpm test` → 5 files, 468 tests passed.
+- `sha256sum gold200.png` → `54bd952c…8793f78d`, matches the guide.
+- Checked npm: `@colorhythm/libraw-wasm` 1.1.1 (MIT wrapper, published 2026-08-03), `libraw-wasm` 1.6.0, `fflate` 0.8.2 (2024-02-07; 0.8.3 is from 2026-05, skipped as too new for the pin rule's spirit).
+- Added `packages/ingest/package.json` with `fflate@0.8.2` (synchronous zlib in Node, browser and workers, so decoders can stay synchronous; `DecompressionStream` would have made every decoder async and broken the mock's sync `readTiff`).
+- Wrote `src/decode/{types,errors,codecs,encoding,tiff,tiff-write,png,linear}.ts`.
+
+### Why
+- Chromogen's `region()` and `flatGrid` are the reference for σ goldens, so I port them with exact footprint behaviour (floor/ceil overlapping footprints) rather than a "cleaner" area average.
+- Classes blank/below are noise-only in Chromogen's statistics code (05-inline.js 3041–3051: `zm < -Z → below; else zm ≤ Z → blank`, over all pixels), so the textbook's 12.6/9.7 % and 21.5/7.2 % can be goldens here without CHB-003's residual.
+
+### What worked
+- Nothing run yet beyond the baseline; tests come next.
+
+### What didn't work
+- A compound `cd … && mkdir … && cat > … && pnpm install; git status` was refused by the harness: "this command is too complex to verify that it stays inside the worktree". Split into separate commands.
+
+### What I learned
+- Contract decisions: boxes are sensor pixels; `scan.flare` stays a single percent number; `E_LIBRAW_<n>` collapsed into `E_FORMAT`; Orientation is applied last by `output.frame`, so conditioning works in sensor coordinates only.
+- Gold 200 metadata (03-inline.js): flipH, rebate [98,100,20,680], frame [126,60,1090,754] in oriented coordinates → sensor rebate [1174,100,20,680], crop [76,60,1090,754].
+
+### What was tricky to build
+- TIFF LZW early change in the encoder: the decoder adds each entry one code later than the encoder, so the encoder switches width when `next > 2^width − 1` after incrementing, and bumps once more after the final code before EOI (as libtiff does).
+
+### What warrants a second pair of eyes
+- Predictor 3 byte order (TN3: MSB first regardless of file byte order).
+
+### What should be done in the future
+- Tests for every decoder path; registry; triplet; mock swap.
+
+### Code review instructions
+- Start at `packages/ingest/src/decode/tiff.ts` `decodeTiff`.
+
+### Technical details
+- Gold 200 linear values: `levels: { black: [32,32,32], white: [64032,64032,64032] }` reproduces `loadSample`'s T = (u/16 − 2)/4000 except its 0.05-count floor.

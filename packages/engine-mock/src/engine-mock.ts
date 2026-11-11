@@ -7,7 +7,7 @@ import {
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
 import { IMAGE_OPS, VALUE_OPS, newImg, type Img, type OpCtx } from './ops.ts';
-import { readTiff } from './tiff16.ts';
+import { openSourceSync } from '@chromobench/ingest';
 
 export interface MockEngineOptions {
   /** Restrict capabilities().ops (conformance "not implemented" case). Default: every catalog op. */
@@ -41,23 +41,17 @@ export class MockEngine implements Engine {
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = sha256Hex(bytes);
     if (source.sha256 && source.sha256 !== sha) fail('E_DATA_HASH', `source bytes hash to ${sha.slice(0, 12)}…, not ${source.sha256.slice(0, 12)}…`);
-    const raw = readTiff(bytes);
-    const max = raw.bits === 16 ? 65535 : 255;
-    const img = newImg(raw.width, raw.height, 3);
-    let clipped = 0;
-    for (let i = 0; i < raw.width * raw.height; i++) {
-      for (let k = 0; k < 3; k++) {
-        const v = raw.data[i * raw.samples + (raw.samples === 3 ? k : 0)]!;
-        if (v >= max) clipped++;
-        img.data[i * 3 + k] = v / max;
-      }
+    // CHB-006 decoders: TIFF, LinearRaw DNG and PNG, linearised per sample with the evidence-based encoding.
+    const opened = openSourceSync(bytes, { ...(source.path ? { fileName: source.path } : {}) });
+    const { width, height } = opened.linear;
+    const img = newImg(width, height, 3);
+    const row = new Float64Array(width);
+    for (let k = 0; k < 3; k++) for (let y = 0; y < height; y++) {
+      opened.linear.row(k, y, row);
+      for (let x = 0; x < width; x++) img.data[(y * width + x) * 3 + k] = row[x]!;
     }
     this.sources.set(sha, img);
-    const info: SourceInfo = {
-      sha256: sha, format: 'tiff', width: raw.width, height: raw.height, channels: 3, bits: raw.bits, sample: 'uint',
-      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [max, max, max], from: 'default' },
-      cfa: 'none', clippedFraction: clipped / (raw.width * raw.height * 3), notes: [],
-    };
+    const info: SourceInfo = { ...opened.info, sha256: sha };
     this.graph.registerSource(info);
     return info;
   }

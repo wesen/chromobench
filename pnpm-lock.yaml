@@ -17,6 +17,9 @@ importers:
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:packages/engine-mock
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:packages/ingest
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -68,10 +71,22 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:../ingest
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*
         version: link:../conformance
+
+  packages/ingest:
+    dependencies:
+      '@chromobench/contract':
+        specifier: workspace:*
+        version: link:../contract
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
 
 packages:
 
@@ -454,6 +469,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -893,6 +911,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.2: {}
 
   fsevents@2.3.3:
     optional: true

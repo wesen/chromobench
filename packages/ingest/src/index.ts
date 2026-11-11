@@ -1,0 +1,22 @@
+// @chromobench/ingest — bytes to camera-linear values, and scan conditioning (CHB-006).
+export * from './decode/types.ts';
+export { formatError, NeedsLibRaw } from './decode/errors.ts';
+export * from './decode/codecs.ts';
+export * from './decode/encoding.ts';
+export * from './decode/identity.ts';
+export { decodeTiff, readIfds, chooseImage, isTiff, T as TIFF_TAGS, PHOTOMETRIC, type Ifd } from './decode/tiff.ts';
+export * from './decode/tiff-write.ts';
+export * from './decode/png.ts';
+export * from './decode/linear.ts';
+export * from './decode/registry.ts';
+export * from './decode/triplet.ts';
+export * from './conditioning/resample.ts';
+export * from './conditioning/flat.ts';
+export * from './conditioning/sigma.ts';
+export * from './conditioning/rebate.ts';
+export * from './conditioning/classify.ts';
+export * from './conditioning/flare.ts';
+export * from './conditioning/opengate.ts';
+export * from './conditioning/rank.ts';
+export * from './conditioning/conditioning-map.ts';
+export * from './conditioning/forward-stub.ts';
