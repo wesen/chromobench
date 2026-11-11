@@ -1,0 +1,3 @@
+# On-demand pack files (> 5 MB). The manifest lists them with their hash and an "onDemand" hint;
+# regenerate with: python -I tools/spektrafilm-export/sfx.py export --upstream <spektrafilm checkout>
+packs/*/upsampling/

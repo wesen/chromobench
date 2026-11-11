@@ -1,0 +1,1012 @@
+{
+ "applied": {
+  "fujifilm_c200": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "fujifilm_pro_400h": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "fujifilm_provia_100f": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.078,
+    0.078
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.104,
+    0.078
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.156,
+    0.078
+   ],
+   "gamma_samelayer_rgb": [
+    0.156,
+    0.104,
+    0.078
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.156,
+     0.156,
+     0.078
+    ],
+    [
+     0.104,
+     0.104,
+     0.078
+    ],
+    [
+     0.078,
+     0.078,
+     0.078
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "stock-override"
+  },
+  "fujifilm_velvia_100": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.054,
+    0.054
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.072,
+    0.054
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.108,
+    0.054
+   ],
+   "gamma_samelayer_rgb": [
+    0.108,
+    0.072,
+    0.054
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.108,
+     0.108,
+     0.054
+    ],
+    [
+     0.072,
+     0.072,
+     0.054
+    ],
+    [
+     0.054,
+     0.054,
+     0.054
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "stock-override"
+  },
+  "fujifilm_xtra_400": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_ektachrome_100": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.06,
+    0.06
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.08,
+    0.06
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.12,
+    0.06
+   ],
+   "gamma_samelayer_rgb": [
+    0.12,
+    0.08,
+    0.06
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.12,
+     0.12,
+     0.06
+    ],
+    [
+     0.08,
+     0.08,
+     0.06
+    ],
+    [
+     0.06,
+     0.06,
+     0.06
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "positive"
+  },
+  "kodak_ektar_100": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_gold_200": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_kodachrome_64": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.06,
+    0.06
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.08,
+    0.06
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.12,
+    0.06
+   ],
+   "gamma_samelayer_rgb": [
+    0.12,
+    0.08,
+    0.06
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.12,
+     0.12,
+     0.06
+    ],
+    [
+     0.08,
+     0.08,
+     0.06
+    ],
+    [
+     0.06,
+     0.06,
+     0.06
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "positive"
+  },
+  "kodak_portra_160": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_portra_400": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_portra_800": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_portra_800_push1": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_portra_800_push2": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_ultramax_400": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_verita_200d": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_vision3_200t": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_vision3_250d": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_vision3_500t": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  },
+  "kodak_vision3_50d": {
+   "active": true,
+   "amount": 1.0,
+   "diffusion_size_um": 20.0,
+   "diffusion_tail_um": 200.0,
+   "diffusion_tail_weight": 0.06,
+   "gamma_interlayer_b_to_rg": [
+    0.168,
+    0.226
+   ],
+   "gamma_interlayer_g_to_rb": [
+    0.154,
+    0.353
+   ],
+   "gamma_interlayer_r_to_gb": [
+    0.353,
+    0.302
+   ],
+   "gamma_samelayer_rgb": [
+    0.336,
+    0.319,
+    0.273
+   ],
+   "inhibition_interlayer": 1.0,
+   "inhibition_samelayer": 1.0,
+   "matrix": [
+    [
+     0.336,
+     0.353,
+     0.302
+    ],
+    [
+     0.154,
+     0.319,
+     0.353
+    ],
+    [
+     0.168,
+     0.226,
+     0.273
+    ]
+   ],
+   "matrix_axes": [
+    "donor layer R,G,B",
+    "receiver layer R,G,B"
+   ],
+   "source": "negative"
+  }
+ },
+ "notes": "'applied' is what spektrafilm's digest_params(init_params(film, 'kodak_portra_endura')) sets for the film (runtime/params_builder.py _apply_film_specifics); 'schemaDefault' is DirCouplersParams() (runtime/params_schema.py). matrix = model/couplers.py compute_dir_couplers_matrix, donor rows, receiver columns; 'amount' is applied by the filming stage, not folded into the matrix. Lengths in um.",
+ "schemaDefault": {
+  "active": true,
+  "amount": 1.0,
+  "diffusion_size_um": 20.0,
+  "diffusion_tail_um": 200.0,
+  "diffusion_tail_weight": 0.06,
+  "gamma_interlayer_b_to_rg": [
+   0.171,
+   0.225
+  ],
+  "gamma_interlayer_g_to_rb": [
+   0.154,
+   0.358
+  ],
+  "gamma_interlayer_r_to_gb": [
+   0.355,
+   0.305
+  ],
+  "gamma_samelayer_rgb": [
+   0.341,
+   0.324,
+   0.273
+  ],
+  "inhibition_interlayer": 1.0,
+  "inhibition_samelayer": 1.0,
+  "matrix": [
+   [
+    0.341,
+    0.355,
+    0.305
+   ],
+   [
+    0.154,
+    0.324,
+    0.358
+   ],
+   [
+    0.171,
+    0.225,
+    0.273
+   ]
+  ],
+  "matrix_axes": [
+   "donor layer R,G,B",
+   "receiver layer R,G,B"
+  ]
+ }
+}

@@ -1,0 +1,172 @@
+{
+ "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0, via the Filmbench IDE prototype bundle (an older, rounded snapshot). Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+ "curve_model": {
+  "amplitudes": [
+   [
+    0.561844,
+    0.592289,
+    0.592019
+   ],
+   [
+    0.523201,
+    0.558679,
+    0.558084
+   ],
+   [
+    0.628455,
+    0.646634,
+    0.647418
+   ]
+  ],
+  "axes": [
+   "channel",
+   "sublayer"
+  ],
+  "centers": [
+   [
+    -0.89704,
+    0.481571,
+    1.244438
+   ],
+   [
+    -0.966791,
+    0.540204,
+    1.355534
+   ],
+   [
+    -0.85238,
+    0.521586,
+    1.273777
+   ]
+  ],
+  "model_type": "cdfs",
+  "sigmas": [
+   [
+    0.640227,
+    0.935135,
+    0.936342
+   ],
+   [
+    0.641835,
+    0.934608,
+    0.93662
+   ],
+   [
+    0.635921,
+    0.936452,
+    0.934559
+   ]
+  ]
+ },
+ "hanatos_surface": null,
+ "hanatos_window": null,
+ "id": "kodak_vision3_500t",
+ "info": {
+  "antihalation": "strong",
+  "name": "Kodak Vision3 500T",
+  "reference_illuminant": "T",
+  "stage": "filming",
+  "stock": "kodak_vision3_500t",
+  "support": "film",
+  "target_print": "kodak_2383",
+  "type": "negative",
+  "use": "cine",
+  "viewing_illuminant": "D50"
+ },
+ "kind": "stock",
+ "metadata": {
+  "license": "spektrafilm profile by Andrea Volpato, CC BY-SA 4.0 (via Filmbench IDE)"
+ },
+ "missingRows_nm": {
+  "base": [
+   380,
+   400
+  ],
+  "dyes": [
+   380,
+   400
+  ],
+  "sensitivity": []
+ },
+ "role": "film",
+ "tensors": {
+  "base_density_D": {
+   "axes": [
+    "wavelength"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81
+   ],
+   "unit": "D"
+  },
+  "dye_amount_curves": {
+   "axes": [
+    "logH",
+    "dye C,M,Y"
+   ],
+   "missing": "none",
+   "shape": [
+    256,
+    3
+   ],
+   "unit": "dye"
+  },
+  "film_exposure_lut64_log2": {
+   "axes": [
+    "filmbench lut u",
+    "filmbench lut v",
+    "layer R,G,B"
+   ],
+   "missing": "none",
+   "note": "Filmbench FB.decodeLuts (01-inline.js 96-106): int16 / 1024; substitute for the hanatos table",
+   "shape": [
+    64,
+    64,
+    3
+   ],
+   "unit": "log2"
+  },
+  "log10_sensitivity": {
+   "axes": [
+    "wavelength",
+    "layer R,G,B"
+   ],
+   "missing": "zero-sensitivity",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "log10"
+  },
+  "log_exposure_logH": {
+   "axes": [
+    "logH"
+   ],
+   "missing": "none",
+   "shape": [
+    256
+   ],
+   "unit": "logH"
+  },
+  "unit_dye_density_D": {
+   "axes": [
+    "wavelength",
+    "dye C,M,Y"
+   ],
+   "missing": "opaque",
+   "shape": [
+    81,
+    3
+   ],
+   "unit": "D"
+  },
+  "wavelengths_nm": {
+   "missing": "none",
+   "shape": [
+    81
+   ],
+   "unit": "nm"
+  }
+ }
+}

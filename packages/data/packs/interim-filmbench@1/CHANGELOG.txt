@@ -1,0 +1,16 @@
+chromobench changes to the data in this interim pack
+=====================================================
+
+Source: Filmbench IDE embedded film-data blob (various/extracted/filmbench-ide/00-film-data.bin.txt) (decoded by the CHB-001 scripts; file sha256 9bbb55483bda378acc40c71c565a1741ed3f1fce917825a20db361ec71007c88).
+The data is spektrafilm's (Andrea Volpato, CC BY-SA 4.0; SPEKTRAFILM_LICENSE.txt copied verbatim),
+as embedded in an older prototype at reduced precision.
+
+What was changed
+----------------
+1. Format: JSON arrays -> safetensors float64 + JSON sidecars; arrays renamed with units as in the
+   spektrafilm pack (log10_sensitivity, unit_dye_density_D, base_density_D, log_exposure_logH,
+   dye_amount_curves).
+2. Missing values: rows listed in nanRows (base 99 D, dyes 0 in Filmbench) restored as NaN in base and all three dyes.
+3. Field mapping: logSens->log10_sensitivity, chan->unit_dye_density_D, base->base_density_D, curves->dye_amount_curves, model{centers,amps,sigmas}->curve_model{centers,amplitudes,sigmas}, lut->film_exposure_lut64_log2 (int16/1024), neutral_filters[paper][film]->[paper]['TH-KG3'][film], dichroic->custom set, role 'print'/'film' kept.
+
+No values were corrected or resampled.

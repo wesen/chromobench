@@ -530,3 +530,70 @@ After the context was compacted, I ran mechanical checks on the Markdown, verifi
 
 ### Technical details
 - The scratchpad drafts are at `.../scratchpad/guides/chb004-draft.md` and `.../scratchpad/guides/chb014-draft.md`.
+
+## Step 13: Implementation start: upstream clone, exporter venv and the stage-1 exporter
+
+Implementation of CHB-004 began in the worktree branch `task/chb-004-data`. I cloned upstream spektrafilm outside the repository, built a minimal Python environment for the exporter, read the upstream modules the exporter imports, and wrote `tools/spektrafilm-export`. It writes four packs into `packages/data/packs/` (the spektrafilm pack, two interim packs from the CHB-001 extracts, and the illustrative camera and lights), converts the five upstream regression baselines, and cross-checks the result against the prototypes. All cross-checks pass with the tolerances of guide §5.3.
+
+### Prompt Context
+**User prompt (verbatim):** not available to this agent; the work was assigned by the orchestrator.
+**Orchestrator brief (not the user's words), opening lines verbatim:** "You implement ticket CHB-004 (stock and reference data pipeline from spektrafilm) in the chromobench monorepo, in your own git worktree." Ticket notes in the brief, verbatim excerpt: "The user has explicitly approved cloning upstream spektrafilm and creating a Python virtual environment for the exporter. Clone OUTSIDE the repository, at /home/manuel/code/wesen/chromobench-ext/spektrafilm, and check out the pinned commit from the guide (3bb2c2d). [...] Install only what the exporter actually needs [...] Do not run upstream code you have not read". The brief also asks that packs plus a TypeScript loader implement core's `PhysicsData`, that the interim provider keeps working, that `packages/gpu` is not touched, and that packs over ~5 MB are generated on demand.
+**Assistant interpretation:** Stage 1 (exporter) and stage 2 (pack format, loader, interim packs) solidly, then the missing-data laws, then as much of stages 4–6 as time allows, with a TypeScript `PhysicsData` adapter for CHB-003.
+**Inferred user intent:** CHB-003 and CHB-005 can switch from the interim JSON to verified, hashed packs by changing one import.
+**Commit (code):** the first commit on the branch, "CHB-004: spektrafilm exporter, four data packs and converted regression baselines" (hash in Step 14).
+
+### What I did
+- `git checkout -b task/chb-004-data`; `pnpm install --frozen-lockfile --offline`; baseline `pnpm test`: 32 files, 1829 tests passed.
+- `git clone https://github.com/andreavolpato/spektrafilm.git /home/manuel/code/wesen/chromobench-ext/spektrafilm`, then `git -C <abs path> checkout 3bb2c2d` → HEAD `3bb2c2d2801ff68b92019cf1dbcbb133d60832bc` ("fix: vlog midgray exposure"); the clone is 148 MB.
+- `uv venv --python 3.13 /home/manuel/code/wesen/chromobench-ext/venv`; installed numpy 2.5.4, scipy 1.18.1, colour-science 0.4.7, opt-einsum 3.4.0, safetensors 0.8.0, pytest 9.2.0, then matplotlib 3.11.2 and numba 0.68.1 (with llvmlite 0.50.0). The frozen list is `tools/spektrafilm-export/requirements.lock`.
+- Not installed, because nothing the exporter calls needs them: OpenImageIO, exiv2, rawpy, lensfunpy, pyfftw, scikit-image, pyside6, napari, qtpy, pyconify, markdown.
+- Read before running: `src/spektrafilm/__init__.py`, `config.py`, `profiles/io.py` (all), `model/illuminants.py`, `model/color_filters.py`, `model/stocks.py`, `utils/io.py` (header and 300–402), `runtime/params_builder.py`, `runtime/params_schema.py`, `model/couplers.py` 1–80, `utils/spectral_upsampling.py` 1–140 and 250–425, `model/density_curves.py` 1–60, `runtime/stages/printing.py` 60–123, `runtime/stages/filming.py` 90–150, `tests/regression_baselines.py`, `tests/conftest.py`. Grepped the module-level statements of `gamut_compression.py`, `morph_curves.py`, `fast_gaussian_filter.py`, `fast_interp.py` and `fast_interp_lut.py`, and grepped all imported modules for `subprocess|os.system|urllib|requests|socket|eval(|exec(|pickle` (no hits).
+- Wrote `tools/spektrafilm-export/`: the `sfx.py` launcher; `spektrafilm_export/{upstream,packwriter,spektrafilm_pack,baselines,interim,illustrative,crosscheck,verify,cli}.py`; tests `tests/{conftest,test_packwriter,test_export,test_interim}.py`; `pyproject.toml`; `LICENSE` (GPLv3 text copied from upstream); `.gitignore`.
+- Ran `/home/manuel/code/wesen/chromobench-ext/venv/bin/python -I tools/spektrafilm-export/sfx.py all --upstream /home/manuel/code/wesen/chromobench-ext/spektrafilm` (export, baselines, interim, illustrative, crosscheck, verify).
+- Tests: `SPEKTRAFILM_CHECKOUT=/home/manuel/code/wesen/chromobench-ext/spektrafilm /home/manuel/code/wesen/chromobench-ext/venv/bin/python -I -m pytest -q -p no:cacheprovider tools/spektrafilm-export/tests` → `13 passed in 1.75s`.
+
+### Why
+- `import spektrafilm.<anything>` runs `spektrafilm/__init__.py`, which imports the whole simulator, rawpy, OpenImageIO and exiv2. So importing "only submodules" (guide §9.3) is not enough on its own. `upstream.py` registers `spektrafilm`, `spektrafilm.runtime` and `spektrafilm.utils` as bare packages, so their `__init__` files never run.
+- The guide's principle "ask spektrafilm, do not re-derive" holds. The arrays come from `load_profile`, `standard_illuminant`, `DichroicFilters`, `read_neutral_print_filters`, `digest_params(init_params(...))` with `compute_dir_couplers_matrix`, the dataclass defaults, and the shipped `.npy`.
+
+### What worked
+- Pack `spektrafilm@0.3.2+3bb2c2d`: 28 stocks (20 films, 8 prints), 50 items, 67 files. The committed size is about 1.2 MB (`du -sb`: stocks 1,084,509 B, other files 115,287 B). The hanatos table is 5,972,304 B, so it is on demand: its manifest entry has an `onDemand` hint, and `packages/data/.gitignore` ignores `packs/*/upsampling/`.
+- The shipped `irradiance_xy_tc.npy` header is `{'descr': '<f2', 'fortran_order': False, 'shape': (192, 192, 81)}`. This resolves the task "check the shipped irradiance_xy_tc.npy size": it is 192 × 192 × 81. The `lut_size=128` default only applies when the table is regenerated.
+- The missing rows reproduce the guide: Portra 400 base `[380, 395, 705, 780]` and dyes `[380, 380, 750, 780]`. Vision3 250D, 200T and 500T have base gaps only below 400 nm; slides and print materials have no base gaps.
+- The pairwise comparison found these known issues: Supra Endura's log sensitivity equals Portra Endura's; Supra Endura's base equals Crystal Archive Type II's; Portra 800, push 1 and push 2 share sensitivities, dyes, base and midscale neutral. Upstream's `# problematic` comment on `kodak_ultra_endura` is also recorded.
+- DIR matrices: applied for Portra 400 `[[0.336, 0.353, 0.302], [0.154, 0.319, 0.353], [0.168, 0.226, 0.273]]`; schema default `[[0.341, 0.355, 0.305], [0.154, 0.324, 0.358], [0.171, 0.225, 0.273]]`; the Velvia override starts `[[0.108, 0.108, 0.054], ...]`.
+- Cross-check (`sfx.py crosscheck --pack 'spektrafilm@0.3.2+3bb2c2d'`):
+  - Chromogen, 11 stocks: max diff 4.9998e-6 (tolerance 5e-6), identical null patterns.
+  - Filmbench, 28 stocks: logSens 4.99996e-5, curves 4.9998e-5, chan and base outside nanRows ≤ 4.9985e-6, curve models 4.998e-7. For all 28, nanRows equals the union of missing base and dye rows.
+  - Filmbench reference data: neutral table identical, custom dichroics 4.78e-7, illuminants ≤ 4.99e-7, CMF 4.90e-7.
+- Grey card, normalised paper log H: opaque (0.0039, 0.0047, −0.0086), zero-density (0.1110, −0.0729, −0.0381). The guide has (0.004, 0.005, −0.009) and (0.111, −0.072, −0.038).
+- Balance law over 128 pairs of a negative film and a print material: opaque median 0.0324, max 0.188 (2393 / Portra 800 push 2).
+- Determinism: a fresh export in the pytest process reproduces the committed `manifest.json` byte for byte. The round trip is bit-exact (`tobytes()` equality, NaN included) for every tensor of all 28 profiles and for the curve models.
+
+### What didn't work
+- The first export failed inside colour-science: `RuntimeError: OpenImageIO.__path__ is not available: the exporter stubs OpenImageIO because it only reads data and never decodes or writes images` (raised from `colour/io/image.py` line 116, `from OpenImageIO import ImageSpec`). My global stub made colour-science believe OpenImageIO was installed. Fix: the stand-ins exist only while `spektrafilm.utils.io` is imported, and are then removed from `sys.modules`.
+- The determinism tests failed: `AssertionError: interim-chromogen@1 ... At index 558 diff: b'b' != b'9'`. The `safetensors` package keeps `__metadata__` in a hash map, so the header's key order changes between processes (an earlier single-key probe had looked deterministic). Fix: `packwriter.st_save`, a 25-line deterministic writer (sorted names and metadata keys, header padded to 8-byte alignment). The `safetensors` package stays as the reference reader in the tests.
+- The illustrative camera differed from Chromogen's by 1.085e-5, above the 6e-6 tolerance. Cause: FWHM→σ with the exact 2√(2 ln 2) = 2.35482, while the prototypes (and core's `gaussian()`) use 2.3548. With 2.3548: camera 4.96e-6, white LED 4.81e-6.
+- The harness refused `git -C spektrafilm checkout` (relative path) and multi-command heredoc shells. I re-ran with absolute paths and wrote scripts with the Write tool.
+
+### What I learned
+- The guide's zero-density balance figures (median 0.52, worst 1.17 on 2393) come from Filmbench data, where the dye rows marked missing had been zeroed. On upstream data, where those dye values are real, zero-density gives median 0.205 and max 0.529 (Crystal Archive / Ektar 100). Recomputed on `interim-filmbench@1`: median 0.5175, max 1.169 (2393 / Ektar 100). Both fail the ≤ 0.06 law, which is all the law needs; the cross-check reports both.
+- The illustrative white LED is 0.45 · Gaussian(450 nm, FWHM 22) plus an asymmetric Gaussian at 565 nm (σ 45 nm below, 70 nm above), normalised to peak 1 (least-squares fit, residual 5.4e-6). The camera is exactly Gaussian at 600, 535 and 460 nm with FWHM 80, 90 and 70 nm.
+
+### What was tricky to build
+- Keeping upstream's import graph small without editing upstream: bare package modules plus temporary stubs, the checkout appended (not prepended) to `sys.path`, and every run under `python -I`.
+
+### What warrants a second pair of eyes
+- `upstream.load` refuses a dirty or unpinned checkout. It shells out to `git -C <checkout> rev-parse HEAD` and `git status --porcelain`.
+- The licence of `illustrative@1` is `LicenseRef-chromobench-illustrative` until the owner decides (guide §12.4).
+
+### What should be done in the future
+- Measured cameras (stage 4) and synthetic frames (stage 5) are not started.
+
+### Code review instructions
+- Start with `tools/spektrafilm-export/spektrafilm_export/spektrafilm_pack.py` (`export`), then `packwriter.py` (`st_save`, `content_hash`, `PackWriter.finish`), `upstream.py` and `crosscheck.py`.
+- Re-run with the venv python: `python -I tools/spektrafilm-export/sfx.py all --upstream <checkout>`; afterwards `git status` must show no changes. Then run the pytest command above.
+
+### Technical details
+- Pack id `<source>@<profile version>+<commit7>`. packHash = sha256 of the `manifest.json` bytes. File hashes are in `manifest.files`. An item's `contentHash` = sha256 of the canonical JSON of its meaning without licence keys, followed by its tensor bytes in name order.
+- Interim packs: `interim-chromogen@1` (11 stocks, all policies) and `interim-filmbench@1` (28 stocks, `missing.supported: ['opaque']`, curve models, neutral table under `TH-KG3`, custom dichroics, 6 illuminants, CMF, `film_exposure_lut64_log2` 64 × 64 × 3).

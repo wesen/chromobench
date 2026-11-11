@@ -1,0 +1,16 @@
+chromobench changes to the data in this interim pack
+=====================================================
+
+Source: Chromogen Studio window.ST_DATA stocks (various/extracted/chromogen-studio/st-data/cg/stocks) (decoded by the CHB-001 scripts; file sha256 0aa818fa345d400c12169b56a798ff80418fb909ccd78b7512502c4de798c524).
+The data is spektrafilm's (Andrea Volpato, CC BY-SA 4.0; SPEKTRAFILM_LICENSE.txt copied verbatim),
+as embedded in an older prototype at reduced precision.
+
+What was changed
+----------------
+1. Format: JSON arrays -> safetensors float64 + JSON sidecars; arrays renamed with units as in the
+   spektrafilm pack (log10_sensitivity, unit_dye_density_D, base_density_D, log_exposure_logH,
+   dye_amount_curves).
+2. Missing values: JSON null kept as IEEE NaN (Chromogen's own loader read null densities as 0; this pack does not).
+3. Field mapping: info.stock/name/type/densitometer/target_print kept; role = 'print' for status_A negatives (the 3 papers), else 'film'.
+
+No values were corrected or resampled.

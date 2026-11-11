@@ -1,0 +1,1311 @@
+{
+ "counts": {
+  "films": 20,
+  "prints": 8,
+  "stocks": 28
+ },
+ "files": [
+  {
+   "bytes": 2162,
+   "path": "CHANGELOG.txt",
+   "sha256": "c11645179fa7d8eec9b561fbed28f21fa276b80576f0162142456bfc20779234"
+  },
+  {
+   "bytes": 23677,
+   "path": "SPEKTRAFILM_LICENSE.txt",
+   "sha256": "76d629501783ae52e8d63aee1e054c1e1a9713b9fe7d36fb306e25b1d14b24e9"
+  },
+  {
+   "bytes": 4264,
+   "path": "cie/cmf-1931-2deg.safetensors",
+   "sha256": "6813064fe0304156fea0948951773385d31d57f7246d646680cdfe413b2dc9b2"
+  },
+  {
+   "bytes": 8312,
+   "path": "enlarger/dichroics.safetensors",
+   "sha256": "3850d0e8b803f727aa0e833f10b20b7316abb352ff9eec839d3a578dbc945d35"
+  },
+  {
+   "bytes": 14424,
+   "path": "enlarger/neutral-print-filters.json",
+   "sha256": "b7c2f42ce54f06e5b57c60fa930c6fc67894e6490a187b1a19afde0e969ebbe8"
+  },
+  {
+   "bytes": 3072,
+   "path": "light/filters.safetensors",
+   "sha256": "fb7907062c09a6371901a740ce9314c730f4b5b6b4ec3ee7a32486136fd42713"
+  },
+  {
+   "bytes": 5184,
+   "path": "light/illuminants.safetensors",
+   "sha256": "d7edebe6810d27ed6eba8d5a1d114a729c688e4eb36192e6de687868df7f7186"
+  },
+  {
+   "bytes": 15859,
+   "path": "presets/dir-couplers.json",
+   "sha256": "71055c4a5d22ba3bb7f1ad9eebe761e83778faf9524076baecbadf6722a6a1b7"
+  },
+  {
+   "bytes": 481,
+   "path": "presets/grain.json",
+   "sha256": "9ed44d3f37891f23e822c41c5a55a250e5dcd00035a1274d461bca84eafaabca"
+  },
+  {
+   "bytes": 6016,
+   "path": "presets/halation.json",
+   "sha256": "e2aa43041cd5821bda4aa8b5f4ad6db0fe35092fc0e0ef3d865d29d355530190"
+  },
+  {
+   "bytes": 5677,
+   "path": "stocks/fujifilm_c200.json",
+   "sha256": "ca5dc5d680f13d47ad8a0d8338568e40d18d331fc3cbc6a0273167feb44e0e7d"
+  },
+  {
+   "bytes": 33448,
+   "path": "stocks/fujifilm_c200.safetensors",
+   "sha256": "fd4b4f0d4b2c93c6c29674e18442dfac190a4dbc29f0d2f4252f83a873f2eb25"
+  },
+  {
+   "bytes": 4358,
+   "path": "stocks/fujifilm_crystal_archive_typeii.json",
+   "sha256": "dcb0596a9be645654013c302b4b9f2833af498c79df816ecd4b23cc0a09a32a1"
+  },
+  {
+   "bytes": 33464,
+   "path": "stocks/fujifilm_crystal_archive_typeii.safetensors",
+   "sha256": "d4a2eec7c8affece4dca93dc8e76f30b7d04addb5570b3976523d08d8ecca64c"
+  },
+  {
+   "bytes": 5683,
+   "path": "stocks/fujifilm_pro_400h.json",
+   "sha256": "faf75e101b487bad119df0d26e9f2e77fec7e4e4c571250370b9d3ec3fca4f6e"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/fujifilm_pro_400h.safetensors",
+   "sha256": "cea7d5ef6ed5baecfa121f3875edaf7d115e4de9a1c6c53021a2ee2f5db18f19"
+  },
+  {
+   "bytes": 5646,
+   "path": "stocks/fujifilm_provia_100f.json",
+   "sha256": "d806482d89d89b36837095d750693d950f4c114c27b4f4f5f2d5795dd9b371d3"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/fujifilm_provia_100f.safetensors",
+   "sha256": "c06c8c49185a19ff8a17c9ee259020b4c89263ae7402068e3aabff2f89d4631e"
+  },
+  {
+   "bytes": 5635,
+   "path": "stocks/fujifilm_velvia_100.json",
+   "sha256": "fc77d62230ffa9a10ab0de90b265d4f1d1bc93be47e82311c3e726e06fea8490"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/fujifilm_velvia_100.safetensors",
+   "sha256": "d0819b111d301f83328e73c5a1a581d729476c2c6392b1da13ffbdb1ba6ddd5a"
+  },
+  {
+   "bytes": 5689,
+   "path": "stocks/fujifilm_xtra_400.json",
+   "sha256": "50f53eafc4eef13cc6724fb1a4746b9fa6f53054e7951e612239fe8c7d966aad"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/fujifilm_xtra_400.safetensors",
+   "sha256": "813261a2ed0ebebacb2fdea45512d94ba5ebf6d5d5a84bf5a057b5036bd745a0"
+  },
+  {
+   "bytes": 4274,
+   "path": "stocks/kodak_2383.json",
+   "sha256": "083b81056e1bf89575b75a4398bcb5ace4355b98e108d7eae0ccb9fcda3d7630"
+  },
+  {
+   "bytes": 33448,
+   "path": "stocks/kodak_2383.safetensors",
+   "sha256": "abc4476366009e80e11f7861b199a1c713bc130786f093a0d17803d56eb1f2ba"
+  },
+  {
+   "bytes": 4285,
+   "path": "stocks/kodak_2393.json",
+   "sha256": "fab2b8e8faefd169d822b67e06a565fc9d91b3ab76db27fa9912c8d0142af56c"
+  },
+  {
+   "bytes": 33448,
+   "path": "stocks/kodak_2393.safetensors",
+   "sha256": "055c9469ac2f8e956a6f81093e85151692153d0e7d754a75e89f3a6c119bd286"
+  },
+  {
+   "bytes": 5639,
+   "path": "stocks/kodak_ektachrome_100.json",
+   "sha256": "5335a3a185c0da0e98e05efbf20a7a951fd430fddead02f3e093517132d58243"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_ektachrome_100.safetensors",
+   "sha256": "249051201cb4a99bc1e3b02654e7acd4a8fcb07ae9ab17b8680cecbb83d34921"
+  },
+  {
+   "bytes": 4318,
+   "path": "stocks/kodak_ektacolor_edge.json",
+   "sha256": "cde34cbcb8c947f19c135bb6a57999f293d4e6ee5569cc3721e24863b3f8d2d1"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_ektacolor_edge.safetensors",
+   "sha256": "4953b5936cba3d9ce6cba397b9b37463923a6d229ab2096a814b6d71ee67c80b"
+  },
+  {
+   "bytes": 5663,
+   "path": "stocks/kodak_ektar_100.json",
+   "sha256": "73b0e976d8762635d7e002d8ef3789e3154283748742a04f7002bb16b979d147"
+  },
+  {
+   "bytes": 33448,
+   "path": "stocks/kodak_ektar_100.safetensors",
+   "sha256": "6cda2bfe71a6c32130b6ffdcca16bf32b61dd7c70923f43bddd2f30fc4b695d9"
+  },
+  {
+   "bytes": 4335,
+   "path": "stocks/kodak_endura_premier.json",
+   "sha256": "ae6ed1bf69bd3dc1aa7f28cbcf5ad2493655fef8b42fa56b3a7568c426308e9f"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_endura_premier.safetensors",
+   "sha256": "80dc444f5b216ea47006a8b04376cd29031041509dfdd78e2d81f02dd5d69ae4"
+  },
+  {
+   "bytes": 5664,
+   "path": "stocks/kodak_gold_200.json",
+   "sha256": "66fa9f13dc4e54626a09db5b096f578c91db9b5d2a7caa83e9af965baceb3229"
+  },
+  {
+   "bytes": 33448,
+   "path": "stocks/kodak_gold_200.safetensors",
+   "sha256": "6e4034c6dcb427ae59f01674549416ed1e4ce67e75d1ee6814b07af10cd2fb00"
+  },
+  {
+   "bytes": 5640,
+   "path": "stocks/kodak_kodachrome_64.json",
+   "sha256": "5d61fa10686264ccb204a387bafbbcdfc947eda5f690630de8c077a5154241d9"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_kodachrome_64.safetensors",
+   "sha256": "619cfa0a51b63dfd2bd4b0ccf1b61f24cdf1f727969928bad47f62a19462a699"
+  },
+  {
+   "bytes": 5665,
+   "path": "stocks/kodak_portra_160.json",
+   "sha256": "9e4541c8555fed7930c20f6d2b9b0596056458412874e40b086e1404f7fff559"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_160.safetensors",
+   "sha256": "63b2087fc9bee41c633b757adeadaf4e86b5a7db18ca397fb0e32ac842c59dee"
+  },
+  {
+   "bytes": 5663,
+   "path": "stocks/kodak_portra_400.json",
+   "sha256": "f931b5cc3868d4f10a189b3912d1a9e092e1607edb574acddeefe0e8d6ef6cf5"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_400.safetensors",
+   "sha256": "c8604acecc02191ffbd364cb296e83c13aa0aada44441b096185d1f7f4f37e6c"
+  },
+  {
+   "bytes": 5672,
+   "path": "stocks/kodak_portra_800.json",
+   "sha256": "e64ecefacf7b09002309eee36aadfea4f94ec493a651a03a1199a6a24aa5964d"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_800.safetensors",
+   "sha256": "9e62aa53786138faf18654799104ab19f1bc2413e992ce471efe3796d721f59a"
+  },
+  {
+   "bytes": 5693,
+   "path": "stocks/kodak_portra_800_push1.json",
+   "sha256": "4a433b18e00881a40977b3145bd4b560a145fa8ca048ce975102953c59ebc800"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_800_push1.safetensors",
+   "sha256": "5201080144e3fb8fbbc5b78549027da785b3c27fe7313b2f67d8a2e595e24d03"
+  },
+  {
+   "bytes": 5691,
+   "path": "stocks/kodak_portra_800_push2.json",
+   "sha256": "9eb2c71b09eaf2035d33b4cd6e31a11dfce2d627dfbbe4d0cbefc41e298932e6"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_800_push2.safetensors",
+   "sha256": "bebda60938f4d66b9003b1c9284dbf8cb3e07921ad22138b612ab0a743dcca59"
+  },
+  {
+   "bytes": 4330,
+   "path": "stocks/kodak_portra_endura.json",
+   "sha256": "a3493464271b07cf3bfe1ff87c0e635fd1d0c6aad96c73b640b6297100363eec"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_portra_endura.safetensors",
+   "sha256": "d157005d1c14cac41012e5b661c9b11624986a4e3c96fdb34e8ef73e4b98d2a2"
+  },
+  {
+   "bytes": 4334,
+   "path": "stocks/kodak_supra_endura.json",
+   "sha256": "6e2f9aa9b5610ee6a187ceca0546590ed3b8d6572f575d1d280592ced129b05e"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_supra_endura.safetensors",
+   "sha256": "3e77edd8c401fdcf9d66356fbdfb313f17309a108ced220fec4ff8d43e4e4f3c"
+  },
+  {
+   "bytes": 4332,
+   "path": "stocks/kodak_ultra_endura.json",
+   "sha256": "4d90f82ebf187710240c57e262a7838a1578e40cd1200fa747c6def89045e97b"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_ultra_endura.safetensors",
+   "sha256": "b7aa5f2f461df99d62ff6ad2311c81d5da270063efb7f5db8e0696bb8eae7929"
+  },
+  {
+   "bytes": 5675,
+   "path": "stocks/kodak_ultramax_400.json",
+   "sha256": "71587323e28595d210520a4bdccc80a81dcb1e35860b0c86f1a4bc5e795b16f3"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_ultramax_400.safetensors",
+   "sha256": "fa5bc88afa6adbdcc568b4484060496102734642dd22b7c8f230368cfdd6e9b1"
+  },
+  {
+   "bytes": 5670,
+   "path": "stocks/kodak_verita_200d.json",
+   "sha256": "5dc9d713e2ddbd5069bbf45e0443f02feaa61037bd69a046ddaacf569906c2fd"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_verita_200d.safetensors",
+   "sha256": "b60701e9bf2ca28acdd09f8a943ffceb2fa89123322a6c3b8a7768f3cbefa4c4"
+  },
+  {
+   "bytes": 5623,
+   "path": "stocks/kodak_vision3_200t.json",
+   "sha256": "be24b3f2a3764ea609457e8059b4045b09ab9cd0a2d57f3847c689daa8eca27c"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_vision3_200t.safetensors",
+   "sha256": "35263db478a727056e456c10bd100567bcdb05f512dd20b8696ceb8137beef8f"
+  },
+  {
+   "bytes": 5633,
+   "path": "stocks/kodak_vision3_250d.json",
+   "sha256": "99c6333932f87572492a0f54bd97cbbf3bb9ccb77c1fe018a00485a6fa1d494c"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_vision3_250d.safetensors",
+   "sha256": "31c69c929f7abe3cdbcec90e9be614ccd181585e95d57e73ca522d84954e1149"
+  },
+  {
+   "bytes": 5620,
+   "path": "stocks/kodak_vision3_500t.json",
+   "sha256": "2899b50439d3587694a9a87550b0b7755bb815aef1f17578a4ef88a02b023e11"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_vision3_500t.safetensors",
+   "sha256": "cf6d0e2a3e0a0e49fa55c4ca9fa71f0cfdc213542d9864bb85c04f4a86a96e3a"
+  },
+  {
+   "bytes": 5666,
+   "path": "stocks/kodak_vision3_50d.json",
+   "sha256": "8aeee29bba8f17eb585846450889f26dd10458c1c17ee17fdc6f7240709bd97d"
+  },
+  {
+   "bytes": 33456,
+   "path": "stocks/kodak_vision3_50d.safetensors",
+   "sha256": "b3d15600600ab17f39d2ec02fe8f802dc6d9c9f1d8f6c8fe78187fc88982ffa8"
+  },
+  {
+   "bytes": 5972304,
+   "onDemand": "not committed (5.97 MB); regenerate with: python -I tools/spektrafilm-export/sfx.py export --upstream <spektrafilm checkout>",
+   "path": "upsampling/hanatos2025-irradiance-xy-tc.safetensors",
+   "sha256": "9c32a3fabcb0affbce246635625502cb48bf847a90db768f8d38b7e1860a9d0e"
+  }
+ ],
+ "grid": {
+  "count": 81,
+  "start_nm": 380,
+  "step_nm": 5
+ },
+ "items": [
+  {
+   "contentHash": "sha256:1631eaf68879216ff7f1f37800cc0cc4455e70b6515d8e40835118e2a791a320",
+   "files": [
+    "cie/cmf-1931-2deg.safetensors"
+   ],
+   "id": "cie1931-2deg",
+   "kind": "cmf",
+   "tensor": "cmf_xyz_2deg"
+  },
+  {
+   "contentHash": "sha256:3338c8fecd89d8264891fa4088b73f80aa8d69ff3f6fb86743c8ab747321f821",
+   "files": [
+    "cie/cmf-1931-2deg.safetensors"
+   ],
+   "id": "stockman-sharpe-2deg-lms",
+   "kind": "cmf",
+   "tensor": "lms_stockman_sharpe_2deg"
+  },
+  {
+   "contentHash": "sha256:0354cd3e2b636f385eb2f923af4e0b4dbf7cf7a5d0c4481d2d85085f54db98d2",
+   "default": true,
+   "files": [
+    "enlarger/dichroics.safetensors"
+   ],
+   "id": "custom",
+   "kind": "dichroics",
+   "missingRows_nm": [],
+   "tensor": "custom_cmy_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:371d7a39873b3e1c3c6948b0d536b135ba0945f496cac5c79dcabd21725e541b",
+   "default": false,
+   "files": [
+    "enlarger/dichroics.safetensors"
+   ],
+   "id": "durst_digital_light",
+   "kind": "dichroics",
+   "missingRows_nm": [
+    760,
+    780
+   ],
+   "tensor": "durst_digital_light_cmy_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:24b61b3e0e11091d6a8fb9df9c6f6a57451d961fbc63d0be94d9ed714f82266b",
+   "default": false,
+   "files": [
+    "enlarger/dichroics.safetensors"
+   ],
+   "id": "edmund_optics",
+   "kind": "dichroics",
+   "missingRows_nm": [
+    380,
+    380
+   ],
+   "tensor": "edmund_optics_cmy_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:66bd880d368cac2bb515040c38e4d4004ee0b99b8e636673ed8d67087155b911",
+   "default": false,
+   "files": [
+    "enlarger/dichroics.safetensors"
+   ],
+   "id": "thorlabs",
+   "kind": "dichroics",
+   "missingRows_nm": [],
+   "tensor": "thorlabs_cmy_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:c788fdeef70e69674d44e43b81499bf895ad7bb26846f9cee70d3d41207da062",
+   "files": [
+    "light/filters.safetensors"
+   ],
+   "id": "canon_24_f28_is",
+   "kind": "filter",
+   "tensor": "canon_24_f28_is_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:021c2b02af1900fa0a5e4e273063c93872be256b7994022e440354938b48b51e",
+   "files": [
+    "light/filters.safetensors"
+   ],
+   "id": "schott_kg1",
+   "kind": "filter",
+   "tensor": "schott_kg1_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:5492a847d2690b700fb4e7bbcf1cb02d8a125b21891c6e5736ab569b76fe9bca",
+   "files": [
+    "light/filters.safetensors"
+   ],
+   "id": "schott_kg3",
+   "kind": "filter",
+   "tensor": "schott_kg3_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:02713476c898188e12f1420271f1b2dddda720b8863aa6f6e6539bd8fed7aa1c",
+   "files": [
+    "light/filters.safetensors"
+   ],
+   "id": "schott_kg5",
+   "kind": "filter",
+   "tensor": "schott_kg5_transmittance_fraction"
+  },
+  {
+   "contentHash": "sha256:b4a748f4865cc923470ce57f50267c7bea11f1d182b36d3ee475f0423af6aff5",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "D50",
+   "kind": "illuminant",
+   "tensor": "D50_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:2351269ebf46eb3161ba46dccbd37d66272beb127b68bd79477a4e62c3ee2651",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "D55",
+   "kind": "illuminant",
+   "tensor": "D55_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:55502190d4baaef3f2dd0ca26c0d44a984e216a9a15ce1f35b8e9f38ddcdd816",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "D65",
+   "kind": "illuminant",
+   "tensor": "D65_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:7bfc1bdc8afe8d45e370aabf84e7620ea38bb713961591d29a796b588c5615dd",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "K75P",
+   "kind": "illuminant",
+   "tensor": "K75P_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:e7f7869d734349bd939d2f04a8360ef38470ba99bff421a4cdc2049f35b275fa",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "T",
+   "kind": "illuminant",
+   "tensor": "T_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:af0bffd72d0ec3e748fa44e493e813105952ca27dc195fd4a0b29f278b40f881",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "TH-KG3",
+   "kind": "illuminant",
+   "tensor": "TH-KG3_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:7eff800bce10a864eb47d7143e532f3880d2e3bca4d02638a251262a5bd9d7b2",
+   "files": [
+    "light/illuminants.safetensors"
+   ],
+   "id": "TH-KG3-L",
+   "kind": "illuminant",
+   "tensor": "TH-KG3-L_spd_rel_mean1"
+  },
+  {
+   "contentHash": "sha256:7b01cc59827892cf1ee8122598ba744fc904c8fe28e554bc1acdf912b76a1603",
+   "files": [
+    "enlarger/neutral-print-filters.json"
+   ],
+   "id": "neutral-print-filters",
+   "kind": "neutral-print-filters",
+   "lamps": [
+    "TH-KG3"
+   ]
+  },
+  {
+   "contentHash": "sha256:a56c5de48484bda3ce35f538aad7375e34eefac9fd2aac13277cb862215e2d93",
+   "files": [
+    "presets/dir-couplers.json"
+   ],
+   "id": "dir-couplers",
+   "kind": "preset"
+  },
+  {
+   "contentHash": "sha256:2cded6851e6a1f18a02fa03910424e6a0d8f7113048626209f6759a121feee99",
+   "files": [
+    "presets/grain.json"
+   ],
+   "id": "grain",
+   "kind": "preset"
+  },
+  {
+   "contentHash": "sha256:9f11f96d3bcdd6a3b912567b5706b859fd23061247f12e6aad1e650ab824b0bc",
+   "files": [
+    "presets/halation.json"
+   ],
+   "id": "halation",
+   "kind": "preset"
+  },
+  {
+   "contentHash": "sha256:b6b396796e8599e39efd3300990d0fb180623f82ac24224f57c994567deb179a",
+   "files": [
+    "stocks/fujifilm_c200.json",
+    "stocks/fujifilm_c200.safetensors"
+   ],
+   "id": "fujifilm_c200",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     720,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:82ddb48f41ca3a4d043570d696252aebe675b764a78bff098c799ff1c3f47e12",
+   "files": [
+    "stocks/fujifilm_crystal_archive_typeii.json",
+    "stocks/fujifilm_crystal_archive_typeii.safetensors"
+   ],
+   "id": "fujifilm_crystal_archive_typeii",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     380,
+     725,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:6fa1497afbe5ab751eca93ac7affde939259a5e560efd7775483773f76f9d0fb",
+   "files": [
+    "stocks/fujifilm_pro_400h.json",
+    "stocks/fujifilm_pro_400h.safetensors"
+   ],
+   "id": "fujifilm_pro_400h",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     720,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:3dc5b0816c4f30622cbee04f3e8d14f5d7a744e67ab024d0745bdf59dc96b2ac",
+   "files": [
+    "stocks/fujifilm_provia_100f.json",
+    "stocks/fujifilm_provia_100f.safetensors"
+   ],
+   "id": "fujifilm_provia_100f",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     380,
+     720,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "positive"
+  },
+  {
+   "contentHash": "sha256:5d46ad3857d4af589aefa62a3fad4b0acf64fa6f13692f3623239ac8410f9208",
+   "files": [
+    "stocks/fujifilm_velvia_100.json",
+    "stocks/fujifilm_velvia_100.safetensors"
+   ],
+   "id": "fujifilm_velvia_100",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     395,
+     710,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "positive"
+  },
+  {
+   "contentHash": "sha256:23535f91e61f6c64b3b63d2d8b5fee40193c8bdf3f4c7cb06a5ef318f4dedcb2",
+   "files": [
+    "stocks/fujifilm_xtra_400.json",
+    "stocks/fujifilm_xtra_400.safetensors"
+   ],
+   "id": "fujifilm_xtra_400",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     725,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:4f3f0bcd942d77cd07ccbfc7210c9a58708bf8e465dd492366123d1b1b3120ea",
+   "files": [
+    "stocks/kodak_2383.json",
+    "stocks/kodak_2383.safetensors"
+   ],
+   "id": "kodak_2383",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:d6047eac78eb1b296a3f11c0d95549f3db821368b125e520c04ec6d59f242311",
+   "files": [
+    "stocks/kodak_2393.json",
+    "stocks/kodak_2393.safetensors"
+   ],
+   "id": "kodak_2393",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:a7acb7652133f826950674e8dd9b94543486b0acbdad7b68f776a8327e59571e",
+   "files": [
+    "stocks/kodak_ektachrome_100.json",
+    "stocks/kodak_ektachrome_100.safetensors"
+   ],
+   "id": "kodak_ektachrome_100",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     705,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "positive"
+  },
+  {
+   "contentHash": "sha256:3500ec83e6934d579034bf8c89c35432eaec8918ecd0f3b5d4aafd0e5f7abfc7",
+   "files": [
+    "stocks/kodak_ektacolor_edge.json",
+    "stocks/kodak_ektacolor_edge.safetensors"
+   ],
+   "id": "kodak_ektacolor_edge",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:ecc8f15c8e92d196a252c8f161407792c4c45bc039582c59e35d264e8cd7255c",
+   "files": [
+    "stocks/kodak_ektar_100.json",
+    "stocks/kodak_ektar_100.safetensors"
+   ],
+   "id": "kodak_ektar_100",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     685,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:d6dc4cd051a7956a0bab5e9ebd6f520cfd0c1c4ec3046f546dc89a54cf00e46f",
+   "files": [
+    "stocks/kodak_endura_premier.json",
+    "stocks/kodak_endura_premier.safetensors"
+   ],
+   "id": "kodak_endura_premier",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:8c0788fd52edea4701498a81f86840ab540d72767ef4f517a0f914559e2a455a",
+   "files": [
+    "stocks/kodak_gold_200.json",
+    "stocks/kodak_gold_200.safetensors"
+   ],
+   "id": "kodak_gold_200",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:9b86cd85f2485dd34ed749bd30c0050c6afc563a2feeb965c41a5179c1f312f4",
+   "files": [
+    "stocks/kodak_kodachrome_64.json",
+    "stocks/kodak_kodachrome_64.safetensors"
+   ],
+   "id": "kodak_kodachrome_64",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     420,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "positive"
+  },
+  {
+   "contentHash": "sha256:a5836aecff72edc5719cc8013f81012882834aadb72cb0ac2cc686e02be6e162",
+   "files": [
+    "stocks/kodak_portra_160.json",
+    "stocks/kodak_portra_160.safetensors"
+   ],
+   "id": "kodak_portra_160",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:0e5f1ab8c71db8cdef53f62063684b32f4779379ff192f1662e8314fc95e2516",
+   "files": [
+    "stocks/kodak_portra_400.json",
+    "stocks/kodak_portra_400.safetensors"
+   ],
+   "id": "kodak_portra_400",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:0da3023221cfb4a60cec4102af984efa6abd729a9ea87aec42f07df7a26d3740",
+   "files": [
+    "stocks/kodak_portra_800.json",
+    "stocks/kodak_portra_800.safetensors"
+   ],
+   "id": "kodak_portra_800",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:04d2f8edc8dea841433e22eded58c89da70dbb6bffba0448cd816fc74fd5297a",
+   "files": [
+    "stocks/kodak_portra_800_push1.json",
+    "stocks/kodak_portra_800_push1.safetensors"
+   ],
+   "id": "kodak_portra_800_push1",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:b55c69c22e1137f630c9821e26c85fa6a89f2e73049ef440b0c7181c49e4ed23",
+   "files": [
+    "stocks/kodak_portra_800_push2.json",
+    "stocks/kodak_portra_800_push2.safetensors"
+   ],
+   "id": "kodak_portra_800_push2",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:a794388d8e71172358c3fad06a8031b56061941c11e7e5e61da2a1d0765e6791",
+   "files": [
+    "stocks/kodak_portra_endura.json",
+    "stocks/kodak_portra_endura.safetensors"
+   ],
+   "id": "kodak_portra_endura",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:11431fd5b2bda759ab7f75e95a30cc3699e21c96810b80fbc1a4f5420dfca4e9",
+   "files": [
+    "stocks/kodak_supra_endura.json",
+    "stocks/kodak_supra_endura.safetensors"
+   ],
+   "id": "kodak_supra_endura",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:36306e339761f5614fda2e5f6db204398f4dde062fe9b7aa3a05b24cc11a8bce",
+   "files": [
+    "stocks/kodak_ultra_endura.json",
+    "stocks/kodak_ultra_endura.safetensors"
+   ],
+   "id": "kodak_ultra_endura",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [],
+    "dyes": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "print",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:72498850bf76b2325cd4b1b8f2a934dd940c2f3ac01dabad22afe74560ba1526",
+   "files": [
+    "stocks/kodak_ultramax_400.json",
+    "stocks/kodak_ultramax_400.safetensors"
+   ],
+   "id": "kodak_ultramax_400",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     705,
+     780
+    ],
+    "dyes": [
+     380,
+     380,
+     750,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:0d80ae52dae3751a3f93c89dc17cd8412b1d7f9b8725a437783c04316dd880ab",
+   "files": [
+    "stocks/kodak_verita_200d.json",
+    "stocks/kodak_verita_200d.safetensors"
+   ],
+   "id": "kodak_verita_200d",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     400,
+     700,
+     780
+    ],
+    "dyes": [
+     380,
+     400,
+     765,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:ab8b46fdef62b1cadd7a09e3a19b10942233019e4170cfb30c08b989adfc629b",
+   "files": [
+    "stocks/kodak_vision3_200t.json",
+    "stocks/kodak_vision3_200t.safetensors"
+   ],
+   "id": "kodak_vision3_200t",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395
+    ],
+    "dyes": [
+     380,
+     400
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:3290e6adf856d6ccfe38556acb988da08ca4c3fe1998f2573548cb16e7ce3fd9",
+   "files": [
+    "stocks/kodak_vision3_250d.json",
+    "stocks/kodak_vision3_250d.safetensors"
+   ],
+   "id": "kodak_vision3_250d",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395
+    ],
+    "dyes": [
+     380,
+     400
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:840b88ca563b1e54c295f273c37d13e5280e26bde3dbbd9c8ae0f0f8c687c177",
+   "files": [
+    "stocks/kodak_vision3_500t.json",
+    "stocks/kodak_vision3_500t.safetensors"
+   ],
+   "id": "kodak_vision3_500t",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395
+    ],
+    "dyes": [
+     380,
+     400
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:c4336c1b09af9d8255a52d9a65f017911820f9852e7a0c9dea17a0df9a35f0c1",
+   "files": [
+    "stocks/kodak_vision3_50d.json",
+    "stocks/kodak_vision3_50d.safetensors"
+   ],
+   "id": "kodak_vision3_50d",
+   "kind": "stock",
+   "missingRows_nm": {
+    "base": [
+     380,
+     395,
+     760,
+     780
+    ],
+    "dyes": [
+     380,
+     400,
+     765,
+     780
+    ],
+    "sensitivity": []
+   },
+   "role": "film",
+   "type": "negative"
+  },
+  {
+   "contentHash": "sha256:4dcbbe12dcf9a9c278546e37c9f3f57f5b1745140a48313ca2140e51f867c49a",
+   "files": [
+    "upsampling/hanatos2025-irradiance-xy-tc.safetensors"
+   ],
+   "id": "hanatos2025-irradiance-xy-tc",
+   "kind": "upsampling",
+   "licence_note": "provided to spektrafilm by Johannes Hanika (hanatos); licence unclear (guide §12.1)",
+   "shape": [
+    192,
+    192,
+    81
+   ],
+   "tensor": "irradiance_xy_tc_f16"
+  }
+ ],
+ "knownIssues": [
+  {
+   "id": "shared-base_density-fujifilm_crystal_archive_typeii-kodak_supra_endura",
+   "items": [
+    "fujifilm_crystal_archive_typeii",
+    "kodak_supra_endura"
+   ],
+   "text": "base_density is identical across fujifilm_crystal_archive_typeii, kodak_supra_endura (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "shared-base_density-kodak_portra_800-kodak_portra_800_push1-kodak_portra_800_push2",
+   "items": [
+    "kodak_portra_800",
+    "kodak_portra_800_push1",
+    "kodak_portra_800_push2"
+   ],
+   "text": "base_density is identical across kodak_portra_800, kodak_portra_800_push1, kodak_portra_800_push2 (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "shared-channel_density-kodak_portra_800-kodak_portra_800_push1-kodak_portra_800_push2",
+   "items": [
+    "kodak_portra_800",
+    "kodak_portra_800_push1",
+    "kodak_portra_800_push2"
+   ],
+   "text": "channel_density is identical across kodak_portra_800, kodak_portra_800_push1, kodak_portra_800_push2 (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "shared-log_sensitivity-kodak_portra_800-kodak_portra_800_push1-kodak_portra_800_push2",
+   "items": [
+    "kodak_portra_800",
+    "kodak_portra_800_push1",
+    "kodak_portra_800_push2"
+   ],
+   "text": "log_sensitivity is identical across kodak_portra_800, kodak_portra_800_push1, kodak_portra_800_push2 (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "shared-log_sensitivity-kodak_portra_endura-kodak_supra_endura",
+   "items": [
+    "kodak_portra_endura",
+    "kodak_supra_endura"
+   ],
+   "text": "log_sensitivity is identical across kodak_portra_endura, kodak_supra_endura (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "shared-midscale_neutral_density-kodak_portra_800-kodak_portra_800_push1-kodak_portra_800_push2",
+   "items": [
+    "kodak_portra_800",
+    "kodak_portra_800_push1",
+    "kodak_portra_800_push2"
+   ],
+   "text": "midscale_neutral_density is identical across kodak_portra_800, kodak_portra_800_push1, kodak_portra_800_push2 (upstream data, reproduced not repaired)"
+  },
+  {
+   "id": "upstream-comment-kodak_ultra_endura",
+   "items": [
+    "kodak_ultra_endura"
+   ],
+   "text": "upstream model/stocks.py comment: 'problematic'"
+  }
+ ],
+ "license": {
+  "attribution": "Derived from spektrafilm by Andrea Volpato, https://github.com/andreavolpato/spektrafilm, CC BY-SA 4.0. Converted by chromobench (tools/spektrafilm-export); see CHANGELOG.txt.",
+  "changelog": "CHANGELOG.txt",
+  "file": "SPEKTRAFILM_LICENSE.txt",
+  "spdx": "CC-BY-SA-4.0"
+ },
+ "logExposureGrid": {
+  "count": 256,
+  "start_logH": -3,
+  "stop_logH": 4
+ },
+ "missing": {
+  "default": "opaque",
+  "supported": [
+   "opaque",
+   "zero-density",
+   "extend-flat"
+  ]
+ },
+ "packId": "spektrafilm@0.3.2+3bb2c2d",
+ "schemaVersion": 1,
+ "source": {
+  "commit": "3bb2c2d2801ff68b92019cf1dbcbb133d60832bc",
+  "exporter": "spektrafilm-export 0.1.0",
+  "kind": "upstream",
+  "profileVersion": "0.3.2",
+  "repo": "https://github.com/andreavolpato/spektrafilm"
+ },
+ "title": "spektrafilm profiles, enlarger, light and parameter data (28 stocks)"
+}
