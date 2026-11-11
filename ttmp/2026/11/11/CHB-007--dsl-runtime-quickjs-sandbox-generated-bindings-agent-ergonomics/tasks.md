@@ -17,3 +17,4 @@
 - [ ] [stage 4] Extend tools/gen-docs for the DSL reference, the instructions (under 4000 characters) and chromobench-dsl.d.ts <!-- t:2og2 -->
 - [ ] [stage 4] Write the topic pages and port docs_test.go so every js block and OpDef example runs in CI <!-- t:bg07 -->
 - [ ] [stage 4] Implement EvalTrace and tools/dsl-usage to report unused vocabulary and frequent errors <!-- t:h52b -->
+- [ ] [errata] Review guide claims flagged by its writer's diary: asyncify-after-await call does complete (after 50 ms + second pump); import('x') rejection untested; OOM observed at 64 MiB not 32; Filmbench WRITE_RE matches lab.write/remove/export/useAsScene <!-- t:cg16 -->
