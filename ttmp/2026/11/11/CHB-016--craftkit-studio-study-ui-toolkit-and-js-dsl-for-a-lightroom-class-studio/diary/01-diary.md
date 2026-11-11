@@ -330,3 +330,69 @@ the real design.
 | JS-defined parameters | `ck.ui.slider(...)` | `ck.ui.input(name, v)` | no; ArgSpec only in contract |
 | proxy diagnostics | expr + tracking proxies, build report | suggestions | handle/namespace proxies, fixes |
 | fragments | `defineForm`, habits (new components only) | `*.` ops, SUGAR | registry-driven methods only |
+
+## Step 4: Sketch the product: a Lightroom + Negative Lab Pro + Dehancer flow on chromobench
+
+Manuel asked how I would build a Lightroom + Negative Lab Pro + Dehancer kind of app for his dad with everything now
+available. This step is a product/architecture sketch, given in chat, no code: one physical pipeline with three
+entry points (scanned negative, digital RAW through a virtual negative, optional plain digital develop), a darkroom
+vocabulary for the controls, Lightroom's library/compare/sync/export patterns from CraftKit Studio, and milestones
+ordered to put a Negative-Lab-Pro replacement in the photographer's hands first.
+
+### Prompt Context
+
+**User prompt (verbatim):** "how woud you build a lightroom + negative lab pro + dehancer kind of flow app for my
+dad, given all these tools?"
+**Assistant interpretation:** Propose the product flow, the mapping from those three products' features to
+chromobench/CraftKit parts, and an order of work.
+**Inferred user intent:** A shared picture of the target app before the real design doc.
+**Commit (code):** see the commit adding this step — "CHB-016: diary step 4, product sketch"
+
+### What I did
+
+- No commands beyond this diary write; the sketch draws on Steps 2–3, the Phase-1 agent reports (CHB-003, -005, -006,
+  -007, -009) and the ticket table in CHB-001's architecture doc.
+
+### Why
+
+- Ordering by "which product does he replace first": scanned negatives are what chromobench's physics is for and
+  where Phase 1 is strongest (ingest, conditioning, inversion, print chain, GPU tables), so a Negative-Lab-Pro
+  replacement is the shortest path to real use.
+
+### What worked
+
+- N/A (sketch).
+
+### What didn't work
+
+- N/A.
+
+### What I learned
+
+- Lightroom's global sliders split three ways in a physical model: exposure/contrast/white balance become enlarger
+  time, paper grade and filtration (print chain); HSL and colour grading have no darkroom equivalent and belong in
+  the contract's `finishing.*` ops on print-xyz; local adjustments become dodge/burn (exposure masks) plus finishing
+  masks.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Assumptions about the photographer's workflow (current tools, scanner setup, machine, printing) — asked in chat.
+
+### What should be done in the future
+
+- Turn the sketch into the CHB-016 design doc once the toolkit and workflow questions are answered.
+
+### Code review instructions
+
+- N/A.
+
+### Technical details
+
+- Milestones proposed: M2 negative lab (scan → roll → contact sheet → print → export), M3 darkroom (dodge/burn, test
+  strips, ring-around, looks, roll sync, compare), M4 film look for digital (CHB-012 forward sim, halation, grain),
+  M5 Lightroom parity (finishing, heal, keywords/search, print with soft proof), M6 assistant (CHB-008 chat,
+  playbooks).
