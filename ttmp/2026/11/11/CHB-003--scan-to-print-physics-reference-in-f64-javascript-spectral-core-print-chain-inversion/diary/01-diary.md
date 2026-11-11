@@ -1026,3 +1026,29 @@ Stage 3 went in as commit 5addf8e. I wrote the reference engine (`RefEngine`, ex
 
 ### Technical details
 - `EngineCaps.conventions` = `core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean` by default.
+
+## Step 18: Table tests for CHB-005 and hand-back state
+
+The last step added table tests (node order, texel-centre lookup, interpolation against exact values), deleted the uncommitted exploration scripts (`packages/core/explore/`), and ran the full gates. This entry records what is done and what is open.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 14.
+**Assistant interpretation:** Close out with green gates and a clear list of open items.
+**Inferred user intent:** see Step 14.
+**Commit (code):** d29b098 — "CHB-003: §3.6 balance tests, contract requests, diary steps 15-17" (the table tests and this entry follow in the final commit).
+
+### What I did
+- `packages/core/test/tables.test.ts` (5 tests). `pnpm typecheck` clean, `pnpm lint` clean, `pnpm test`: 750 passed.
+- Removed `packages/core/explore/` (scratch scripts e1–e7, never committed).
+
+### What worked
+- `look3` returns node values exactly at nodes and is trilinear between them; pd table = clear − x; solve-table channel 4 equals the recomputed residual.
+
+### What didn't work
+- First bound for print-table interpolation: "AssertionError: expected 0.002242018568993309 to be less than 0.002". The 33³ print table's interpolation error in linear XYZ is 2.24e-3 at 200 scattered points; the bound is now 3e-3 and the measured value is in the test name. This is table error (reference/tabulated vs reference/exact), separate from f32 error.
+
+### What should be done in the future
+- Open tasks: `j90u` (tolerances still to hand over formally; key ranges are in Step 17), `i839` (tabulated mode), `d0xa` (14.6 density-shift arm), `7zy5` (Gold 200 class percentages), `ccc7` (guide errata).
+
+### Code review instructions
+- `pnpm test`; the golden fixtures are `fixtures/golden/core/ch{1,2,3}.json`.
