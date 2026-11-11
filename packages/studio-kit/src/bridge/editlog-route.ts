@@ -285,6 +285,39 @@ export class EditLogRoute implements RouteAdapter {
     if (!e) throw new Error(`no frame ${frame}`);
     return e.log.apply(ms, 'user', label, o);
   }
+  /**
+   * A cross-frame batch (CHB-020 roll setup, first print, "print the roll like this frame"): one unit per frame
+   * under one shared tx, one global undo step. Every frame is validated before any is applied. `by: 'auto'`
+   * for the automatic first print (as ingest's frame.add). Until LoggedMutation.batch exists (CHB-020
+   * CONTRACT-REQUESTS R3) the shared tx is what groups the entries.
+   */
+  applyBatch(entries: { frame: string; mutations: Mutation[] }[], label: string, o: { by?: 'user' | 'auto'; tx?: string; detail?: string } = {}): UndoUnit[] {
+    this.endBurst();
+    const plan: { e: FrameEntry; ms: Mutation[] }[] = [];
+    for (const { frame, mutations } of entries) {
+      if (!mutations.length) continue;
+      const e = this.frames.get(frame);
+      if (!e) throw new Error(`no frame ${frame}`);
+      let r = e.log.committed;
+      for (const m of mutations) r = applyMutation(r, m, { graph: e.graph }).recipe;
+      plan.push({ e, ms: mutations });
+    }
+    const tx = o.tx ?? `u${++this.txSeq}`;
+    const units: UndoUnit[] = [];
+    const parts: HistoryPart[] = [];
+    for (const { e, ms } of plan) {
+      this.previewed.delete(e.id);
+      units.push(this.withQuiet(() => e.log.apply(ms, o.by ?? 'user', label, { tx })));
+      this.stats.applies++;
+      parts.push(this.part(e, tx, label));
+      this.publish(e);
+    }
+    if (parts.length && this.api) {
+      this.stats.pushes++;
+      this.api.push({ label, ...(o.detail ? { detail: o.detail } : {}), channel: plan.length === 1 ? plan[0]!.e.id : null, parts });
+    }
+    return units;
+  }
   approve(frame: string, seqs: number[], force = false): UndoUnit | Diagnostic[] {
     this.endBurst();
     const e = this.frames.get(frame);

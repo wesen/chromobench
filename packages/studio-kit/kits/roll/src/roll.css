@@ -1,0 +1,23 @@
+/* cb.kits.roll on the shell's tokens */
+.cb-roll-sheet { display: flex; flex-direction: column; min-height: 0; }
+.cb-roll-sheet > .ck-gridview, .cb-roll-sheet > .ck-grid { flex: 1; min-height: 0; }
+.cb-roll-sheet-bar { align-items: center; gap: 12px; padding: 4px 10px; }
+.cb-roll-list { list-style: none; margin: 0 0 6px; padding: 0; }
+.cb-roll-card { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius, 3px); margin-bottom: 4px; cursor: pointer; }
+.cb-roll-card.is-current { border-color: var(--accent); }
+.cb-roll-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.cb-roll-row { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.cb-roll-row select { margin-top: 3px; width: 100%; background: var(--panel3, #2a2a2a); color: var(--text); border: 1px solid var(--line); }
+.cb-roll-scope { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.cb-roll-value { font-variant-numeric: tabular-nums; }
+.cb-roll-evidence { margin-top: 2px; }
+.cb-roll-title { font-weight: 600; margin-bottom: 4px; }
+.cb-roll-ref { font-weight: 600; }
+.cb-roll-alpha { display: flex; align-items: center; gap: 6px; }
+.cb-roll-alpha input { flex: 1; accent-color: var(--accent); }
+.cb-roll-diags { margin: 6px 0; padding-left: 16px; }
+.cb-roll-table { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 11px; width: 100%; }
+.cb-roll-table th, .cb-roll-table td { padding: 1px 4px; text-align: right; white-space: nowrap; }
+.cb-roll-table td:first-child, .cb-roll-table th:first-child { text-align: left; }
+.cb-warn { color: var(--warn, #d9a441); }
+.cb-err { color: var(--err, #c44); }

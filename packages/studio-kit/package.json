@@ -10,7 +10,10 @@
     "./variants": {
       "types": "./variants/index.d.ts",
       "default": "./variants/index.js"
-    }
+    },
+    "./kits/roll": "./kits/roll/src/index.ts",
+    "./kits/roll/dom": "./kits/roll/src/dom.ts",
+    "./kits/roll/roll.css": "./kits/roll/src/roll.css"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"
@@ -20,8 +23,10 @@
     "@chromobench/shell": "workspace:*"
   },
   "devDependencies": {
+    "@chromobench/core": "workspace:*",
     "@chromobench/dsl": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",
+    "@chromobench/ingest": "workspace:*",
     "happy-dom": "21.0.4"
   }
 }
