@@ -1,0 +1,23 @@
+{
+  "name": "@chromobench/studio-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dom": "./src/dom/index.ts",
+    "./studio-kit.css": "./src/dom/studio-kit.css"
+  },
+  "scripts": {
+    "demo": "vite --config demo/vite.config.ts"
+  },
+  "dependencies": {
+    "@chromobench/contract": "workspace:*",
+    "@chromobench/shell": "workspace:*"
+  },
+  "devDependencies": {
+    "@chromobench/dsl": "workspace:*",
+    "@chromobench/engine-mock": "workspace:*",
+    "happy-dom": "21.0.4"
+  }
+}

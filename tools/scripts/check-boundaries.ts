@@ -9,7 +9,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const RULES: { dir: string; forbid: RegExp; why: string }[] = [
+const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp }[] = [
   { dir: 'packages/contract/src', forbid: /^@chromobench\//, why: 'the contract imports nothing from the workspace' },
   { dir: 'packages/contract/src', forbid: /^(?!@noble\/hashes|\.\.?\/)/, why: 'the contract depends only on @noble/hashes' },
   { dir: 'apps/studio/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the UI never calls physics code directly' },
@@ -17,6 +17,11 @@ const RULES: { dir: string; forbid: RegExp; why: string }[] = [
   { dir: 'packages/shell/src', forbid: /^(?!\.\.?\/)/, why: 'the shell imports only its own files (generic, no dependencies)' },
   ...['core', 'ir', 'build', 'app', 'themes', 'testing'].map(d => ({ dir: `packages/shell/src/${d}`, forbid: /(^|\/)dom\//, why: 'the headless half of the shell never imports the DOM half' })),
   { dir: 'packages/shell/src', forbid: /^\.\/dom\//, why: 'the shell entry point is headless; the DOM half is @chromobench/shell/dom' },
+  // CHB-019 studio-kit: engines arrive by injection; only the shell and the contract are imported; the headless
+  // half never imports the DOM half; variants import nothing but their sibling parts
+  { dir: 'packages/studio-kit/src', forbid: /^@chromobench\/(?!contract$|shell(\/dom)?$)/, why: 'studio-kit imports only the contract and the shell (engines are injected)' },
+  { dir: 'packages/studio-kit/src', skip: /\/src\/dom\//, forbid: /^(@chromobench\/shell\/dom|\.\.?\/dom\/)/, why: 'the headless half of studio-kit never imports the DOM half (@chromobench/studio-kit/dom)' },
+  { dir: 'packages/studio-kit/variants', skip: /\.d\.ts$/, forbid: /^(?!\.\/)/, why: 'a variant receives ck and cb and imports nothing (only sibling variant parts)' },
 ];
 
 function* files(dir: string): Generator<string> {
@@ -33,6 +38,7 @@ let bad = 0;
 let checked = 0;
 for (const rule of RULES) {
   for (const f of files(join(root, rule.dir))) {
+    if (rule.skip?.test(f)) continue;
     checked++;
     const src = readFileSync(f, 'utf8');
     for (const m of src.matchAll(IMPORT)) {
