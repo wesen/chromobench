@@ -719,3 +719,56 @@ This step builds the minimal `apps/studio` page and the Playwright M1 test, and 
 ### Technical details
 - Canvas check: the grey-patch canvas pixel equals `round(display × 255)` of the golden values: (94, 111, 140) before.
 - Run counts after the lights change: `source.open`, `scan.density`, `invert.dyes` and `print.expose` were each computed once.
+
+## Step 13: The M1 page restyled in the Chromogen Studio look
+
+The user asked mid-run for the studio page to use Chromogen Studio's CSS and design. I extracted the stylesheet from the original bundle and ported its tokens and component rules to `apps/studio/src/studio.css`. The M1 page now uses Chromogen's bar/left/mid/right layout in light and dark themes. The e2e test still passes unchanged. Commit `14f5419`.
+
+### Prompt Context
+**User prompt (verbatim):** "Use CSS / design aesthetics from the chromogen studio."
+**Assistant interpretation:** Restyle the M1 studio page (CHB-002's minimal page) with Chromogen Studio 1.2's visual language, without changing behaviour.
+**Inferred user intent:** The skeleton should already look like the darkroom app the photographer knows, so CHB-009 starts from that look.
+**Commit (code):** 14f5419 — "CHB-002: studio page in the Chromogen Studio look"
+**Also received mid-run (verbatim):** "also, ask each subagent to keep a diary as they work, and commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)". This agent spawned no subagents. It keeps this diary and commits at each milestone.
+
+### What I did
+- Looked in `C1/various/extracted/chromogen-studio/` first: the extracted JS has class names (`.ctl`, `.skv`, `.st-bar`, …) but no CSS.
+- Found it in `C1/sources/chromogen-studio-1.2/index.html` (705,296 bytes). One `<style>` block of 102,700 characters, extracted with `python3 -I` into `SP/chromogen.css`. Lines 1–1135 are the shared "Kiln look (Porous Forge)" base; lines 1136+ are "studio.css — Chromogen Studio on the Kiln look".
+- Ported the tokens: `--bg --fill --ink --ink-2 --accent #e2001a --hair --rule --code-bg --sel`, plus the R/G/B plot colours `--pR --pG --pB` and the dark variants. Also ported `.btn`, `.pill`, `.seg`, `#studio` grid, `.st-bar/.brand/.frame-t`, `.h`, `.sec .about`, `.skv`, `.sel-row`, `.ctl` sliders (hairline track, 8×12 square thumb, `.zero` tick, `.fillbar` from zero, `changed •`), `.tools`, `.canvas-wrap`, `.drop`, `.sreadout`, `.ask` and `.hist-it`.
+- `index.html`: the new layout. The Open TIFF button is a `label.btn` wrapping the hidden `#file` input. The state hash shows in a `.pill`. The pending, history and provenance panels are in the right column.
+- `controls.ts`: rewritten to build the Chromogen `.ctl` markup, with a channel swatch per component, `pt` as the aside unit and signed values. It returns `{sync}` in place of the old `host.syncFrom` hack. The `aria-label`s are unchanged.
+- `main.ts`: `.ask` cards (why, tx, mutations, Approve/Reject), a history list of units (undone units struck through, agent units in red), a frame name, and a readout of R, G, B under the cursor.
+- Took screenshots in light and dark mode with a temporary `e2e/zz-shot.spec.ts` (deleted afterwards). They are kept as `various/studio-light.png` and `various/studio-dark.png`.
+
+### Why
+- I kept the original token and class names, so CHB-009 can diff against the Chromogen source.
+- Red appears only for pending agent changes and errors, as in the original ("red only for selection, masks and errors").
+
+### What worked
+- Both M1 e2e tests and the WGSL tests passed without any test change: `6 passed (4.5s)`.
+- `pnpm test` 468 passed; typecheck, lint and gen:check ok.
+
+### What didn't work
+- `find / -iname '*chromogen*'` ran past the 120 s timeout and was moved to the background. I stopped it with TaskStop; the source was in the ticket's `sources/` all along.
+- `pnpm test:browser` failed because Playwright, with `testDir: '.'`, picked up another agent's worktree at `.claude/worktrees/agent-aeb28d11cd9e9eb7e/` and loaded a second Playwright copy from it. Fixed with `testIgnore: ['**/node_modules/**', '.claude/**']`. I did not touch the worktree.
+- The first screenshot run (spec under `tools/scripts/`) printed "Make sure that arguments are regular expressions matching test files", because that path is outside `testMatch`. I moved the temporary spec under `e2e/`.
+- An empty-state `<li>` in `#pending` would have broken the e2e count of `#pending li`. Instead, a CSS `#pending:empty::before` rule shows the empty message.
+
+### What I learned
+- The Chromogen 1.2 bundle inlines a shared Kiln design system before the studio-specific rules. The extracted-JS folder in CHB-001 omits it.
+
+### What was tricky to build
+- Matching Chromogen's fill bar to the native range thumb: thumb centres run from 4 px to width − 4 px for an 8 px thumb. The fill and the zero tick are therefore positioned with `calc(f·100% + (4 − 8f)px)`.
+
+### What warrants a second pair of eyes
+- In light mode the paper-white end of the print meets the white stage with no border, so the image edge disappears. This is Chromogen's `--stage: #ffffff`; CHB-009 may want a hairline frame around the image box.
+
+### What should be done in the future
+- CHB-009: reuse `studio.css` as the base. The original's remaining components (filmstrip `.thumb`, `.pads`, `.hues`, `.ring`, `.srcview`) are in `SP/chromogen.css` lines 1136–1262 and in the source bundle.
+
+### Code review instructions
+- `apps/studio/src/studio.css`, `apps/studio/index.html`, `apps/studio/src/controls.ts`, `apps/studio/src/main.ts`.
+- Run `pnpm --filter @chromobench/studio dev`, open http://localhost:4173 and load `fixtures/synthetic/m1-negative-96x64.tif`. Then run `pnpm test:browser`.
+
+### Technical details
+- Screenshots: `ttmp/.../CHB-002--*/various/studio-light.png`, `studio-dark.png` (1280×720, +4 pt red applied, one pending proposal "Cool the shadows slightly").
