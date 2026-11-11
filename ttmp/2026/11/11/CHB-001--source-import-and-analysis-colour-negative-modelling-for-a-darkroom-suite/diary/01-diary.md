@@ -489,3 +489,86 @@ the CHB-006 merge, 0158441, 74d90f1)
 ### Technical details
 
 - Branch heads merged: chb-003 a9888f9, chb-007 9709f62, chb-006 b7eb54d, chb-005 01dfec7, chb-009 aa0c754.
+
+## Step 8: CraftKit decision, UI tickets CHB-016..022 with guides, Phase-2 agents started
+
+After the CraftKit study (CHB-016 Steps 1–4) the user chose to build the proper UI on a JS API in which the whole
+studio is expressed, so that many variants can exist. This step created CHB-017 (non-UI close-out, tasks only) and
+CHB-018..022 (shell, studio v2, roll, looks, finish), wrote a shared UI design brief, had six writer subagents fill
+the guides in parallel, and started three implementation agents: CHB-004 (approved by the user), CHB-017 and CHB-018.
+
+### Prompt Context
+
+**User prompt (verbatim):** "CHB-004: approve. before we move on, now that we have worked out what to do with
+craftkit, let's create the tickets and design guides (remember, no need to be overly correct in the guides, they are
+\"guides for impementation\" after all, and we'll sort out details as we work) for the proper UI. Allow the UI to be
+entirely expressed using the JS API, so that we can create many different versions of it." Later: "can we start on
+tickets?" and "tell subagents to not overdo the reviewing / correctness of the guides, as long as it's good to
+implement, it's good".
+**Assistant interpretation:** Create and fill the UI tickets; launch CHB-004; then start implementation in
+dependency order.
+**Inferred user intent:** Move from analysis to building, with guides as working documents.
+**Commit (code):** 3c35cf8 — "CHB-016, CHB-018..022: UI implementation guides, tasks, diaries; CHB-017 tasks"
+(also b5517ca tickets + brief, 2e9999b wasm files, ed9b514 CHB-016 merge)
+
+### What I did
+
+- Found that the root `.gitignore` (`dist/`) had dropped `vendor/wb/dist` (3 wasm crates, opentype) from the CHB-016
+  import; force-added on `task/chb-016-craftkit-study` (2e9999b) and merged CHB-016 into `task/phase1-integration`
+  (ed9b514); new branch `task/ui-guides`.
+- Created CHB-017..022 (`docmgr ticket create-ticket`), guide and diary docs; wrote
+  CHB-016 `various/ui-design-brief.md` (layers `ck` shell → `cb` studio-kit → kits → host + variants; binding times;
+  fragments, kits, passes, IRs, diagnostics, explain; recipes as EditLog projections; agent proposals as previews)
+  and a writer brief in the scratchpad (`ui-guide-writer-brief.md`).
+- Six writers in parallel (CHB-016/018/019 on the default model, 020/021/022 on sonnet), writing directly into their
+  tickets; relayed the user's "don't overdo it" mid-run and added it to the writer brief.
+- Launched implementation agents in worktrees: CHB-004 (clone and venv outside the repo at
+  `~/code/wesen/chromobench-ext/`), CHB-017 (contract 0.2, one physics), CHB-018 (shell port).
+- Checks: `08-check-guide-markdown.py` clean on all six (9985, 7990, 7380, 7578, 7802, 7422 words); `docmgr doctor`
+  clean on CHB-017..022; CHB-016 had `invalid_frontmatter` for the brief → added frontmatter (now one
+  `missing_numeric_prefix` warning, accepted).
+
+### Why
+
+- CHB-017 first because the contract and the shared physics underlie everything; CHB-018 in parallel because the
+  shell is generic and touches no other package.
+
+### What worked
+
+- Writers wrote into the ticket files directly (no refusals this time), so no guide text passed through the
+  orchestrator.
+
+### What didn't work
+
+- The CHB-017 agent's worktree was created from b5517ca, before CHB-017's tasks and diary Step 1 were committed
+  (3c35cf8); told it by message to `git merge --no-edit task/ui-guides` in its worktree.
+
+### What I learned
+
+- Commit ticket scaffolding before launching an agent on that ticket: worktrees snapshot HEAD.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Contract requests accumulated by the guides, for a contract 0.3 after CHB-017: batch `EditLog.preview`
+  (CHB-016, CHB-019), `Diagnostic.where` with a file (CHB-016), `scan.baseT`, `scan.flare` as number|Vec3,
+  `LoggedMutation.batch`, `FrameRecipe.roll` (CHB-020), `view.frame {orientation, angle_deg, crop}` and
+  `retouch.spots.<id>` with null-delete in `checkSet` (CHB-022), a boundary exception for the studio host to import
+  core/gpu (CHB-019), the DSL frame vocabulary moved to a shared module (CHB-016, CHB-019).
+- Small inconsistency to settle in CHB-019: variants receive `ck`/`cb` as arguments (CHB-019) vs `ck`/`cb` importable
+  (CHB-016); compatible (variants take arguments, kits import).
+
+### What should be done in the future
+
+- When CHB-017 lands: CHB-010 basic printing and CHB-011 basic export. When CHB-018 lands: CHB-019, then 020–022.
+
+### Code review instructions
+
+- Guides: `ttmp/2026/11/11/CHB-01{6,8,9}--*/design-doc/01-intern-guide.md`, `CHB-02{0,1,2}--*/…`.
+
+### Technical details
+
+- Open tasks after filing: CHB-016 12, CHB-017 9, CHB-018 16, CHB-019 15, CHB-020 15, CHB-021 18, CHB-022 17.
