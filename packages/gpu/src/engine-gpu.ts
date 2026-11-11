@@ -10,10 +10,10 @@ import {
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
 import { readTiff } from '@chromobench/engine-mock';
-import { ChainRunner } from './chain/run.ts';
+import { ChainRunner, POINTWISE_WGSL } from './chain/run.ts';
 import { OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
-import { histPercentile, Reducer } from './measure.ts';
+import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
 import { chromogenOracle } from './physics/oracle.ts';
 import { chainConstants, interimAim, pdInputs, printInputs, solveInputs } from './physics/setup.ts';
 import { scannerChannels, type Stock } from './physics/spectral.ts';
@@ -40,6 +40,8 @@ export interface GpuEngineOptions extends RuntimeOptions {
   opfs?: boolean;
   /** f64 worker pool size (0: no workers). */
   workers?: number;
+  /** Compile the chain and reduction pipelines at creation (default true). */
+  prewarm?: boolean;
 }
 
 interface SourceImg { w: number; h: number; c: number; data: Float32Array }
@@ -90,7 +92,16 @@ export class GpuEngine implements Engine {
 
   static async create(opts: GpuEngineOptions = {}): Promise<GpuEngine> {
     const rt = opts.runtime ?? (await GpuRuntime.create(opts));
-    return new GpuEngine(rt, opts, !opts.runtime);
+    const e = new GpuEngine(rt, opts, !opts.runtime);
+    // prewarm (guide §5.2): compile the chain and reduction kernels now, not on the first slider move
+    if (opts.prewarm !== false) {
+      await rt.pipelines.prewarm([
+        { name: 'pointwise', code: POINTWISE_WGSL },
+        { name: 'reduce.moments', code: REDUCE_WGSL, entryPoint: 'moments' },
+        { name: 'reduce.histogram', code: REDUCE_WGSL, entryPoint: 'histogram' },
+      ]);
+    }
+    return e;
   }
 
   get runtime(): GpuRuntime { return this.rt; }
