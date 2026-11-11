@@ -75,10 +75,10 @@ describe('chapter 2 goldens', () => {
     const ch = makePrintChain({ data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, aim: 'midgray-normalised', filtrationShift: { c: 0, m: 0, y: 10 } });
     const x = ch.enlarger.exposureOfDensity(ch.enlarger.midgray);
     expect(Math.abs(x[0] + x[1] + x[2])).toBeLessThan(1e-12);
-    const real = makePrintChain({ data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, aim: 'midgray-normalised', filtrationShift: { c: 0, m: 0, y: 10 }, mode: 'real', real: { time_s: 10, fstop: 8 } });
+    const real = makePrintChain({ data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, aim: 'midgray-normalised', filtrationShift: { c: 0, m: 0, y: 10 }, mode: 'real', optics: { time_s: 10, fstop: 8 } });
     const xr = real.enlarger.exposureOfDensity(real.enlarger.midgray);
     expect(xr[2]).toBeLessThan(-0.09);
-    const e = makeEnlarger({ ...real.enlarger.setup, real: { ...real.enlarger.setup.real!, time_s: 20 } });
+    const e = makeEnlarger({ ...real.enlarger.setup, optics: { ...real.enlarger.setup.optics, time_s: 20 } });
     expect(e.offset_logH - real.enlarger.offset_logH).toBeCloseTo(Math.log10(2), 12);
   });
   it("aim 'grey-0.184' prints the grey card neutral at 18.4 %", () => {

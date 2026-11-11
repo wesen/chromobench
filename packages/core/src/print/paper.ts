@@ -123,8 +123,35 @@ export function paperDeveloper(paper: Stock, morph: PaperMorph = NO_MORPH): (x: 
   return (x) => [0, 1, 2].map((k) => paper.curves[k]!.at(x[k]! * g * morph.rgb[k]!)) as Vec3;
 }
 
-/** Contrast grade → gamma factor of the morph. Grade 2 is the paper as made; each grade ×1.15 (placeholder for CHB-010). */
-export const gradeToGamma = (grade: number): number => 1.15 ** (grade - 2);
+/**
+ * Paper grade → contrast factor γ (Filmbench vfs/controls.js GRADE): grade 2 is the paper as made.
+ * Colour papers have no grades; this is a contrast control with darkroom numbering (CHB-010 guide §6.8).
+ */
+export const GRADE_GAMMA: readonly (readonly [number, number])[] = [[0, 0.7], [1, 0.82], [2, 1], [3, 1.2], [4, 1.45], [5, 1.8]];
+
+/** Piecewise-linear interpolation of GRADE_GAMMA, clamped to grades 0…5. */
+export function gradeToGamma(grade: number): number {
+  const t = GRADE_GAMMA;
+  if (!(grade > t[0]![0])) return t[0]![1];
+  for (let i = 1; i < t.length; i++) {
+    const [g1, v1] = t[i]!;
+    if (grade <= g1) {
+      const [g0, v0] = t[i - 1]!;
+      return v0 + ((v1 - v0) * (grade - g0)) / (g1 - g0);
+    }
+  }
+  return t[t.length - 1]![1];
+}
+
+/**
+ * The grade as a gamma about a pivot in paper log exposure: x′ = pivot + γ·(x − pivot) (Chromogen
+ * paperX `g + γ(x − g)`). Equals spektrafilm's morph (μ/γ, σ/γ) about the pivot where its σ ≥ 0.05
+ * floor does not bind. The engines pivot about the aim grey (ops `gradePivot`), so a grade change
+ * leaves the grey card in place and needs no time compensation.
+ */
+export function gradeX(x: ArrayLike<number>, gamma: number, pivot: ArrayLike<number>): Vec3 {
+  return [0, 1, 2].map((k) => pivot[k]! + gamma * (x[k]! - pivot[k]!)) as Vec3;
+}
 
 export function preflash(x: ArrayLike<number>, phi: ArrayLike<number>): Vec3 {
   return [0, 1, 2].map((k) => Math.log10(10 ** x[k]! + phi[k]!)) as Vec3;

@@ -46,6 +46,16 @@ test('export chain: display-rgb within one 8-bit level (0.1 continuous) of core 
   expect(r.tanhScanOfPrint.maxLevels).toBeLessThan(0.1);
 });
 
+// CHB-010: real mode (time, signed filtration) and grade 4 lower to core's numbers on both paths.
+test('darkroom chain (real mode, 14 s, +10 M, grade 4): export and preview match core', async ({ page }) => {
+  const r = await run(page, 'chain:darkroom');
+  expect(r.export.max8bit).toBeLessThanOrEqual(1);
+  expect(r.export.maxLevels).toBeLessThan(0.1);
+  expect(r.preview.max8bit).toBeLessThanOrEqual(1);
+  expect(r.preview.maxLevels).toBeLessThan(0.1);
+  expect(r.vsDefaultPrint.max8bit).toBeGreaterThan(10); // the settings do change the print
+});
+
 test('broken variant: lookups without the half-texel mapping fail the preview chain', async ({ page }) => {
   const r = await run(page, 'chain:preview-display', { lookup: 3 });
   expect(r.max8bit).toBeGreaterThan(1);

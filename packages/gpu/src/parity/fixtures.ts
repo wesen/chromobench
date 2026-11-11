@@ -27,6 +27,6 @@ export function setup(film = 'kodak_gold_200', paper = 'kodak_portra_endura', sc
   const ex = physics.expose(expose, N);
   return {
     physics, film, paper, scanner, expose,
-    solve: physics.solveInputs(film, scanner, N), pd: ex.pd, offset: ex.offset, print: physics.printInputs(paper, 'D50', N), develop: physics.developRow(paper, 2),
+    solve: physics.solveInputs(film, scanner, N), pd: ex.pd, offset: ex.offset, print: physics.printInputs(paper, 'D50', N), develop: physics.developRow(paper),
   };
 }

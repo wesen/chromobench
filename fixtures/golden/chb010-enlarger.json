@@ -1,0 +1,26 @@
+{
+  "ticket": "CHB-010",
+  "about": "Stage 1 (real-mode enlarger) and stage 2 (balance) golden numbers of the CHB-010 intern guide §3.2, §3.3, §6.4, §6.8 and textbook §2.6–2.8, §3.6. Setup unless noted: Portra 400 on Portra Endura, TH-KG3 lamp, the database neutral pack, SPEKTRAFILM conventions (missing data opaque), D50 viewing, no flare, aim 'midgray-normalised' (the guide's computations have no aim lights), calibration 10 s, f/8, magnification 8. Points are 0.025 log H. Scene patches: grey card at log H 0, white and black at log10(ρ/0.184).",
+  "entries": [
+    { "id": "chb010.neutralPack", "section": "guide §2.1, textbook §2.6", "what": "neutralPack", "expect": [0, 51.57, 52.53], "tol": 0.006 },
+    { "id": "chb010.grey.Dvis", "section": "guide §3.3", "what": "grey", "field": "Dvis", "expect": 0.758, "tol": 0.003, "note": "0.7562 here; the guide's script read the grey card off the raw curves (min not subtracted)" },
+    { "id": "chb010.grey.lab", "section": "guide §3.3", "what": "grey", "field": "lab", "expect": [48.8, -0.3, -4.4], "tol": 0.15 },
+    { "id": "chb010.paperWhite.Y", "section": "guide §3.3", "what": "paperWhiteY", "expect": 0.813, "tol": 0.0006 },
+    { "id": "chb010.J.real", "section": "guide §3.2", "what": "J", "mode": "real", "expect": [[-0.0092, -0.0007, 0], [0, -0.0087, -0.0016], [0, 0, -0.0100]], "tol": 0.00011, "note": "∂x/∂v per CC at the grey card, κ fixed; G/Y is −0.0015 here as in the guide's own reproduction" },
+    { "id": "chb010.J.normalised", "section": "guide §3.2", "what": "J", "mode": "normalised", "expect": [[-0.0061, 0.0024, 0.0038], [0.0031, -0.0056, 0.0023], [0.0031, 0.0031, -0.0061]], "tol": 0.00006 },
+    { "id": "chb010.filter.+10Y", "section": "guide §3.3", "what": "filter10", "filter": "y", "expect": { "dx_pt": [-0.02, -0.56, -4.00], "realDvis": -0.038, "colour": ["b", -17.0], "normDvis": 0.053, "timeFactor": 1.039 } },
+    { "id": "chb010.filter.+10M", "section": "guide §3.3", "what": "filter10", "filter": "m", "expect": { "dx_pt": [-0.26, -3.43, -0.00], "realDvis": -0.111, "colour": ["a", -10.2], "normDvis": -0.042, "timeFactor": 1.119 } },
+    { "id": "chb010.filter.+10C", "section": "guide §3.3", "what": "filter10", "filter": "c", "expect": { "dx_pt": [-3.64, 0.00, 0.00], "realDvis": -0.076, "colour": ["a", 8.9], "normDvis": -0.007, "timeFactor": 1.080 } },
+    { "id": "chb010.red10", "section": "guide §3.3, textbook §2.7", "what": "red10", "expect": { "Dvis": 0.972, "a": -22.0 }, "note": "0.9699 and −21.98 here; the textbook's 0.956 and −20.7 include flare and a 5,000 K light" },
+    { "id": "chb010.optics.stop", "section": "guide §2.2", "what": "optics", "from": { "fstop": 8 }, "to": { "fstop": 11.313708498984761 }, "expect": -0.30103, "tol": 0.00001 },
+    { "id": "chb010.optics.f11", "section": "guide §2.2", "what": "optics", "from": { "fstop": 8 }, "to": { "fstop": 11 }, "expect": -0.277, "tol": 0.0006 },
+    { "id": "chb010.optics.time", "section": "guide §2.2", "what": "optics", "from": { "time_s": 10 }, "to": { "time_s": 20 }, "expect": 0.30103, "tol": 0.00001 },
+    { "id": "chb010.optics.magnification", "section": "guide §2.2", "what": "timeFactor", "from": { "magnification": 7.06 }, "to": { "magnification": 14.1 }, "expect": 3.51, "tol": 0.006, "note": "8×10 in → 16×20 in from 35 mm: ×3.51 time, +1.81 stops" },
+    { "id": "chb010.warmth", "section": "guide §6.4", "what": "warmth", "expect": [-0.00107, 0.00001, 0.00106], "tol": 0.00002, "note": "The guide's −0.00124/+0.00124 came from absolute Planck radiance (its extra.py); Chromogen's and core's blackbody is normalised at 560 nm, so the ±20 mired exposures stay at the grey card. Warmth +100 = (−5.6, 0.0, +5.5) points; the Studio's book says 'about 5'. See the CHB-010 diary." },
+    { "id": "chb010.strip.time", "section": "guide §6.8", "what": "timeStrip", "expect": [[5.0, 0.10, 0.27, 1.22], [6.3, 0.11, 0.38, 1.52], [7.9, 0.13, 0.55, 1.79], [10.0, 0.18, 0.76, 2.00], [12.6, 0.26, 1.02, 2.15], [15.9, 0.37, 1.32, 2.26], [20.0, 0.53, 1.62, 2.34]], "tol": 0.008, "note": "rows: time (10·2^(n/3) s), D_vis of the 90 % white, the grey card, the 3 % black; worst 0.0065 here (the grey card sits 0.002 lighter, see chb010.grey.Dvis)" },
+    { "id": "chb010.grade", "section": "guide §6.8", "what": "grade", "expect": [[0, 0.28, 0.76, 1.69], [2, 0.18, 0.76, 2.00], [4, 0.11, 0.76, 2.27]], "tol": 0.008, "note": "grade → γ 0.7, 1, 1.45 (Filmbench GRADE), pivot the aim grey: the grey card stays" },
+    { "id": "chb010.balance.lights", "section": "textbook §3.6", "what": "balance", "field": "lights", "expect": 2.4, "tol": 0.06, "note": "CHROMOGEN conventions, 3,200 K lamp, 5,000 K viewing, grey scale under 3,800 K vs 5,500 K" },
+    { "id": "chb010.balance.density", "section": "textbook §3.6", "what": "balance", "field": "density", "expect": 14.6, "tol": 0.15, "note": "14.50 here; paper dye amounts cannot go below 0 (without that floor the error reaches 19.6)" },
+    { "id": "chb010.balance.densityWhite", "section": "textbook §3.6", "what": "balance", "field": "densityWhite", "expect": 14.0, "tol": 0.1, "note": "'from 1 log H above the grey card up to paper white the error stays near 14'" }
+  ]
+}
