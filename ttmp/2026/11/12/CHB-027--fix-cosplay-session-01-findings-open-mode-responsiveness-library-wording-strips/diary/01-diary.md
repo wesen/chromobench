@@ -133,3 +133,56 @@ fold the host bar into the shell's menus.
 
 ### Technical details
 - The CHB-027 tasks map: 9wcz, j9hg (WS-A), 6p1c (WS-B), ik6l (WS-C).
+
+## Step 3: WS-C merged
+
+WS-C (wording, forms, messages) reported done and I merged `task/chb-027-wording` into main. Its report: F7, F8,
+F9, F12 and F13 fixed, F11 partly (the host bar and the empty state are WS-A's), F14 not reproducible (only Ctrl+K
+opens "Commands", and the typed-value boxes swallow every key; likely the session tooling). On the way it fixed a
+real bug: shortcuts matched physical keys, so on a German QWERTZ layout Ctrl+Z arrived as Ctrl+Y.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1; and "how far are we?" (status question during the merge).
+**Assistant interpretation:** Merge finished workstreams and report progress.
+**Inferred user intent:** Know where the fixes stand.
+**Commit (code):** 444f153 — "Merge task/chb-027-wording (CHB-027 WS-C: wording, forms, messages)"
+
+### What I did
+- `git log main..task/chb-027-wording`: `a3e1b25` (code), `4136c70` (diary); 40 files, +1313/−67.
+- `git merge --no-ff task/chb-027-wording`; `pnpm typecheck` (ok), `pnpm lint` (boundaries 333 file checks;
+  check-colours 135 files ok), `pnpm test` twice.
+
+### Why
+- C finished first; merging it now means A and B rebase onto (or merge with) the same `main.ts` status-line
+  changes, instead of me resolving three-way at the end.
+
+### What worked
+- Second `pnpm test`: 89 files, 2661 passed, 7 skipped (the agent reported the same in its worktree; its browser
+  suite on ports 4921–4924: 88 passed).
+
+### What didn't work
+- First `pnpm test` after the merge: `Test Files 2 failed | 87 passed (89)`, `Tests 2 failed | 2659 passed`. A
+  re-run passed with no failures, so these were timing flakes under load (WS-A and WS-B run test suites on the same
+  machine). The failing test names were not captured (the second run's grep found nothing to show).
+
+### What I learned
+- New shell hook `Runtime.explainError` (studio-kit fills it in `Studio.attach`); new `ToastOpts.detail`;
+  `apps/studio/src/status-text.ts` builds the human summaries from the existing note strings.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- The layout-following shortcut change affects every shell app (`packages/shell/src/core/keys.ts`).
+
+### What should be done in the future
+- Re-run `CI=1 pnpm test:browser` on main after all merges, when the agents' load is gone.
+- WS-A: route open-file errors through `explainError`; name the frame in the Undo/Redo tooltips (if the buttons
+  survive the top-bar fold).
+
+### Code review instructions
+- `packages/studio-kit/src/messages.ts` (or the agent's equivalent), `apps/studio/src/status-text.ts`,
+  `packages/shell/src/core/keys.ts`; diary `04-diary-ws-c-wording-and-forms.md`.
+
+### Technical details
+- e2e specs now read `#engine[data-engine]` and `#notes[title]` for technical text.
