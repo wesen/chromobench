@@ -95,25 +95,6 @@ export function removeFlareValue(Tprime: number, f: number): number {
   return Math.max(1e-6, Tprime * (1 + f) - f);
 }
 
-/** Size of the oriented image. */
-export function orientedSize(o: Orientation, sw: number, sh: number): [number, number] {
-  return ['cw90', 'ccw90', 'transpose', 'transverse'].includes(o) ? [sh, sw] : [sw, sh];
-}
-
-/** Continuous sensor point → oriented point. */
-export function orientPoint(o: Orientation, u: number, v: number, sw: number, sh: number): [number, number] {
-  switch (o) {
-    case 'none': return [u, v];
-    case 'flipH': return [sw - u, v];
-    case 'flipV': return [u, sh - v];
-    case 'rot180': return [sw - u, sh - v];
-    case 'cw90': return [sh - v, u];
-    case 'ccw90': return [v, sw - u];
-    case 'transpose': return [v, u];
-    case 'transverse': return [sh - v, sw - u];
-  }
-}
-
 /** Continuous oriented point → sensor point. */
 export function unorientPoint(o: Orientation, x: number, y: number, sw: number, sh: number): [number, number] {
   switch (o) {
@@ -131,11 +112,6 @@ export function unorientPoint(o: Orientation, x: number, y: number, sw: number, 
 const boxFrom = (a: [number, number], b: [number, number]): Box => ({
   x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]),
 });
-
-/** A sensor box seen in oriented coordinates (for display). */
-export function sensorToOrientedBox(o: Orientation, b: Box, sw: number, sh: number): Box {
-  return boxFrom(orientPoint(o, b.x, b.y, sw, sh), orientPoint(o, b.x + b.w, b.y + b.h, sw, sh));
-}
 
 /** An oriented box (e.g. Chromogen's sample metadata) in sensor coordinates (DR-7). */
 export function orientedToSensorBox(o: Orientation, b: Box, sw: number, sh: number): Box {

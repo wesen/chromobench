@@ -2,6 +2,7 @@
 // and the assistant panel (cb.kits.chat) on the scripted demo and on the Claude transport against a routed fake API:
 // streamed text, step cards with looks, an approval card that applies the change, Stop, and the mode buttons.
 import { expect, test, type Page } from '@playwright/test';
+import { opened } from './support.ts';
 
 const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url).pathname;
 
@@ -11,8 +12,7 @@ async function boot(page: Page): Promise<void> {
   await page.goto('/?nosw&engine=mock&variant=classic&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
-  await idle(page);
+  await opened(page);
   await page.evaluate(() => window.chromobench.rt.go('assistant'));
   await expect(page.locator('#chat')).toBeVisible();
 }

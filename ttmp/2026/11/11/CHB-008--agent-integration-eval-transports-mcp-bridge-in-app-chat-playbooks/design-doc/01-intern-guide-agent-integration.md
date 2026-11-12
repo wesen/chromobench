@@ -115,7 +115,7 @@ Two rules matter for agent behaviour:
 - **Balance in log exposure, never by adding density.** A printer-light change is a shift of paper log H; a density offset is refused by the API (architecture doc §2, rule table; textbook §2.8, third law). A playbook that "adds 0.05 D of cyan" is wrong by construction.
 - **Filtration is subtractive.** More yellow filtration removes blue light, the blue-sensitive layer forms less yellow dye, and the print turns bluer. More magenta makes the print greener; more cyan makes it redder. Filmbench's system prompt states the same rule (`C1/various/extracted/filmbench-ide/01-inline.js` 4648–4707, "PHYSICS HINTS").
 
-The textbook also gives golden numbers that the evaluation harness uses (section 8): with Portra 400 printed on Portra Endura the grey card prints at visual density 0.755, and moving the red light by +10 points turns the grey card cyan (a* = −20.7) and darkens it from 0.746 to 0.956 (textbook §2.7, "Try it"). Auto-balance ("integrate to grey") removes three-quarters of a colour cast, α = 0.75 (§2.6).
+The textbook also gives golden numbers that the evaluation harness uses (section 8): with Portra 400 printed on Portra Endura the grey card prints at visual density 0.755, and moving the red light by +10 points turns the grey card cyan (a* = −20.7) and darkens it from 0.746 to 0.956 (textbook §2.7, "Try it"). Auto-balance ("integrate to grey") removes three-quarters of a colour cast, α = 0.75 (stated in §2.6, implemented in §3.6 "Grey balance belongs in log exposure").
 
 ### 2.3 MCP in brief
 
@@ -965,7 +965,7 @@ Two failure variants on the same flow:
 
 - units: 1 point = 0.025 log H; 1 stop = 0.30103 log H = 12.04 points; a 1/3-stop time step multiplies the time by 1.2599 (12.00 → 15.12 s) and adds 0.1003 log H; f/8 → f/11 is −0.277 log H. A unit test of the playbook arithmetic uses these.
 - textbook §2.7: +10 points of red at the grey card gives a* = −20.7 and density 0.746 → 0.956; this is the starting fixture of the grey-balance evaluation on the reference engine and a check that the fixture is set up right.
-- textbook §2.6: grey card at visual density 0.755 for Portra 400 on Portra Endura; the default aim of the test-strip evaluation.
+- textbook chapter-2 introduction (and §2.7 "Try it"): grey card at visual density 0.755 for Portra 400 on Portra Endura; the default aim of the test-strip evaluation.
 - the "lights factor out" law (§2.8): a playbook may compute what-ifs by adding lights without rebuilding tables; the ring-around evaluation relies on that being cheap.
 
 **Host safety tests (the security boundary).** Each is a program run through the real host with the mock engine, and each must fail if the boundary is removed:

@@ -1,5 +1,5 @@
-// Node-only helpers: the file-system DataSource for the packs committed in packages/data/packs, and a
-// drop-in replacement for core's interimData(). It reaches node:fs through process.getBuiltinModule
+// Node-only helpers: the file-system DataSource for the packs committed in packages/data/packs, and
+// nodePhysicsData() (core re-exports it as nodePacksData). It reaches node:fs through process.getBuiltinModule
 // rather than a static import, so the module also loads (and bundles) in a browser; calling the file
 // system there fails.
 import { fail } from '@chromobench/contract';
@@ -43,9 +43,9 @@ export function openPackFromDisk(packId: string, opts?: OpenOptions): Pack {
 const physics = new Map<string, CorePhysicsData>();
 
 /**
- * Core's PhysicsData served from packs, synchronously, like core's interimData(). Default: the
- * spektrafilm pack for stocks, enlarger, light and observer, and illustrative@1 for the camera and
- * scanner lights. To switch core: `import { nodePhysicsData as interimData } from '@chromobench/data/node'`.
+ * Core's PhysicsData served from packs, synchronously (Node only; core re-exports it as nodePacksData).
+ * Default: the spektrafilm pack for stocks, enlarger, light and observer, and illustrative@1 for the camera
+ * and scanner lights.
  */
 export function nodePhysicsData(o: { stocks?: string; scanners?: string | null } = {}): CorePhysicsData {
   const sid = o.stocks ?? DEFAULT_STOCK_PACK;

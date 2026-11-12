@@ -1,10 +1,10 @@
 // CHB-012 stage 4: the development model (guide §2.9, §5.5, §8.1 "derived" push table).
 import { describe, expect, it } from 'vitest';
 import {
-  developCoupled, developmentCurves, dirForStock, FilmCurves, inhibitor, interimData, precorrectedCurves, resolveStock, SPEKTRAFILM, type StockData,
+  developCoupled, developmentCurves, dirForStock, FilmCurves, inhibitor, nodePacksData, precorrectedCurves, resolveStock, SPEKTRAFILM, type StockData,
 } from './film-helpers.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const p800 = data.stock('kodak_portra_800');
 const profiles = new Map<number, StockData>([[0, p800], [1, data.stock('kodak_portra_800_push1')], [2, data.stock('kodak_portra_800_push2')]]);
 const ds = (d: StockData): FilmCurves => FilmCurves.ofStock(resolveStock(d, SPEKTRAFILM));

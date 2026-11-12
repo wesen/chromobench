@@ -24,9 +24,6 @@ export function filmUmPerPx(info: Pick<ImageInfo, 'width' | 'height' | 'umPerPx'
   return info?.umPerPx.film ?? (DEFAULT_FORMAT_MM * 1000) / Math.max(w, h, 1);
 }
 
-/** The capture film of a forward chain (capture.expose's stock), or undefined on a scan chain. */
-export const captureFilmOf = (ctx: Pick<ChainCtx, 'up'>): string | undefined => ctx.up('capture.expose')?.args['stock'] as string | undefined;
-
 /** The film of film.* ops: capture.expose's stock (core's default film without one, as filmOf). */
 const filmStock = (ctx: ChainCtx): string => filmOf(ctx);
 

@@ -2,12 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  coupleImage, developCoupled, dirForStock, effectiveGamma, FilmCurves, fitParametric, inhibitor, interimData, parametric,
+  coupleImage, developCoupled, dirForStock, effectiveGamma, FilmCurves, fitParametric, inhibitor, nodePacksData, parametric,
   inv3, parametricInverse, parametricSlope, precorrectedCurves, resolveStock, SPEKTRAFILM, type Mat3,
 } from './film-helpers.ts';
 
 const SF = JSON.parse(readFileSync(new URL('../../../fixtures/golden/film/spektrafilm-forward.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const portra = resolveStock(data.stock('kodak_portra_400'), SPEKTRAFILM);
 const f = FilmCurves.ofStock(portra);
 const dir = dirForStock(portra);

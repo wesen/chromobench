@@ -10,10 +10,6 @@ export function tripletSha256(r: string, g: string, b: string): string {
   return sha256Hex(`triplet:v1\n${r}\n${g}\n${b}`);
 }
 
-export function fileRef(bytes: Uint8Array, path?: string): SourceRef {
-  return { kind: 'file', sha256: sourceSha256(bytes), ...(path ? { path } : {}) };
-}
-
 export function tripletRef(parts: { role: 'R' | 'G' | 'B'; sha256: string; path?: string }[]): SourceRef {
   const by = (r: 'R' | 'G' | 'B'): string => parts.find((p) => p.role === r)?.sha256 ?? '';
   return { kind: 'triplet', sha256: tripletSha256(by('R'), by('G'), by('B')), parts: [...parts].sort((a, b) => 'RGB'.indexOf(a.role) - 'RGB'.indexOf(b.role)) };

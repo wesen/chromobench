@@ -22,5 +22,4 @@ export function addQ(a: Quantity, b: Quantity): Quantity {
 }
 
 export const toLogH = (x: Quantity): number => convert(x.value, x.unit, 'logH');
-export const stops = (n: number): Quantity => q(n, 'stop');
 export const points = (n: number): Quantity => q(n, 'point');

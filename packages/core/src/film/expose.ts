@@ -67,9 +67,6 @@ export function makeExposer(table: FilmTable, o: ExposeOptions): Exposer {
   };
 }
 
-/** One pixel: scene XYZ → linear raw. */
-export const sceneToRaw = (xyz: ArrayLike<number>, table: FilmTable, o: ExposeOptions): Float64Array => makeExposer(table, o).raw(xyz);
-
 /** The film-logH value of a linear raw exposure (filming.py: log10(max(raw, 0) + 1e-10)). */
 export const logRaw = (r: number): number => Math.log10(Math.max(r, 0) + 1e-10);
 

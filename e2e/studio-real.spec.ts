@@ -4,6 +4,7 @@
 // real chain, undo, export (CHB-011's encoders), the bench hook, and the offline start.
 // Canvas2D presentation (?canvas2d): presenting a WebGPU canvas loses the device on SwiftShader.
 import { expect, test, type Page } from '@playwright/test';
+import { opened } from './support.ts';
 
 /** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
 async function menu(page: Page, title: string, command: string): Promise<void> {
@@ -30,8 +31,7 @@ async function open(page: Page, engine: string): Promise<void> {
   await page.goto(`/?nosw&canvas2d&fresh&engine=${engine}`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toContainText('rendered', { timeout: 60_000 });
-  await idle(page);
+  await opened(page, 1, 60_000);
 }
 
 for (const engine of ['gpu', 'reference'] as const) {

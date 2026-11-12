@@ -94,13 +94,3 @@ export function adobeCameraToXyz(camXyz: M3): CameraToXyz {
   return { camToXyz: camToXyz.map((r) => r.map((v) => v / white[1]!)), whiteXy: XYZtoxy(white), cct: cctFromXy(...XYZtoxy(white)), from: 'adobe' };
 }
 
-/** Planar camera RGB → planar XYZ (f32, negative values kept). */
-export function cameraPlanesToXyz(rgb: Float32Array[], M: M3): Float32Array[] {
-  const n = rgb[0]!.length;
-  const out = [0, 1, 2].map(() => new Float32Array(n));
-  for (let i = 0; i < n; i++) {
-    const r = rgb[0]![i]!, g = rgb[1]![i]!, b = rgb[2]![i]!;
-    for (let k = 0; k < 3; k++) out[k]![i] = M[k]![0]! * r + M[k]![1]! * g + M[k]![2]! * b;
-  }
-  return out;
-}

@@ -19,19 +19,6 @@ const NONE = (why: string): OpenGate => ({
   notes: [{ code: 'W_NO_OPEN_GATE', message: `No open-gate reference: ${why}. Flare correction, the base check and stock ranking are off.`, hint: 'Include sprocket holes or a holder gap in the capture, or a flat field at the scan exposure.' }],
 });
 
-/** Open gate from a picked sensor box (recipe scan.openGate). */
-export function openGateFromBox(src: CameraLinear, box: Box, cond: RegionOptions = {}): OpenGate {
-  const bw = Math.max(1, Math.min(64, Math.round(box.w)));
-  const bh = Math.max(1, Math.min(64, Math.round(box.h)));
-  const v = region(src, box, bw, bh, { ...cond, channels: 3, openGate: null, flare: null });
-  const T = [0, 1, 2].map((k) => {
-    let s = 0;
-    for (let i = k; i < v.length; i += 3) s += v[i]!;
-    return s / (bw * bh);
-  }) as Vec3;
-  return { T, from: 'box', box, notes: [] };
-}
-
 /**
  * Detects open-gate pixels: the brightest 0.2 % of the scan (at ≤ 512 px), accepted only if their
  * channel ratios match the light's (the flat's open-gate colour) within 0.05 D, the orange mask's do not.

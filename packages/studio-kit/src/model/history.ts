@@ -118,10 +118,6 @@ export function pendingGroups(log: EditLog, lookup: ModelLookup): PendingGroup[]
   }));
 }
 
-export function rejectedEntries(log: EditLog, lookup: ModelLookup): (Change & { tx: string })[] {
-  return log.entries.filter((e) => e.status === 'rejected').map((e) => ({ seq: e.seq, tx: e.tx ?? '', text: describe(e.m, log.committed, lookup) }));
-}
-
 /** Moves the undo cursor to `target` (several undos or redos at once). */
 export function moveCursor(log: EditLog, target: number): void {
   while (log.cursor > target && log.undo());

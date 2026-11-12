@@ -63,8 +63,3 @@ export interface RawImage {
   meta: SourceMeta;
 }
 
-export interface Decoder {
-  readonly name: 'tiff' | 'png16' | 'libraw' | 'browser';
-  sniff(head: Uint8Array, fileName?: string): boolean;
-  decode(bytes: Uint8Array): RawImage | Promise<RawImage>;
-}

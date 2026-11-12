@@ -1,7 +1,7 @@
 // Synthetic frames with known dye amounts (stand-ins for CHB-004's synthetic fixtures): smooth dye
 // gradients pushed through core's scanner forward model, so the scan's transmittance is exact. The
 // left REBATE_W columns hold unexposed film (c = 0), so T there is the rebate transmittance.
-import { writeTiff16 } from '@chromobench/engine-mock';
+import { writeTiff16 } from '@chromobench/ingest';
 import type { SolveInputs, Vec3 } from '../tables/inputs.ts';
 import type { Segment } from '../chain/program.ts';
 import { lowerDisplay, OP } from '../chain/program.ts';

@@ -69,25 +69,6 @@ export function statusM(): Channels {
   return new Channels(P, 'status-m');
 }
 
-/** A tabulated responsivity table (Status A, APD) from CHB-004: wl and three columns, linear. */
-export interface ResponsivityTable { wl: ArrayLike<number>; R: ArrayLike<number>; G: ArrayLike<number>; B: ArrayLike<number>; log10?: boolean }
-export function fromTable(t: ResponsivityTable, name: string): Channels {
-  const P = ([t.R, t.G, t.B]).map((col) => Array.from(GRID.wl, (w) => {
-    const v = interp(t.wl, col, w, NaN, NaN);
-    if (!Number.isFinite(v)) return 0;
-    return t.log10 ? 10 ** v : v;
-  })) as Triple<number[]>;
-  return new Channels(P, name);
-}
-export const statusA = (t: ResponsivityTable): Channels => fromTable(t, 'status-a');
-export const apd = (t: ResponsivityTable): Channels => fromTable(t, 'apd');
-
-/** Printing density: lamp × filter × paper sensitivity (G&M Eq. 8.1). */
-export function printingChannels(paper: Stock, lamp: ArrayLike<number>, filter?: ArrayLike<number>): Channels {
-  const P = paper.sens.map((s) => s.map((v, i) => v * lamp[i]! * (filter ? filter[i]! : 1))) as Triple<Float64Array>;
-  return new Channels(P, `printing(${paper.data.id})`);
-}
-
 /** Scanner density: light × camera (G&M Eq. B.4); one light per channel for sequential capture. */
 export function scannerChannels(light: ArrayLike<number> | Triple<ArrayLike<number>>, camera: Triple<ArrayLike<number>>, name = 'scanner'): Channels {
   const lights = (Array.isArray(light) && light.length === 3 && typeof light[0] !== 'number' ? light : [light, light, light]) as Triple<ArrayLike<number>>;

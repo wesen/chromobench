@@ -2,9 +2,9 @@
 // Controls generated from the op registry (guide §5.7): one ControlModel per recipe path that an
 // op argument with `ui` metadata owns. The model converts between the stored unit and the unit the
 // photographer reads; widgets only ever see display values.
-import { argPath, canonicalJSON, convert, type ArgSpec, type OpDef, type Unit } from '@chromobench/contract';
+import { argPath, convert, type ArgSpec, type OpDef, type Unit } from '@chromobench/contract';
 import {
-  filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopIndex, fstopStops, num, signed, stopsBetween,
+  filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopStops, num, signed, stopsBetween,
 } from './units.ts';
 import { ENUM_NAMES, valueName } from './names.ts';
 
@@ -195,11 +195,3 @@ export function generateControls(ops: readonly OpDef[]): ControlModel[] {
   return out;
 }
 
-/** The f-number one third-stop step away (stepper). */
-export function fstopStep(n: number, dir: number): number {
-  const i = Math.max(0, Math.min(FSTOPS_THIRD.length - 1, fstopIndex(n) + dir));
-  return FSTOPS_THIRD[i]!;
-}
-
-/** Equality of recipe values (for skipping no-op commits). */
-export const sameValue = (a: unknown, b: unknown): boolean => canonicalJSON(a) === canonicalJSON(b);

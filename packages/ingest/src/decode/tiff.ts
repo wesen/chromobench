@@ -394,6 +394,29 @@ export function decodeTiff(bytes: Uint8Array, o: TiffDecodeOptions = {}): RawIma
   };
 }
 
+/** Stored integer codes of an 8/16-bit grey or RGB TIFF, interleaved row-major (`samples` per pixel). */
+export interface TiffCodes {
+  width: number;
+  height: number;
+  samples: 1 | 3;
+  bits: 8 | 16;
+  data: Uint16Array;
+}
+
+/**
+ * The stored codes of an 8/16-bit integer TIFF, interleaved: the engines' own `open()` path (a fourth, infrared
+ * plane is dropped). Other sample formats are refused; hosts decode those with decodeTiff and call openDecoded.
+ */
+export function readTiffCodes(bytes: Uint8Array): TiffCodes {
+  const img = decodeTiff(bytes);
+  if (img.sample !== 'uint' || img.bits === 32) throw new Error('readTiffCodes: 8/16-bit integer TIFF expected; decode others with decodeTiff');
+  const samples = img.channels === 1 ? 1 : 3;
+  const n = img.width * img.height;
+  const data = new Uint16Array(n * samples);
+  for (let i = 0; i < n; i++) for (let k = 0; k < samples; k++) data[i * samples + k] = img.planes[k]![i]!;
+  return { width: img.width, height: img.height, samples, bits: img.bits as 8 | 16, data };
+}
+
 /** DNG colour tags from a tag lookup (the chosen IFD first, then IFD0). */
 export function dngColourOf(tagOf: (tag: number) => number[] | undefined): DngColour {
   const dng: DngColour = {};

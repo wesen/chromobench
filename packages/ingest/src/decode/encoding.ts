@@ -3,7 +3,6 @@ import type { Diagnostic } from '@chromobench/contract';
 import type { Encoding, EncodingEvidence } from './types.ts';
 
 export const srgbDecode = (v: number): number => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-export const srgbEncode = (v: number): number => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
 export const gamma22Decode = (v: number): number => Math.max(v, 0) ** 2.2;
 
 /** The transfer that turns an encoded value in [0, 1] into linear light. */

@@ -8,7 +8,6 @@
 // print.expose adds: recipe lights 0 print the stock's grey card as the aim.
 import { fail, type Cmy, type FrameRecipe, type Mutation } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
-import type { Channels } from '../spectral/channels.ts';
 import type { Conventions } from '../spectral/conventions.ts';
 import { solve3, type Mat3, type Vec3 } from '../spectral/linalg.ts';
 import { exposeSpectral } from '../spectral/metamer.ts';
@@ -20,18 +19,6 @@ import { Lights } from './lights.ts';
 
 const LOG10_2 = Math.log10(2);
 const PT = LOGH_PER_POINT;
-
-/** −log10 of the mean transmittance per paper band over the frame's spectral densities. */
-export function latd(printing: Channels, Ds: Iterable<ArrayLike<number>>): Vec3 {
-  const T = [0, 0, 0];
-  let n = 0;
-  for (const D of Ds) {
-    const t = printing.transmittance(D);
-    for (let k = 0; k < 3; k++) T[k]! += t[k]!;
-    n++;
-  }
-  return T.map((t) => -Math.log10(t / n)) as Vec3;
-}
 
 /** LATD from an interleaved printing-density buffer (`stride` floats per pixel; frameStats). */
 export function latdFromPD(pd: ArrayLike<number>, n: number, stride = 3): Vec3 {

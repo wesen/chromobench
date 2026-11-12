@@ -122,7 +122,3 @@ export function openSourceSync(bytes: Uint8Array, req: DecodeRequest = {}): Open
   return finish(bytes, decodeSync(bytes, req), req.options ?? {});
 }
 
-/** Hash, decode (any route) and linearise. */
-export async function openSource(bytes: Uint8Array, req: DecodeRequest = {}): Promise<OpenedSource> {
-  return finish(bytes, await decodeAsync(bytes, req), req.options ?? {});
-}

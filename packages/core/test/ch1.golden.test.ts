@@ -2,12 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  baseWeightedK, CHROMOGEN, Channels, hessian, interimData, makeScanner, readStock, resolveStock, secant, sigmoidFlatC2,
+  baseWeightedK, CHROMOGEN, Channels, hessian, nodePacksData, makeScanner, readStock, resolveStock, secant, sigmoidFlatC2,
   singularValues3, solveLinear, sub3, symEig3, tangentAtZero, type Mat3,
 } from '../src/index.ts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/core/ch1.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const stock = resolveStock(data.stock('kodak_portra_400'), CHROMOGEN);
 const c: number[] = fx.greyC;
 const ch = (id: string): Channels => makeScanner(data, id).channels;

@@ -3,6 +3,7 @@
 // the library survives a reload with thumbnails, a context menu and Delete (F5, F6). Synthetic files only.
 import { expect, test, type Page } from '@playwright/test';
 import { writeTiff } from '@chromobench/ingest';
+import { opened } from './support.ts';
 
 const W = 240, H = 160;
 
@@ -58,10 +59,7 @@ test('photo or negative is guessed per file; re-open the other way and back; an 
   await page.goto('/?nosw&canvas2d&fresh&engine=reference');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.setInputFiles('#file', [FILES.photo, FILES.negative]);
-  await expect(page.locator('#status')).toContainText(/opened 2 files|rendered/, { timeout: 120_000 });
-  // with the engine in a worker (CHB-027 WS-B) the first file renders while the second still opens
-  await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 2 && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: 120_000 });
-  await idle(page);
+  await opened(page, 2, 120_000);
   expect((await frames(page)).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
     { name: 'DSC_0001.dng', kind: 'digital-raw', mode: 'photo' },
     { name: 'scan-007.tif', kind: 'negative-scan', mode: 'scan' },
@@ -103,10 +101,7 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await expect(page.locator('.ck-coll-empty:visible').first()).toContainText('No photos yet');
   await page.setInputFiles('#file', [FILES.photo, FILES.negative]);
-  await expect(page.locator('#status')).toContainText(/opened 2 files|rendered/, { timeout: 120_000 });
-  // with the engine in a worker (CHB-027 WS-B) the first file renders while the second still opens
-  await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 2 && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: 120_000 });
-  await idle(page);
+  await opened(page, 2, 120_000);
   // the thumbnails are kept in the KV during the session and go into the catalog at the next start
   // (expect.poll, not waitForFunction: waitForFunction takes the async predicate's promise as truthy and returns at once)
   await expect.poll(() => page.evaluate(async () => {

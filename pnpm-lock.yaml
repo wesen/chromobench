@@ -117,16 +117,16 @@ importers:
       '@chromobench/data':
         specifier: workspace:*
         version: link:../data
-      '@chromobench/engine-mock':
+      '@chromobench/ingest':
         specifier: workspace:*
-        version: link:../engine-mock
+        version: link:../ingest
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*
         version: link:../conformance
-      '@chromobench/ingest':
+      '@chromobench/engine-mock':
         specifier: workspace:*
-        version: link:../ingest
+        version: link:../engine-mock
 
   packages/data:
     dependencies:
@@ -180,9 +180,9 @@ importers:
       '@chromobench/data':
         specifier: workspace:*
         version: link:../data
-      '@chromobench/engine-mock':
+      '@chromobench/ingest':
         specifier: workspace:*
-        version: link:../engine-mock
+        version: link:../ingest
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*
@@ -211,6 +211,9 @@ importers:
       '@chromobench/core':
         specifier: workspace:*
         version: link:../core
+      '@chromobench/ingest':
+        specifier: workspace:*
+        version: link:../ingest
       lcms-wasm:
         specifier: 1.0.5
         version: 1.0.5

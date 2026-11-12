@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '@chromobench/contract';
 import {
-  buildSolveTable, CHROMOGEN, fitFlare, forwardJacobian, interimData, makeForward, makeScanner, removeFlare, resolveStock,
+  buildSolveTable, CHROMOGEN, fitFlare, forwardJacobian, nodePacksData, makeForward, makeScanner, removeFlare, resolveStock,
   solveDyes, withFlare,
 } from '../src/index.ts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/core/ch3.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const stock = resolveStock(data.stock('kodak_portra_400'), CHROMOGEN);
 const white = makeScanner(data, 'white-led');
 const cg = stock.develop([0, 0, 0]);
