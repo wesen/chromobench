@@ -1,0 +1,1118 @@
+[
+ {
+  "kind": "cold",
+  "query": "",
+  "engine": "reference · CPU f64 (tabulated previews, exact export) (worker) (no WebGPU: E_EVAL: no GPU adapter) · 512 px",
+  "swControlled": true,
+  "wallMs": 12696,
+  "readyMs": 1357,
+  "openAt": 1360,
+  "presentMs": 6781,
+  "firstScreenMs": 11072,
+  "firstScreen": [
+   12432,
+   "main",
+   "screen",
+   512,
+   342,
+   3628
+  ],
+  "status": [
+   [
+    -1105,
+    "starting the engine…"
+   ],
+   [
+    -1102,
+    "loading data packs…"
+   ],
+   [
+    -903,
+    "starting WebGPU…"
+   ],
+   [
+    -901,
+    "starting the engine worker…"
+   ],
+   [
+    -19,
+    "ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)"
+   ],
+   [
+    35,
+    "opening DSC_8559.NEF…"
+   ],
+   [
+    6590,
+    "opened DSC_8559.NEF"
+   ],
+   [
+    11086,
+    "rendered 1 · screen"
+   ]
+  ],
+  "page": [
+   {
+    "name": "/assets/index-DPl18tvo.js",
+    "n": 1,
+    "start": 18,
+    "end": 83,
+    "bytes": 339876
+   },
+   {
+    "name": "/assets/index-ChPxfydo.css",
+    "n": 1,
+    "start": 19,
+    "end": 39,
+    "bytes": 9987
+   },
+   {
+    "name": "/assets/engines-CN_yAeZk.js",
+    "n": 1,
+    "start": 225,
+    "end": 232,
+    "bytes": 67422
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 258,
+    "end": 260,
+    "bytes": 32136
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 258,
+    "end": 260,
+    "bytes": 4746
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 270,
+    "end": 272,
+    "bytes": 2462
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 270,
+    "end": 272,
+    "bytes": 809
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 273,
+    "end": 275,
+    "bytes": 23977
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 273,
+    "end": 274,
+    "bytes": 2436
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 276,
+    "end": 277,
+    "bytes": 4564
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 276,
+    "end": 277,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 278,
+    "end": 279,
+    "bytes": 8612
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 279,
+    "end": 280,
+    "bytes": 14724
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 281,
+    "end": 282,
+    "bytes": 3372
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 283,
+    "end": 284,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 286,
+    "end": 287,
+    "bytes": 16159
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 291,
+    "end": 292,
+    "bytes": 781
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 293,
+    "end": 294,
+    "bytes": 6316
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 294,
+    "end": 454,
+    "bytes": 5977
+   },
+   {
+    "name": "/assets/engine-worker-BmGL-40A.js",
+    "n": 1,
+    "start": 467,
+    "end": 478,
+    "bytes": 92589
+   }
+  ],
+  "worker": [
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 124,
+    "end": 128,
+    "bytes": 32136
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 124,
+    "end": 128,
+    "bytes": 4746
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 156,
+    "end": 158,
+    "bytes": 2462
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 157,
+    "end": 158,
+    "bytes": 809
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 159,
+    "end": 160,
+    "bytes": 23977
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 160,
+    "end": 161,
+    "bytes": 2436
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 162,
+    "end": 163,
+    "bytes": 4564
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 163,
+    "end": 164,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 164,
+    "end": 165,
+    "bytes": 8612
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 165,
+    "end": 167,
+    "bytes": 14724
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 168,
+    "end": 169,
+    "bytes": 3372
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 169,
+    "end": 170,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 171,
+    "end": 172,
+    "bytes": 16159
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 173,
+    "end": 174,
+    "bytes": 781
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 174,
+    "end": 175,
+    "bytes": 6316
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 176,
+    "end": 318,
+    "bytes": 5977
+   },
+   {
+    "name": "/assets/libraw-IP__XGtL.wasm",
+    "n": 1,
+    "start": 1247,
+    "end": 1260,
+    "bytes": 0
+   }
+  ],
+  "trace": [
+   {
+    "what": "DedicatedWorker thread | MessagePort::Accept",
+    "totalMs": 4218,
+    "n": 14,
+    "maxMs": 1166
+   },
+   {
+    "what": "CrRendererMain | AsyncTask Run",
+    "totalMs": 3349,
+    "n": 119113,
+    "maxMs": 115
+   },
+   {
+    "what": "CrRendererMain | FireIdleCallback",
+    "totalMs": 2913,
+    "n": 118589,
+    "maxMs": 10
+   },
+   {
+    "what": "DedicatedWorker thread | SimpleWatcher::OnHandleReady",
+    "totalMs": 1010,
+    "n": 316,
+    "maxMs": 967
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.TurbofanTask",
+    "totalMs": 891,
+    "n": 132,
+    "maxMs": 38
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.OptimizeBackground",
+    "totalMs": 888,
+    "n": 137,
+    "maxMs": 38
+   },
+   {
+    "what": "CrRendererMain | BlinkScheduler_PerformMicrotaskCheckpoint",
+    "totalMs": 733,
+    "n": 98821,
+    "maxMs": 296
+   },
+   {
+    "what": "CrRendererMain | WebFrameWidgetImpl::BeginMainFrame",
+    "totalMs": 266,
+    "n": 20,
+    "maxMs": 146
+   },
+   {
+    "what": "CrRendererMain | AsyncTask Scheduled",
+    "totalMs": 205,
+    "n": 173354,
+    "maxMs": 2
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::UpdateStyleAndLayout",
+    "totalMs": 199,
+    "n": 55,
+    "maxMs": 93
+   },
+   {
+    "what": "CrRendererMain | V8.CompileCode",
+    "totalMs": 185,
+    "n": 1459,
+    "maxMs": 6
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::RunStyleAndLayoutLifecyclePhases",
+    "totalMs": 179,
+    "n": 37,
+    "maxMs": 93
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | v8.parseOnBackgroundParsing",
+    "totalMs": 163,
+    "n": 5,
+    "maxMs": 143
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | BackgroundJSStreamManager::RunScriptStreamingTask",
+    "totalMs": 163,
+    "n": 3,
+    "maxMs": 143
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | v8.parseOnBackground",
+    "totalMs": 163,
+    "n": 3,
+    "maxMs": 143
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | BackgroundCompileTask::Run",
+    "totalMs": 162,
+    "n": 3,
+    "maxMs": 142
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.MaglevTask",
+    "totalMs": 159,
+    "n": 467,
+    "maxMs": 6
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.MaglevBackground",
+    "totalMs": 148,
+    "n": 279,
+    "maxMs": 6
+   },
+   {
+    "what": "CrRendererMain | Blink.Layout.UpdateTime",
+    "totalMs": 148,
+    "n": 21,
+    "maxMs": 83
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::layout",
+    "totalMs": 147,
+    "n": 21,
+    "maxMs": 83
+   },
+   {
+    "what": "CrRendererMain | Layout",
+    "totalMs": 147,
+    "n": 21,
+    "maxMs": 83
+   },
+   {
+    "what": "CrRendererMain | EventHandler::handleMouseMoveEvent",
+    "totalMs": 147,
+    "n": 16,
+    "maxMs": 97
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::performLayout",
+    "totalMs": 147,
+    "n": 21,
+    "maxMs": 83
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.GC_MC_BACKGROUND_MARKING",
+    "totalMs": 145,
+    "n": 127,
+    "maxMs": 20
+   },
+   {
+    "what": "CrRendererMain | LayoutView::HitTest",
+    "totalMs": 145,
+    "n": 15,
+    "maxMs": 95
+   },
+   {
+    "what": "DedicatedWorker thread | HandlePostMessage",
+    "totalMs": 137,
+    "n": 12,
+    "maxMs": 107
+   },
+   {
+    "what": "CrRendererMain | V8.ParseFunction",
+    "totalMs": 130,
+    "n": 1550,
+    "maxMs": 6
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | SimpleWatcher::OnHandleReady",
+    "totalMs": 124,
+    "n": 717,
+    "maxMs": 17
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | Receive mojo message",
+    "totalMs": 120,
+    "n": 497,
+    "maxMs": 17
+   },
+   {
+    "what": "CrRendererMain | Blink.Animate.UpdateTime",
+    "totalMs": 119,
+    "n": 20,
+    "maxMs": 115
+   },
+   {
+    "what": "CrRendererMain | PageAnimator::serviceScriptedAnimations",
+    "totalMs": 118,
+    "n": 20,
+    "maxMs": 115
+   },
+   {
+    "what": "CrRendererMain | FrameRequestCallbackCollection::ExecuteFrameCallbacks",
+    "totalMs": 118,
+    "n": 19,
+    "maxMs": 115
+   },
+   {
+    "what": "CrRendererMain | FireAnimationFrame",
+    "totalMs": 118,
+    "n": 6,
+    "maxMs": 115
+   },
+   {
+    "what": "DedicatedWorker thread | V8.CompileCode",
+    "totalMs": 97,
+    "n": 840,
+    "maxMs": 54
+   },
+   {
+    "what": "DedicatedWorker thread | MinorGC",
+    "totalMs": 89,
+    "n": 595,
+    "maxMs": 2
+   },
+   {
+    "what": "CrRendererMain | V8.CollectSourcePositions",
+    "totalMs": 81,
+    "n": 138,
+    "maxMs": 29
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.PreParse",
+    "totalMs": 80,
+    "n": 2379,
+    "maxMs": 7
+   },
+   {
+    "what": "DedicatedWorker thread | Receive mojo message",
+    "totalMs": 80,
+    "n": 294,
+    "maxMs": 60
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.Maglev.GraphBuilding",
+    "totalMs": 79,
+    "n": 279,
+    "maxMs": 3
+   },
+   {
+    "what": "CrRendererMain | HandlePostMessage",
+    "totalMs": 75,
+    "n": 6,
+    "maxMs": 54
+   }
+  ]
+ },
+ {
+  "kind": "warm",
+  "query": "",
+  "engine": "reference · CPU f64 (tabulated previews, exact export) (worker) (no WebGPU: E_EVAL: no GPU adapter) · 512 px",
+  "swControlled": true,
+  "wallMs": 30976,
+  "readyMs": 2989,
+  "openAt": 2994,
+  "presentMs": 18846,
+  "firstScreenMs": 27700,
+  "firstScreen": [
+   30694,
+   "main",
+   "screen",
+   512,
+   342,
+   8951
+  ],
+  "status": [
+   [
+    -2552,
+    "starting the engine…"
+   ],
+   [
+    -2542,
+    "loading data packs…"
+   ],
+   [
+    -1322,
+    "starting WebGPU…"
+   ],
+   [
+    -1314,
+    "starting the engine worker…"
+   ],
+   [
+    -52,
+    "ready: 1 frame in the library; select one to open its file again"
+   ],
+   [
+    102,
+    "opening DSC_8559.NEF…"
+   ],
+   [
+    18673,
+    "opened DSC_8559.NEF"
+   ],
+   [
+    27727,
+    "rendered 1 · screen"
+   ]
+  ],
+  "page": [
+   {
+    "name": "/assets/index-DPl18tvo.js",
+    "n": 1,
+    "start": 69,
+    "end": 178,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/index-ChPxfydo.css",
+    "n": 1,
+    "start": 73,
+    "end": 102,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/engines-CN_yAeZk.js",
+    "n": 1,
+    "start": 341,
+    "end": 402,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 450,
+    "end": 479,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 451,
+    "end": 481,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 497,
+    "end": 514,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 497,
+    "end": 515,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 516,
+    "end": 535,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 517,
+    "end": 535,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 537,
+    "end": 551,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 538,
+    "end": 560,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 553,
+    "end": 569,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 571,
+    "end": 586,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 590,
+    "end": 601,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 601,
+    "end": 610,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 611,
+    "end": 627,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 631,
+    "end": 647,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 647,
+    "end": 666,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 669,
+    "end": 1666,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/engine-worker-BmGL-40A.js",
+    "n": 1,
+    "start": 1726,
+    "end": 1733,
+    "bytes": 300
+   }
+  ],
+  "worker": [
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 108,
+    "end": 115,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 110,
+    "end": 116,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 140,
+    "end": 157,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 140,
+    "end": 156,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 161,
+    "end": 171,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 166,
+    "end": 172,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 176,
+    "end": 188,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 180,
+    "end": 189,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 190,
+    "end": 197,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 203,
+    "end": 208,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 211,
+    "end": 214,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 215,
+    "end": 221,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 222,
+    "end": 229,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 232,
+    "end": 237,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 238,
+    "end": 245,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 246,
+    "end": 769,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/libraw-IP__XGtL.wasm",
+    "n": 1,
+    "start": 1598,
+    "end": 1643,
+    "bytes": 0
+   }
+  ],
+  "trace": [
+   {
+    "what": "DedicatedWorker thread | MessagePort::Accept",
+    "totalMs": 8912,
+    "n": 14,
+    "maxMs": 3009
+   },
+   {
+    "what": "CrRendererMain | AsyncTask Run",
+    "totalMs": 6538,
+    "n": 97812,
+    "maxMs": 144
+   },
+   {
+    "what": "CrRendererMain | FireIdleCallback",
+    "totalMs": 5673,
+    "n": 96565,
+    "maxMs": 27
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.TurbofanTask",
+    "totalMs": 2165,
+    "n": 128,
+    "maxMs": 86
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.OptimizeBackground",
+    "totalMs": 2137,
+    "n": 131,
+    "maxMs": 80
+   },
+   {
+    "what": "CrRendererMain | AsyncTask Scheduled",
+    "totalMs": 802,
+    "n": 184165,
+    "maxMs": 12
+   },
+   {
+    "what": "CrRendererMain | BlinkScheduler_PerformMicrotaskCheckpoint",
+    "totalMs": 628,
+    "n": 101024,
+    "maxMs": 175
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | SimpleWatcher::OnHandleReady",
+    "totalMs": 467,
+    "n": 2269,
+    "maxMs": 45
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | Receive mojo message",
+    "totalMs": 405,
+    "n": 1360,
+    "maxMs": 45
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.GC_MC_BACKGROUND_MARKING",
+    "totalMs": 354,
+    "n": 81,
+    "maxMs": 28
+   },
+   {
+    "what": "ServiceWorker thread | SimpleWatcher::OnHandleReady",
+    "totalMs": 316,
+    "n": 1645,
+    "maxMs": 9
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.MaglevTask",
+    "totalMs": 269,
+    "n": 435,
+    "maxMs": 12
+   },
+   {
+    "what": "CrRendererMain | V8.CompileCode",
+    "totalMs": 224,
+    "n": 1437,
+    "maxMs": 30
+   },
+   {
+    "what": "Chrome_ChildIOThread | EpollEvent",
+    "totalMs": 223,
+    "n": 2706,
+    "maxMs": 6
+   },
+   {
+    "what": "CrRendererMain | HTMLDocumentParser::NotifyScriptLoaded",
+    "totalMs": 218,
+    "n": 1,
+    "maxMs": 218
+   },
+   {
+    "what": "DedicatedWorker thread | MinorGC",
+    "totalMs": 213,
+    "n": 306,
+    "maxMs": 15
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::UpdateStyleAndLayout",
+    "totalMs": 201,
+    "n": 54,
+    "maxMs": 69
+   },
+   {
+    "what": "ThreadPoolForegroundWorker | V8.MaglevBackground",
+    "totalMs": 200,
+    "n": 266,
+    "maxMs": 9
+   },
+   {
+    "what": "DedicatedWorker thread | V8.MarkCandidatesForOptimization",
+    "totalMs": 198,
+    "n": 5668,
+    "maxMs": 8
+   },
+   {
+    "what": "DedicatedWorker thread | V8.GCScavenger",
+    "totalMs": 194,
+    "n": 306,
+    "maxMs": 15
+   },
+   {
+    "what": "CrRendererMain | Receive mojo message",
+    "totalMs": 179,
+    "n": 231,
+    "maxMs": 41
+   },
+   {
+    "what": "CrRendererMain | Blink.Layout.UpdateTime",
+    "totalMs": 179,
+    "n": 20,
+    "maxMs": 67
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::layout",
+    "totalMs": 179,
+    "n": 20,
+    "maxMs": 67
+   },
+   {
+    "what": "CrRendererMain | Layout",
+    "totalMs": 179,
+    "n": 20,
+    "maxMs": 67
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::performLayout",
+    "totalMs": 178,
+    "n": 20,
+    "maxMs": 67
+   },
+   {
+    "what": "DedicatedWorker thread | SimpleWatcher::OnHandleReady",
+    "totalMs": 169,
+    "n": 242,
+    "maxMs": 42
+   },
+   {
+    "what": "CrRendererMain | WebFrameWidgetImpl::BeginMainFrame",
+    "totalMs": 148,
+    "n": 20,
+    "maxMs": 83
+   },
+   {
+    "what": "CrRendererMain | HTMLParserScriptRunner::executeScriptsWaitingForParsing",
+    "totalMs": 145,
+    "n": 4,
+    "maxMs": 144
+   },
+   {
+    "what": "CrRendererMain | v8.evaluateModule",
+    "totalMs": 145,
+    "n": 3,
+    "maxMs": 143
+   },
+   {
+    "what": "DedicatedWorker thread | V8.OptimizeCode",
+    "totalMs": 145,
+    "n": 118,
+    "maxMs": 7
+   },
+   {
+    "what": "CrRendererMain | HTMLParserScriptRunner ExecuteScript",
+    "totalMs": 144,
+    "n": 1,
+    "maxMs": 144
+   },
+   {
+    "what": "CrRendererMain | PendingScript::ExecuteScriptBlock",
+    "totalMs": 144,
+    "n": 1,
+    "maxMs": 144
+   },
+   {
+    "what": "DedicatedWorker thread | V8.OptimizeConcurrentPrepare",
+    "totalMs": 140,
+    "n": 118,
+    "maxMs": 6
+   },
+   {
+    "what": "Chrome_IOThread | EpollEvent",
+    "totalMs": 139,
+    "n": 3809,
+    "maxMs": 5
+   },
+   {
+    "what": "CrRendererMain | TimerBase::run",
+    "totalMs": 139,
+    "n": 1256,
+    "maxMs": 4
+   },
+   {
+    "what": "CrRendererMain | LocalFrameView::RunStyleAndLayoutLifecyclePhases",
+    "totalMs": 133,
+    "n": 34,
+    "maxMs": 69
+   },
+   {
+    "what": "DedicatedWorker thread | V8.GC_SCAVENGER",
+    "totalMs": 133,
+    "n": 306,
+    "maxMs": 6
+   },
+   {
+    "what": "CrRendererMain | TimerFire",
+    "totalMs": 127,
+    "n": 1195,
+    "maxMs": 4
+   },
+   {
+    "what": "DedicatedWorker thread | V8.GC_SCAVENGER_SCAVENGE",
+    "totalMs": 127,
+    "n": 306,
+    "maxMs": 6
+   },
+   {
+    "what": "CrRendererMain | MinorGC",
+    "totalMs": 126,
+    "n": 19,
+    "maxMs": 26
+   }
+  ]
+ }
+]

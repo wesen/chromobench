@@ -578,3 +578,200 @@ A per-frame veil does not matter either: the veil is 0.3 % of frame 1's signal (
 - raw010 at 232 × 512: frames `{x 8, y 16, 209 × 143}`, `{8, 182, 209 × 145}`, `{8, 348, 209 × 145}`; density
   percentiles vs the old base — frame 1 p1 −0.068/−0.061/−0.026, p50 0.088/0.081/0.022, p99 0.381/0.385/0.170;
   frame 2 p99 0.517/0.640/0.413; frame 3 p99 0.420/0.527/0.586.
+
+## Step 8: Merge of main (WS-A: real enlarger mode by default)
+
+The orchestrator merged WS-A into main (`e7df8a0`: real enlarger mode by default, contract 0.4.0, normalised as a
+layout option) and asked me to merge main before my final commit. I committed Steps 6–7 first (`04c0eb7`), then
+merged. One conflict: the `Studio` constructor, where WS-A wraps `o.initial` in `initialInMode` and I pass `known`
+to `Frames`; both kept. The variant snapshots auto-merged; `-u` changed nothing, and the diff against main is exactly
+my four commands and their counts. `pnpm gen` changed nothing.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 5. Orchestrator (verbatim): "Orchestrator: CHB-031 WS-A is merged into main (e7df8a0): real enlarger mode by default (contract 0.4.0, decision CC-017), normalised as a layout option (simple, tiny) with Time/Aperture hidden, Lighter/Darker = ⅓ stop of time in real mode, F19/F23/F8/F9 changes, view tabs renamed (\"No mask\", \"Clipping\"), new e2e/studio-enlarger.spec.ts. Before your final commit, `git merge main` into task/chb-031-open-strips (in your worktree) and resolve: expected conflicts in packages/studio-kit/test/__snapshots__/variants.test.ts.snap — regenerate with `npx vitest run packages/studio-kit/test/variants.test.ts -u` and read the diff instead of hand-merging; generated docs — regenerate with `pnpm gen`; cb.ts hunks should not overlap. Note: in real mode the first print sets the time, so strip-frame first prints now set Time per frame (check your strip tests still hold). Then run the full checks including the browser suite on your ports."
+**Assistant interpretation:** Merge main now, resolve by regenerating, re-run the checks.
+**Inferred user intent:** WS-B lands on top of WS-A without surprises.
+**Commit (code):** `4baace6` — "Merge main (CHB-031 WS-A) into task/chb-031-open-strips"
+
+### What I did
+- `git merge main --no-edit` → `CONFLICT (content): Merge conflict in packages/studio-kit/src/studio.ts`; resolved
+  to `this.initial = o.enlarger ? initialInMode(o.initial, o.enlarger) : o.initial;` and `new Frames(…, known: sha =>
+  this.libraryKind(sha))`.
+- `npx vitest run packages/studio-kit/test/variants.test.ts -u` (9 passed, no file change); `git diff main --
+  …variants.test.ts.snap`: `+ frame.rotateRight`, `+ frame.rotateLeft`, `+ frame.flip`, `+ file.openAs.keep` in
+  each of 8 variants, command counts +4. `pnpm gen`: no change.
+- `pnpm typecheck` clean, `pnpm lint` ok, `pnpm test`: 100 files, 2767 passed, 7 skipped.
+
+### Why
+- The orchestrator merges A then B; merging main here moves the conflicts to the branch that knows both sides.
+
+### What worked
+- The whole unit suite after the merge (strip tests included: their first prints now set Time per frame).
+
+### What didn't work
+- No failures beyond the expected conflict.
+
+### What I learned
+- `cb.ts` merged without overlap, as planned.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- `studio.ts` constructor: both changes on one line each.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `git show 4baace6 -- packages/studio-kit/src/studio.ts`
+
+### Technical details
+- Merge base `9d10010`; main at `e2af842`.
+
+## Step 9: F22 — the cold first open: an idle-callback spin, and a full-size demosaic for a 640 px picture
+
+I profiled the tester's path (`scripts/wsb-02-cold-open.mjs`: a fresh persistent profile, service worker on, no
+WebGPU flags, the NEF set on `#file` as soon as the studio is ready; then a warm second start of the same profile;
+optional Chrome trace summarised by event name). Two things stood out; the classic suspects did not. The data packs
+(4.2 MB) load in ≈ 0.2 s, twice (page and worker) in parallel before "ready"; libraw.wasm is fetched in 13–35 ms and
+its instantiation takes ≈ 13 ms; the service worker's precache costs nothing visible; cold and warm differ by < 1 s
+now.
+
+First, the render queue spun the main thread. In the trace of one open: `CrRendererMain | FireIdleCallback` 118 589
+calls (2.9 s) and `AsyncTask Run` 119 113 (3.3 s). A background render (navigator, thumbnails) waiting for live work
+re-queued itself from an idle callback; while the engine worker computed, the main thread was idle, so it ran
+≈ 10 000 times a second — a core spinning against the worker for the length of every live render (on a two-core
+laptop, half the machine). The queue already lets waiting background slots go when live work ends (`after()`), so the
+polling is gone (`packages/shell/src/app/render/queue.ts`; `cancel()` releases them too). After: `AsyncTask Run` 548
+calls, no `FireIdleCallback` among the top 40. Second, a photo for the CPU engine's working image was read through
+LibRaw's AHD demosaic at full size (24 MP) and then area-averaged to 512–640 px: in Node 5.0 s decode + 0.4 s
+linearise/resample; read binned (2 × 2 Bayer photosites a pixel, raw camera colour, as scan mode reads negatives)
+2.1 s + 0.1 s with channel means within 0.04 %. `decodePhoto` now reads camera RAW binned for working sizes up to 1024
+px (falls back to the demosaic when the bins are smaller than the working size; the GPU's 4000 px reads the demosaic).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 5.
+**Assistant interpretation:** Profile the ~29 s cold first open and cut what can be cut (not the progress UI).
+**Inferred user intent:** The first picture comes quickly, also on a fresh browser.
+**Commit (code):** with Step 10 ("CHB-031 WS-B: F22 render queue spin, binned RAW photos for the CPU engine; F10 640 px")
+
+### What I did
+- `ttmp/…/CHB-031…/scripts/wsb-02-cold-open.mjs` (cold/warm runs, status timeline on the page clock, resource
+  timings of page and engine worker, optional trace summary); results in `various/ws-b/f22/`.
+- `packages/shell/src/app/render/queue.ts`: `pump()` returns for a background slot while live work is busy (no idle
+  re-queue); the one idle deferral kept for `preemptBackground` when nothing is live; `releaseBackground()` from
+  `after()` and from `cancel()` when nothing was in flight. Test `render-queue.test.ts` "a background render waiting
+  for live work does not poll idle callbacks" (0 idle calls; it goes when live work resolves or is cancelled).
+- `apps/studio/src/host/decode.ts`: `BINNED_PHOTO_MAX_LONG = 1024`, `decodePhoto` reads `{ mode: 'scan', bin:
+  'cfa-half' }` for camera RAW at small working sizes; the note names the sensor size first ("photo mode,
+  6032×4032, read binned 3016×2016 (2 × 2 photosites a pixel)"), so the status line still says 24 MP; `full` is the
+  sensor size. Test `apps/studio/test/photo-binned.test.ts` (synthetic CFA DNG: channel means of the working image
+  within 1 % of the AHD path, mean relative pixel difference < 3 %; demosaic when the bins are too small or for long 0).
+- Scratchpad (private, not committed): `libraw-time.ts`, `photo-half.ts` (Node timings on the D750 NEF).
+
+### Why
+- The spin is pure waste and scales with render time, so it was worst exactly on the slow CPU path the tester used.
+- The demosaic computes 24 MP of interpolation that the 640 px working image averages away.
+
+### What worked
+- Cold open of the NEF, open → first screen render (page clock): before the fixes (tabulated, 512 px, load average
+  ≈ 14) 11.1 s cold / 27.7 s warm — the load made the warm run meaningless; queue fix (load ≈ 2) 11.5 s cold / 8.2 s
+  warm; final (queue fix, binned, 640 px tabulated; load ≈ 2) 7.9 and 8.6 s cold / 7.9 and 7.5 s warm, frame present
+  after 3.7–4.5 s (was 7.8 s). Session 02's tester: 29 s cold, 10–12 s warm (main `3703d0a`, exact, 512 px).
+- `npx vitest run apps/studio packages/shell packages/studio-kit`: 33 files, 341 passed.
+
+### What didn't work
+- `chromium.launchPersistentContext` + `browser.startTracing` wrote 335–388 MB traces per run; summarised and deleted.
+- An exact-512 cold run (one sample, `?refMode=exact&refLong=512`) reached the first render in 6.2 s, faster than
+  the 640 px default's 7.9–8.6 s: the first render of a photo at 640 px pays the larger forward-path stages (capture,
+  halation, grain are not tabulated) and the first table builds. One sample on a shared machine; recorded as is.
+
+### What I learned
+- Cold vs warm is no longer the story (< 1 s apart); the first open is decode + first print + first render.
+- The machine is shared with other agents' browser suites: load averages of 12–20 made timings swing 2–3× within
+  minutes. Only runs at load ≈ 1.5–2.5 are used, and several samples where it matters (Step 10).
+
+### What was tricky to build
+- The queue's deferral had two jobs: wait for live work (now `after()`/`cancel()`), and let a live request of the same
+  frame reach the engine first under `preemptBackground` (kept: one idle deferral when nothing is live, which
+  `later = true` ends). A slot cancelled while only waiting has nothing in flight, so no `after()` follows: `cancel()`
+  releases background slots itself.
+- Binning factor for the note: Bayer 2, X-Trans `cfa-half` 3 (`scanMode`), from `raw.meta.cfa`.
+
+### What warrants a second pair of eyes
+- `packages/shell/src/app/render/queue.ts` is shared runtime code outside the plan's WS-B list (small, local, tested).
+- Binned photos: AHD vs 2 × 2 bins differ at edges (sub-pixel channel offset), invisible at 640 px; colour and level
+  identical by construction (same raw camera RGB, unit multipliers). The GPU path is unchanged (4000 px > 1024).
+
+### What should be done in the future
+- The visible progress during the open is CHB-029's (item 6).
+- The packs are parsed twice (page and worker, ≈ 0.2 s each, before "ready"); not on the open path, left as is.
+- GPU checks pending (the owner's Mac is closed); the GPU engine path is unchanged except the queue fix.
+
+### Code review instructions
+- `packages/shell/src/app/render/queue.ts` `pump`, `after`, `releaseBackground`, `cancel`;
+  `apps/studio/src/host/decode.ts` `decodePhoto`.
+- `npx vitest run packages/shell/test/app/render-queue.test.ts apps/studio/test/photo-binned.test.ts`;
+  `node ttmp/…/scripts/wsb-02-cold-open.mjs --profile <scratch dir> [--trace <dir>]` against a preview on 4811.
+
+### Technical details
+- Trace summary rows (cold, before → after the queue fix): `CrRendererMain | FireIdleCallback` 2913 ms / 118 589
+  → absent; `CrRendererMain | AsyncTask Run` 3349 ms / 119 113 → 117 ms / 548; `DedicatedWorker thread |
+  MessagePort::Accept` 4218 → 3650 ms.
+- Node, D750 NEF 6032 × 4032: photo (AHD) decode 5019 ms, linearise + region 421 ms; binned 3016 × 2016: 2090 ms, 99
+  ms; channel mean ratios 0.9999 / 1.0004 / 0.9997.
+
+## Step 10: F10 settled — 640 px on the CPU engine, measured against the old exact 512 px
+
+With previews through tables (Step 6), the queue spin gone and photos read binned (Step 9), the CPU engine had
+headroom. The plan asks for a sharper preview without losing responsiveness, so the yardstick is the engine as it
+was (exact, 512 px). I ran CHB-027's responsiveness script in a quiet window, interleaved: the new default at 640 px
+(7 samples), tabulated at 512 px (2 + 2 earlier) and exact at 512 px (4). Medians: 640 px tabulated is faster than
+exact 512 px on every step and 25 % sharper; tabulated 512 px is faster still, but the photographer asked for focus.
+`DEFAULT_REF_LONG` is now 640 (strip frames follow: ≈ 432 × 639 each).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 5.
+**Assistant interpretation:** Choose the CPU working size from measurements, not by guess.
+**Inferred user intent:** A sharper picture that answers no slower than before.
+**Commit (code):** with Step 9 (same commit).
+
+### What I did
+- `apps/studio/src/host/engines.ts`: `DEFAULT_REF_LONG = 640` and its doc; `main.ts` URL-options comment;
+  `apps/studio/DEMO.md` (640 px, strip frames about as much).
+- Measurements in `various/ws-b/`: `f10-final-*.json`, `f10-ab/*.json` (file names say the configuration: the
+  `default640-b*`/`-c*` runs were meant as 512/exact but zsh passed `${q:+--query $q}` as one word, so they are more
+  samples of the default; the `tabulated512-*`/`exact512-*` runs pass `--query "$q"` correctly).
+
+### Why
+- Medians over several samples, because single runs on this machine swing 2×.
+
+### What worked
+- Medians (result ms; 640 tabulated n = 7 | tabulated 512 n = 2–4 | exact 512 n = 4):
+  open NEF 7700 | 5400–9700 | ≈ 9500; drag Time (photo, to final) 2580 | 1850–5280 | ≈ 3600; typed 15 (photo) 1460 |
+  850–1190 | 1700; open raw010 4500 | 2700–4100 | ≈ 12 500; drag (negative) 3060 | 2000–2050 | ≈ 3400; typed 15
+  (negative) 1470 | 950–2490 | ≈ 2000. First drafts 120–780 ms; no stall over 100 ms in any drag.
+
+### What didn't work
+- See "What I learned" in Step 9 about load; and the zsh quoting slip above (caught by the sizes in the table:
+  640 × 428 where 512 × 342 was meant).
+
+### What I learned
+- A print-only change costs ∝ the shown pixels (sampled previews), so 640 px is ≈ 1.6× tabulated 512 px; the tables'
+  2× buy that back against the old exact engine.
+
+### What was tricky to build
+- N/A (a constant), but choosing it needed the interleaved runs.
+
+### What warrants a second pair of eyes
+- On a much slower laptop all of this scales; `?refLong=512` remains for speed, `?refLong=1024` for focus.
+
+### What should be done in the future
+- A true 1:1 focus check on the CPU needs a full-size decode of the shown region (CHB-026 F10's suggestion): open.
+
+### Code review instructions
+- `engines.ts` `DEFAULT_REF_LONG`; numbers in `various/ws-b/f10-ab/`.
+
+### Technical details
+- Sizes: photo 640 × 428 (draft 160 × 107); strip frame 432 × 639 (draft 108 × 160).

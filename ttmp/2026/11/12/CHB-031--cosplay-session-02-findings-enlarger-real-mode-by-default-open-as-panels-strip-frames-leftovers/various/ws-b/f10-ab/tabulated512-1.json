@@ -1,0 +1,124 @@
+[
+ {
+  "engine": "reference",
+  "label": "Compatibility mode: slower",
+  "bootMs": 577,
+  "steps": [
+   {
+    "step": "open NEF as photo",
+    "resultMs": 5371,
+    "firstRenderMs": 5371,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     1928
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "wallMs": 5463,
+    "status": "rendered 1 · screen",
+    "notes": "Nikon D750 photo, 24 MP"
+   },
+   {
+    "step": "drag Time 40 px (photo)",
+    "resultMs": 1850,
+    "firstRenderMs": 333,
+    "renders": 5,
+    "drafts": 4,
+    "lastSize": "512×342",
+    "draftSize": "181×121",
+    "renderMs": [
+     246,
+     114,
+     123,
+     134,
+     852
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 951,
+    "pointerDownToUpMs": 931,
+    "upToResultMs": 902,
+    "rendersDuringDrag": 4,
+    "value": "Time 10.0 seconds → Time 20.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (photo)",
+    "resultMs": 881,
+    "firstRenderMs": 881,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     866
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   },
+   {
+    "step": "open DNG as negative",
+    "resultMs": 3338,
+    "firstRenderMs": 3338,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "349×511",
+    "draftSize": null,
+    "renderMs": [
+     929
+    ],
+    "stalls": 1,
+    "worstStallMs": 500,
+    "stallTotalMs": 500,
+    "wallMs": 3920,
+    "status": "rendered 8 · screen",
+    "notes": "Colour negative (DNG), 6.2 MP, film edge found"
+   },
+   {
+    "step": "drag Time 40 px (negative)",
+    "resultMs": 2002,
+    "firstRenderMs": 187,
+    "renders": 5,
+    "drafts": 4,
+    "lastSize": "349×511",
+    "draftSize": "123×181",
+    "renderMs": [
+     158,
+     129,
+     145,
+     151,
+     927
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 990,
+    "pointerDownToUpMs": 983,
+    "upToResultMs": 1014,
+    "rendersDuringDrag": 4,
+    "value": "Time 2.23 seconds → Time 5.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (negative)",
+    "resultMs": 1124,
+    "firstRenderMs": 1124,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "349×511",
+    "draftSize": null,
+    "renderMs": [
+     1103
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   }
+  ],
+  "errors": []
+ }
+]

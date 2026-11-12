@@ -52,9 +52,28 @@ export function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): n
   return found.length;
 }
 
+/**
+ * Working sizes up to this long side read a camera RAW photo binned (CHB-031 F22): one pixel per 2 × 2 Bayer (3 × 3
+ * X-Trans) photosites, raw camera colour, as scan mode reads negatives, instead of LibRaw's AHD demosaic at full size.
+ * The working image is area-averaged from either, so the picture is the same (channel means within 0.05 % on a D750
+ * NEF) while the decode takes ≈ 40 % of the time (24 MP: 2.2 s instead of 5.4 s, Node). The CPU engine works at
+ * 640 px; the GPU engine's 4000 px reads the full demosaic.
+ */
+export const BINNED_PHOTO_MAX_LONG = 1024;
+
 /** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
 export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw'>): Promise<Decoded> {
-  const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'photo' }, raw: o.raw });
+  const binned = o.long > 0 && o.long <= BINNED_PHOTO_MAX_LONG;
+  let raw = await decodeAsync(bytes, { fileName: name, options: binned ? { mode: 'scan', bin: 'cfa-half' } : { mode: 'photo' }, raw: o.raw });
+  // binning applies to camera RAW only; a camera whose binned image is smaller than the working size: the demosaic
+  const k = raw.meta.format === 'raw' && binned ? (raw.meta.cfa === 'xtrans' ? 3 : 2) : 1;
+  let fullW = raw.width * k, fullH = raw.height * k;
+  if (k > 1 && Math.max(raw.width, raw.height) < o.long) {
+    raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'photo' }, raw: o.raw });
+    fullW = raw.width;
+    fullH = raw.height;
+  }
+  const read = raw.width < fullW ? `, read binned ${raw.width}×${raw.height} (${k} × ${k} photosites a pixel)` : '';
   const lin = linearise(raw, { sha256, ir: false });
   const W = lin.width, H = lin.height;
   const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
@@ -62,12 +81,12 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
   const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
   const cam = raw.meta.camera;
   const notes = [raw.meta.format === 'raw'
-    ? `photo: camera RAW${cam ? ` (${cam.make} ${cam.model})` : ''} via LibRaw, photo mode, ${W}×${H}${cam?.camToXyz ? `, camera matrix from ${cam.from ?? 'LibRaw'}` : ', no camera matrix (taken as linear sRGB)'}`
+    ? `photo: camera RAW${cam ? ` (${cam.make} ${cam.model})` : ''} via LibRaw, photo mode, ${fullW}×${fullH}${read}${cam?.camToXyz ? `, camera matrix from ${cam.from ?? 'LibRaw'}` : ', no camera matrix (taken as linear sRGB)'}`
     : `photo: ${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit, taken as linear sRGB scene light`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = { ...info0, width: w, height: h, channels: 3, notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }] };
-  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
+  return { info, data, full: { width: fullW, height: fullH }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
 }
 
 /** A box (working px) scaled by kx, ky, kept inside its old edges (a strip frame's box is inset already). */

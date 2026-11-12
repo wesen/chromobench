@@ -30,9 +30,10 @@ export interface HostOptions {
   /** Working image long side for the GPU engine (default 4000; 0 = the file's own size). */
   long?: number;
   /**
-   * Working image long side for the reference engine (default 512; ?refLong=1024 is sharper, ≈ 3× slower to the final
-   * render, CHB-027 F10). It computes in f64
-   * on the CPU, in the engine worker, and only the pixels a preview shows (sampled previews).
+   * Working image long side for the reference engine (default 640 since CHB-031: its previews through tables are
+   * ≈ 2× faster, so 640 px answers about as fast as 512 px did exactly; ?refLong=1024 is sharper and ≈ 3× slower to
+   * the final render, CHB-027 F10). It computes in f64 on the CPU, in the engine worker, and only the pixels a preview
+   * shows (sampled previews).
    */
   refLong?: number;
   /**
@@ -76,7 +77,7 @@ export interface HostEngine {
 }
 
 const DEFAULT_LONG = 4000;
-const DEFAULT_REF_LONG = 512;
+const DEFAULT_REF_LONG = 640;
 const DEFAULT_REF_MODE: 'exact' | 'tabulated' = 'tabulated';
 /** The reference engine's cache: node images at 1024 × 683 (?refLong=1024) are ≈ 22 MB each (4 channels, f64). */
 const REF_CACHE = { cacheLimit: 48, cacheBytes: 768 * 2 ** 20 };
