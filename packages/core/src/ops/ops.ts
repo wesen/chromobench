@@ -11,6 +11,7 @@ import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { combinePixel, combineRatio, type CombineTerm } from '../print/exposures.ts';
 import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gradientAt, gridCentres, luminanceAt, paintMask, parseStrokes } from '../print/masks.ts';
 import { densityMaskSigma, maskDensityPolar } from '../print/densityMask.ts';
+import { parseSpots, retouch } from '../print/retouch.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
@@ -314,10 +315,10 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return { w: r.w, h: r.h, c: 1, data };
   },
   'retouch.heal': (ctx) => {
-    // contract 0.3 stub: CHB-022 implements heal and clone; the print passes through
+    // CHB-022: heal and clone spots on the print (print/retouch.ts), every source read from the receiver
     const r = recv(ctx);
-    const spots = Object.keys(JSON.parse(String(A(ctx, 'spots') ?? '{}')) as object).length;
-    return spots ? { ...r, warnings: [{ code: 'W_PREVIEW_APPROX', message: `retouch.heal is not implemented yet (CHB-022): ${spots} spot(s) not applied` }] } : r;
+    const spots = parseSpots(A(ctx, 'spots') as string | undefined);
+    return spots.length ? { w: r.w, h: r.h, c: r.c, data: retouch(r.data, r.w, r.h, r.c, spots) } : r;
   },
   'mask.luminance': (ctx) => {
     const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;

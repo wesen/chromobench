@@ -362,8 +362,49 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const same = A(ctx, 'polarity') === 'same';
     return map(Hm, 1, (px) => [a === 0 ? 0 : same ? a * (Math.log10(hi) - Math.log10(px[0]!)) : a * (Math.log10(px[0]!) - Math.log10(lo))]);
   },
-  // contract 0.3 stub: CHB-022 implements heal and clone
-  'retouch.heal': (ctx) => recv(ctx),
+  // CHB-022, the mock's naive heal and clone (core print/retouch.ts is the reference): clone copies the source
+  // disc (bilinear at pixel centres); heal multiplies it by one gain per channel, the mean of the target's
+  // ring over the source's (core matches the seam with a harmonic offset instead)
+  'retouch.heal': (ctx) => {
+    const src = recv(ctx);
+    const rec = JSON.parse(String(A(ctx, 'spots') ?? '{}')) as Record<string, { mode: string; x: number; y: number; r: number; src: Point; feather: number; opacity: number; enabled: boolean }>;
+    const spots = Object.entries(rec).filter(([, s]) => s.enabled !== false && s.r > 0 && s.opacity > 0).sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true })).map(([, s]) => s);
+    if (!spots.length) return src;
+    const { w: W, h: H, c } = src;
+    const out = { w: W, h: H, c, data: src.data.slice() };
+    const bil = (x: number, y: number, k: number): number => {
+      const fx = clamp(x, 0.5, W - 0.5) - 0.5, fy = clamp(y, 0.5, H - 0.5) - 0.5;
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+      const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
+      const at = (xx: number, yy: number): number => src.data[(yy * W + xx) * c + k]!;
+      return (1 - ty) * ((1 - tx) * at(x0, y0) + tx * at(x1, y0)) + ty * ((1 - tx) * at(x0, y1) + tx * at(x1, y1));
+    };
+    for (const s of spots) {
+      const gain = Array.from({ length: c }, (_, k) => {
+        if (s.mode !== 'heal') return 1;
+        let t = 0, q = 0;
+        for (let i = 0; i < 32; i++) {
+          const th = (2 * Math.PI * i) / 32, rho = s.r + 1.5;
+          t += bil(s.x + rho * Math.cos(th), s.y + rho * Math.sin(th), k);
+          q += bil(s.src.x + rho * Math.cos(th), s.src.y + rho * Math.sin(th), k);
+        }
+        return q > 0 ? t / q : 1;
+      });
+      for (let y = Math.max(0, Math.floor(s.y - s.r)); y < Math.min(H, Math.ceil(s.y + s.r)); y++) {
+        for (let x = Math.max(0, Math.floor(s.x - s.r)); x < Math.min(W, Math.ceil(s.x + s.r)); x++) {
+          const dx = x + 0.5 - s.x, dy = y + 0.5 - s.y, d = Math.hypot(dx, dy), inner = s.r * (1 - s.feather);
+          if (d >= s.r) continue;
+          const t = d <= inner ? 0 : (d - inner) / (s.r - inner);
+          const a = s.opacity * (1 - t * t * (3 - 2 * t));
+          for (let k = 0; k < c; k++) {
+            const o = (y * W + x) * c + k;
+            out.data[o] = (1 - a) * out.data[o]! + a * gain[k]! * bil(s.src.x + dx, s.src.y + dy, k);
+          }
+        }
+      }
+    }
+    return out;
+  },
   'view.reflect': (ctx) => map(recv(ctx), 3, (px) => reflectXYZ(rgb3(px))),
   'view.flare': (ctx) => {
     const f = num(ctx, 'flare') / 100;

@@ -15,9 +15,10 @@ import pack16Code from '../kernels/pack16.wgsl?raw';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
-import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseStrokes, rebateBox, type PhysicsData, type UpNode } from '@chromobench/core';
+import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseSpots, parseStrokes, rebateBox, type PhysicsData, type UpNode } from '@chromobench/core';
 import combineCode from '../kernels/combine.wgsl?raw';
 import { Blur } from './spatial.ts';
+import { Retouch } from './retouch.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
@@ -35,7 +36,7 @@ export const GPU_OPS = [
 ] as const;
 
 /** Multi-input or spatial ops: always materialised, computed from materialised inputs (combine.wgsl, blur.wgsl). */
-const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or']);
+const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or', 'retouch.heal']);
 /** Masks from coordinates (or strokes): their receiver's values are never read. */
 const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.gradient', 'mask.ellipse', 'mask.paint']);
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run several passes. */
@@ -110,6 +111,7 @@ export class GpuEngine implements Engine {
   private reducer: Reducer;
   private blur: Blur;
   private dummyTex: GPUTexture | null = null;
+  private retouchK: { rt: GpuRuntime; k: Retouch } | null = null;
   private readonly opts: GpuEngineOptions;
   private readonly pool: WorkerPool | null;
   private readonly cache: TableCache;
@@ -338,12 +340,6 @@ export class GpuEngine implements Engine {
           break;
         }
         case 'scan.density': push({ code: OP.DENSITY, p0: [...(treb.get(n.id) ?? [1, 1, 1])], node: n.id }); break;
-        case 'retouch.heal': {
-          // contract 0.3 stub (CHB-022 implements heal and clone): the print passes through
-          const spots = Object.keys(JSON.parse(String(a['spots'] ?? '{}')) as object).length;
-          if (spots) warnings.push({ code: 'W_PREVIEW_APPROX', message: `retouch.heal is not implemented yet (CHB-022): ${spots} spot(s) not applied` });
-          break;
-        }
         case 'invert.dyes': push({ code: OP.DYES, node: n.id }, { solve: P.solveInputs(a['stock'] as string, a['scanner'] as string) }); break;
         case 'print.expose': {
           // filtration is a shift on the database neutral pack; the aim lights are core's (aim, aimView)
@@ -747,6 +743,13 @@ export class GpuEngine implements Engine {
         const out = await this.mix(COMBINE.DENSITY_MASK, recv, Hm, null, 0, [same ? -amount : amount, Math.log10(same ? mo.max[0]! : mo.min[0]!)]);
         this.rt.textures.release(Hm);
         return out;
+      }
+      case 'retouch.heal': {
+        // CHB-022 (src/retouch.ts, kernels/retouch.wgsl): source windows of the receiver at full resolution,
+        // core's seam coefficients, one composite pass on the grid
+        if (this.retouchK?.rt !== this.rt) this.retouchK = { rt: this.rt, k: new Retouch(this.rt, (tx, w, h) => this.chain.readTexture(tx, w, h)) };
+        const win = async (box: Box): Promise<GPUTexture> => (await this.renderGraph(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box, umOut: t.umOut * scale })).tex;
+        return this.retouchK.k.apply(recv, parseSpots(a['spots'] as string), { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
       }
       default: return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
     }

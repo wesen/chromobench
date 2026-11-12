@@ -24,6 +24,7 @@ export * from './print/balance.ts';
 export * from './print/masks.ts';
 export * from './print/exposures.ts';
 export * from './print/densityMask.ts';
+export * from './print/retouch.ts';
 export * from './scan/solve.ts';
 export * from './scan/classify.ts';
 export * from './scan/forward.ts';
