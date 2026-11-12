@@ -159,3 +159,25 @@ catalog, the sidecar and CHB-013's fixture layout.
 `W_ROLL_MIXED` (a frame's base beyond 0.03 D of the roll's), `W_ROLL_STOCK_AMBIGUOUS` (top two stocks within
 0.025 D), `W_ROLL_BASE_WEAK` (no confident rebate on the roll), `W_FRAME_DIVERGES`, and ingest's `W_NO_SURROUND`,
 `W_SURROUND_BRIGHT`, `W_REBATE_BLANK`, `W_NO_REBATE`, `W_NO_FILM`: add them to the contract's diagnostic table.
+
+# Contract requests from the looks kit (CHB-021)
+
+Status: none needed to ship. Contract 0.3 already has what the looks kit uses: `LoggedMutation.batch` on
+`EditLog.apply` / `propose`, `approve({ batch })` / `reject({ batch })`, `fieldSpec` / `checkSet` for the Amount
+rules and range checks, `MOVED_PATHS` for preset migration, `PRINT_OPTION_PATHS` for the what-if form of a look.
+Two candidates for a later contract step, neither blocking:
+
+## R8. (optional) Kit diagnostic codes
+
+The kit reports `CB-L110` (Amount leaves a path's range; fix = the clamped value), `CB-L111` (clamped silently),
+`CB-L120` (a look sets a roll-balance path absolutely on a frame of a roll; the guide's `CB-LOOK-CONFLICT`) and
+`CB-L130` (a preset path migrated). They are kit codes (like CB-R…) built as plain `Diagnostic` objects, because
+`diag()` takes only the contract's closed `ErrorCode` list. If they should reach the agent through the DSL with a
+contract meaning, add `W_LOOK_RANGE`, `W_LOOK_CONFLICT`, `W_PRESET_MIGRATED` to `ERROR_CODES`.
+
+## R9. (open question 12.1) Symbolic looks
+
+Looks resolve to plain `set` mutations (decided). If the photographer wants "change Amount later" or "update the
+look and re-sync the roll", the recipe would need `looks: [{ id, params, amount }]` folded before explicit edits —
+a fold change for every consumer. Not requested now; the batch id (`look:<id>:…`) and the unit label
+("Look: warm print at 60 %") already record which look made a unit, so a "reapply" command can be built without it.

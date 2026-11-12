@@ -50,6 +50,8 @@ export interface PlanOptions extends Partial<AmountOptions> {
   syncGroups?: SyncGroups;
   by?: 'user' | 'agent';
   why?: string;
+  /** skip the diff (tiles and previews need only the mutations; the diff walk is most of the cost) */
+  noDiff?: boolean;
 }
 
 let seq = 0;
@@ -73,6 +75,7 @@ export function planFrame(l: Look, params: Record<string, unknown>, frame: strin
         if ('set' in e && BALANCE_PATHS.includes(e.path))
           warnings.push(kitDiag('CB-L120', `${l.name} sets ${e.path} absolutely on a balanced roll`, { path: e.path, hint: 'apply as offsets (add entries) to keep the roll balance', fix: `{ path: '${e.path}', add: … }` }));
     }
+    if (o.noDiff) return { frame, mutations: res.mutations, diff: [], warnings };
     const after = previewRecipe(recipe, res.mutations);
     return { frame, mutations: res.mutations, diff: diffRecipes(recipe, after, o.syncGroups ? { groups: o.syncGroups } : {}), warnings };
   } catch (err) {

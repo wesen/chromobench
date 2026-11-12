@@ -137,7 +137,7 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   const lookedRecipe = (s: any, f: string, l: Look, o: { amount?: number; params?: Record<string, unknown> } = {}): FrameRecipe | null => {
     const r = s?.recipes?.[f] as FrameRecipe | undefined;
     if (!r) return null;
-    const pf = planFrame(l, o.params ?? paramsOf(s, l), f, r, { ...optsOf(s), ...(o.amount !== undefined ? { amount: o.amount } : {}) });
+    const pf = planFrame(l, o.params ?? paramsOf(s, l), f, r, { ...optsOf(s), ...(o.amount !== undefined ? { amount: o.amount } : {}), noDiff: true });
     if (pf.skipped) return null;
     return previewRecipe(r, pf.mutations);
   };
@@ -705,8 +705,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   const lookCell = (o: { size?: number; survey?: boolean } = {}) => (l: Look) =>
     ck.column(
       { class: `cb-look-cell${o.survey ? ' is-survey' : ''}` },
-      ck.view.thumb({ image: (s: any) => tile(s, l), max: o.size ?? 120, badge: (s: any) => (looksView(s).picked === l.id ? 'picked' : '') } as any),
-      ck.text((s: any) => `${favMark(s, l)}${l.name}`, { strong: true } as any),
+      ck.view.thumb({ image: (s: any) => tile(s, l), max: o.size ?? 120 } as any),
+      ck.text((s: any) => `${looksView(s).picked === l.id ? '● ' : ''}${favMark(s, l)}${l.name}`, { strong: true } as any),
       ck.text((s: any) => caption(s, l), { dim: true, class: 'cb-look-caption' } as any),
       ck.row(
         { class: 'cb-look-actions' },

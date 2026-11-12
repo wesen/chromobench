@@ -71,3 +71,29 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await page.keyboard.press('Control+z');
   await expect.poll(() => hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => e.log.committed.print.grade)')).toEqual([2, 2, 2]);
 });
+
+test('looks: apply to the roll’s unedited frames on one card, untick a frame, apply, one undo', async ({ page }) => {
+  await page.goto('/demo/?variant=looks&fresh');
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await hook(page, `cb.run('roll.fromFrames', { analyse: false })`);
+  const ids = await hook<string[]>(page, `cb.state().roll.rolls['roll-1'].frames`);
+  expect(ids.length).toBe(6);
+  // frame 2 has been worked on: not "unedited"
+  await hook(page, `cb.studio.route.applyMutations(${JSON.stringify(ids[1])}, [{ op: 'set', path: 'print.grade', value: 3 }], 'Grade')`);
+  await page.keyboard.press('d');
+  await page.locator('.ck-panel[data-panel="looks-library"] .cb-look-cell', { hasText: 'strong grade 4' }).getByRole('button', { name: 'Preview' }).click();
+  await page.locator('#looks-apply-roll').click();
+  const card = page.locator('#looks-pending');
+  await expect(card).toContainText('Look: strong grade 4 · 5 frames');
+  await expect(card).toContainText('grade 2 → 4 (5 frames)');
+  const last = await hook<string>(page, `cb.state().catalog.frames[${JSON.stringify(ids[5])}].name`);
+  await card.getByRole('checkbox', { name: `Include ${last}` }).uncheck();
+  await expect(card).toContainText('· 4 frames');
+  await page.locator('#looks-pending-approve').click();
+  await expect(card).toHaveCount(0);
+  const grades = () => hook<number[]>(page, `cb.state().roll.rolls['roll-1'].frames.map((f) => cb.studio.frames.get(f).log.committed.print.grade)`);
+  expect(await grades()).toEqual([4, 3, 4, 4, 4, 2]);
+  await page.locator('.ck-vp').first().click();
+  await page.keyboard.press('Control+z');
+  await expect.poll(grades).toEqual([2, 3, 2, 2, 2, 2]);
+});
