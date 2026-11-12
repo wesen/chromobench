@@ -775,3 +775,92 @@ exact 512 px on every step and 25 % sharper; tabulated 512 px is faster still, b
 
 ### Technical details
 - Sizes: photo 640 × 428 (draft 160 × 107); strip frame 432 × 639 (draft 108 × 160).
+
+## Step 11: Browser tests for F21, F18, F20; merge of CHB-032; the full checks
+
+The user-visible changes got an e2e spec of their own, `e2e/studio-open-strips.spec.ts`, on synthetic files and the
+visible controls: F21 (a library of two negatives, reload, one opened again, Remove from Library on it by its
+context menu: no "Where is …?" dialog, no selection; clicking the other one still asks for its file), F18 (File ▸
+Open As ▸ Open as Photos shows the status pill, a reload resets it to Guess; Negatives + "Keep This Choice After
+Restart" survives the reload and shows; the pill is a way back to Guess), F20 (a planted strip with an underexposed
+first frame: three frames `transpose`, each with its own ≈ file-size pixels instead of a third of 640, the base from
+the gaps, Frame ▸ Rotate Right → `flipH`, Rotate Left → back). The first full browser run: 100 passed, 1 failed —
+CHB-027's `studio-responsive.spec.ts` matched the engine label `reference · CPU f64 (worker) · 1024 px`, which now
+reads `… f64 (tabulated previews, exact export) (worker) …`; its regex allows text between "f64" and "(worker)".
+
+Then the orchestrator merged CHB-032 into main and asked for another merge. No conflicts; `RefEngine` now requires
+`data`, so my new test passes `nodePacksData()`; my spec uses `opened()` from `e2e/support.ts` and writes its
+screenshots to `test-results/` (the three in `various/ws-b/` are from its first run). Full checks green after.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 5. Orchestrator (verbatim): "Orchestrator: CHB-032 (housekeeping) is now merged into main (02fd314). Please `git merge main` into task/chb-031-open-strips once more before your final commit (after you finish your current item). What will bite you, from CHB-032's report and a cross-check of your diff:
+1. `RefEngine` now REQUIRES `data` (since 1927c3f): your `new RefEngine({ ...o, mode: 'tabulated' })`, `new RefEngine({ sampled: true, mode: … })`, `new RefEngine()` (TabulatedPreviews, tests) will not compile — pass `data` (e.g. `nodePacksData()` in Node tests; in the app the host already has the packs' data). The names `interimData`, `packsData`, `legacyInterimData` are gone: use `nodePacksData` / `chb001InterimData`.
+2. 63 unused exports were removed (list: `ttmp/2026/11/12/CHB-032--…/various/01-unused-exports-after.txt`); if your code imports one, restore the export in the same commit with a one-line note. (ingest's `CLASS_CODE` was removed; core's is still there — you import core's, I think.)
+3. e2e: specs that open files now use `opened(page, frames, timeout)` from `e2e/support.ts` (waits for the open flow, then `idle()`); new or edited specs of yours should too. `studio-strip.spec.ts` now writes its screenshot to `test-results/`.
+4. Splits: `packages/gpu/src/engine-gpu.ts` → `engine/{defs,lower,dag,textures,reduce,results}.ts`; `packages/dsl/src/host.ts` → `host/*.ts`; looks and finish kits → state/model/commands/panels/... files. If you touched any of those, re-apply your change in the new file.
+Then the full checks (typecheck, lint, `pnpm gen:check`, `pnpm test`, `CI=1 pnpm test:browser` on your ports) and your final report."
+**Assistant interpretation:** Finish the e2e item, merge main again, adapt to CHB-032, run every check, report.
+**Inferred user intent:** A branch that merges cleanly on top of A and the housekeeping.
+**Commit (code):** `ad28758` — "CHB-031 WS-B: e2e for F21, F18, F20 (synthetic files); responsive spec reads the new
+engine label; tasks odem jb0i 6wti 9t2y"; merge `e2dd71e`; `38fb3d7` — "CHB-031 WS-B after merging CHB-032:
+RefEngine needs data in the tests; the open-strips spec uses e2e/support opened() and writes screenshots to
+test-results"
+
+### What I did
+- `e2e/studio-open-strips.spec.ts` (3 tests); `e2e/studio-responsive.spec.ts` regex `/reference · CPU f64
+  .*\(worker\) · 1024 px/`.
+- `docmgr task check --ticket CHB-031 --id odem,jb0i,6wti,9t2y`.
+- `git merge main --no-edit` (merge `e2dd71e`, parents `ad28758` and `02fd314`, no conflicts); `pnpm typecheck` →
+  8 × `TS2345 … Property 'data' is missing in type '{ sampled: true; }' but required in type 'RefEngineOptions'` in
+  `apps/studio/test/ref-tabulated.test.ts`; fixed with `const data = nodePacksData()`. `engine-serve.ts` already
+  passes the worker's `data` to `referenceEngine`. No import of a removed export (typecheck clean).
+- Restored `ttmp/…/CHB-027…/various/ws-d/01-synthetic-strip-frame2.png`, which my pre-merge browser run had
+  rewritten (the old strip spec wrote into the ticket).
+- Final checks: `pnpm typecheck` clean; `pnpm lint` (boundaries ok, 368 file checks; colours ok); `pnpm gen:check`
+  ok (26 files); `pnpm test` 101 files, 2770 passed, 7 skipped; `STUDIO_PORT=5321 STUDIO_KIT_PORT=5322
+  SHELL_DEMO_PORT=5323 GPU_PARITY_PORT=5324 CI=1 pnpm test:browser` 101 passed (3.5 min).
+- Stopped the preview on 4811.
+
+### Why
+- The e2e drive the controls he uses (context menu, menus, the pill, the filmstrip), so a regression in the wiring
+  shows, not only in the studio model the unit tests cover.
+
+### What worked
+- All three new e2e passed on the first run (19.2 / 10.6 / 16.2 s) and again after the merge (17.1 / 15.6 /
+  31.9 s, load average ≈ 17 then).
+
+### What didn't work
+- First browser run: `✘ e2e/studio-responsive.spec.ts:34:1 › reference engine in the worker: … (6.7s)` —
+  `Error: expect(locator).toHaveAttribute(expected) failed` on the engine label (fixed above; it passed in the second
+  run, 55.6 s).
+
+### What I learned
+- After a reload the library's frames are in the catalog, not in `studio.frames`: `opened(page, 1)` after re-opening
+  one file of a two-file library is right (`>= 1`).
+
+### What was tricky to build
+- F21's e2e must make the selection land where the bug did: the frame removed must be the open one *before* a
+  not-open one in the catalog order (A, then B), so the old "next frame of the catalog" was B.
+
+### What warrants a second pair of eyes
+- The label change touched a CHB-027 spec (regex only).
+
+### What should be done in the future
+- Session 03 (task b50a) re-runs session 02's steps; for WS-B: open raw010 (upright, sharper, frame 1 still flat by
+  nature), Remove from Library with a not-open frame next, Open As across a restart, the first open on a fresh
+  profile.
+- Not done here: a per-frame base for strips with uneven scanner light (not needed on raw010), a rebate check for
+  single frames whose thin image reaches the edge (ingest), a 1:1 refine pass at full size on the CPU (F10's deeper
+  ask), the open progress UI (CHB-029). GPU checks pending: the Mac is closed (no GPU-specific code changed; the
+  queue fix and strip orientation apply to both engines).
+- Task l1ny (leftovers) stays open for WS-A's parts; F10's outcome is Steps 6 and 10.
+
+### Code review instructions
+- `npx playwright test --project=chromium-webgpu e2e/studio-open-strips.spec.ts` with the ports above.
+- Branch summary: `git diff main --stat -- . ':!ttmp'`.
+
+### Technical details
+- Findings: F21 fixed (Step 2); F18 fixed (Step 2); F20 fixed — orientation and rotate (Step 3), working size (Steps
+  3, 10), haze explained and the wrong strip base fixed (Step 7); F22 cut — idle-callback spin, binned RAW photos,
+  tabulated previews: cold first open ≈ 8 s on this machine (Step 9); F10 on the CPU — 640 px through tables, faster
+  than the old exact 512 px on every measured step (Steps 6, 10).
