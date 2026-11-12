@@ -797,3 +797,59 @@ whole host.
 - Public exports of `@chromobench/dsl` from host.ts: `Host`, `PRINT_OPTIONS`, `dslOps`, `suggest`, `HandleInfo`,
   `LooksProvider` (unchanged); host.ts also re-exports `editFix`, `HANDLE_MEMBERS`, `isDslOp`, `DocsProvider`,
   `FrameEntry`, `LogLine`, `LookRequest`, `QueuedEdit` for the package's own importers.
+
+## Step 11: Browser specs stop writing into tracked ticket folders (orchestrator request)
+
+While I was planning the kit splits the orchestrator relayed two items: CHB-031 WS-A is merged into `main`
+(e7df8a0; contract 0.4.0, real enlarger mode by default), to be merged into this branch before the final commit;
+and, as part of the e2e review, `e2e/studio-strip.spec.ts:51` rewrote a tracked CHB-027 screenshot on every browser
+run (Step 10 had to restore it by hand). The spec now writes the screenshot into Playwright's per-test output
+folder under `test-results/`, which `.gitignore` excludes. It was the only browser spec writing into `ttmp/`.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7. Orchestrator message (verbatim): "Orchestrator: CHB-031 WS-A is merged into
+main (e7df8a0; contract 0.4.0, real enlarger by default). Before your final commit, `git merge main` into
+task/chb-032-housekeeping (in your worktree) and resolve; regenerate generated docs with `pnpm gen` and snapshots
+with `-u` (read the diffs) rather than merging them by hand. One more item for your e2e review task:
+`e2e/studio-strip.spec.ts:51` rewrites a CHB-027 screenshot under `ttmp/` on every browser run — make specs write
+screenshots to `test-results/` (or behind an env flag) instead of into tracked ticket folders."
+**Assistant interpretation:** Fix the screenshot path now; merge `main` before the final commit, regenerating
+generated files and snapshots instead of hand-merging them.
+**Inferred user intent:** A browser run should never dirty the tree, and the branch should merge cleanly.
+**Commit (code):** see the next commit, "CHB-032: studio-strip spec writes its screenshot to test-results/, not a tracked CHB-027 file".
+
+### What I did
+- `grep -rn "screenshot(\|ttmp/\|writeFileSync" e2e packages/*/test/browser tools/wgsl-check`: one hit in `ttmp/`
+  (`e2e/studio-strip.spec.ts:51`); the shell demo spec writes shots only when `SHELL_DEMO_SHOT` is set.
+- `e2e/studio-strip.spec.ts`: `page.screenshot({ path: test.info().outputPath('strip-frame2.png') })`.
+- `pnpm typecheck` 0; `… CI=1 pnpm exec playwright test --project=chromium-webgpu e2e/studio-strip.spec.ts` → 1 passed;
+  `git status` shows only the spec; the file is at
+  `test-results/e2e-studio-strip-a-strip-o-1e12a-ove-one-open-the-file-again-chromium-webgpu/strip-frame2.png`.
+
+### Why
+- `test.info().outputPath()` is per test and per project, so parallel projects cannot overwrite each other, and
+  Playwright clears it at the start of a run.
+
+### What worked
+- The spec passes and the tree stays clean after a run.
+
+### What didn't work
+- No failures observed.
+
+### What I learned
+- The committed CHB-027 screenshot stays as that ticket's evidence; it is no longer regenerated.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- N/A.
+
+### What should be done in the future
+- The merge of `main` (before the final commit).
+
+### Code review instructions
+- `git show HEAD -- e2e/studio-strip.spec.ts`.
+
+### Technical details
+- `.gitignore:3` is `test-results/`.

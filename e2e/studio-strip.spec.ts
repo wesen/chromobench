@@ -48,7 +48,8 @@ test('a strip opens as three frames, each cropped and printed on its own; remove
   await page.getByText('strip-07.tif · 2/3', { exact: true }).first().click();
   await idle(page);
   expect(await page.evaluate(() => window.chromobench.studio.current)).toBe(s[1].id);
-  await page.screenshot({ path: 'ttmp/2026/11/12/CHB-027--fix-cosplay-session-01-findings-open-mode-responsiveness-library-wording-strips/various/ws-d/01-synthetic-strip-frame2.png' });
+  // into the test's output folder (test-results/, ignored), never into a tracked ticket folder
+  await page.screenshot({ path: test.info().outputPath('strip-frame2.png') });
 
   // remove it: the others stay
   await page.evaluate(() => window.chromobench.run('frame.remove'));
