@@ -75,6 +75,9 @@ describe('apply (guide §6, §9)', () => {
     const s = await startedLooks();
     const { rt, ids, studio, st } = s;
     await rt.runCommand('roll.fromFrames', null, { analyse: false });
+    // roll.fromFrames writes the roll fields itself (CHB-020 follow-up): count units from here
+    const n0 = (f: string) => studio.frames.get(f)!.log.units.length;
+    const base = new Map(ids.map((f) => [f, n0(f)]));
     // frame 2 has been worked on
     studio.route.applyMutations(ids[1]!, [{ op: 'set', path: 'print.grade', value: 3 }], 'Grade');
     rt.runCommand('looks.pick', null, 'warm-print');
@@ -84,7 +87,7 @@ describe('apply (guide §6, §9)', () => {
     expect(p.frames.map((f) => f.frame)).toEqual([ids[0], ids[2], ids[3], ids[4], ids[5]]);
     expect(p.aggregate).toEqual([{ path: 'print.lights.logH', label: 'lights', frames: 5, short: 'R −4.0 pt, B +4.0 pt' }]);
     // nothing applied yet
-    expect(studio.frames.get(ids[0]!)!.log.units.length).toBe(0);
+    expect(n0(ids[0]!)).toBe(base.get(ids[0]!));
     rt.runCommand('looks.pending.toggle', null, ids[5]);
     // the photographer nudges frame 4's lights while the card waits
     studio.route.applyMutations(ids[3]!, [{ op: 'set', path: 'print.lights.logH', value: [0.01, 0, 0] }], 'Lights');
@@ -92,12 +95,12 @@ describe('apply (guide §6, §9)', () => {
     expect(Array.isArray(res)).toBe(true);
     expect(res[0].code).toBe('E_STALE');
     expect(looksView(st()).stale[0]!.message).toContain('frame-4.tif: print.lights.logH changed');
-    expect(studio.frames.get(ids[0]!)!.log.units.length).toBe(0);
+    expect(n0(ids[0]!)).toBe(base.get(ids[0]!));
     // Apply anyway: frame 4 is recomputed against its current lights (an offset on top of the nudge)
     expect(rt.runCommand('looks.pending.approve', null, true)).toBe(true);
     expect(lights(s, ids[3]!)).toEqual([-0.09, 0, 0.1]);
     expect(lights(s, ids[0]!)).toEqual([-0.1, 0, 0.1]);
-    expect(studio.frames.get(ids[5]!)!.log.units.length).toBe(0); // unticked
+    expect(n0(ids[5]!)).toBe(base.get(ids[5]!)); // unticked
     expect(studio.frames.get(ids[1]!)!.log.committed.print.lights.logH).toEqual([0, 0, 0]); // edited: not unedited
     expect(looksView(st()).pending).toBeNull();
     // one undo takes the look off all four frames
