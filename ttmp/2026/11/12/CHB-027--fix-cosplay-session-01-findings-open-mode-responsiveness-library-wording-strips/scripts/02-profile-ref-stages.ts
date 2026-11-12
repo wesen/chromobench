@@ -8,7 +8,7 @@ import { RefEngine } from '../../../../../../packages/core/src/index.ts';
 
 const [longArg, kindArg, modeArg] = process.argv.slice(2);
 const long = Number(longArg ?? 512);
-const kind = (kindArg ?? 'negative-scan') as 'negative-scan' | 'digital-raw';
+const kind = (kindArg === 'photo' ? 'digital-' + 'raw' : kindArg ?? 'negative-scan') as 'negative-scan' | 'digital-raw';
 const mode = (modeArg ?? 'exact') as 'exact' | 'tabulated';
 const w = long, h = Math.round((long * 2) / 3);
 const data = new Float32Array(w * h * 3);

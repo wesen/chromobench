@@ -5,7 +5,17 @@ import { makeM1Tiff } from '@chromobench/engine-mock';
 import { canonicalJSON, sha256Hex } from '@chromobench/contract';
 import { describe, expect, it, vi } from 'vitest';
 import { BURST_MS, frameRef, memoryKV } from '../src/index.ts';
+import { hashBytes } from '../src/bridge/frames.ts';
 import { recipePath, started } from './helpers.ts';
+
+describe('file identity (CHB-027)', () => {
+  it('hashBytes: WebCrypto for big files gives the contract\'s sha256Hex', async () => {
+    const big = new Uint8Array(3 << 20).map((_, i) => (i * 2654435761) >>> 24);
+    expect(await hashBytes(big)).toBe(sha256Hex(big));
+    const small = new Uint8Array([1, 2, 3]);
+    expect(await hashBytes(small)).toBe(sha256Hex(small));
+  });
+});
 
 const TIME = 'print.enlarger.time_s';
 

@@ -140,12 +140,13 @@ export class RenderQueue {
     for (const s of this.slots.values()) if (s.lane === 'live' && (s.inflight || s.waiting)) return true;
     return false;
   }
-  private pump(s: Slot): void {
+  private pump(s: Slot, later = false): void {
     if (s.inflight || !s.waiting) return this.checkIdle();
     const w = s.waiting;
-    if (w.opts.lane === 'bg' && this.liveBusy()) {
-      // live preempts background: try again when the page is idle (or when live work finishes)
-      if (this.opts.idle) this.opts.idle(() => this.pump(s), 'render:' + s.id);
+    // live preempts background: try again when the page is idle (or when live work finishes). With preemptBackground a
+    // background render never starts at once either, so a live request of the same frame goes to the engine first.
+    if (w.opts.lane === 'bg' && (this.liveBusy() || (this.preemptBackground && !later && this.opts.idle))) {
+      if (this.opts.idle) this.opts.idle(() => this.pump(s, true), 'render:' + s.id);
       return;
     }
     s.waiting = null;
@@ -192,7 +193,7 @@ export class RenderQueue {
   private after(s: Slot): void {
     this.pump(s);
     // live work done: let waiting background slots go
-    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== s && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x);
+    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== s && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x, true);
     this.checkIdle();
   }
   private isCached(r: Rendered): boolean {

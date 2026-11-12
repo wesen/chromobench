@@ -64,6 +64,9 @@ describe('render queue', () => {
     q.preemptBackground = true;
     const thumbs: string[] = [];
     q.request('thumb:x', fakeImage('t', { w: 1000, h: 500 }), { maxSide: 50, lane: 'bg', present: (r: any) => void thumbs.push(`${r.image.width}`) });
+    expect(b.pending).toBe(0); // a background render waits for an idle moment, so a live request of the same frame goes first
+    idle.shift()!();
+    expect(b.pending).toBe(1);
     q.request('vp:main:after', fakeImage('m', { w: 1000, h: 500 }), { maxSide: 300, present: () => undefined });
     expect(q.stats.aborted).toBe(1);
     await flush();
