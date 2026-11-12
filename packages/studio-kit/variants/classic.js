@@ -77,7 +77,7 @@ export default {
   label: 'Classic',
   description: 'Lightroom-like modules: Library, Roll, Print, Output',
   build: (ck, cb) => {
-    const s = cb.studio('Chromobench').theme('chromogen').use(cb.kits.roll.kit).use(cb.kits.finish.kit).menus(m => finishMenu(rollMenu(menus(m))));
+    const s = cb.studio('Chromobench').theme('craftkit').use(cb.kits.roll.kit).use(cb.kits.finish.kit).menus(m => finishMenu(rollMenu(menus(m))));
     s.module('library', libraryModule(ck, cb));
     s.module('roll', rollModule(ck, cb));
     s.module('print', printModule(ck, cb));

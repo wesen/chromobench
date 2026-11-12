@@ -20,7 +20,8 @@ import { menuBar } from '../app/chrome.ts';
 import { h, icon, setIcons, listen } from './h.ts';
 import { DomChrome } from './chrome.ts';
 import { DomDock } from './dock.ts';
-import { applyTheme } from './theme.ts';
+import { themeHandle } from './theme.ts';
+import { DEFAULT_THEME, resolveTheme } from '../themes/tokens.ts';
 
 export type Renderer = (n: NodeData, m: MountCtx) => Node | null;
 /** built-in renderers, registered by the forms modules when '@chromobench/shell/dom' is imported */
@@ -216,6 +217,8 @@ export class Binding {
 export interface DomServices extends Services {
   /** extra renderers by form name */
   renderers?: Record<string, Renderer>;
+  /** where the theme's tokens are written (default: the app root; a host frame passes document.documentElement) */
+  themeRoot?: HTMLElement;
 }
 
 export interface Mounted<S = any> {
@@ -260,13 +263,21 @@ export function mountRuntime<S>(rt: Runtime<S>, root: HTMLElement, services: Dom
 
   root.classList.add('ck-app');
   root.replaceChildren();
-  const offTheme = applyTheme(root, ir.theme ? ir.themes.get(ir.theme) ?? null : null);
+  // the theme and interface gray: prefs (View ▸ Theme, View ▸ Interface Gray) over the program's theme (CHB-025)
+  const themeTarget = services.themeRoot ?? root;
+  const theme = themeHandle(themeTarget, resolveTheme(ir.themes, DEFAULT_THEME));
   m.cell(
-    s => s.prefs?.gray,
+    s => `${rt.themeName(s)}|${s.prefs?.gray || 'auto'}`,
     v => {
-      root.dataset['gray'] = String(v || 'auto');
+      const [name, gray] = v.split('|') as [string, string];
+      theme.set(resolveTheme(ir.themes, name), gray);
+      if (themeTarget !== root) {
+        root.dataset['ckTheme'] = name;
+        root.dataset['gray'] = gray;
+      }
     },
   );
+  const offTheme = (): void => theme.dispose();
   // the menu bar (Help stays last)
   const bar = dom.chrome.menubar(menuBar(rt));
   const title = h('div', { class: 'ck-menubar-title' }, h('b', { text: ir.name }));

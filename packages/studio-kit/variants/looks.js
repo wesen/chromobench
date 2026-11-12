@@ -13,7 +13,7 @@ export default {
     const looks = cb.kits.looks;
     const s = cb
       .studio('Chromobench')
-      .theme('chromogen')
+      .theme('craftkit')
       .use(cb.kits.roll.kit)
       .use(looks.kit)
       .menus((m) =>

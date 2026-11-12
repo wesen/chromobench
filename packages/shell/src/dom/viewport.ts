@@ -33,11 +33,19 @@ export interface DomViewport extends ViewportApi {
 }
 
 const DEFAULT_COLOURS: Colours = { stage: [0.18, 0.18, 0.18], frame: [0, 0, 0] };
-const hexColour = (s: unknown): [number, number, number] | null => {
-  const m = typeof s === 'string' ? /^#([0-9a-f]{6})$/i.exec(s) : null;
-  if (!m) return null;
-  const v = parseInt(m[1]!, 16);
-  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+/** a CSS colour as 0–1 RGB: #rgb, #rrggbb or rgb()/rgba(); null for anything else */
+export const cssColour = (s: unknown): [number, number, number] | null => {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  let m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(t);
+  if (m) return [m[1]!, m[2]!, m[3]!].map(x => parseInt(x + x, 16) / 255) as [number, number, number];
+  m = /^#([0-9a-f]{6})$/i.exec(t);
+  if (m) {
+    const v = parseInt(m[1]!, 16);
+    return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+  }
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(t);
+  return m ? ([m[1]!, m[2]!, m[3]!].map(x => Math.min(255, Number(x)) / 255) as [number, number, number]) : null;
 };
 
 export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
@@ -60,7 +68,11 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
     if (x) hud.append(x);
   }
   if (p['background']) el.style.background = p['background'];
-  const colours: Colours = { ...DEFAULT_COLOURS, stage: hexColour(p['background']) ?? DEFAULT_COLOURS.stage };
+  // the stage around the picture: the program's background, else the theme's --canvas (CHB-025), read at paint time
+  const fixedStage = cssColour(p['background']);
+  const colours: Colours = { ...DEFAULT_COLOURS, stage: fixedStage ?? DEFAULT_COLOURS.stage };
+  const themeStage = (): [number, number, number] =>
+    fixedStage ?? (typeof getComputedStyle === 'function' ? cssColour(getComputedStyle(el).getPropertyValue('--canvas')) : null) ?? DEFAULT_COLOURS.stage;
   const presenter: Presenter = rt.services.presenter ? rt.services.presenter(cv) : new Canvas2DPresenter(cv);
   m.scope.onDispose(() => presenter.dispose());
   const viewPath = ['view', 'vp', vid];
@@ -183,8 +195,11 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
     const showBefore = V.compare === 'before' && V.before;
     presenter.setImages(showBefore ? V.before! : V.after, V.compare !== 'off' && V.compare !== 'before' ? V.before : null);
     const splitAt = V.compare === 'split' || V.compare === 'lr' || V.compare === 'tb' ? (V.ox + V.nw * V.s * V.split) / V.W : null;
+    colours.stage = themeStage();
     presenter.draw({ docW: V.nw, docH: V.nh, cx: (V.W / 2 - V.ox) / V.s, cy: (V.H / 2 - V.oy) / V.s, zoom: V.s, dpr: V.dpr, split: V.before ? splitAt : null }, colours);
   }
+  // a theme or interface gray change repaints the stage
+  if (!fixedStage) m.cell((s: any) => `${s.prefs?.theme ?? ''}|${s.prefs?.gray ?? ''}`, () => paint());
 
   // ── overlays: each is { read: τ, paint(svg, api, value, state) }; repainted on their state or a view change ──
   const ovs = ((p['overlays'] as any[]) || []).map((o, i) => ({ o, g: svgEl('g', { class: 'ck-ov ck-ov-' + (o.kind || i) }), value: undefined as unknown }));

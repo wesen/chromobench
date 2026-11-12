@@ -1,18 +1,22 @@
-/* The host frame around the shell-based studio: a bar for files and export on top, a status line at the bottom. */
+/* The host frame around the shell-based studio: a bar for files and export on top, a status line at the bottom.
+   CHB-025: on the shell's tokens, which the shell writes on <html> (themeRoot), so the frame follows View ▸ Theme and
+   View ▸ Interface Gray with the studio; before the studio mounts, shell.css's :root (CraftKit) applies. */
 html,
 body {
   margin: 0;
   height: 100%;
-  background: #1d1d1d;
-  color: #ddd;
-  font: 13px system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--app);
+  color: var(--text);
+  font: var(--fontSize, 12px) var(--font, system-ui, -apple-system, 'Segoe UI', sans-serif);
 }
 #app {
   position: fixed;
-  top: 38px;
-  bottom: 24px;
+  top: 34px;
+  bottom: 22px;
   left: 0;
   right: 0;
+  /* .ck-app sets height: 100%, which would run the app under the status line */
+  height: auto;
 }
 .hb {
   position: fixed;
@@ -22,57 +26,66 @@ body {
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  background: #262626;
-  border-bottom: 1px solid #3a3a3a;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--line);
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 #bar {
   top: 0;
-  height: 38px;
+  height: 34px;
 }
 .hb-status {
   bottom: 0;
-  height: 24px;
-  border-top: 1px solid #3a3a3a;
+  height: 22px;
+  border-top: 1px solid var(--line);
   border-bottom: 0;
-  font-size: 12px;
-  color: #aaa;
+  font-size: 11px;
+  color: var(--text2);
 }
 .hb .brand {
   font-weight: 600;
   margin-right: 8px;
-  color: #eee;
+  color: var(--strong);
 }
 .hb .brand i {
-  font-weight: normal;
-  color: #999;
+  font-weight: 300;
+  color: var(--text2);
 }
 .hb button,
 .hb select,
 .hb .file {
   font: inherit;
   font-size: 12px;
-  color: #ddd;
-  background: #333;
-  border: 1px solid #4a4a4a;
-  border-radius: 4px;
-  padding: 3px 9px;
-  cursor: pointer;
+  height: 24px;
+  color: var(--text);
+  background: var(--panel3);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius, 3px);
+  padding: 0 10px;
+  cursor: default;
+  box-sizing: border-box;
+}
+.hb select {
+  padding: 0 4px;
 }
 .hb button:hover,
 .hb .file:hover {
-  background: #3d3d3d;
+  background: var(--hover);
+  border-color: var(--text3);
 }
 .hb button.primary {
-  background: #b7791f;
-  border-color: #b7791f;
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--onaccent);
+}
+.hb button.primary:hover {
+  background: var(--accent2);
 }
 .hb button:disabled {
   opacity: 0.45;
-  cursor: default;
 }
 .hb input[type='file'] {
   display: none;
@@ -82,22 +95,23 @@ body {
 }
 .hb .sep {
   width: 1px;
-  height: 20px;
-  background: #444;
+  height: 18px;
+  background: var(--line);
   margin: 0 4px;
 }
 .hb label {
-  color: #aaa;
+  color: var(--text2);
   font-size: 12px;
 }
 .pill {
-  background: #333;
+  background: var(--panel3);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  padding: 1px 8px;
-  color: #ddd;
+  padding: 0 8px;
+  color: var(--text2);
 }
 #notes {
-  color: #999;
+  color: var(--text3);
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 45%;
@@ -108,7 +122,7 @@ body {
   text-overflow: ellipsis;
 }
 #status.is-error {
-  color: #f08070;
+  color: var(--err);
 }
 .boot,
 .report {
@@ -117,9 +131,12 @@ body {
 }
 .report pre {
   white-space: pre-wrap;
-  background: #111;
+  background: var(--field);
+  border: 1px solid var(--line);
   padding: 12px;
+  font-family: var(--mono, monospace);
 }
-.boot a {
-  color: #e8a33c;
+.boot a,
+.report a {
+  color: var(--accent);
 }

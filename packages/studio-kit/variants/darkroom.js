@@ -7,7 +7,7 @@ export default {
   build: (ck, cb) =>
     cb
       .studio('Chromobench')
-      .theme('chromogen')
+      .theme('craftkit')
       .left(ck.dock.column({ width: 200 }, cb.view.strip({ vertical: true }), cb.panel.history()))
       .center(
         cb.viewer(s => cb.frame(s)?.print() ?? null, {

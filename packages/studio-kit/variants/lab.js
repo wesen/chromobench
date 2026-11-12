@@ -8,7 +8,7 @@ export default {
   label: 'Lab',
   description: 'Everything, plus inspectors',
   build: (ck, cb) => {
-    const s = cb.studio('Chromobench').theme('chromogen').menus(menus);
+    const s = cb.studio('Chromobench').theme('craftkit').menus(menus);
     s.module('library', libraryModule(ck, cb));
     s.module('print', printModule(ck, cb, { extraRight: [cb.panel.why()] }));
     s.module('assistant', cb.kits.chat.module());

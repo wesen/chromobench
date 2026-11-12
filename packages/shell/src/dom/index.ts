@@ -15,7 +15,7 @@ export { mount, mountRuntime, defineRenderer, RENDERERS, MountCtx, Binding, setD
 export type { Renderer, DomApp, DomServices, Mounted } from './mount.ts';
 export { DomChrome } from './chrome.ts';
 export { DomDock } from './dock.ts';
-export { applyTheme } from './theme.ts';
+export { applyTheme, themeHandle, type ThemeHandle } from './theme.ts';
 export { h, append, svgEl, icon, hasIcon, listen, clear, drag } from './h.ts';
 export * as habits from './habits.ts';
 export { resettables } from './forms/container.ts';

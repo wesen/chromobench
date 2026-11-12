@@ -4,10 +4,34 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CommandSpec } from '../core/commands.ts';
 import type { Runtime } from './runtime.ts';
+import type { Theme } from '../build/types.ts';
+import { GRAY_IDS } from '../themes/tokens.ts';
 
 export const GRAYS: Record<string, string> = { auto: 'Auto', 1: 'Darkest', 2: 'Dark', 3: 'Medium Gray', 4: 'Light' };
 
-export function builtinCommands(get: () => Runtime<any> | null): Record<string, CommandSpec> {
+/** the command groups menus pick the theme and gray choices from: { label: 'Theme', items: [{ group: 'Theme' }] } */
+export const THEME_GROUP = 'Theme';
+export const GRAY_GROUP = 'Interface Gray';
+
+/** View ▸ Theme: one checked command per registered theme (CHB-025); View ▸ Interface Gray: auto and the four grays */
+function themeCommands(get: () => Runtime<any> | null, themes: Iterable<Theme>): Record<string, CommandSpec> {
+  const out: Record<string, CommandSpec> = {};
+  const rt = (): Runtime<any> => {
+    const r = get();
+    if (!r) throw new Error('built-in commands run only in a started app');
+    return r;
+  };
+  for (const t of themes) {
+    const label = t.label ?? t.name.charAt(0).toUpperCase() + t.name.slice(1);
+    out['view.theme.' + t.name] = { label, group: THEME_GROUP, ...(t.doc ? { doc: t.doc } : {}), checked: (s: any) => get()?.themeName(s) === t.name, run: () => rt().setTheme(t.name) };
+  }
+  for (const g of GRAY_IDS) {
+    out['view.gray.' + g] = { label: g === 'auto' ? 'Auto (follows the system)' : GRAYS[g]!, group: GRAY_GROUP, checked: (s: any) => String(s.prefs?.gray || 'auto') === g, run: () => rt().setGray(g) };
+  }
+  return out;
+}
+
+export function builtinCommands(get: () => Runtime<any> | null, themes: Iterable<Theme> = []): Record<string, CommandSpec> {
   const rt = (): Runtime<any> => {
     const r = get();
     if (!r) throw new Error('built-in commands run only in a started app');
@@ -63,5 +87,6 @@ export function builtinCommands(get: () => Runtime<any> | null): Record<string, 
     'tool.none': { label: 'No Tool', run: () => rt().selectTool(null), palette: false },
     'app.escape': { label: 'Cancel', palette: false, run: () => rt().escape() },
     'app.theme': { label: (s: any) => `Interface Gray: ${GRAYS[s.prefs?.gray] || 'Auto'}`, menu: 'View', run: () => rt().cycleGray() },
+    ...themeCommands(get, themes),
   };
 }

@@ -12,7 +12,7 @@ export default {
     const roll = cb.kits.roll;
     const s = cb
       .studio('Chromobench')
-      .theme('chromogen')
+      .theme('craftkit')
       .use(roll.kit)
       .menus(m => rollMenu(menus(m)));
     // the same Roll module as the classic variant, here first and on G

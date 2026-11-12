@@ -200,9 +200,9 @@ export function buildApp<S>(def: ShellDef, self: any, ck: CkCore, opts: { platfo
   const kits = orderKits(def.uses, D);
   installKits(ir, kits, D, def.init || {});
   // CraftKit compatibility: panels defined anywhere through this ck instance
-  const extra = { D, platform, builtins: builtinCommands(() => null), registry: ck.panels };
+  const extra = { D, platform, builtins: builtinCommands(() => null, ir.themes.values()), registry: ck.panels };
   const res = runPasses('ui', ir, ir.passes, { D, extra, explain: x => ck.explain(x) });
-  const asm = (res.facts.get('assembled') as Assembled | undefined) ?? assemble(ir, builtinCommands(() => null), platform);
+  const asm = (res.facts.get('assembled') as Assembled | undefined) ?? assemble(ir, builtinCommands(() => null, ir.themes.values()), platform);
   res.facts.set('assembled', asm);
   runPasses('ui', ir, [summaryPass], { D, extra, explain: x => ck.explain(x), facts: res.facts });
   const fidx = (res.facts.get('fragments') as FragmentIndex | undefined) ?? null;
