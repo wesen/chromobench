@@ -10,3 +10,4 @@
 - [ ] Cosplay re-run of session 01; before/after table in the diary <!-- t:m5pv -->
 - [ ] Real-GPU check in a normal Chromium: WebGPU canvas presentation, frame times for a 24 MP file, drag stalls (from CHB-017 07g7, CHB-023 4h85, CHB-026 wo3t) <!-- t:37lv -->
 - [ ] After merge: delete merged task/* branches and agent worktrees (from CHB-017 d98b) <!-- t:5dta -->
+- [ ] Drag-latency measurement in a test (from CHB-019 oizm/cebs; WS-B's measurement script is the start) <!-- t:akjc -->

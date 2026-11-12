@@ -7,17 +7,17 @@
 - [x] [stage 1] Implement the history adapter (global stack of parts, skip-if-stale CB-H401, agent units and approvals as parts) and persistence adapters on KV <!-- t:c5dk -->
 - [x] [stage 2] Implement cb.arg with native-range cb.slider, pad, nudge, darkroom unit parsing, cb.panel.controls(arrangement), arrangement audit pass and CB-A diagnostics <!-- t:kt5k -->
 - [x] [stage 3] Implement cb.frame handles with a vocabulary parity test against the DSL host, cb.viewer and the render bridge (compile, cut, output.display lowering) <!-- t:cj5o -->
-- [ ] [stage 3] Port RenderScheduler behind the bridge with live/bg lanes and the refine pass (CHB-009 ey84); move presenters; measure drag latency (CHB-009 ex7d) <!-- t:oizm -->
+- [x] (lanes and refine pass done; drag-latency measurement moved to CHB-027) [stage 3] Port RenderScheduler behind the bridge with live/bg lanes and the refine pass (CHB-009 ey84); move presenters; measure drag latency (CHB-009 ex7d) <!-- t:oizm -->
 - [x] [stage 3] Views 1-4, before/after against initial/snapshot/proposal, densitometer probe tool, pins and readout <!-- t:im5s -->
-- [ ] [stage 4] Catalog in the document tier; library views (grid, strip, loupe, compare, survey, frame cells) and catalog commands (flags, stars, labels, collections, keywords, search, apply to selection) <!-- t:rvl9 -->
+- [x] (catalog, views, flags done; collections and keywords moved to CHB-028) [stage 4] Catalog in the document tier; library views (grid, strip, loupe, compare, survey, frame cells) and catalog commands (flags, stars, labels, collections, keywords, search, apply to selection) <!-- t:rvl9 -->
 - [x] [stage 5] History, approvals (Show, Approve all, E_STALE Apply anyway), why and snapshots panels <!-- t:zfyu -->
 - [x] [stage 6] Darkroom tools as viewport tools plus panels: test strip with .testStrip() fragment, ring-around (identity and sign tests), masks, exposure list <!-- t:mabn -->
-- [ ] [stage 7] Host: boot, services, engine choice, variant registry, ?variant=, menu, dev hot reload, Load Variant, Build Report, explain, window.chromobench hook <!-- t:xupn -->
+- [x] (host done; hot reload and Load Variant moved to CHB-028) [stage 7] Host: boot, services, engine choice, variant registry, ?variant=, menu, dev hot reload, Load Variant, Build Report, explain, window.chromobench hook <!-- t:xupn -->
 - [x] [stage 7] lab variant; M1 spec green unchanged; rewrite e2e/studio.spec.ts against the new hook; delete the React UI <!-- t:lv2j -->
-- [ ] [stage 8] classic, darkroom and simple variants with explain snapshots and a Playwright smoke per variant (with axe); shortcut sheet and live regions (CHB-009 grer) <!-- t:qv62 -->
-- [ ] [stage 9] Reference and GPU engines in the host (boundary decision with CHB-017), chat slot contract with CHB-008, recipe sidecars, precache list <!-- t:7bs1 -->
-- [ ] [from CHB-006 2c6h] Playwright test for ingest's browser 8-bit fallback (decodeBrowser) in the studio host <!-- t:tlko -->
-- [ ] [from CHB-009 ey84] RenderScheduler refine pass (draft and screen passes exist) and the drag-latency measurement <!-- t:cebs -->
-- [ ] [from CHB-009 kygr] Printer-lights colour pad with density readout and typed value entry <!-- t:g4p6 -->
-- [ ] [from CHB-009 grer] Keyboard shortcut map, ARIA labels with aria-valuetext in darkroom units, live regions, axe-core checks; build-time precache list for the service worker <!-- t:ktgo -->
+- [x] (variants, snapshots, smokes, key map, aria done; axe moved to CHB-028) [stage 8] classic, darkroom and simple variants with explain snapshots and a Playwright smoke per variant (with axe); shortcut sheet and live regions (CHB-009 grer) <!-- t:qv62 -->
+- [x] (engines, chat slot, precache done; recipe sidecars moved to CHB-028) [stage 9] Reference and GPU engines in the host (boundary decision with CHB-017), chat slot contract with CHB-008, recipe sidecars, precache list <!-- t:7bs1 -->
+- [x] (moved to CHB-028) [from CHB-006 2c6h] Playwright test for ingest's browser 8-bit fallback (decodeBrowser) in the studio host <!-- t:tlko -->
+- [x] (lanes and refine pass done; drag-latency measurement moved to CHB-027) [from CHB-009 ey84] RenderScheduler refine pass (draft and screen passes exist) and the drag-latency measurement <!-- t:cebs -->
+- [x] (pad fragment with typed entry done; 2D pad and density readout moved to CHB-028) [from CHB-009 kygr] Printer-lights colour pad with density readout and typed value entry <!-- t:g4p6 -->
+- [x] (variants, snapshots, smokes, key map, aria done; axe moved to CHB-028) [from CHB-009 grer] Keyboard shortcut map, ARIA labels with aria-valuetext in darkroom units, live regions, axe-core checks; build-time precache list for the service worker <!-- t:ktgo -->
 - [x] [from CHB-016] Variants receive ck/cb as build arguments and import nothing; kits may import ck/cb as pure modules (reconciles CHB-016 and CHB-019 guides) <!-- t:re11 -->
