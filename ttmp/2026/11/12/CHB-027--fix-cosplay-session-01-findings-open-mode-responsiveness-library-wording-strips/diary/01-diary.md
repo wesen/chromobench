@@ -80,3 +80,56 @@ commits; subagents allowed.
 ### Technical details
 - Workstream branches: `task/chb-027-open-mode`, `task/chb-027-responsive`, `task/chb-027-wording`,
   `task/chb-027-strip-frames`.
+
+## Step 2: Three workstream agents launched; top bar folded into the menus (scope added to WS-A)
+
+I launched WS-A, WS-B and WS-C as background agents, each in its own git worktree, with a common brief
+(`scratchpad/chb027-brief-common.md`: plan as spec, lanes per the ownership table, checks green per commit,
+browser tests on per-agent ports, private photos read-only and skipped when absent, their own diary file, no MCP
+browser). The user then asked why the host top bar is separate from the menus. There is no technical reason, so
+folding it into the menus was added to WS-A's scope by message.
+
+### Prompt Context
+**User prompt (verbatim):** "should we address the issues before running the agents? or are you running implementation agents" and "also, couldn't we merge the top bar commands into the menus proper? why is it separate anyway?"
+**Assistant interpretation:** Clarify that these are implementation agents (cosplay testers come after the merge);
+fold the host bar into the shell's menus.
+**Inferred user intent:** Test only after fixing; one place for commands, like a real desktop application.
+
+### What I did
+- Agents: WS-A (`task/chb-027-open-mode`, ports 4711/4721–4724), WS-B (`task/chb-027-responsive`, 4811/4821–4824),
+  WS-C (`task/chb-027-wording`, 4911/4921–4924).
+- Checked where the menus live: the variants' menus and commands are declared in `packages/studio-kit/src/cb.ts`
+  (e.g. "Save the Print"); the host bar is plain DOM in `apps/studio/src/main.ts`.
+- Message to WS-A: the host registers Open Files… (Ctrl+O), Open Folder…, Reopen, Open as ▸ Auto/Photo/Negative,
+  Export… (Ctrl+E, format and space in an export dialog), Save Recipe and View ▸ Layout as runtime commands; the
+  menus reference them (hidden in hosts without them); the Undo/Redo buttons go; "offline ready" moves to the
+  status bar, "dust" becomes an option; the bar is removed.
+
+### Why
+- The bar exists because studio-kit may import only the contract and the shell (CHB-019 boundaries), so host
+  actions (decoder, export writer, layouts) were wired as host DOM instead of contributed commands.
+- WS-A already owns `main.ts`, the top bar and the File menu; a fourth agent there would conflict.
+
+### What worked
+- N/A (in progress).
+
+### What didn't work
+- N/A.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- e2e specs that click top-bar controls (`#file`, `#export`, `#variant`, `#photo`) must move with the bar.
+
+### What should be done in the future
+- Cosplay testers after the merge: a session-01 re-run, then S01, S05, S09.
+
+### Code review instructions
+- N/A.
+
+### Technical details
+- The CHB-027 tasks map: 9wcz, j9hg (WS-A), 6p1c (WS-B), ik6l (WS-C).
