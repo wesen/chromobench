@@ -2,7 +2,7 @@
 
 ## TODO
 - [x] [stage 1] Turn the QuickJS spike into tests: host-promise awaits, interrupts before and after await, memory limit, default globals, asyncify re-entry <!-- t:kfdz -->
-- [ ] [stage 1] Record DR-1 (QuickJS vs Worker+CSP) and DR-2 (sync variant vs asyncify) and get the change to the ticket plan confirmed — awaiting the user's confirmation (implemented as proposed; cg16 spike tests are the evidence) <!-- t:zr25 -->
+- [x] [stage 1] Record DR-1 (QuickJS vs Worker+CSP) and DR-2 (sync variant vs asyncify) and get the change to the ticket plan confirmed — awaiting the user's confirmation (implemented as proposed; cg16 spike tests are the evidence) <!-- t:zr25 -->
 - [x] [stage 1] Implement createVm (limits, Date off, seeded frozen Math.random, console capture) and the 1000-eval handle-leak test <!-- t:gjoh -->
 - [x] [stage 1] Implement the eval pump with deadline, stall detection, cancellation of host work, and probe-and-restart after memory errors <!-- t:2ki7 -->
 - [x] [stage 1] Implement the DSL worker and DslSession RPC, including node-closure shipping and Graph.adopt on the main thread — moved to CHB-008 <!-- t:44uo -->
