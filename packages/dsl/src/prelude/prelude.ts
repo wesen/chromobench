@@ -225,8 +225,48 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     search: (text) => H('docs', { op: 'search', text: String(text) }),
     read: (id, opts) => H('docs', { op: 'read', id: String(id), section: opts && opts.section }),
   }));
+  // ---- cb.looks (CHB-021): the studio's looks, resolved per frame into proposed edits (one batch, one card) ----
+  const whatIfs = new WeakMap();
+  function toIds(to) {
+    if (Array.isArray(to)) return to.map((x) => (x && typeof x === 'object' && typeof x.id === 'string' ? x.id : x));
+    if (to && typeof to === 'object' && typeof to.id === 'string' && !('roll' in to)) return to.id;
+    return to;
+  }
+  function lookRef(x) {
+    if (x && typeof x === 'object' && whatIfs.has(x)) return { whatIf: whatIfs.get(x) };
+    if (typeof x === 'string') return { frame: x };
+    if (x && typeof x === 'object' && typeof x.id === 'string' && !isHandle(x)) return { frame: x.id };
+    return H('argType', { what: 'cb.looks.diff', expect: 'two frames or what-ifs: cb.looks.diff(frame, cb.looks.whatIf(frame, name))' });
+  }
+  const looksObj = guarded('cb.looks', Object.freeze({
+    list: () => H('looks.list'),
+    apply: (name, params, opts) => {
+      const o = Object.assign({}, opts || {});
+      if (o.to && typeof o.to === 'object' && !Array.isArray(o.to) && typeof o.to.where === 'function') {
+        o.where = o.to.where;
+        o.to = Object.assign({}, o.to);
+        delete o.to.where;
+      }
+      if (typeof o.where === 'function') {
+        const pred = o.where;
+        const cands = H('looks.targets', { to: marshal(o.to === undefined ? 'all' : toIds(o.to), 0) });
+        o.to = cands.filter((x) => pred(Object.freeze(x))).map((x) => x.id);
+        delete o.where;
+      } else if (o.to !== undefined) o.to = toIds(o.to);
+      return Object.freeze(H('looks.apply', { name: String(name), params: marshal(params === undefined ? {} : params, 0), opts: marshal(o, 0), at: callerLine() }));
+    },
+    whatIf: (f, name, params, opts) => {
+      const r = H('looks.whatIf', { frame: frameIdOf(f), name: String(name), params: marshal(params === undefined ? {} : params, 0), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() });
+      const h = wrap(r.preview);
+      const obj = Object.freeze({ look: r.look, label: r.label, frame: r.frame, diff: r.diff, mutations: r.mutations, skipped: r.skipped, print: () => h, toString: () => '[what-if ' + r.label + ' on ' + r.frame + ']' });
+      whatIfs.set(obj, r.key);
+      return obj;
+    },
+    diff: (a, b) => H('looks.diff', { a: lookRef(a), b: lookRef(b) }),
+  }));
   const cbObj = {
     version: T.version,
+    looks: looksObj,
     frames: () => H('frames'),
     frame: (id) => frameObj(H('frameId', { id: id })),
     help: (name) => H('help', { name: name === undefined ? null : (isHandle(name) ? handles.get(name).op : String(name)) }),

@@ -1,4 +1,4 @@
-// The studio-kit dev host: mounts a variant (?variant=classic|darkroom|simple|lab|tiny) on MockEngine with the M1
+// The studio-kit dev host: mounts a variant (?variant=classic|darkroom|simple|lab|tiny|roll|looks) on MockEngine with the M1
 // fixture TIFF plus a few synthetic frames of the same roll, the Canvas2D presenter and a KV in localStorage
 // (?fresh: in memory). window.chromobench is the test hook (CHB-009's surface: log, propose, … plus app, variant,
 // explain, run). An unknown variant shows the Build Report page with a did-you-mean.
@@ -17,6 +17,8 @@ import '../src/dom/studio-kit.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '../variants/index.js';
 import { ROLL_RENDERERS } from '../kits/roll/src/dom.ts';
 import '../kits/roll/src/roll.css';
+import { LOOKS_RENDERERS } from '../kits/looks/src/dom.ts';
+import '../kits/looks/src/looks.css';
 import { plantedStrip } from '@chromobench/ingest';
 import { rollPhysics } from './roll-physics.ts';
 import fixtureUrl from '../../../fixtures/synthetic/m1-negative-96x64.tif?url';
@@ -112,7 +114,7 @@ async function main(): Promise<void> {
     a.href = cv.toDataURL('image/png');
     a.click();
   };
-  const { rt } = await mountStudio(built.app, root, studio, { save, rollPhysics: rollPhysics(), renderers: ROLL_RENDERERS });
+  const { rt } = await mountStudio(built.app, root, studio, { save, rollPhysics: rollPhysics(), renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS } });
   if (def.id === 'roll') {
     for (const fr of plantedRoll()) await studio.open(fr.bytes, fr.name);
   } else {

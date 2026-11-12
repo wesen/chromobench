@@ -3,6 +3,7 @@ import { EditLog, defaultRecipe, sha256Hex, type AgentMode, type EvalResult, typ
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { DslSession, type DslLimits } from '../src/index.ts';
 import { docsProvider } from '../src/docs/provider.ts';
+import { testLooks } from './looks-provider.ts';
 
 export const FRAME = 'frame_m1';
 /** Centre of the M1 grey patch (same transmittance as the guide's §7 grey card). */
@@ -24,7 +25,7 @@ export async function setup(opts: { mode?: AgentMode; limits?: Partial<DslLimits
   if (opts.recipe) recipe = opts.recipe(recipe);
   let t = 1000;
   const log = EditLog.create(recipe, { mode: opts.mode ?? 'ask', now: () => t++ });
-  const session = await DslSession.create({ engine, frames: { [FRAME]: { log, source, name: 'M1 test negative' } }, docs: docsProvider(), ...(opts.limits ? { limits: opts.limits } : {}) });
+  const session = await DslSession.create({ engine, frames: { [FRAME]: { log, source, name: 'M1 test negative' } }, docs: docsProvider(), looks: testLooks(), ...(opts.limits ? { limits: opts.limits } : {}) });
   return {
     session, engine, log, recipe,
     run: (code, o = {}) => session.eval({ code, ...(o.frame === null ? {} : { frame: o.frame ?? FRAME }), ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) }),

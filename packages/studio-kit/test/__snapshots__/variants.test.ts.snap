@@ -158,7 +158,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 51 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 60 · keys 51 in 4 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -258,7 +258,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 25 in 3 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 25 in 3 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
@@ -518,7 +518,213 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 63 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 60 · keys 63 in 5 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
+module library "Library" key G
+  left   dockcol  width 236
+           panel navigator "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel library "Library"
+             cb.library
+  center column  grow 1
+           cb.filter
+           match  of [grid, loupe, compare, survey]  on τ
+             cases.grid:
+               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+             cases.loupe:
+               column  class "cb-viewer"  grow 1
+                 cb.ribbon
+                 viewport loupe τ  image τ  overlays: 
+             cases.compare:
+               row  grow 1
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-a τ  image τ  overlays: 
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-b τ  image τ  overlays: 
+             cases.survey:
+               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 260
+           panel metadata "Metadata"
+             cb.metadata
+  bottom dockcol  width 124
+           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module print "Print" key D
+  left   dockcol  width 300
+           panel looks-library "Looks"
+             segmented "Group"  bind looksView.group  options [{…}, {…}, {…}, {…}, {…}]  small
+             gridview looks-library-grid  cell θ  empty "No looks in this group"  items τ  key θ  size τ
+           panel snapshots "Snapshots"
+             cb.snapshots
+           panel history "History"
+             cb.history
+  center match  of [print, survey]  on τ
+           cases.print:
+             column  class "cb-viewer"  grow 1
+               segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+               cb.ribbon
+               match  of [view, ring]  on τ
+                 cases.view:
+                   viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip]
+                     hud:
+                       cb.readout
+                 cases.ring:
+                   column  class "cb-ring"  grow 1
+                     text "Ring-around, 4 pt: click the print that looks …  strong
+                     grid  class "cb-ring-grid"  cols 3
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                       column  class "cb-ring-tile is-current"
+                         thumb  image τ
+                         button  run tool.none  small  text "Keep this one"
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                       spacer
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                       spacer
+                     row  class "cb-ring-density"
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                       column  class "cb-ring-tile"
+                         thumb  image τ
+                         button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+           cases.survey:
+             column  class "cb-looks-survey"  grow 1
+               row  class "cb-looks-survey-bar"
+                 text τ  strong
+                 segmented "Survey"  bind looksView.survey  options [{…}, {…}]  small
+                 button  run looks.survey.open  small  text "Back to the print"
+               gridview looks-survey  cell θ  empty "Add looks to the survey (Survey ± in the libra…  items τ  key θ  size τ
+  right  dockcol  width 320
+           panel looks-params "Look"
+             looks.params  model τ
+           panel looks-amount "Amount"
+             looks.amount  model τ
+           panel looks-diff "What changed"
+             looks.diff  model τ
+           panel looks-compare "Compare with"
+             looks.compare  model τ
+           panel looks-card "Look batches"
+             looks.card  model τ
+           panel approvals "Agent proposals"
+             cb.approvals
+           panel enlarger "Enlarger"
+             cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+             cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
+             cb.arg  path "print.paper"  rollScope "frame"  select
+           panel looks-groups "Sync groups"
+             looks.groups  model τ
+           panel looks-presets "Presets"
+             looks.presets  model τ
+  bottom dockcol  width 124
+           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+commands
+  frame.pick "Flag as Pick" (Frame) P ← cb.core
+  frame.reject "Reject" (Frame) X ← cb.core
+  frame.unflag "Unflag" (Frame) U ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) \\ ← cb.core
+  view.sideBySide "Side by Side" (View) Y ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) S ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) P ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+  roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
+  roll.select "Select Roll" ← cb.roll
+  roll.analyse "Analyse Roll" (Roll) ← cb.roll
+  roll.firstPrint "First Print of the Roll" (Roll) ← cb.roll
+  roll.setReference "Set as Roll Reference" (Roll) ← cb.roll
+  roll.matchToReference "Print the Roll Like the Reference" (Roll) ← cb.roll
+  roll.alpha "Roll Consistency" ← cb.roll
+  roll.pending.toggle "Include Frame" ← cb.roll
+  roll.pending.approve "Approve Roll Batch" ← cb.roll
+  roll.pending.reject "Reject Roll Batch" ← cb.roll
+  roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
+  roll.setShared "Set on the Roll" ← cb.roll
+  roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
+  roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
+  roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
+  roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
+  looks.pick "Pick Look" ← cb.looks
+  looks.param "Set Look Parameter" ← cb.looks
+  looks.amount "Look Amount" ← cb.looks
+  looks.from "Amount From" ← cb.looks
+  looks.preview "Preview Look" (Looks) ← cb.looks
+  looks.apply "Apply Look to Selection" (Looks) Ctrl+Enter ← cb.looks
+  looks.applyToSelection "Apply Look to Selected Frames" ← cb.looks
+  looks.applyToRoll "Apply Look to the Roll’s Unedited Frames…" (Looks) ← cb.looks
+  looks.applyToLibrary "Apply Look to the Library…" (Looks) ← cb.looks
+  looks.pending.toggle "Include Frame" ← cb.looks
+  looks.pending.approve "Apply Planned Look" ← cb.looks
+  looks.pending.reject "Cancel Planned Look" ← cb.looks
+  looks.batch.toggle "Include Frame in Batch" ← cb.looks
+  looks.batch.approve "Approve Agent Look Batch" ← cb.looks
+  looks.batch.reject "Reject Agent Look Batch" ← cb.looks
+  looks.survey.open "Survey Looks" (Looks) N ← cb.looks
+  looks.survey.toggle "Add Look to Survey" ← cb.looks
+  looks.compare "Compare With" ← cb.looks
+  looks.setReference "Compare With This Frame" (Looks) ← cb.looks
+  looks.snapshot "Snapshot" (Looks) Ctrl+Alt+N ← cb.looks
+  looks.restoreSnapshot "Restore Snapshot" ← cb.looks
+  looks.copy "Copy Settings" (Looks) ← cb.looks
+  looks.paste "Paste Settings" (Looks) ← cb.looks
+  looks.sync "Sync Settings to Selection" (Looks) ← cb.looks
+  looks.saveAsPreset "Save Frame as Preset…" (Looks) ← cb.looks
+  looks.bake "Save Look as Preset" (Looks) ← cb.looks
+  looks.deletePreset "Delete Preset" ← cb.looks
+  looks.importPreset "Import Preset" ← cb.looks
+  looks.exportPreset "Export Preset" ← cb.looks
+  looks.favourite "Favourite Look" ← cb.looks
+  looks.group "Look Group" ← cb.looks
+  looks.syncGroup "Sync Group" ← cb.looks
+  looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
+  looks.match "Match to Reference" (Looks) ← cb.looks
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
+commands 109 · keys 53 in 4 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
@@ -675,7 +881,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 75 · keys 48 in 4 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 75 · keys 48 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
@@ -772,7 +978,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 22 in 3 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 22 in 3 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -832,7 +1038,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 19 in 2 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 19 in 2 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
@@ -840,6 +1046,7 @@ exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] 
   "classic": [],
   "darkroom": [],
   "lab": [],
+  "looks": [],
   "roll": [],
   "simple": [],
   "tiny": [],
