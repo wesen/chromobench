@@ -2,7 +2,8 @@
 // mixed base), as 16-bit TIFFs a MockEngine opens; the roll physics from ingest + core; a started roll studio.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { MockEngine, writeTiff16 } from '@chromobench/engine-mock';
+import { MockEngine } from '@chromobench/engine-mock';
+import { writeTiff16 } from '@chromobench/ingest';
 import { plantedStrip, type PlantedStrip } from '@chromobench/ingest';
 import { CHROMOGEN, interimData, scannerForward } from '@chromobench/core';
 import { manualClock, type ManualClock } from '@chromobench/shell/testing';

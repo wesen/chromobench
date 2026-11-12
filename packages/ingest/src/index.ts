@@ -4,7 +4,7 @@ export { formatError, NeedsLibRaw } from './decode/errors.ts';
 export * from './decode/codecs.ts';
 export * from './decode/encoding.ts';
 export * from './decode/identity.ts';
-export { decodeTiff, readIfds, chooseImage, isTiff, readDngColour, dngColourOf, T as TIFF_TAGS, PHOTOMETRIC, type Ifd } from './decode/tiff.ts';
+export { decodeTiff, readTiffCodes, readIfds, chooseImage, isTiff, readDngColour, dngColourOf, T as TIFF_TAGS, PHOTOMETRIC, type Ifd, type TiffCodes } from './decode/tiff.ts';
 export * from './decode/tiff-write.ts';
 export * from './decode/png.ts';
 export * from './decode/linear.ts';

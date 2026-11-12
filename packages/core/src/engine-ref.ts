@@ -7,7 +7,7 @@ import {
   type Box, type Diagnostic, type Domain, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
-import { readTiff } from '@chromobench/engine-mock';
+import { readTiffCodes } from '@chromobench/ingest';
 import { nodePhysicsData as interimData } from '@chromobench/data/node';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
@@ -186,7 +186,7 @@ export class RefEngine implements Engine {
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = sha256Hex(bytes);
     if (source.sha256 && source.sha256 !== sha) fail('E_DATA_HASH', `source bytes hash to ${sha.slice(0, 12)}…, not ${source.sha256.slice(0, 12)}…`);
-    const raw = readTiff(bytes);
+    const raw = readTiffCodes(bytes);
     const max = raw.bits === 16 ? 65535 : 255;
     const img = newImg(raw.width, raw.height, 3);
     let clipped = 0;

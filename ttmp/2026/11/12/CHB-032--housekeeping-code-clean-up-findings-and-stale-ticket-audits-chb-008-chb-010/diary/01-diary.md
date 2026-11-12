@@ -191,3 +191,70 @@ nothing remains.
 ### Technical details
 - New task ids. CHB-008: saxi, 7v7v, kbxw, 3hb1, kd8u, qur1, 5yyv, eqyx, vg50. CHB-010: mj68, fx3n, dotm, f1kv, i3wj,
   gynm, odj8.
+
+## Step 3: The real engines stop importing the mock (task 02r5)
+
+`RefEngine.open` and `GpuEngine.open` read TIFF bytes through `readTiff` from `@chromobench/engine-mock`, a shim
+that itself only wrapped ingest's `decodeTiff`. The reader moved into ingest as `readTiffCodes` (same code, same
+output shape), the engines import it from there, and `packages/engine-mock/src/tiff16.ts` is gone. Test fixtures that
+took `writeTiff16` from the mock now take it from ingest. Same test counts as the baseline.
+
+With that, `@chromobench/core` and `@chromobench/gpu` no longer need the mock at run time: core's dependency moved to
+devDependencies (its tests still use `makeM1Tiff`), gpu dropped it (only `src/parity/synthetic.ts` used it, for
+`writeTiff16`).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Task 02r5: real engines read TIFF through ingest; delete the shim, keeping what the mock
+needs (`makeM1Tiff`, `m1Codes`, `M1`).
+**Inferred user intent:** The dependency graph should say "the mock is a test double", not "physics depends on it".
+**Commit (code):** see the next commit, "CHB-032: real engines read TIFF through ingest; drop the engine-mock TIFF shim".
+
+### What I did
+- `packages/ingest/src/decode/tiff.ts`: new `readTiffCodes(bytes): TiffCodes` (the shim's body, renamed: ingest already
+  has a different `RawImage`); exported from `packages/ingest/src/index.ts`.
+- `packages/core/src/engine-ref.ts`, `packages/gpu/src/engine-gpu.ts`: `import { readTiffCodes } from '@chromobench/ingest'`;
+  removed the GPU's stale `TODO(CHB-006)` comment above it.
+- Deleted `packages/engine-mock/src/tiff16.ts` and its export line; `m1.ts` imports `writeTiff16` from ingest.
+- Consumers moved to ingest: `packages/gpu/src/parity/synthetic.ts`, `packages/output/test/export.test.ts`,
+  `packages/studio-kit/demo/main.ts`, `packages/studio-kit/test/{looks/kit.test.ts,roll/fixtures.ts}`,
+  `packages/engine-mock/test/m1-trace.test.ts`.
+- package.json: core (ingest → dependencies, engine-mock → devDependencies), gpu (engine-mock out, ingest in),
+  output (ingest in devDependencies); `pnpm install --offline` updated the lockfile.
+- `pnpm typecheck` ok; `pnpm lint` ok (import boundaries ok, 336 file checks); `pnpm test` → 95 files, 2733 passed,
+  7 skipped (= baseline).
+
+### Why
+- Moving the reader instead of inlining the interleave loop twice keeps one copy; ingest is the lowest package
+  that both engines may depend on.
+
+### What worked
+- Unit tests unchanged in count and green; snapshots untouched (the M1 bytes are produced by the same writer).
+
+### What didn't work
+- My first audit commit picked up the staged `git rm` of `tiff16.ts` (a plain `git commit` commits everything staged,
+  not only the paths I had just added). Fixed with
+  `git restore --source=HEAD~1 --staged packages/engine-mock/src/tiff16.ts && git commit --amend --no-edit`.
+  From here on I check `git diff --cached --stat` before each commit.
+
+### What I learned
+- engine-mock's own source never used `readTiff`/`isTiff`; only one test and the two real engines did.
+
+### What was tricky to build
+- Name clash: ingest exports a `RawImage` (planes, levels, encoding) different from the shim's `RawImage`
+  (interleaved codes). The moved type is `TiffCodes`.
+
+### What warrants a second pair of eyes
+- `@chromobench/gpu`'s package.json no longer lists engine-mock; if a gpu browser test page imports it, Vite would
+  still resolve it through the workspace root, but check `packages/gpu/parity-page` when running the parity suite.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `git show <commit> -- packages/ingest packages/core/src packages/gpu/src packages/engine-mock`; run
+  `pnpm vitest run packages/core packages/engine-mock packages/output`.
+
+### Technical details
+- `readTiffCodes` refuses float and 32-bit TIFFs (`8/16-bit integer TIFF expected; decode others with decodeTiff`);
+  hosts decode those with ingest and call `openDecoded`, as before.

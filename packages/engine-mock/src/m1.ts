@@ -1,5 +1,5 @@
 // The M1 synthetic negative: 96×64, "orange mask" rebate strip, grey patch, horizontal density ramp.
-import { writeTiff16 } from './tiff16.ts';
+import { writeTiff16 } from '@chromobench/ingest';
 
 export const M1 = Object.freeze({
   width: 96,

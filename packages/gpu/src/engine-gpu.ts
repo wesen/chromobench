@@ -9,7 +9,7 @@ import {
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
-import { readTiff } from '@chromobench/engine-mock';
+import { readTiffCodes } from '@chromobench/ingest';
 import { ChainRunner, POINTWISE_WGSL, type RunTarget } from './chain/run.ts';
 import pack16Code from '../kernels/pack16.wgsl?raw';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
@@ -210,12 +210,11 @@ export class GpuEngine implements Engine {
   }
 
   async open(source: SourceRef): Promise<SourceInfo> {
-    // TODO(CHB-006): delegate decoding to ingest. Interim: the mock's 16-bit TIFF reader.
     if (!source.bytes) fail('E_FORMAT', 'GpuEngine.open needs source.bytes');
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = sha256Hex(bytes);
     if (source.sha256 && source.sha256 !== sha) fail('E_DATA_HASH', `source bytes hash to ${sha.slice(0, 12)}…, not ${source.sha256.slice(0, 12)}…`);
-    const raw = readTiff(bytes);
+    const raw = readTiffCodes(bytes);
     const max = raw.bits === 16 ? 65535 : 255;
     let clipped = 0;
     for (let i = 0; i < raw.width * raw.height; i++) for (let k = 0; k < 3; k++) if (raw.data[i * raw.samples + (raw.samples === 3 ? k : 0)]! >= max) clipped++;
