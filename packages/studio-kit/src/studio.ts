@@ -89,7 +89,7 @@ export class Studio {
     this.engine = o.engine;
     this.kv = o.kv ?? null;
     this.initial = o.enlarger ? initialInMode(o.initial, o.enlarger) : o.initial;
-    this.frames = new Frames(o.engine, { kv: this.kv, ...(o.mode ? { mode: o.mode } : {}), ...(o.now ? { now: o.now } : {}), ...(o.opener ? { opener: o.opener } : {}) });
+    this.frames = new Frames(o.engine, { kv: this.kv, ...(o.mode ? { mode: o.mode } : {}), ...(o.now ? { now: o.now } : {}), ...(o.opener ? { opener: o.opener } : {}), known: sha => this.libraryKind(sha) });
     this.route = new EditLogRoute(this.frames);
     this.bridge = new FrameRenderBridge(this.frames, o.displaySpace ? { displaySpace: o.displaySpace } : {});
   }
@@ -176,13 +176,23 @@ export class Studio {
     if (writes.length) st.writeDoc(writes, { tier: 'document' });
     const sel = st.peek(['ui', 'selection']) as { ids: string[]; primary: string | null; anchor: string | null } | undefined;
     if (sel && (sel.ids.includes(id) || sel.primary === id)) {
-      const order = (cat?.order ?? []).filter(x => x !== id);
-      const i = (cat?.order ?? []).indexOf(id);
-      const next = order[Math.min(Math.max(0, i), order.length - 1)] ?? null;
+      // the next open frame (after it, else before it): never a library frame whose file is not open, since
+      // selecting one asks for its file (CHB-031 F21: "Where is …?" opened by itself after Remove from Library)
+      const all = cat?.order ?? [];
+      const i = Math.max(0, all.indexOf(id));
+      const open = (x: string): boolean => x !== id && !!this.frames.get(x);
+      const next = all.slice(i).find(open) ?? all.slice(0, i).reverse().find(open) ?? null;
       const ids = sel.ids.filter(x => x !== id);
-      const primary = sel.primary === id ? (ids[0] ?? next) : sel.primary;
+      const primary = sel.primary === id ? (ids.find(open) ?? next) : sel.primary;
       st.writeDoc([{ path: ['ui', 'selection'], value: { ids: ids.length ? ids : primary ? [primary] : [], primary, anchor: primary } }], { tier: 'view' });
     }
+  }
+
+  /** how the library has a file (by hash): as a photo or a negative; undefined when it does not know the file */
+  libraryKind(sha: string): 'photo' | 'negative' | undefined {
+    const frames = (this.rt?.store.peek(['catalog', 'frames']) as Record<string, CatalogFrame> | undefined) ?? {};
+    for (const c of Object.values(frames)) if (c?.sha256 === sha && c.kind) return c.kind;
+    return undefined;
   }
 
   /** open a file's bytes as a photo, a negative or as guessed (resumes its EditLog by SHA-256 and mode) */
@@ -197,10 +207,11 @@ export class Studio {
   /** re-open a frame as a photo or as a negative (F3, F6): decoded again, that mode's recipe */
   async reopen(id: string, as: 'photo' | 'negative'): Promise<OpenResult> {
     this.route.endBurst();
+    const before = this.current;
     const r = await this.frames.reopen(id, as, this.initial ? { initial: this.initial } : {});
     // a strip re-opened as one photo (or a photo as a strip): the frame shown was replaced, show the file's first
     const cur = this.current;
-    if (this.rt && (!cur || !this.frames.get(cur))) this.rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [r.entry.id], primary: r.entry.id, anchor: r.entry.id } }], { tier: 'view' });
+    if (this.rt && (!cur || !this.frames.get(cur) || (before && before !== cur && !this.frames.get(before)))) this.rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [r.entry.id], primary: r.entry.id, anchor: r.entry.id } }], { tier: 'view' });
     return r;
   }
   /** take frames out of the library (their recipes stay saved: opening the file again resumes them) */

@@ -39,7 +39,8 @@ test('reference engine in the worker: no frozen window on open or drag; drafts c
   await page.addInitScript(probe);
   await page.goto('/?nosw&canvas2d&fresh&engine=reference&refLong=1024');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
-  await expect(page.locator('#engine')).toHaveAttribute('data-engine', /reference · CPU f64 \(worker\) · 1024 px/);
+  // (CHB-031: the label names the tabulated previews between "f64" and "(worker)")
+  await expect(page.locator('#engine')).toHaveAttribute('data-engine', /reference · CPU f64 .*\(worker\) · 1024 px/);
   await page.evaluate(() => {
     const w = window as unknown as { __r: string[]; chromobench: { rt: { on(e: string, f: (x: { viewport: string; pass: string; w: number; h: number }) => void): void } } };
     w.__r = [];

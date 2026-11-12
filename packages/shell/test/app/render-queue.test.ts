@@ -121,6 +121,35 @@ describe('render queue', () => {
     expect(b.calls.map(c => c.r.name)).toEqual(['live', 'bg']);
     expect(b.calls[1]!.t.lane).toBe('bg');
   });
+  it('a background render waiting for live work does not poll idle callbacks (CHB-031 F22); it goes when live work ends or is cancelled', async () => {
+    for (const end of ['resolve', 'cancel'] as const) {
+      const b = fakeBridge({ manual: true });
+      let idleCalls = 0;
+      const idle: (() => void)[] = [];
+      const q = new RenderQueue([b], { idle: f => void (idleCalls++, idle.push(f)) });
+      q.preemptBackground = true;
+      // a live render in flight (in the engine worker, the main thread is idle meanwhile) and one waiting behind it
+      q.request('vp', fakeImage('live'), { maxSide: 100, present: () => {} });
+      q.request('thumb:x', fakeImage('bg'), { maxSide: 50, lane: 'bg', present: () => {} });
+      // the page goes idle many times while the engine works: nothing re-queues itself
+      for (let i = 0; i < 100 && idle.length; i++) idle.shift()!();
+      expect(idleCalls).toBe(0);
+      expect(b.calls.map(c => c.r.name)).toEqual(['live']);
+      if (end === 'resolve') {
+        b.resolve();
+        await flush();
+        expect(b.calls.map(c => c.r.name)).toEqual(['live', 'bg']);
+      } else {
+        // the live render is cancelled (its abort settles it): the thumbnail goes
+        q.cancel('vp');
+        await flush();
+        expect(b.calls.map(c => c.r.name)).toEqual(['live', 'bg']);
+      }
+      b.resolve();
+      await flush();
+      expect(q.busy()).toBe(false);
+    }
+  });
   it('thumbnails: hits draw at once; LRU eviction releases', async () => {
     const b = fakeBridge();
     const q = new RenderQueue([b], { thumbLimit: 2 });
