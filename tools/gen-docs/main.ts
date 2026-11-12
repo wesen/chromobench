@@ -120,7 +120,7 @@ const files: [string, string][] = [
   ['packages/contract/catalog.snapshot.json', `${JSON.stringify(buildSnapshot(), null, 2)}\n`],
   ...AREAS.map((a): [string, string] => [`docs/reference/ops/${a}.md`, genAreaDoc(a, implemented)]),
   ...dslFiles(root), // CHB-007
-  ...agentFiles(), // CHB-008: the MCP server's embedded texts
+  ...agentFiles(root), // CHB-008: the MCP server's embedded texts
 ];
 
 let drift = 0;

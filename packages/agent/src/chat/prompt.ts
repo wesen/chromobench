@@ -4,6 +4,7 @@
 import { genInstructions, genReference } from '@chromobench/dsl';
 import type { AgentMode } from '@chromobench/contract';
 import type { ToolDef } from './model.ts';
+import { PLAYBOOKS } from '../playbooks.generated.ts';
 
 export const EVAL_TOOL_DESCRIPTION =
   "Run JavaScript in the photographer's darkroom (the Chromobench DSL). The input `code` is the body of an async function: use await, end with return. Calls build lazy nodes; awaiting a measurement gives numbers; h.look(label) returns a picture with its numbers (at most 4 per eval). frame.edit({ path: value }, { why }) proposes a change: in ask mode the photographer approves it; the result says what happened. Keep values between evals on `mem`. Omit `frame` to work on the frame the photographer has open.";
@@ -59,6 +60,7 @@ export interface PromptOptions {
 export function systemPrompt(o: PromptOptions = {}): string {
   const parts = [OUTLINE, genInstructions()];
   if (o.reference !== false) parts.push(genReference());
+  parts.push(playbookSection());
   if (o.houseNotes?.trim()) parts.push(`# House notes from the photographer\n\n${o.houseNotes.trim()}`);
   return parts.join('\n\n');
 }
@@ -68,3 +70,10 @@ export const MODE_TEXT: Record<AgentMode, string> = {
   ask: 'The photographer set the agent to ask mode: edits are proposals they approve or reject.',
   auto: 'The photographer set the agent to auto mode: edits apply at once (they stay undoable).',
 };
+
+/** The playbooks: helper libraries the agent loads into `mem` by sending a playbook's source as one eval. */
+export function playbookSection(): string {
+  const lines = ['# Playbooks', '', 'Each playbook defines helpers on `mem`. Load one by sending its whole source as one eval; then call the helpers.', ''];
+  for (const p of PLAYBOOKS) lines.push(`## ${p.name}`, '', p.doc, '', '```js', p.source.trimEnd(), '```', '');
+  return lines.join('\n');
+}

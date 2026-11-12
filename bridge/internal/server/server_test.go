@@ -141,6 +141,10 @@ func TestToolsResourcesPromptAndInstructions(t *testing.T) {
 	if err != nil || !strings.Contains(res.Contents[0].Text, "frame.") {
 		t.Fatalf("reference resource: %v", err)
 	}
+	pb, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "chromobench://playbooks/grey-balance"})
+	if err != nil || !strings.Contains(pb.Contents[0].Text, "mem.greyBalance") {
+		t.Fatalf("playbook resource: %v", err)
+	}
 	p, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "chromobench-agent"})
 	if err != nil || len(p.Messages) != 1 {
 		t.Fatalf("prompt: %v", err)

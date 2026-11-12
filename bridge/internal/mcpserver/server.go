@@ -17,7 +17,7 @@ import (
 	"github.com/wesen/chromobench/bridge/internal/hub"
 )
 
-//go:embed generated/*.md generated/*.txt
+//go:embed generated/*.md generated/*.txt generated/playbooks/*.js
 var generatedFS embed.FS
 
 // Generated holds the texts tools/gen-docs writes into generated/.
@@ -25,6 +25,8 @@ type Generated struct {
 	Instructions        string
 	Reference           string
 	EvalToolDescription string
+	// Playbooks: name → source (packages/agent/playbooks/*.js); an agent loads one by sending it as an eval.
+	Playbooks map[string]string
 }
 
 // Embedded returns the generated texts compiled into the binary.
@@ -36,7 +38,12 @@ func Embedded() Generated {
 		}
 		return string(b)
 	}
-	return Generated{Instructions: read("instructions.md"), Reference: read("reference.md"), EvalToolDescription: strings.TrimSpace(read("eval-tool.txt"))}
+	g := Generated{Instructions: read("instructions.md"), Reference: read("reference.md"), EvalToolDescription: strings.TrimSpace(read("eval-tool.txt")), Playbooks: map[string]string{}}
+	entries, _ := generatedFS.ReadDir("generated/playbooks")
+	for _, e := range entries {
+		g.Playbooks[strings.TrimSuffix(e.Name(), ".js")] = read("playbooks/" + e.Name())
+	}
+	return g
 }
 
 // Backend runs evals: the in-process hub, or a running bridge over HTTP (attach mode).
@@ -103,6 +110,13 @@ func New(b Backend, gen Generated, version string) *mcp.Server {
 	})
 	addMarkdown(srv, "chromobench://instructions", "instructions", "How to work in the darkroom through eval (the server instructions).", gen.Instructions)
 	addMarkdown(srv, "chromobench://reference", "reference", "Every DSL call with arguments and units, generated from the op registry.", gen.Reference)
+	for name, src := range gen.Playbooks {
+		uri := "chromobench://playbooks/" + name
+		doc := strings.SplitN(strings.TrimPrefix(src, "// "), "\n", 2)[0]
+		srv.AddResource(&mcp.Resource{URI: uri, Name: "playbook " + name, Description: doc + " Load it by sending the source as one eval.", MIMEType: "text/javascript"}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: "text/javascript", Text: src}}}, nil
+		})
+	}
 	srv.AddPrompt(&mcp.Prompt{Name: "chromobench-agent", Title: "Chromobench agent instructions", Description: "The instructions plus the full DSL reference."},
 		func(context.Context, *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 			return &mcp.GetPromptResult{Description: "Chromobench agent instructions", Messages: []*mcp.PromptMessage{
