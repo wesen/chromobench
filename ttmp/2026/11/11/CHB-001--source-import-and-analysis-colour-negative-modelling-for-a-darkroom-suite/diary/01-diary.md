@@ -1107,3 +1107,69 @@ remaining feature tickets — committing and logging throughout, without stoppin
 
 - Branch tips kept: task/chb-0NN-* for every merged ticket; task/ui-guides and task/phase2-integration are ancestors
   of main.
+
+## Step 17: Host wiring and contract 0.3 merged; feature wave started (CHB-021, 022, 012, 008, 020 follow-up)
+
+Both agents from Step 16 finished. The app's file opening now uses CHB-020's film-layout base detection, the
+gpu-parity port is configurable, and contract 0.3 (CHB-024) is in: batches, roll records, per-channel scan.flare in
+all engines, uniform flashes, recipe-driven density masks, view.frame for every frame kind, retouch spots, a CAM16
+knee, the shared vocabulary. With the contract settled, five feature agents started in parallel.
+
+### Prompt Context
+
+**User prompt (verbatim):** see Step 16 ("ok build … all the way to the end.").
+**Assistant interpretation:** Continue the plan: merge, then the feature wave.
+**Inferred user intent:** A complete app.
+**Commit (code):** a1dde02 (merge task/chb-020-host-wiring), 73a11d1 (merge task/chb-024-contract-0.3)
+
+### What I did
+
+- Merged `task/chb-020-host-wiring` into main (clean; 2351 tests), removed its worktree.
+- Merged `task/chb-024-contract-0.3` (clean); `pnpm install --offline`; typecheck clean; lint "272 file checks";
+  gen:check "19 files"; `pnpm test` "68 passed (68) files, 2413 passed (2413)"; removed its worktree. The agent's own
+  browser run: 69 passed, GPU conformance 274/274.
+- Launched five worktree agents from 73a11d1 with disjoint lanes and port sets: CHB-021 looks (`kits/looks`,
+  4521–4524), CHB-022 finish (`kits/finish`, retouch.heal + framing in core/gpu, 4531–4534), CHB-012 forward film
+  path (core/gpu forward sim, halation/DIR/grain ops, 4541–4544), CHB-008 agent (DSL worker, chat panel kit,
+  pluggable LLM transport with runtime-entered key, MCP bridge, 4551–4554), CHB-020 follow-up (sonnet; baseT/flare in
+  recipes instead of pixel subtraction, batch fields, roll module in the classic variant, 4561–4564).
+
+### Why
+
+- Waiting for 0.3 before the wave avoided five agents rebasing onto a moving contract.
+
+### What worked
+
+- Clean merges.
+
+### What didn't work
+
+- No failures on my side; CHB-024's first browser run had 12 failures (stale parity fixture, a dev-server hot edit),
+  fixed before its commit.
+
+### What I learned
+
+- CHB-024 "(review)" decisions for the user: flare formula T = T′(1 + f) − f; `FrameRecipe.roll` required ({id} |
+  null); C4 open (normalised mode stays default); C5 density-mask adaptation; CAM16 on GPU falls back to OkLCh;
+  view.frame crop in sensor pixels, angle clockwise. Flash recipes now print the flash evenly through the base.
+
+### What was tricky to build
+
+- Lane separation for two agents in core/gpu (CHB-022 retouch.heal, CHB-012 forward/halation): both told to put GPU
+  code in new kernels/files and keep engine-gpu.ts edits small.
+
+### What warrants a second pair of eyes
+
+- CHB-008's LLM transport: API keys entered at runtime, never committed.
+
+### What should be done in the future
+
+- Merge the wave; then CHB-013 (needs the photographer's files), remaining open tasks, a final review pass.
+
+### Code review instructions
+
+- packages/contract/CONTRACT-DECISIONS.md "Contract 0.3".
+
+### Technical details
+
+- Running: CHB-021, CHB-022, CHB-012, CHB-008, CHB-020 follow-up.
