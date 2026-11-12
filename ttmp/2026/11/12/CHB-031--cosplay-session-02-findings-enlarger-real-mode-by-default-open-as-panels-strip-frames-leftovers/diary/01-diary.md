@@ -229,8 +229,10 @@ tasks (`e2af842`). WS-B and CHB-032 were told to merge main before their final c
   saved recipes. Normalised recipes keep their mode, and only the layout default changes.
 
 ### What warrants a second pair of eyes
-- Old recipes saved before 0.4.0 without an explicit mode: they keep `normalised` because the old default is now
-  written into the migration. Check WS-A's `enlarger-mode.test.ts` "old recipes unchanged" case.
+- Saved recipes: no migration is needed because every recipe and EditLog stores `print.enlarger.mode` explicitly
+  (CONTRACT-DECISIONS.md, CC-017), so a recipe saved before 0.4.0 reopens `normalised` in a real-mode layout.
+  The case is in `packages/studio-kit/test/enlarger-mode.test.ts` ("a recipe saved in normalised mode … opens
+  normalised in a real-mode layout, and vice versa").
 - Contract 0.4.0 is a minor bump with a catalogue baseline; the bridge reference docs were regenerated.
 
 ### What should be done in the future
