@@ -332,3 +332,69 @@ or a thin wrapper.
 
 ### Technical details
 - M1 sha256 `29ffc4d574382d06…` before and after (= `fixtures/synthetic/m1-negative-96x64.tif`).
+
+## Step 5: "Interim data" naming and RefEngine's Node-only default (task 0tc4)
+
+Core exported three names for two data sets: `interimData` and `packsData` both meant CHB-004's packs read from
+disk (Node only), and `legacyInterimData` meant the retired CHB-001 JSON set. `RefEngine` silently defaulted to the
+Node-only packs, so a browser caller that forgot `data` got a file-system error deep inside. Now `RefEngineOptions.data`
+is required, the Node helper has one explicit name (`nodePacksData`), and the CHB-001 set is `chb001InterimData`.
+Chromogen's conventions (and with them the fitted CMFs) are documented as test-only.
+
+The full suite after Step 4's commit (c7e33a9) was green: 95 files, 2733 passed, 7 skipped. After this step: the
+same.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Task 0tc4: no hidden Node-only default in RefEngine; rename legacyInterimData; keep the
+Chromogen CMFs as tests-only, documented.
+**Inferred user intent:** Names should say what the data is and where it can load.
+**Commit (code):** see the next commit, "CHB-032: RefEngine requires data; nodePacksData and chb001InterimData replace the interim names".
+
+### What I did
+- `packages/core/src/engine-ref.ts`: `data: PhysicsData` (required), `constructor(o: RefEngineOptions)`; dropped the
+  `@chromobench/data/node` import.
+- `packages/core/src/index.ts`: `export { nodePhysicsData as nodePacksData }`; `export { chb001InterimData, interimFromJson }`;
+  the `interimData`/`packsData`/`legacyInterimData` names are gone.
+- `packages/core/src/data/interim.ts`: `interimData` → `chb001InterimData`, header rewritten (what the set is, who
+  still uses it).
+- `packages/core/src/spectral/conventions.ts`: doc comment on `CHROMOGEN` (golden tests and law harnesses only;
+  engines run `DEFAULT_CONVENTIONS`; `cmfChromogenFit` is reached only through it).
+- `packages/data/src/node.ts`: comments no longer call it a replacement for `interimData()`.
+- Tests: 21 files renamed by a word-boundary script (`interimData|packsData` → `nodePacksData`,
+  `legacyInterimData as interimData` → `chb001InterimData` in packs-parity); 11 files now pass
+  `{ data: nodePacksData() }` to `new RefEngine(…)` (typecheck listed them: apps/studio host and worker-engine tests,
+  core engine-ref, engine-ref-sampled, chb010.*, film.stage5, one-physics, retouch, output export, studio-kit roll engine).
+- Checks: `pnpm typecheck` 0 errors, `pnpm lint` ok, `pnpm test` 95 files, 2733 passed, 7 skipped.
+
+### Why
+- "Data required" over "an explicit node helper as the default": every production caller
+  (`apps/studio/src/host/engines.ts:193`, `engine-serve.ts:66`, gpu `parity/chain-tests.ts:54`) already passes data, so
+  only tests change, and a missing `data` is now a compile error instead of a runtime one in a browser.
+
+### What worked
+- Typecheck found every construction site; no behaviour change (the same default data reaches the same tests).
+
+### What didn't work
+- No failures.
+
+### What I learned
+- `nodePhysicsData` caches per pack pair, so calling it per test costs nothing extra.
+
+### What was tricky to build
+- `engine-ref-sampled.test.ts` takes engine options as a parameter; its type became
+  `Omit<ConstructorParameters<typeof RefEngine>[0], 'data'>` and the helper spreads them after `data`.
+
+### What warrants a second pair of eyes
+- `packages/contract/CONTRACT-DECISIONS.md:238` still names core's `interimData()`; it is a decision record in the
+  contract package, which this ticket must not touch.
+
+### What should be done in the future
+- Update that CONTRACT-DECISIONS.md line when the contract is next edited.
+
+### Code review instructions
+- `packages/core/src/index.ts:11-16`, `packages/core/src/engine-ref.ts:16-18`, `packages/core/src/data/interim.ts:1-9`.
+- `pnpm typecheck && pnpm vitest run packages/core`.
+
+### Technical details
+- New public names: `nodePacksData` (Node only), `chb001InterimData` (Node only), `interimFromJson` (unchanged).

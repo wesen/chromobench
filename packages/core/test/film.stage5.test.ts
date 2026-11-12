@@ -2,7 +2,7 @@
 // composition laws (guide §5.6, §8.2). A synthetic RAW: scene XYZ of a chart × a known camera matrix.
 import { compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe, type SourceInfo } from '@chromobench/contract';
 import { describe, expect, it } from 'vitest';
-import { interimData, inv3, mulMV, PhysicsEnv, rawOfLinearSRGB, RefEngine, SPEKTRAFILM, SRGB_TO_XYZ, type FilmModel, type Mat3 } from './film-helpers.ts';
+import { nodePacksData, inv3, mulMV, PhysicsEnv, rawOfLinearSRGB, RefEngine, SPEKTRAFILM, SRGB_TO_XYZ, type FilmModel, type Mat3 } from './film-helpers.ts';
 
 /** Linear sRGB (G = 0.184) whose raw is neutral through the film: 2-D Newton on log(R/G), log(B/G). */
 function neutralRGB(film: FilmModel): number[] {
@@ -69,7 +69,7 @@ const patchMean = (img: { data: Float64Array; w: number; h: number }, i: number)
 
 describe('stage 5: a synthetic RAW renders end to end to a print', () => {
   it('digital-raw recipe → display: finite, in range, a monotone and nearly neutral grey ramp', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const { info, data } = syntheticRaw();
     e.openDecoded(info, data);
     const r = defaultRecipe('digital-raw', { sha256: info.sha256, name: 'synthetic.dng' });
@@ -86,7 +86,7 @@ describe('stage 5: a synthetic RAW renders end to end to a print', () => {
     expect(red[0]!).toBeGreaterThan(red[1]! + 0.15);
   });
   it('the film stages are visible as nodes and each changes the image', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const { info, data } = syntheticRaw();
     e.openDecoded(info, data);
     const r = defaultRecipe('digital-raw', { sha256: info.sha256 });
@@ -113,10 +113,10 @@ describe('stage 5: graph-level composition laws', () => {
     return g.intern('film.develop', [n], { push: 0, curves: opts.curves ?? 'datasheet' }).node.id;
   }
   it('neutral reproduction through the engine: couple → develop(precorrected) = develop(datasheet) on greys; the mismatched pair fails', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const w = 32, h = 1;
     // linear sRGB whose film exposure is neutral (equal raw in the three layers), scaled along a ramp
-    const film = new PhysicsEnv(interimData(), SPEKTRAFILM).film('kodak_portra_400');
+    const film = new PhysicsEnv(nodePacksData(), SPEKTRAFILM).film('kodak_portra_400');
     const base = neutralRGB(film);
     const data = new Float64Array(w * 3);
     for (let x = 0; x < w; x++) { const v = 2 ** ((x - 16) / 3); data.set(base.map((c) => c * v), x * 3); }

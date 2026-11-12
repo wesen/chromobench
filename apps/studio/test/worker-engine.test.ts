@@ -3,7 +3,7 @@
 // in this thread, pixels coming back for an engine on this thread, and cancellation between stages.
 import { MessageChannel } from 'node:worker_threads';
 import { compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe } from '@chromobench/contract';
-import { CLASS_CODE, classify, DEFAULT_SIGMA_D, RefEngine } from '@chromobench/core';
+import { CLASS_CODE, classify, DEFAULT_SIGMA_D, nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { afterEach, describe, expect, it } from 'vitest';
 import { decodeFile } from '../src/host/decode.ts';
@@ -59,7 +59,7 @@ describe('engine worker (CHB-027)', () => {
     // the same decode in this thread, on a RefEngine here
     const local = await decodeFile(bytes, sha, 'm1.tif', 'scan', { long: 0, dust: false, roll: new Map(), raw: noRaw });
     expect(local.info).toEqual(info);
-    const ref = new RefEngine({ sampled: true });
+    const ref = new RefEngine({ data: nodePacksData(), sampled: true });
     ref.openDecoded(local.info, local.data);
     const g = new Graph();
     g.registerSource(info);

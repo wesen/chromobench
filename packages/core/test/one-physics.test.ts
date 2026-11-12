@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { Graph, sha256Hex } from '@chromobench/contract';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import {
-  buildPdTable, buildPrintTable, buildSolveTable, interimData, makeForward, makePrintChain, makeScanner, nodeAt, pdArrays, printArrays, RefEngine,
+  buildPdTable, buildPrintTable, buildSolveTable, nodePacksData, makeForward, makePrintChain, makeScanner, nodeAt, pdArrays, printArrays, RefEngine,
   resolveStock, solveArrays, solveNode, SPEKTRAFILM, spectralNode,
 } from '../src/index.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const N = 9;
 
 describe('table arrays reproduce the builders (Studio node order)', () => {
@@ -53,7 +53,7 @@ describe('table arrays reproduce the builders (Studio node order)', () => {
 describe('reference engine, tabulated mode', () => {
   it('renders print → view through the tables, within table error of exact inside the table domains', async () => {
     const run = async (mode: 'exact' | 'tabulated') => {
-      const e = new RefEngine({ mode });
+      const e = new RefEngine({ data: nodePacksData(), mode });
       const g = new Graph();
       const bytes = makeM1Tiff();
       g.registerSource(await e.open({ kind: 'file', sha256: sha256Hex(bytes), bytes }));

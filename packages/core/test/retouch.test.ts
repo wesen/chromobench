@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { compile, defaultRecipe, Graph, setPath, type FrameRecipe, type RetouchSpot } from '@chromobench/contract';
 import { makeM1Tiff } from '@chromobench/engine-mock';
-import { healCoefficients, healOffset, parseSpots, RefEngine, retouch, spotAlpha, spotOrder, type Spot } from '../src/index.ts';
+import { healCoefficients, healOffset, parseSpots, nodePacksData, RefEngine, retouch, spotAlpha, spotOrder, type Spot } from '../src/index.ts';
 
 const W = 96, H = 64;
 const GAIN = [0.95, 1, 1.09];
@@ -111,7 +111,7 @@ describe('retouch.heal: the reference (core print/retouch.ts)', () => {
 
 describe('retouch.heal in RefEngine through compile(recipe)', () => {
   it('equals retouch() on the view.adapt image; no spots → no node; disabled spots → no node', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const info = await e.open({ kind: 'file', sha256: '', bytes: makeM1Tiff() });
     let r: FrameRecipe = defaultRecipe('negative-scan', { sha256: info.sha256, name: 'm1' });
     const g = new Graph();

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canonicalJSON, compile, defaultRecipe, Graph, type Box, type FrameRecipe, type Vec3 } from '@chromobench/contract';
 import { openSourceSync, orientedToSensorBox, region } from '@chromobench/ingest';
-import { integrateToGrey, Lights, RefEngine } from '@chromobench/core';
+import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import {
   analysePixels, analyseRoll, divergence, firstPrintBatch, fragmentOf, matchBatch, newRoll, previewOf, rollTotals, splitTotal, totalOf,
   type FrameAnalysis, type Roll, type RollAnalysis,
@@ -95,7 +95,7 @@ describe('first print and match as batches (stage 2)', () => {
     expect(after.scan!.rebate).not.toBeNull();
     // on core's reference engine: scan.density with no box takes the brightest 5 % of columns (through the
     // sprocket holes), so the rebate reads as image density; with the roll's box it is the zero of density
-    const ref = new RefEngine();
+    const ref = new RefEngine({ data: nodePacksData() });
     const info = await ref.open({ kind: 'file', sha256: r.studio.frames.get(r.ids[0]!)!.sha, name: 'f.tif', bytes: tiffOf(r.strips[0]!) });
     const g = new Graph();
     g.registerSource(info);

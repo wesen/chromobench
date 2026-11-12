@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { MockEngine } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import { plantedStrip, type PlantedStrip } from '@chromobench/ingest';
-import { CHROMOGEN, interimData, scannerForward } from '@chromobench/core';
+import { CHROMOGEN, nodePacksData, scannerForward } from '@chromobench/core';
 import { manualClock, type ManualClock } from '@chromobench/shell/testing';
 import type { Runtime } from '@chromobench/shell';
 import { buildVariant, createStudio, memoryKV, type Studio } from '../../src/index.ts';
@@ -17,7 +17,7 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const laws = JSON.parse(readFileSync(`${root}fixtures/golden/ingest-laws.json`, 'utf8'));
 export const STOCKS: string[] = Object.keys(laws.stockBases.D);
 /** The guide's illustrative X-T5 LED scanner under Chromogen's conventions (the CHB-006 base table). */
-export const physics = (): RollPhysics => rollPhysics({ fwd: scannerForward(interimData(), 'xt5-rgb-led', CHROMOGEN), stocks: STOCKS });
+export const physics = (): RollPhysics => rollPhysics({ fwd: scannerForward(nodePacksData(), 'xt5-rgb-led', CHROMOGEN), stocks: STOCKS });
 
 /** base offsets 0–0.01 D and one frame (index 10) at 0.04 D: a mixed roll */
 export const OFFSETS = [0, 0.002, 0.004, 0.006, 0.008, 0.01, 0.001, 0.003, 0.005, 0.007, 0.04, 0.009];

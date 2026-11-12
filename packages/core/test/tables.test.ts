@@ -1,11 +1,11 @@
 // f64 tables for CHB-005 parity: node order, texel-centre lookup, and agreement with the exact functions.
 import { describe, expect, it } from 'vitest';
 import {
-  buildPdTable, buildPrintTable, buildSolveTable, interimData, look3, makeForward, makePrintChain, makeScanner, nodeAt,
+  buildPdTable, buildPrintTable, buildSolveTable, nodePacksData, look3, makeForward, makePrintChain, makeScanner, nodeAt,
   observe, reflectance, resolveStock, SPEKTRAFILM,
 } from '../src/index.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const chain = makePrintChain({ data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM });
 
 describe('tables', () => {

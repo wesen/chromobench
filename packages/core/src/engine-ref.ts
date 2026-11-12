@@ -8,14 +8,14 @@ import {
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
 import { readTiffCodes } from '@chromobench/ingest';
-import { nodePhysicsData as interimData } from '@chromobench/data/node';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
 import { conventionsKey, DEFAULT_CONVENTIONS, type Conventions } from './spectral/conventions.ts';
 import type { SpectraTable } from './film/upsample.ts';
 
 export interface RefEngineOptions {
-  data?: PhysicsData;
+  /** Stocks, papers, lights and observer (required: in Node, core's nodePacksData(); in a browser, the packs loaded by the host). */
+  data: PhysicsData;
   conv?: Conventions;
   /** Restrict capabilities().ops. */
   ops?: string[];
@@ -160,7 +160,7 @@ export class RefEngine implements Engine {
   /** Stages computed since construction (tests and profiling: what a change recomputed, and how many pixels). */
   readonly computed = { full: 0, sampled: 0, pixels: 0 };
 
-  constructor(o: RefEngineOptions = {}) {
+  constructor(o: RefEngineOptions) {
     const limit = Math.max(4, o.cacheLimit ?? Infinity);
     const bytes = o.cacheBytes ?? Infinity;
     this.full = new Lru(limit, bytes);
@@ -170,7 +170,7 @@ export class RefEngine implements Engine {
     this.sampled = o.sampled ?? false;
     this.yieldFn = o.yield ?? (() => Promise.resolve());
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
-    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
+    this.env = new PhysicsEnv(o.data, this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
   }
 

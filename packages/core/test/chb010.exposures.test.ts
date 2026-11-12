@@ -7,13 +7,13 @@ import { applyMutation, compile, defaultRecipe, Graph, sha256Hex, type FrameReci
 import { M1, makeM1Tiff } from '@chromobench/engine-mock';
 import {
   applyDensityMask, brushCoverage, combinePixel, combineRatio, compileExposures, ellipseAt, exposureSeconds, fullGrid, gaussianBlur1, gradientAt,
-  gridCentres, interimData, luminanceAt, makePrintChain, maskDensity, midgrayDensity, paintMask, parseStrokes, RefEngine, SPEKTRAFILM,
+  gridCentres, nodePacksData, luminanceAt, makePrintChain, maskDensity, midgrayDensity, paintMask, parseStrokes, RefEngine, SPEKTRAFILM,
   type PrintChainOptions,
 } from '../src/index.ts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/chb010-exposures.json', import.meta.url), 'utf8')) as { entries: { id: string; [k: string]: any }[] };
 const entry = (id: string) => fx.entries.find((e) => e.id === id)!;
-const data = interimData();
+const data = nodePacksData();
 const BASE: PrintChainOptions = { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50', aim: 'midgray-normalised', mode: 'real' };
 const LOG2 = Math.log10(2);
 
@@ -184,7 +184,7 @@ describe('exposure semantics (compileExposures)', () => {
 // ---- the reference engine on the M1 negative ----------------------------------------------------
 
 async function setup() {
-  const e = new RefEngine();
+  const e = new RefEngine({ data: nodePacksData() });
   const g = new Graph();
   const bytes = makeM1Tiff();
   const info = await e.open({ kind: 'file', sha256: sha256Hex(bytes), bytes });

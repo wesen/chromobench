@@ -5,7 +5,7 @@ import {
   compile, defaultRecipe, Graph, ORIENTATIONS, sha256Hex,
   type Engine, type EngineCaps, type EvalTarget, type FrameRecipe, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
-import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, interimData, Lights, RefEngine } from '@chromobench/core';
+import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, nodePacksData, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { conditionScan, plantedFrames, plantedStrip, stripFrames } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
@@ -141,7 +141,7 @@ describe('first print (core RefEngine)', () => {
   const integrate = (latd: number[], alpha: number) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as [number, number, number];
 
   it('integrates the frame to grey: real mode, time on the 1/6-stop grid, exposure ≈ aim', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const info = await e.open({ kind: 'file', sha256: sha, bytes });
     const g = new Graph();
     g.registerSource(info);
@@ -169,7 +169,7 @@ describe('first print (core RefEngine)', () => {
     const c = conditionScan(Float32Array.from(strip.rgb), strip.w, strip.h, { id: sha, subtract: false });
     const boxes = stripFrames(strip.rgb, strip.w, strip.h, { layout: c.layout });
     expect(boxes.split).toBe(true);
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     e.openDecoded(info, Float32Array.from(strip.rgb));
     const g = new Graph();
     g.registerSource(info);
@@ -254,7 +254,7 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
       encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
       cfa: 'none', clippedFraction: 0, notes: [],
     };
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     e.openDecoded(info, data);
     const g = new Graph();
     g.registerSource(info);
@@ -283,13 +283,13 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
       cfa: 'none', clippedFraction: 0, notes: [],
     };
     const c = conditionScan(Float32Array.from(strip.rgb), strip.w, strip.h, { id: sha, subtract: false });
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     e.openDecoded(info, Float32Array.from(strip.rgb));
     const g = new Graph();
     g.registerSource(info);
     const r0 = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
     const plain = await firstPrint(e, g, r0, { integrate });
-    const baked = await firstPrint(e, g, r0, { integrate, bake: (r) => bakeRecipe(r, interimData(), DEFAULT_CONVENTIONS).mutations });
+    const baked = await firstPrint(e, g, r0, { integrate, bake: (r) => bakeRecipe(r, nodePacksData(), DEFAULT_CONVENTIONS).mutations });
     expect(baked.print.enlarger.filtration).not.toEqual(plain.print.enlarger.filtration);
     expect(Math.max(...baked.print.lights.logH.map(Math.abs))).toBeLessThan(Math.max(...plain.print.lights.logH.map(Math.abs)) + 1e-9);
     expect(baked.print.lights.auto.logH).toEqual(plain.print.lights.auto.logH);
@@ -314,7 +314,7 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     const sub = conditionScan(gone, strip.w, strip.h, { id: sha });
     const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'strip' });
     const printed = async (px: Float32Array, m: Parameters<typeof withMeasured>[1]): Promise<number[]> => {
-      const e = new RefEngine();
+      const e = new RefEngine({ data: nodePacksData() });
       e.openDecoded(info, px);
       const g = new Graph();
       g.registerSource(info);

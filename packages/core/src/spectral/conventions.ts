@@ -20,6 +20,12 @@ export interface Conventions {
 export const SPEKTRAFILM: Conventions = Object.freeze({
   nan: 'opaque', cmf: 'cie1931-2deg', curveMin: 'subtract', paperCurve: 'model-3cdf', printNormalise: 'midgray-geomean', version: 1,
 });
+/**
+ * Chromogen's choices, kept to reproduce the textbook's Chromogen numbers: the golden tests
+ * (packages/core/test/ch*.golden.test.ts, chb010.*) and the law harnesses in src/laws/ that compare both
+ * conventions. No engine or host selects them: engines run DEFAULT_CONVENTIONS, and the fitted CMFs
+ * ('chromogen-fit', spectrum.ts cmfChromogenFit) are reached only through this object.
+ */
 export const CHROMOGEN: Conventions = Object.freeze({
   nan: 'zero', cmf: 'chromogen-fit', curveMin: 'keep', paperCurve: 'table', printNormalise: 'none', version: 1,
 });

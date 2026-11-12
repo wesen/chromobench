@@ -4,12 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { ChromobenchError, defaultRecipe, EditLog, Graph, sha256Hex } from '@chromobench/contract';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import {
-  aimOf, autoLights, bakeRecipe, chainOptionsOf, colourOffset, filtrationForLights, frameStats, gradeToGamma, greyPickSliders, interimData,
+  aimOf, autoLights, bakeRecipe, chainOptionsOf, colourOffset, filtrationForLights, frameStats, gradeToGamma, greyPickSliders, nodePacksData,
   latdFromPD, Lights, lightsToFiltration, makePrintChain, matchFrame, meanX, points, q, REFERENCE_OPTICS, RefEngine, rollConsistency, rollMean,
   SPEKTRAFILM, warmthVector, type PrintChainOptions,
 } from '../src/index.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const O: PrintChainOptions = { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' };
 const PT = 0.025;
 
@@ -193,7 +193,7 @@ describe('grey pick, lights → filtration and Bake', () => {
 
 describe('the reference engine in real mode', () => {
   it('print.expose: time and magnification move every pixel by the optics; grade 4 leaves the grey card where it is', async () => {
-    const e = new RefEngine();
+    const e = new RefEngine({ data: nodePacksData() });
     const g = new Graph();
     const bytes = makeM1Tiff();
     g.registerSource(await e.open({ kind: 'file', sha256: sha256Hex(bytes), bytes }));

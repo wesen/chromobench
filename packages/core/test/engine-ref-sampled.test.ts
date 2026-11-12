@@ -3,7 +3,7 @@
 // full-resolution path bit for bit; a cancel lands between stages; a print-only change recomputes print stages only.
 import { describe, expect, it } from 'vitest';
 import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo } from '@chromobench/contract';
-import { RefEngine } from '../src/index.ts';
+import { nodePacksData, RefEngine } from '../src/index.ts';
 
 const W = 60, H = 40;
 
@@ -21,12 +21,12 @@ function source(kind: 'negative-scan' | 'digital-raw'): { info: SourceInfo; data
   return { info, data };
 }
 
-function setup(kind: 'negative-scan' | 'digital-raw', o: ConstructorParameters<typeof RefEngine>[0] = {}) {
+function setup(kind: 'negative-scan' | 'digital-raw', o: Omit<ConstructorParameters<typeof RefEngine>[0], 'data'> = {}) {
   const { info, data } = source(kind);
   const g = new Graph();
   g.registerSource(info);
   const mk = (): RefEngine => {
-    const e = new RefEngine(o);
+    const e = new RefEngine({ data: nodePacksData(), ...o });
     e.openDecoded(info, data);
     return e;
   };

@@ -1,11 +1,11 @@
 // The packs implement core's PhysicsData (packages/core/src/data/provider.ts). This file checks the type, the data overlap
 // with the retired interim JSON provider, and core's print chain on pack data. (Moved here from packages/data to avoid a workspace cycle.)
 import { describe, expect, it } from 'vitest';
-import { legacyInterimData as interimData, makePrintChain, resolveStock, SPEKTRAFILM, type PhysicsData } from '@chromobench/core';
+import { chb001InterimData, makePrintChain, resolveStock, SPEKTRAFILM, type PhysicsData } from '@chromobench/core';
 import { nodePhysicsData } from '@chromobench/data/node';
 
 const packs: PhysicsData = nodePhysicsData(); // compile-time check: the adapter satisfies core's interface
-const interim = interimData();
+const interim = chb001InterimData();
 
 function maxdiff(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let d = 0;

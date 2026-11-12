@@ -6,13 +6,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { openPackFromDisk } from '@chromobench/data/node';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  autoExposureEV, buildFilmTable, cat16Matrix, D65, erf4Window, filmTableFromLog2, interimData, lookupBilinear, lookupCubic, makeExposer, makeFilmModel,
+  autoExposureEV, buildFilmTable, cat16Matrix, D65, erf4Window, filmTableFromLog2, nodePacksData, lookupBilinear, lookupCubic, makeExposer, makeFilmModel,
   mulMM, mulMV, quad2tri, rawOfLinearSRGB, resampleFilmTable, resolveStock, sigmoidSpectraTable, spdXY, spectraFromF16, spectralLocus, SPEKTRAFILM,
   SRGB_TO_XYZ, tri2quad, windowNormalisers, xyToXYZ, compressXY, midgrayFilmDensity, mulberryish, type FilmModel, type FilmTable, type SpectraTable,
 } from './film-helpers.ts';
 
 const SF = JSON.parse(readFileSync(new URL('../../../fixtures/golden/film/spektrafilm-forward.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const portra = resolveStock(data.stock('kodak_portra_400'), SPEKTRAFILM);
 const UPS = new URL('../../data/packs/spektrafilm@0.3.2+3bb2c2d/upsampling/hanatos2025-irradiance-xy-tc.safetensors', import.meta.url);
 const haveHanatos = existsSync(UPS);
