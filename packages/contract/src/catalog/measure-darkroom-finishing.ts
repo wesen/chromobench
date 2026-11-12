@@ -107,7 +107,7 @@ export const darkroomOps: OpDef[] = [
     args: {
       logH: { type: 'vec3', unit: 'logH', min: -1.5, max: 1.5, default: [0, 0, 0], path: 'print.lights.logH', doc: 'Printer lights to express as filtration and time.' },
       paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', path: 'print.paper', doc: 'Colour paper.' },
-      mode: { type: 'enum', values: ['real', 'normalised'], default: 'normalised', path: 'print.enlarger.mode', doc: 'real: filtration and time; normalised: filtration, the density part stays as lights.' },
+      mode: { type: 'enum', values: ['real', 'normalised'], default: 'real', path: 'print.enlarger.mode', doc: 'real: filtration and time; normalised: filtration, the density part stays as lights.' },
       lamp: { type: 'string', valuesFrom: 'lamps', default: 'TH-KG3', path: 'print.enlarger.lamp', doc: 'Enlarger lamp.' },
       filtration: { type: 'cmy', unit: 'CC', min: -100, max: 200, default: { c: 0, m: 0, y: 0 }, path: 'print.enlarger.filtration', doc: 'Current shift on the neutral pack.' },
       time_s: { type: 'number', unit: 's', min: 0.1, max: 600, default: 10, path: 'print.enlarger.time_s', doc: 'Current exposure time.' },

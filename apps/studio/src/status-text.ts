@@ -11,6 +11,26 @@ export function engineSummary(label: string): string {
   return label;
 }
 
+/** the engine's tooltip: what it means first, the technical label second (CHB-031 F9) */
+export function engineTip(label: string): string {
+  const what = /^mock/i.test(label)
+    ? 'A preview without the film and paper model.'
+    : /^GPU/.test(label)
+      ? /\(software\)/.test(label) ? 'The prints are computed by a graphics card that this browser emulates in software, so it is slower.' : 'The prints are computed on the graphics card.'
+      : /^reference/.test(label)
+        ? `The prints are computed on the processor, which is slower${/no WebGPU/.test(label) ? ': this browser offers no graphics card to compute on' : ''}. Pictures are previewed smaller.`
+        : '';
+  return `${what ? `${what}\n` : ''}Technical: ${label}`;
+}
+
+/** the decode notes' tooltip: the summary first, the decoder's own notes second (CHB-031 F9) */
+export function notesTip(notes: readonly string[]): string {
+  if (!notes.length) return '';
+  const sum = notesSummary(notes);
+  const how = /via LibRaw/.test(notes[0]!) ? (/^photo:/.test(notes[0]!) ? 'Developed from the camera RAW with its own colour.' : 'Read from the camera RAW without developing it, as a scan.') : '';
+  return `${sum}${how ? `. ${how}` : ''}\nTechnical: ${notes.join(' · ')}`;
+}
+
 const mp = (w: number, h: number): string => {
   const m = (w * h) / 1e6;
   if (m < 0.1) return `${w}×${h} px`;

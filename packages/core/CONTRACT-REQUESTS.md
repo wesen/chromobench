@@ -142,6 +142,8 @@ pack }`) so old recipes keep their density if it ever changes; that is CHB-004's
 
 ## C4. Real mode as the default **(review: photographer's call)**
 
+> **Status (CHB-031, contract 0.4.0):** accepted. The owner decided on 2026-11-12 (real by default; normalised a layout option). See CONTRACT-DECISIONS "Contract 0.4".
+
 The guide's decision record 1 makes real mode the default. The contract default is `'normalised'`.
 `defaultRecipe` writes the mode into every new frame, so existing recipes keep theirs; only new frames
 and DSL calls without `mode` would change. Proposed when the photographer confirms:

@@ -3,6 +3,8 @@
 export default {
   id: 'tiny',
   label: 'Tiny',
+  // new recipes print normalised: the grey card at the aim, no time or aperture to set (CHB-031)
+  enlarger: 'normalised',
   build: (ck, cb) =>
     cb
       .studio('Chromobench')

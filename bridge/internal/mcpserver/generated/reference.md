@@ -230,7 +230,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.darkroom.lightsToFiltration({ logH, paper, mode, lamp, filtration, time_s, fstop, aim, aimView }) → value — Expresses printer lights as colour-head filtration plus time.`
     - logH: vec3, logH, [-1.5, 1.5], default [0,0,0], recipe print.lights.logH — Printer lights to express as filtration and time.
     - paper: stockId, default "kodak_portra_endura", recipe print.paper — Colour paper.
-    - mode: enum real|normalised, default "normalised", recipe print.enlarger.mode — real: filtration and time; normalised: filtration, the density part stays as lights.
+    - mode: enum real|normalised, default "real", recipe print.enlarger.mode — real: filtration and time; normalised: filtration, the density part stays as lights.
     - lamp: string, default "TH-KG3", recipe print.enlarger.lamp — Enlarger lamp.
     - filtration: cmy, CC, [-100, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Current shift on the neutral pack.
     - time_s: number, s, [0.1, 600], default 10, recipe print.enlarger.time_s — Current exposure time.
@@ -292,7 +292,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 - **print**
   - `h.print.expose({ paper, mode, lamp, filtration, time_s, fstop, magnification, aim, aimView }) → paper-logH — Exposes paper through the negative: the per-stock table from dye amounts to paper log exposure, without lights.`
     - paper: stockId, default "kodak_portra_endura", recipe print.paper — Colour paper.
-    - mode: enum real|normalised, default "normalised", recipe print.enlarger.mode — normalised: the grey card prints at the aim at lights 0; real: a physical enlarger (CHB-010).
+    - mode: enum real|normalised, default "real", recipe print.enlarger.mode — real: a physical enlarger, where time, aperture and magnification expose the paper (CHB-010; the default since contract 0.4, CHB-031); normalised: the grey card prints at the aim at lights 0 whatever the optics, so time, aperture and magnification do nothing.
     - lamp: string, default "TH-KG3", recipe print.enlarger.lamp — Enlarger lamp and heat filter.
     - filtration: cmy, CC, [-100, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0.
     - time_s: number, s, [0.1, 600], default 10, recipe print.enlarger.time_s — Exposure time.

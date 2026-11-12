@@ -12,6 +12,8 @@ export interface VariantDef {
   id: string;
   label: string;
   description?: string;
+  /** the enlarger mode of new recipes in this layout (default 'real'; simple and tiny: 'normalised', CHB-031) */
+  enlarger?: 'real' | 'normalised';
   build(ck: Ck, cb: Cb, env: VariantEnv): { build(): BuiltApp } | unknown;
 }
 
