@@ -41,13 +41,14 @@ test('a camera RAW opened as a photo is shot on film and printed on the GPU engi
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?nosw&canvas2d&fresh&engine=gpu');
-  await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+  await expect(page.locator('#engine')).toHaveAttribute('data-engine', /GPU/, { timeout: 60_000 });
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.locator('#photo').check();
   await page.setInputFiles('#file', { name: 'scene.dng', mimeType: 'image/x-adobe-dng', buffer: Buffer.from(bayerDng()) });
   await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
   await page.evaluate(() => window.chromobench.idle());
-  await expect(page.locator('#notes')).toContainText('photo: camera RAW (Synth Camera) via LibRaw, photo mode');
+  await expect(page.locator('#notes')).toHaveAttribute('title', /photo: camera RAW \(Synth Camera\) via LibRaw, photo mode/);
+  await expect(page.locator('#notes')).toContainText('Synth Camera photo');
   const s = await page.evaluate(() => ({ kind: window.chromobench.log!.state.kind, stock: window.chromobench.log!.state.capture?.stock, w: window.chromobench.size()!.width }));
   expect(s).toEqual({ kind: 'digital-raw', stock: 'kodak_portra_400', w: 2 * W }); // demosaiced at the sensor resolution
   // brighter scene → brighter print along the ramp; the red object prints red

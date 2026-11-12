@@ -6,6 +6,7 @@ import { argPath, canonicalJSON, convert, type ArgSpec, type OpDef, type Unit } 
 import {
   filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopIndex, fstopStops, num, signed, stopsBetween,
 } from './units.ts';
+import { valueName } from './names.ts';
 
 export type Widget = 'slider' | 'wheel' | 'stepper' | 'segmented' | 'toggle' | 'select';
 export type ValueType = 'number' | 'vec3' | 'cmy' | 'enum' | 'string';
@@ -32,6 +33,10 @@ export interface ControlModel {
   detents: number[];
   defaultValue: unknown;
   values?: string[];
+  /** the contract list the values come from (stocks:print, illuminants, …): their ids read as names (names.ts) */
+  valuesFrom?: string;
+  /** a value as a person reads it: a stock's name for its id; other values as they are */
+  valueLabel(v: unknown): string;
   components?: [string, string, string];
   toDisplay(v: number): number;
   fromDisplay(d: number): number;
@@ -130,8 +135,9 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
     const s = shift ? signed(d, dec) : num(d, dec);
     return unitText ? `${s} ${unitText}` : s;
   };
+  const valueLabel = (v: unknown): string => (spec.valuesFrom && typeof v === 'string' ? valueName(spec.valuesFrom, v) : String(v));
   const format = (v: unknown, k?: number): string => {
-    if (type === 'enum' || type === 'string') return String(v);
+    if (type === 'enum' || type === 'string') return valueLabel(v);
     if (type === 'number') return Array.isArray(v) ? `(${v.map((x) => fmtNum(x as number)).join(', ')})` : fmtNum(v as number);
     if (k !== undefined) return fmtNum(componentOf(type, v, k));
     const parts = [0, 1, 2].map((i) => {
@@ -148,7 +154,7 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   } else if (displayUnit === 'point') aside = (v, _b, k = 0) => `${signed(componentOf(type, v, k), 3)} log H`;
   const valueText = (v: unknown, k?: number): string => {
     const comp = k !== undefined && ui.components ? `${ui.components[k]} ` : '';
-    if (type === 'enum' || type === 'string') return `${label} ${String(v)}`;
+    if (type === 'enum' || type === 'string') return `${label} ${valueLabel(v)}`;
     const x = k !== undefined || Array.isArray(v) ? componentOf(type, v, k ?? 0) : (v as number);
     if (isTime) return `${label} ${formatSeconds(x)} seconds`;
     if (isFstop) return `${label} f ${Number(x.toFixed(1))}`;
@@ -157,7 +163,8 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   };
   const model: ControlModel = {
     path, op: op.name, arg, label, group, doc: spec.doc, widget, type, storageUnit, displayUnit, scale, step,
-    detents: (ui.detents ?? []).map(toDisplay), defaultValue: spec.default, toDisplay, fromDisplay, format, valueText,
+    detents: (ui.detents ?? []).map(toDisplay), defaultValue: spec.default, toDisplay, fromDisplay, format, valueText, valueLabel,
+    ...(spec.valuesFrom ? { valuesFrom: spec.valuesFrom } : {}),
     ...(spec.min !== undefined ? { min: spec.min } : {}),
     ...(spec.max !== undefined ? { max: spec.max } : {}),
     ...(spec.usual ? { usual: spec.usual } : {}),

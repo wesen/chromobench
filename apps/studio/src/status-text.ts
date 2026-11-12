@@ -1,0 +1,46 @@
+// The status line in the photographer's words (CHB-027 F9). The host's engine label and decode notes are written
+// for developers ("reference · CPU f64 (no WebGPU: E_EVAL: no GPU adapter) · 512 px", "W_NO_OPEN_GATE: …"); the
+// status line shows a short summary and keeps the technical text as its tooltip. Reads only the strings that
+// engines.ts and the shell already produce, so nothing upstream changes.
+
+/** "Fast (graphics card)" or "Compatibility mode: slower (no WebGPU)" for the host's engine label */
+export function engineSummary(label: string): string {
+  if (/^mock/i.test(label)) return 'Preview only (no film physics)';
+  if (/^GPU/.test(label)) return /\(software\)/.test(label) ? 'Graphics card emulated in software: slower' : 'Fast (graphics card)';
+  if (/^reference/.test(label)) return /no WebGPU/.test(label) ? 'Compatibility mode: slower (no WebGPU)' : 'Compatibility mode: slower';
+  return label;
+}
+
+const mp = (w: number, h: number): string => {
+  const m = (w * h) / 1e6;
+  if (m < 0.1) return `${w}×${h} px`;
+  return m >= 10 ? `${Math.round(m)} MP` : `${Number(m.toFixed(1))} MP`;
+};
+const size = (s: string): { w: number; h: number } | null => {
+  const m = /(\d+)×(\d+)/.exec(s);
+  return m ? { w: Number(m[1]), h: Number(m[2]) } : null;
+};
+
+/**
+ * One line for a frame's decode notes (the host's strings, in order): "Nikon D750 photo, 24 MP",
+ * "Colour negative (Nikon D750 RAW), 6 MP, film edge found", "Colour negative (TIFF), 6 MP, no film edge found".
+ * An empty list gives ''.
+ */
+export function notesSummary(notes: readonly string[]): string {
+  if (!notes.length) return '';
+  const first = notes[0]!;
+  const sz = size(first);
+  const px = sz ? `, ${mp(sz.w, sz.h)}` : '';
+  const cam = /\(([^)]+)\) via LibRaw/.exec(first)?.[1];
+  const fmt = /^(?:photo: )?([A-Z]{3,4}) \d+×\d+/.exec(first)?.[1];
+  if (/^photo:/.test(first)) return `${cam ?? fmt ?? 'Digital'} photo${px}`;
+  const parts = [`Colour negative (${cam ? `${cam} RAW` : fmt ?? 'scan'})${px}`];
+  if (notes.some((n) => /^base .* D \(rebate/.test(n))) parts.push('film edge found');
+  else if (notes.some((n) => /^no rebate found/.test(n))) parts.push('no film edge found');
+  const dust = notes.map((n) => /^dust: (\d+) specks/.exec(n)?.[1]).find((x) => x !== undefined);
+  if (dust && dust !== '0') parts.push(`${dust} dust specks healed`);
+  // no film edge, no open gate and no surround: what a photo opened as a negative looks like
+  const missing = ['W_NO_OPEN_GATE', 'W_NO_SURROUND', 'W_REBATE_BLANK'].filter((c) => notes.some((n) => n.startsWith(`${c}:`))).length;
+  if (missing >= 2 && notes.some((n) => /^no rebate found/.test(n))) parts.push('it may be a photo, not a negative');
+  return parts.join(', ');
+}

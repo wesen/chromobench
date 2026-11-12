@@ -56,7 +56,9 @@ export function describe(m: Mutation, before: FrameRecipe, lookup: ModelLookup):
         const b = model.format(m.value);
         const ma = /^(.*) (\S+)$/.exec(a);
         const mb = /^(.*) (\S+)$/.exec(b);
-        const text = ma && mb && ma[2] === mb[2] ? `${model.label} ${ma[1]} → ${b}` : `${model.label} ${a} → ${b}`;
+        // a shared unit is written once (Time 10.0 → 12.6 s); names (Kodak Portra Endura) are not units
+        const numeric = model.type !== 'string' && model.type !== 'enum';
+        const text = numeric && ma && mb && ma[2] === mb[2] ? `${model.label} ${ma[1]} → ${b}` : `${model.label} ${a} → ${b}`;
         const aside = model.aside && model.storageUnit === 's' ? ` (${formatStops(Math.log2((m.value as number) / (old as number)))} st)` : '';
         return text + aside;
       }
