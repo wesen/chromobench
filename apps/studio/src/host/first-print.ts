@@ -4,7 +4,7 @@
 // mean density goes into the enlarger time (on the slider's 1/6-stop grid) and the colour remainder
 // into the printer lights. Two passes, so a time model that is not exactly log-linear still lands.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
-import { compile, type Engine, type FrameRecipe, type Graph, type Node, type Vec3 } from '@chromobench/contract';
+import { compile, type Box, type Engine, type FrameRecipe, type Graph, type Node, type Vec3 } from '@chromobench/contract';
 
 /** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
 export type IntegrateToGrey = (frameLatd: Vec3, alpha: number) => Vec3;
@@ -91,4 +91,9 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
       },
     },
   };
+}
+
+/** The new recipe with the measured rebate box (CHB-020) as its scan base; no box leaves scan.density's own rule. */
+export function withRebate(recipe: FrameRecipe, rebate: Box | null | undefined): FrameRecipe {
+  return rebate && recipe.scan ? { ...recipe, scan: { ...recipe.scan, rebate } } : recipe;
 }
