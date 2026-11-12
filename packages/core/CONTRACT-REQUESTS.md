@@ -259,3 +259,123 @@ Doc only; the engines implement this.
  mask.paint doc
 +  + ' Pressure is recorded but does not modulate the brush; add takes the maximum, erase multiplies by 1 − coverage.'
 ```
+
+---
+
+# Contract requests from CHB-012 (forward film path, `@chromobench/core` film/ and `packages/gpu` src/film.ts)
+
+Core and the GPU engine implement `source.xyz`, `capture.expose`, `film.couple`, `film.halation`,
+`film.develop` and `film.grain` on contract 0.3 as it stands; each item below says what is worked around
+locally. Nothing here blocks merging.
+
+## F1. `compile`: halation before coupling
+
+**Need.** Halation and scatter redistribute *light*, so they act on the exposure the camera put on the
+film; DIR coupling acts on that (halated) exposure during development. Guide §5.6 and spektrafilm
+(`FilmingStage.expose` → `develop`) order them expose → halation → couple → develop. `compile` emits
+`capture.expose → film.couple → film.halation → film.develop(precorrected)`, so the halation blurs the
+*inhibited* exposure u − a and the precorrected curve is applied to a blurred inhibited exposure; on a
+uniform field the two orders agree (both kernels are normalised), at edges they differ.
+
+**Workaround.** None needed for uniform areas; the engines evaluate whatever order the graph has.
+
+```diff
+--- a/packages/contract/src/graph.ts (compile, digital-raw branch)
+     n = I('capture.expose', [n], { stock: c.stock, exposureEV: c.exposureEV });
+-    n = I('film.couple', [n], { amount: c.development.dir.amount, diffusion_um: c.development.dir.diffusion_um });
+-    n = I('film.halation', [n], { strength: c.development.halation.strength });
++    n = I('film.halation', [n], { strength: c.development.halation.strength });
++    n = I('film.couple', [n], { amount: c.development.dir.amount, diffusion_um: c.development.dir.diffusion_um });
+     n = I('film.develop', [n], { push: c.development.push, curves: 'precorrected' });
+```
+
+## F2. `capture.expose` carries adaptation, auto exposure and the film format
+
+**Need.** The recipe has `capture.adapt`, `capture.autoExposure` and `capture.format.longEdge_mm`, but no op
+argument receives them, and `ImageInfo.umPerPx.film` is never set on a digital-raw chain (graph.infer copies
+`{}` from source.open), so every µm-sized film effect has no pixel size.
+
+**Workaround.** `adapt` is read when present and defaults to `'to-film-reference'` (the recipe default);
+auto exposure is available as `autoExposureEV()` in core but not applied; the pixel size falls back to a
+36 mm long edge over the image's long side (`filmUmPerPx`, core `ops/film.ts`) in both engines.
+
+```diff
+--- a/packages/contract/src/catalog/capture-film-print.ts (capture.expose args)
+       exposureEV: { … },
++      adapt: { type: 'enum', values: ['to-film-reference', 'none'], default: 'to-film-reference', path: 'capture.adapt', doc: 'CAT16 from D65 to the film reference white, or the scene light as is.' },
++      autoEV: { type: 'number', unit: 'stop', min: -10, max: 10, default: 0, doc: 'Auto-exposure shift measured by the host (autoExposureEV on the scene luminance at analysisLongSide_px); adds to exposureEV.' },
++      format_mm: { type: 'number', unit: 'none', min: 10, max: 300, default: 36, path: 'capture.format.longEdge_mm', doc: 'Long edge of the film format; sets ImageInfo.umPerPx.film.' },
+--- a/packages/contract/src/graph.ts (infer)
++    if (op.name === 'capture.expose') umPerPx = { ...umPerPx, film: ((args['format_mm'] as number) * 1000) / Math.max(width, height) };
+--- a/packages/contract/src/graph.ts (compile)
+-    n = I('capture.expose', [n], { stock: c.stock, exposureEV: c.exposureEV });
++    n = I('capture.expose', [n], { stock: c.stock, exposureEV: c.exposureEV, adapt: c.adapt, format_mm: c.format.longEdge_mm });
+--- a/packages/contract/src/recipe.ts
+-  autoExposure: { method: 'off' | 'mean' | 'grey'; analysisLongSide_px: number };
++  autoExposure: { method: 'off' | 'center_weighted' | 'average' | 'median' | 'partial' | 'matrix' | 'multi_zone' | 'highlight_weighted'; analysisLongSide_px: number };
+-  'capture.autoExposure.method': spec({ type: 'enum', values: ['off', 'mean', 'grey'], doc: 'automatic exposure' }),
++  'capture.autoExposure.method': spec({ type: 'enum', values: ['off', 'center_weighted', 'average', 'median', 'partial', 'matrix', 'multi_zone', 'highlight_weighted'], doc: "automatic exposure (spektrafilm's metering methods)" }),
+```
+
+The auto-exposure value is image-global (guide §2.4), so the host measures it (a `measure` node on the scene
+luminance at the analysis size) and writes `autoEV`, which keeps `capture.expose` pointwise and hash-consed.
+
+## F3. `film.couple` needs the development
+
+**Need.** The inhibitor is a = Mᵀ f(u) with f the *developed* datasheet curve; a pushed film releases more
+inhibitor. `push` is an argument of `film.develop`, downstream, so `film.couple` cannot see it.
+
+**Workaround.** `film.couple` uses the nominal curves; `film.develop(precorrected)` builds f⁰ from the pushed
+curves, so neutrals still reproduce only at push 0 (the push-neutrality law of core is checked on the pure
+functions, not through the graph).
+
+```diff
+--- a/packages/contract/src/catalog/capture-film-print.ts (film.couple args)
++      push: { type: 'number', unit: 'stop', min: -2, max: 3, default: 0, path: 'capture.development.push', doc: 'The development the inhibitor is formed in (set by compile with film.develop.push).' },
+--- a/packages/contract/src/graph.ts (compile)
+-    n = I('film.couple', [n], { amount: …, diffusion_um: … });
++    n = I('film.couple', [n], { amount: …, diffusion_um: …, push: c.development.push });
+```
+
+## F4. The development basis is visible
+
+**Need.** Guide §5.5: a push is `measured` (Portra 800 push 1/2), `interpolated`, `transferred` (other stocks)
+or `heuristic` (pull); the UI and the agent should say which. Core returns it (`developmentCurves().basis`).
+
+```diff
+--- a/packages/contract/src/errors.ts
++  'W_DEVELOP_BASIS',   // film.develop: the push curves are transferred or heuristic, not measured
+```
+The engines would attach it to `film.develop`'s result (like `W_DODGE_EXCEEDS_MAIN`).
+
+## F5. `film.grain.size_um` meaning (doc)
+
+**Need.** spektrafilm's grain has no "clump size"; core reads `size_um` as a scale of the crystal area,
+(size_um / 12)², so the default 12 is the stock's own grain, and `amount` as D + amount·(D̂ − D).
+
+```diff
+-      size_um: { …, doc: 'Grain clump size.' },
++      size_um: { …, doc: 'Grain size: crystal areas scale by (size_um / 12)²; 12 is the stock as measured.' },
+-      amount: { …, doc: 'Grain amount relative to the stock.' },
++      amount: { …, doc: 'Grain fluctuation relative to the stock: D + amount·(D̂ − D).' },
+```
+
+## F6. `film.halation` and `film.couple` keep `film-logH` (note, no diff)
+
+Guide decision record: halation exponentiates, convolves in linear exposure and takes the log again, so no
+`film-exposure` domain is needed. The Jensen law with the log-domain mutant guards it (core
+`film.stage3.test.ts`).
+
+## F7. `source.xyz` is implemented by core (note)
+
+The catalog lists CHB-006 as owner. Core (`ops/film.ts`, `film/camera.ts`) and the GPU engine implement it
+from `SourceInfo.camera` (camToXyz normalised so the as-shot neutral has Y = 1, as ingest's DNG mapping
+produces): 'daylight' keeps the scene light, 'as-shot' adapts the as-shot neutral to D65 (CAT16), 'custom'
+adapts the white of temperature/tint. Without camToXyz the camera values are taken as linear sRGB.
+
+## F8. Data (CHB-004, not contract): window and sublayer curves reach core
+
+`packages/data/src/physics.ts` now copies the pack's `hanatosWindow` and `sublayerCurves` into core's
+StockData (`window`, `sublayerCurves`, both optional). The 192² hanatos2025 spectra table stays on demand:
+core builds film tables from it when given (`RefEngineOptions.spectra`), else from its own sigmoid fit
+(`sigmoidSpectraTable`, up to ≈ 0.7 stops away for saturated colours; neutrals within 0.05 stops).

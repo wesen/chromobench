@@ -849,3 +849,195 @@ The cross-check found one transcription error in the guide (the push 1 shift, St
 
 ### Technical details
 - Transcript: `/home/manuel/.claude/projects/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/subagents/agent-a942cef5b48559a44.jsonl`.
+
+## Step 16: Implementation start — brief, guide, code state and an executable spektrafilm
+
+This step opened the implementation of CHB-012 in its own worktree on branch `task/chb-012-forward`. I read the common brief, the full intern guide (772 lines) and the tasks, then mapped what the code already had: core had no forward path at all (no `source.xyz`, `capture.*` or `film.*` adapters in `IMAGE_OPS`), the GPU engine lowered only `film.grain` (Gaussian noise, `OP.GRAIN`), and the contract's `compile` already emits the digital-raw chain.
+
+The decisive find was that the spektrafilm checkout at `/home/manuel/code/wesen/chromobench-ext/spektrafilm` (commit `3bb2c2d`) runs in its venv once a handful of I/O modules are stubbed. That turned spektrafilm itself into an oracle for stage 1 and the DIR numbers, beside the guide's printed values.
+
+### Prompt Context
+**User prompt (verbatim):** "You implement ticket CHB-012 (forward film simulation and the digital RAW path — the "Dehancer" part: a digital camera RAW exposed onto a virtual negative, then printed through the same paper model) in the chromobench monorepo, in your own git worktree (based on main). […] Final reply (short): branch, commits, test counts, what works (digital RAW → film look), open items, contract requests." (orchestrator brief to this agent; the full text is in the transcript)
+**Assistant interpretation:** Build the forward path in core with goldens, then the GPU with parity, halation/DIR/grain as engine ops, then whatever studio piece the guide needs.
+**Inferred user intent:** RAW photos printed through the simulated darkroom with a film look that is physically grounded and testable.
+**Commit (code):** none in this step.
+
+### What I did
+- `git checkout -b task/chb-012-forward`; `pnpm install --offline --frozen-lockfile` (exit 0).
+- Read `packages/contract/src/catalog/capture-film-print.ts`, `graph.ts` (`compile`), `recipe.ts` (`CaptureSettings`, `DevelopmentSettings`), `source.ts` (`CameraColour`), core `ops/ops.ts`, `engine-ref.ts`, `print/chain.ts` (`midgray` override already present), the GPU engine's barrier/tail planner, `spatial.ts` and the parity page.
+- Data: the spektrafilm pack has stocks, `presets/{dir-couplers,halation,grain}.json`, the window params and sublayer curves in the pack's StockData, but core's `PhysicsData` did not pass the window or sublayers through; the 192² `hanatos2025-irradiance-xy-tc` table is on demand and not committed. `interim-filmbench@1` has Filmbench's 64² log₂ film tables.
+- Copied the on-demand table into the gitignored `packages/data/packs/spektrafilm@0.3.2+3bb2c2d/upsampling/` from a pytest temp export after checking its sha256 against the manifest (`9c32a3fa…0e`).
+- Stubbed `exiv2`, `rawpy`, `lensfunpy`, `OpenImageIO`, `skimage` in `scratchpad/chb012/stubs/` and ran spektrafilm with `PYTHONPATH=.:<stubs>`.
+
+### Why
+- The guide's numbers are partly derived from Chromogen's or Filmbench's copies; running spektrafilm on the pack's own data separates data differences from implementation errors.
+
+### What worked
+- `load_profile('kodak_portra_400')` succeeded after five rounds of stubbing.
+
+### What didn't work
+- `python -c 'from spektrafilm.profiles.io import load_profile'` failed in turn with `ModuleNotFoundError: No module named 'exiv2'`, `'lensfunpy'`, then `ImportError: cannot import name 'ImageSpec' from 'OpenImageIO'` (an empty stub; fixed with a module `__getattr__` stub), then `No module named 'skimage'`.
+- Several shell commands with heredocs were refused by the worktree guard ("this command is too complex to verify that it stays inside the worktree"); I moved scripts into scratchpad files.
+
+### What I learned
+- The pack's sensitivities are already balanced: a D55-adapted 18.4 % sRGB grey gives raw ≈ (1.013, 0.989, 0.918) through the windowed table, as LFP says.
+
+### What was tricky to build
+- N/A (orientation).
+
+### What warrants a second pair of eyes
+- The local hanatos table is gitignored; CI runs without it and skips the six tests that need it.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- N/A.
+
+### Technical details
+- Stub directory: `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/chb012/stubs`.
+
+## Step 17: spektrafilm goldens and the sigmoid-fit fallback spectra
+
+I wrote `tools/fixtures/chb012-spektrafilm-goldens.py`, which runs spektrafilm's own functions on Portra 400 and writes `fixtures/golden/film/spektrafilm-forward.json`: film-table nodes (window + compression, window only, bare), `M_sRGB_D55`, the raw of nine linear sRGB colours, `compress_xy` samples, the window values, the seven auto-exposure methods on a synthetic image, and d⁰, a and coupled d on six exposures.
+
+Because the 192² spectra table is not committed, core needs spectra of its own. I prototyped a minimum-norm Gauss–Newton fit of a sigmoid-quadratic spectrum per (u, v) node (the form of hanatos' coefficients) and compared it with the hanatos table.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** Make goldens that pin the implementation to spektrafilm, and keep the path working without the on-demand table.
+**Inferred user intent:** Tests that can fail for the right reasons.
+**Commit (code):** 49c2c41 — "CHB-012: forward film path in core — …" (the fixture and generator are in it).
+
+### What I did
+- `PYTHONPATH=.:<stubs> ../../venv/bin/python goldens.py > sf-goldens.json` from `spektrafilm/src`; wrapped it with a `_doc` header by `scratchpad/chb012/py/mkfixture.py`.
+- `scratchpad/chb012/py/sigfit.py`: sigmoid fit vs hanatos at seven nodes, Portra 400 layer differences in stops.
+
+### Why
+- A fallback that is wrong by a constant would be invisible in the neutral tests; comparing layer exposures shows where it differs.
+
+### What worked
+- spektrafilm reproduces the guide: moderate red raw (2.5056, 0.5293, 0.6898), grey (1.0129, 0.9894, 0.9179), a(0) = (0.4847, 0.6628, 0.6924), moderate red d = (0.9867, 0.4557, 0.7116), toe magenta 0.00386.
+- Sigmoid fit vs hanatos (stops, R G B): (0.2588, 0.6303) −0.078 −0.023 +0.054; (0.45, 0.66) +0.060 +0.023 +0.084; (0.5, 0.3) −0.153 +0.289 +0.672.
+
+### What didn't work
+- First fit run: `numpy.linalg.LinAlgError: SVD did not converge in Linear Least Squares` (undamped steps diverged to NaN); fixed with step halving.
+
+### What I learned
+- With three coefficients and two chromaticity constraints the family has one free parameter; hanatos' choice within it is unknown, so the fallback is "a" smooth spectrum, not hanatos'.
+
+### What was tricky to build
+- N/A here (the TypeScript version is Step 19).
+
+### What warrants a second pair of eyes
+- The fallback's saturated-colour error (up to ≈ 0.7 stops in blue) is large; it is labelled `'sigmoid-fit'` and the hanatos table should ship with CHB-004 (F8).
+
+### What should be done in the future
+- Ship the hanatos table (licence check, guide §9 risk) or a 64² derivative per stock.
+
+### Code review instructions
+- `tools/fixtures/chb012-spektrafilm-goldens.py`; rerun as in Step 16 and diff the JSON.
+
+### Technical details
+- Generator settings: window on, surface off, `InputGamutCompressSpec()` defaults, `rgb_to_raw_hanatos2025(..., color_space='sRGB', apply_cctf_decoding=False, reference_illuminant='D55')`.
+
+## Step 18: The forward path in core (stages 1–5) with goldens and laws
+
+I implemented `packages/core/src/film/` (upsample, expose, camera, curves, couple, blur, halation, rng, grain, develop, forward) and the reference-engine adapters in `ops/film.ts`, then encoded the guide's §8 numbers and the spektrafilm fixture as five test files (55 tests). A digital-raw recipe now compiles and renders end to end in the reference engine: synthetic RAW → `source.xyz` → `capture.expose` → `film.couple` → `film.halation` → `film.develop(precorrected)` → `film.grain` → the CHB-003 print chain, with the print normalised to the capture path's mid-grey.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** Core first, with the guide's numbers as goldens.
+**Inferred user intent:** A trustworthy oracle for the GPU.
+**Commit (code):** 49c2c41 — "CHB-012: forward film path in core — upsampling, exposure, curves, DIR, halation, grain, development, ref-engine ops"
+
+### What I did
+- `film/upsample.ts`: `tri2quad`/`quad2tri`, `erf4Window`, `windowNormalisers`, `spectralLocus`, `compressXY` (radial, Reinhard knee 0/1/6), `lookupCubic` (Mitchell–Netravali B = C = ⅓, reflected indices, weight-sum normalised, as `apply_lut_cubic_2d`), `lookupBilinear`, `buildFilmTable` (window renormalised on the reference illuminant, compression baked in by `remapForCompression`), `filmTableFromLog2` (Filmbench), `resampleFilmTable`, `spectraFromF16`, `sigmoidSpectraTable`.
+- `film/expose.ts`: `cat16Matrix`, `makeExposer`, `logRaw`, `autoExposureEV` (seven methods). `film/camera.ts`: `cameraMatrix` for daylight / as-shot / custom (CIE daylight or Planckian locus plus a tint). `film/forward.ts`: `makeFilmModel`, `rawOfLinearSRGB`, `midgrayFilmDensity`.
+- `film/curves.ts`: `FilmCurves` (min-subtracted, f(g·x), clamped), `parametric`, slope, Newton inverse, LM `fitParametric`. `film/couple.ts`: `DIR_NEGATIVE`, `precorrectedCurves`, `inhibitor`, `developCoupled`, `effectiveGamma`, `inhibitorKernel`, `coupleImage`.
+- `film/halation.ts`: presets, `halationKernel` (16 Gaussians), exact `edgeResponse`, `applyHalation(Linear)`. `film/blur.ts`: separable f64 Gaussians (reflect, 4σ), `EXP_GAUSSIANS`. `film/rng.ts`: `pcg4d`, `KeyedUniforms`, `poisson` (inversion < 30, PTRS). `film/grain.ts`: sublayers, `grainDraw`, `grainImage`, `grainHalo`, `selwynG`, `rmsGranularity48`. `film/develop.ts`: `developmentCurves` with the four bases.
+- `ops/film.ts`: `FILM_IMAGE_OPS` and the shared binding helpers (`sceneMatrixAt`, `exposerAt`, `developCurvesAt`, `dirAt`, `coupleCurvesAt`, `halationAt`, `grainAt`, `filmUmPerPx`); `ops/ops.ts`: `PhysicsEnv.film()`/`spectra()`, `OpCtx.sourceInfo`, `ExposeSettings.capture` (RAW mid-grey), `isCapture`. `packages/data/src/physics.ts` and core `StockData`: optional `window`, `sublayerCurves`.
+- Tests: `packages/core/test/film.stage{1..5}.test.ts`. Checks: `pnpm typecheck` ok, `pnpm lint` ok (272 file checks), `pnpm test` 73 files / 2523 tests (baseline 2413), `pnpm gen:check` ok, `pnpm contract:check` exit 0 (it lists the 0.3 changes against the baseline, not mine), `pnpm test:browser` 69 passed.
+
+### Why
+- One set of `*At(ctx, args)` helpers serves both engines, so the GPU cannot bind different physics than the reference.
+
+### What worked
+- spektrafilm parity: film-table nodes to 1e-6 relative; raw of nine colours to 1e-5 stops with spektrafilm's matrix, 2e-3 with core's whites; d⁰, a, d to 1e-9; `compress_xy` to 2e-4; auto exposure to 1e-4 EV.
+- Guide numbers: M_D55 within 1e-4; window values; normalisers (0.336, 0.739, 0.480); centroids 624.2 → 612.5 and 430.8 → 447.2 nm; grey vs D55 (+0.018, −0.015, −0.124) stops; fit table within (0.006, 0.02); a(0); J(0) within 0.0035 and row sums; neutral ramp < 0.0012; toe magenta 0.004 vs −0.333; edge 1.399/0.687/1.484/0.615 within 0.01; 16-Gaussian kernel; edge cyan within 0.0015; Jensen +0.404/−0.973; RMS 9.1/7.4/13.8 within 0.06; Monte Carlo variance within 1 % on 400,000 draws; padded tile equals the full render to 1e-12; Portra 800 push profiles exact (`measured`), push 1 interpolated within 0.03 rms.
+
+### What didn't work
+- `pnpm typecheck`: `index.ts(42,1): error TS2308: Module './print/masks.ts' has already exported a member named 'gaussianTaps'` → renamed to `filmGaussianTaps`.
+- Stage 1 first run, 5 of 21 failed: (u, v) 0.63043 vs 0.6303 (rounded inputs; tolerance 2e-4), Y 0.18547 vs 0.1854, centroid 623.49 vs 624.2 (the textbook's centroid has no illuminant), saturated raw 1.4e-3 stops (whites), `multi_zone` 2.2e-4 EV (`Math.hypot` vs `sqrt(x² + y²)` at a ring boundary).
+- Stage 2: closed-form J vs differences 0.015 (slopes at h = 1e-4 vs the textbook's ±0.05; `effectiveGamma(..., h)`), mutant −0.272 vs −0.333 until f₁ = B⁻¹f was applied per channel.
+- Stage 3: kernel weights summed to 0.999922 (spektrafilm's three exponential amplitudes sum to 0.9999) → normalised in `EXP_GAUSSIANS`; edge cyan 0.5742 vs 0.573 → tolerance 0.0015.
+- Stage 4: push 3 neutral error 1.81: the transferred curve folds the shifted axis (Σ_k M_kj f′_k ≥ 1), f⁰ does not exist; the law runs over −1…2 and the axis is made non-decreasing.
+- Conformance: `capture.expose shape` timed out at 5000 ms: the first sigmoid-fit table took 11 s; after rewriting the fitter allocation-free and fitting beyond 85 % of the locus radius at 85 %, 64² builds in ≈ 0.4 s.
+- Stage 5: `E_NOT_IMPLEMENTED: output.frame is not implemented by the reference engine` (CHB-022's) → the test evaluates `output.display`; the graph neutral law first failed by 0.0225 because a grey sRGB input is not a neutral *exposure* → the input is solved for equal raw.
+
+### What I learned
+- The guide's halation and DIR numbers reproduce on the spektrafilm pack's data to the printed digit or within 0.0015; its grain RMS needs the sublayer curves, which CHB-004 already exports.
+
+### What was tricky to build
+- `film.develop(precorrected)` must find the DIR amount of the `film.couple` upstream (`ctx.up`), and the print chain of a RAW frame must use the capture mid-grey; both are read from the graph, not from new arguments.
+
+### What warrants a second pair of eyes
+- `couple.ts` makes the shifted axis non-decreasing; for steep (pushed) curves that silently changes f⁰ instead of failing.
+- `film.couple` uses the nominal curves (F3).
+
+### What should be done in the future
+- Contract requests F1–F5 (`packages/core/CONTRACT-REQUESTS.md`).
+
+### Code review instructions
+- Start at `packages/core/src/ops/film.ts`, then `film/forward.ts`, `film/upsample.ts`, `film/couple.ts`, `film/grain.ts`.
+- `npx vitest run packages/core/test/film.stage1.test.ts packages/core/test/film.stage2.test.ts packages/core/test/film.stage3.test.ts packages/core/test/film.stage4.test.ts packages/core/test/film.stage5.test.ts`
+
+### Technical details
+- pcg4d(0, 0, 0, 0) = (251852841, 760645481, 850445371, 3542436074), recomputed in Python with 32-bit wrap-around.
+- Fallback spectra: `sigmoidSpectraTable(cmf, 64)`, RMAX 0.85.
+
+## Step 19: The forward path on the GPU, with parity against core
+
+I added `packages/gpu/src/film.ts` (class `FilmGpu`) and `kernels/film.wgsl` and wired them into `engine-gpu.ts` with a 16-line change: the six film ops join `GPU_OPS` and the barrier set, and the barrier switch's default branch hands them to `FilmGpu.run` with the node's core context. The film ops are materialised steps on the output grid: camera matrix, exposure through the cubic film table, curves (the stock's own 256-sample rows), the DIR inhibitor, linear/log conversions, weighted sums of separable Gaussians (multi-pass beyond σ = 32 px), and Poisson sublayer grain with pcg4d keys.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** GPU parity; halation, DIR and grain as engine ops; small, self-contained edits in engine-gpu.ts.
+**Inferred user intent:** RAW photos render interactively on the GPU like the reference engine.
+**Commit (code):** see the next commit after 49c2c41 ("CHB-012: forward film path on the GPU …").
+
+### What I did
+- `src/parity/film-tests.ts` (`film:rng`, `film:stages`, `film:grain`, `film:mixture`, `film:recipe`), `test/browser/film.spec.ts` (5 tests); `grain:selwyn` (spatial-tests) now measures σ²·A on a uniform RAW field, because the Poisson model's final 0.65 px blur also softens the image and the old random-pattern input made blur(b) − b dominate.
+- `GPU_PARITY_PORT=4544 CI=1 npx playwright test -c playwright.config.ts test/browser/film.spec.ts test/browser/spatial.spec.ts`: 14 passed; conformance 318/318 (274 before: the new ops add cases).
+
+### Why
+- Barrier steps keep engine-gpu.ts untouched apart from the hook; pointwise fusion of `capture.expose`/`film.develop` into the program kernel is an optimisation for later.
+
+### What worked
+- pcg4d uniforms bit-identical (132,612 of 132,612).
+- Max |GPU − core| on a 96 × 64 synthetic RAW: xyz 9.6e-7, expose 4.5e-7, couple 5.0e-7, coupleDiffused 1.3e-6, halation 5.2e-7, develop 5.7e-7, developPush 6.9e-7; grain variance 0.00084652 vs 0.00084657, 80 % of values within 1e-4; mixture (σ 45, two passes) max 5.8e-4 in the interior; digital-raw recipe display max 4.5e-5.
+
+### What didn't work
+- First parity run: `E_NO_SOURCE: source 0ef3df6754ae… is not open` (the test graph needs `registerSource`).
+- Then develop max 0.978, halation 10.24: the `curves`, `exp10` and `log10e` dispatches silently failed validation. `curves` statically uses `b`, and `exp10`/`log10e` did not use the uniform buffer, so the auto layouts lacked binding 2 or 0; the output textures kept old pool contents (the halation output was the source.xyz texture's 12.14). Fixed by binding `b` for `curves` and a phony `_ = U.u.w;` in `inside()`.
+- `pnpm typecheck`: `Float32Array<ArrayBufferLike>` not assignable to `GPUAllowSharedBufferSource` → `Float32Array<ArrayBuffer>`.
+
+### What I learned
+- WebGPU validation errors on `createBindGroup` do not throw; a missing or extra binding shows up as stale pool memory, so parity against core is the only reliable detector.
+
+### What was tricky to build
+- The texture pool: every intermediate of `mixture` must be released exactly once, and the identity term must not release its source.
+
+### What warrants a second pair of eyes
+- Tiled export: film spatial ops run on the tile's grid with clamp-to-edge; the tile plan has no halo or global field for them yet (seams in large tiled exports with halation, diffused DIR or grain blurs).
+- `umPerPx` falls back to 36 mm over the long side in both engines (F2); `DEFAULT_UM_PER_PX = 6` of the engine is no longer used by film ops.
+
+### What should be done in the future
+- Halo / global-field tiling for the film ops; pointwise fusion of capture.expose and film.develop into the program kernel.
+
+### Code review instructions
+- `packages/gpu/src/film.ts`, `packages/gpu/kernels/film.wgsl`, the hunk in `packages/gpu/src/engine-gpu.ts` (search "CHB-012").
+- `GPU_PARITY_PORT=4544 CI=1 npx playwright test -c packages/gpu/playwright.config.ts packages/gpu/test/browser/film.spec.ts`
+
+### Technical details
+- Uniform block `P` (128 bytes): three matrix rows, s, g, d, u (u32), o (i32); entry points `camMatrix`, `expose`, `curves`, `inhibit`, `exp10`, `log10e`, `axpy`, `grainDraw` (three storage outputs, one per sublayer), `rngProbe`.
