@@ -106,7 +106,8 @@ export function parseEntry(a: ArgModel, text: string, current: unknown): unknown
   const m = a.model;
   const k = a.component;
   const cur = k === null ? (current as number) : componentOf(m.type, current, k);
-  const t = text.trim();
+  // a decimal comma (German '7,5', '+2,5 st') reads as a point
+  const t = text.trim().replace(/(\d),(\d)/g, '$1.$2');
   const put = (x: number): unknown => {
     const y = Number(x.toFixed(6));
     return k === null ? y : withComponent(m.type, current, k, y);
@@ -135,6 +136,17 @@ export function parseEntry(a: ArgModel, text: string, current: unknown): unknown
   // the shell's arithmetic: '*2', '50%', '12+3'
   const d = parseValue(t, { current: m.toDisplay(cur) });
   return d.ok ? put(m.fromDisplay(d.value)) : null;
+}
+
+/** the track's range for a value: the usual range, widened by a margin to take in x, never past the hard range */
+export function trackRange(sc: { min: number; max: number; step: number; hard: { min: number; max: number } }, x: number): { min: number; max: number } {
+  if (!Number.isFinite(x)) return { min: sc.min, max: sc.max };
+  const margin = Math.max(sc.step * 3, (sc.max - sc.min) * 0.05);
+  // widen on the step grid, so the thumb keeps landing on whole steps
+  const grid = (y: number, f: (n: number) => number): number => f(y / sc.step) * sc.step;
+  const min = x - margin < sc.min ? Math.max(sc.hard.min, grid(x - margin, Math.floor)) : sc.min;
+  const max = x + margin > sc.max ? Math.min(sc.hard.max, grid(x + margin, Math.ceil)) : sc.max;
+  return { min: Number(min.toFixed(6)), max: Number(max.toFixed(6)) };
 }
 
 /** the paths .testStrip() applies to (time, filtration and its components) */

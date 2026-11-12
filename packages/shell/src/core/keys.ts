@@ -106,7 +106,11 @@ export interface KeyEventLike {
 export function chordFromEvent(e: KeyEventLike, platform: Platform = OTHER): string | null {
   let key: string;
   const code = e.code || '';
-  if (/^Key[A-Z]$/.test(code)) key = code.slice(3).toLowerCase();
+  const typed = String(e.key ?? '');
+  // letters follow the keyboard layout (CHB-027): Ctrl+Z on a German QWERTZ keyboard is the key labelled Z, whose
+  // physical code is KeyY. A key that types no Latin letter (Option on a Mac, Cyrillic) falls back to the code.
+  if (/^[a-z]$/i.test(typed) && /^Key[A-Z]$/.test(code)) key = typed.toLowerCase();
+  else if (/^Key[A-Z]$/.test(code)) key = code.slice(3).toLowerCase();
   else if (/^Digit\d$/.test(code)) key = code.slice(5);
   else if (/^Numpad\d$/.test(code)) key = code.slice(6);
   else if (CODE_KEYS[code]) key = CODE_KEYS[code]!;

@@ -63,13 +63,14 @@ for (const [kind, make] of Object.entries(FILES)) {
   test(`${kind}: decoded by ingest, conditioned, printed on the GPU engine`, async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto('/?nosw&canvas2d&fresh&engine=gpu');
-    await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+    await expect(page.locator('#engine')).toHaveAttribute('data-engine', /GPU/, { timeout: 60_000 });
     await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
     await page.setInputFiles('#file', make());
     await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
     await idle(page);
-    await expect(page.locator('#notes')).toContainText(kind === 'dng' ? 'camera RAW (Synth Scanner) via LibRaw' : kind.toUpperCase());
-    await expect(page.locator('#notes')).toContainText('base');
+    await expect(page.locator('#notes')).toHaveAttribute('title', kind === 'dng' ? /camera RAW \(Synth Scanner\) via LibRaw/ : new RegExp(kind.toUpperCase()));
+    await expect(page.locator('#notes')).toHaveAttribute('title', /base/);
+    await expect(page.locator('#notes')).toContainText('Colour negative');
     const r = await page.evaluate(() => ({ w: window.chromobench.size()!.width, h: window.chromobench.size()!.height, auto: window.chromobench.log!.state.print.lights.auto.method }));
     expect(r).toEqual({ w: W, h: H, auto: 'integrate' });
     // the ramp prints: denser negative (right) → lighter print

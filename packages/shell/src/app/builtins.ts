@@ -40,14 +40,15 @@ export function builtinCommands(get: () => Runtime<any> | null, themes: Iterable
   const noVp = { enabled: () => !!get()?.viewport(), why: 'No picture is shown' };
   return {
     'edit.undo': {
-      label: () => (get()?.history.last ? `Undo ${get()!.history.last}` : 'Undo'),
+      // an undo that lands on another frame (channel) than the one on screen says which (CHB-027 F12)
+      label: () => (get()?.history.last ? `Undo ${get()!.history.last}${get()!.whereOf(get()!.history.entries.at(-1) ?? null)}` : 'Undo'),
       menu: 'Edit',
       enabled: () => !!get()?.history.canUndo,
       why: 'Nothing to undo yet',
       run: () => rt().undo(),
     },
     'edit.redo': {
-      label: () => (get()?.history.next ? `Redo ${get()!.history.next}` : 'Redo'),
+      label: () => (get()?.history.next ? `Redo ${get()!.history.next}${get()!.whereOf(get()!.history.redoStack.at(-1) ?? null)}` : 'Redo'),
       menu: 'Edit',
       enabled: () => !!get()?.history.canRedo,
       why: 'Nothing to redo',

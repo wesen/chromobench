@@ -9,25 +9,36 @@
 import { getPath } from '@chromobench/contract';
 import { h, listen, type MountCtx } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
-import { argModel, parseEntry, parseStep, stepValue, type ArgModel } from '../kit/args.ts';
+import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
+import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
-import { PT } from '../model/units.ts';
+import { printerSeconds, PT } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 const cur = (s: any): string | null => s?.ui?.selection?.primary ?? null;
 
-/** the slider's own scale: stops for log2 time, display units otherwise */
+/**
+ * The slider's own scale: stops for log2 time, display units otherwise. `hard` is the contract's hard range on the
+ * same scale: the track widens towards it to show a value outside the usual range (CHB-027 F13: an automatic first
+ * print of 2.23 s sat at the 2 s floor). A dragged time lands on a value a printer sets (printerSeconds).
+ */
 function scaleOf(a: ArgModel) {
   const m = a.model;
   const isTime = m.storageUnit === 's' && m.scale === 'log2';
   const lo = m.usual?.[0] ?? m.min ?? 0;
   const hi = m.usual?.[1] ?? m.max ?? 1;
-  if (isTime) return { min: Math.log2(lo), max: Math.log2(hi), step: m.step, to: (v: number) => Math.log2(v), from: (x: number) => Number((2 ** x).toFixed(4)) };
+  if (isTime) {
+    return {
+      min: Math.log2(lo), max: Math.log2(hi), step: m.step, to: (v: number) => Math.log2(v), from: (x: number) => printerSeconds(2 ** x),
+      hard: { min: m.min !== undefined && m.min > 0 ? Math.log2(m.min) : -Infinity, max: m.max !== undefined ? Math.log2(m.max) : Infinity },
+    };
+  }
   const dlo = m.toDisplay(m.displayUnit === 'point' ? -0.5 : lo);
   const dhi = m.toDisplay(m.displayUnit === 'point' ? 0.5 : hi);
   const span = m.storageUnit === 'CC' ? { min: -50, max: 100 } : { min: Math.min(dlo, dhi), max: Math.max(dlo, dhi) };
-  return { ...span, step: m.step, to: (v: number) => m.toDisplay(v), from: (x: number) => Number(m.fromDisplay(x).toFixed(6)) };
+  const hard = m.min !== undefined && m.max !== undefined ? [m.toDisplay(m.min), m.toDisplay(m.max)] : [-Infinity, Infinity];
+  return { ...span, step: m.step, to: (v: number) => m.toDisplay(v), from: (x: number) => Number(m.fromDisplay(x).toFixed(6)), hard: { min: Math.min(hard[0]!, hard[1]!), max: Math.max(hard[0]!, hard[1]!) } };
 }
 
 export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
@@ -59,7 +70,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const widget: string = p['widget'] ?? model.widget;
   const el = h('div', { class: ['cb-arg', `is-${widget}`, p['big'] && 'is-big'], 'data-path': p['path'] });
   const head = h('div', { class: 'cb-arg-h' });
-  const lab = h('label', { class: 'cb-arg-l', text: label, title: model.doc });
+  const lab = h('label', { class: 'cb-arg-l', text: label, title: controlTip(model) });
   const out = h('span', { class: 'cb-arg-v' });
   const aside = h('span', { class: 'cb-arg-a' });
   head.append(lab, out, aside);
@@ -72,10 +83,11 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   });
 
   // ── one numeric track (a component, or the number) ──
-  const track = (k: number | null, name: string): { el: HTMLElement; set(v: unknown): void } => {
+  const track = (k: number | null, name: string): { el: HTMLElement; set(v: unknown, force?: boolean): void; reset(): void } => {
     const sc = scaleOf(a);
     const input = h('input', { type: 'range', class: 'cb-range', min: String(sc.min), max: String(sc.max), step: String(sc.step), 'aria-label': name }) as HTMLInputElement;
-    const field = h('input', { type: 'text', class: 'cb-num', 'aria-label': `${name} value`, spellcheck: 'false' }) as HTMLInputElement;
+    const hint = entryHint(model);
+    const field = h('input', { type: 'text', class: 'cb-num', 'aria-label': `${name} value`, spellcheck: 'false', title: hint, placeholder: entryPlaceholder(model), 'aria-description': hint }) as HTMLInputElement;
     const row = h('div', { class: 'cb-arg-row' }, k !== null ? h('span', { class: 'cb-arg-c', text: model.components?.[k] ?? String(k) }) : null, input, field);
     const valueOf = (x: number): unknown => {
       const y = sc.from(x);
@@ -107,37 +119,59 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       const kk = { ...a, component: k };
       burst(now.f, stepValue(kk, k === null ? base : base, dir * (e.shiftKey ? 3 : e.altKey ? 1 / 3 : 1), step));
     });
+    // typed values (CHB-027 F8): a bad entry says why and stays red only while the box has the focus; out of
+    // range is held to the limit and said; a relative entry (+, −) says what it did
     listen(m.scope, field, 'keydown', (e: KeyboardEvent) => {
+      e.stopPropagation();
       if (e.key === 'Enter' && now.f) {
-        const v = parseEntry({ ...a, component: k }, field.value, now.v);
-        if (v === null) {
+        const text = field.value;
+        const kk = { ...a, component: k };
+        const parsed = parseEntry(kk, text, now.v);
+        if (parsed === null) {
           field.classList.add('is-bad');
+          rt.chrome.toast(badEntryText(model, text), { kind: 'warn', ms: 4000 });
           return;
         }
         field.classList.remove('is-bad');
-        commitSet(now.f, v);
+        const c = clampEntry(kk, parsed, k);
+        if (c.hit) rt.chrome.toast(clampedText(model, c.hit, k), { kind: 'warn', ms: 4000 });
+        else if (isRelativeEntry(text)) rt.chrome.toast(relativeText(model, text, c.value, k), { kind: 'info', ms: 2400 });
+        commitSet(now.f, c.value);
         field.blur();
-      } else if (e.key === 'Escape') field.blur();
-      e.stopPropagation();
+      } else if (e.key === 'Escape') {
+        set(now.v, true);
+        field.blur();
+      }
     });
-    listen(m.scope, field, 'blur', () => set(now.v));
-    const set = (v: unknown): void => {
+    listen(m.scope, field, 'blur', () => set(now.v, true));
+    /** show v; `force` also resets the typed box (blur, Escape, another frame) */
+    const set = (v: unknown, force = false): void => {
+      if (force) field.classList.remove('is-bad');
       if (v === undefined) return;
       const x = k === null ? (v as number) : componentOf(model.type, v, k);
-      if (!dragging) input.value = String(sc.to(x));
-      if (document.activeElement !== field) field.value = model.format(v, k ?? undefined);
+      if (!dragging) {
+        const r = trackRange(sc, sc.to(x));
+        if (input.min !== String(r.min)) input.min = String(r.min);
+        if (input.max !== String(r.max)) input.max = String(r.max);
+        input.value = String(sc.to(x));
+      }
+      if (force || document.activeElement !== field) field.value = model.format(v, k ?? undefined);
       input.setAttribute('aria-valuetext', model.valueText(v, k ?? undefined));
     };
-    return { el: row, set };
+    const reset = (): void => {
+      field.classList.remove('is-bad');
+      field.value = '';
+    };
+    return { el: row, set, reset };
   };
 
-  const tracks: { set(v: unknown): void }[] = [];
+  const tracks: { set(v: unknown, force?: boolean): void; reset?(): void }[] = [];
   const body = h('div', { class: 'cb-arg-b' });
   el.append(body);
 
   if (widget === 'select' || model.type === 'enum' || model.type === 'string') {
     const sel = h('select', { class: 'cb-select', 'aria-label': label }) as HTMLSelectElement;
-    for (const v of model.values ?? []) sel.append(h('option', { value: v, text: v.replace(/_/g, ' ') }));
+    for (const v of model.values ?? []) sel.append(h('option', { value: v, text: model.valueLabel(v) }));
     listen(m.scope, sel, 'change', () => now.f && commitSet(now.f, sel.value));
     body.append(sel);
     tracks.push({ set: v => void (sel.value = String(v)) });
@@ -208,12 +242,17 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     head.append(b);
   }
 
+  const isSelect = widget === 'select' || model.type === 'enum' || model.type === 'string';
   m.cell(read, v => {
+    // another frame: what was typed (and its red mark) belongs to the old one
+    const other = v.f !== now.f;
     now = v;
-    out.textContent = v.v === undefined ? '—' : a.component !== null ? model.format(v.v, a.component) : model.type === 'vec3' || model.type === 'cmy' ? '' : model.format(v.v);
+    // a select shows its value itself (by name); the readout above it would repeat it
+    out.textContent = isSelect ? '' : v.v === undefined ? '—' : a.component !== null ? model.format(v.v, a.component) : model.type === 'vec3' || model.type === 'cmy' ? '' : model.format(v.v);
     const base = v.f ? initialOf(v.f) : undefined;
     aside.textContent = model.aside && v.v !== undefined && base !== undefined && model.type === 'number' ? model.aside(v.v, base) : '';
-    if (v.v !== undefined) for (const t of tracks) t.set(v.v);
+    if (v.v !== undefined) for (const t of tracks) t.set(v.v, other);
+    else if (other) for (const t of tracks) t.reset?.();
     el.classList.toggle('is-empty', v.v === undefined);
   });
   return el;

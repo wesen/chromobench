@@ -25,6 +25,14 @@ for (const platform of [OTHER, MAC]) {
       const e = { key: 'z', code: 'KeyZ', metaKey: platform.mac, ctrlKey: !platform.mac, shiftKey: true };
       expect(chordFromEvent(e, platform)).toBe('mod+shift+z');
     });
+    it('letters follow the layout: Ctrl+Z on a German QWERTZ keyboard (code KeyY) is undo', () => {
+      const m = { metaKey: platform.mac, ctrlKey: !platform.mac };
+      expect(chordFromEvent({ key: 'z', code: 'KeyY', ...m }, platform)).toBe('mod+z');
+      expect(chordFromEvent({ key: 'y', code: 'KeyZ', ...m }, platform)).toBe('mod+y');
+      expect(chordFromEvent({ key: 'Z', code: 'KeyY', shiftKey: true, ...m }, platform)).toBe('mod+shift+z');
+      // no Latin letter typed (Option+K on a Mac types '˚'): the physical key
+      expect(chordFromEvent({ key: '˚', code: 'KeyK', altKey: true }, platform)).toBe('alt+k');
+    });
     it('key checks: K201 K204 K205 K210 K215', () => {
       const cmds = new Commands();
       cmds.add('photo.pick', { run: () => {} }).add('photo.reject', { run: () => {} }).add('edit.undo', { run: () => {} });

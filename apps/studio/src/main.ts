@@ -11,7 +11,7 @@ import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, frameRef, memoryKV, setKnownValues, type InitialRecipe, type KV, type Studio } from '@chromobench/studio-kit';
+import { buildVariant, createStudio, explainError, frameRef, memoryKV, setKnownValues, type InitialRecipe, type KV, type Studio } from '@chromobench/studio-kit';
 import type { DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
@@ -26,6 +26,7 @@ import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
+import { engineSummary, notesSummary } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
@@ -89,9 +90,10 @@ const notesEl = el('span', { id: 'notes' });
 const statusEl = el('span', { id: 'status', role: 'status', text: 'starting…' });
 statusBarEl.append(engineEl, notesEl, statusEl);
 let sticky = false;
-function status(text: string, o: { error?: boolean; sticky?: boolean } = {}): void {
+function status(text: string, o: { error?: boolean; sticky?: boolean; detail?: string } = {}): void {
   if (sticky && !o.sticky && !o.error) return;
   statusEl.textContent = text;
+  statusEl.title = o.detail ?? '';
   statusEl.classList.toggle('is-error', !!o.error);
   sticky = !!o.sticky;
 }
@@ -163,7 +165,10 @@ async function main(): Promise<void> {
     report('The engine did not start', [msgOf(e)], '<p>Try <a href="?engine=reference">the reference engine</a> or <a href="?engine=mock">the mock engine</a>.</p>');
     throw e;
   }
-  engineEl.textContent = host.label;
+  // the status line in his words; the technical label stays in the tooltip and data-engine (CHB-027 F9)
+  engineEl.textContent = engineSummary(host.label);
+  engineEl.title = `The engine that computes the prints: ${host.label}`;
+  engineEl.dataset['engine'] = host.label;
 
   // the variant is built after setKnownValues, so the paper and stock menus list the data packs' stocks
   const def = (await load()).default;
@@ -216,7 +221,7 @@ async function main(): Promise<void> {
     rendered++;
     status(`rendered ${rendered} · ${e.pass}`);
   });
-  rt.on('renderError', (e: { error: unknown }) => status(msgOf(e.error), { error: true }));
+  rt.on('renderError', (e: { error: unknown }) => status(explainError(e.error)?.text ?? msgOf(e.error), { error: true, detail: msgOf(e.error) }));
   let lastFrame: string | null = null;
   let lastMode = studio.frames.mode;
   let lastLog: unknown = null;
@@ -229,14 +234,15 @@ async function main(): Promise<void> {
     }
     if (f !== lastFrame) {
       lastFrame = f;
-      notesEl.textContent = e ? host.notes(e.sha).join(' · ') : '';
-      notesEl.title = notesEl.textContent;
+      const notes = e ? host.notes(e.sha) : [];
+      notesEl.textContent = notesSummary(notes);
+      notesEl.title = notes.join(' · ');
     }
     // a refusal (E_STALE, …) stays in the status line until the frame's log changes
     const a = rt.store.peek(['ui', 'approvals']) as Record<string, { stale?: { code: string; message: string }[] }> | undefined;
     const stale = Object.values(a ?? {}).flatMap((x) => x.stale ?? []);
     const recipe = f ? rt.store.peek(['recipes', f]) : null;
-    if (stale.length && !sticky) status(stale.map((d) => `${d.code}: ${d.message}`).join('; '), { sticky: true, error: true });
+    if (stale.length && !sticky) status(explainError({ diag: stale[0] })?.text ?? stale[0]!.message, { sticky: true, error: true, detail: stale.map((d) => `${d.code}: ${d.message}`).join('; ') });
     else if (sticky && recipe !== lastLog) sticky = false;
     lastLog = recipe;
   });

@@ -105,6 +105,7 @@ test('M1: a stale proposal is refused with E_STALE', async ({ page }) => {
   const h = await hash(page);
   await page.locator('#pending .approve').click();
   await expect(page.locator('#pending li .cb-stale')).toContainText('E_STALE');
-  await expect(page.locator('#status')).toContainText('E_STALE');
+  await expect(page.locator('#status')).toContainText('not applied');
+  await expect(page.locator('#status')).toHaveAttribute('title', /E_STALE/);
   expect(await hash(page)).toBe(h);
 });
