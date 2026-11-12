@@ -62,3 +62,68 @@ option and the default of the simple layouts, after verifying the test strip and
 
 ### Technical details
 - Owner decision recorded here: real mode default for classic/darkroom/lab; normalised default for simple/tiny.
+
+## Step 2: Agents launched (CHB-031 A and B, CHB-032); resume notes for the orchestrator
+
+I launched three agents in parallel, each in its own worktree with its own diary, and asked all three to
+checkpoint (commit plus a "Checkpoint" diary step with an exact resume list) because the user may quit the session,
+which stops background agents. This step records what a resumed orchestrator needs.
+
+### Prompt Context
+**User prompt (verbatim):** "❯ ok, make a ticket for the findings and adjustments, to get it over with. 031 then 029.", "and code cleanup", "all 3 should keep thei rown diaries: commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)", "if i quit and then resume later, will th esubagents be able to continue?", "yes."
+**Assistant interpretation:** CHB-032 for clean-up and ticket audits; CHB-031 now (two workstreams), CHB-029 after;
+own diaries per agent; checkpoint before a possible quit.
+**Inferred user intent:** Make progress in parallel without losing work if the session ends.
+**Commit (code):** 9d10010 (plans and diaries)
+
+### What I did
+- CHB-032 created with 13 tasks (audits of CHB-008 and CHB-010, mock-engine shim, one TIFF writer, interim data,
+  docs, e2e waits, splits of engine-gpu.ts, dsl host.ts, looks/finish kits; store.ts/viewport.ts split deferred
+  until after CHB-031; dead-code pass).
+- CHB-031 plan (`design-doc/01-plan.md`) with WS-A (enlarger and controls) and WS-B (open, strips, library).
+- Common brief v2 in the scratchpad (`brief-common-v2.md`: stage named paths, never commit browser profiles,
+  `idle()` waits, the M1 access, the scans folder).
+- Agents: WS-A `task/chb-031-enlarger` (preview 4711, tests 5221–5224, tasks x86v 0xav 5ywv 9i1n 3z8z l1ny);
+  WS-B `task/chb-031-open-strips` (preview 4811, tests 5321–5324, tasks odem 6wti jb0i 9t2y); CHB-032
+  `task/chb-032-housekeeping` (tests 5421–5424). Worktrees under `.claude/worktrees/agent-*`.
+
+### Why
+- The three touch mostly disjoint files (plan's ownership section); A and B share `cb.ts` with local edits.
+
+### What worked
+- N/A (launched).
+
+### What didn't work
+- N/A.
+
+### What I learned
+- Background agents, preview servers and tunnels end with the session; worktrees, branches, commits and the Mac's
+  `nohup` Playwright server survive.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- WS-A changes the enlarger default (a contract catalogue default): saved recipes must keep their stored mode.
+
+### What should be done in the future
+- **Resume list for the orchestrator:**
+  1. `git worktree list`; for each agent branch read the last diary step ("Checkpoint" or later) and the open tasks
+     (`docmgr task list --ticket CHB-031`, `--ticket CHB-032`). If the agents cannot be resumed by message, launch
+     fresh agents per branch with `brief-common-v2.md` and "continue from the last diary step".
+  2. Restart services as needed: `pnpm --filter @chromobench/studio preview --port 4600 --strictPort` (pre-CHB-027
+     build in `apps/studio/dist` — rebuild only if the baseline is no longer needed); the current-main preview
+     `pnpm --filter @chromobench/studio exec vite build --outDir dist-current && … vite preview --outDir dist-current
+     --port 4650 --strictPort`; tunnels `ssh -N -L 9333:127.0.0.1:9333 -R 4600:127.0.0.1:4600 -R 4711:127.0.0.1:4711
+     -R 4811:127.0.0.1:4811 mimimi-2.local` and `ssh -N -R 4650:127.0.0.1:4650 mimimi-2.local`; check the Mac server
+     with `ssh mimimi-2.local 'tail -1 /tmp/chromobench-pw/server.log'`.
+  3. Merge order: CHB-031 WS-A, then WS-B, then CHB-032; full checks incl. `CI=1 pnpm test:browser` on main.
+  4. Then: CHB-032 task dgz9 (store.ts/viewport.ts split), the session-03 cosplay re-run (CHB-031 task b50a, a
+     Sonnet tester per the CHB-026 protocol, darkroom flow in real mode included), then CHB-029.
+
+### Code review instructions
+- `design-doc/01-plan.md`; CHB-032 `tasks.md`.
+
+### Technical details
+- Owner decision (Step 1): real enlarger mode by default for darkroom-style layouts; normalised default for simple
+  and tiny, with Time/Aperture hidden.
