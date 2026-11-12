@@ -178,7 +178,7 @@ it is the next unit (`:151`, `:160`). Otherwise it returns `false` and counts a 
 when the frame was removed or re-opened (`:145`).
 
 Bursts. `step(store, clock, path, value, label)` (`:264-275`) is used by the arg editors for arrow keys, wheel
-and nudge buttons (`packages/studio-kit/src/dom/arg.ts:69`). It previews immediately and commits once after
+and nudge buttons (`packages/studio-kit/src/dom/arg.ts:78`). It previews immediately and commits once after
 `BURST_MS` = 800 ms without another step (`:27`). `endBurst()` (`:277-283`) commits early; every command entry
 point of the route calls it first.
 
@@ -226,7 +226,7 @@ Mod+Z. The built-in keymap binds `Mod+Z` to `edit.undo` and `Mod+Shift+Z` to `ed
 (`packages/shell/src/app/assemble.ts:22-23`). The command calls `Runtime.undo()`
 (`packages/shell/src/app/builtins.ts:43-49`), which calls `History.undo()` and shows a toast naming the
 entry and its channel (`packages/shell/src/app/runtime.ts:404-408`). Studio-kit reports a skipped part as
-the info diagnostic `CB-H401` (`packages/studio-kit/src/studio.ts:110`).
+the info diagnostic `CB-H401` (`packages/studio-kit/src/studio.ts:116`).
 
 ### 3.4 The history view model (studio-kit)
 
@@ -307,7 +307,7 @@ commits one unit after 800 ms of inactivity (`packages/studio-kit/test/bridge.te
 
 The looks kit plans per-frame mutations and commits them with
 `route.applyBatch(entries, p.label, {tx: p.id, batch: p.id, detail: p.why})`
-(`packages/studio-kit/kits/looks/src/kit.ts:261`). For three frames `a`, `b`, `c`:
+(`commit` in `packages/studio-kit/kits/looks/src/model.ts:162`). For three frames `a`, `b`, `c`:
 
 1. `applyBatch` validates all three recipes first (`editlog-route.ts:305-312`). A refusal throws before any log
    changes.
@@ -327,7 +327,7 @@ balance: one entry holding many units, undone by one undo"). The roll kit uses t
 
 The agent never holds an EditLog. The agent worker's client replays the session's proposals on the real logs
 with `f.log.propose(ms, {tx, why, label})` (`packages/agent/src/worker/client.ts:187`). The browser console
-helper `studio.propose` does the same (`packages/studio-kit/src/studio.ts:214-219`). The frame is in mode
+helper `studio.propose` does the same (`packages/studio-kit/src/studio.ts:220-225`). The frame is in mode
 `ask` (the default, `packages/contract/src/editlog.ts:116`).
 
 ```mermaid
@@ -372,7 +372,7 @@ Variants:
   (`packages/agent/src/worker/client.ts:186-192`).
 - An agent look batch across frames: `approveBatch` approves each frame and pushes one entry for all
   approved frames; refused frames are returned for an Apply anyway / Skip choice
-  (`packages/studio-kit/kits/looks/src/kit.ts:436-447`).
+  (the `looks.batch.approve` command, `packages/studio-kit/kits/looks/src/commands.ts:113-124`).
 - Reject: `log.reject` marks entries `rejected`; no unit, no history entry.
 
 ## 5. How Mod+Z travels, summarised

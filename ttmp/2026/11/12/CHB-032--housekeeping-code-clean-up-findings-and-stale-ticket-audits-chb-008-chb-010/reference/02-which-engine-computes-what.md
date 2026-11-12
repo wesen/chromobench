@@ -313,7 +313,7 @@ means `StudioEngine` on the main thread.
 | `darkroom.lightsToFiltration` | not available | RefEngine | MockEngine |
 | `finishing.clarity`, `finishing.hue` | not available | not available | MockEngine |
 | Roll analysis (layout, roll base, noise, classes, stock ranking) — not ops | main thread, `HostRollPhysics` (`engines.ts:106-129`) | same | not provided |
-| First print (integrate to grey) | main thread: `engine.evaluate` + core arithmetic (`apps/studio/src/host/first-print.ts:59-67`) | same | — |
+| First print (integrate to grey) | main thread: `engine.evaluate` + core arithmetic (`apps/studio/src/host/first-print.ts:60-68`) | same | — |
 | Export encoding (TIFF/PNG, ICC) | main thread, `packages/output` on tiles evaluated by the engine (`apps/studio/src/host/export.ts`) | same | same |
 
 A node whose closure mixes native ops and host ops is split by `StudioEngine`: the host op evaluates its

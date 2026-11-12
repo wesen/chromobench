@@ -910,3 +910,97 @@ keep the checks green.
 ### Technical details
 - Main's spec edits next to mine: the inspection view names (`'No mask', 'Clipping'`) in `studio.spec.ts` and
   `studio-real.spec.ts`, the relative-entry wording in `studio-wording.spec.ts`; my `opened()` waits are intact.
+
+## Step 13: Split the looks and finish kits (task j38l)
+
+Each kit was one factory closure of 700–800 lines. The looks kit (800 lines) is now `kit.ts` (151: the docs, the
+forms and passes, the kit declaration and its API) plus `state.ts` (state shape, readers, agent batches), `model.ts`
+(the look registry, looked recipes, compare sources, targets, plan and commit), `commands.ts` (the command table)
+and `panels.ts` (builder calls and their models). The finish kit (724 lines) is now `kit.ts` (110) plus `state.ts`,
+`context.ts` (what the tools, commands and panels share: the frame a tool acts on, the sizes seen, frame writes, the
+aspect lock), `tools.ts` (the crop and spot tools and their SVG overlays), `commands.ts`, `panels.ts` and
+`passes.ts`. Each factory module returns what the others use; the kit destructures it, so every moved body is the
+original text. A verification script finds each of the 28 original segments verbatim as one block in its module
+(the two command chains dedented by 6, as they left the `.commands((c) => { … })` callback).
+
+Two original lines changed on purpose: `syncGroups` is a `let` the API can replace, so the model owns it and
+returns an accessor `syncGroupsOf`; the panels' `groupsModel` reads `syncGroupsOf()` and the API's `syncGroups`
+member is that accessor (it returned the assigned value before and does now).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7.
+**Assistant interpretation:** Task j38l: split the looks and finish kits into state, commands and panels modules
+(plus what they share), behaviour unchanged.
+**Inferred user intent:** A kit file one can read: what the kit stores, what it does, what it shows.
+**Commit (code):** see the next commit, "CHB-032: split the looks and finish kits into state/model|context/tools/commands/panels/passes modules".
+
+### What I did
+- Read both kits in full and mapped their sections (line ranges in `verify-kits.py`).
+- `<scratchpad>/chb032/split-kits.py` (helpers: line ranges, names defined at a given indent, names used, imports
+  recomputed from the original import statements) and `split-kits2.py` (one assembly per kit).
+- `prune-imports.py`: removed 9 import specifiers that `tsc --noUnusedLocals` reported (`set`, `look`, `choice`,
+  `aggregate`, `suggestSource` matched words in comments and template text).
+- `kits/{looks,finish}/src/index.ts` export from the modules that define the names; `kit.ts` keeps
+  `createLooksKit`/`createFinishKit` (imported by `packages/studio-kit/src/cb.ts`, untouched).
+- `tools/scripts/check-colours.ts`: the 13-colour allowance moved from `kits/finish/src/kit.ts` to
+  `kits/finish/src/tools.ts` with the overlay styles (`LOOK`).
+- The undo doc's two looks-kit references now point at `model.ts:162` and `commands.ts:113-124`; four references
+  into files the merge of main shifted (`first-print.ts:60-68`, `arg.ts:78`, `studio.ts:116`, `studio.ts:220-225`)
+  were re-located by matching the cited line's text at 2f6adef (`<scratchpad>/chb032/relocate.py`).
+- Checks: `pnpm typecheck` 0; `pnpm lint` 0 (import boundaries ok, 366 file checks; check-colours 151 files ok);
+  `pnpm test` → 97 files, 2749 passed, 7 skipped (= post-merge baseline), no snapshot written;
+  `… CI=1 pnpm exec playwright test --project=studio-kit` → 13 passed;
+  `python3 <scratchpad>/chb032/verify-kits.py HEAD` → every body segment `ok`.
+
+### Why
+- Factories that return what they share, not one shared mutable "context" object written by several modules: each
+  closure keeps reading its own module's bindings, which is what it read before.
+- `index.ts` exporting from the defining modules instead of `kit.ts` re-exporting them: one hop, and `kit.ts` keeps
+  only the kit.
+
+### What worked
+- 28 of 28 body segments verbatim; the "glue" the script lists is only headers, imports, factory signatures,
+  destructures and returns (looks: 13 + 38 + 18 + 15 + 7 lines; finish: 12 + 11 + 34 + 14 + 4 + 4 + 13).
+
+### What didn't work
+- First `tsc` after the split: `'SpotMode' is a type and must be imported using a type-only import when
+  'verbatimModuleSyntax' is enabled` (and the same for `DustSpot`, `FinishView`, `SpotRef`, `CompareSource`);
+  `Cannot find name 'needFrame'` (9×), `'needLook'` (3×), `'FINISH_STATE'`, `'FINISHING_PATHS'` — the usage scan's
+  look-behind excluded `.`, so `...needFrame` (a spread) did not count as a use; and `index.ts` errors
+  (`Module '"./kit.ts"' declares 'cropProblem' locally, but it is not exported`, …). Fixed the scan (spreads count),
+  marked interface/type names `type`, rewrote both `index.ts`, regenerated from the originals
+  (`git checkout --` both `kit.ts` first).
+- Second `tsc`: `Property 'syncGroups' does not exist on type '{ studioOf: … }'` — the scan counted the object key
+  `syncGroups:` in the API as a use; excluded `syncGroups` from the destructures.
+- `pnpm lint` → `check-colours: 1 file(s) with literal colours outside the theme files` (tools.ts:9–21); moved the
+  allowance.
+
+### What I learned
+- `CommandsBuilder.add` records `site()`, the first stack frame outside the registered library roots, and only
+  `packages/studio-kit/src/` is a root (`cb.ts:29`); the kits are not. So a command's recorded definition site is
+  now `src/commands.ts:<line>` instead of `src/kit.ts:<line>`, and a form node built by a panel records
+  `src/panels.ts:<line>`. No snapshot or test contains a `.ts:<line>` site (`grep -c "\.ts:[0-9]"` over every
+  `.snap`: 0), so this shows only in diagnostics text that cites where a command or panel was defined.
+
+### What was tricky to build
+- Order and lifetime: the model (looks) and context and tools (finish) are created where their closures were
+  defined before, ahead of the forms, passes and the kit declaration; the panels after it, as before. `cycle` was a
+  hoisted function declaration after the kit declaration; it is now declared before the command chain in
+  `commands.ts`, which only the chain calls.
+
+### What warrants a second pair of eyes
+- `syncGroupsOf` (looks `model.ts`): the API member `syncGroups(g?)` still replaces the groups for every later
+  read in the model and the panels, because both read the model's `let` through the accessor.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `packages/studio-kit/kits/looks/src/{kit,state,model,commands,panels}.ts`,
+  `packages/studio-kit/kits/finish/src/{kit,state,context,tools,commands,panels,passes}.ts`.
+- `python3 <scratchpad>/chb032/verify-kits.py <commit before this one>`; `pnpm vitest run packages/studio-kit`;
+  `… pnpm exec playwright test --project=studio-kit`.
+
+### Technical details
+- Line counts. looks: kit 151, state 81, model 190, commands 289, panels 152. finish: kit 110, state 76, context 50,
+  tools 322, commands 118, panels 77, passes 42.
