@@ -27,6 +27,8 @@ export interface Decoded {
   notes: string[];
   /** Rebate box in working-image px from the film layout (CHB-020), for the new recipe's scan.rebate; null = scan.density's own rule. */
   rebate?: Box | null;
+  /** 'digital-raw': opened as a photo (CHB-012): shot on film by the forward path, no negative conditioning. */
+  kind?: 'negative-scan' | 'digital-raw';
 }
 
 /** What the host file (engines.ts) provides: everything that needs core, gpu or ingest. */

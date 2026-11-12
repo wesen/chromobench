@@ -1041,3 +1041,46 @@ I added `packages/gpu/src/film.ts` (class `FilmGpu`) and `kernels/film.wgsl` and
 
 ### Technical details
 - Uniform block `P` (128 bytes): three matrix rows, s, g, d, u (u32), o (i32); entry points `camMatrix`, `expose`, `curves`, `inhibit`, `exp10`, `log10e`, `axpy`, `grainDraw` (three storage outputs, one per sublayer), `rngProbe`.
+
+## Step 20: Studio — open a digital photo as a scene shot on film
+
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** the studio must be able to take a user's digital RAW through the forward path; a minimal entry point, no new kit.
+**Inferred user intent:** drop a camera RAW into the studio and get a print that looks like film.
+**Commit (code):** the next commit after 98fcc79 ("CHB-012: studio photo mode …").
+
+### What I did
+- `apps/studio/src/host/engines.ts`: `HostSettings.photo`; `decodePhoto` decodes with LibRaw `mode: 'photo'` (demosaiced, camera colour, no white balance), linearises, area-averages to the working size and returns `kind: 'digital-raw'` with the camera matrix in `SourceInfo.camera`; `decode` picks photo or scan by the setting.
+- `apps/studio/src/host/studio-engine.ts`: `Decoded.kind`.
+- `apps/studio/src/main.ts`: a "photo" checkbox (`#photo`) next to "dust"; for a digital-raw decode the first recipe is `defaultRecipe('digital-raw', …)` (Portra 400 onto the default paper), as-shot white balance when the file has an as-shot neutral, instead of `firstPrint`'s negative auto-print.
+- `e2e/studio-photo.spec.ts`: a synthetic RGGB DNG (brightness ramp and a red patch) opened with `#photo` on the GPU engine; checks the decode note, `kind`/stock in the log, brighter scene → brighter print, the red patch prints red, no page errors.
+
+### Why
+- The compile branch for digital-raw already exists in the contract (source.xyz → capture.expose → film.* → print); the studio only lacked a way to produce a digital-raw recipe. A toggle keeps the change out of the kits (no capture.* control panel yet).
+
+### What worked
+- `npx playwright test e2e/studio-photo.spec.ts`: 1 passed (10.9 s).
+- Full checks: typecheck, lint (272 file checks), `pnpm test` 73 files / 2523 tests, gen:check, contract:check exit 0, `pnpm test:browser` 75 passed (conformance 318/318).
+
+### What didn't work
+- First run: expected working width 600, got 1200 — LibRaw photo mode demosaics at the sensor resolution (the scan mode bins the CFA 2×2). Test adjusted.
+
+### What I learned
+- The studio's first-recipe hook (`initial`) is the single place where the frame kind is decided; everything downstream follows the recipe.
+
+### What was tricky to build
+- Keeping the frame id and source of the recipe the studio created while replacing its kind: `photoRecipe` takes `d.frame` and `d.source` (decode mode switched to 'photo').
+
+### What warrants a second pair of eyes
+- The toggle applies to files opened after it is checked; an already open frame is not re-decoded.
+- No capture.* controls in any kit: stock, exposure, white balance, push, grain and halation are reachable only through the recipe/agent mutations.
+
+### What should be done in the future
+- A small `kits/film` panel (stock, EV, WB, push, DIR, halation, grain) and an auto-detect (camera RAW dropped without a negative's orange mask → photo).
+
+### Code review instructions
+- `git show HEAD -- apps/studio e2e/studio-photo.spec.ts`
+- `STUDIO_PORT=4541 CI=1 npx playwright test e2e/studio-photo.spec.ts`
+
+### Technical details
+- Decode note: `photo: camera RAW (<make> <model>) via LibRaw, photo mode, W×H, camera matrix from <dng|LibRaw>`.
