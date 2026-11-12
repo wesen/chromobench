@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "4c8eed399a2e4b8d0deb6626ac5a7339fcdb5b132c4cd5473e327021043c2e3e",
+  "request": {
+    "ticket": "CHB-027",
+    "status": "complete",
+    "intent": "",
+    "entry": "Closed: all four workstreams merged (A open mode/library/menus, B worker and responsiveness, C wording, D strip frames); session 02 re-run: 11 of 16 findings fixed, 3 partly, F10 open on CPU, F14 not reproduced; new findings F17–F23 and leftovers moved to CHB-031; merged branches and worktrees deleted"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-f24aa468fc4d5a99136aa640e56c445d",
+    "state": "committed",
+    "created_at": "2026-11-12T22:06:23.092353643Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "20e7213c37bbde693cc996dcd8cc6c3f7725631f364bbfc15587c985290cd596",
+      "index.md": "d903722f01be9d2933d858b4876e64ae6a18b10c8dfb0aa7abfc1ec4b99e2dd6"
+    },
+    "after": {
+      "changelog.md": "19124286189ed630ad10ccc3b208a4f69d127a56bf4abc85749c634cf9e28aae",
+      "index.md": "124db4aee09fdf66d9928cfd541956ef8eca88843607fd501966843fb375ae2b"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "20e7213c37bbde693cc996dcd8cc6c3f7725631f364bbfc15587c985290cd596",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTIKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMgoKQ2xvc2VkOiBhbGwgZm91ciB3b3Jrc3RyZWFtcyBtZXJnZWQgKEEgb3BlbiBtb2RlL2xpYnJhcnkvbWVudXMsIEIgd29ya2VyIGFuZCByZXNwb25zaXZlbmVzcywgQyB3b3JkaW5nLCBEIHN0cmlwIGZyYW1lcyk7IHNlc3Npb24gMDIgcmUtcnVuOiAxMSBvZiAxNiBmaW5kaW5ncyBmaXhlZCwgMyBwYXJ0bHksIEYxMCBvcGVuIG9uIENQVSwgRjE0IG5vdCByZXByb2R1Y2VkOyBuZXcgZmluZGluZ3MgRjE34oCTRjIzIGFuZCBsZWZ0b3ZlcnMgbW92ZWQgdG8gQ0hCLTAzMTsgbWVyZ2VkIGJyYW5jaGVzIGFuZCB3b3JrdHJlZXMgZGVsZXRlZAo="
+    },
+    {
+      "path": "index.md",
+      "before": "d903722f01be9d2933d858b4876e64ae6a18b10c8dfb0aa7abfc1ec4b99e2dd6",
+      "after": "LS0tClRpdGxlOiAnRml4IGNvc3BsYXkgc2Vzc2lvbiAwMSBmaW5kaW5nczogb3BlbiBtb2RlLCByZXNwb25zaXZlbmVzcywgbGlicmFyeSwgd29yZGluZywgc3RyaXBzJwpUaWNrZXQ6IENIQi0wMjcKU3RhdHVzOiBjb21wbGV0ZQpUb3BpY3M6CiAgICAtIHVpCiAgICAtIHByb2R1Y3QKICAgIC0gaW5nZXN0CiAgICAtIHBlcmZvcm1hbmNlCkRvY1R5cGU6IGluZGV4CkludGVudDogbG9uZy10ZXJtCk93bmVyczogW10KUmVsYXRlZEZpbGVzOiBbXQpFeHRlcm5hbFNvdXJjZXM6IFtdClN1bW1hcnk6ICIiCkxhc3RVcGRhdGVkOiAyMDI2LTExLTEyVDE3OjA2OjIzLjA5MjI3NTY3OC0wNTowMApXaGF0Rm9yOiAiIgpXaGVuVG9Vc2U6ICIiCi0tLQoKIyBGaXggY29zcGxheSBzZXNzaW9uIDAxIGZpbmRpbmdzOiBvcGVuIG1vZGUsIHJlc3BvbnNpdmVuZXNzLCBsaWJyYXJ5LCB3b3JkaW5nLCBzdHJpcHMKCiMjIE92ZXJ2aWV3Cgo8IS0tIFByb3ZpZGUgYSBicmllZiBvdmVydmlldyBvZiB0aGUgdGlja2V0LCBpdHMgZ29hbHMsIGFuZCBjdXJyZW50IHN0YXR1cyAtLT4KCiMjIEtleSBMaW5rcwoKLSAqKlJlbGF0ZWQgRmlsZXMqKjogU2VlIGZyb250bWF0dGVyIFJlbGF0ZWRGaWxlcyBmaWVsZAotICoqRXh0ZXJuYWwgU291cmNlcyoqOiBTZWUgZnJvbnRtYXR0ZXIgRXh0ZXJuYWxTb3VyY2VzIGZpZWxkCgojIyBTdGF0dXMKCkN1cnJlbnQgc3RhdHVzOiAqKmFjdGl2ZSoqCgojIyBUb3BpY3MKCi0gdWkKLSBwcm9kdWN0Ci0gaW5nZXN0Ci0gcGVyZm9ybWFuY2UKCiMjIFRhc2tzCgpTZWUgW3Rhc2tzLm1kXSguL3Rhc2tzLm1kKSBmb3IgdGhlIGN1cnJlbnQgdGFzayBsaXN0LgoKIyMgQ2hhbmdlbG9nCgpTZWUgW2NoYW5nZWxvZy5tZF0oLi9jaGFuZ2Vsb2cubWQpIGZvciByZWNlbnQgY2hhbmdlcyBhbmQgZGVjaXNpb25zLgoKIyMgU3RydWN0dXJlCgotIGRlc2lnbi8gLSBBcmNoaXRlY3R1cmUgYW5kIGRlc2lnbiBkb2N1bWVudHMKLSByZWZlcmVuY2UvIC0gUHJvbXB0IHBhY2tzLCBBUEkgY29udHJhY3RzLCBjb250ZXh0IHN1bW1hcmllcwotIHBsYXlib29rcy8gLSBDb21tYW5kIHNlcXVlbmNlcyBhbmQgdGVzdCBwcm9jZWR1cmVzCi0gc2NyaXB0cy8gLSBUZW1wb3JhcnkgY29kZSBhbmQgdG9vbGluZwotIHZhcmlvdXMvIC0gV29ya2luZyBub3RlcyBhbmQgcmVzZWFyY2gKLSBhcmNoaXZlLyAtIERlcHJlY2F0ZWQgb3IgcmVmZXJlbmNlLW9ubHkgYXJ0aWZhY3RzCg=="
+    }
+  ]
+}
