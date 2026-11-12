@@ -81,7 +81,7 @@ test('viewer: inspection views, before/after, densitometer and pinned probes', a
   await boot(page, '&fresh');
   await open(page);
   expect(await page.evaluate(() => window.chromobench.presenter())).toMatch(/webgpu|2d/);
-  for (const v of ['Negative', 'Dyes', 'Base & gamut', 'Print']) {
+  for (const v of ['Negative', 'No mask', 'Clipping', 'Print']) {
     await page.getByRole('radio', { name: v, exact: true }).click();
     await idle(page);
     await expect(page.getByRole('radio', { name: v, exact: true })).toHaveAttribute('aria-checked', 'true');

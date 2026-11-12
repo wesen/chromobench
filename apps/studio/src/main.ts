@@ -27,7 +27,7 @@ import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
-import { engineSummary, notesSummary } from './status-text.ts';
+import { engineSummary, engineTip, notesSummary, notesTip } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
@@ -180,7 +180,7 @@ async function main(): Promise<void> {
   }
   // the status line in his words; the technical label stays in the tooltip and data-engine (CHB-027 F9)
   engineEl.textContent = engineSummary(host.label);
-  engineEl.title = `The engine that computes the prints: ${host.label}`;
+  engineEl.title = engineTip(host.label);
   engineEl.dataset['engine'] = host.label;
 
   // the variant is built after setKnownValues, so the paper and stock menus list the data packs' stocks
@@ -199,7 +199,8 @@ async function main(): Promise<void> {
     kv = memoryKV();
   }
   const device = q.has('canvas2d') ? null : await presentDevice();
-  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
+  // the layout's enlarger mode for new recipes (CHB-031: real by default, normalised in simple and tiny)
+  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   const chat = createStudioChat(studio);
   const presenter = hostPresenter({
     device,
@@ -258,7 +259,7 @@ async function main(): Promise<void> {
       lastEntry = e;
       const notes = e ? host.notes(e.sha) : [];
       notesEl.textContent = notesSummary(notes);
-      notesEl.title = notes.join(' · ');
+      notesEl.title = notesTip(notes);
       showMode(e);
     }
     // a refusal (E_STALE, …) stays in the status line until the frame's log changes

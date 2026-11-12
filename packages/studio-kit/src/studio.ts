@@ -14,6 +14,7 @@ import type { KV } from './bridge/kv.ts';
 import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
 import { explainError } from './kit/messages.ts';
+import { initialInMode, type EnlargerMode } from './model/enlarger.ts';
 import type { CatalogFrame } from './cb.ts';
 
 /** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
@@ -29,6 +30,11 @@ export interface StudioOptions {
   initial?: InitialRecipe;
   /** opens a source as a photo, a negative or as guessed (the host's engine; default: Engine.open as a negative) */
   opener?: SourceOpener;
+  /**
+   * The enlarger mode of new recipes (the layout's, VariantDef.enlarger; CHB-031): 'real' (the contract's default)
+   * or 'normalised'. The first recipe is made in it (initialInMode); saved recipes keep the mode they store.
+   */
+  enlarger?: EnlargerMode;
 }
 
 /**
@@ -82,7 +88,7 @@ export class Studio {
   constructor(o: StudioOptions) {
     this.engine = o.engine;
     this.kv = o.kv ?? null;
-    this.initial = o.initial;
+    this.initial = o.enlarger ? initialInMode(o.initial, o.enlarger) : o.initial;
     this.frames = new Frames(o.engine, { kv: this.kv, ...(o.mode ? { mode: o.mode } : {}), ...(o.now ? { now: o.now } : {}), ...(o.opener ? { opener: o.opener } : {}) });
     this.route = new EditLogRoute(this.frames);
     this.bridge = new FrameRenderBridge(this.frames, o.displaySpace ? { displaySpace: o.displaySpace } : {});

@@ -121,24 +121,25 @@ export function explainError(err: unknown, o: { label?: string } = {}): Explaine
 // ── typed values (F8) ──
 
 /** what a typed-value field accepts, as its tooltip and placeholder: "15, 12s or 7,5 — or +1/3 st, −2 to change by" */
+// CHB-031 F8: a plain number sets the value; a change needs a sign and a unit ('−5 s', '+1/3 st', '+2 pt', '+5 CC')
 export function entryHint(m: ControlModel): string {
-  if (isTime(m)) return 'Type a time: 15, 12s or 7,5. A sign changes it: +1/3 st, −2 (seconds)';
-  if (m.storageUnit === 'fstop') return 'Type an aperture: f/8 or 11. A sign changes it: +1/3 st';
-  if (m.storageUnit === 'CC') return 'Type filtration in CC: 40 or 62,5. A sign changes it: +5, −10';
-  if (m.displayUnit === 'point') return 'Type points: 4 or −2,5 sets it. A sign changes it: +2, −1';
-  return 'Type a value (7,5 works). A sign changes it: +1, −1';
+  if (isTime(m)) return 'Type a time: 15, 12s or 7,5 sets it. To change it, add a unit: +1/3 st, −2 s';
+  if (m.storageUnit === 'fstop') return 'Type an aperture: f/8 or 11 sets it. To change it: +1/3 st';
+  if (m.storageUnit === 'CC') return 'Type filtration in CC: 40, −10 or 62,5 sets it. To change it, add CC: +5 CC, −10 CC';
+  if (m.displayUnit === 'point') return 'Type points: 4 or −2,5 sets it. To change it, add pt: +2 pt, −1 pt';
+  return 'Type a value (7,5 works)';
 }
 /** the shorter version for the empty box */
 export function entryPlaceholder(m: ControlModel): string {
   if (isTime(m)) return '15, 12s, +1/3 st';
   if (m.storageUnit === 'fstop') return 'f/8, +1/3 st';
-  if (m.storageUnit === 'CC') return '40, +5';
-  if (m.displayUnit === 'point') return '+2, −1';
+  if (m.storageUnit === 'CC') return '40, +5 CC';
+  if (m.displayUnit === 'point') return '4, +2 pt';
   return 'value';
 }
 
-/** a typed entry that moves from the current value (a leading + or −) */
-export const isRelativeEntry = (text: string): boolean => /^\s*[+−-]/.test(text);
+/** a typed entry that moves from the current value: a leading + or − and a unit ('−5 s', '+1/3 st') */
+export const isRelativeEntry = (text: string): boolean => /^\s*[+−-][^A-Za-z]*\s*(st|stops?|s|sec|pt|pts|points?|CC|cc)\s*$/.test(text);
 
 /** the toast after a relative entry: "Time −5 → 10.0 s" (the field read '−5' as "5 s less") */
 export function relativeText(m: ControlModel, text: string, after: unknown, component: number | null): string {
@@ -154,6 +155,15 @@ export function relativeText(m: ControlModel, text: string, after: unknown, comp
 /** the toast for a value that did not parse: "Time: “abc” is not a value. Type a time: …" */
 export function badEntryText(m: ControlModel, text: string): string {
   const t = text.trim();
+  // '−5' on a time: neither "5 s less" nor −5 s (F8); say how to write each
+  const bare = /^[+−-]\s*(\d+(?:[.,]\d+)?(?:\s*\/\s*\d+)?)$/.exec(t);
+  if (bare && (isTime(m) || m.storageUnit === 'fstop')) {
+    const n = bare[1]!.replace(/\s+/g, '');
+    const sign = t.startsWith('+') ? '+' : MINUS;
+    return isTime(m)
+      ? `${m.label}: “${t}” — to change the time, add a unit (${sign}${n} s or ${sign}1/3 st); to set it, type ${n}`
+      : `${m.label}: “${t}” — to change the aperture, type ${sign}1/3 st; to set it, type f/${n}`;
+  }
   return `${m.label}: ${t ? `“${t}” is not a value` : 'the box is empty'}. ${entryHint(m)}`;
 }
 
@@ -218,7 +228,7 @@ const TIPS: Record<string, string> = {
   'print.grade': 'Contrast: 2 is the paper as made, higher is harder, lower is softer. The mid-grey stays where it is.',
   'print.paper': 'The colour paper the print is made on.',
   'print.preflash': 'A weak, even pre-exposure of the paper that tames the highlights.',
-  'print.enlarger.mode': 'Normalised: the grey card prints at the aim with lights at 0. Real: a physical enlarger, with filtration and time doing all the work.',
+  'print.enlarger.mode': 'Real: a darkroom enlarger, where the time, the aperture and the filtration expose the paper. Normalised: the grey card prints at the aim whatever the time; make the print lighter or darker with the printer lights.',
   'scan.stock': 'The film the negative was shot on. It sets the orange mask and the film’s colour response.',
   'capture.stock': 'The film the photo is put on, as if it had been shot on it.',
   'capture.exposureEV': 'Exposure of the film, in stops from its rated speed.',

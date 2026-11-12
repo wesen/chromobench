@@ -26,7 +26,7 @@ error:
   code: E_NOT_AWAITED
   message: 'measure.densitometer() is a lazy node: read .D after awaiting it.'
   where: 'line 3: return g.D'
-  path: '[value #878c measure.densitometer] → ✗ D'
+  path: '[value #284f measure.densitometer] → ✗ D'
   hint: 'Nothing has been computed yet; awaiting the node evaluates it.'
   fix: '(await frame.print().measure.densitometer({at: [48, 32]})).D'
   valid: [D, visual]

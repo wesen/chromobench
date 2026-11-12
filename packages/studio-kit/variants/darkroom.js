@@ -19,15 +19,20 @@ export default {
       .right(
         ck.dock.column(
           { width: 300 },
+          // no frame: "Select a photo to print it." instead of empty panels; the mode select shows a frame saved in
+          // normalised mode (before CHB-031) why its Time and Aperture are missing, and switches it (CHB-031 F17, F19)
           ck.panel(
             'enlarger',
             { title: 'Enlarger' },
-            cb.arg('print.enlarger.time_s').testStrip({ step: '1/3 st' }),
-            cb.arg('print.enlarger.fstop'),
-            cb.arg('print.enlarger.filtration'),
-            cb.arg('print.lights.logH').pad(),
+            cb.ifFrame(
+              cb.arg('print.enlarger.mode'),
+              cb.arg('print.enlarger.time_s').testStrip({ step: '1/3 st' }),
+              cb.arg('print.enlarger.fstop'),
+              cb.arg('print.enlarger.filtration'),
+              cb.arg('print.lights.logH').pad(),
+            ),
           ),
-          ck.panel('paper', { title: 'Paper' }, cb.arg('print.paper'), cb.arg('print.grade')),
+          ck.panel('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('print.paper'), cb.arg('print.grade'))),
           cb.panel.exposures(),
           cb.panel.approvals(),
         ),

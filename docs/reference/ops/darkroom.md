@@ -29,7 +29,7 @@ Expresses printer lights as colour-head filtration plus time.
 |---|---|---|---|---|---|---|---|
 | `logH` | vec3 | logH | [-1.5, 1.5] |  | `[0,0,0]` | print.lights.logH | Printer lights to express as filtration and time. |
 | `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `mode` | enum real/normalised |  |  |  | `"normalised"` | print.enlarger.mode | real: filtration and time; normalised: filtration, the density part stays as lights. |
+| `mode` | enum real/normalised |  |  |  | `"real"` | print.enlarger.mode | real: filtration and time; normalised: filtration, the density part stays as lights. |
 | `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp. |
 | `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Current shift on the neutral pack. |
 | `time_s` | number | s | [0.1, 600] |  | `10` | print.enlarger.time_s | Current exposure time. |

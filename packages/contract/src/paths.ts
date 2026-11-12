@@ -176,7 +176,7 @@ export function defaultRecipe(kind: FrameRecipe['kind'], source: NewSource, opts
     print: {
       paper: 'kodak_portra_endura',
       aim: 'grey-0.184',
-      enlarger: { mode: 'normalised', lamp: 'TH-KG3', filtration: { c: 0, m: 0, y: 0 }, time_s: 10, fstop: 8, magnification: null },
+      enlarger: { mode: 'real', lamp: 'TH-KG3', filtration: { c: 0, m: 0, y: 0 }, time_s: 10, fstop: 8, magnification: null },
       lights: {
         logH: [0, 0, 0],
         auto: { method: 'none', alpha: 1, analysisLongSide_px: 256, rollConsistency: null, matchFrame: null, matchAmount: null, applied: false, logH: [0, 0, 0] },

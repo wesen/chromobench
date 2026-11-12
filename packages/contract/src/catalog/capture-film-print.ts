@@ -59,7 +59,7 @@ export const printOps: OpDef[] = [
     class: 'pointwise', binding: 'stock', recipePath: 'print.enlarger',
     args: {
       paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', path: 'print.paper', doc: 'Colour paper.', ui: { widget: 'select', label: 'Paper', group: 'Print' } },
-      mode: { type: 'enum', values: ['real', 'normalised'], default: 'normalised', doc: 'normalised: the grey card prints at the aim at lights 0; real: a physical enlarger (CHB-010).', ui: { widget: 'segmented', label: 'Enlarger mode', group: 'Print' } },
+      mode: { type: 'enum', values: ['real', 'normalised'], default: 'real', doc: 'real: a physical enlarger, where time, aperture and magnification expose the paper (CHB-010; the default since contract 0.4, CHB-031); normalised: the grey card prints at the aim at lights 0 whatever the optics, so time, aperture and magnification do nothing.', ui: { widget: 'segmented', label: 'Enlarger mode', group: 'Print' } },
       lamp: { type: 'string', valuesFrom: 'lamps', default: 'TH-KG3', doc: 'Enlarger lamp and heat filter.' },
       filtration: { type: 'cmy', unit: 'CC', min: -100, max: 200, default: { c: 0, m: 0, y: 0 }, doc: 'Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0.', ui: { widget: 'slider', step: 1, detents: [0], label: 'Filtration', group: 'Print', components: ['C', 'M', 'Y'] } },
       time_s: { type: 'number', unit: 's', min: 0.1, max: 600, usual: [2, 60], default: 10, doc: 'Exposure time.', ui: { widget: 'slider', step: 0.1, label: 'Time', group: 'Print', scale: 'log2', aside: 'stop' } },
