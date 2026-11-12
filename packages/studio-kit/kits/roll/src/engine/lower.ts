@@ -97,6 +97,9 @@ export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecip
     const shared = Object.entries(roll.fragment).filter(([p]) => rec.kind === 'negative-scan' || !p.startsWith('scan.'));
     const values: Record<string, unknown> = { ...Object.fromEntries(shared), 'print.enlarger.mode': 'real', 'print.enlarger.time_s': time_s, 'print.lights.logH': logH };
     // the frame's own rebate box (source px), unless the photographer picked one
+    // a frame the analysis flags as mixed keeps its own base; the others take the roll's (scan.baseT, scan.flare)
+    if (a.base.mixed.includes(f)) delete values['scan.baseT'];
+    values['roll'] = { id: roll.id };
     const box = fa.layout.rebate?.box;
     if (box && rec.kind === 'negative-scan' && !getPath(rec, 'scan.rebate')) values['scan.rebate'] = box;
     const ms = changedSets(rec, values);
@@ -107,7 +110,7 @@ export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecip
   return {
     id, kind: 'first-print', by: 'auto', frames, skipped,
     label: 'First print',
-    why: `Roll first print of ${n} frame${n === 1 ? '' : 's'}: base from the frames' rebates (roll spread ${a.base.spreadD.toFixed(3)} D), integrate to grey α = ${alpha}, roll consistency ${r}`,
+    why: `Roll first print of ${n} frame${n === 1 ? '' : 's'}: base (scan.baseT) from the frames' rebates (roll spread ${a.base.spreadD.toFixed(3)} D)${a.base.veil ? ', veil as scan.flare' : ''}, integrate to grey α = ${alpha}, roll consistency ${r}`,
     meta: { alpha, consistency: r },
   };
 }

@@ -18,10 +18,10 @@ import type { Cb, CatalogFrame } from '../../../src/cb.ts';
 import { frameRef } from '../../../src/handles.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { analyseRoll } from './engine/analyse.ts';
-import { buildBatch, plain, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
+import { buildBatch, plain, setWithExpect, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
 import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, SHARED_PATHS } from './engine/constants.ts';
 import { clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
-import { divergence, fragmentOf, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
+import { baseOfVeilFree, divergence, flareOfVeil, fragmentOf, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
 
 export interface RollDoc {
   rolls: Record<string, Roll>;
@@ -146,6 +146,10 @@ export function createRollKit(ck: Ck, cb: Cb) {
       const top = analysis.ranking?.[0]?.stock;
       const next: Roll = { ...rollOf(ctx.state, roll.id)!, analysis, status: 'analysed' };
       if (top && !next.fragment['scan.stock']) next.fragment = { ...next.fragment, 'scan.stock': top };
+      // the measured base and veil are recipe settings (contract 0.3), not pixel edits: scan.baseT and per-channel scan.flare
+      const bs = analysis.base;
+      if (bs.T) next.fragment = { ...next.fragment, 'scan.baseT': baseOfVeilFree(bs.T, bs.veil) };
+      if (bs.veil) next.fragment = { ...next.fragment, 'scan.flare': flareOfVeil(bs.veil) };
       writeRoll(ctx, next);
       for (const d of analysis.diagnostics) ctx.rt.diagnostics.info(d.code, d.message, { runtime: true });
       if (o.firstPrint) firstPrint(ctx);
@@ -158,16 +162,34 @@ export function createRollKit(ck: Ck, cb: Cb) {
     }
   }
 
-  function firstPrint(ctx: any, only?: FrameId[]): MutationBatch | null {
+  /** the roll's own bookkeeping once its first print is in: a real enlarger for the roll, status first-printed */
+  function firstPrinted(ctx: any, rollId: string): void {
+    const cur = rollOf(ctx.state, rollId);
+    if (cur) writeRoll(ctx, { ...cur, fragment: { ...cur.fragment, 'print.enlarger.mode': 'real' }, status: 'first-printed' });
+  }
+  /** the frames that have no first print yet (the automatic one on a new roll), or `only` */
+  function planFirstPrint(ctx: any, only?: FrameId[]): MutationBatch | null {
     const roll = rollOf(ctx.state);
     if (!roll?.analysis) return null;
     const pending = only ?? roll.frames.filter((f) => !['roll', 'match'].includes(recipeOf(ctx)(f)?.print.lights.auto.method ?? ''));
     if (!pending.length) return null;
-    const b = firstPrintBatch(roll, recipeOf(ctx), { rejected: rejectedOf(ctx.state), consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, only: pending });
+    return firstPrintBatch(roll, recipeOf(ctx), { rejected: rejectedOf(ctx.state), consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, only: pending });
+  }
+  /** the automatic first print of a new roll: applied at once, by 'auto', one undo step */
+  function firstPrint(ctx: any, only?: FrameId[]): MutationBatch | null {
+    const b = planFirstPrint(ctx, only);
+    if (!b) return null;
     applyBatch(ctx, b, { force: true });
-    const cur = rollOf(ctx.state, roll.id)!;
-    writeRoll(ctx, { ...cur, fragment: { ...cur.fragment, 'print.enlarger.mode': 'real' }, status: 'first-printed' });
+    firstPrinted(ctx, rollOf(ctx.state)!.id);
     return b;
+  }
+  /** frames of the roll that do not name it yet (FrameRecipe.roll): one 'auto' batch */
+  function membersBatch(ctx: any, roll: Roll): MutationBatch {
+    const frames = roll.frames.flatMap((f) => {
+      const r = recipeOf(ctx)(f);
+      return r && r.roll?.id !== roll.id ? [{ frame: f, mutations: [setWithExpect(r, 'roll', { id: roll.id })] }] : [];
+    });
+    return { id: `${ROLL_TX}members-${roll.id}`, kind: 'setup', by: 'auto', frames, skipped: [], label: 'Add to roll', why: `${frames.length} frame${frames.length === 1 ? '' : 's'} name roll ${roll.id}` };
   }
 
   function planMatch(ctx: any): MutationBatch | null {
@@ -259,7 +281,12 @@ export function createRollKit(ck: Ck, cb: Cb) {
               t.$set(['roll', 'order'], [...(t.roll.order ?? []), id]);
               t.$set(['roll', 'current'], id);
             });
-            return o.analyse === false ? id : analyse(ctx, { firstPrint: true }).then(() => id);
+            const join = (): string => {
+              const m = membersBatch(ctx, rollOf(ctx.state, id)!);
+              if (m.frames.length) applyBatch(ctx, m, { force: true });
+              return id;
+            };
+            return o.analyse === false ? join() : analyse(ctx, { firstPrint: true }).then(join);
           },
         })
           .add('roll.select', {
@@ -282,7 +309,12 @@ export function createRollKit(ck: Ck, cb: Cb) {
             menu: 'Roll',
             enabled: (s: any) => !!rollOf(s)?.analysis,
             why: 'Analyse the roll first',
-            run: (ctx: any, all = false) => firstPrint(ctx, all ? rollOf(ctx.state)!.frames : undefined),
+            // one card: the first print of the roll as a batch to approve or reject (the automatic one on a new roll is applied at once)
+            run: (ctx: any, all = false) => {
+              const b = planFirstPrint(ctx, all ? rollOf(ctx.state)!.frames : undefined);
+              showPending(ctx, b);
+              return b;
+            },
           })
           .add('roll.setReference', {
             label: 'Set as Roll Reference',
@@ -339,6 +371,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
               const roll = rollOf(ctx.state);
               if (roll && b.kind === 'match') writeRoll(ctx, { ...roll, match: { alpha: Number(b.meta?.['alpha'] ?? 0), appliedAt: ctx.rt.clock?.now?.() ?? Date.now(), batch: b.id }, status: 'balanced' });
               if (roll && b.kind === 'clear-match') writeRoll(ctx, { ...roll, match: null, status: 'first-printed' });
+              if (roll && b.kind === 'first-print') firstPrinted(ctx, roll.id);
               showPending(ctx, null);
               return true;
             },

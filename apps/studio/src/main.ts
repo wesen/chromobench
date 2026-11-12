@@ -17,7 +17,7 @@ import { mountStudio } from '@chromobench/studio-kit/dom';
 import '@chromobench/studio-kit/studio-kit.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
-import { firstPrint, withRebate } from './host/first-print.ts';
+import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -88,7 +88,7 @@ async function startEngine(): Promise<Host> {
   return {
     engine: se,
     label: se.label,
-    initial: (d, g) => firstPrint(se, g, withRebate(d, se.notes.get(d.source.sha256)?.rebate), { integrate: h.integrate }),
+    initial: (d, g) => firstPrint(se, g, withMeasured(d, se.notes.get(d.source.sha256)), { integrate: h.integrate }),
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
   };

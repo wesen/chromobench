@@ -288,8 +288,8 @@ export class EditLogRoute implements RouteAdapter {
   /**
    * A cross-frame batch (CHB-020 roll setup, first print, "print the roll like this frame"): one unit per frame
    * under one shared tx, one global undo step. Every frame is validated before any is applied. `by: 'auto'`
-   * for the automatic first print (as ingest's frame.add). Until LoggedMutation.batch exists (CHB-020
-   * CONTRACT-REQUESTS R3) the shared tx is what groups the entries.
+   * for the automatic first print (as ingest's frame.add). Every entry carries the shared tx as its
+   * LoggedMutation.batch (contract 0.3), so a log can list, approve or reject the batch's entries.
    */
   applyBatch(entries: { frame: string; mutations: Mutation[] }[], label: string, o: { by?: 'user' | 'auto'; tx?: string; detail?: string } = {}): UndoUnit[] {
     this.endBurst();
@@ -307,7 +307,8 @@ export class EditLogRoute implements RouteAdapter {
     const parts: HistoryPart[] = [];
     for (const { e, ms } of plan) {
       this.previewed.delete(e.id);
-      units.push(this.withQuiet(() => e.log.apply(ms, o.by ?? 'user', label, { tx })));
+      // the batch id is the shared tx: every entry carries LoggedMutation.batch (contract 0.3)
+      units.push(this.withQuiet(() => e.log.apply(ms, o.by ?? 'user', label, { tx, batch: tx })));
       this.stats.applies++;
       parts.push(this.part(e, tx, label));
       this.publish(e);

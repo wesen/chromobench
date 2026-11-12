@@ -27,6 +27,9 @@ export interface Decoded {
   notes: string[];
   /** Rebate box in working-image px from the film layout (CHB-020), for the new recipe's scan.rebate; null = scan.density's own rule. */
   rebate?: Box | null;
+  /** The holder's veil as scan.flare (percent per channel), and the base as scan.baseT (flare-corrected), from conditionScan (contract 0.3). */
+  flare?: Vec3 | null;
+  baseT?: Vec3 | null;
 }
 
 /** What the host file (engines.ts) provides: everything that needs core, gpu or ingest. */

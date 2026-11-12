@@ -97,3 +97,22 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
 export function withRebate(recipe: FrameRecipe, rebate: Box | null | undefined): FrameRecipe {
   return rebate && recipe.scan ? { ...recipe, scan: { ...recipe.scan, rebate } } : recipe;
 }
+
+/** What the host measured at decode (conditionScan), for the new recipe's scan settings (contract 0.3). */
+export interface MeasuredScan {
+  rebate?: Box | null;
+  /** scan.flare, percent per channel, from the holder's veil */
+  flare?: Vec3 | null;
+  /** scan.baseT: the flare-corrected base */
+  baseT?: Vec3 | null;
+}
+
+/** The recipe with the measured scan settings: rebate box, per-channel flare and base. Nothing measured leaves the default. */
+export function withMeasured(recipe: FrameRecipe, m: MeasuredScan | null | undefined): FrameRecipe {
+  if (!m || !recipe.scan) return recipe;
+  const scan = { ...recipe.scan };
+  if (m.rebate) scan.rebate = m.rebate;
+  if (m.flare && m.flare.some((f) => f > 0)) scan.flare = [...m.flare] as Vec3;
+  if (m.baseT) scan.baseT = [...m.baseT] as Vec3;
+  return { ...recipe, scan };
+}

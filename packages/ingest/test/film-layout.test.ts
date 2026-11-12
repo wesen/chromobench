@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Box, Vec3 } from '@chromobench/contract';
 import {
-  conditionScan, filmLayout, frameBaseOf, openSourceSync, orientedToSensorBox, plantedStrip, rebateFromBox, region, rollBase, subtractVeil,
+  conditionScan, filmLayout, veilToFlare, frameBaseOf, openSourceSync, orientedToSensorBox, plantedStrip, rebateFromBox, region, rollBase, subtractVeil,
   type FilmLayout, type PlantedStrip,
 } from '@chromobench/ingest';
 
@@ -201,5 +201,16 @@ describe("conditionScan: the host's one call at decode", () => {
     expect(lab.layout.rebate!.from).toBe('blank');
     expect(lab.rebate).toBeNull();
     expect(conditionScan(Float32Array.from(crop), k.w, k.h, { blankBox: true }).rebate).not.toBeNull();
+  });
+  it('subtract: false leaves the pixels and hands the veil over as scan.flare and scan.baseT', () => {
+    const p = plantedStrip({ pxPerMm: 6, seed: 9 });
+    const rgb = Float32Array.from(p.rgb);
+    const c = conditionScan(rgb, p.w, p.h, { id: 'a', subtract: false });
+    expect(rgb).toEqual(Float32Array.from(p.rgb));
+    // the exact model: the holder reads f/(1+f), so f = L/(1 − L); percent per channel
+    c.veil!.forEach((L, k) => expect(c.flare![k]).toBeCloseTo((100 * L) / (1 - L), 3));
+    // T′(1+f) − f = (T′ − L)/(1 − L): the flare-corrected base is what scan.density divides by after scan.flare
+    c.baseT!.forEach((t, k) => expect(c.scanBaseT![k]).toBeCloseTo(t / (1 - c.veil![k]!), 9));
+    expect(veilToFlare([0, 0.5, 0])).toEqual([0, 20, 0]);
   });
 });

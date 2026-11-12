@@ -151,3 +151,54 @@ describe('the roll flow through commands (guide §9)', () => {
     }
   }, 60_000);
 });
+
+describe('contract 0.3 in the roll flow: scan.baseT, scan.flare, FrameRecipe.roll, batch ids, the first-print card', () => {
+  it('the first print writes the measured base and veil into the recipes, names the roll, and tags every entry with its batch', async () => {
+    const r = await startedRoll([0, 0.004, 0.008, 0.002]);
+    const { rt, studio, ids } = r;
+    await rt.runCommand('roll.fromFrames', null);
+    const roll = rollOf(rt.state)!;
+    const b = roll.analysis!.base;
+    expect(b.veil).not.toBeNull();
+    for (const f of ids) {
+      const rec = studio.frames.get(f)!.log.committed;
+      expect(rec.roll).toEqual({ id: roll.id });
+      expect(rec.scan!.flare).toEqual(roll.fragment['scan.flare']);
+      expect((rec.scan!.flare as number[]).every((x) => x > 0 && x <= 20)).toBe(true);
+      expect(rec.scan!.baseT).toEqual(roll.fragment['scan.baseT']);
+      // the veil is the recipe's: f = 100 L / (1 - L); the base is (T - L) / (1 - L)
+      b.veil!.forEach((L, k) => expect((rec.scan!.flare as number[])[k]).toBeCloseTo((100 * L) / (1 - L), 3));
+      b.T!.forEach((T, k) => expect(rec.scan!.baseT![k]).toBeCloseTo(T / (1 - b.veil![k]!), 5));
+      const tags = studio.frames.get(f)!.log.inEffect().map((e) => e.batch);
+      expect(tags.length).toBeGreaterThan(0);
+      expect(new Set(tags).size).toBe(1);
+      expect(tags[0]).toMatch(/^roll:first-print-/);
+    }
+  }, 60_000);
+
+  it('"First print of the roll" is one card: reject leaves the frames alone, approve prints them as one batch', async () => {
+    const r = await startedRoll([0, 0.004, 0.008]);
+    const { rt, studio, ids } = r;
+    await rt.runCommand('roll.fromFrames', null);
+    // take the first print off, so there is something to print again
+    rt.run('edit.undo');
+    const before = recipes(r);
+    rt.runCommand('roll.firstPrint', null, true);
+    const card = (rt.state as any).rollView.pending;
+    expect(card.kind).toBe('first-print');
+    expect(card.frames.length).toBe(3);
+    expect(recipes(r)).toEqual(before);
+    rt.runCommand('roll.pending.reject', null);
+    expect((rt.state as any).rollView.pending).toBeNull();
+    expect(recipes(r)).toEqual(before);
+    rt.runCommand('roll.firstPrint', null, true);
+    const id = (rt.state as any).rollView.pending.id as string;
+    expect(rt.runCommand('roll.pending.approve', null)).toBe(true);
+    for (const f of ids) {
+      const log = studio.frames.get(f)!.log;
+      expect(log.committed.print.lights.auto.method).toBe('roll');
+      expect(log.inEffect().at(-1)!.batch).toBe(id);
+    }
+    expect(rollOf(rt.state)!.status).toBe('first-printed');
+  }, 60_000);
+});

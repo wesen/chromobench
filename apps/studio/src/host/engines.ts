@@ -91,30 +91,33 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
     ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
     : `${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
-  // Film layout (CHB-020): the holder's veil comes off the pixels, and the rebate box (film outside the image
-  // frame, never a sprocket hole or the holder) goes into the recipe's scan.rebate. A frame with no holder gets
-  // the veil of the roll opened so far.
+  // Film layout (CHB-020, contract 0.3): the pixels stay as scanned. The holder's veil goes into the recipe as
+  // scan.flare (per channel, percent) and the measured base as scan.baseT, so the engine removes the flare and
+  // the preview, the export and the roll analysis all see the same chain; the rebate box (film outside the image
+  // frame, never a sprocket hole or the holder) goes into scan.rebate. A frame with no holder gets the veil of
+  // the roll opened so far.
   const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
-  const c = conditionScan(data, w, h, { id: sha256, rollVeil });
+  const c = conditionScan(data, w, h, { id: sha256, rollVeil, subtract: false });
   roll.set(sha256, c.frame);
   const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
-  const Treb: Vec3 = c.baseT ?? ([0, 1, 2].map((k) => {
+  // the base as scanned (veil still in): the dust healer measures density against it
+  const Treb: Vec3 = c.layout.rebate?.Traw ?? ([0, 1, 2].map((k) => {
     let t = 0, m = 0;
     for (let y = rb.y; y < rb.y + rb.h; y++) for (let x = rb.x; x < rb.x + rb.w; x++) { t += data[(y * w + x) * 3 + k]!; m++; }
     return Math.max(t / Math.max(m, 1), 1e-6);
   }) as Vec3);
-  if (c.rebate) notes.push(`base ${fmt3(Treb.map((t) => -Math.log10(t)))} D (rebate ${rb.w}×${rb.h} at ${rb.x},${rb.y}, ${c.layout.rebate?.from})`);
+  if (c.rebate) notes.push(`base ${fmt3((c.baseT ?? Treb).map((t) => -Math.log10(t)))} D (rebate ${rb.w}×${rb.h} at ${rb.x},${rb.y}, ${c.layout.rebate?.from})`);
   else notes.push('no rebate found: the base is the brightest 5 % of columns (scan.density default)');
-  if (c.veil) notes.push(`veil ${c.veil.map((v) => v.toExponential(1)).join(' ')} subtracted (${c.veilFrom})`);
+  if (c.flare) notes.push(`scan.flare ${fmt3(c.flare)} % from the veil ${c.veil!.map((v) => v.toExponential(1)).join(' ')} (${c.veilFrom}), removed by the engine`);
+  else notes.push('no veil measured: scan.flare 0');
   for (const n of c.notes) notes.push(`${n.code}: ${n.message}`);
   if (settings.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
-  notes.push('scanner flare (scan.flare) not set');
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT };
 }
 
 function catalogOf(data: PhysicsData): Record<string, string[]> {

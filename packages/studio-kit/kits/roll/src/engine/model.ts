@@ -149,3 +149,13 @@ export const meanVec = (vs: readonly Vec3[]): Vec3 | null =>
   vs.length ? ([0, 1, 2].map((k) => vs.reduce((s, v) => s + v[k]!, 0) / vs.length) as Vec3) : null;
 export const r6 = (x: number): number => Number(x.toFixed(6));
 export const r6v = (v: readonly number[]): Vec3 => [r6(v[0]!), r6(v[1]!), r6(v[2]!)];
+
+// ── the measured base and veil as recipe settings (contract 0.3: scan.flare per channel, scan.baseT) ──
+/** The holder reads f/(1+f) of the open gate: a veil L (signal units) is scan.flare f = 100·L/(1 − L) per channel, percent (catalog max 20). */
+export function flareOfVeil(L: readonly number[]): Vec3 {
+  return [0, 1, 2].map((k) => Number(Math.min(20, Math.max(0, (100 * L[k]!) / (1 - Math.min(L[k]!, 0.99)))).toFixed(4))) as Vec3;
+}
+/** The veil-corrected base T − L as scan.baseT, the value scan.density divides by after scan.flare: T′(1+f) − f = (T′ − L)/(1 − L). */
+export function baseOfVeilFree(T: readonly number[], L: readonly number[] | null): Vec3 {
+  return [0, 1, 2].map((k) => Number((T[k]! / (1 - Math.min(L?.[k] ?? 0, 0.99))).toPrecision(7))) as Vec3;
+}
