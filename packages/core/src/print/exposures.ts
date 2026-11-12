@@ -19,6 +19,8 @@ export interface CombineTerm {
   sign: 1 | -1;
   /** Seconds ratio applied to 10^x (1 in real mode; t_i / t_main in normalised mode, see combineRatio). */
   ratio: number;
+  /** A flash (contract 0.3 'flash-base' / 'flash-open'): x is uniform, and the density mask does not apply to it. */
+  flash?: boolean;
 }
 
 /**
@@ -27,8 +29,9 @@ export interface CombineTerm {
  * back more light than the main exposure gives; guide §6.5 W_DODGE_EXCEEDS_MAIN). Returns whether the
  * clamp engaged in any layer.
  */
-export function combinePixel(xMain: ArrayLike<number>, terms: readonly CombineTerm[], out: Float64Array | number[]): boolean {
+export function combinePixel(xMain: ArrayLike<number>, terms: readonly CombineTerm[], out: Float64Array | number[], dm = 0): boolean {
   let clamped = false;
+  const through = 10 ** -dm;
   for (let k = 0; k < 3; k++) {
     let H = 10 ** xMain[k]!;
     for (const t of terms) if (t.sign < 0) H -= t.ratio * t.m * 10 ** t.x[k]!;
@@ -37,7 +40,10 @@ export function combinePixel(xMain: ArrayLike<number>, terms: readonly CombineTe
       if (H < -1e-9 * 10 ** xMain[k]!) clamped = true;
       H = 0;
     }
-    for (const t of terms) if (t.sign > 0) H += t.ratio * t.m * 10 ** t.x[k]!;
+    for (const t of terms) if (t.sign > 0 && !t.flash) H += t.ratio * t.m * 10 ** t.x[k]!;
+    // contract 0.3: the density mask d_m holds back every exposure through the negative; flashes do not pass it
+    H *= through;
+    for (const t of terms) if (t.flash) H += t.ratio * t.m * 10 ** t.x[k]!;
     out[k] = Math.log10(Math.max(H, H_FLOOR));
   }
   return clamped;

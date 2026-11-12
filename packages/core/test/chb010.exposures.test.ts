@@ -287,18 +287,26 @@ describe('print.combine and mask.* in the reference engine', () => {
     expect(shown.width).toBe(48);
   });
 
-  it('print.densityMask: amount 0 is the identity; the mask is neutral, ≥ 0 and 0 at the densest area', async () => {
+  it('print.densityMask (contract 0.3): d_m from PD = −x without a print.expose, ≥ 0 and 0 at the densest area; print.combine applies it', async () => {
     const { I, read } = await setup();
-    const pd = I('source.pattern', [], { domain: 'printing-density', width: 24, height: 16, seed: 3 });
-    const [p0, p1] = [await read(pd), await read(I('print.densityMask', [pd.id], { amount: 0 }))];
-    expect([...p1]).toEqual([...p0]);
-    const p2 = await read(I('print.densityMask', [pd.id], { amount: 0.5, radius_um: 12 }));
-    const d = maskDensity(p0, 24, 16, 3, 0.5, 2);
+    const x = I('source.pattern', [], { domain: 'paper-logH', width: 24, height: 16, seed: 3 });
+    const x0 = await read(x);
+    expect([...(await read(I('print.densityMask', [x.id], { amount: 0 })))].every((v) => v === 0)).toBe(true);
+    const dm = I('print.densityMask', [x.id], { amount: 0.5, radius_um: 12 });
+    const d1 = await read(dm);
+    const pd = Float64Array.from(x0, (v) => -v);
+    const d = maskDensity(pd, 24, 16, 3, 0.5, 2);
     let min = Infinity;
     for (let i = 0; i < 24 * 16; i++) {
-      for (let k = 0; k < 3; k++) expect(p2[3 * i + k]! - p0[3 * i + k]!).toBeCloseTo(d[i]!, 12);
+      expect(d1[i]!).toBeCloseTo(d[i]!, 12);
       min = Math.min(min, d[i]!);
     }
     expect(min).toBe(0);
+    // same polarity: 0 at the thinnest area, ≥ 0
+    const ds = await read(I('print.densityMask', [x.id], { amount: 0.5, radius_um: 12, polarity: 'same' }));
+    expect(Math.min(...ds)).toBe(0);
+    // the combine with only a density mask: x − d_m in every layer (neutral)
+    const c = await read(I('print.combine', [x.id], { densityMasks: [dm.id] }));
+    for (let i = 0; i < 24 * 16; i++) for (let k = 0; k < 3; k++) expect(c[3 * i + k]!).toBeCloseTo(x0[3 * i + k]! - d1[i]!, 11);
   });
 });

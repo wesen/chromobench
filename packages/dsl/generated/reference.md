@@ -40,10 +40,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -60,10 +60,11 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
 - **scan**
-  - `h.scan.density({ rebate }) → scanner-density — Scanner density relative to the rebate: d = −log10(T / T_rebate).`
+  - `h.scan.density({ rebate, baseT }) → scanner-density — Scanner density relative to the film base: d = −log10(T / T_base), T_base = baseT when given, else the mean over the rebate box.`
     - rebate: box, px, optional, recipe scan.rebate — Box in source (sensor) pixels; absent means automatic.
-  - `h.scan.flare({ flare }) → camera-linear — Removes scanner flare.`
-    - flare: number, percent, [0, 20], default 0, recipe scan.flare — Scanner veiling flare, percent of the open-gate signal.
+    - baseT: vec3, fraction, [0.000001, 100], optional, recipe scan.baseT — Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box.
+  - `h.scan.flare({ flare }) → camera-linear — Removes scanner flare: T = T′(1 + f) − f per channel, with T′ the signal relative to the open gate (after scan.flatField with an open-gate flat; ingest removeFlareValue).`
+    - flare: number, percent, [0, 20], default 0, recipe scan.flare — Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel).
   - `h.scan.flatField({ flat }) → camera-linear — Divides by the flat field in sensor coordinates.`
     - flat: string, optional, recipe scan.flat — SHA-256 of the flat-field frame (opened like a source).
   - `h.scan.noise({ box }) → value — Measures noise σ per channel (MAD), in density.`
@@ -97,10 +98,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -134,10 +135,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
@@ -198,10 +199,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -225,9 +226,17 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
 
 - `neg.print({ paper, time_s, fstop, filtration, lights, grade, preflash, illuminant, flare })` → print-xyz — the vocabulary print macro
 - **darkroom**
-  - `h.darkroom.lightsToFiltration({ logH }) → value — Expresses printer lights as colour-head filtration plus time.`
-    - logH: vec3, logH, [-1.5, 1.5], default [0,0,0] — Printer lights to express as filtration.
-    - returns `filtration`, `residual`
+  - `h.darkroom.lightsToFiltration({ logH, paper, mode, lamp, filtration, time_s, fstop, aim, aimView }) → value — Expresses printer lights as colour-head filtration plus time.`
+    - logH: vec3, logH, [-1.5, 1.5], default [0,0,0], recipe print.lights.logH — Printer lights to express as filtration and time.
+    - paper: stockId, default "kodak_portra_endura", recipe print.paper — Colour paper.
+    - mode: enum real|normalised, default "normalised", recipe print.enlarger.mode — real: filtration and time; normalised: filtration, the density part stays as lights.
+    - lamp: string, default "TH-KG3", recipe print.enlarger.lamp — Enlarger lamp.
+    - filtration: cmy, CC, [-100, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Current shift on the neutral pack.
+    - time_s: number, s, [0.1, 600], default 10, recipe print.enlarger.time_s — Current exposure time.
+    - fstop: number, fstop, [2.8, 45], default 8, recipe print.enlarger.fstop — Lens aperture.
+    - aim: enum grey-0.184|midgray-normalised, default "grey-0.184", recipe print.aim — The aim.
+    - aimView: string, default "D50", recipe view.illuminant — Viewing light of the aim.
+    - returns `filtration`, `time_s`, `stops`, `lights`, `residual`
   - `h.darkroom.ringAround({ step_pt, rings }) → print-xyz — A ring-around: the print surrounded by prints moved one step towards and away from each colour, in printer lights.`
     - step_pt: number, point, [1, 16], default 4 — Printer-light step between prints, in points (2, 4 or 8 are usual).
     - rings: number, [1, 2], default 1 — Number of rings.
@@ -255,10 +264,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
@@ -287,7 +296,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - filtration: cmy, CC, [-100, 200], default {"c":0,"m":0,"y":0}, recipe print.enlarger.filtration — Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0.
     - time_s: number, s, [0.1, 600], default 10, recipe print.enlarger.time_s — Exposure time.
     - fstop: number, fstop, [2.8, 45], default 8, recipe print.enlarger.fstop — Enlarger lens aperture.
-    - magnification: number, [0.5, 20], optional, recipe print.enlarger.magnification — Enlarger magnification; absent = the calibration's reference (CHB-010).
+    - magnification: number, [0.5, 20], optional, recipe print.enlarger.magnification — Enlarger magnification (light ∝ 1/(m + 1)²); absent = the calibration's reference, 8×. Real mode only (CHB-010).
     - aim: enum grey-0.184|midgray-normalised, default "grey-0.184", recipe print.aim — What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone.
     - aimView: string, default "D50", recipe view.illuminant — Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light).
 - **scan**
@@ -306,10 +315,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
@@ -330,10 +339,6 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - box: box, px, optional — Region in source px; absent = whole image.
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
-- **print**
-  - `h.print.densityMask({ amount, radius_um }) → printing-density — Contrast-reducing density mask (unsharp mask in printing density).`
-    - amount: number, fraction, [0, 1], default 0 — Strength of the unsharp density mask.
-    - radius_um: number, um, [0, 5000], default 500 — Blur radius on the film.
 - **view**
   - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
     - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
@@ -348,10 +353,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -368,13 +373,18 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
 - **print**
-  - `h.print.combine({ exposures, masks, modes }) → paper-logH — Sums several exposures in linear H (dodge, burn, flash, split; CHB-010).`
-    - exposures: Image[], default [] — Additional paper-logH exposures, summed in linear H.
+  - `h.print.combine({ exposures, masks, modes, densityMasks }) → paper-logH — Sums several exposures in linear H (dodge, burn, flash, split; CHB-010): H = 10^−Σd_m·(max(10^x − Σ_dodge r·m·10^x_i, 0) + Σ_add r·m·10^x_i) + Σ_flash r·m·10^x_flash, one log at the end.`
+    - exposures: Image[], default [] — Additional paper-logH exposures (print.expose nodes), summed in linear H.
     - masks: Mask[], default [] — One mask per additional exposure.
-    - modes: string[], default [] — Per exposure: 'add' (burn, flash, split) or 'subtract' (dodge).
+    - modes: string[], default [] — Per exposure: 'add' (burn, split), 'subtract' (dodge), 'flash-base' or 'flash-open' (a flash: the exposure's print.expose settings evaluated uniformly, through the film base with no image (dye amounts 0), or through an empty gate (no film)).
+    - densityMasks: Image[], default [] — print.densityMask densities d_m (scalar-field): every exposure through the negative is multiplied by 10^−Σd_m, flashes are not (CHB-010 §6.6).
+  - `h.print.densityMask({ amount, radius_um, polarity }) → scalar-field — The density d_m ≥ 0 of a neutral silver mask made from the negative: H_m = blur of the negative's mean transmittance 10^−PD, with PD = x_clear − x read from the receiver (the main print.expose; x_clear its clear-film exposure, 0 without one).`
+    - amount: number, fraction, [0, 1], default 0 — Mask gamma γ_m (0.6: large-area contrast falls to 40 %).
+    - radius_um: number, um, [0, 5000], default 500 — Gaussian σ of the blur on the film (spacer and diffuser).
+    - polarity: enum positive|same, default "positive" — positive lowers large-area contrast (d_m = γ(log10 H_m − log10 min H_m)); same raises it (d_m = γ(log10 max H_m − log10 H_m)).
   - `h.print.develop({ paper, grade }) → paper-dyes — Develops paper log exposure to paper dye amounts through the paper curves.`
     - paper: stockId, default "kodak_portra_endura", recipe print.paper — Colour paper.
-    - grade: number, [0, 5], default 2, recipe print.grade — Contrast grade.
+    - grade: number, [0, 5], default 2, recipe print.grade — Contrast grade: a gamma about the aim grey, so the grey card stays (0 → 0.7, 1 → 0.82, 2 → 1 the paper as made, 3 → 1.2, 4 → 1.45, 5 → 1.8). Colour papers have no grades; this is a contrast control.
   - `h.print.lights({ logH }) → paper-logH — Balance colour and density by shifting the paper's log exposure.`
     - logH: vec3, logH, [-1.5, 1.5], default [0,0,0], recipe print.lights.logH — Offsets of paper log exposure per layer (R, G, B light), applied after the negative→paper table.
   - `h.print.preflash({ amount }) → paper-logH — Adds a uniform pre-exposure in linear H.`
@@ -393,10 +403,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
@@ -440,10 +450,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
@@ -468,7 +478,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
   - `h.output.display({ space, rendering, knee }) → display-rgb — Turns the print's XYZ into encoded RGB in an output space.`
     - space: enum srgb|display-p3|rec2020|adobe-rgb|prophoto, default "srgb" — Output colour space (the display space for viewing; export uses view.output.export.space).
     - rendering: enum print-as-seen|scan-of-print, default "scan-of-print", recipe view.output.rendering — Paper white at its own level (as seen) or at display white (scan).
-    - knee: enum oklch|tanh-shoulder|clip, default "oklch", recipe view.output.display.knee.method — Gamut compression; always the last colour step. 'oklch' is the perceptual knee (OkLCh with spektrafilm's parameters; called 'cam16-ucs' before contract 0.2, CAM16-UCS itself is CHB-011's).
+    - knee: enum oklch|cam16-ucs|tanh-shoulder|clip, default "oklch", recipe view.output.display.knee.method — Gamut compression; always the last colour step. 'oklch': OkLCh chroma knee (spektrafilm's parameters; called 'cam16-ucs' before contract 0.2); 'cam16-ucs': the same in CAM16-UCS (L_A 64, Y_b 20, average surround, D = 1; contract 0.3, CHB-011); 'tanh-shoulder': Chromogen's per-channel shoulder (kept for comparison; it cannot keep paper white at display white); 'clip': per channel.
+- **retouch**
+  - `h.retouch.heal({ spots }) → print-xyz — Heals and clones circular spots on the print (after view.adapt, before finishing).`
+    - spots: string, default "{}" — Canonical JSON of the enabled retouch.spots record (compile fills it): {id: {mode, x, y, r, src: {x, y}, feather, opacity, enabled}}, sensor px of the un-oriented source.
 - **view**
   - `h.view.adapt({ to }) → print-xyz — Chromatic adaptation of the print XYZ to the output white.`
     - to: enum D50|D65, default "D65", recipe view.output.white — White to adapt to.
@@ -487,10 +500,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -507,9 +520,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
 - **output**
-  - `h.output.frame({ orientation, crop }) → display-rgb — Orientation and crop, applied last (DR-3: all coordinates are source pixels).`
-    - orientation: enum none|cw90|rot180|ccw90|flipH|flipV|transpose|transverse, default "none", recipe scan.orientation — Orientation applied for display.
-    - crop: box, px, optional, recipe scan.crop — Crop in source (sensor) pixels; absent = full frame.
+  - `h.output.frame({ orientation, angle_deg, crop }) → display-rgb — Crop, straighten and orientation, applied last, resampling once (DR-3: all coordinates are source pixels).`
+    - orientation: enum none|cw90|rot180|ccw90|flipH|flipV|transpose|transverse, default "none", recipe view.frame.orientation — Orientation applied for display.
+    - angle_deg: number, deg, [-45, 45], default 0, recipe view.frame.angle_deg — Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0.
+    - crop: box, px, optional, recipe view.frame.crop — Crop in source (sensor) pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented.
 
 ## Handles in mask
 
@@ -520,18 +534,18 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in source px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.feather({ radius_px }) → mask — Feathers (blurs) a mask.`
-    - radius_px: number, px, [0, 500], default 10 — Feather radius.
+    - radius_px: number, px, [0, 500], default 10 — Feather radius in source px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide).
   - `h.mask.gradient({ from, to }) → mask — Linear gradient mask (graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.not({  }) → mask — Inverse (1 − m).`
   - `h.mask.or({ other }) → mask — Union (maximum).`
     - other: Mask — Second mask.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -561,10 +575,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -594,10 +608,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
@@ -627,10 +641,10 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`. Handles are lazy nodes: `awai
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (source px).
     - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (source px).
   - `h.mask.luminance({ above, below, softness }) → mask — Mask from a luminance range of the receiver.`
-    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range).
-    - below: number, fraction, [0, 1], default 1 — Select values below this.
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
-  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).`
+  - `h.mask.paint({ strokes }) → mask — Painted mask: brush strokes rasterised with soft round dabs.`
     - strokes: string, default "[]" — Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"|"erase"}], sensor px, simplified (RDP 0.5 px).
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`

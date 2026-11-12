@@ -17,7 +17,7 @@ Intersection (minimum).
 
 ## `mask.ellipse`
 
-Elliptical mask.
+Elliptical mask. The edge is antialiased over one pixel; use mask.feather for a soft edge.
 
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
@@ -40,7 +40,7 @@ Feathers (blurs) a mask.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `radius_px` | number | px | [0, 500] | [2, 100] | `10` |  | Feather radius. |
+| `radius_px` | number | px | [0, 500] | [2, 100] | `10` |  | Feather radius in source px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). |
 
 ## `mask.gradient`
 
@@ -67,8 +67,8 @@ Mask from a luminance range of the receiver.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `above` | number | fraction | [0, 1] |  | `0` |  | Select values above this (normalised to the domain range). |
-| `below` | number | fraction | [0, 1] |  | `1` |  | Select values below this. |
+| `above` | number | fraction | [0, 1] |  | `0` |  | Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected). |
+| `below` | number | fraction | [0, 1] |  | `1` |  | Select values below this. 1 means no upper bound. |
 | `softness` | number | fraction | [0, 0.5] |  | `0.05` |  | Transition width. |
 
 ## `mask.not`
@@ -95,7 +95,7 @@ Union (maximum).
 
 ## `mask.paint`
 
-Painted mask: brush strokes rasterised with soft round dabs (erase strokes subtract).
+Painted mask: brush strokes rasterised with soft round dabs. Pressure is recorded but does not modulate the brush; add takes the maximum, erase multiplies by 1 − coverage.
 
 - Owner: CHB-009
 - On: Image (any) → Mask (mask)

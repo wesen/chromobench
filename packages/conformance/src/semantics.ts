@@ -1,4 +1,5 @@
-// Semantic cases (CHB-010): what print.combine and the mask.* ops must compute, in any engine, on
+// Semantic cases (CHB-010, contract 0.3): what print.combine, the mask.* ops, scan.flare and scan.density's
+// baseT must compute, in any engine, on
 // seeded synthetic inputs. Values are read back from the engine under test (masks included), so the
 // cases hold for f64 and f32 engines alike; the tolerance is the f32 one.
 import type { Node } from '@chromobench/contract';
@@ -53,6 +54,59 @@ const CASES: SemanticCase[] = [
       const out = env.build('print.combine', [x.id], { exposures: [e.id, e.id], masks: [m.id, m.id], modes: ['subtract', 'add'] });
       const [xa, oa] = [await read(env, x), await read(env, out)];
       check(worst(oa, 3, (i, k) => xa[3 * i + k]!) <= TOL, 'dodge and burn of the same exposure do not cancel');
+    },
+  },
+  {
+    id: 'print.combine semantics: an unmasked base flash adds the same H to every pixel (contract 0.3)', op: 'print.combine', needs: ['print.combine', 'print.expose', 'mask.luminance'],
+    async run(env) {
+      const dyes = env.input('film-dyes');
+      const x = env.build('print.expose', [dyes.id], {});
+      const f = env.build('print.expose', [dyes.id], { time_s: 1 });
+      const all = env.build('mask.luminance', [x.id], { above: 0, below: 1, softness: 0 });
+      for (const mode of ['flash-base', 'flash-open']) {
+        const out = env.build('print.combine', [x.id], { exposures: [f.id], masks: [all.id], modes: [mode] });
+        const [xa, oa] = [await read(env, x), await read(env, out)];
+        const added = (i: number, k: number): number => 10 ** oa[3 * i + k]! - 10 ** xa[3 * i + k]!;
+        let spread = 0;
+        for (let i = 0; i < xa.length / 3; i++) for (let k = 0; k < 3; k++) spread = Math.max(spread, Math.abs(added(i, k) - added(0, k)) / Math.max(added(0, k), 1e-12));
+        check(added(0, 0) > 0 && spread <= 1e-3, `${mode}: the flash is not a uniform H (relative spread ${spread})`);
+      }
+    },
+  },
+  {
+    id: 'print.combine semantics: density masks hold back the exposures through the negative (x − Σd_m), flashes pass (contract 0.3)', op: 'print.combine', needs: ['print.combine', 'print.densityMask'],
+    async run(env) {
+      const x = env.input('paper-logH');
+      const d1 = env.build('print.densityMask', [x.id], { amount: 0.5, radius_um: 30 });
+      const d2 = env.build('print.densityMask', [x.id], { amount: 0.2, radius_um: 30, polarity: 'same' });
+      const out = env.build('print.combine', [x.id], { densityMasks: [d1.id, d2.id] });
+      const [xa, oa] = [await read(env, x), await read(env, out)];
+      const [da, db] = [Array.from(await read(env, d1)), Array.from(await read(env, d2))];
+      check(da.every((v) => v >= -1e-6) && db.every((v) => v >= -1e-6), 'a density mask is negative somewhere');
+      check(Math.min(...da) <= 1e-6, 'a positive mask is not 0 at the densest area');
+      check(worst(oa, 3, (i, k) => xa[3 * i + k]! - da[i]! - db[i]!) <= TOL, 'print.combine with density masks is not x − Σd_m');
+    },
+  },
+  {
+    id: 'scan.flare semantics: T = T′(1 + f) − f per channel, f a number or [r, g, b] (contract 0.3)', op: 'scan.flare', needs: ['scan.flare'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const one = await read(env, env.build('scan.flare', [r.id], { flare: 2 }));
+      const per = await read(env, env.build('scan.flare', [r.id], { flare: [1, 2, 4] }));
+      const ra = await read(env, r);
+      const f = [0.01, 0.02, 0.04];
+      check(worst(one, 3, (i, k) => ra[3 * i + k]! * 1.02 - 0.02) <= TOL, 'scan.flare (number) is not T′(1 + f) − f');
+      check(worst(per, 3, (i, k) => ra[3 * i + k]! * (1 + f[k]!) - f[k]!) <= TOL, 'scan.flare (per channel) is not T′(1 + f_k) − f_k');
+    },
+  },
+  {
+    id: 'scan.density semantics: baseT is the zero of density and wins over the rebate (contract 0.3)', op: 'scan.density', needs: ['scan.density'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const baseT = [0.8, 0.6, 0.5];
+      const d = await read(env, env.build('scan.density', [r.id], { baseT, rebate: { x: 0, y: 0, w: 2, h: 2 } }));
+      const ra = await read(env, r);
+      check(worst(d, 3, (i, k) => -Math.log10(Math.max(ra[3 * i + k]!, 1e-8) / baseT[k]!)) <= 1e-4, 'scan.density with baseT is not −log10(T / baseT)');
     },
   },
   {

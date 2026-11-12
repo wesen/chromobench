@@ -39,7 +39,7 @@ interface Frame {
   exact: RefEngine;
   tabulated: RefEngine;
   T: Float32Array;
-  nodes: { dyes: Node; display: Node; displayTanh: Node; darkroom: Node; masks: Node[]; combined: Node; multi: Node; densityMask: Node; densityPd: Node };
+  nodes: { dyes: Node; display: Node; displayTanh: Node; darkroom: Node; masks: Node[]; combined: Node; multi: Node; densityMask: Node; flashMasked: Node };
 }
 let frameP: Promise<Frame> | null = null;
 async function frame(): Promise<Frame> {
@@ -82,11 +82,13 @@ async function frame(): Promise<Frame> {
     const combined = I('print.combine', [xMain.id], { exposures: [ex(6, { c: 0, m: 0, y: 15 }).id, ex(3).id, ex(4).id], masks: [sky.id, face.id, painted.id], modes: ['add', 'subtract', 'add'] });
     const xyzM = I('view.reflect', [I('print.develop', [I('print.lights', [combined.id], { logH: [0.01, 0, -0.02] }).id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
     const multi = I('output.display', [I('view.adapt', [I('view.flare', [xyzM.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
-    // stage 4: a contrast mask on a printing-density pattern (σ = 18 µm / 6 µm per px = 3 px)
-    const densityPd = I('source.pattern', [], { domain: 'printing-density', width: W, height: H, seed: 5 });
-    const densityMask = I('print.densityMask', [densityPd.id], { amount: 0.4, radius_um: 18 });
-    for (const n of [display, displayTanh, darkroom, multi, densityMask]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
-    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh, darkroom, masks: [sky, face, painted, band], combined, multi, densityMask, densityPd } };
+    // stage 4 (contract 0.3): a contrast mask made from the main exposure (σ = 18 µm / 6 µm per px = 3 px), applied by
+    // print.combine with a burn and a base flash (uniform, not held back by the mask)
+    const densityMask = I('print.densityMask', [xMain.id], { amount: 0.4, radius_um: 18 });
+    const all = I('mask.luminance', [xMain.id], { above: 0, below: 1, softness: 0 });
+    const flashMasked = I('print.combine', [xMain.id], { exposures: [ex(4).id, ex(2).id], masks: [sky.id, all.id], modes: ['add', 'flash-base'], densityMasks: [densityMask.id] });
+    for (const n of [display, displayTanh, darkroom, multi, densityMask, flashMasked]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
+    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh, darkroom, masks: [sky, face, painted, band], combined, multi, densityMask, flashMasked } };
   })();
   return frameP;
 }
@@ -230,11 +232,13 @@ export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Prom
     const exp = levels(await read(f.gpu, f.nodes.multi, 'export'), 3, await read(f.exact, f.nodes.multi, 'export'), 3);
     const pre = levels(await read(f.gpu, f.nodes.multi, 'preview'), 3, await read(f.tabulated, f.nodes.multi, 'export'), 3);
     const differs = levels(await read(f.exact, f.nodes.multi, 'export'), 3, await read(f.exact, f.nodes.darkroom, 'export'), 3);
-    const dm = compare('density mask (printing density)', await read(f.gpu, f.nodes.densityMask, 'export'), await read(f.exact, f.nodes.densityMask, 'export'), { tolerance: 1e-4, stride: 3 });
-    const dmMoves = compare('density mask moves PD', await read(f.exact, f.nodes.densityMask, 'export'), await read(f.exact, f.nodes.densityPd, 'export'), { tolerance: 0, stride: 3 });
+    const dmExact = await read(f.exact, f.nodes.densityMask, 'export');
+    const dm = compare('density mask d_m', await read(f.gpu, f.nodes.densityMask, 'export'), dmExact, { tolerance: 1e-4, stride: 1 });
+    const dmMax = Math.max(...Array.from(dmExact));
+    const flash = compare('burn, base flash and density mask (paper-logH)', await read(f.gpu, f.nodes.flashMasked, 'export'), await read(f.exact, f.nodes.flashMasked, 'export'), { tolerance: 2e-4, stride: 3 });
     const half = await f.gpu.evaluate(f.nodes.multi, { scale: 0.5, precision: 'preview' });
     const halfRef = await f.tabulated.evaluate(f.nodes.multi, { scale: 0.5, precision: 'export' });
-    return { masks, x, xPre, export: exp, preview: pre, vsDarkroomPrint: differs, densityMask: dm, densityMaskMax: dmMoves.maxDiff, halfScale: levels(await half.read(), 3, await halfRef.read(), 3) };
+    return { masks, x, xPre, export: exp, preview: pre, vsDarkroomPrint: differs, densityMask: dm, densityMaskMax: dmMax, flashMasked: flash, halfScale: levels(await half.read(), 3, await halfRef.read(), 3) };
   },
 
   async 'chain:builders-identical'() {

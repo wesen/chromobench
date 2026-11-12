@@ -1,5 +1,8 @@
 # Contract requests from CHB-011 (`@chromobench/output`)
 
+> **Status (CHB-024, contract 0.3.0):** decided (R1 option a: recipe version 2). Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.3". Kept here as the record of the request.
+
 Against contract 0.2.0. Nothing here blocks merging: each item has a local workaround, named below.
 
 ## R1. The CAM16-UCS knee as a new `KneeMethod` value (asked for by CHB-017, core R5)

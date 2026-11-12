@@ -15,7 +15,7 @@ import pack16Code from '../kernels/pack16.wgsl?raw';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { histPercentile, REDUCE_WGSL, Reducer } from './measure.ts';
-import { combineRatio, densitiesOf, densityMaskSigma, featherSigma, paintMask, parseStrokes, rebateBox, type PhysicsData } from '@chromobench/core';
+import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseStrokes, rebateBox, type PhysicsData, type UpNode } from '@chromobench/core';
 import combineCode from '../kernels/combine.wgsl?raw';
 import { Blur } from './spatial.ts';
 import { CorePhysics } from './physics/core.ts';
@@ -27,7 +27,7 @@ import { TableManager } from './tables/manager.ts';
 import type { Mat3, Vec3 } from './tables/inputs.ts';
 
 export const GPU_OPS = [
-  'source.open', 'source.pattern', 'scan.density', 'invert.dyes', 'print.expose', 'print.lights', 'print.develop',
+  'source.open', 'source.pattern', 'scan.flare', 'scan.density', 'invert.dyes', 'retouch.heal', 'print.expose', 'print.lights', 'print.develop',
   'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
   // CHB-010: multi-exposure printing, masks and density masks
@@ -41,7 +41,7 @@ const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.gradient', 'mask.ellip
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run several passes. */
 const MAX_PASS_SIGMA = 32;
 export const COMBINE_WGSL = combineCode;
-const COMBINE = Object.freeze({ EXP: 0, ADD: 1, LOG: 2, MIN: 3, MAX: 4, TRANSMITTANCE: 5, DENSITY_MASK: 6, COPY: 7 });
+const COMBINE = Object.freeze({ EXP: 0, ADD: 1, LOG: 2, MIN: 3, MAX: 4, TRANSMITTANCE: 5, DENSITY_MASK: 6, COPY: 7, FLASH: 8, HOLD: 9, TRANSMITTANCE_X: 10 });
 
 /** The output grid every materialised texture of one evaluation shares. */
 interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export'; umOut: number }
@@ -330,7 +330,20 @@ export class GpuEngine implements Engine {
           break;
         }
         case 'source.pattern': break;
+        case 'scan.flare': {
+          // T = T′(1 + f) − f per channel (contract 0.3; core and ingest removeFlareValue)
+          const fl = a['flare'] as number | number[];
+          const f = [0, 1, 2].map((k) => (Array.isArray(fl) ? fl[k]! : fl) / 100);
+          push({ code: OP.AFFINE, p0: f.map((x) => 1 + x), p1: f.map((x) => -x), node: n.id });
+          break;
+        }
         case 'scan.density': push({ code: OP.DENSITY, p0: [...(treb.get(n.id) ?? [1, 1, 1])], node: n.id }); break;
+        case 'retouch.heal': {
+          // contract 0.3 stub (CHB-022 implements heal and clone): the print passes through
+          const spots = Object.keys(JSON.parse(String(a['spots'] ?? '{}')) as object).length;
+          if (spots) warnings.push({ code: 'W_PREVIEW_APPROX', message: `retouch.heal is not implemented yet (CHB-022): ${spots} spot(s) not applied` });
+          break;
+        }
         case 'invert.dyes': push({ code: OP.DYES, node: n.id }, { solve: P.solveInputs(a['stock'] as string, a['scanner'] as string) }); break;
         case 'print.expose': {
           // filtration is a shift on the database neutral pack; the aim lights are core's (aim, aimView)
@@ -534,6 +547,12 @@ export class GpuEngine implements Engine {
     const out = new Map<string, Vec3>();
     for (const n of nodes) {
       if (n.op !== 'scan.density') continue;
+      const baseT = n.args['baseT'] as Vec3 | undefined;
+      if (baseT) {
+        // the roll's base (contract 0.3): no measurement
+        out.set(n.id, [...baseT] as Vec3);
+        continue;
+      }
       const known = this.rebateT.get(n.id);
       if (known) {
         out.set(n.id, known);
@@ -677,21 +696,33 @@ export class GpuEngine implements Engine {
     switch (n.op) {
       case 'print.combine': {
         // core combinePixel: H = max(10^x − Σ dodge, 0) + Σ add, one log at the end
+        // contract 0.3: flashes are uniform (core flashExposure, f64) and skip the density masks, which
+        // multiply every exposure through the negative by 10^−d_m
         const ids = a['exposures'] as string[], masks = a['masks'] as string[], modes = a['modes'] as string[];
-        if (!ids.length) return this.mix(COMBINE.COPY, recv);
+        const dms = (a['densityMasks'] as string[] | undefined) ?? [];
+        if (!ids.length && !dms.length) return this.mix(COMBINE.COPY, recv);
         const chain = this.chainOf(nid);
-        const main = this.physics.ctx(chain, chain.length - 1).up('print.expose')?.args;
+        const cctx = this.physics.ctx(chain, chain.length - 1);
+        const main = cctx.up('print.expose')?.args;
+        const fctx = { up: cctx.up, env: cctx.env, node: (id: string) => this.graph.get(id) as UpNode | undefined };
         const terms = ids.map((id, i) => {
           const e = this.graph.get(id);
-          return { e: tex(id), m: tex(masks[i]!), sign: modes[i] === 'subtract' ? -1 : 1, ratio: combineRatio(main, e?.op === 'print.expose' ? e.args : undefined) };
+          return { e: tex(id), m: tex(masks[i]!), sign: modes[i] === 'subtract' ? -1 : 1, ratio: combineRatio(main, e?.op === 'print.expose' ? e.args : undefined), flash: flashExposure(fctx, id, modes[i]!) };
         });
         let H = await this.mix(COMBINE.EXP, recv);
         let firstAdd = true;
-        for (const term of [...terms.filter((x) => x.sign < 0), ...terms.filter((x) => x.sign > 0)]) {
-          const next = await this.mix(COMBINE.ADD, H, term.e, term.m, term.sign > 0 && firstAdd ? 1 : 0, [term.sign * term.ratio]);
-          if (term.sign > 0) firstAdd = false;
+        const step = async (next: GPUTexture): Promise<void> => {
           this.rt.textures.release(H);
           H = next;
+        };
+        for (const term of [...terms.filter((x) => x.sign < 0), ...terms.filter((x) => x.sign > 0 && !x.flash)]) {
+          const next = await this.mix(COMBINE.ADD, H, term.e, term.m, term.sign > 0 && firstAdd ? 1 : 0, [term.sign * term.ratio]);
+          if (term.sign > 0) firstAdd = false;
+          await step(next);
+        }
+        for (const d of dms) await step(await this.mix(COMBINE.HOLD, H, tex(d), null, 1));
+        for (const term of terms.filter((x) => x.flash)) {
+          await step(await this.mix(COMBINE.FLASH, H, null, term.m, 1, term.flash!.map((x) => term.ratio * 10 ** x)));
         }
         const out = await this.mix(COMBINE.LOG, H, null, null, 1);
         this.rt.textures.release(H);
@@ -701,15 +732,19 @@ export class GpuEngine implements Engine {
       case 'mask.or': return this.mix(COMBINE.MAX, recv, tex(a['other'] as string));
       case 'mask.feather': return this.gaussian(recv, featherSigma(a['radius_px'] as number) * scale);
       case 'print.densityMask': {
-        // core maskDensity: blur the mean transmittance, d = γ·(log10 H_m − log10 min H_m), added to every layer
+        // core maskDensityPolar (contract 0.3): PD = x_clear − x from the main print.expose, blur the mean
+        // transmittance, d = ±γ·(log10 H_m − log10 ref), ref the smallest (positive) or largest (same) H_m
         const amount = a['amount'] as number;
-        if (amount === 0) return this.mix(COMBINE.COPY, recv);
+        if (amount === 0) return this.mix(COMBINE.DENSITY_MASK, recv, recv, null, 0, [0, 0]);
         const info = n.info as ImageInfo;
-        const T = await this.mix(COMBINE.TRANSMITTANCE, recv);
+        const chain = this.chainOf(nid);
+        const clear = clearExposure(this.physics.ctx(chain, chain.length - 1));
+        const T = await this.mix(COMBINE.TRANSMITTANCE_X, recv, null, null, 0, [...clear]);
         const Hm = await this.gaussian(T, densityMaskSigma(a['radius_um'] as number, info.umPerPx.film) * scale);
         this.rt.textures.release(T);
-        const ref = (await this.reducer.moments(Hm, { x: 0, y: 0, w: t.outW, h: t.outH })).min[0]!;
-        const out = await this.mix(COMBINE.DENSITY_MASK, recv, Hm, null, 0, [amount, Math.log10(ref)]);
+        const mo = await this.reducer.moments(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
+        const same = a['polarity'] === 'same';
+        const out = await this.mix(COMBINE.DENSITY_MASK, recv, Hm, null, 0, [same ? -amount : amount, Math.log10(same ? mo.max[0]! : mo.min[0]!)]);
         this.rt.textures.release(Hm);
         return out;
       }

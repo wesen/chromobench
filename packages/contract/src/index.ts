@@ -1,6 +1,7 @@
 // @chromobench/contract — the shared vocabulary every ticket codes against.
-// Importing this module registers the catalog (contract 0.2: the Phase-1 requests, CHB-017).
-export const CONTRACT_VERSION = '0.2.0';
+// Importing this module registers the catalog (contract 0.3: roll records, batches, flare, flash, density
+// masks, framing, retouch, shared vocabulary; CHB-024).
+export const CONTRACT_VERSION = '0.3.0';
 
 export * from './errors.ts';
 export * from './units.ts';
@@ -21,5 +22,9 @@ export * from './editlog.ts';
 export * from './engine.ts';
 export * from './eval.ts';
 export * from './laws.ts';
+export * from './roll.ts';
+export * from './frame.ts';
+export * from './vocab.ts';
 export { CATALOG } from './catalog/index.ts';
+export { COMBINE_MODES } from './catalog/capture-film-print.ts';
 export type { OpArgs, OpName } from './generated/op-args.ts';

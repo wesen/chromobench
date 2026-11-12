@@ -106,6 +106,10 @@ export class MockEngine implements Engine {
       extra,
       info: n.info.kind === 'Image' ? n.info : undefined,
       source: (sha) => this.sources.get(sha) ?? fail('E_NO_SOURCE', `source ${sha.slice(0, 12)}… is not open in the mock engine`),
+      def: (nid) => {
+        const d = this.graph.get(nid);
+        return d ? { op: d.op, args: d.args } : undefined;
+      },
     };
     const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no mock image implementation`);
     const img = f(ctx);

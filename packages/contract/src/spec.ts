@@ -51,6 +51,8 @@ export interface ArgSpec {
   optional?: boolean;
   /** Names agents actually type, mapped to this one (CHB-002 §11 item 10). */
   redirects?: Record<string, Redirect>;
+  /** A number argument that also takes a vec3, one value per channel (R, G, B); ranges apply per component (contract 0.3, scan.flare). */
+  perChannel?: boolean;
   /** Absolute recipe path when not `${OpDef.recipePath}.${name}`. Set to '' for no recipe path. */
   path?: string;
   ui?: UiHints;
@@ -144,7 +146,8 @@ export interface CheckResult { value: unknown; warnings: Diagnostic[] }
 export function checkArgValue(spec: ArgSpec, raw: unknown, label: string): CheckResult {
   const v = normaliseShape(spec.type, raw);
   const warnings: Diagnostic[] = [];
-  const t = spec.type;
+  // a per-channel number given as [r, g, b] is checked as a vec3
+  const t: ArgType = spec.type === 'number' && spec.perChannel && Array.isArray(v) ? 'vec3' : spec.type;
   if (v === null && spec.optional) return { value: null, warnings };
   switch (t) {
     case 'bool':
@@ -173,7 +176,8 @@ export function checkArgValue(spec: ArgSpec, raw: unknown, label: string): Check
   }
   const comps = components(t, v);
   if (!comps) {
-    fail('E_ARG_TYPE', `${label} must be ${t === 'number' ? 'a number' : shapeHint(t)}, got ${formatValue(v)}`, { path: label, hint: `Expected ${shapeHint(t)}${spec.unit ? ` in ${spec.unit}` : ''}.` });
+    const want = spec.perChannel ? 'a number or [r, g, b]' : t === 'number' ? 'a number' : shapeHint(t);
+    fail('E_ARG_TYPE', `${label} must be ${want}, got ${formatValue(v)}`, { path: label, hint: `Expected ${spec.perChannel ? 'a number or [r, g, b]' : shapeHint(t)}${spec.unit ? ` in ${spec.unit}` : ''}.` });
   }
   if (!comps.every(Number.isFinite)) {
     fail('E_ARG_RANGE', `${label} = ${formatValue(v)} is not finite`, { path: label, valid: [formatRange(spec)] });

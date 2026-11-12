@@ -70,6 +70,7 @@ test('multi-exposure print with masks: masks within 1e-5, paper log H within 2e-
   expect(r.vsDarkroomPrint.max8bit).toBeGreaterThan(10); // the exposures do change the print
   expect(r.densityMask.maxDiff).toBeLessThanOrEqual(1e-4);
   expect(r.densityMaskMax).toBeGreaterThan(0.05);
+  expect(r.flashMasked.maxDiff).toBeLessThanOrEqual(2e-4);
 });
 
 test('broken variant: lookups without the half-texel mapping fail the preview chain', async ({ page }) => {

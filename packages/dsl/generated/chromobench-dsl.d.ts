@@ -114,7 +114,7 @@ export interface FilmLogHHandle extends ImageHandleBase {
 
 export interface FilmDyesHandle extends ImageHandleBase {
   readonly darkroom: {
-    lightsToFiltration(args?: Partial<OpArgs["darkroom.lightsToFiltration"]>): ValueHandle<{ filtration: unknown; residual: unknown }>;
+    lightsToFiltration(args?: Partial<OpArgs["darkroom.lightsToFiltration"]>): ValueHandle<{ filtration: unknown; time_s: unknown; stops: unknown; lights: unknown; residual: unknown }>;
     ringAround(args?: Partial<OpArgs["darkroom.ringAround"]>): PrintXyzHandle;
     testStrip(args?: Partial<OpArgs["darkroom.testStrip"]>): PrintXyzHandle;
   };
@@ -161,9 +161,6 @@ export interface PrintingDensityHandle extends ImageHandleBase {
     patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
     stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
   };
-  readonly print: {
-    densityMask(args?: Partial<OpArgs["print.densityMask"]>): PrintingDensityHandle;
-  };
   readonly view: {
     inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
   };
@@ -183,6 +180,7 @@ export interface PaperLogHHandle extends ImageHandleBase {
   };
   readonly print: {
     combine(args?: Partial<OpArgs["print.combine"]>): PaperLogHHandle;
+    densityMask(args?: Partial<OpArgs["print.densityMask"]>): ScalarFieldHandle;
     develop(args?: Partial<OpArgs["print.develop"]>): PaperDyesHandle;
     lights(args?: Partial<OpArgs["print.lights"]>): PaperLogHHandle;
     preflash(args?: Partial<OpArgs["print.preflash"]>): PaperLogHHandle;
@@ -230,6 +228,9 @@ export interface PrintXyzHandle extends ImageHandleBase {
   };
   readonly output: {
     display(args?: Partial<OpArgs["output.display"]>): DisplayRgbHandle;
+  };
+  readonly retouch: {
+    heal(args?: Partial<OpArgs["retouch.heal"]>): PrintXyzHandle;
   };
   readonly view: {
     adapt(args?: Partial<OpArgs["view.adapt"]>): PrintXyzHandle;

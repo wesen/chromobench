@@ -16,7 +16,7 @@ Turns the print's XYZ into encoded RGB in an output space. Finishing ops come be
 |---|---|---|---|---|---|---|---|
 | `space` | enum srgb/display-p3/rec2020/adobe-rgb/prophoto |  |  |  | `"srgb"` |  | Output colour space (the display space for viewing; export uses view.output.export.space). |
 | `rendering` | enum print-as-seen/scan-of-print |  |  |  | `"scan-of-print"` | view.output.rendering | Paper white at its own level (as seen) or at display white (scan). Redirects: view. |
-| `knee` | enum oklch/tanh-shoulder/clip |  |  |  | `"oklch"` | view.output.display.knee.method | Gamut compression; always the last colour step. 'oklch' is the perceptual knee (OkLCh with spektrafilm's parameters; called 'cam16-ucs' before contract 0.2, CAM16-UCS itself is CHB-011's). |
+| `knee` | enum oklch/cam16-ucs/tanh-shoulder/clip |  |  |  | `"oklch"` | view.output.display.knee.method | Gamut compression; always the last colour step. 'oklch': OkLCh chroma knee (spektrafilm's parameters; called 'cam16-ucs' before contract 0.2); 'cam16-ucs': the same in CAM16-UCS (L_A 64, Y_b 20, average surround, D = 1; contract 0.3, CHB-011); 'tanh-shoulder': Chromogen's per-channel shoulder (kept for comparison; it cannot keep paper white at display white); 'clip': per channel. |
 
 ## `output.encode`
 
@@ -39,10 +39,17 @@ Returns:
 - `name`: string — file name in OPFS
 - `bytes`: number (none) — file size
 - `sha256`: string — content hash
+- `mime`: string — image/png or image/tiff
+- `width`: number (px) — pixel width
+- `height`: number (px) — pixel height
+- `bits`: number (none) — 8 or 16
+- `space`: string — output space id
+- `iccSha256`: string — sha256 of the embedded profile (empty when none)
+- `recipeSha256`: string — sha256 of the canonical recipe (empty when not given)
 
 ## `output.frame`
 
-Orientation and crop, applied last (DR-3: all coordinates are source pixels).
+Crop, straighten and orientation, applied last, resampling once (DR-3: all coordinates are source pixels). Contract 0.3: recipe view.frame for both frame kinds (was scan.orientation / scan.crop).
 
 - Owner: CHB-011
 - On: Image (display-rgb) → Image (display-rgb)
@@ -51,5 +58,6 @@ Orientation and crop, applied last (DR-3: all coordinates are source pixels).
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `orientation` | enum none/cw90/rot180/ccw90/flipH/flipV/transpose/transverse |  |  |  | `"none"` | scan.orientation | Orientation applied for display. |
-| `crop` (optional) | box | px |  |  |  | scan.crop | Crop in source (sensor) pixels; absent = full frame. |
+| `orientation` | enum none/cw90/rot180/ccw90/flipH/flipV/transpose/transverse |  |  |  | `"none"` | view.frame.orientation | Orientation applied for display. |
+| `angle_deg` | number | deg | [-45, 45] |  | `0` | view.frame.angle_deg | Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0. |
+| `crop` (optional) | box | px |  |  |  | view.frame.crop | Crop in source (sensor) pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented. |

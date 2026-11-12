@@ -1,5 +1,5 @@
 {
-  "contractVersion": "0.2.0",
+  "contractVersion": "0.3.0",
   "domains": {
     "camera-linear": {
       "channels": 3,
@@ -181,15 +181,25 @@
     "W_DODGE_EXCEEDS_MAIN",
     "W_ENCODING_ASSUMED",
     "W_FLAT_SHAPE",
+    "W_FRAME_DIVERGES",
     "W_ICC_IGNORED",
     "W_ILL_CONDITIONED",
+    "W_NO_FILM",
     "W_NO_OPEN_GATE",
+    "W_NO_REBATE",
+    "W_NO_SURROUND",
     "W_PREVIEW_APPROX",
+    "W_REBATE_BLANK",
     "W_REBATE_PERCENTILE",
+    "W_ROLL_BASE_WEAK",
+    "W_ROLL_MIXED",
+    "W_ROLL_STOCK_AMBIGUOUS",
     "W_SIGMA_ASSUMED",
     "W_STOCK_KNOWN_ISSUE",
     "W_STOCK_NO_MODEL",
-    "W_TRIPLET_SHIFT"
+    "W_SURROUND_BRIGHT",
+    "W_TRIPLET_SHIFT",
+    "W_VEIL_FROM_ROLL"
   ],
   "mutationOps": [
     "set",
@@ -256,6 +266,47 @@
     "darkroom.lightsToFiltration": {
       "area": "darkroom",
       "args": {
+        "aim": {
+          "default": "grey-0.184",
+          "path": "print.aim",
+          "type": "enum",
+          "values": [
+            "grey-0.184",
+            "midgray-normalised"
+          ]
+        },
+        "aimView": {
+          "default": "D50",
+          "path": "view.illuminant",
+          "type": "string",
+          "valuesFrom": "illuminants"
+        },
+        "filtration": {
+          "default": {
+            "c": 0,
+            "m": 0,
+            "y": 0
+          },
+          "max": 200,
+          "min": -100,
+          "path": "print.enlarger.filtration",
+          "type": "cmy",
+          "unit": "CC"
+        },
+        "fstop": {
+          "default": 8,
+          "max": 45,
+          "min": 2.8,
+          "path": "print.enlarger.fstop",
+          "type": "number",
+          "unit": "fstop"
+        },
+        "lamp": {
+          "default": "TH-KG3",
+          "path": "print.enlarger.lamp",
+          "type": "string",
+          "valuesFrom": "lamps"
+        },
         "logH": {
           "default": [
             0,
@@ -264,8 +315,32 @@
           ],
           "max": 1.5,
           "min": -1.5,
+          "path": "print.lights.logH",
           "type": "vec3",
           "unit": "logH"
+        },
+        "mode": {
+          "default": "normalised",
+          "path": "print.enlarger.mode",
+          "type": "enum",
+          "values": [
+            "real",
+            "normalised"
+          ]
+        },
+        "paper": {
+          "default": "kodak_portra_endura",
+          "path": "print.paper",
+          "type": "stockId",
+          "valuesFrom": "stocks:print"
+        },
+        "time_s": {
+          "default": 10,
+          "max": 600,
+          "min": 0.1,
+          "path": "print.enlarger.time_s",
+          "type": "number",
+          "unit": "s"
         }
       },
       "binding": "setting",
@@ -276,6 +351,21 @@
           "name": "filtration",
           "type": "object",
           "unit": "CC"
+        },
+        {
+          "name": "time_s",
+          "type": "number",
+          "unit": "s"
+        },
+        {
+          "name": "stops",
+          "type": "number",
+          "unit": "stop"
+        },
+        {
+          "name": "lights",
+          "type": "vec3",
+          "unit": "logH"
         },
         {
           "name": "residual",
@@ -990,6 +1080,7 @@
           "type": "enum",
           "values": [
             "oklch",
+            "cam16-ucs",
             "tanh-shoulder",
             "clip"
           ]
@@ -1084,6 +1175,37 @@
         {
           "name": "sha256",
           "type": "string"
+        },
+        {
+          "name": "mime",
+          "type": "string"
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "unit": "px"
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "unit": "px"
+        },
+        {
+          "name": "bits",
+          "type": "number",
+          "unit": "none"
+        },
+        {
+          "name": "space",
+          "type": "string"
+        },
+        {
+          "name": "iccSha256",
+          "type": "string"
+        },
+        {
+          "name": "recipeSha256",
+          "type": "string"
         }
       ],
       "on": "Image",
@@ -1094,15 +1216,23 @@
     "output.frame": {
       "area": "output",
       "args": {
+        "angle_deg": {
+          "default": 0,
+          "max": 45,
+          "min": -45,
+          "path": "view.frame.angle_deg",
+          "type": "number",
+          "unit": "deg"
+        },
         "crop": {
           "optional": true,
-          "path": "scan.crop",
+          "path": "view.frame.crop",
           "type": "box",
           "unit": "px"
         },
         "orientation": {
           "default": "none",
-          "path": "scan.orientation",
+          "path": "view.frame.orientation",
           "type": "enum",
           "values": [
             "none",
@@ -1122,12 +1252,16 @@
       "domainOut": "display-rgb",
       "on": "Image",
       "owner": "CHB-011",
-      "recipePath": "scan",
+      "recipePath": "view.frame",
       "returns": "Image"
     },
     "print.combine": {
       "area": "print",
       "args": {
+        "densityMasks": {
+          "default": [],
+          "type": "Image[]"
+        },
         "exposures": {
           "default": [],
           "type": "Image[]"
@@ -1159,6 +1293,14 @@
           "type": "number",
           "unit": "fraction"
         },
+        "polarity": {
+          "default": "positive",
+          "type": "enum",
+          "values": [
+            "positive",
+            "same"
+          ]
+        },
         "radius_um": {
           "default": 500,
           "max": 5000,
@@ -1169,8 +1311,8 @@
       },
       "binding": "scan",
       "class": "spatial",
-      "domainIn": "printing-density",
-      "domainOut": "printing-density",
+      "domainIn": "paper-logH",
+      "domainOut": "scalar-field",
       "on": "Image",
       "owner": "CHB-010",
       "returns": "Image"
@@ -1350,6 +1492,23 @@
       "owner": "CHB-010",
       "returns": "Image"
     },
+    "retouch.heal": {
+      "area": "retouch",
+      "args": {
+        "spots": {
+          "default": "{}",
+          "type": "string"
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "domainIn": "print-xyz",
+      "domainOut": "print-xyz",
+      "on": "Image",
+      "owner": "CHB-022",
+      "recipePath": "retouch",
+      "returns": "Image"
+    },
     "scan.baseClass": {
       "area": "scan",
       "args": {
@@ -1407,6 +1566,14 @@
     "scan.density": {
       "area": "scan",
       "args": {
+        "baseT": {
+          "max": 100,
+          "min": 0.000001,
+          "optional": true,
+          "path": "scan.baseT",
+          "type": "vec3",
+          "unit": "fraction"
+        },
         "rebate": {
           "optional": true,
           "path": "scan.rebate",
@@ -1431,6 +1598,7 @@
           "max": 20,
           "min": 0,
           "path": "scan.flare",
+          "perChannel": true,
           "type": "number",
           "unit": "percent",
           "usual": [
@@ -1969,6 +2137,9 @@
     "print.aim": {
       "kind": "op"
     },
+    "print.densityMasks.*": {
+      "kind": "custom"
+    },
     "print.enlarger.filtration": {
       "kind": "op"
     },
@@ -2076,7 +2247,13 @@
     "probes.*": {
       "kind": "custom"
     },
-    "scan.crop": {
+    "retouch.spots.*": {
+      "kind": "custom"
+    },
+    "roll": {
+      "kind": "custom"
+    },
+    "scan.baseT": {
       "kind": "op"
     },
     "scan.dust.marginPx": {
@@ -2112,9 +2289,6 @@
     "scan.openGate": {
       "kind": "custom"
     },
-    "scan.orientation": {
-      "kind": "op"
-    },
     "scan.rebate": {
       "kind": "op"
     },
@@ -2140,6 +2314,15 @@
       ]
     },
     "view.flare": {
+      "kind": "op"
+    },
+    "view.frame.angle_deg": {
+      "kind": "op"
+    },
+    "view.frame.crop": {
+      "kind": "op"
+    },
+    "view.frame.orientation": {
       "kind": "op"
     },
     "view.illuminant": {
@@ -2178,6 +2361,7 @@
       "unit": null,
       "values": [
         "oklch",
+        "cam16-ucs",
         "tanh-shoulder",
         "clip"
       ]
@@ -2245,7 +2429,7 @@
       "kind": "op"
     }
   },
-  "recipeVersion": 1,
+  "recipeVersion": 2,
   "units": [
     "D",
     "logH",

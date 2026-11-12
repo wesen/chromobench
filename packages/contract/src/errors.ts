@@ -4,7 +4,8 @@
 export interface Diagnostic {
   code: string;
   message: string;
-  where?: { line: number; col?: number };
+  /** `file`: the module the line is in (a studio variant's file; contract 0.3, CHB-016). */
+  where?: { line: number; col?: number; file?: string };
   path?: string;
   hint?: string;
   /** Literal code or value the caller can paste. */
@@ -99,6 +100,17 @@ export const ERROR_CODES = {
   W_ILL_CONDITIONED: 'Ill-conditioned solve.',
   W_DODGE_EXCEEDS_MAIN: 'A dodge exceeds the main exposure.',
   W_PREVIEW_APPROX: 'Result is an approximate preview.',
+  // roll workflow (CHB-020) and ingest's film layout (CHB-006), contract 0.3
+  W_ROLL_MIXED: "A frame's base is beyond 0.03 D of the roll's: probably another film on the roll.",
+  W_ROLL_STOCK_AMBIGUOUS: 'The top two stocks of the ranking are within 0.025 D.',
+  W_ROLL_BASE_WEAK: 'No confident rebate on the roll; the roll base is uncertain.',
+  W_FRAME_DIVERGES: "A frame differs from the roll's value on a shared path.",
+  W_NO_SURROUND: 'No opaque holder in view: the scanner veil (flare) is not measured on this frame.',
+  W_SURROUND_BRIGHT: 'The holder is bright: probably not opaque, or very high flare.',
+  W_REBATE_BLANK: 'No film edge beside the frame: the base was read on blank film inside it (low confidence).',
+  W_NO_REBATE: 'No rebate (film edge or blank film) was found.',
+  W_NO_FILM: 'No film was found in the image.',
+  W_VEIL_FROM_ROLL: "No holder on this frame: the roll's veil was subtracted instead.",
   LOOKS: 'Too many looks; extra looks dropped.',
   CUT: 'Output truncated.',
   UNHANDLED: 'Unhandled promise rejection in the eval.',

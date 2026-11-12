@@ -69,6 +69,13 @@ for (const [name, op] of Object.entries<any>(base.ops)) {
     if ((s.values ?? []).some((v: string) => !(n.values ?? []).includes(v))) out.push({ cls: 'breaking', what: `${name}.${a} enum value removed` });
     else if (J(s.values) !== J(n.values)) out.push({ cls: 'minor', what: `${name}.${a} enum value added (compile-visible)` });
   }
+  for (const [a, s] of Object.entries<any>(op.args)) {
+    const n = now.args[a];
+    if (n && !!s.perChannel !== !!n.perChannel) out.push({ cls: n.perChannel ? 'minor' : 'breaking', what: `${name}.${a} ${n.perChannel ? 'now also takes [r, g, b] (perChannel)' : 'no longer takes [r, g, b]'}` });
+  }
+  const fOld = (op.fields ?? []).map((f: any) => f.name), fNew = (now.fields ?? []).map((f: any) => f.name);
+  for (const f of fOld) if (!fNew.includes(f)) out.push({ cls: 'breaking', what: `${name} field ${f} removed` });
+  for (const f of fNew) if (!fOld.includes(f)) out.push({ cls: 'minor', what: `${name} field ${f} added` });
   for (const a of Object.keys(now.args)) if (!op.args[a]) out.push({ cls: now.args[a].default !== undefined || now.args[a].optional ? 'minor' : 'breaking', what: `${name}.${a} added` });
 }
 for (const name of Object.keys(cur.ops)) if (!base.ops[name]) out.push({ cls: 'minor', what: `op ${name} added` });

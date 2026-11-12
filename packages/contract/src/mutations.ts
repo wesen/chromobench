@@ -2,12 +2,12 @@
 // (the frame's EditLog), never by the agent's good behaviour.
 import { ChromobenchError, diag, fail, type Diagnostic } from './errors.ts';
 import { Graph } from './graph.ts';
-import { assertRecipe, checkSet, getPath, setPath } from './paths.ts';
+import { applySet, assertRecipe, checkSet, getPath } from './paths.ts';
 import type { Exposure, FrameRecipe, MaskSpec } from './recipe.ts';
 import { closest, getOp } from './registry.ts';
 
 export type Mutation =
-  | { op: 'set'; path: string; value: unknown; /** Value the proposer saw (DR-7); filled by propose(). */ expect?: unknown }
+  | { op: 'set'; path: string; /** null on a record entry (print.densityMasks.*, retouch.spots.*) deletes it. */ value: unknown; /** Value the proposer saw (DR-7); filled by propose(). */ expect?: unknown }
   | { op: 'exposure.add'; exposure: ExposureInput }
   | { op: 'exposure.remove'; id: string }
   | { op: 'mask.set'; id: string; mask: MaskSpec }
@@ -28,6 +28,8 @@ export interface LoggedMutation {
   m: Mutation;
   by: Author;
   tx?: string;
+  /** Cross-frame operation this entry belongs to (a roll batch): the same id in every frame's log (contract 0.3). */
+  batch?: string;
   ts: number;
   status: 'applied' | 'pending' | 'rejected';
   /** The agent's one-line reason, shown on the approval card. */
@@ -50,8 +52,9 @@ export function applyMutation(r: FrameRecipe, m: Mutation, ctx: MutationContext 
   switch (m?.op) {
     case 'set': {
       if (typeof m.path !== 'string') fail('E_PATH', 'set needs a path');
-      const { value, warnings } = checkSet(r, m.path, m.value);
-      return { recipe: setPath(r, m.path, value), warnings, value };
+      // null on a record entry (print.densityMasks.<id>, retouch.spots.<id>) deletes it
+      const { value, warnings, recipe } = applySet(r, m.path, m.value);
+      return { recipe, warnings, value };
     }
     case 'exposure.add': {
       const e = m.exposure;

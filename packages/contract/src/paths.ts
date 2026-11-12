@@ -44,6 +44,23 @@ export function getPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
+/** Copy-on-write delete of a record key (a `set … null` on a deletable entry). A missing key is a no-op. */
+export function deletePath<T>(obj: T, path: string): T {
+  const segs = splitPath(path);
+  const parent = getPath(obj, segs.slice(0, -1).join('.'));
+  const key = segs[segs.length - 1]!;
+  if (!isObj(parent) || !Object.hasOwn(parent, key)) return obj;
+  const { [key]: _gone, ...rest } = parent;
+  return setPath(obj, segs.slice(0, -1).join('.'), rest);
+}
+
+/** Whether `set path null` deletes a record entry (print.densityMasks.*, retouch.spots.*; contract 0.3). */
+export function deletesOnNull(path: string): boolean {
+  const pattern = fieldPattern(path);
+  const rule = pattern ? RECIPE_FIELDS[pattern] : undefined;
+  return rule?.kind === 'custom' && rule.deletes === true;
+}
+
 /** Copy-on-write set. Missing record keys are created; missing array ids are refused. */
 export function setPath<T>(obj: T, path: string, value: unknown): T {
   const segs = splitPath(path);
@@ -69,7 +86,15 @@ function sectionAvailable(r: FrameRecipe, pattern: string): boolean {
   return true;
 }
 
+/** Paths that moved in a contract change: old prefix → new prefix (the E_PATH hint names the new one). */
+export const MOVED_PATHS: Readonly<Record<string, string>> = Object.freeze({
+  'scan.orientation': 'view.frame.orientation',
+  'scan.crop': 'view.frame.crop',
+});
+
 function pathError(path: string): never {
+  const moved = MOVED_PATHS[path];
+  if (moved) fail('E_PATH', `${path} moved to ${moved} in contract 0.3 (both frame kinds have it)`, { path, hint: `set ${moved}`, fix: moved, valid: [moved] });
   const segs = splitPath(path);
   const children = PATTERNS.filter((p) => p.startsWith(`${path}.`));
   if (children.length) {
@@ -83,6 +108,7 @@ function pathError(path: string): never {
 
 function checkRule(rule: FieldRule, pattern: string, value: unknown, label: string): CheckResult {
   if (rule.kind === 'custom') {
+    if (value === null && rule.deletes) return { value: null, warnings: [] };
     const msg = rule.check(value);
     if (msg) fail('E_ARG_TYPE', `${label}: ${msg}`, { path: label, hint: rule.doc });
     return { value, warnings: [] };
@@ -108,6 +134,13 @@ export function checkSet(r: FrameRecipe, path: string, value: unknown): CheckRes
     fail('E_PATH', `no exposure "${splitPath(path)[2]}"`, { path, valid: r.print.exposures.map((e) => e.id) });
   }
   return checkRule(RECIPE_FIELDS[pattern]!, pattern, value, path);
+}
+
+/** checkSet, then the new recipe: setPath, or deletePath for `null` on a deletable record entry. */
+export function applySet(r: FrameRecipe, path: string, value: unknown): CheckResult & { recipe: FrameRecipe } {
+  const res = checkSet(r, path, value);
+  const recipe = res.value === null && deletesOnNull(path) ? deletePath(r, path) : setPath(r, path, res.value);
+  return { ...res, recipe };
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -149,6 +182,7 @@ export function defaultRecipe(kind: FrameRecipe['kind'], source: NewSource, opts
         auto: { method: 'none', alpha: 1, analysisLongSide_px: 256, rollConsistency: null, matchFrame: null, matchAmount: null, applied: false, logH: [0, 0, 0] },
       },
       exposures: [],
+      densityMasks: {},
       grade: 2,
       preflash: 0,
     },
@@ -162,15 +196,18 @@ export function defaultRecipe(kind: FrameRecipe['kind'], source: NewSource, opts
         export: { format: 'tiff16', space: 'prophoto', knee, scale: 'full', dpi: 300, compression: 'deflate', signal: 'icc', recipe: 'sidecar' },
         printer: null,
       },
+      frame: { orientation: 'none', angle_deg: 0, crop: null },
     },
     masks: {},
     probes: {},
+    retouch: { spots: {} },
     finishing: { look: 0, values: { clarity: 0, clarity_radius_px: 40 }, hues: {} },
+    roll: null,
   };
   if (kind === 'negative-scan') {
     r.scan = {
-      scanner: 'xt5-rgb-led', stock: 'kodak_portra_400', format: '135', rebate: null, flat: null, openGate: null,
-      flare: 0, orientation: 'none', crop: null, dust: { spots: [], method: 'patch', marginPx: 2 },
+      scanner: 'xt5-rgb-led', stock: 'kodak_portra_400', format: '135', rebate: null, baseT: null, flat: null, openGate: null,
+      flare: 0, dust: { spots: [], method: 'patch', marginPx: 2 },
     };
   } else {
     r.capture = {
@@ -255,13 +292,10 @@ export function assertRecipe(x: unknown): asserts x is FrameRecipe {
   if (d.length) throw new ChromobenchError({ ...d[0]!, message: `${d[0]!.message}${d.length > 1 ? ` (+${d.length - 1} more)` : ''}` });
 }
 
-/** migrations[n] turns a version-n recipe into version n+1. Empty at v0/v1. */
-export const migrations: ReadonlyArray<(r: Record<string, unknown>) => Record<string, unknown>> = [];
-
 /**
- * Value renames inside recipe version 1 (contract 0.1 → 0.2), applied by migrateRecipe after the
- * version migrations: knee method 'cam16-ucs' → 'oklch' (it always was OkLCh; CHB-003 R5).
- * Returns the recipe unchanged (same object) when nothing needs renaming.
+ * Contract 0.1 → 0.2 value rename inside recipe version 1: knee method 'cam16-ucs' → 'oklch' (it always was
+ * OkLCh; CHB-003 R5). Since contract 0.3 'cam16-ucs' is CAM16-UCS proper, so the rename runs only as part
+ * of migrations[1] (version-1 documents). Returns the recipe unchanged (same object) when nothing needs renaming.
  */
 export function renameLegacyValues(x: Record<string, unknown>): Record<string, unknown> {
   const knee = (o: unknown, k: 'display' | 'export'): Record<string, unknown> | undefined => {
@@ -274,6 +308,38 @@ export function renameLegacyValues(x: Record<string, unknown>): Record<string, u
   return copy;
 }
 
+/**
+ * Recipe version 1 (contracts 0.1, 0.2) → 2 (contract 0.3): the knee rename; scan.orientation / scan.crop move
+ * to view.frame (angle 0); scan.baseT null; print.densityMasks {}; retouch {spots: {}}; roll null.
+ */
+export function migrateV1(x: Record<string, unknown>): Record<string, unknown> {
+  const r = structuredClone(renameLegacyValues(x)) as Record<string, any>;
+  const scan = isObj(r['scan']) ? r['scan'] : undefined;
+  const frame = { orientation: scan?.['orientation'] ?? 'none', angle_deg: 0, crop: scan?.['crop'] ?? null };
+  if (scan) {
+    delete scan['orientation'];
+    delete scan['crop'];
+    if (!('baseT' in scan)) scan['baseT'] = null;
+  }
+  if (isObj(r['view']) && !('frame' in r['view'])) r['view']['frame'] = frame;
+  if (isObj(r['print']) && !('densityMasks' in r['print'])) r['print']['densityMasks'] = {};
+  if (!('retouch' in r)) r['retouch'] = { spots: {} };
+  if (!('roll' in r)) r['roll'] = null;
+  r['version'] = 2;
+  return r;
+}
+
+/** Path renames of migrateV1, for logged `set` mutations (EditLog version 1 → 2). */
+export function migratePathV1(path: string): string {
+  return MOVED_PATHS[path] ?? path;
+}
+
+/** migrations[n] turns a version-n recipe into version n+1 (there was never a version 0). */
+export const migrations: ReadonlyArray<(r: Record<string, unknown>) => Record<string, unknown>> = [
+  () => fail('E_RECIPE', 'recipe version 0 never existed'),
+  migrateV1,
+];
+
 export function migrateRecipe(x: Record<string, unknown>): FrameRecipe {
   let cur = x;
   let v = Number(cur['version']);
@@ -282,7 +348,6 @@ export function migrateRecipe(x: Record<string, unknown>): FrameRecipe {
     cur = m(cur);
     v = Number(cur['version']);
   }
-  cur = renameLegacyValues(cur);
   assertRecipe(cur);
   return cur;
 }

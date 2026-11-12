@@ -59,7 +59,7 @@ error:
   path: print.light.logH
   hint: 'did you mean print.lights.logH?'
   fix: 'frame.edit({ ''print.lights.logH'': [0.1, 0, 0] })'
-  valid: [capture.adapt, capture.autoExposure.analysisLongSide_px, capture.autoExposure.method, capture.development.dir.amount, capture.development.dir.diffusion_um, capture.development.grain.amount, capture.development.grain.seed, capture.development.grain.size_um, capture.development.halation.strength, capture.development.push, capture.exposureEV, capture.format.longEdge_mm, capture.stock, capture.whiteBalance.mode, capture.whiteBalance.temperature_K, capture.whiteBalance.tint, data, 'finishing.hues.*', finishing.look, finishing.values.clarity, finishing.values.clarity_radius_px, print.aim, print.enlarger.filtration, print.enlarger.fstop, … 48 more]
+  valid: [capture.adapt, capture.autoExposure.analysisLongSide_px, capture.autoExposure.method, capture.development.dir.amount, capture.development.dir.diffusion_um, capture.development.grain.amount, capture.development.grain.seed, capture.development.grain.size_um, capture.development.halation.strength, capture.development.push, capture.exposureEV, capture.format.longEdge_mm, capture.stock, capture.whiteBalance.mode, capture.whiteBalance.temperature_K, capture.whiteBalance.tint, data, 'finishing.hues.*', finishing.look, finishing.values.clarity, finishing.values.clarity_radius_px, print.aim, 'print.densityMasks.*', print.enlarger.filtration, … 53 more]
 
 context:
   frame: 'frame_m1 (M1 test negative) · negative-scan · kodak_portra_400 → kodak_portra_endura · mode ask'

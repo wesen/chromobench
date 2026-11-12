@@ -10,7 +10,7 @@ import { displayPixel, displaySetup, type DisplaySetup, type KneeName } from '..
 import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { combinePixel, combineRatio, type CombineTerm } from '../print/exposures.ts';
 import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gradientAt, gridCentres, luminanceAt, paintMask, parseStrokes } from '../print/masks.ts';
-import { applyDensityMask, densityMaskSigma } from '../print/densityMask.ts';
+import { densityMaskSigma, maskDensityPolar } from '../print/densityMask.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
@@ -167,6 +167,27 @@ export function displaySetupAt(ctx: ChainCtx, args: Readonly<Record<string, unkn
   return displaySetup({ rendering: args['rendering'] === 'print-as-seen' ? 'print-as-seen' : 'scan-of-print', white: whiteAt(ctx), paperWhite: flareWhite(ctx), space, knee });
 }
 
+/** x of an exposure through clear film (no negative) for the nearest upstream print.expose; 0 without one. */
+export function clearExposure(ctx: Pick<OpCtx, 'up' | 'env'>): Vec3 {
+  const ex = ctx.up('print.expose');
+  if (!ex) return [0, 0, 0];
+  const ch = ctx.env.chain(exposeSettings(ex.args, filmOf(ctx)));
+  return ch.aimLights.apply(ch.enlarger.clear());
+}
+
+/**
+ * The uniform x of a flash term of print.combine (contract 0.3): the exposure's print.expose settings through
+ * the film base with no image (dye amounts 0, 'flash-base') or through an empty gate ('flash-open'); null for
+ * other modes. Shared with packages/gpu's lowering.
+ */
+export function flashExposure(ctx: Pick<OpCtx, 'node' | 'up' | 'env'>, id: string, mode: string): Vec3 | null {
+  if (mode !== 'flash-base' && mode !== 'flash-open') return null;
+  const n = ctx.node(id);
+  if (!n || n.op !== 'print.expose') return null;
+  const ch = ctx.env.chain(exposeSettings(n.args, filmOf(ctx)));
+  return mode === 'flash-open' ? ch.aimLights.apply(ch.enlarger.clear()) : ch.xOfDyes([0, 0, 0]);
+}
+
 /** scan.density's rebate: the given box, else the brightest 5 % column band (as the mock engine). */
 export function rebateBox(w: number, h: number, c: number, data: ArrayLike<number>, box?: Box): Box {
   if (box) return box;
@@ -190,11 +211,19 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     for (let i = 0; i < out.data.length; i++) out.data[i] = info.domain === 'scan-classes' ? Math.floor(rng.next() * 4) : lo + rng.next() * (hi - lo);
     return out;
   },
-  'scan.density': (ctx) => {
-    // d = −log10(T / T_rebate) per channel (CHB-006's op; the same rule as the mock engine)
+  'scan.flare': (ctx) => {
+    // T = T′(1 + f) − f per channel, T′ relative to the open gate (contract 0.3; ingest removeFlareValue)
+    const a = A(ctx, 'flare') as number | Vec3;
+    const f = [0, 1, 2].map((k) => (Array.isArray(a) ? a[k]! : (a as number)) / 100);
     const r = recv(ctx);
-    const b = rebateBox(r.w, r.h, r.c, r.data, A(ctx, 'rebate') as Box | undefined);
-    const T = [0, 1, 2].map((k) => { const v = values(r, k, b); return v.length ? v.reduce((a, q) => a + q, 0) / v.length : 1; });
+    return mapPx(r, r.c, (px, o) => { for (let k = 0; k < r.c; k++) o[k] = k < 3 ? px[k]! * (1 + f[k]!) - f[k]! : px[k]!; });
+  },
+  'scan.density': (ctx) => {
+    // d = −log10(T / T_base) per channel: T_base = baseT (the roll's, contract 0.3) or the rebate box mean (as the mock)
+    const r = recv(ctx);
+    const baseT = A(ctx, 'baseT') as Vec3 | undefined;
+    const b = baseT ? undefined : rebateBox(r.w, r.h, r.c, r.data, A(ctx, 'rebate') as Box | undefined);
+    const T = baseT ?? [0, 1, 2].map((k) => { const v = values(r, k, b); return v.length ? v.reduce((a, q) => a + q, 0) / v.length : 1; });
     return mapPx(r, 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = -Math.log10(Math.max(px[Math.min(k, px.length - 1)]!, 1e-8) / T[k]!); });
   },
   'invert.dyes': (ctx) => {
@@ -250,29 +279,45 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const ids = A(ctx, 'exposures') as string[];
     const maskIds = A(ctx, 'masks') as string[];
     const modes = A(ctx, 'modes') as string[];
-    if (ids.length === 0) return r;
+    if (ids.length === 0 && !((A(ctx, 'densityMasks') as string[] | undefined) ?? []).length) return r;
     const main = ctx.up('print.expose')?.args;
     const ex = ids.map((id) => ctx.image(id));
     const ms = maskIds.map((id) => ctx.image(id));
     const ratio = ids.map((id) => combineRatio(main, ctx.node(id)?.op === 'print.expose' ? ctx.node(id)!.args : undefined));
-    const terms: CombineTerm[] = ids.map((_, i) => ({ x: [0, 0, 0], m: 0, sign: modes[i] === 'subtract' ? -1 : 1, ratio: ratio[i]! }));
+    const flashX = ids.map((id, i) => flashExposure(ctx, id, modes[i]!));
+    const terms: CombineTerm[] = ids.map((_, i) => ({ x: [0, 0, 0], m: 0, sign: modes[i] === 'subtract' ? -1 : 1, ratio: ratio[i]!, flash: flashX[i] !== null }));
+    const dms = ((A(ctx, 'densityMasks') as string[] | undefined) ?? []).map((id) => ctx.image(id));
     let clamped = 0;
     const out = mapPx(r, 3, (px, o, i) => {
       terms.forEach((t, j) => {
         const e = ex[j]!;
-        t.x = e.data.subarray(i * e.c, i * e.c + 3);
+        t.x = flashX[j] ?? e.data.subarray(i * e.c, i * e.c + 3);
         t.m = ms[j]!.data[i * ms[j]!.c]!;
       });
-      if (combinePixel(px, terms, o)) clamped++;
+      let dm = 0;
+      for (const d of dms) dm += d.data[i * d.c]!;
+      if (combinePixel(px, terms, o, dm)) clamped++;
     });
     if (clamped) out.warnings = [{ code: 'W_DODGE_EXCEEDS_MAIN', message: `dodges hold back more than the main exposure at ${clamped} pixel(s); clamped at no light` }];
     return out;
   },
   'print.densityMask': (ctx) => {
-    // CHB-010 §6.6: a neutral silver mask from the blurred transmittance, added to every layer
+    // CHB-010 §6.6, contract 0.3: d_m of a neutral silver mask from the blurred transmittance 10^−PD of the
+    // negative, PD = x_clear − x recovered from the main print.expose's paper log exposure (x_clear = 0 without one)
     const r = recv(ctx);
+    const clear = clearExposure(ctx);
+    const pd = new Float64Array(r.w * r.h * 3);
+    for (let i = 0; i < r.w * r.h; i++) for (let k = 0; k < 3; k++) pd[i * 3 + k] = clear[k]! - r.data[i * r.c + Math.min(k, r.c - 1)]!;
     const sigma = densityMaskSigma(num(ctx, 'radius_um'), ctx.info?.umPerPx.film);
-    return { w: r.w, h: r.h, c: r.c, data: applyDensityMask(r.data, r.w, r.h, r.c, num(ctx, 'amount'), sigma) };
+    const amount = num(ctx, 'amount');
+    const data = amount === 0 ? new Float64Array(r.w * r.h) : maskDensityPolar(pd, r.w, r.h, 3, amount, sigma, A(ctx, 'polarity') === 'same' ? 'same' : 'positive');
+    return { w: r.w, h: r.h, c: 1, data };
+  },
+  'retouch.heal': (ctx) => {
+    // contract 0.3 stub: CHB-022 implements heal and clone; the print passes through
+    const r = recv(ctx);
+    const spots = Object.keys(JSON.parse(String(A(ctx, 'spots') ?? '{}')) as object).length;
+    return spots ? { ...r, warnings: [{ code: 'W_PREVIEW_APPROX', message: `retouch.heal is not implemented yet (CHB-022): ${spots} spot(s) not applied` }] } : r;
   },
   'mask.luminance': (ctx) => {
     const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;

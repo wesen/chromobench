@@ -71,6 +71,9 @@ uses the same string in `TableKey.conventions`.
 
 # Contract requests from CHB-010 M2 (darkroom printing, stages 1–2)
 
+> **Status (CHB-024, contract 0.3.0):** decided (C4 deferred: open, the photographer's call). Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.3". Kept here as the record of the request.
+
 Status: open. Core works around each one locally; nothing here blocks merging. Numbers refer to the
 CHB-010 intern guide (`ttmp/2026/11/11/CHB-010--*/design-doc/01-intern-guide-darkroom-printing.md`).
 
@@ -152,6 +155,9 @@ and DSL calls without `mode` would change. Proposed when the photographer confir
 ---
 
 # Contract requests from CHB-010 stages 3–4 (multi-exposure printing, masks, density masks)
+
+> **Status (CHB-024, contract 0.3.0):** decided (C5 adapted: the mask is applied by print.combine). Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.3". Kept here as the record of the request.
 
 Status: open. Core and the GPU engine implement `print.combine`, every `mask.*` op and
 `print.densityMask` as contract 0.2 defines them; nothing here blocks merging. Guide sections refer to

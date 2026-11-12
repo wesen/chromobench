@@ -1,38 +1,13 @@
 // Frame handles, host side (guide §5.2): `cb.frame(s).print()` in a viewer names the node `frame.print()` names in
 // an agent eval. A handle is a plain frozen object; it compiles nothing. The render bridge lowers it.
 //
-// The accessor names and the print() options are copies of the DSL host's (packages/dsl/src/host.ts ACCESSORS and
-// PRINT_OPTIONS); test/handles.test.ts compares them with the DSL's and the node ids with a DslSession's.
-// TODO(CHB-017/007): move ACCESSORS, PRINT_OPTIONS and cut into a shared module and import it here.
-import { setPath, type FrameRecipe, type Vec3 } from '@chromobench/contract';
+// The accessor names and the print() options are the contract's shared frame vocabulary (contract 0.3,
+// packages/contract/src/vocab.ts), the same module the DSL host uses.
+import { ACCESSORS, PRINT_OPTION_PATHS, PRINT_OPTIONS, setPath, type Accessor, type FrameRecipe, type Vec3 } from '@chromobench/contract';
 import type { ViewMode } from './model/recipes.ts';
 
-export const ACCESSORS = ['negative', 'print', 'scan', 'source', 'display'] as const;
-export type Accessor = (typeof ACCESSORS)[number];
-
-/** print({…}) options → the recipe path they set (a what-if: not logged) */
-export const PRINT_OPTIONS: Readonly<Record<string, readonly [string, string]>> = Object.freeze({
-  paper: ['print.expose', 'paper'],
-  time_s: ['print.expose', 'time_s'],
-  fstop: ['print.expose', 'fstop'],
-  filtration: ['print.expose', 'filtration'],
-  lights: ['print.lights', 'logH'],
-  grade: ['print.develop', 'grade'],
-  preflash: ['print.preflash', 'amount'],
-  illuminant: ['view.reflect', 'illuminant'],
-  flare: ['view.flare', 'flare'],
-});
-const OPTION_PATH: Record<string, string> = {
-  paper: 'print.paper',
-  time_s: 'print.enlarger.time_s',
-  fstop: 'print.enlarger.fstop',
-  filtration: 'print.enlarger.filtration',
-  lights: 'print.lights.logH',
-  grade: 'print.grade',
-  preflash: 'print.preflash',
-  illuminant: 'view.illuminant',
-  flare: 'view.flare',
-};
+export { ACCESSORS, PRINT_OPTIONS, type Accessor };
+const OPTION_PATH = PRINT_OPTION_PATHS;
 
 export type HandleWhat = Accessor | 'view' | 'testStrip' | 'ringTile';
 

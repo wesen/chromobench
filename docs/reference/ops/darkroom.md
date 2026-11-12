@@ -27,12 +27,23 @@ Expresses printer lights as colour-head filtration plus time.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `logH` | vec3 | logH | [-1.5, 1.5] |  | `[0,0,0]` |  | Printer lights to express as filtration. |
+| `logH` | vec3 | logH | [-1.5, 1.5] |  | `[0,0,0]` | print.lights.logH | Printer lights to express as filtration and time. |
+| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
+| `mode` | enum real/normalised |  |  |  | `"normalised"` | print.enlarger.mode | real: filtration and time; normalised: filtration, the density part stays as lights. |
+| `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp. |
+| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Current shift on the neutral pack. |
+| `time_s` | number | s | [0.1, 600] |  | `10` | print.enlarger.time_s | Current exposure time. |
+| `fstop` | number | fstop | [2.8, 45] |  | `8` | print.enlarger.fstop | Lens aperture. |
+| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | print.aim | The aim. |
+| `aimView` | string |  |  |  | `"D50"` | view.illuminant | Viewing light of the aim. |
 
 Returns:
 
-- `filtration`: object (CC) — {c, m, y} equivalent filtration
-- `residual`: number (logH) — what filtration cannot reproduce
+- `filtration`: object (CC) — {c, m, y}: the new shift on the neutral pack (what print.enlarger.filtration becomes)
+- `time_s`: number (s) — the new exposure time (real mode; unchanged in normalised mode)
+- `stops`: number (stop) — the time change in stops
+- `lights`: vec3 (logH) — what stays in the printer lights (the density part in normalised mode)
+- `residual`: number (logH) — largest per-layer error at the grey card after rounding the dials (0.1 CC, 0.01 s)
 
 ## `darkroom.ringAround`
 

@@ -2,7 +2,7 @@
 // names → display-referred for the presenter → Engine.evaluate at the size the viewport asks → PresentImage.
 // Keys are node ids, so equal recipes mean equal keys (content addressing) and the shell's queue and thumbnail
 // cache dedupe by node. The engine is injected (MockEngine in tests and the dev host; RefEngine / GpuEngine later).
-import { compile, fail, type Box, type Engine, type FrameRecipe, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
+import { compile, cut, fail, type Box, type Engine, type FrameRecipe, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
 import type { PresentImage, RenderBridge, RenderTarget, Rendered } from '@chromobench/shell';
 import { effectiveRecipe, isImageHandle, type ImageHandle } from '../handles.ts';
 import { bandBoxes, stripRecipe, stripValues, type StripVary } from '../model/tools.ts';
@@ -125,12 +125,14 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     const g = e.graph;
     const top = compile(r, g, { displaySpace: this.displaySpace });
     const I = (op: string, inputs: string[], args: Record<string, unknown>): Node => g.intern(op, inputs, args).node;
-    const dyes = (): Node => (r.kind === 'negative-scan' ? this.cut(e, top, 'invert.dyes') : this.cut(e, top, 'film.grain'));
+    // the shared frame vocabulary (contract cut): the node the DSL names for the same words
+    const cutTo = (op: string): Node => cut(r, g, op, { displaySpace: this.displaySpace });
+    const dyes = (): Node => (r.kind === 'negative-scan' ? cutTo('invert.dyes') : cutTo('film.grain'));
     let out: Lowered;
     switch (h.what) {
       case 'print':
       case 'ringTile':
-        out = { named: this.cut(e, top, 'view.adapt'), shown: top };
+        out = { named: cutTo('view.adapt'), shown: top };
         break;
       case 'display':
         out = { named: top, shown: top };
@@ -142,7 +144,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
       }
       case 'source':
       case 'scan': {
-        const src = this.cut(e, top, 'source.open');
+        const src = cutTo('source.open');
         const named = h.what === 'scan' ? e.graph.get(dyes().inputs[0]!)! : src;
         out = { named, shown: I('view.inspect', [src.id], { mode: 'negative' }) };
         break;
@@ -150,7 +152,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
       case 'view': {
         const mode = h.args['mode'] as string;
         const d = dyes();
-        if (mode === 'negative') out = { named: d, shown: I('view.inspect', [this.cut(e, top, 'source.open').id], { mode: 'negative' }) };
+        if (mode === 'negative') out = { named: d, shown: I('view.inspect', [cutTo('source.open').id], { mode: 'negative' }) };
         else if (mode === 'dyes') out = { named: d, shown: I('view.inspect', [d.id], { mode: 'dyes' }) };
         else {
           const cls = I('invert.classes', [d.id], {});

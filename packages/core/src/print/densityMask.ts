@@ -11,6 +11,10 @@
 // gets no mask density, so d_m ≥ 0 everywhere: a physical mask that keeps the highlights and lifts the
 // shadows; the printer re-times the overall density, as in the darkroom. The `same`-polarity and
 // highlight (threshold) masks need arguments contract 0.2 does not have (CHB-010 contract request C5).
+//
+// Contract 0.3 (C5): print.densityMask reads the main print.expose's paper log exposure x and recovers
+// PD = x_clear − x (x_clear = that exposure's clear-film x); it returns d_m (one channel), and print.combine
+// multiplies every exposure through the negative by 10^−d_m. Polarity 'same' is d_m = γ(log10 max H_m − log10 H_m).
 import { gaussianBlur1 } from './masks.ts';
 
 /** Default film pixel pitch when an image carries no umPerPx.film (packages/gpu DEFAULT_UM_PER_PX). */
@@ -38,7 +42,19 @@ export function maskDensity(pd: ArrayLike<number>, w: number, h: number, c: numb
   return d;
 }
 
-/** print.densityMask: PD + d_m in each of the three layers (extra channels pass through). */
+/** The mask density for a polarity: positive γ(log H − log min H), same γ(log max H − log H); both ≥ 0. */
+export function maskDensityPolar(pd: ArrayLike<number>, w: number, h: number, c: number, amount: number, sigma_px: number, polarity: 'positive' | 'same'): Float64Array {
+  if (polarity === 'positive') return maskDensity(pd, w, h, c, amount, sigma_px);
+  const Hm = maskExposure(pd, w, h, c, sigma_px);
+  let ref = -Infinity;
+  for (let i = 0; i < Hm.length; i++) ref = Math.max(ref, Hm[i]!);
+  const lref = Math.log10(ref);
+  const d = new Float64Array(w * h);
+  for (let i = 0; i < Hm.length; i++) d[i] = amount * (lref - Math.log10(Hm[i]!));
+  return d;
+}
+
+/** PD + d_m in each of the three layers (extra channels pass through): the mask sandwiched with the negative. */
 export function applyDensityMask(pd: ArrayLike<number>, w: number, h: number, c: number, amount: number, sigma_px: number): Float64Array {
   const out = Float64Array.from(pd as ArrayLike<number>);
   if (amount === 0) return out;

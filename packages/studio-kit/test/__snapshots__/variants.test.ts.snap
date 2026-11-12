@@ -409,7 +409,8 @@ module lab "Lab" key L
              section "Output"
                cb.arg  path "view.output.rendering"  segmented
              section "Frame"
-               cb.arg  path "scan.orientation"  select
+               cb.arg  path "view.frame.orientation"  select
+               cb.arg  path "view.frame.angle_deg"  slider  deg  step 0.1 deg  detent 0
              section "Print"
                cb.arg  path "print.grade"  slider  step 0.5 none
                cb.arg  path "print.paper"  select
