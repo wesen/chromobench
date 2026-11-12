@@ -1,0 +1,13 @@
+import { launch, goto, shot, bodyText, readProbe } from './lib.mjs';
+const { ctx, page } = await launch(true);
+await goto(page);
+await shot(page, '01-empty');
+console.log(await bodyText(page));
+const btns = await page.evaluate(() => [...document.querySelectorAll('button,[role=menuitem],[role=tab],input,select')].map(e=>(e.innerText||e.getAttribute('aria-label')||e.title||e.id||e.tagName).trim().slice(0,40)).slice(0,60));
+console.log(JSON.stringify(btns));
+await page.getByText('File', { exact: true }).first().click();
+await page.waitForTimeout(500);
+await shot(page, '02-file-menu');
+console.log('MENU:', await bodyText(page).then(t=>t.slice(0,800)));
+await page.keyboard.press('Escape');
+await ctx.close();

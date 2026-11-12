@@ -151,3 +151,26 @@ in Edit. The empty grid says "No frames yet: open a negative" although he has di
   in "negative" mode, where the W_ notes show it, but only as jargon).
 - **F16** `raw010.dng` holds three frames; the app shows and prints the strip as one image, rebate and gaps
   included ([shot](shots/12-negative-fresh-print.png)). The auto time (2.23 s) sits at the slider's 2 s floor.
+
+## Session 02 (re-run of session 01 on main 3703d0a, CPU engine, Sonnet tester)
+
+[Report](../sessions/02-sonnet-rerun-session-01/experience-report.md) (before/after table),
+[diary](../sessions/02-sonnet-rerun-session-01/diary.md). Verdicts for F1–F16: **fixed** F1–F7, F11, F13, F15, F16;
+**partly** F8 (`-5` still relative, now with a hint), F9 (engine tooltip `CPU f64 … E_EVAL`, the LibRaw/camera-matrix
+note, the "Dyes" and "Base & gamut" tabs, negative-only controls on photos), F12 (Edit menu label does not name the
+frame); **not fixed** F10 (512 px on the CPU engine, expected); **not reproduced** F14. Worst stall in the whole
+session: 517 ms (typing `1000`); no stall over 100 ms during drags (session 01: 2.4 s per preview, 6.7 s on open).
+
+| ID | Sev | Summary | Seen in |
+|---|---|---|---|
+| F17 (S02-N1) | **major** | Time (and Aperture) have no effect in the default enlarger mode: the picture is identical at 0.1, 10, 20, 30, 600 s; "Lighter" works. The default `print.enlarger.mode` is `normalised`, which "ignores the optics" (`packages/core/src/print/enlarger.ts`); the controls are still shown and recorded in History | S02 |
+| F18 (S02-N2) | minor | File ▸ Open As persists across restarts and is applied silently when a library frame is relinked (a photo opened inverted until the hint pill was clicked) | S02 |
+| F19 (S02-N3) | minor | With no frame selected the Darkroom panel shows placeholder-like text ("15, 12s, +1", "40, +5") and live-looking sliders | S02 |
+| F20 (S02-N4) | minor | Strip frames show sideways and blocky, frame 1 hazy and bluish; no rotate command in the Frame menu | S02 |
+| F21 (S02-N5) | minor | "Where is …?" opens by itself after Remove from Library (selection moves to the next not-open frame, which triggers relink) | S02 |
+| F22 (S02-N6) | minor | First open on a cold profile: ~29 s to the picture with only "opening …" (warm 6–12 s); no progress | S02 |
+| F23 (S02-N7) | note | Film stock, Scanner and Viewing light controls shown for a digital photo | S02 |
+
+**Correction to session 01.** Session 01's experience report says that after dragging Time "the picture is lighter".
+That was not verified (no pixel measurement), and F17 shows it was not true in the default mode: the drag changed the
+recipe and triggered renders, not the picture. The report is left as written; this note supersedes that sentence.

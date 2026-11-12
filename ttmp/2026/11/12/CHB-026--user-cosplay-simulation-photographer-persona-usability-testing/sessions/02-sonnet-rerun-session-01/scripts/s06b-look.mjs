@@ -1,0 +1,11 @@
+import { launch, goto, shot, bodyText, readProbe, menuState } from './lib.mjs';
+const { ctx, page } = await launch(false);
+await goto(page);
+await page.waitForTimeout(1500);
+await shot(page, '09a-state-on-relaunch');
+console.log((await bodyText(page)).split('\n').slice(-8).join(' | '));
+await page.getByText('File', { exact: true }).first().click();
+await page.getByText('Open As', { exact: true }).first().hover();
+await page.waitForTimeout(400);
+await shot(page, '09b-open-as-menu-state');
+await ctx.close();
