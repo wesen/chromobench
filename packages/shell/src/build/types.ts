@@ -10,7 +10,6 @@ import type { FormSpec } from '../ir/forms.ts';
 import type { Slot, Time } from '../ir/slots.ts';
 
 export type Region = 'top' | 'left' | 'center' | 'right' | 'bottom' | 'toolbar';
-export const REGIONS: Region[] = ['top', 'left', 'center', 'right', 'bottom', 'toolbar'];
 
 export interface StateOpts<S = any> {
   /** view-tier prefixes (default ui, view, prefs, workspace); the rest is the undoable document tier */

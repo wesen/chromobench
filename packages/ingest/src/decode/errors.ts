@@ -1,4 +1,4 @@
-import { ChromobenchError, diag, type Diagnostic } from '@chromobench/contract';
+import { ChromobenchError } from '@chromobench/contract';
 
 /** An E_FORMAT error naming the unsupported or malformed feature (goja-cv's FormatError). */
 export function formatError(message: string, hint?: string): never {
@@ -14,6 +14,3 @@ export class NeedsLibRaw extends ChromobenchError {
   }
 }
 
-export function note(code: 'W_ENCODING_ASSUMED' | 'W_ICC_IGNORED' | 'W_CLIPPED' | 'W_TRIPLET_SHIFT' | 'W_FLAT_SHAPE', message: string): Diagnostic {
-  return diag(code, message);
-}

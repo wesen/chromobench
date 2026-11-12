@@ -9,7 +9,7 @@
 import type { Page } from '@playwright/test';
 
 /** Waits for worker renders, log writes and queued frames (`window.chromobench.idle()`). */
-export const idle = (page: Page): Promise<void> => page.evaluate(() => window.chromobench.idle());
+const idle = (page: Page): Promise<void> => page.evaluate(() => window.chromobench.idle());
 
 /**
  * After `page.setInputFiles('#file' | '#folder', …)`: waits until at least `frames` frames are open and the open

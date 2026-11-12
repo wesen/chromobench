@@ -57,11 +57,6 @@ export function bandBoxes(count: number, w: number, h: number): { x: number; y: 
   });
 }
 
-/** Arguments of the mock/CHB-010 darkroom.testStrip op (step in the varied quantity's display unit). */
-export function testStripArgs(vary: StripVary, step: number, count: number): Record<string, unknown> {
-  return { vary, steps: count, step, direction: 'vertical' };
-}
-
 // ---- ring-around ---------------------------------------------------------------------------
 
 export interface RingTile {
@@ -102,8 +97,6 @@ export function ringTiles(stepPt: number): RingTile[] {
   }
   return tiles;
 }
-
-export const addLights = (a: Vec3, b: Vec3): Vec3 => a.map((x, i) => Number((x + b[i]!).toFixed(6))) as Vec3;
 
 // ---- exposures -----------------------------------------------------------------------------
 

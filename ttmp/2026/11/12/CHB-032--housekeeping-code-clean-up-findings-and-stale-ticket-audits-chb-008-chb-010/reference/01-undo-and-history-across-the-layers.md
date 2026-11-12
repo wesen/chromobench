@@ -113,7 +113,7 @@ zero or more parts (`packages/shell/src/core/history.ts:29-40`).
 | (a) Contract edit log | `packages/contract/src/editlog.ts` | journal, units, cursor, the one preview slot, agent mode, `why()` provenance | anything cross-frame; the global order of steps |
 | (b) EditLog route | `packages/studio-kit/src/bridge/editlog-route.ts` | the mapping store path → recipe field; one history part per unit; bursts; cross-frame batches; publishing `recipes.<f>` and `proposals.<f>` | recipe state (it reads the logs) |
 | (c) Shell store + History | `packages/shell/src/core/store.ts`, `packages/shell/src/core/history.ts` | gesture previews, transactions, the global undo/redo stacks, coalescing, Mod+Z | recipe contents (they are routed) |
-| (d) History view model | `packages/studio-kit/src/model/history.ts` | read-only views of one log: unit groups, pending groups, rejected entries, "why" rows, darkroom wording | no state; it never writes a log |
+| (d) History view model | `packages/studio-kit/src/model/history.ts` | read-only views of one log: unit groups, pending groups, "why" rows, darkroom wording | no state; it never writes a log |
 
 Layer (d) is a pure function library over one `EditLog`. It does not implement global undo across frames.
 Global undo across frames is the shell History (c), fed with parts by the route (b).
@@ -238,10 +238,10 @@ the info diagnostic `CB-H401` (`packages/studio-kit/src/studio.ts:116`).
   (`packages/studio-kit/src/cb.ts:345-349`), which is `EditLogRoute.jump`.
 - `pendingGroups(log, lookup)` (`:109-119`): pending entries grouped by `tx`, with `why` and `batch`. The
   route uses it to build `proposals.<f>` (`packages/studio-kit/src/bridge/editlog-route.ts:107`).
-- `whyRows` (`:134-154`): the "Why is X?" rows from `EditLog.why()` plus pending proposals on that path.
+- `whyRows` (`:130-150`): the "Why is X?" rows from `EditLog.why()` plus pending proposals on that path.
 - `describe` (`:49-79`): one line per mutation in the photographer's units.
-- `rejectedEntries` (`:121-123`) and `moveCursor` (`:126-129`): no caller in `src`; `moveCursor` is used only by
-  `packages/studio-kit/test/model.test.ts:65` and duplicates `EditLogRoute.jump`.
+- `moveCursor` (`:122-125`): no caller in `src`; it is used only by `packages/studio-kit/test/model.test.ts:65` and
+  duplicates `EditLogRoute.jump`. (A `rejectedEntries` view with no caller was removed in CHB-032.)
 
 ## 4. Worked sequences
 
@@ -423,9 +423,8 @@ Three rules follow from the code:
 
 ## 7. Observations for the clean-up
 
-- `moveCursor` (`packages/studio-kit/src/model/history.ts:126-129`) duplicates `EditLogRoute.jump`
+- `moveCursor` (`packages/studio-kit/src/model/history.ts:122-125`) duplicates `EditLogRoute.jump`
   (`packages/studio-kit/src/bridge/editlog-route.ts:368-374`) and has no caller outside tests.
-  `rejectedEntries` (`:121-123`) has no caller.
 - The store's named preview layers (`Store.layer`, `packages/shell/src/core/store.ts:563`) are described in
   the store header as "agent proposals", but the studio does not use them. Proposals are published as data
   under `proposals.<f>` and shown by rendering the folded recipe.

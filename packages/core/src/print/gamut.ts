@@ -20,19 +20,8 @@ export function knee(d: number, t: number, l: number, p: number): number {
 // OKLab (Ottosson) from linear sRGB.
 const M1: Mat3 = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]];
 const M2: Mat3 = [[0.2104542553, 0.793617785, -0.0040720468], [1.9779984951, -2.428592205, 0.4505937099], [0.0259040371, 0.7827717662, -0.808675766]];
-const M2I: Mat3 = [[1, 0.3963377774, 0.2158037573], [1, -0.1055613458, -0.0638541728], [1, -0.0894841775, -1.291485548]];
-/** The exact inverse of M2 (the published M2⁻¹ above is rounded to 10 digits: round trips drift by 2e-7). */
+/** The exact inverse of M2 (Ottosson's published M2⁻¹ is rounded to 10 digits: round trips drift by 2e-7). */
 const M2_INV: Mat3 = inv3(M2);
-const M1I: Mat3 = [[4.0767416621, -3.3077115913, 0.2309699292], [-1.2684380046, 2.6097574011, -0.3413193965], [-0.0041960863, -0.7034186147, 1.707614701]];
-
-export function rgbToOklab(rgb: ArrayLike<number>): Vec3 {
-  const lms = mulMV(M1, rgb).map(Math.cbrt);
-  return mulMV(M2, lms);
-}
-export function oklabToRgb(lab: ArrayLike<number>): Vec3 {
-  const lms = mulMV(M2I, lab).map((v) => v * v * v);
-  return mulMV(M1I, lms);
-}
 
 const inCube = (rgb: ArrayLike<number>, eps = 1e-9): boolean => rgb[0]! >= -eps && rgb[0]! <= 1 + eps && rgb[1]! >= -eps && rgb[1]! <= 1 + eps && rgb[2]! >= -eps && rgb[2]! <= 1 + eps;
 

@@ -2,7 +2,6 @@
 // Chromogen's and spektrafilm's. A golden number is reproducible only under its own conventions,
 // so they are one explicit, versioned object. The contract's `PhysicsConventions` (engine.ts) carries
 // only the version string; this is the full set behind that string.
-import type { PhysicsConventions } from '@chromobench/contract';
 
 export interface Conventions {
   /** Missing spectral samples: no light (spektrafilm) or zero density (Chromogen). */
@@ -36,6 +35,3 @@ export function conventionsKey(c: Conventions): string {
   return `core-v${c.version}:${c.nan}/${c.cmf}/${c.curveMin}/${c.paperCurve}/${c.printNormalise}`;
 }
 
-export function toContract(c: Conventions, aim: PhysicsConventions['aim'] = 'grey-0.184'): PhysicsConventions {
-  return { version: conventionsKey(c), grid: '380:780:5', greyCard: 0.184, aim };
-}

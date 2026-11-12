@@ -10,7 +10,6 @@ import { solveDyes, type ForwardModel, type SolveOptions } from '../scan/solve.t
 export const A_RANGE: [number, number] = [-0.25, 2.55];
 export const C_RANGE: [number, number] = [0, 2.6];
 export const CP_RANGE: [number, number] = [0, 2.7];
-export const X_RANGE: [number, number] = [-2.5, 2.5];
 export const N3 = 33;
 
 export function nodeAt(q: number, N: number, lo: number, hi: number): Vec3 {
@@ -44,20 +43,6 @@ export function buildSolveTable(f: ForwardModel, o: { N?: number; range?: [numbe
   }
   const n = N * N * N;
   return { table: { N, lo, hi, channels: 4, data }, stats: { meanIterations: it / n, atCap: cap, unreachable: un / n, maxResidual: maxR } };
-}
-
-/** Key a = K⁻¹(D − D_base) for every dye triple in the box: the range a table must cover. */
-export function solveKeyRange(f: ForwardModel, cRange: [number, number] = C_RANGE, n = 9): [number, number] {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (let i = 0; i < n ** 3; i++) {
-    const c = nodeAt(i, n, cRange[0], cRange[1]);
-    const d = f.D(c);
-    const a = mulMV(f.Kinv, [d[0] - f.Dbase[0], d[1] - f.Dbase[1], d[2] - f.Dbase[2]]);
-    lo = Math.min(lo, ...a);
-    hi = Math.max(hi, ...a);
-  }
-  return [lo, hi];
 }
 
 /** Printing density table: film dyes → printing density (clear − x) per paper layer. */

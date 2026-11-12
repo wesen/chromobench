@@ -157,7 +157,3 @@ export function preflash(x: ArrayLike<number>, phi: ArrayLike<number>): Vec3 {
   return [0, 1, 2].map((k) => Math.log10(10 ** x[k]! + phi[k]!)) as Vec3;
 }
 
-/** Chromogen paperX: φ = 0.35 · p/100 · 10^(g − 0.6), g the grey card's paper exposure (05-inline.js 2119, 2165). */
-export function preflashFromSlider(p_percent: number, g: ArrayLike<number>): Vec3 {
-  return [0, 1, 2].map((k) => 0.35 * (p_percent / 100) * 10 ** (g[k]! - 0.6)) as Vec3;
-}

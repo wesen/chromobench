@@ -76,9 +76,6 @@ export function fitsInside(box: Box, thetaDeg: number, W: number, H: number, eps
 /** The frame's crop is valid: its turned box lies inside the frame. */
 export const frameValid = (f: FrameSettings, W: number, H: number): boolean => fitsInside(cropOf(f, W, H), sensorTurn(f), W, H);
 
-/** Box w/h from the shown aspect (w/h as the viewer sees it, after the orientation). */
-export const sensorAspect = (shown: number, o: Orientation | string): number => (swapsAxes(o) ? 1 / shown : shown);
-
 /** The largest h of a box with sensor aspect ρ = w/h, centred at c, turned by θ, inside W × H. */
 export function largestHeight(c: Pt, rho: number, thetaDeg: number, W: number, H: number): number {
   const t = Math.abs(thetaDeg) * RAD, cs = Math.cos(t), sn = Math.sin(t);

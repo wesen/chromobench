@@ -9,8 +9,6 @@
 import { ChromobenchError, CONTRACT_VERSION, MOVED_PATHS, diag, type Diagnostic } from '@chromobench/contract';
 import { kitDiag, PRESET_FORMAT, PRESET_VERSION, validatePreset, type Preset } from './look.ts';
 
-export const PRESET_EXT = '.cbpreset.json';
-
 export function presetToFile(p: Preset): string {
   return `${JSON.stringify({ ...p, format: PRESET_FORMAT, version: PRESET_VERSION, contract: p.contract || CONTRACT_VERSION }, null, 2)}\n`;
 }

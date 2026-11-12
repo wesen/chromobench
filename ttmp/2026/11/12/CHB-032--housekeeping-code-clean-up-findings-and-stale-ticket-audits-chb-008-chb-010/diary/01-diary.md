@@ -1004,3 +1004,100 @@ member is that accessor (it returned the assigned value before and does now).
 ### Technical details
 - Line counts. looks: kit 151, state 81, model 190, commands 289, panels 152. finish: kit 110, state 76, context 50,
   tools 322, commands 118, panels 77, passes 42.
+
+## Step 14: Dead code and unused exports (task z99j)
+
+Neither knip nor ts-prune is a dependency, and installing one offline was not possible, so I wrote the scan on the
+TypeScript compiler API already in the workspace: build the program from `tsconfig.json` (sources, tests, demos,
+kits, tools, e2e), resolve every import specifier, namespace import, re-export and `import('…')` type to its
+original declaration, and report each export of a source file that no other file imports — split into "used by
+nothing", "used only in its own file" and "used only by tests, demos or tools". It found 69 exports used by
+nothing. After a text search over the whole tree for each name (the GPU parity page, the kit variants and the JS
+playbooks are outside the program), I removed 63 exported declarations and the 3 private constants that only they
+used, in three waves (the second and third waves were helpers that only the first wave used). 41 source files,
+269 lines deleted, 12 added; test counts unchanged.
+
+Kept on purpose (12 still reported as used by nothing): six contract names (`MutationOp`, `validateMutation`,
+`_registrySize`, `ROLL_SIDECAR`, `SPECTRUM_KINDS`, `PhysicsConventions`; the contract is not edited in this ticket);
+`lightsOffset` in `packages/studio-kit/src/kit/args.ts` and `permission`, `fileAt`, `sha256` in
+`apps/studio/src/storage/fsa.ts` (files in CHB-031's area: the library's file handles are WS-B's open work);
+`preflashPhi` in core (spektrafilm's preflash through the base, which CHB-010's follow-up dotm needs); `setOracle` in
+the GPU parity harness (its documented experiment hook). The scanner is now `tools/scripts/unused-exports.mjs` and
+its final report is in the ticket (`various/01-unused-exports-after.txt`).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7.
+**Assistant interpretation:** Task z99j: a ts-prune/knip-style run over the workspace; remove what nothing uses;
+list what is kept on purpose.
+**Inferred user intent:** No code that only misleads a reader into thinking it matters.
+**Commit (code):** see the next commit, "CHB-032: remove 63 unused exports (core, data, gpu, ingest, shell, studio-kit); unused-exports scanner".
+
+### What I did
+- `<scratchpad>/chb032/unused-exports.mjs` (now `tools/scripts/unused-exports.mjs`): 28 s per run.
+  Run 1: 69 used by nothing, 722 only in their own file, 262 only by tests, demos or tools.
+- For each of the 69: its definition with context, and `grep -rlw <name>` over the tree outside its file
+  (`<scratchpad>/chb032/dead-grep.txt`). Same-named symbols elsewhere were different symbols: `X_RANGE` (gpu's own
+  in `tables/inputs.ts`), `ROLL_MIXED_D` (ingest's, used by `roll-base.ts`), `CLASS_CODE` (core's, used by the host),
+  `srgbEncode` (engine-mock's own), `latd` (a field and parameter name), `hostOf` (a test's local function),
+  `MIN_REBATE_CONFIDENCE` (the check exists: `ingest/src/conditioning/roll-base.ts:68`, `minConfidence ?? 0.5`).
+- `<scratchpad>/chb032/delete-exports.mjs`: removes a top-level export with its own JSDoc by AST position.
+  Waves: 58 declarations (`delete-targets.txt`), then `fromTable`, `orientPoint` (ingest), `P3_TO_XYZ`,
+  `REC2020_TO_XYZ`, then `ResponsivityTable`; cascades found by diffing `tsc --noEmit --noUnusedLocals` on the touched
+  files before and after: unused imports (`Channels`, `addFlare`, `D50`, `PhysicsConventions`, `diag`, `Diagnostic`,
+  `canonicalJSON`, `fstopIndex`) and private constants (`CAT16_INV`, OKLab `M1I`, `M2I`).
+- `e2e/support.ts`: `idle` is no longer exported (only `opened` uses it).
+- Undo doc: `rejectedEntries` is gone from Section 3.4 and 7; `moveCursor` and `whyRows` re-numbered (`:122-125`,
+  `:130-150`); `check-doc-refs.py` compares every `path:N` the two docs cite between HEAD and the tree.
+- Checks: `pnpm typecheck` 0, `pnpm lint` 0, `pnpm gen:check` ok (26 files), `pnpm test` → 97 files, 2749 passed,
+  7 skipped (= baseline after the merge).
+
+### Why
+- A checker-based scan over the one program that includes the tests sees type-only imports, re-exports through
+  `index.ts` and `export *`, which a text search cannot tell apart from comments.
+- I did not un-export the 717 "used only in their own file" names: many are types in public signatures, and the
+  change would be churn without a reader benefit; the report lists them per file.
+
+### What worked
+- Run 3: `exports used by nothing: 12`, exactly the kept list above (plus `ResponsivityTable`, removed after it).
+- Removed by package: core 27 (film, ops, print/balance, chain, colour, gamut, paper, spectral/channels,
+  conventions, linalg, spectrum, units, tables), ingest 13 (conditioning classify, open-mode, opengate, resample;
+  decode encoding, errors, identity, registry `openSource`, types `Decoder`; libraw colour), shell 10 (util `isPlain`,
+  `round`, `hasPath`, `clone`, `esc`, `isFn`; `Side`, `REGIONS`, `hostOf`, `timeOf`), studio-kit 11 (finish
+  `sensorAspect`, looks `PRESET_EXT`, roll `ROLL_MIXED_D`, `MIN_REBATE_CONFIDENCE`, `setupBatch`; model `fstopStep`,
+  `sameValue`, `rejectedEntries`, `Snapshot`, `testStripArgs`, `addLights`), data 1 (`openPackSync`), gpu 1
+  (`TableInputs`).
+
+### What didn't work
+- My first cascade fix deleted `CAT16` with `CAT16_INV`: `packages/core/src/film/expose.ts(4,10): error TS2305:
+  Module '"../print/colour.ts"' has no exported member 'CAT16'.` (my grep for other users had not covered
+  `core/src/film/`). Restored the export and the header wording; only `CAT16_INV` (used by the deleted `adaptCAT16`)
+  is gone.
+- No `knip`/`ts-prune` in `node_modules/.bin` or the npx cache.
+
+### What I learned
+- The counts of the remaining categories by package. Only in their own file: shell 139, contract 109, core 91,
+  ingest 75, gpu 57, studio-kit 41 (+ kits: looks 30, roll 20, finish 5, chat 4), output 32, agent 32, dsl 27,
+  apps/studio 21, data 17, engine-mock 12, conformance 5. Only by tests, demos or tools: core 79, ingest 50, gpu 20,
+  studio-kit 19, contract 16, output 14, data 13, shell 11, the kits 18, apps/studio 7, agent 5, dsl 4, engine-mock 3,
+  conformance 3.
+
+### What was tricky to build
+- Waves: deleting a function can make its private helpers and types dead; the analyzer and `--noUnusedLocals` were
+  re-run until nothing new appeared.
+
+### What warrants a second pair of eyes
+- Physics helpers removed from core that a later ticket might want back (`viewToDisplay`, `rgbToOklab`/`oklabToRgb`,
+  `adaptCAT16`, `sigmoid` spectra, `printingChannels`, `XYZ_TO_P3`/`XYZ_TO_REC2020`): all are in git history at
+  2911ca9; nothing in the tree called them.
+
+### What should be done in the future
+- After CHB-031 merges: `fsa.ts`'s three helpers and `args.ts` `lightsOffset`, if still unused.
+- When the contract is next edited: its six unused names.
+
+### Code review instructions
+- `git show <commit> --stat`; `node tools/scripts/unused-exports.mjs .`.
+- `pnpm typecheck && pnpm test`.
+
+### Technical details
+- The scanner treats a module imported as a namespace or through `import()` as fully used, and judges a re-exported
+  name at its original declaration.

@@ -5,8 +5,6 @@ import type { Vec3 } from '@chromobench/contract';
 
 export const Z_NOISE = 3;
 export type BaseClass = 'below' | 'blank' | 'above';
-/** scan-classes codes: 0 above, 1 blank, 2 below (CHB-003 adds 3 = gamut). */
-export const CLASS_CODE: Record<BaseClass, number> = { above: 0, blank: 1, below: 2 };
 
 export function baseClass(T: Vec3, Treb: Vec3, sigma: Vec3, Z = Z_NOISE): { cls: BaseClass; D: Vec3; z: Vec3; layers: number[] } {
   const D = [0, 1, 2].map((k) => -Math.log10(Math.max(T[k]!, 1e-6) / Treb[k]!)) as Vec3;

@@ -83,4 +83,3 @@ export const commonSlots = {
   lazy: slot.build<boolean>('skip the build-time binding check'),
 } as const;
 
-export const timeOf = (s: Slot | undefined): Time | undefined => s?.time;
