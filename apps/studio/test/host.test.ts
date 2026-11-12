@@ -7,8 +7,9 @@ import {
 } from '@chromobench/contract';
 import { CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
+import { conditionScan, plantedStrip } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
-import { firstPrint, gridTime, integratedExposure, measureExposure } from '../src/host/first-print.ts';
+import { firstPrint, gridTime, integratedExposure, measureExposure, withRebate } from '../src/host/first-print.ts';
 import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
 import { bandBoxes, evaluateBands, stripRecipe, stripValues } from '@chromobench/studio-kit';
 
@@ -188,4 +189,43 @@ describe('test strip bands', () => {
     const f = stripRecipe('filtration.m', r, 5).print.enlarger.filtration;
     expect(f).toEqual({ ...r.print.enlarger.filtration, m: 5 });
   });
+});
+
+describe('first print on a roll scan (CHB-020 host wiring)', () => {
+  const integrate = (latd: number[], alpha: number) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as [number, number, number];
+  const overlaps = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+  it('measures the base on the film edge, not on a sprocket hole', async () => {
+    const strip = plantedStrip();
+    const data = Float32Array.from(strip.rgb);
+    const sha = 'f'.repeat(64);
+    const c = conditionScan(data, strip.w, strip.h, { id: sha });
+    expect(c.rebate).not.toBeNull();
+    expect(c.veilFrom).toBe('frame');
+    for (const hole of strip.truth.holes) expect(overlaps(c.rebate!, hole)).toBe(false);
+    const info: SourceInfo = {
+      sha256: sha, format: 'tiff', width: strip.w, height: strip.h, channels: 3, bits: 16, sample: 'uint',
+      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
+      cfa: 'none', clippedFraction: 0, notes: [],
+    };
+    const e = new RefEngine();
+    e.openDecoded(info, data);
+    const g = new Graph();
+    g.registerSource(info);
+    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'strip' });
+    // total paper exposure the first print settles on: time and lights together, per channel
+    const total = async (box: { x: number; y: number; w: number; h: number } | null | undefined): Promise<number[]> => {
+      const r = await firstPrint(e, g, withRebate(r0, box), { integrate });
+      return r.print.lights.logH.map((l) => l + Math.log10(r.print.enlarger.time_s));
+    };
+    const measured = await total(c.rebate);
+    const truth = await total(strip.truth.rebate[0]);
+    const hole = await total(strip.truth.holes[0]);
+    const dist = (a: number[], b: number[]): number => Math.max(...a.map((v, k) => Math.abs(v - b[k]!)));
+    expect(dist(measured, truth)).toBeLessThan(0.1);
+    expect(dist(hole, truth)).toBeGreaterThan(0.3);
+    expect(withRebate(r0, null).scan?.rebate).toBeNull();
+    expect(withRebate(r0, c.rebate).scan?.rebate).toEqual(c.rebate);
+  }, 60_000);
 });

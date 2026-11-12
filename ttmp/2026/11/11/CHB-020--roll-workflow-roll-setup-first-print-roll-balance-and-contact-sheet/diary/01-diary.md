@@ -245,3 +245,37 @@ the host"
   roll does not share), `CB-R110` (base from blank film), `CB-R111` (probable under-exposure).
 - State: `roll` (document: `rolls`, `order`, `current`), `rollView` (view: `contact.mode`, `pending`, `off`,
   `stale`, `progress`, `alpha` = 0.45, `consistency` = 0.5). Roll batches' tx ids start with `roll:`.
+
+## Step 3: Host wiring: conditionScan at decode, measured rebate in the first print, parity port
+
+Step 2's hand-off said the studio's file opening should call `conditionScan`. This step does that in `apps/studio/src/host/engines.ts` and routes the measured rebate box into the new recipe's `scan.rebate`, so `firstPrint` measures on the film edge instead of the brightest columns (sprocket holes on a strip scan). Separately, the gpu-parity Playwright server port became configurable.
+
+### Prompt Context
+**User prompt (verbatim):** see the task brief (CHB-020 host wiring: wire roll analysis into decodeScan; make GPU_PARITY_PORT configurable).
+**Assistant interpretation:** Integrate Step 2's `conditionScan` and `rollBase` in the host; leave `scan.flare` at 0; add a test with `plantedStrip`; env port for the parity page.
+**Inferred user intent:** Roll analysis reaching real file opens; parallel runs not colliding on port 4185.
+**Commit (code):** on branch task/chb-020-host-wiring.
+
+### What I did
+- `engines.ts` `decodeScan`: after `region(…)`, `rollBase(frames opened so far).veil` as `rollVeil`, then `conditionScan(data, w, h, { id: sha256, rollVeil })` (veil subtracted in place). `c.frame` is kept per sha256 in a `Map<string, FrameBase>` created in `createHostEngine`. `c.rebate` goes on `Decoded.rebate` (new optional field in `studio-engine.ts`); `c.notes`, the base, the veil and its origin go in the decode notes. The old `rebateBox` band stays only as the dust-healing base when no rebate is found.
+- `first-print.ts`: `withRebate(recipe, box)` sets `scan.rebate`; `main.ts` `initial` applies it from the decoded record (`se.notes`, keyed by the recipe's file sha256) before `firstPrint`. `scan.flare` untouched (0).
+- `playwright.config.ts`: `GPU_PARITY_PORT` (default 4185) for the project's baseURL, the web server command and port. `packages/gpu/playwright.config.ts` and `parity-page/vite.config.ts` already read the same env var.
+- Test in `apps/studio/test/host.test.ts`: `plantedStrip()` through `conditionScan`, loaded into RefEngine with `openDecoded`; the first print's total paper exposure with the measured box is within 0.1 D of the print with the true rebate band, and the print with a box on a sprocket hole is more than 0.3 D off.
+
+### What worked
+- The test passed first time; the unit suite went from 2350 to 2351. `STUDIO_PORT=4511 STUDIO_KIT_PORT=4512 SHELL_DEMO_PORT=4513 GPU_PARITY_PORT=4514 CI=1 pnpm test:browser`: 69 passed.
+
+### What didn't work
+- `npx vitest run apps/studio/test/host.test.ts` first failed with `Cannot find package '@chromobench/core'`: the new worktree had no node_modules links. `pnpm install --offline --frozen-lockfile` fixed it.
+- `pnpm typecheck`: `first-print.ts(98,32): TS2322` (spreading `recipe.scan`, which is optional on `digital-raw`); `withRebate` now leaves recipes without `scan` unchanged.
+
+### What I learned
+- The decoded record is keyed by the same sha256 the new recipe carries, so no new plumbing was needed between decode and `initial`.
+
+### What warrants a second pair of eyes
+- The roll veil comes from frames opened earlier only; an early frame with no holder gets no veil, and earlier frames are not re-conditioned.
+- Frames stay in the host's map for the session (never removed on close).
+
+### Code review instructions
+- `apps/studio/src/host/engines.ts` (`decodeScan`), `first-print.ts` (`withRebate`), `main.ts` (`initial`), `apps/studio/test/host.test.ts` (last describe), `playwright.config.ts`.
+- `pnpm typecheck && pnpm lint && pnpm test`; `STUDIO_PORT=4511 STUDIO_KIT_PORT=4512 SHELL_DEMO_PORT=4513 GPU_PARITY_PORT=4514 CI=1 pnpm test:browser`.

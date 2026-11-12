@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test';
 // STUDIO_PORT lets parallel worktrees run their own dev servers side by side.
 const port = Number(process.env['STUDIO_PORT'] ?? 4173);
 const shellPort = Number(process.env['SHELL_DEMO_PORT'] ?? 4186);
+const parityPort = Number(process.env['GPU_PARITY_PORT'] ?? 4185);
 const kitPort = Number(process.env['STUDIO_KIT_PORT'] ?? 4187);
 
 export default defineConfig({
@@ -36,7 +37,7 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         channel: 'chromium',
-        baseURL: 'http://localhost:4185',
+        baseURL: `http://localhost:${parityPort}`,
         launchOptions: {
           args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'],
         },
@@ -65,8 +66,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'pnpm --filter @chromobench/gpu exec vite --config parity-page/vite.config.ts --port 4185 --strictPort',
-      port: 4185,
+      command: `pnpm --filter @chromobench/gpu exec vite --config parity-page/vite.config.ts --port ${parityPort} --strictPort`,
+      port: parityPort,
       reuseExistingServer: !process.env['CI'],
       timeout: 60_000,
     },

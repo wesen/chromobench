@@ -4,13 +4,13 @@
 // CHB-004's data packs, decodes scans through packages/ingest (TIFF, PNG, DNG, camera RAW via LibRaw
 // in a worker), conditions them on open, and hands the UI a StudioEngine plus a few injected
 // functions. Nothing else in the studio sees physics code.
-import type { Engine, SourceInfo, Vec3 } from '@chromobench/contract';
+import type { Box, Engine, SourceInfo, Vec3 } from '@chromobench/contract';
 import {
   CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine, rebateBox, SCANNER_IDS, type PhysicsData,
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
-  decodeAsync, detectSpecks, heal, linearise, RAW_EXTENSIONS, region, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type RawDecoder,
+  conditionScan, decodeAsync, detectSpecks, heal, linearise, RAW_EXTENSIONS, region, rollBase, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type FrameBase, type RawDecoder,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import type { IntegrateToGrey } from './first-print.ts';
@@ -78,7 +78,7 @@ function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
 }
 
 /** Decode → linear → area-averaged working image → conditioning. */
-async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long: number, settings: HostSettings): Promise<Decoded> {
+async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long: number, settings: HostSettings, roll: Map<string, FrameBase>): Promise<Decoded> {
   // Camera RAW (and CFA DNG) go to LibRaw in scan mode: linear camera RGB, no white balance, CFA-binned.
   const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'scan', bin: 'cfa' }, raw: LAZY_LIBRAW });
   const lin = linearise(raw, { sha256, ir: false });
@@ -91,23 +91,30 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
     ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
     : `${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
-  // The film base (rebate): the brightest 5 % column band, the rule scan.density uses with no box.
-  const rb = rebateBox(w, h, 3, data);
-  const Treb = [0, 1, 2].map((k) => {
+  // Film layout (CHB-020): the holder's veil comes off the pixels, and the rebate box (film outside the image
+  // frame, never a sprocket hole or the holder) goes into the recipe's scan.rebate. A frame with no holder gets
+  // the veil of the roll opened so far.
+  const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
+  const c = conditionScan(data, w, h, { id: sha256, rollVeil });
+  roll.set(sha256, c.frame);
+  const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
+  const Treb: Vec3 = c.baseT ?? ([0, 1, 2].map((k) => {
     let t = 0, m = 0;
     for (let y = rb.y; y < rb.y + rb.h; y++) for (let x = rb.x; x < rb.x + rb.w; x++) { t += data[(y * w + x) * 3 + k]!; m++; }
     return Math.max(t / Math.max(m, 1), 1e-6);
-  }) as Vec3;
-  notes.push(`base ${fmt3(Treb.map((t) => -Math.log10(t)))} D (columns ${rb.x}–${rb.x + rb.w - 1})`);
-  if (Treb.every((t) => t > 0.97)) notes.push('the brightest columns are at the white level: open gate? set a rebate box');
+  }) as Vec3);
+  if (c.rebate) notes.push(`base ${fmt3(Treb.map((t) => -Math.log10(t)))} D (rebate ${rb.w}×${rb.h} at ${rb.x},${rb.y}, ${c.layout.rebate?.from})`);
+  else notes.push('no rebate found: the base is the brightest 5 % of columns (scan.density default)');
+  if (c.veil) notes.push(`veil ${c.veil.map((v) => v.toExponential(1)).join(' ')} subtracted (${c.veilFrom})`);
+  for (const n of c.notes) notes.push(`${n.code}: ${n.message}`);
   if (settings.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
-  notes.push('scanner flare not corrected');
+  notes.push('scanner flare (scan.flare) not set');
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate };
 }
 
 function catalogOf(data: PhysicsData): Record<string, string[]> {
@@ -135,6 +142,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
   const settings: HostSettings = { dust: false };
+  const roll = new Map<string, FrameBase>();
   let primary: Engine | null = null;
   let label = '';
   let long = o.long ?? DEFAULT_LONG;
@@ -162,7 +170,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     label = `reference · CPU f64${why ? ` (no WebGPU: ${why})` : ''}`;
   }
   const host: HostServices = {
-    decode: (bytes, sha, name) => decodeScan(bytes, sha, name, long, settings),
+    decode: (bytes, sha, name) => decodeScan(bytes, sha, name, long, settings, roll),
     register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,
