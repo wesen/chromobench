@@ -483,3 +483,75 @@ survives the session ending.
 ### Technical details
 - Delegating methods kept on the class (same names, same signatures): `lower`, `uploadU16`, `readU16`, `gaussian`,
   `mix`, `cacheResult`, `reduce`; removed: `fillGrain` (now the module function), `planNode`.
+
+## Step 7: Resume after the session restart; GPU parity of the engine-gpu split
+
+The session restarted after Step 6's checkpoint. A new agent (this one) continues in the same worktree and branch
+(`task/chb-032-housekeeping` at aef2d3d). I read the common brief, the ticket's tasks, this diary in full, and
+`git status` (one untracked folder: the `reference/` drafts the docs sub-agent left). The CHB-008 and CHB-010 audits
+the resume prompt lists are already done and committed (Step 2, 12efc67; `docmgr task list` for both tickets shows
+the "(done: …; remaining: …)" texts and the follow-ups), so the first pending item was the browser parity check of
+the engine-gpu split.
+
+The parity suite passed on the split engine: 40 browser tests, conformance 320/320. Task kiq4 is ticked.
+
+### Prompt Context
+**User prompt (verbatim):** "You continue an interrupted task: CHB-032, **housekeeping — code clean-up and stale ticket audits** in the chromobench monorepo. The previous agent was stopped when the session restarted; its work is committed up to a checkpoint.
+
+**Work ONLY inside this existing git worktree** (do not create a new one): `/home/manuel/code/wesen/chromobench/.claude/worktrees/agent-a51b6b68283982497` on branch `task/chb-032-housekeeping` (last commit aef2d3d). Start every shell command with `cd /home/manuel/code/wesen/chromobench/.claude/worktrees/agent-a51b6b68283982497 && …` and use absolute paths inside it for file edits. Do not touch the main checkout or other worktrees.
+
+Read first:
+1. The common brief: /tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/brief-common-v2.md (rules, checks, diary format, final reply).
+2. The ticket's tasks (`docmgr task list --ticket CHB-032`), which are the spec.
+3. Your diary, which you continue: `ttmp/2026/11/12/CHB-032--housekeeping-code-clean-up-findings-and-stale-ticket-audits-chb-008-chb-010/diary/01-diary.md` — read all steps; Step 6 is the checkpoint with the resume list.
+4. `git status`: an untracked `reference/` draft in the ticket (one of the two docs) — finish it.
+
+Then continue: (1) the pending browser parity check of the engine-gpu split — GPU conformance must stay 320/320 (`STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm test:browser`); (2) the audits of CHB-008 and CHB-010 (verdict DONE/PARTLY/OPEN with file:line evidence per open task, a table in the diary; tick DONE, split PARTLY into \"(done: …; remaining: …)\" plus a new task for the remainder; close a ticket only if nothing remains); (3) the real engines stop importing the mock engine's TIFF shim; one 16-bit TIFF writer; the e2e status-text waits review (switch to `window.chromobench.idle()` where they race); the two docs (undo/history; which engine computes what) as docmgr reference docs with mermaid diagrams, textbook style (definitions first, no analogies); the splits of `packages/dsl/src/host.ts` and the looks and finish kits; a dead-code / unused-exports pass. Behaviour must not change (explain snapshot changes if any). SKIP task dgz9 (store.ts/viewport.ts) — it waits for CHB-031's merge. Don't touch `packages/contract` or `packages/studio-kit/src/cb.ts`; avoid the files CHB-031 is editing (apps/studio/src/main.ts, status-text.ts, first-print.ts, studio-kit frames.ts and args.ts, host decode.ts) beyond import fixes required by your moves.
+
+The user's instruction (verbatim): \"commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)\". Continue the same diary with the next step number: investigation format from /home/manuel/.claude/skills/diary/references/investigation-entry.md, every section in every step; the first new step records the resume and quotes this prompt verbatim. Each clean-up its own commit with green checks; stage named paths only. The owner's Mac is closed: do not use it."
+**Assistant interpretation:** Pick up at Step 6's resume list: parity first, then the remaining clean-ups (e2e
+waits, the two docs, the dsl host and kit splits, dead code), one commit each; dgz9 stays open.
+**Inferred user intent:** Finish the housekeeping ticket without losing what the stopped agent did, and without
+changing behaviour.
+**Commit (code):** see the next commit, "CHB-032: diary step 7 (resume), GPU parity 320/320 on the engine-gpu split; tick kiq4".
+
+### What I did
+- Read the brief, `docmgr task list --ticket CHB-032` (02r5, i6gf, 0tc4, p4cv, c7sw ticked; kiq4 not yet), this
+  diary, `docmgr task list --ticket CHB-008` and `--ticket CHB-010` (Step 2's verdicts and follow-ups are there).
+- `git status`: clean except the untracked `reference/` folder with two drafts
+  (`01-undo-and-history-across-the-layers.md`, 433 lines; `02-which-engine-computes-what.md`, 379 lines).
+- `GPU_PARITY_PORT=5424 CI=1 pnpm --filter @chromobench/gpu test:browser` (background, log in the scratchpad
+  `chb032/gpu-parity.log`).
+- `docmgr task check --ticket CHB-032 --id kiq4`.
+
+### Why
+- Only the GPU project of the browser suite exercises `planGraph`, `combinePass`, `gaussianBlur` and `reduceMeasure`
+  on a device; the full browser suite runs once at the end, with all the clean-ups in.
+
+### What worked
+- `40 passed (1.8m)`; `conformance {"total":320,"passed":320,"failures":[]}`; the output-space parity rows report
+  `maxCodes16: 1` for every space and rendering, the worker tables are bitwise equal
+  (`"differing":0` for solve, pd and print), the OPFS cache round-trips bit for bit.
+
+### What didn't work
+- No failures observed.
+
+### What I learned
+- The audit commit is 12efc67 (Step 6's resume list says b0f6fa0, the hash before the `--amend` recorded in Step 3).
+
+### What was tricky to build
+- N/A (a check).
+
+### What warrants a second pair of eyes
+- N/A.
+
+### What should be done in the future
+- Remaining, in order: the two reference docs (finish and commit), the e2e status-text waits (vuwz), the dsl
+  `host.ts` split (6qs1), the looks and finish kit splits (j38l), dead code (z99j), the full browser suite.
+
+### Code review instructions
+- Re-run: `GPU_PARITY_PORT=5424 CI=1 pnpm --filter @chromobench/gpu test:browser`; look for the `conformance` line.
+
+### Technical details
+- The suite's tests with negative controls still fail their controls as designed (`LOG2_10 = 3.32` pd table
+  `"pass":false`, row-major print matrix `"pass":false`), which the specs assert.

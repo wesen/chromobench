@@ -9,7 +9,7 @@
 - [ ] Docs: undo/history across contract editlog, studio-kit editlog-route, shell history, studio-kit model/history — one page with a sequence diagram <!-- t:m6qo -->
 - [ ] Docs: which engine computes what — StudioEngine host ops (output.frame, view.inspect, invert.classes/classify, P3) vs the physics engines vs the engine worker; one page with a diagram <!-- t:vrrs -->
 - [ ] Review e2e specs that wait on status text (grep toContainText) and switch them to idle()-based waits where they race <!-- t:vuwz -->
-- [ ] Code clean-up: split packages/gpu/src/engine-gpu.ts (1012 lines: pipelines, caches, DAG evaluation, readback) into modules; behaviour and parity unchanged (conformance 320/320) <!-- t:kiq4 -->
+- [x] Code clean-up: split packages/gpu/src/engine-gpu.ts (1012 lines: pipelines, caches, DAG evaluation, readback) into modules; behaviour and parity unchanged (conformance 320/320) <!-- t:kiq4 -->
 - [ ] Code clean-up: split packages/dsl/src/host.ts (804 lines) by vocabulary area; generated bindings and DSL tests unchanged <!-- t:6qs1 -->
 - [ ] Code clean-up: split the looks and finish kits (kits/looks/src/kit.ts 800, kits/finish/src/kit.ts 724) into state/commands/panels modules <!-- t:j38l -->
 - [ ] Code clean-up, after CHB-031 merges and before CHB-029: split packages/shell/src/core/store.ts (775) and packages/shell/src/dom/viewport.ts (723) <!-- t:dgz9 -->
