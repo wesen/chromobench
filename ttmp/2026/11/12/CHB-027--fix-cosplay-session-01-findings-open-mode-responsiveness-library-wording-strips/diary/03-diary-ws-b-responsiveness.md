@@ -392,3 +392,120 @@ status-text.ts working)
 
 ### Technical details
 - Debug probe: `[...rt.renders.slots.values()].filter(s => s.inflight || s.waiting)` → id, lane, keys, gen, shownGen.
+
+## Step 6: The hang after the drag was settle() looping forever in idle tasks
+
+Wall-clock logs on both sides of the worker settled it: the worker computed draft job 9 in 4.3–6.3 s, logged
+`DBG post 9 true 1 1803933` and `DBG replied 9`, but the main thread never logged the reply, and no `messageerror`
+fired. The page had answered 14 quick probes (all within 31 ms, before the reply), then the next `page.evaluate`
+(the hook's `idle()`) never returned: the main thread was stuck in a synchronous loop, so the worker's reply could
+not be delivered. The loop is in the shell: `rt.settle()` calls `scheduler.runIdle({ timeRemaining: () => 50,
+didTimeout: true })`, and `runIdle` runs `while (idleQ.length && (… || deadline.didTimeout))`. A background
+thumbnail render that waits for live work re-queues itself (`RenderQueue.pump`: bg lane and `liveBusy()` →
+`opts.idle(() => this.pump(s))`), so with live work in flight on an asynchronous engine the queue never empties and
+the loop never ends. That is also why the GPU engine's drag "never finished" in the BEFORE runs: the measurement's
+`idle()` hung, not SwiftShader.
+
+The fix (`packages/shell/src/core/cells.ts`): `runIdle` runs only the tasks queued before it started; a task that
+queues itself again runs in the next idle period. Real browsers give `runIdle` a real deadline (12 ms cap without
+`didTimeout`), so users did not hit the endless loop, but the hook (`window.chromobench.idle()`, used by e2e tests)
+did as soon as the engine became asynchronous.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1
+**Assistant interpretation:** Explain the post-drag hang before measuring further.
+**Inferred user intent:** Honest numbers and no hidden hang.
+**Commit (code):** 430bfa1 — "CHB-027 WS-B: idle tasks that requeue themselves run once per idle run (settle() looped forever with an async engine); measurement waits for the change's render"
+
+### What I did
+- Temporary `DBG` logs in `engine-serve.ts` (job start/done/post/replied, a 3 s heartbeat) and `worker-engine.ts`
+  (reply received, `messageerror`), all with `Date.now() % 1e6`; a temporary `scripts/debug-tmp.mjs` driving open →
+  idle → drag → probes. Removed both afterwards (`git checkout 04993aa -- apps/studio/src/host/engine-serve.ts`;
+  `sed -i '/DBG/d' …/worker-engine.ts`; `rm …/debug-tmp.mjs`).
+- `cells.ts`: `let n = this.idleQ.length; while (n-- > 0 && …)`; test in `packages/shell/test/core/core.test.ts`
+  ("a task that queues itself again runs once per idle run, even with a timed-out deadline").
+- Measurement script: `idle()` now first waits until `rt.renders.busy()` is false; drag and typed steps wait for a
+  non-draft render of the main viewer after the action (`settled`); opening waits until the new file is the
+  selected frame and no "opening" status, then for a main-viewer render.
+
+### Why
+- With the fix, `settle()` returns after its 50 rounds even when a render is still running in the worker, so the
+  script must wait for the change's own render instead of trusting `idle()`.
+
+### What worked
+- `npx vitest run packages/shell/test`: 104 passed.
+- The next AFTER run finished every step (Step 8).
+
+### What didn't work
+- Run 2 of the AFTER measurement (before the script fix) reported 0 renders for "type 15 + Enter" and a 37 s
+  negative drag: the open step's `waitForFunction` matched the previous step's "rendered 3 · screen" status (with an
+  asynchronous engine the page is no longer blocked when Playwright polls), so the next steps raced the DNG's open;
+  the drag even started on the NEF's slider ("Time 15.0 seconds → Time 2.23 seconds").
+- An attempt to strip the DBG lines with `sed '/const t0 = …$/{N;}'` mangled `engine-serve.ts`; restored from 04993aa.
+
+### What I learned
+- Any `didTimeout` deadline loop must not run tasks that the loop itself re-queues.
+- Worker console messages reach Playwright late; wall-clock stamps are needed to order events.
+
+### What was tricky to build
+- The symptom (a reply that never arrives) pointed at the worker protocol; the cause was a blocked receiver.
+
+### What warrants a second pair of eyes
+- `cells.ts` is the shell's scheduler core (no workstream owns it); the change only bounds one idle run.
+
+### What should be done in the future
+- Background renders poll by re-queuing an idle task while live work runs; a wake-up when live work finishes
+  (`RenderQueue.after` already pumps bg slots) would make the idle task unnecessary.
+
+### Code review instructions
+- `packages/shell/src/core/cells.ts` `runIdle`; `packages/shell/src/app/runtime.ts:585` `settle`;
+  `packages/shell/src/app/render/queue.ts` `pump`.
+
+### Technical details
+- Stuck state: `vp:main:after` in flight with key `…|draft|865|`, waiting `…|screen|896|`; bg thumbnail slots
+  waiting; `renders 7, presented 5` frozen.
+
+## Step 7: Sampled stages got their own cache
+
+The first complete AFTER run (Step 8, run 3) showed the photo drag's first draft only after 8.4 s although a
+draft is ≈ 22 k pixels. The cause: sampled ('S:') and full-resolution ('F:') images shared one LRU of 48 entries;
+every evaluation adds ≈ 7 sampled entries, and a sampled hit returns without touching the full image, so the
+film stages of the photo (couple, halation, grain at full resolution, seconds each) aged out and were recomputed
+on the next new grid. Sampled stages now live in their own LRU (8× the entries, a quarter of the bytes).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1
+**Assistant interpretation:** Make drafts as cheap as designed.
+**Inferred user intent:** Fluid drags.
+**Commit (code):** c94a3d4 — "CHB-027 WS-B: sampled stages in their own LRU, so draft and screen grids never evict the full-resolution negative and film stages"
+
+### What I did
+- `RefEngine`: `full` (F:) and `grid` (S:) LRUs; test "previews on many grids never push the full-resolution
+  stages out of the cache" (`cacheLimit: 8`, ten grids, `computed.full` unchanged).
+
+### Why
+- With one shared LRU the test fails (full stages recomputed); with two it passes.
+
+### What worked
+- `npx vitest run packages/core/test/engine-ref-sampled.test.ts packages/core/test/engine-ref.test.ts apps/studio/test/worker-engine.test.ts`: 369 passed (incl. conformance).
+
+### What didn't work
+- N/A.
+
+### What I learned
+- A cache hit at one level must keep the level below it alive, or the levels need separate budgets.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- Budgets: full 48 entries / 768 MB, grid 384 entries / 192 MB, results 48 / 192 MB (`REF_CACHE` in engines.ts).
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `packages/core/src/engine-ref.ts` constructor, `computeAt`, `staged`, `warningsOf`.
+
+### Technical details
+- N/A.
