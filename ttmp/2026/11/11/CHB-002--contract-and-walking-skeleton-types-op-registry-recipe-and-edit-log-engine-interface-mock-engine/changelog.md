@@ -12,3 +12,7 @@ Contract v0 (CONTRACT_VERSION 0.1.0) implemented on branch task/chb-002-contract
 
 - /home/manuel/code/wesen/chromobench/packages/contract/CONTRACT-DECISIONS.md — every contract decision and the change-note template
 - /home/manuel/code/wesen/chromobench/packages/contract/catalog.snapshot.json — v0 baseline for contract:check
+
+## 2026-11-11
+
+Closed: contract v0, mock engine, conformance and the M1 page done; contract continued in CHB-017 (0.2) and CHB-024 (0.3)

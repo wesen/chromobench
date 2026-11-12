@@ -1249,3 +1249,73 @@ timeout commit, f55cfd0 (agent)
 ### Technical details
 
 - Assistant: Assistant module in classic/lab; "Scripted demo (offline)" needs no key. MCP: `bridge/README.md`.
+
+## Step 19: CHB-012 merged; full browser suite green on main; ticket sweep
+
+The last feature agent, CHB-012 (digital RAW → virtual film negative → paper, on both engines, plus a photo mode
+in the studio), finished and was merged. Main now passes 2631 unit tests (7 skipped), the full browser suite (86,
+GPU conformance 320/320), the bridge's Go tests, and the studio builds. CHB-002 and CHB-024 have no open tasks and
+were closed. This ends the build-out the user asked for in Step 16; what remains needs the user's input or is a
+second round of smaller tasks.
+
+### Prompt Context
+
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** Finish the wave, verify main end to end, sweep tickets.
+**Inferred user intent:** A complete, verified app on main.
+**Commit (code):** 681a28b — "Merge task/chb-012-forward"
+
+### What I did
+
+- `git merge --no-ff task/chb-012-forward`: conflicts in `apps/studio/src/host/studio-engine.ts` (roll's
+  flare/baseT fields + photo `kind`: kept both), `apps/studio/src/main.ts` (initial recipe: digital-raw →
+  `photoRecipe`, else `firstPrint(withMeasured(…))` with the `?filtration=1` bake), `packages/gpu/src/engine-gpu.ts`
+  (imports; BARRIER_OPS with both `retouch.heal` and `...FILM_OPS`; execute: the retouch case, then the film
+  default), `packages/gpu/src/parity/page.ts` (both test lists). Verified the photo path in `engines.ts` returns
+  before `conditionScan`.
+- `pnpm install --offline`; typecheck clean; lint 325 file checks; gen:check 26 files; `pnpm test` "85 passed (85)
+  files, 2631 passed | 7 skipped"; studio build ✓ 4.32 s; `CI=1 pnpm test:browser` "86 passed (1.9m)", conformance
+  `{"total":320,"passed":320}` on the default ports (all free).
+- Removed the worktree; closed CHB-002 and CHB-024 with `docmgr ticket close`.
+
+### Why
+
+- The browser suite on main with default ports is the end-to-end check none of the agents could run in isolation.
+
+### What worked
+
+- Everything above.
+
+### What didn't work
+
+- No failures in this step.
+
+### What I learned
+
+- With the 30 s timeout and no parallel agents, the full unit suite is stable.
+
+### What was tricky to build
+
+- engine-gpu.ts's `execute` switch: CHB-022 added a case before the default, CHB-012 replaced the default — both
+  kept.
+
+### What warrants a second pair of eyes
+
+- CHB-012: the hanatos spectra table is not committed (tests use core's sigmoid fit: neutrals within 0.05 stops,
+  saturated colours up to ~0.7 stops off); no film panel in the studio yet; tiled export of film blur ops may seam.
+
+### What should be done in the future
+
+- User input: the photographer's scans and setup (CHB-013), a real-GPU check (CHB-023 stage 5), decisions: real mode
+  default (C4), CHB-007 DR-1/DR-2, CHB-004 licences, the "(review)" items in CONTRACT-DECISIONS.md 0.2 and 0.3.
+- A residual round: open tasks in CHB-008 (12), CHB-010 (10), CHB-019 (9), CHB-021 (9), CHB-011 (6), CHB-004 (5),
+  CHB-022 (5), CHB-020 (4), CHB-018 (3); CHB-016's 12 design-implementation tasks need re-checking against what
+  CHB-018/019 built.
+
+### Code review instructions
+
+- `git log --first-parent --oneline -20 main`; `apps/studio/DEMO.md`; `bridge/README.md`.
+
+### Technical details
+
+- Tickets complete: CHB-002, 003, 005, 006, 009, 024. Parked: CHB-014, 015.

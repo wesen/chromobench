@@ -1,7 +1,7 @@
 ---
 Title: 'Contract 0.3: roll records, batches, flare, flash, density masks, framing, retouch, shared vocabulary'
 Ticket: CHB-024
-Status: active
+Status: complete
 Topics:
     - architecture
     - testing
@@ -11,7 +11,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T21:49:58.584790322-05:00
+LastUpdated: 2026-11-11T23:40:29.423275657-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

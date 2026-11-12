@@ -1,7 +1,7 @@
 ---
 Title: 'Contract and walking skeleton: types, op registry, recipe and edit log, engine interface, mock engine'
 Ticket: CHB-002
-Status: active
+Status: complete
 Topics:
     - architecture
     - js-api
@@ -13,7 +13,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:21.755477419-05:00
+LastUpdated: 2026-11-11T23:40:29.077974667-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
