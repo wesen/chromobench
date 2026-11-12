@@ -34,6 +34,8 @@ export interface HostOptions {
    * on the CPU, in the engine worker, and only the pixels a preview shows (sampled previews).
    */
   refLong?: number;
+  /** The reference engine's physics: 'exact' (every pixel through the physics) or 'tabulated' (core's tables, as the GPU engine). */
+  refMode?: 'exact' | 'tabulated';
   /** Decode and run the reference engine in the engine worker (default true); false: on this thread (CHB-023's way). */
   worker?: boolean;
   /** Status callback while the engine starts. */
@@ -70,6 +72,7 @@ export interface HostEngine {
 
 const DEFAULT_LONG = 4000;
 const DEFAULT_REF_LONG = 512;
+const DEFAULT_REF_MODE: 'exact' | 'tabulated' = 'exact';
 /** The reference engine's cache: node images at 1024 × 683 (?refLong=1024) are ≈ 22 MB each (4 channels, f64). */
 const REF_CACHE = { cacheLimit: 48, cacheBytes: 768 * 2 ** 20 };
 
@@ -154,6 +157,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
   const settings: HostSettings = { dust: false };
+  const refMode = o.refMode ?? DEFAULT_REF_MODE;
   const roll = new Map<string, FrameBase>();
   let primary: Engine | null = null;
   let label = '';
@@ -181,7 +185,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   if (client) {
     say('starting the engine worker…');
     try {
-      const init = await client.init({ engine: primary ? 'none' : 'reference', librawWasmUrl, packsBase: new URL('/packs/', location.href).href, sampled: true, ...REF_CACHE });
+      const init = await client.init({ engine: primary ? 'none' : 'reference', librawWasmUrl, packsBase: new URL('/packs/', location.href).href, sampled: true, mode: refMode, ...REF_CACHE });
       if (!primary) primary = new WorkerEngine(client, init.caps!);
     } catch (e) {
       console.warn('engine worker failed to start; running on the main thread', e);
@@ -190,10 +194,10 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     }
   }
   const inWorker = client !== null;
-  if (!primary) primary = new RefEngine({ data, sampled: true, ...REF_CACHE });
+  if (!primary) primary = new RefEngine({ data, sampled: true, mode: refMode, ...REF_CACHE });
   if (primary.id === 'reference') {
     long = o.refLong ?? DEFAULT_REF_LONG;
-    label = `reference · CPU f64${inWorker ? ' (worker)' : ''}${why ? ` (no WebGPU: ${why})` : ''}`;
+    label = `reference · CPU f64${refMode === 'tabulated' ? ' tabulated' : ''}${inWorker ? ' (worker)' : ''}${why ? ` (no WebGPU: ${why})` : ''}`;
   }
   // the reference engine in the worker keeps the decoded pixels there ('register': none come back, the register
   // hook below makes the last decode the engine's); the GPU engine gets them back as a transferable ('return')

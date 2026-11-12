@@ -20,6 +20,8 @@ export interface InitJob {
   cacheBytes?: number;
   /** RefEngine computes previews on the sample grid (CHB-027). */
   sampled?: boolean;
+  /** RefEngine's physics: 'exact' per pixel, or 'tabulated' through core's tables as the GPU engine (CHB-031 F10). */
+  mode?: 'exact' | 'tabulated';
 }
 
 export interface DecodeJob {

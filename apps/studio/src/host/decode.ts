@@ -70,6 +70,24 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
   return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
 }
 
+/** A box (working px) scaled by kx, ky, kept inside its old edges (a strip frame's box is inset already). */
+export function scaleBox(b: Box, kx: number, ky: number): Box {
+  const x = Math.ceil(b.x * kx), y = Math.ceil(b.y * ky);
+  return { x, y, w: Math.max(1, Math.floor((b.x + b.w) * kx) - x), h: Math.max(1, Math.floor((b.y + b.h) * ky) - y) };
+}
+
+/**
+ * The working scale of a strip (CHB-031 F20, F10): `long` is meant for one picture, so a strip of n frames at that
+ * size leaves each frame a fraction of it (the reference engine's 512 px over raw010's three frames left ≈ 220 px a
+ * frame: blocky). The strip is sized so its largest frame gets ≈ `long` px on its long side — at most 4 × `long` for
+ * the whole strip and never above the file's own size. `s` is the scale the boxes were found at (working / file).
+ */
+export function stripScale(s: number, boxes: readonly Box[], long: number, W: number, H: number): number {
+  if (!(long > 0) || s >= 1 || !boxes.length) return s;
+  const frameLong = Math.max(...boxes.map((b) => Math.max(b.w, b.h)));
+  return Math.max(s, Math.min(1, (s * long) / Math.max(1, frameLong), (4 * long) / Math.max(W, H)));
+}
+
 /** Decode → linear → area-averaged working image → conditioning. */
 export async function decodeScan(bytes: Uint8Array, sha256: string, name: string, o: DecodeOptions): Promise<Decoded> {
   const roll = o.roll;
@@ -78,8 +96,8 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   const lin = linearise(raw, { sha256, ir: false });
   const W = lin.width, H = lin.height;
   const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
-  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
-  const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  let w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  let data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
   const cam = raw.meta.camera ? ` (${raw.meta.camera.make} ${raw.meta.camera.model})` : '';
   const notes: string[] = [raw.meta.format === 'raw'
     ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
@@ -110,14 +128,29 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   for (const n of c.notes) notes.push(`${n.code}: ${n.message}`);
   // a strip of several frames (CHB-027 WS-D, F16): one frame per box, all on this decode (shared base and veil)
   const strip = guess.kind === 'negative' || !guess.confident ? stripFrames(data, w, h, { layout: c.layout }) : null;
+  let boxes = strip?.split ? strip.frames.map((f) => f.box) : null;
+  let rebate = c.rebate;
   if (strip?.split) notes.push(`strip of ${strip.frames.length} frames along ${strip.axis} (confidence ${strip.confidence.toFixed(2)})`);
+  // a strip's working image sized for its frames (F20): the boxes and the rebate scale with it; base, veil and the
+  // guess are averages and stay (measured on the smaller image, as for a single frame)
+  const s2 = boxes ? stripScale(s, boxes, o.long, W, H) : s;
+  if (boxes && s2 > s * 1.05) {
+    const w2 = Math.max(1, Math.round(W * s2)), h2 = Math.max(1, Math.round(H * s2));
+    const kx = w2 / w, ky = h2 / h;
+    data = region(lin, { x: 0, y: 0, w: W, h: H }, w2, h2, { channels: 3 });
+    boxes = boxes.map((b) => scaleBox(b, kx, ky));
+    rebate = rebate ? scaleBox(rebate, kx, ky) : rebate;
+    notes.push(`strip working image ${w2}×${h2} (≈ ${Math.max(...boxes.map((b) => Math.max(b.w, b.h)))} px a frame)`);
+    w = w2;
+    h = h2;
+  }
   if (o.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess, frames: strip?.split ? strip.frames.map((f) => f.box) : null };
+  return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess, frames: boxes };
 }
 
 /** Decodes a file in the given mode. */

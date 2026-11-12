@@ -11,8 +11,9 @@
 // `frame_<sha8>-<n>`, log key `<sha>:<mode>:<n>`. A file with one frame keeps its id and key without an index.
 import {
   EditLog, fail, Graph, sha256Hex,
-  type AgentMode, type Box, type EditLogData, type Engine, type FrameRecipe, type SourceInfo, type SourceRef,
+  type AgentMode, type Box, type EditLogData, type Engine, type FrameRecipe, type Mutation, type Orientation, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
+import { stripOrientation } from '../model/orient.ts';
 import { defaultFor } from '../model/recipes.ts';
 import type { KV } from './kv.ts';
 
@@ -105,6 +106,11 @@ export interface FramesOptions {
   mode?: AgentMode;
   now?: () => number;
   opener?: SourceOpener;
+  /**
+   * How the library last had a file open (CHB-031 F18), by hash: a file it knows opens that way when the caller
+   * says 'auto' (a frame of the library opened again after a restart is what it was, not a new guess).
+   */
+  known?: (sha: string) => 'photo' | 'negative' | null | undefined;
 }
 
 /** The KV key of a frame's log: the hash and the mode, and the frame's place on a strip. */
@@ -112,9 +118,37 @@ export const logKey = (sha: string, kind: FrameKind, index?: number): string => 
 /** The id of a frame of a strip (a whole file keeps the recipe's `frame_<sha8>`). */
 export const stripFrameId = (sha: string, index: number): string => `frame_${sha.slice(0, 8)}-${index}`;
 
-/** A strip frame's recipe: its id and its box as the crop. */
-export function stripFrameRecipe(r: FrameRecipe, id: string, box: Box): FrameRecipe {
-  return { ...r, frame: id, view: { ...r.view, frame: { ...r.view.frame, crop: { ...box } } } };
+/** A strip frame's recipe: its id, its box as the crop and, when given, the strip's orientation (F20). */
+export function stripFrameRecipe(r: FrameRecipe, id: string, box: Box, orientation?: Orientation): FrameRecipe {
+  return { ...r, frame: id, view: { ...r.view, frame: { ...r.view.frame, crop: { ...box }, ...(orientation ? { orientation } : {}) } } };
+}
+
+/**
+ * A strip frame's saved log from a decode at another working size (CHB-031: the reference engine decodes strips
+ * larger now; the GPU engine decodes at another size again): its crop and rebate are working-image pixels of that
+ * size. A strip frame's crop sits on its frame, so its centre scales with the box's centre from the image origin:
+ * when that says the scale changed (by more than a third), the crop and the rebate are scaled to this decode, as one
+ * 'auto' step. The exact ratio is the frame's first box (the log's initial crop) when that agrees. `W × H`: this
+ * decode's working image.
+ */
+export function rescaleStripLog(log: EditLog, box: Box, W: number, H: number): boolean {
+  const r = log.committed;
+  const crop = r.view?.frame?.crop;
+  if (!crop || crop.w <= 0 || crop.h <= 0) return false;
+  const bx = box.x + box.w / 2, by = box.y + box.h / 2;
+  const est = ((crop.x + crop.w / 2) * bx + (crop.y + crop.h / 2) * by) / Math.max(1e-9, bx * bx + by * by);
+  if (!(est > 0) || Math.abs(Math.log(est)) < 0.3) return false;
+  const was = log.toJSON().initial.view?.frame?.crop;
+  const exact = was && was.w > 0 && was.h > 0 && Math.abs(Math.log((box.w / was.w) * est)) < 0.2 ? [box.w / was.w, box.h / was.h] as const : null;
+  const [kx, ky] = exact ?? [1 / est, 1 / est];
+  const scale = (b: Box): Box => {
+    const x = Math.min(W - 1, Math.max(0, Math.round(b.x * kx))), y = Math.min(H - 1, Math.max(0, Math.round(b.y * ky)));
+    return { x, y, w: Math.max(1, Math.min(W - x, Math.round(b.w * kx))), h: Math.max(1, Math.min(H - y, Math.round(b.h * ky))) };
+  };
+  const ms: Mutation[] = [{ op: 'set', path: 'view.frame.crop', value: scale(crop) }];
+  if (r.scan?.rebate) ms.push({ op: 'set', path: 'scan.rebate', value: scale(r.scan.rebate) });
+  log.apply(ms, 'auto', 'Working size changed');
+  return true;
 }
 
 /** A decoded file: what every frame of it shares. */
@@ -126,6 +160,7 @@ export class Frames {
   mode: AgentMode;
   private readonly now: (() => number) | undefined;
   private readonly opener: SourceOpener;
+  private readonly known: FramesOptions['known'];
   private readonly map = new Map<string, FrameEntry>();
   private readonly readers = new Map<string, () => Promise<Uint8Array>>();
   /** the files decoded now, by hash (their frames may be fewer: one removed) */
@@ -140,6 +175,7 @@ export class Frames {
     this.kv = o.kv ?? null;
     this.mode = o.mode ?? 'ask';
     this.now = o.now;
+    this.known = o.known;
     this.opener = o.opener ?? (async (src, as) => ({ info: await engine.open(src), kind: kindOf(as === 'photo' ? 'photo' : 'negative') }));
   }
 
@@ -184,7 +220,8 @@ export class Frames {
   /** Opens bytes and says what happened: opened, resumed, already open, or open in the other mode. */
   async openFile(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<OpenResult> {
     const sha = await hashBytes(bytes);
-    const as = o.as ?? 'auto';
+    // 'auto' on a file the library knows: the way it had it open (F18), not a new guess
+    const as: OpenAs = (o.as ?? 'auto') === 'auto' ? (this.known?.(sha) ?? 'auto') : o.as!;
     // no reader from the host: a copy (an engine may transfer the bytes it decodes to a worker)
     const copy = o.read ? null : bytes.slice();
     this.readers.set(sha, o.read ?? (async () => copy!));
@@ -250,6 +287,8 @@ export class Frames {
       : [{ index: 0, box: null as Box | null, id: present.length === 1 && !present[0]!.strip ? present[0]!.id : null }];
     const made: FrameEntry[] = [];
     let resumed = 0;
+    // frames cut from a strip read the way the strip runs (F20: landscape frames on a vertical strip are sideways)
+    const turn = d.boxes ? stripOrientation(d.boxes) : 'none';
     for (const p of plan) {
       const open = keep.find(e => (p.id ? e.id === p.id : !e.strip));
       if (open) {
@@ -261,11 +300,12 @@ export class Frames {
       const saved = await this.savedLog(sha, d.kind, p.index || undefined);
       const opts = { mode: this.mode, graph, ...(this.now ? { now: this.now } : {}) };
       let defaults = defaultFor(sha, d.name, d.kind);
-      if (p.box) defaults = stripFrameRecipe(defaults, p.id!, p.box);
+      if (p.box) defaults = stripFrameRecipe(defaults, p.id!, p.box, turn);
       let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && initial.kind === d.kind ? initial : null;
-      if (first && p.box) first = stripFrameRecipe(first, p.id!, p.box);
+      if (first && p.box) first = stripFrameRecipe(first, p.id!, p.box, turn);
       const log = saved ? new EditLog(saved, opts) : EditLog.create(first ?? defaults, { ...opts, by: 'auto' });
       if (saved) resumed++;
+      if (saved && p.box) rescaleStripLog(log, p.box, d.info.width, d.info.height);
       const strip = p.box && d.boxes ? { index: p.index, of: d.boxes.length, box: { ...p.box } } : undefined;
       made.push({ id: p.id ?? log.frame, sha, name: d.name, kind: d.kind, info: d.info, graph, log, initial: log.toJSON().initial, ...(strip ? { strip } : {}) });
     }

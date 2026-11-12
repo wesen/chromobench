@@ -64,7 +64,7 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
         if (job.engine === 'reference') {
           const data = await loadDefaultPhysicsData(job.packsBase);
           engine = new RefEngine({
-            data, yield: macrotask, sampled: job.sampled ?? true,
+            data, yield: macrotask, sampled: job.sampled ?? true, ...(job.mode ? { mode: job.mode } : {}),
             ...(job.cacheLimit ? { cacheLimit: job.cacheLimit } : {}), ...(job.cacheBytes ? { cacheBytes: job.cacheBytes } : {}),
           });
         }

@@ -223,12 +223,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -293,7 +297,7 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 121 · keys 104 in 15 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 125 · keys 104 in 15 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -373,12 +377,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -406,7 +414,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 77 · keys 29 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 29 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
@@ -595,12 +603,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -649,7 +661,7 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 103 · keys 74 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 107 · keys 74 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
@@ -907,12 +919,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -940,7 +956,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 80 · keys 82 in 12 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 84 · keys 82 in 12 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1076,12 +1092,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -1159,7 +1179,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 129 · keys 63 in 8 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 133 · keys 63 in 8 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1280,12 +1300,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -1329,7 +1353,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 95 · keys 52 in 5 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 99 · keys 52 in 5 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1406,12 +1430,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -1439,7 +1467,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 77 · keys 26 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 26 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1479,12 +1507,16 @@ commands
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
   frame.remove "τ" (Frame) Del ← cb.core
+  frame.rotateLeft "Rotate Left" (Frame) ← cb.core
+  frame.rotateRight "Rotate Right" (Frame) ← cb.core
+  frame.flip "Flip Left to Right" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
   file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
   file.openAs.photo "Open as Photos" (File) ← cb.core
   file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
@@ -1512,7 +1544,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 77 · keys 23 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 23 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `

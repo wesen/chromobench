@@ -68,11 +68,11 @@ export const menus = m =>
     .menu('File', [
       // the host's actions (CHB-027); hidden where the host has none (the dev host, tests)
       'file.open', 'file.openFolder', 'file.reopenFolder',
-      { label: 'Open As', items: ['file.openAs.auto', 'file.openAs.photo', 'file.openAs.negative', '-', 'file.dust'] },
+      { label: 'Open As', items: ['file.openAs.auto', 'file.openAs.photo', 'file.openAs.negative', 'file.openAs.keep', '-', 'file.dust'] },
       '-', 'file.export', 'file.saveRecipe', '-', 'app.palette',
     ])
     .menu('Edit', ['edit.undo', 'edit.redo', '-', 'proposal.approveAll'])
-    .menu('Frame', ['frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.reopenAsPhoto', 'frame.reopenAsNegative', 'frame.remove', '-', 'frame.next', 'frame.previous', '-', 'snapshot.new', 'probe.pin', 'exposure.add', 'print.applyToSelection'])
+    .menu('Frame', ['frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.rotateLeft', 'frame.rotateRight', 'frame.flip', '-', 'frame.reopenAsPhoto', 'frame.reopenAsNegative', 'frame.remove', '-', 'frame.next', 'frame.previous', '-', 'snapshot.new', 'probe.pin', 'exposure.add', 'print.applyToSelection'])
     .menu('View', ['view.beforeAfter', 'view.sideBySide', '-', 'view.fit', 'view.zoomIn', 'view.zoomOut', '-', 'view.layout', 'app.theme'])
     .menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'workspace.reset'])
     .menu('Help', ['app.shortcuts', 'app.diagnostics']);
