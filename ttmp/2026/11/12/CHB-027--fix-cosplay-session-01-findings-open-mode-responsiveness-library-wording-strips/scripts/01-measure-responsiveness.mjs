@@ -32,6 +32,9 @@ const SHOTS = arg('shots', '');
 const EXTRA = arg('query', '');
 const TIMEOUT = Number(arg('timeout', '240000'));
 const STEP_TIMEOUT = Number(arg('step-timeout', '180000'));
+// --mac: the owner's M1 Max (Chrome, Metal WebGPU) through the Playwright server and tunnel of scripts/mac-README.md
+// (take the lock first); the WebGPU presenter there, not Canvas2D
+const MAC = process.argv.includes('--mac');
 
 const have = [NEF, DNG].filter((f) => existsSync(f));
 if (!have.length) {
@@ -184,13 +187,15 @@ async function typed(page, label, text = '15') {
 }
 
 async function run(engine) {
-  const browser = await chromium.launch({ channel: 'chromium', args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'] });
-  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  const browser = MAC
+    ? await chromium.connect('ws://127.0.0.1:9333/', { headers: { 'x-playwright-launch-options': JSON.stringify({ channel: 'chrome', headless: false }) } })
+    : await chromium.launch({ channel: 'chromium', args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'] });
+  const page = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(probe);
   const t = Date.now();
-  await page.goto(`${BASE}/?nosw&fresh&canvas2d&engine=${engine}${EXTRA ? `&${EXTRA}` : ''}`);
+  await page.goto(`${BASE}/?nosw&fresh${MAC ? "" : "&canvas2d"}&engine=${engine}${EXTRA ? `&${EXTRA}` : ''}`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: TIMEOUT });
   const bootMs = Date.now() - t;
   await page.evaluate(() => window.__wsb.hook());
