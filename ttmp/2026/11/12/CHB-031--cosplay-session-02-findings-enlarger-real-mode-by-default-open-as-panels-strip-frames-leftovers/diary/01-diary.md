@@ -322,3 +322,74 @@ before CHB-031, and the tester's brief.
 ### Technical details
 - Removed export names: scratchpad `removed-exports.txt` (from `git show 9eca10d`); CHB-032's full scanner report
   is `ttmp/2026/11/12/CHB-032--…/various/01-unused-exports-after.txt`.
+
+## Step 6: WS-B merged; all CHB-031 code on main; dgz9 and session 03 started
+
+WS-B (open, strips and library) finished with main merged in twice and every check green (unit 2770 passed; browser
+101 passed on its ports). I reviewed the riskier changes, merged it as `7e96726`, and removed its worktree and
+branch. All CHB-031 code and all of CHB-032 except dgz9 are now on main. Since WS-B touches neither `store.ts` nor
+`viewport.ts`, I started dgz9 (the shell split) in its own worktree right away instead of after the cosplay
+re-run. I then rebuilt the :4650 preview from main and launched the session-03 tester (Sonnet).
+
+### Prompt Context
+**User prompt (verbatim):** none new (see step 4).
+**Assistant interpretation:** Merge B, verify, start the remaining work in parallel.
+**Inferred user intent:** CHB-031 done and checked by a cosplay re-run; CHB-032 finished; then CHB-029.
+**Commit (code):** 7e96726 — "Merge task/chb-031-open-strips (CHB-031 WS-B: F21 selection, F18 Open As reset and pill, F20 strip orientation/working size/gap base, F22 render-queue spin and binned RAW decode, F10 tabulated CPU previews at 640 px)"; b2bec93 (CHB-028 task); 15bd6df (CHB-031 tasks)
+
+### What I did
+- Checked WS-B's diary: steps 1–11, each with all eleven sections.
+- Reviewed `packages/shell/src/app/render/queue.ts`. A waiting background render no longer re-queues itself from an
+  idle callback while live work runs; `after()` and `cancel()` release it (`releaseBackground`). That loop was the
+  "core spinning against the engine worker" behind part of F22.
+- Reviewed `apps/studio/src/host/decode.ts`. Binned RAW decode applies only when `0 < long ≤ 1024` (the CPU
+  engine's working size). The GPU's 4000 px and `long = 0` still read the full demosaic. Strips are sized by
+  `stripScale` so each frame gets about `long` px, and `gapBase` reads a strip's base from the gaps between frames.
+- Followed the export path while checking that binned decode never reaches an export. An export has the working
+  image's size (`apps/studio/src/host/export.ts:4-5`), so on the CPU engine it is 640 px; that predates WS-B
+  (512 px before). Added CHB-028 task "Exports at the file's own size on both engines".
+- Merged with `--no-ff`. `git diff --quiet bf98546 HEAD -- . ':!ttmp'` showed main's code identical to WS-B's head,
+  where the agent ran the full checks, so I did not re-run them.
+- Stopped the WS-B agent (it reported waiting on background work), checked its worktree was clean, removed the
+  worktree and deleted the branch. One more `vite preview --host` process on :4173 is the user's own (parent: a
+  kitty terminal's zsh, started 17:37), not an agent's; left running.
+- CHB-031 tasks: checked l1ny (F8/F9/F12 in WS-A, F10 in WS-B). Added two from WS-B: the decode note still says
+  "film edge found" when a strip's base comes from the gaps, and there is no 1:1 focus check on the CPU engine.
+- Launched an agent for CHB-032 dgz9 in a new worktree (branch `task/chb-032-store-viewport`, ports 5421–5424,
+  continuing the CHB-032 diary at step 16) and told it to merge main (WS-B) before finishing.
+- Stopped the old-build preview, rebuilt `apps/studio/dist-current` from 15bd6df, served it at :4650, and confirmed
+  the bundle has "No mask" (WS-A) and "tabulated previews" (WS-B). Launched the session-03 tester with the brief
+  from step 5, adding a note about timing while another agent runs test suites (medians, `uptime`).
+
+### Why
+- dgz9 is mechanical and does not overlap anything in flight, so running it during the cosplay session saves a
+  serial step before CHB-029.
+
+### What worked
+- Three branches merged with identical-tree checks. The only conflicts were semantic ones (RefEngine data), and the
+  agents fixed them on their own branches.
+
+### What didn't work
+- N/A.
+
+### What I learned
+- On the CPU engine the export size equals the preview's working size. The dad's Mac has WebGPU (4000 px), but a
+  fallback user would export 640 px files without being told.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- WS-B's tabulated CPU previews differ from exact by up to 4.2 8-bit levels on negatives (its diary step 6). Exports
+  stay exact, so preview and export can differ slightly on the CPU engine, as they already do on the GPU.
+
+### What should be done in the future
+- On the tester's report: commit session 03 (named paths; not the profiles), fold its verdicts into CHB-026
+  findings, decide what follows. On dgz9's report: review and merge, then close CHB-032 if only follow-ups remain.
+  Then close CHB-031 and start CHB-029.
+
+### Code review instructions
+- `git show 7e96726 --stat`; WS-B diary steps 5–11.
+
+### Technical details
+- Remaining CHB-031 tasks: b50a (session 03), srvr and 8iv8 (WS-A edges), two WS-B leftovers.
