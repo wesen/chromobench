@@ -428,3 +428,65 @@ launched a cheaper-model tester (Sonnet) to re-run session 01 against main, per 
 
 ### Technical details
 - Open CHB-027 tasks: m5pv (re-run, running), 5dta (branch clean-up).
+
+## Step 8: The re-run (session 02): 11 fixed, 3 partly, 1 open, 1 not reproduced, 7 new; a privacy slip in my commit
+
+The Sonnet tester re-ran session 01 against main (3703d0a) on the CPU engine and wrote a full diary and an
+experience report with a before/after table (CHB-026 `sessions/02-sonnet-rerun-session-01/`). Its most important
+new finding (F17): Time and Aperture do nothing in the default enlarger mode `normalised`, while the controls are
+shown and recorded. It also reported that my step-7 commit had swept its browser profile (IndexedDB and cache with
+thumbnails of the private photos) into git. I removed it from history (the commit was the unpushed tip) and made
+browser profiles ignored.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Acceptance check for CHB-027; keep private data out of the repository.
+**Inferred user intent:** Know what is really fixed, from an independent tester.
+**Commit (code):** 7130bbd (amended step-7 commit, replaces e4088c0), 3d05fc1 (session 02 and F17–F23)
+
+### What I did
+- `git log -- …/sessions`: only e4088c0 (HEAD) contained the session folder: 300 files under `profile/`
+  (11 382 582 bytes), plus 7 scripts and 11 early screenshots.
+- `git rm -r --cached` the session folder, `.gitignore` += `ttmp/**/sessions/*/profile/` and `**/chromium-profile/`,
+  `git commit --amend --no-edit` → 7130bbd; verified `git ls-tree -r HEAD | grep -c /profile/` = 0.
+- Read `packages/core/src/print/enlarger.ts` ("Real mode: the setting's optics … Normalised mode ignores them") and
+  the catalogue default (`mode: 'normalised'`).
+- Committed the finished session folder (diary 10 steps, report, 49 shots, scripts; no profile) and F17–F23 in
+  CHB-026's findings, with a correction note for session 01's unverified "the picture is lighter".
+
+### Why
+- Amending was safe: local repository, no remote, the commit was the tip. The browser-profile files are derived
+  private data and bulky cache; screenshots of the app stay in the ticket by the existing convention.
+
+### What worked
+- Verdicts: fixed F1–F7, F11, F13, F15, F16; partly F8, F9, F12; not fixed F10 (CPU 512 px, expected); not
+  reproduced F14. Worst stall 517 ms (typing 1000); drags 0 stalls; strip open 2.6 s with no stall.
+
+### What didn't work
+- My `git add ttmp` in Step 7 added a directory another agent was writing to. Cause: committing a whole tree while a
+  tester was active in it.
+
+### What I learned
+- The tester's pixel measurement (mean grey of the picture area at several times) caught what my session 01
+  narrative missed: a control that records but does not act.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The amended-away objects stay in `.git` (reflog) until `git reflog expire --expire=now --all && git gc --prune=now`;
+  nothing was pushed.
+
+### What should be done in the future
+- Never `git add` a ticket tree while a tester writes in it; stage named paths.
+- F17 needs the owner's decision on the enlarger default (open question C4: real mode by default), or the Time and
+  Aperture controls must be hidden or remapped in normalised mode.
+- F18–F23 and the partly-fixed F8, F9, F12 and F10 (CPU) go to a follow-up ticket; then close CHB-027 and delete
+  the merged branches and agent worktrees (task 5dta).
+
+### Code review instructions
+- `git show 7130bbd --stat`; `.gitignore`; CHB-026 `various/02-findings.md` (session 02 section).
+
+### Technical details
+- Tester scripts: CHB-026 `sessions/02-sonnet-rerun-session-01/scripts/` (`lib.mjs`, `s01`–`s18`;
+  `s10-does-time-matter.mjs` measures the picture's mean grey).
