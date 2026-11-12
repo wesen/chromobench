@@ -1319,3 +1319,71 @@ second round of smaller tasks.
 ### Technical details
 
 - Tickets complete: CHB-002, 003, 005, 006, 009, 024. Parked: CHB-014, 015.
+
+## Step 20: CraftKit design system merged (CHB-025)
+
+The user noticed the studio does not look like CraftKit Studio. Cause: CraftKit's tokens had been ported as a
+`lightroom` theme that no variant used (all used `chromogen`, from the CHB-002 request), CraftKit's app-level CSS was
+never ported, and 41 literal colours sat in studio-kit/app CSS. CHB-025 made CraftKit the default theme with a
+runtime switch (View ▸ Theme, View ▸ Interface Gray), moved all colours to tokens with a lint check, ported
+CraftKit's app styling onto studio-kit components and took screenshots of every variant. Merged; all checks green.
+
+### Prompt Context
+
+**User prompt (verbatim):** "what about using the design system / tokens from craft kit? things look a bit different?"
+**Assistant interpretation:** Adopt CraftKit's design system as the studio's look.
+**Inferred user intent:** The studio should look like the CraftKit prototype he built.
+**Commit (code):** c30cef5 (CHB-025 ticket), 675376f (merge task/chb-025-design-system: b0f0263, d979730)
+
+### What I did
+
+- Diagnosed: `packages/shell/src/themes/lightroom.ts` (CraftKit's 32 tokens, empty `grays`), every variant
+  `.theme('chromogen')`, CraftKit app CSS (app.css 141, export 104, prepress 107 lines) unported, 41 literal colours
+  (`grep` over studio-kit.css and app.css).
+- Created CHB-025 (4 tasks), committed, launched one worktree agent; it ran headed screenshot scripts and inspected
+  them itself.
+- Merged (clean). `pnpm install --offline`; typecheck clean; lint "328 file checks" + "check-colours: 132 files, no
+  literal colours outside the theme files and the counted overlays"; `pnpm test` "87 passed (87) files, 2642 passed |
+  7 skipped"; studio build ✓ 4.99 s. Agent's browser run: 87 passed (one earlier flake in `studio.spec.ts:161`, a
+  status-line race between "opened N files" and "rendered", passed 4/4 alone and in the next full run).
+- Viewed `after-classic-craftkit-light.png` and `-dark.png`: CraftKit greys, blue accent, Lightroom slider tracks,
+  CraftKit library cells in the film strip.
+
+### Why
+
+- Keep Chromogen selectable rather than delete it: it was an explicit earlier request.
+
+### What worked
+
+- Runtime theme switch, persisted; red "pending" kept as a token in both themes.
+
+### What didn't work
+
+- N/A on my side.
+
+### What I learned
+
+- The host page adds its own top bar above the shell's menu bar and title bar: three rows of chrome before the
+  workspace (visible in the screenshots) — a candidate for consolidation into the shell's menus/toolbar.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Pending tint strength on approval cards in CraftKit light; values shown twice in slider rows (heading + field).
+
+### What should be done in the future
+
+- Fold the host top bar (Open, Undo/Redo, Export, format, space, Layout) into shell commands/toolbar; fix the
+  status-line race in studio.spec.ts.
+
+### Code review instructions
+
+- `ttmp/2026/11/12/CHB-025--*/various/after/*.png`; `packages/shell/src/themes/craftkit.ts`;
+  `tools/scripts/check-colours.ts`.
+
+### Technical details
+
+- View ▸ Theme: CraftKit / Chromogen; View ▸ Interface Gray: auto, 1–4; stored in prefs and localStorage.
