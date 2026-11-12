@@ -20,6 +20,7 @@ export * from './conditioning/opengate.ts';
 export * from './conditioning/rank.ts';
 export * from './conditioning/conditioning-map.ts';
 export * from './conditioning/film-layout.ts';
+export * from './conditioning/open-mode.ts';
 export * from './conditioning/roll-base.ts';
 export * from './conditioning/planted-strip.ts';
 export * from './conditioning/dust/kernels.ts';

@@ -36,14 +36,14 @@ function bayerDng(): Uint8Array {
   });
 }
 
-test('a camera RAW opened as a photo is shot on film and printed on the GPU engine', async ({ page }) => {
+test('a camera RAW is guessed to be a photo, shot on film and printed on the GPU engine', async ({ page }) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?nosw&canvas2d&fresh&engine=gpu');
   await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
-  await page.locator('#photo').check();
+  // CHB-027: no "photo" checkbox any more; the studio guesses (no orange mask, no film edge: a photo)
   await page.setInputFiles('#file', { name: 'scene.dng', mimeType: 'image/x-adobe-dng', buffer: Buffer.from(bayerDng()) });
   await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
   await page.evaluate(() => window.chromobench.idle());

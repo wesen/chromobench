@@ -11,7 +11,7 @@ import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, frameRef, memoryKV, setKnownValues, type InitialRecipe, type KV, type Studio } from '@chromobench/studio-kit';
+import { buildVariant, createStudio, frameRef, memoryKV, setKnownValues, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio } from '@chromobench/studio-kit';
 import type { DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
@@ -29,7 +29,7 @@ import { createStudioChat, type StudioChat } from './host/chat.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
-import type { StudioEngine } from './host/studio-engine.ts';
+import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
 import { openIdb } from './storage/db.ts';
 import { addScanExtensions, fromFileList, hasDirectoryPicker, listScans, pickDirectory, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
@@ -114,7 +114,14 @@ interface Host {
   settings: HostSettings | null;
   /** The roll kit's physics service; the mock engine has none (the Roll panels say so). */
   rollPhysics?: unknown;
+  /** Opens a file as a photo, a negative or as guessed (CHB-027); the mock engine opens everything as a negative. */
+  opener?: SourceOpener;
+  /** What the pixels of an open file look like (the guess), for the "looks like a negative" hint (F15). */
+  guess(sha: string): OpenGuess | null;
 }
+
+/** Asks the photographer when a guess is unsure; set for the length of one open batch (one question per batch). */
+let askOpen: AskOpenMode | undefined;
 
 /** A photo's first recipe (CHB-012): the frame's id and source, shot on the default film (as-shot white balance when known). */
 function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
@@ -126,7 +133,7 @@ function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
 
 async function startEngine(): Promise<Host> {
   const want = q.get('engine') ?? 'auto';
-  if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null };
+  if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null, guess: () => null };
   const { createHostEngine } = await import('./host/engines.ts');
   const long = q.get('long');
   const h = await createHostEngine({ want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), onStatus: (s) => status(s) });
@@ -143,6 +150,8 @@ async function startEngine(): Promise<Host> {
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,
+    opener: (src, as) => se.openAs(src, as, askOpen),
+    guess: (sha) => se.notes.get(sha)?.guess ?? null,
   };
 }
 
@@ -181,7 +190,7 @@ async function main(): Promise<void> {
     kv = memoryKV();
   }
   const device = q.has('canvas2d') ? null : await presentDevice();
-  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}) });
+  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   const chat = createStudioChat(studio);
   const presenter = hostPresenter({
     device,
@@ -218,6 +227,7 @@ async function main(): Promise<void> {
   });
   rt.on('renderError', (e: { error: unknown }) => status(msgOf(e.error), { error: true }));
   let lastFrame: string | null = null;
+  let lastEntry: FrameEntry | undefined;
   let lastMode = studio.frames.mode;
   let lastLog: unknown = null;
   rt.store.on(() => {
@@ -227,10 +237,12 @@ async function main(): Promise<void> {
       lastMode = studio.frames.mode;
       bridge.update();
     }
-    if (f !== lastFrame) {
+    if (f !== lastFrame || e !== lastEntry) {
       lastFrame = f;
+      lastEntry = e;
       notesEl.textContent = e ? host.notes(e.sha).join(' · ') : '';
       notesEl.title = notesEl.textContent;
+      showMode(e);
     }
     // a refusal (E_STALE, …) stays in the status line until the frame's log changes
     const a = rt.store.peek(['ui', 'approvals']) as Record<string, { stale?: { code: string; message: string }[] }> | undefined;
@@ -241,31 +253,116 @@ async function main(): Promise<void> {
     lastLog = recipe;
   });
 
+  // ── the frame's mode in the status line (CHB-027): Photo / Negative, a click re-opens it the other way (F3, F6);
+  //    a hint when the pixels say otherwise (F15) ──
+  const modeEl = el('button', { type: 'button', id: 'frame-mode', class: 'pill' });
+  modeEl.hidden = true;
+  const hintEl = el('button', { type: 'button', id: 'mode-hint', class: 'pill is-hint' });
+  hintEl.hidden = true;
+  statusBarEl.insertBefore(hintEl, notesEl);
+  statusBarEl.insertBefore(modeEl, hintEl);
+  const asWord = (k: FrameEntry['kind']): 'photo' | 'negative' => (k === 'digital-raw' ? 'photo' : 'negative');
+  function showMode(e: FrameEntry | undefined): void {
+    modeEl.hidden = !e;
+    hintEl.hidden = true;
+    if (!e) return;
+    const now = asWord(e.kind);
+    const other = now === 'photo' ? 'negative' : 'photo';
+    modeEl.textContent = now === 'photo' ? 'Photo' : 'Negative';
+    modeEl.title = `${e.name} is open as a ${now}. Click to re-open it as a ${other} (Frame ▸ Re-open as ${other === 'photo' ? 'Photo' : 'Negative'}).`;
+    modeEl.dataset['mode'] = now;
+    const g = host.guess(e.sha);
+    if (g && g.kind !== now) {
+      hintEl.hidden = false;
+      hintEl.textContent = `Looks like a ${g.kind}: re-open as ${g.kind}?`;
+      hintEl.title = `The picture ${g.why}. Click to re-open ${e.name} as a ${g.kind}.`;
+      hintEl.dataset['mode'] = g.kind;
+    }
+  }
+  const reopenOther = (to: string | undefined): void => {
+    if (to === 'photo' || to === 'negative') void rt.runCommand(to === 'photo' ? 'frame.reopenAsPhoto' : 'frame.reopenAsNegative', null);
+  };
+  modeEl.addEventListener('click', () => reopenOther(modeEl.dataset['mode'] === 'photo' ? 'negative' : 'photo'));
+  hintEl.addEventListener('click', () => reopenOther(hintEl.dataset['mode']));
+
   // ── files ──
+  const openAsPref = (): OpenAs => ((rt.store.peek(['prefs', 'openAs']) as OpenAs | undefined) ?? 'auto');
+  /** One question per open batch when a guess is unsure (F1): photos from a camera, or scans of negatives? */
+  async function askMode(g: OpenGuess, name: string, count: number): Promise<'photo' | 'negative'> {
+    const body = el('div', {},
+      el('p', { text: `${count > 1 ? `${name} and the other files` : name}: the picture ${g.why}.` }),
+      el('p', { text: 'Are these photos from a camera, or scans of negatives?' }));
+    const r = await rt.chrome.dialog({
+      title: count > 1 ? 'Photos or negatives?' : 'Photo or negative?',
+      body,
+      buttons: [
+        { label: 'Photos from a camera', value: 'photo', primary: g.kind === 'photo' },
+        { label: 'Scans of negatives', value: 'negative', primary: g.kind === 'negative' },
+      ],
+    }).result;
+    return r === 'photo' || r === 'negative' ? r : g.kind;
+  }
+  /** The file is open the other way: re-open it as asked? (F2: never a silent no-op) */
+  async function confirmReopen(e: FrameEntry, want: 'photo' | 'negative'): Promise<boolean> {
+    const now = asWord(e.kind);
+    const r = await rt.chrome.dialog({
+      title: `${e.name} is open as a ${now}`,
+      body: el('p', { text: `Re-open it as a ${want}? What you did to it as a ${now} is kept: re-opening it as a ${now} brings it back.` }),
+      buttons: [{ label: `Keep it as a ${now}`, value: 'keep' }, { label: `Re-open as a ${want}`, value: 'reopen', primary: true }],
+    }).result;
+    return r === 'reopen';
+  }
+  /**
+   * Opens files as File ▸ Open As says (Auto guesses each file; one question per batch when unsure). The status line
+   * always ends with what happened (F2): opened, already open, or the error.
+   */
   async function openFiles(files: PickedFile[]): Promise<void> {
     if (!files.length) {
-      status(`no scan files (${SCAN_EXTENSIONS.join(', ')})`, { error: true });
+      status(`no photos or scans among the files (${SCAN_EXTENSIONS.join(', ')})`, { error: true });
       return;
     }
+    const as = openAsPref();
+    let answer: Promise<'photo' | 'negative'> | null = null;
+    askOpen = (g, name) => (answer ??= askMode(g, name, files.length));
+    const opened: string[] = [];
+    const already: string[] = [];
+    const failed: string[] = [];
     let first = true;
     let n = 0;
-    for (const pf of files) {
-      n++;
-      status(`opening ${pf.name}${files.length > 1 ? ` (${n} of ${files.length})` : ''}…`);
-      try {
-        const bytes = new Uint8Array(await (await pf.file()).arrayBuffer());
-        const e = await studio.open(bytes, pf.name);
-        if (first) {
-          first = false;
-          rt.runCommand('frame.select', null, e.id);
-          if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
+    try {
+      for (const pf of files) {
+        n++;
+        status(`opening ${pf.name}${files.length > 1 ? ` (${n} of ${files.length})` : ''}…`);
+        try {
+          const read = async (): Promise<Uint8Array> => new Uint8Array(await (await pf.file()).arrayBuffer());
+          let r = await studio.openFile(await read(), pf.name, { as, read });
+          if (r.outcome === 'conflict' && as !== 'auto') {
+            if (await confirmReopen(r.entry, as)) r = await studio.reopen(r.entry.id, as);
+            else r = { ...r, outcome: 'already' };
+          }
+          if (r.outcome === 'already' || r.outcome === 'conflict') {
+            already.push(pf.name);
+            rt.chrome.toast(`${pf.name} is already open (as a ${asWord(r.entry.kind)})`, { kind: 'info' });
+          } else opened.push(pf.name);
+          if (pf.handle) void kv.put('handles', `file:${r.entry.sha}`, pf.handle).catch(() => undefined);
+          if (first) {
+            first = false;
+            rt.runCommand('frame.select', null, r.entry.id);
+            if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
+          }
+        } catch (err) {
+          failed.push(`${pf.name}: ${msgOf(err)}`);
+          console.error(err);
         }
-      } catch (err) {
-        status(`${pf.name}: ${msgOf(err)}`, { error: true });
-        console.error(err);
       }
+    } finally {
+      askOpen = undefined;
     }
-    if (files.length > 1) status(`opened ${files.length} files`);
+    const parts: string[] = [];
+    if (opened.length) parts.push(opened.length === 1 ? `opened ${opened[0]}` : `opened ${opened.length} files`);
+    if (already.length) parts.push(already.length === 1 ? `${already[0]} was already open` : `${already.length} were already open`);
+    if (failed.length) parts.push(failed.length === 1 ? failed[0]! : `${failed.length} could not be opened (${failed[0]})`);
+    status(parts.join(' · ') || 'nothing opened', { error: failed.length > 0 && !opened.length && !already.length });
   }
 
   // ── the bar ──
@@ -338,10 +435,13 @@ async function main(): Promise<void> {
     const dust = el('input', { type: 'checkbox', id: 'dust' });
     dust.addEventListener('change', () => void (host.settings!.dust = dust.checked));
     kids.push(el('label', { for: 'dust', title: 'Detect and heal dust specks when a scan is opened (slow on big scans)' }, dust, ' dust'));
-    // CHB-012: open digital photos (camera RAW, TIFF, PNG) as scenes shot on film instead of as negatives
-    const photo = el('input', { type: 'checkbox', id: 'photo' });
-    photo.addEventListener('change', () => void (host.settings!.photo = photo.checked));
-    kids.push(el('label', { for: 'photo', title: 'Open files as photos: a digital RAW exposed onto the film stock, developed and printed (not a negative scan)' }, photo, ' photo'));
+    // CHB-027 (F1): photo or negative per file, guessed (Auto) or as said; remembered in prefs
+    const openAs = el('select', { id: 'open-as', 'aria-label': 'Open files as', title: 'Open files as photos from a camera, as scans of negatives, or let the studio guess each file' },
+      el('option', { value: 'auto', text: 'Open as: guess' }), el('option', { value: 'photo', text: 'Open as: photos' }), el('option', { value: 'negative', text: 'Open as: negatives' }));
+    openAs.value = openAsPref();
+    openAs.addEventListener('change', () => void rt.runCommand(`file.openAs.${openAs.value}`, null));
+    rt.cell((s: { prefs?: { openAs?: string } }) => s.prefs?.openAs ?? 'auto', (v: string) => void (openAs.value = v));
+    kids.push(openAs);
   }
   kids.push(el('span', { class: 'sp' }), offline, el('label', { for: 'variant', text: 'Layout' }), variantSel);
   barEl.append(...kids);

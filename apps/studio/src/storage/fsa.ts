@@ -18,6 +18,8 @@ export interface PickedFile {
   size: number;
   lastModified: number;
   file(): Promise<File>;
+  /** The file's handle when the File System Access API gave one: kept with the library, so the file opens again after a reload (F5). */
+  handle?: FileSystemFileHandle;
 }
 
 interface PickerWindow {
@@ -56,7 +58,7 @@ export async function listScans(dir: FileSystemDirectoryHandle, prefix = '', dep
     if (h.kind === 'directory' && depth > 0) out.push(...(await listScans(h as FileSystemDirectoryHandle, `${prefix}${name}/`, depth - 1)));
     else if (h.kind === 'file' && isScan(name)) {
       const f = await (h as FileSystemFileHandle).getFile();
-      out.push({ name, relPath: `${prefix}${name}`, size: f.size, lastModified: f.lastModified, file: () => (h as FileSystemFileHandle).getFile() });
+      out.push({ name, relPath: `${prefix}${name}`, size: f.size, lastModified: f.lastModified, file: () => (h as FileSystemFileHandle).getFile(), handle: h as FileSystemFileHandle });
     }
   }
   return out.sort((a, b) => a.relPath.localeCompare(b.relPath));

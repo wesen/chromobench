@@ -10,11 +10,12 @@ import {
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
-  classifyImage, conditionScan, decodeAsync, detectSpecks, filmLayout, heal, linearise, rankStocks, RAW_EXTENSIONS, region, rollBase, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type FrameBase, type RawDecoder,
+  classifyImage, conditionScan, decodeAsync, detectSpecks, filmLayout, guessOpenMode, heal, linearise, openPrior, rankStocks, RAW_EXTENSIONS, region, rollBase, sigmaD, sourceInfo, spotsMask, workerRawDecoder,
+  type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import type { IntegrateToGrey } from './first-print.ts';
-import { StudioEngine, type Decoded, type HostServices } from './studio-engine.ts';
+import { StudioEngine, type Decoded, type DecodeMode, type HostServices, type OpenGuess } from './studio-engine.ts';
 
 export type EngineChoice = 'auto' | 'gpu' | 'reference';
 
@@ -28,15 +29,13 @@ export interface HostOptions {
   onStatus?: (s: string) => void;
 }
 
-/** Settings the UI may change; they apply to files opened afterwards. */
+/**
+ * Settings the UI may change; they apply to files opened afterwards. Photo or negative is no setting here any more
+ * (CHB-027): it is chosen per file (HostServices.decode's mode), guessed by ingest's guessOpenMode on 'auto'.
+ */
 export interface HostSettings {
   /** Detect dust specks in scanner density and heal them on open (ingest; off by default, slow on big scans). */
   dust: boolean;
-  /**
-   * Open files as photos, not negatives (CHB-012): camera RAWs through LibRaw's photo mode (demosaiced,
-   * camera colour, no white balance), every file as scene light shot on the recipe's film stock.
-   */
-  photo: boolean;
 }
 
 /** What the roll kit's physics needs (studio-kit's RollPhysics, structurally): ingest's film layout and roll base, core's integrate-to-grey. */
@@ -73,6 +72,13 @@ const LAZY_LIBRAW: RawDecoder = { name: 'libraw', decode: (b, o) => libraw().dec
 
 const fmt3 = (v: ArrayLike<number>): string => Array.from(v, (x) => x.toFixed(2)).join(' ');
 
+/** Photo or negative from the working image (ingest's classifier); scan-mode camera data is white-balanced first. */
+function guessOf(raw: RawImage, data: Float32Array, w: number, h: number, name: string, mode: DecodeMode, layout: FilmLayout | null): OpenGuess {
+  const wb = mode === 'scan' && raw.meta.format === 'raw' ? raw.meta.camera?.daylightMultipliers ?? null : null;
+  const g = guessOpenMode(data, w, h, { name, format: raw.meta.format, wb, layout });
+  return { kind: g.kind, confident: g.confident, why: g.why };
+}
+
 /** Dust in scanner density: detect (ingest detectSpecks), heal (patch), back to transmittance. */
 function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
   const n = w * h;
@@ -104,7 +110,7 @@ async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, long
   if (s < 1) notes.push(`working image ${w}×${h}`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = { ...info0, width: w, height: h, channels: 3, notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }] };
-  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw' };
+  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
 }
 
 /** Decode → linear → area-averaged working image → conditioning. */
@@ -128,7 +134,10 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
   // the roll opened so far.
   const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
   const c = conditionScan(data, w, h, { id: sha256, rollVeil, subtract: false });
-  roll.set(sha256, c.frame);
+  const guess = guessOf(raw, data, w, h, name, 'scan', c.layout);
+  // a photo opened as a negative must not lend its "base" to the roll
+  if (guess.kind === 'negative' || !guess.confident) roll.set(sha256, c.frame);
+  else roll.delete(sha256);
   const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
   // the base as scanned (veil still in): the dust healer measures density against it
   const Treb: Vec3 = c.layout.rebate?.Traw ?? ([0, 1, 2].map((k) => {
@@ -147,7 +156,7 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess };
 }
 
 function subBox(rgb: Float32Array, w: number, b: Box): Float32Array {
@@ -206,7 +215,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const say = o.onStatus ?? (() => undefined);
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
-  const settings: HostSettings = { dust: false, photo: false };
+  const settings: HostSettings = { dust: false };
   const roll = new Map<string, FrameBase>();
   let primary: Engine | null = null;
   let label = '';
@@ -235,7 +244,12 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     label = `reference · CPU f64${why ? ` (no WebGPU: ${why})` : ''}`;
   }
   const host: HostServices = {
-    decode: (bytes, sha, name) => (settings.photo ? decodePhoto(bytes, sha, name, long) : decodeScan(bytes, sha, name, long, settings, roll)),
+    decode: (bytes, sha, name, mode) => {
+      if (mode === 'photo') roll.delete(sha);
+      return mode === 'photo' ? decodePhoto(bytes, sha, name, long) : decodeScan(bytes, sha, name, long, settings, roll);
+    },
+    prior: (name) => openPrior({ name }),
+    forget: (e, sha) => (e as { forgetSource?: (s: string) => void }).forgetSource?.(sha),
     register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,
