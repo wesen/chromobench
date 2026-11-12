@@ -18,7 +18,7 @@ export interface WorkerLike {
   terminate?(): void;
 }
 
-type Job = Exclude<ToWorker, { kind: 'adopt' } | { kind: 'cancel' } | { kind: 'dispose' }>;
+type Job = Exclude<ToWorker, { kind: 'adopt' | 'cancel' | 'dispose' | 'register' | 'forget' }>;
 type NoId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 export class WorkerClient {
@@ -63,7 +63,7 @@ export class WorkerClient {
     });
   }
 
-  post(m: Extract<ToWorker, { kind: 'adopt' | 'dispose' }>): void {
+  post(m: Extract<ToWorker, { kind: 'adopt' | 'dispose' | 'register' | 'forget' }>): void {
     this.worker.postMessage(m);
   }
 
@@ -106,6 +106,16 @@ export class WorkerEngine implements Engine {
   /** Files reach the worker through HostServices.decode (keep 'register'); a plain open is not supported here. */
   open(_source: SourceRef): Promise<SourceInfo> {
     return Promise.reject(new ChromobenchError({ code: 'E_NOT_IMPLEMENTED', message: 'WorkerEngine.open: decode through the host (StudioEngine.open)' }));
+  }
+
+  /** Makes the source's last decode in the worker (keep 'register') the engine's (HostServices.register). */
+  register(sha256: string): void {
+    this.client.post({ kind: 'register', sha256 });
+  }
+
+  /** Drops a source and everything computed from it (RefEngine.forgetSource, in the worker). */
+  forgetSource(sha256: string): void {
+    this.client.post({ kind: 'forget', sha256 });
   }
 
   adopt(defs: readonly NodeDef[]): void {

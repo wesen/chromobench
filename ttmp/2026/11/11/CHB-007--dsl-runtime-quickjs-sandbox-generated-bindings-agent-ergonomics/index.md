@@ -1,7 +1,7 @@
 ---
 Title: 'DSL runtime: QuickJS sandbox, generated bindings, agent ergonomics'
 Ticket: CHB-007
-Status: active
+Status: complete
 Topics:
     - dsl
     - js-api
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T15:40:07.346674549-05:00
+LastUpdated: 2026-11-12T14:50:23.243050154-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

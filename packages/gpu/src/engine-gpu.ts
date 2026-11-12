@@ -106,7 +106,8 @@ function mulberry32(seed: number): () => number {
 
 export class GpuEngine implements Engine {
   readonly id = 'gpu' as const;
-  readonly graph = new Graph();
+  /** Replaced (not mutated) by forgetSource. */
+  graph = new Graph();
   private rt: GpuRuntime;
   private readonly ownsRuntime: boolean;
   private tables: TableManager;
@@ -244,6 +245,25 @@ export class GpuEngine implements Engine {
     this.sources.set(info.sha256, { w: info.width, h: info.height, c: 3, data: data instanceof Float32Array ? data : Float32Array.from(data) });
     this.graph.registerSource(info);
     return info;
+  }
+
+  /**
+   * Host glue (CHB-027): forgets a source and everything computed from it, before the host registers the same file
+   * decoded another way (re-opened as a photo or as a negative). source.open's node id names the file, not the
+   * decode, so uploaded textures, cached results and node infos (sizes) of the old decode would otherwise survive.
+   */
+  forgetSource(sha: string): void {
+    const old = this.graph;
+    this.sources.delete(sha);
+    this.results.clear();
+    this.rebateT.clear();
+    for (const t of this.srcTex.values()) t.destroy();
+    this.srcTex.clear();
+    this.graph = new Graph();
+    for (const k of this.sources.keys()) {
+      const info = old.source(k);
+      if (info) this.graph.registerSource(info);
+    }
   }
 
   adopt(defs: readonly NodeDef[]): void {

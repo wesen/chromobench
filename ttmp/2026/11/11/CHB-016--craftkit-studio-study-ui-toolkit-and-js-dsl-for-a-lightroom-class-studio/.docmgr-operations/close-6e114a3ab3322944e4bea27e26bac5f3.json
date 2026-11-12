@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "bad91b527a8c85f830436e6715852019c2a04a7f45a21a5a2c331b0ab9a72b3a",
+  "request": {
+    "ticket": "CHB-016",
+    "status": "archived",
+    "intent": "",
+    "entry": "Archived: the study was overtaken by building the shell (CHB-018) and studio-kit (CHB-019); its guide stays as history. Glossary, diagnostics table and 'Writing a variant' moved to CHB-028"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-6e114a3ab3322944e4bea27e26bac5f3",
+    "state": "committed",
+    "created_at": "2026-11-12T19:47:50.576509173Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "index.md": "9d6e50a7aeb275e79e7db31b901c61faca90070cbf06b9bf708090dffb99218c"
+    },
+    "after": {
+      "changelog.md": "114686682fab65d7b1932db74d1d9892959f34571cceb7a236efeb0f23131f25",
+      "index.md": "239ecb405e87878ce03f75bcd6f11f1544a2e004b59be77ffbb5847764a10724"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTEKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMgoKQXJjaGl2ZWQ6IHRoZSBzdHVkeSB3YXMgb3ZlcnRha2VuIGJ5IGJ1aWxkaW5nIHRoZSBzaGVsbCAoQ0hCLTAxOCkgYW5kIHN0dWRpby1raXQgKENIQi0wMTkpOyBpdHMgZ3VpZGUgc3RheXMgYXMgaGlzdG9yeS4gR2xvc3NhcnksIGRpYWdub3N0aWNzIHRhYmxlIGFuZCAnV3JpdGluZyBhIHZhcmlhbnQnIG1vdmVkIHRvIENIQi0wMjgK"
+    },
+    {
+      "path": "index.md",
+      "before": "9d6e50a7aeb275e79e7db31b901c61faca90070cbf06b9bf708090dffb99218c",
+      "after": "LS0tClRpdGxlOiAnQ3JhZnRLaXQgU3R1ZGlvIHN0dWR5OiBVSSB0b29sa2l0IGFuZCBKUyBEU0wgZm9yIGEgTGlnaHRyb29tLWNsYXNzIHN0dWRpbycKVGlja2V0OiBDSEItMDE2ClN0YXR1czogYXJjaGl2ZWQKVG9waWNzOgogICAgLSB1aQogICAgLSBkc2wKICAgIC0gYXJjaGl0ZWN0dXJlCiAgICAtIHByb2R1Y3QKRG9jVHlwZTogaW5kZXgKSW50ZW50OiBsb25nLXRlcm0KT3duZXJzOiBbXQpSZWxhdGVkRmlsZXM6IFtdCkV4dGVybmFsU291cmNlczogW10KU3VtbWFyeTogIiIKTGFzdFVwZGF0ZWQ6IDIwMjYtMTEtMTJUMTQ6NDc6NTAuNTc2Mzk5NTcxLTA1OjAwCldoYXRGb3I6ICIiCldoZW5Ub1VzZTogIiIKLS0tCgojIENyYWZ0S2l0IFN0dWRpbyBzdHVkeTogVUkgdG9vbGtpdCBhbmQgSlMgRFNMIGZvciBhIExpZ2h0cm9vbS1jbGFzcyBzdHVkaW8KCiMjIE92ZXJ2aWV3Cgo8IS0tIFByb3ZpZGUgYSBicmllZiBvdmVydmlldyBvZiB0aGUgdGlja2V0LCBpdHMgZ29hbHMsIGFuZCBjdXJyZW50IHN0YXR1cyAtLT4KCiMjIEtleSBMaW5rcwoKLSAqKlJlbGF0ZWQgRmlsZXMqKjogU2VlIGZyb250bWF0dGVyIFJlbGF0ZWRGaWxlcyBmaWVsZAotICoqRXh0ZXJuYWwgU291cmNlcyoqOiBTZWUgZnJvbnRtYXR0ZXIgRXh0ZXJuYWxTb3VyY2VzIGZpZWxkCgojIyBTdGF0dXMKCkN1cnJlbnQgc3RhdHVzOiAqKmFjdGl2ZSoqCgojIyBUb3BpY3MKCi0gdWkKLSBkc2wKLSBhcmNoaXRlY3R1cmUKLSBwcm9kdWN0CgojIyBUYXNrcwoKU2VlIFt0YXNrcy5tZF0oLi90YXNrcy5tZCkgZm9yIHRoZSBjdXJyZW50IHRhc2sgbGlzdC4KCiMjIENoYW5nZWxvZwoKU2VlIFtjaGFuZ2Vsb2cubWRdKC4vY2hhbmdlbG9nLm1kKSBmb3IgcmVjZW50IGNoYW5nZXMgYW5kIGRlY2lzaW9ucy4KCiMjIFN0cnVjdHVyZQoKLSBkZXNpZ24vIC0gQXJjaGl0ZWN0dXJlIGFuZCBkZXNpZ24gZG9jdW1lbnRzCi0gcmVmZXJlbmNlLyAtIFByb21wdCBwYWNrcywgQVBJIGNvbnRyYWN0cywgY29udGV4dCBzdW1tYXJpZXMKLSBwbGF5Ym9va3MvIC0gQ29tbWFuZCBzZXF1ZW5jZXMgYW5kIHRlc3QgcHJvY2VkdXJlcwotIHNjcmlwdHMvIC0gVGVtcG9yYXJ5IGNvZGUgYW5kIHRvb2xpbmcKLSB2YXJpb3VzLyAtIFdvcmtpbmcgbm90ZXMgYW5kIHJlc2VhcmNoCi0gYXJjaGl2ZS8gLSBEZXByZWNhdGVkIG9yIHJlZmVyZW5jZS1vbmx5IGFydGlmYWN0cwo="
+    }
+  ]
+}

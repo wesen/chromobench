@@ -1,7 +1,7 @@
 ---
 Title: 'Demo: the current studio on the real engine, for a first session with the photographer'
 Ticket: CHB-023
-Status: active
+Status: complete
 Topics:
     - ui
     - product
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T16:20:37.95061884-05:00
+LastUpdated: 2026-11-12T14:44:41.506497179-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

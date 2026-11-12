@@ -34,13 +34,15 @@ function macrotasks(): () => Promise<void> {
   });
 }
 
-type Job = Exclude<ToWorker, { kind: 'adopt' } | { kind: 'cancel' } | { kind: 'dispose' }>;
+type Job = Exclude<ToWorker, { kind: 'adopt' | 'cancel' | 'dispose' | 'register' | 'forget' }>;
 
 /** Serves engine jobs on scope. `raw` replaces LibRaw (tests). */
 export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): void {
   let engine: RefEngine | null = null;
   let raw: RawDecoder | null = o.raw ?? null;
   const roll = new Map<string, FrameBase>();
+  /** The last 'register' decode per source, waiting for its 'register' message. */
+  const decoded = new Map<string, Awaited<ReturnType<typeof decodeFile>>>();
   const macrotask = macrotasks();
   const queue: Job[] = [];
   const running = new Map<number, AbortController>();
@@ -73,7 +75,8 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
         if (!raw) throw new Error('the engine worker is not initialised');
         const d = await decodeFile(new Uint8Array(job.bytes), job.sha256, job.name, job.mode, { long: job.long, dust: job.dust, roll, raw });
         if (job.keep === 'register') {
-          need().openDecoded(d.info, d.data);
+          need();
+          decoded.set(job.sha256, d);
           const { data: _kept, ...rest } = d;
           return { value: { ...rest, ms: performance.now() - t0 } satisfies WireDecoded };
         }
@@ -138,6 +141,16 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
           // an unknown source and the like: the evaluation that needs the node reports it
           console.warn('engine worker: adopt failed', e);
         }
+        return;
+      case 'register': {
+        const d = decoded.get(m.sha256);
+        decoded.delete(m.sha256);
+        if (d) need().openDecoded(d.info, d.data);
+        else console.warn(`engine worker: no decode of ${m.sha256.slice(0, 12)}… to register`);
+        return;
+      }
+      case 'forget':
+        engine?.forgetSource(m.sha256);
         return;
       case 'cancel': {
         const i = queue.findIndex((j) => j.id === m.id);

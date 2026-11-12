@@ -18,3 +18,4 @@
 - [ ] [stage 4] File the API pruning note to CHB-002 (deletions, redirects from typed names, hint and fix improvements) and the beta report <!-- t:5bpf -->
 - [x] [errata] Line ~279: a 3% camera-curve error moves the fitted LED peak by ~1 nm, not 'several nanometres' (replacement text in diary Step 13) <!-- t:gc6o -->
 - [ ] [from CHB-006 w3tp] Test LibRaw on real camera RAWs: the photographer's own camera files first, plus public samples (raw.pixls.us: Bayer, X-Trans, two-illuminant DNG; check licences), including non-zero sensor margins <!-- t:ehco -->
+- [ ] [from CHB-001 0d32] Ask the photographer: capture setup (scanner or camera scanning, light source), B&W need, print output target, desktop vs browser. ('Digital RAWs' = his camera photos, answered 2026-11-12.) <!-- t:gb3u -->

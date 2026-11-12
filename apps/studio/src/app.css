@@ -1,4 +1,5 @@
-/* The host frame around the shell-based studio: a bar for files and export on top, a status line at the bottom.
+/* The host frame around the shell-based studio: a status line at the bottom (CHB-027: the top bar's actions are
+   commands in the studio's File and View menus now).
    CHB-025: on the shell's tokens, which the shell writes on <html> (themeRoot), so the frame follows View ▸ Theme and
    View ▸ Interface Gray with the studio; before the studio mounts, shell.css's :root (CraftKit) applies. */
 html,
@@ -11,12 +12,14 @@ body {
 }
 #app {
   position: fixed;
-  top: 34px;
+  top: 0;
   bottom: 22px;
   left: 0;
   right: 0;
   /* .ck-app sets height: 100%, which would run the app under the status line */
   height: auto;
+  /* menus and dialogs of the shell (inside #app) paint over the status line, not under it */
+  z-index: 1;
 }
 .hb {
   position: fixed;
@@ -33,10 +36,6 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
-#bar {
-  top: 0;
-  height: 34px;
-}
 .hb-status {
   bottom: 0;
   height: 22px;
@@ -45,63 +44,37 @@ body {
   font-size: 11px;
   color: var(--text2);
 }
-.hb .brand {
-  font-weight: 600;
-  margin-right: 8px;
-  color: var(--strong);
-}
-.hb .brand i {
-  font-weight: 300;
-  color: var(--text2);
-}
-.hb button,
-.hb select,
-.hb .file {
+.hb button {
   font: inherit;
-  font-size: 12px;
-  height: 24px;
-  color: var(--text);
-  background: var(--panel3);
-  border: 1px solid var(--line2);
-  border-radius: var(--radius, 3px);
-  padding: 0 10px;
-  cursor: default;
-  box-sizing: border-box;
-}
-.hb select {
-  padding: 0 4px;
-}
-.hb button:hover,
-.hb .file:hover {
-  background: var(--hover);
-  border-color: var(--text3);
-}
-.hb button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--onaccent);
-}
-.hb button.primary:hover {
-  background: var(--accent2);
-}
-.hb button:disabled {
-  opacity: 0.45;
-}
-.hb input[type='file'] {
-  display: none;
-}
-.hb .sp {
-  flex: 1;
-}
-.hb .sep {
-  width: 1px;
-  height: 18px;
-  background: var(--line);
-  margin: 0 4px;
-}
-.hb label {
+  font-size: 11px;
   color: var(--text2);
-  font-size: 12px;
+  cursor: default;
+}
+.hb button.pill {
+  height: 16px;
+  line-height: 14px;
+}
+.hb button.pill:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.hb .pill.is-hint {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.hb .small {
+  color: var(--text3);
+}
+/* File ▸ Export… */
+.cb-export-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+.cb-export-row > span {
+  min-width: 110px;
+  color: var(--text2);
 }
 .pill {
   background: var(--panel3);

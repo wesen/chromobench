@@ -14,7 +14,7 @@ import {
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
-  classifyImage, filmLayout, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
+  classifyImage, filmLayout, openPrior, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import { decodeFile } from './decode.ts';
@@ -40,15 +40,13 @@ export interface HostOptions {
   onStatus?: (s: string) => void;
 }
 
-/** Settings the UI may change; they apply to files opened afterwards. */
+/**
+ * Settings the UI may change; they apply to files opened afterwards. Photo or negative is no setting here any more
+ * (CHB-027): it is chosen per file (HostServices.decode's mode), guessed by ingest's guessOpenMode on 'auto'.
+ */
 export interface HostSettings {
   /** Detect dust specks in scanner density and heal them on open (ingest; off by default, slow on big scans). */
   dust: boolean;
-  /**
-   * Open files as photos, not negatives (CHB-012): camera RAWs through LibRaw's photo mode (demosaiced,
-   * camera colour, no white balance), every file as scene light shot on the recipe's film stock.
-   */
-  photo: boolean;
 }
 
 /** What the roll kit's physics needs (studio-kit's RollPhysics, structurally): ingest's film layout and roll base, core's integrate-to-grey. */
@@ -155,7 +153,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const say = o.onStatus ?? (() => undefined);
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
-  const settings: HostSettings = { dust: false, photo: false };
+  const settings: HostSettings = { dust: false };
   const roll = new Map<string, FrameBase>();
   let primary: Engine | null = null;
   let label = '';
@@ -197,15 +195,21 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     long = o.refLong ?? DEFAULT_REF_LONG;
     label = `reference · CPU f64${inWorker ? ' (worker)' : ''}${why ? ` (no WebGPU: ${why})` : ''}`;
   }
-  const keep = primary instanceof WorkerEngine ? 'register' as const : 'return' as const;
+  // the reference engine in the worker keeps the decoded pixels there ('register': none come back, the register
+  // hook below makes the last decode the engine's); the GPU engine gets them back as a transferable ('return')
+  const inEngine = primary instanceof WorkerEngine ? primary : null;
   const host: HostServices = {
     decode: (bytes, sha, name, mode) => {
-      const m = mode ?? (settings.photo ? 'photo' : 'scan');
-      return client
-        ? client.decode(bytes, sha, name, m, { long, dust: settings.dust, keep })
-        : decodeFile(bytes, sha, name, m, { long, dust: settings.dust, roll, raw: LAZY_LIBRAW });
+      if (client) return client.decode(bytes, sha, name, mode, { long, dust: settings.dust, keep: inEngine ? 'register' : 'return' });
+      return decodeFile(bytes, sha, name, mode, { long, dust: settings.dust, roll, raw: LAZY_LIBRAW });
     },
-    register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
+    prior: (name) => openPrior({ name }),
+    forget: (e, sha) => (e as { forgetSource?: (s: string) => void }).forgetSource?.(sha),
+    register: (e, info, px) => {
+      if (e === inEngine) inEngine.register(info.sha256);
+      else if (px) (e as GpuEngine | RefEngine).openDecoded(info, px);
+      else throw new Error(`register ${info.sha256.slice(0, 12)}…: no pixels`);
+    },
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,
     // Since CHB-011 GpuEngine encodes every output space itself (nativeSpaces stays unset).

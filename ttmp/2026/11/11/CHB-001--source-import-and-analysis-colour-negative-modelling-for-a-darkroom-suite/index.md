@@ -1,7 +1,7 @@
 ---
 Title: 'Source import and analysis: colour-negative modelling for a darkroom suite'
 Ticket: CHB-001
-Status: active
+Status: complete
 Topics:
     - color-science
     - film-emulation
@@ -24,7 +24,7 @@ RelatedFiles:
       Note: Inversion app (scan to print), source of the solver/table design
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T09:41:15.051602226-05:00
+LastUpdated: 2026-11-12T14:44:40.460748369-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

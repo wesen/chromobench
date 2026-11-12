@@ -7,6 +7,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
+/** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
+async function menu(page: Page, title: string, command: string): Promise<void> {
+  await page.locator('.ck-menubar-t', { hasText: title }).click();
+  await page.locator(`.ck-menu-i[data-command="${command}"]`).click();
+}
+
 const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url).pathname;
 const FIXTURE_DIR = new URL('../fixtures/synthetic/', import.meta.url).pathname;
 const bytes = readFileSync(FIXTURE);
@@ -124,9 +130,9 @@ test('controls: typed units, a burst on Time, why() follows focus, undo and redo
   await field.press('Enter');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
   // undo and redo through the bar and the keyboard
-  await page.click('#undo');
+  await menu(page, 'Edit', 'edit.undo');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
-  await page.click('#redo');
+  await menu(page, 'Edit', 'edit.redo');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('Control+z');

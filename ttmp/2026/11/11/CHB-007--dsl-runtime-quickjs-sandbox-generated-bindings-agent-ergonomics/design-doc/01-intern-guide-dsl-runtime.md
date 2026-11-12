@@ -284,7 +284,7 @@ packages/dsl/
 - The interpreter is slower than V8. That is acceptable because pixels never enter the VM.
 - Sandbox escape attempts become a test suite (§9).
 
-**Status:** proposed; confirm with the stage 1 tests.
+**Status:** accepted by the user on 2026-11-12 ("quickjs sandbox"); the stage 1 tests reproduce the spike.
 
 ### 5.3 Decision record DR-2: the sync variant with deferred promises, not asyncify
 
@@ -313,7 +313,7 @@ packages/dsl/
 - The variant is one import, so switching later is a one-line change, should a need for synchronous async calls appear. One example would be loading playbooks with `import` through an async module loader.
 - Library choice: bellard/quickjs (version 2025-09-13 in the 0.32.0 variants) or quickjs-ng (`@jitl/quickjs-ng-wasmfile-release-sync`). Start with bellard, the variant the spike tested. Revisit only if a missing language feature shows up in agent traces.
 
-**Status:** proposed; the stage 1 tests reproduce the spike before anything else is built.
+**Status:** accepted by the user on 2026-11-12 ("normal": the sync build with deferred promises); the stage 1 tests reproduce the spike.
 
 ### 5.4 Session lifecycle and the eval pump
 

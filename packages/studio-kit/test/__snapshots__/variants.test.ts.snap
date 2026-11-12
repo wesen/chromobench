@@ -13,7 +13,7 @@ module library "Library" key G
            cb.filter
            match  of [grid, loupe, compare, survey]  on τ
              cases.grid:
-               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
@@ -27,12 +27,12 @@ module library "Library" key G
                    cb.ribbon
                    viewport cmp-b τ  image τ  overlays: 
              cases.survey:
-               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
            panel metadata "Metadata"
              cb.metadata
   bottom dockcol  width 124
-           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module roll "Roll" key Mod+Alt+R
   left   dockcol  width 300
            panel roll-library "Rolls"
@@ -138,7 +138,7 @@ module print "Print" key D
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
-           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module finish "Finish" key F
   left   dockcol  width 236
            panel navigator-finish "Navigator"
@@ -187,7 +187,7 @@ module finish "Finish" key F
                button  run spot.clear  small  text "Clear all"
              text "Heal and clone work on the print; Dust works o…  dim
   bottom dockcol  width 124
-           filmstrip strip-finish  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module assistant "Assistant"
   left   dockcol  width 220
            panel navigator-assistant "Navigator"
@@ -205,14 +205,14 @@ module assistant "Assistant"
            panel chat "Assistant"
              cb.chat
   bottom dockcol  width 124
-           filmstrip strip-assistant  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-assistant  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module output "Output" key Mod+Shift+E
-  center gridview picks  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  center gridview picks  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
            panel output "Save"
              cb.output
   bottom dockcol  width 124
-           filmstrip strip-output  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-output  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
@@ -220,6 +220,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -241,7 +254,7 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -280,14 +293,14 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 108 · keys 86 in 7 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 121 · keys 104 in 15 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 200
-           listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
+           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
            panel history "History"
              cb.history
   center column  class "cb-viewer"  grow 1
@@ -357,6 +370,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -378,9 +404,9 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 64 · keys 25 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 77 · keys 29 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
@@ -396,7 +422,7 @@ module library "Library" key G
            cb.filter
            match  of [grid, loupe, compare, survey]  on τ
              cases.grid:
-               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
@@ -410,12 +436,12 @@ module library "Library" key G
                    cb.ribbon
                    viewport cmp-b τ  image τ  overlays: 
              cases.survey:
-               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
            panel metadata "Metadata"
              cb.metadata
   bottom dockcol  width 124
-           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module print "Print" key D
   left   dockcol  width 236
            panel navigator-print "Navigator"
@@ -503,7 +529,7 @@ module print "Print" key D
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
-           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module finish "Finish" key F
   left   dockcol  width 236
            panel navigator-finish "Navigator"
@@ -558,7 +584,7 @@ module finish "Finish" key F
                button  run finish.toggle  small  text "Before / after"
                button  run finish.resetTones  small  text "Reset"
   bottom dockcol  width 124
-           filmstrip strip-finish  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
@@ -566,6 +592,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -587,7 +626,7 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
   crop.reset "Reset Crop" (Finish) ← cb.finish
   crop.aspect "Crop Aspect" ← cb.finish
   crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
@@ -610,7 +649,7 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 90 · keys 62 in 5 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 103 · keys 74 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
@@ -626,7 +665,7 @@ module library "Library" key G
            cb.filter
            match  of [grid, loupe, compare, survey]  on τ
              cases.grid:
-               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
@@ -640,12 +679,12 @@ module library "Library" key G
                    cb.ribbon
                    viewport cmp-b τ  image τ  overlays: 
              cases.survey:
-               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
            panel metadata "Metadata"
              cb.metadata
   bottom dockcol  width 124
-           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module print "Print" key D
   left   dockcol  width 236
            panel navigator-print "Navigator"
@@ -735,7 +774,7 @@ module print "Print" key D
            panel why "Why"
              cb.why
   bottom dockcol  width 124
-           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module assistant "Assistant"
   left   dockcol  width 220
            panel navigator-assistant "Navigator"
@@ -753,7 +792,7 @@ module assistant "Assistant"
            panel chat "Assistant"
              cb.chat
   bottom dockcol  width 124
-           filmstrip strip-assistant  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-assistant  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module lab "Lab" key L
   left   dockcol  width 280
            panel controls-all "All parameters"
@@ -857,7 +896,7 @@ module lab "Lab" key L
            panel explain "Explain"
              cb.explain
   bottom dockcol  width 124
-           filmstrip strip-lab  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-lab  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
@@ -865,6 +904,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -886,9 +938,9 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 67 · keys 68 in 6 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 80 · keys 82 in 12 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
@@ -904,7 +956,7 @@ module library "Library" key G
            cb.filter
            match  of [grid, loupe, compare, survey]  on τ
              cases.grid:
-               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
@@ -918,12 +970,12 @@ module library "Library" key G
                    cb.ribbon
                    viewport cmp-b τ  image τ  overlays: 
              cases.survey:
-               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+               gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
            panel metadata "Metadata"
              cb.metadata
   bottom dockcol  width 124
-           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module print "Print" key D
   left   dockcol  width 300
            panel looks-library "Looks"
@@ -1013,7 +1065,7 @@ module print "Print" key D
            panel looks-presets "Presets"
              looks.presets  model τ
   bottom dockcol  width 124
-           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
@@ -1021,6 +1073,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -1042,7 +1107,7 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1094,7 +1159,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 116 · keys 53 in 4 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 129 · keys 63 in 8 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1204,7 +1269,7 @@ module print "Print" key D
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
-           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+           filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
@@ -1212,6 +1277,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) → ← cb.core
   frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
@@ -1233,7 +1311,7 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1251,7 +1329,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 82 · keys 48 in 4 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 95 · keys 52 in 5 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1260,7 +1338,7 @@ module main "Chromobench"
   top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
   center match  of [pick, print, save]  on τ
            cases.pick:
-             gridview pick-grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  keys {P, X, Enter}  select ui.selection  size τ
+             gridview pick-grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace, P, X, Enter}  select ui.selection  size τ
            cases.print:
              row  grow 1
                column  class "cb-viewer"  grow 1
@@ -1325,6 +1403,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) ← cb.core
   frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
@@ -1346,16 +1437,16 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 64 · keys 22 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 77 · keys 26 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 180
-           listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
+           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
   center column  class "cb-viewer"  grow 1
            cb.ribbon
            viewport main τ  image τ  overlays: 
@@ -1385,6 +1476,19 @@ commands
   frame.rate "Set Stars" (Frame) ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
+  frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
+  frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
+  frame.remove "τ" (Frame) Del ← cb.core
+  file.open "Open Files…" (File) Ctrl+O ← cb.core
+  file.openFolder "Open Folder…" (File) ← cb.core
+  file.reopenFolder "τ" (File) ← cb.core
+  file.openAs.auto "Photo or Negative: Guess" (File) ← cb.core
+  file.openAs.photo "Open as Photos" (File) ← cb.core
+  file.openAs.negative "Open as Negatives" (File) ← cb.core
+  file.dust "Heal Dust on Open" (File) ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
+  file.saveRecipe "Save Recipe" (File) ← cb.core
+  view.layout "Layout…" (View) ← cb.core
   frame.next "Next Frame" (Frame) ← cb.core
   frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
@@ -1406,9 +1510,9 @@ commands
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
-  output.save "Save the Print" (File) ← cb.core
+  output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 64 · keys 19 in 2 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 77 · keys 23 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `

@@ -10,10 +10,10 @@
 import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
-import type { Runtime } from '@chromobench/shell';
+import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, explainError, frameRef, memoryKV, setKnownValues, type InitialRecipe, type KV, type Studio } from '@chromobench/studio-kit';
-import type { DomViewport } from '@chromobench/shell/dom';
+import { buildVariant, createStudio, explainError, frameRef, isOffline, memoryKV, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
+import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
 import '@chromobench/studio-kit/kits/roll/roll.css';
@@ -31,15 +31,14 @@ import { engineSummary, notesSummary } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
-import type { StudioEngine } from './host/studio-engine.ts';
+import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
 import { openIdb } from './storage/db.ts';
-import { addScanExtensions, fromFileList, hasDirectoryPicker, listScans, pickDirectory, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
+import { addScanExtensions, fromFileList, fromHandles, hasDirectoryPicker, hasFilePicker, isScan, listScans, pickDirectory, pickFiles, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
 import './app.css';
 
 const q = new URLSearchParams(location.search);
 const root = document.getElementById('app')!;
-const barEl = document.getElementById('bar')!;
 const statusBarEl = document.getElementById('statusbar')!;
 
 // ── theme boot (CHB-025): the last theme and interface gray, mirrored from prefs into localStorage, paint the host
@@ -117,7 +116,14 @@ interface Host {
   settings: HostSettings | null;
   /** The roll kit's physics service; the mock engine has none (the Roll panels say so). */
   rollPhysics?: unknown;
+  /** Opens a file as a photo, a negative or as guessed (CHB-027); the mock engine opens everything as a negative. */
+  opener?: SourceOpener;
+  /** What the pixels of an open file look like (the guess), for the "looks like a negative" hint (F15). */
+  guess(sha: string): OpenGuess | null;
 }
+
+/** Asks the photographer when a guess is unsure; set for the length of one open batch (one question per batch). */
+let askOpen: AskOpenMode | undefined;
 
 /** A photo's first recipe (CHB-012): the frame's id and source, shot on the default film (as-shot white balance when known). */
 function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
@@ -129,7 +135,7 @@ function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
 
 async function startEngine(): Promise<Host> {
   const want = q.get('engine') ?? 'auto';
-  if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null };
+  if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null, guess: () => null };
   const { createHostEngine } = await import('./host/engines.ts');
   const long = q.get('long');
   const refLong = q.get('refLong');
@@ -150,6 +156,8 @@ async function startEngine(): Promise<Host> {
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,
+    opener: (src, as) => se.openAs(src, as, askOpen),
+    guess: (sha) => se.notes.get(sha)?.guess ?? null,
   };
 }
 
@@ -191,7 +199,7 @@ async function main(): Promise<void> {
     kv = memoryKV();
   }
   const device = q.has('canvas2d') ? null : await presentDevice();
-  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}) });
+  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   const chat = createStudioChat(studio);
   const presenter = hostPresenter({
     device,
@@ -235,6 +243,7 @@ async function main(): Promise<void> {
   });
   rt.on('renderError', (e: { error: unknown }) => status(explainError(e.error)?.text ?? msgOf(e.error), { error: true, detail: msgOf(e.error) }));
   let lastFrame: string | null = null;
+  let lastEntry: FrameEntry | undefined;
   let lastMode = studio.frames.mode;
   let lastLog: unknown = null;
   rt.store.on(() => {
@@ -244,11 +253,13 @@ async function main(): Promise<void> {
       lastMode = studio.frames.mode;
       bridge.update();
     }
-    if (f !== lastFrame) {
+    if (f !== lastFrame || e !== lastEntry) {
       lastFrame = f;
+      lastEntry = e;
       const notes = e ? host.notes(e.sha) : [];
       notesEl.textContent = notesSummary(notes);
       notesEl.title = notes.join(' · ');
+      showMode(e);
     }
     // a refusal (E_STALE, …) stays in the status line until the frame's log changes
     const a = rt.store.peek(['ui', 'approvals']) as Record<string, { stale?: { code: string; message: string }[] }> | undefined;
@@ -259,110 +270,308 @@ async function main(): Promise<void> {
     lastLog = recipe;
   });
 
+  // ── the frame's mode in the status line (CHB-027): Photo / Negative, a click re-opens it the other way (F3, F6);
+  //    a hint when the pixels say otherwise (F15) ──
+  const modeEl = el('button', { type: 'button', id: 'frame-mode', class: 'pill' });
+  modeEl.hidden = true;
+  const hintEl = el('button', { type: 'button', id: 'mode-hint', class: 'pill is-hint' });
+  hintEl.hidden = true;
+  statusBarEl.insertBefore(hintEl, notesEl);
+  statusBarEl.insertBefore(modeEl, hintEl);
+  const asWord = (k: FrameEntry['kind']): 'photo' | 'negative' => (k === 'digital-raw' ? 'photo' : 'negative');
+  function showMode(e: FrameEntry | undefined): void {
+    modeEl.hidden = !e;
+    hintEl.hidden = true;
+    if (!e) return;
+    const now = asWord(e.kind);
+    const other = now === 'photo' ? 'negative' : 'photo';
+    modeEl.textContent = now === 'photo' ? 'Photo' : 'Negative';
+    modeEl.title = `${e.name} is open as a ${now}. Click to re-open it as a ${other} (Frame ▸ Re-open as ${other === 'photo' ? 'Photo' : 'Negative'}).`;
+    modeEl.dataset['mode'] = now;
+    const g = host.guess(e.sha);
+    if (g && g.kind !== now) {
+      hintEl.hidden = false;
+      hintEl.textContent = `Looks like a ${g.kind}: re-open as ${g.kind}?`;
+      hintEl.title = `The picture ${g.why}. Click to re-open ${e.name} as a ${g.kind}.`;
+      hintEl.dataset['mode'] = g.kind;
+    }
+  }
+  const reopenOther = (to: string | undefined): void => {
+    if (to === 'photo' || to === 'negative') void rt.runCommand(to === 'photo' ? 'frame.reopenAsPhoto' : 'frame.reopenAsNegative', null);
+  };
+  modeEl.addEventListener('click', () => reopenOther(modeEl.dataset['mode'] === 'photo' ? 'negative' : 'photo'));
+  hintEl.addEventListener('click', () => reopenOther(hintEl.dataset['mode']));
+
   // ── files ──
-  async function openFiles(files: PickedFile[]): Promise<void> {
+  const openAsPref = (): OpenAs => ((rt.store.peek(['prefs', 'openAs']) as OpenAs | undefined) ?? 'auto');
+  /** One question per open batch when a guess is unsure (F1): photos from a camera, or scans of negatives? */
+  async function askMode(g: OpenGuess, name: string, count: number): Promise<'photo' | 'negative'> {
+    const body = el('div', {},
+      el('p', { text: `${count > 1 ? `${name} and the other files` : name}: the picture ${g.why}.` }),
+      el('p', { text: 'Are these photos from a camera, or scans of negatives?' }));
+    const r = await rt.chrome.dialog({
+      title: count > 1 ? 'Photos or negatives?' : 'Photo or negative?',
+      body,
+      buttons: [
+        { label: 'Photos from a camera', value: 'photo', primary: g.kind === 'photo' },
+        { label: 'Scans of negatives', value: 'negative', primary: g.kind === 'negative' },
+      ],
+    }).result;
+    return r === 'photo' || r === 'negative' ? r : g.kind;
+  }
+  /** The file is open the other way: re-open it as asked? (F2: never a silent no-op) */
+  async function confirmReopen(e: FrameEntry, want: 'photo' | 'negative'): Promise<boolean> {
+    const now = asWord(e.kind);
+    const r = await rt.chrome.dialog({
+      title: `${e.name} is open as a ${now}`,
+      body: el('p', { text: `Re-open it as a ${want}? What you did to it as a ${now} is kept: re-opening it as a ${now} brings it back.` }),
+      buttons: [{ label: `Keep it as a ${now}`, value: 'keep' }, { label: `Re-open as a ${want}`, value: 'reopen', primary: true }],
+    }).result;
+    return r === 'reopen';
+  }
+  /**
+   * Opens files as File ▸ Open As says (Auto guesses each file; one question per batch when unsure). The status line
+   * always ends with what happened (F2): opened, already open, or the error.
+   */
+  async function openFiles(files: PickedFile[], o: { as?: OpenAs; expect?: CatalogFrame } = {}): Promise<void> {
     if (!files.length) {
-      status(`no scan files (${SCAN_EXTENSIONS.join(', ')})`, { error: true });
+      status(`no photos or scans among the files (${SCAN_EXTENSIONS.join(', ')})`, { error: true });
       return;
     }
+    const as = o.as ?? openAsPref();
+    let answer: Promise<'photo' | 'negative'> | null = null;
+    askOpen = (g, name) => (answer ??= askMode(g, name, files.length));
+    const opened: string[] = [];
+    const already: string[] = [];
+    const failed: string[] = [];
+    const details: string[] = [];
     let first = true;
     let n = 0;
-    for (const pf of files) {
-      n++;
-      status(`opening ${pf.name}${files.length > 1 ? ` (${n} of ${files.length})` : ''}…`);
-      try {
-        const bytes = new Uint8Array(await (await pf.file()).arrayBuffer());
-        const e = await studio.open(bytes, pf.name);
-        if (first) {
-          first = false;
-          rt.runCommand('frame.select', null, e.id);
-          if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
+    try {
+      for (const pf of files) {
+        n++;
+        status(`opening ${pf.name}${files.length > 1 ? ` (${n} of ${files.length})` : ''}…`);
+        try {
+          const read = async (): Promise<Uint8Array> => new Uint8Array(await (await pf.file()).arrayBuffer());
+          let r = await studio.openFile(await read(), pf.name, { as, read });
+          if (r.outcome === 'conflict' && as !== 'auto') {
+            if (await confirmReopen(r.entry, as)) r = await studio.reopen(r.entry.id, as);
+            else r = { ...r, outcome: 'already' };
+          }
+          if (r.outcome === 'already' || r.outcome === 'conflict') {
+            already.push(pf.name);
+            rt.chrome.toast(`${pf.name} is already open (as a ${asWord(r.entry.kind)})`, { kind: 'info' });
+          } else opened.push(pf.name);
+          if (pf.handle) void kv.put('handles', `file:${r.entry.sha}`, pf.handle).catch(() => undefined);
+          if (o.expect && o.expect.sha256 !== r.entry.sha) rt.chrome.toast(`${pf.name} is not the file ${o.expect.name} was made from: it opened as a frame of its own`, { kind: 'warn' });
+          if (first) {
+            first = false;
+            rt.runCommand('frame.select', null, r.entry.id);
+            if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
+          }
+        } catch (err) {
+          // in his words (WS-C's explainError), the technical text in the tooltip
+          failed.push(`${pf.name}: ${rt.explainError?.(err, {})?.text ?? msgOf(err)}`);
+          details.push(`${pf.name}: ${msgOf(err)}`);
+          console.error(err);
         }
-      } catch (err) {
-        status(`${pf.name}: ${msgOf(err)}`, { error: true });
-        console.error(err);
       }
+    } finally {
+      askOpen = undefined;
     }
-    if (files.length > 1) status(`opened ${files.length} files`);
+    const parts: string[] = [];
+    if (opened.length) parts.push(opened.length === 1 ? `opened ${opened[0]}` : `opened ${opened.length} files`);
+    if (already.length) parts.push(already.length === 1 ? `${already[0]} was already open` : `${already.length} were already open`);
+    if (failed.length) parts.push(failed.length === 1 ? failed[0]! : `${failed.length} could not be opened (${failed[0]})`);
+    status(parts.join(' · ') || 'nothing opened', { error: failed.length > 0 && !opened.length && !already.length, ...(details.length ? { detail: details.join('\n') } : {}) });
   }
 
-  // ── the bar ──
-  const fileInput = el('input', { type: 'file', id: 'file', multiple: '', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(',') });
+  // ── the library across reloads (F5): a thumbnail of each frame's print is kept in its catalog entry; a frame not
+  //    open in this session is read again through its file handle (one permission click) or located by him ──
+  const thumbTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function scheduleThumb(id: string, ms = 2000, tries = 6): void {
+    clearTimeout(thumbTimers.get(id));
+    thumbTimers.set(id, setTimeout(() => {
+      thumbTimers.delete(id);
+      const r = rt.store.peek(['recipes', id]) as FrameRecipe | undefined;
+      if (!r) return;
+      // the filmstrip's own thumbnail from the shell's thumbnail cache (same key and size). Only a cache hit: asking
+      // for a render here as well made a second evaluation of the same node race the filmstrip's, and idle() then
+      // hung now and then on the GPU engine. Not drawn yet (no filmstrip in this module): try again later.
+      const x = rt.renders.peekThumb(frameRef(id, r).print(), 160);
+      if (!x) {
+        if (tries > 1) scheduleThumb(id, 3000, tries - 1);
+        return;
+      }
+      // into the KV, not the store: a catalog write while the GPU engine renders made idle() hang on SwiftShader
+      // (studio-real "gpu: first print", every run). The catalog takes the saved thumbnails at the next start.
+      const url = thumbUrl(x.image);
+      if (url) void kv.put('frames', `thumb:${id}`, url).catch(() => undefined);
+    }, ms));
+  }
+  // the thumbnails saved last session, into the catalog before anything renders
+  {
+    const ids = (rt.store.peek(['catalog', 'order']) as string[] | undefined) ?? [];
+    const got = await Promise.all(ids.map((id) => kv.get<string>('frames', `thumb:${id}`).catch(() => undefined)));
+    const writes = ids.flatMap((id, i) => (got[i] && (rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined)?.thumb !== got[i] ? [{ path: ['catalog', 'frames', id, 'thumb'], value: got[i] }] : []));
+    if (writes.length) rt.store.writeDoc(writes, { tier: 'document' });
+  }
+  studio.frames.onAdded((e) => {
+    scheduleThumb(e.id, 500);
+    e.log.on((ev) => {
+      if (ev.type !== 'preview' && studio.frames.get(e.id) === e) scheduleThumb(e.id);
+    });
+  });
+  const relinking = new Set<string>();
+  /** A library frame whose file is not open: its handle (a permission click), else he locates the file. */
+  async function relink(id: string): Promise<void> {
+    const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
+    if (!c || relinking.has(id) || studio.frames.get(id)) return;
+    relinking.add(id);
+    try {
+      const as: OpenAs = c.kind ?? 'auto';
+      const h = await kv.get<FileSystemFileHandle>('handles', `file:${c.sha256}`).catch(() => undefined);
+      if (h) {
+        status(`opening ${c.name} again…`);
+        if (await reconnect(h).catch(() => false)) return await openFiles(await fromHandles([h]), { as, expect: c });
+      }
+      const r = await rt.chrome.dialog({
+        title: `Where is ${c.name}?`,
+        body: el('p', { text: `The library keeps ${c.name} and its recipe, but the browser needs the file again to show it.` }),
+        buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${c.name}…`, value: 'locate', primary: true }],
+      }).result;
+      if (r === 'remove') studio.remove([id]);
+      else if (r === 'locate') {
+        const files = await chooseFiles(false);
+        if (files.length) await openFiles(files, { as, expect: c });
+      } else status(`${c.name} is not open: select it again to open its file`);
+    } finally {
+      relinking.delete(id);
+    }
+  }
+  /** Files through the File System Access picker (handles kept with the library), else an <input type=file>. */
+  async function chooseFiles(multiple = true): Promise<PickedFile[]> {
+    if (hasFilePicker()) {
+      try {
+        return await pickFiles(multiple);
+      } catch (e) {
+        if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
+        return [];
+      }
+    }
+    return new Promise((ok) => {
+      const input = el('input', { type: 'file', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(','), ...(multiple ? { multiple: '' } : {}) });
+      input.addEventListener('change', () => ok(fromFileList(input.files ?? [])), { once: true });
+      input.addEventListener('cancel', () => ok([]), { once: true });
+      input.click();
+    });
+  }
+  // selecting a frame that is not open (after a reload) opens its file again; not the selection restored at boot
+  // (a right-click selects too, for the context menu: that one does not ask for the file)
+  let armed = false;
+  let lastSel: string | null = studio.current;
+  let rightAt = 0;
+  document.addEventListener('pointerdown', (e) => void (e.button === 2 && (rightAt = performance.now())), true);
+  rt.store.on(() => {
+    const f = studio.current;
+    if (f === lastSel) return;
+    lastSel = f;
+    if (armed && f && isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
+  });
+  // drop files anywhere on the window ("or drop them here"); Chrome hands file handles too
+  document.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+  });
+  document.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (!dt?.files.length) return;
+    e.preventDefault();
+    const items = [...dt.items].filter((i) => i.kind === 'file');
+    const handles = items.map((i) => (i as DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> }).getAsFileSystemHandle?.() ?? Promise.resolve(null));
+    const files = fromFileList(dt.files);
+    void Promise.all(handles).then((hs) => {
+      const byName = new Map(hs.filter((h): h is FileSystemFileHandle => h?.kind === 'file').map((h) => [h.name, h]));
+      return openFiles(files.map((f) => ({ ...f, ...(byName.get(f.name) ? { handle: byName.get(f.name)! } : {}) })));
+    });
+  });
+
+  // ── the host's actions in the studio's menus (CHB-027: the top bar folded into File and View; Edit has Undo and
+  //    Redo already). Hidden file inputs stay for browsers without the File System Access API, and for tests. ──
+  const fileInput = el('input', { type: 'file', id: 'file', multiple: '', hidden: '', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(',') });
   fileInput.addEventListener('change', () => {
     void openFiles(fromFileList(fileInput.files ?? []));
     fileInput.value = '';
   });
-  const openBtn = el('label', { class: 'file', for: 'file', title: 'Open scans: TIFF, PNG, DNG, camera RAW', text: 'Open files…' });
-  const folderInput = el('input', { type: 'file', id: 'folder', webkitdirectory: '', multiple: '' });
+  const folderInput = el('input', { type: 'file', id: 'folder', webkitdirectory: '', multiple: '', hidden: '' });
   folderInput.addEventListener('change', () => {
     void openFiles(fromFileList(folderInput.files ?? []));
     folderInput.value = '';
   });
-  const folderBtn = el('button', { type: 'button', id: 'open-folder', title: 'Open every scan in a folder', text: 'Open folder…' });
-  folderBtn.addEventListener('click', () => {
-    if (!hasDirectoryPicker()) return folderInput.click();
-    void (async () => {
+  document.body.append(fileInput, folderInput);
+  let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
+  if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
+  const layouts = Object.keys(VARIANTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
+  const hostActions: StudioHost = {
+    openFiles: async () => {
+      if (!hasFilePicker()) return fileInput.click();
+      const files = await chooseFiles(true);
+      if (files.length) await openFiles(files);
+    },
+    openFolder: async () => {
+      if (!hasDirectoryPicker()) return folderInput.click();
       try {
         const dir = await pickDirectory();
         await kv.put('handles', 'last-folder', dir);
-        reopen.hidden = true;
+        lastDir = dir;
+        studio.setHost({ ...hostActions, folder: dir.name });
         await openFiles(await listScans(dir));
       } catch (e) {
         if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
       }
-    })();
-  });
-  // the last folder (Chrome keeps the handle; reading it again needs a click)
-  const reopen = el('button', { type: 'button', id: 'reopen-folder', text: 'Reopen folder' });
-  reopen.hidden = true;
-  const lastDir = await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined);
-  if (lastDir && hasDirectoryPicker()) {
-    reopen.hidden = false;
-    reopen.textContent = `Reopen ${lastDir.name}`;
-    reopen.title = 'Open the scans of the folder you used last time';
-    reopen.addEventListener('click', () => {
-      void (async () => {
-        if (!(await reconnect(lastDir))) return status(`no access to ${lastDir.name}`, { error: true });
-        reopen.hidden = true;
-        await openFiles(await listScans(lastDir));
-      })();
-    });
+    },
+    // the last folder (Chrome keeps the handle; reading it again needs a click)
+    reopenFolder: async () => {
+      if (!lastDir) return;
+      if (!(await reconnect(lastDir))) return status(`no access to ${lastDir.name}`, { error: true });
+      await openFiles(await listScans(lastDir));
+    },
+    folder: lastDir?.name ?? null,
+    exportPrint: () => exportDialog(),
+    saveRecipe: () => {
+      const r = recipeJson();
+      if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
+    },
+    ...(host.settings ? { dust: (on: boolean) => void (host.settings!.dust = on) } : {}),
+    layouts,
+    layout: def.id,
+    setLayout: (v: string) => {
+      const u = new URL(location.href);
+      u.searchParams.set('variant', v);
+      location.href = u.toString();
+    },
+  };
+  studio.setHost(hostActions);
+
+  /** File ▸ Export…: format and colour space, then where to (the picker) */
+  async function exportDialog(): Promise<void> {
+    const f = studio.current;
+    if (!f || !studio.frames.get(f)) return;
+    const fmt = el('select', { id: 'export-format', 'aria-label': 'Export format' }, ...EXPORT_FORMATS.map((x) => el('option', { value: x.id, text: x.label })));
+    fmt.value = exportState.format;
+    const sp = el('select', { id: 'export-space', 'aria-label': 'Export colour space' }, ...EXPORT_SPACES.map((x) => el('option', { value: x.id, text: x.label })));
+    sp.value = exportState.space;
+    const row = (label: string, c: HTMLElement): HTMLElement => el('label', { class: 'cb-export-row' }, el('span', { text: label }), c);
+    const body = el('div', { class: 'cb-export' }, row('Format', fmt), row('Colour space', sp),
+      el('p', { class: 'small', text: pickerAvailable() ? 'You choose where the file goes next.' : 'The file is downloaded.' }));
+    const r = await rt.chrome.dialog({ title: `Export ${studio.frames.get(f)!.name}`, body, buttons: [{ label: 'Cancel', value: 'cancel' }, { label: 'Export', value: 'export', primary: true }] }).result;
+    if (r !== 'export') return;
+    exportState.format = fmt.value as ExportFormat;
+    exportState.space = sp.value as typeof exportState.space;
+    await exportFrame(f, 'picker');
   }
-  const undo = el('button', { type: 'button', id: 'undo', title: 'Undo (Ctrl+Z)', text: 'Undo' });
-  undo.addEventListener('click', () => rt.runCommand('edit.undo', null));
-  const redo = el('button', { type: 'button', id: 'redo', title: 'Redo (Shift+Ctrl+Z)', text: 'Redo' });
-  redo.addEventListener('click', () => rt.runCommand('edit.redo', null));
-  const exp = el('button', { type: 'button', id: 'export', class: 'primary', title: `Export the print${pickerAvailable() ? ' (you choose where)' : ' (downloaded)'}`, text: 'Export' });
-  exp.addEventListener('click', () => void rt.runCommand('output.save', null));
-  const fmt = el('select', { id: 'export-format', 'aria-label': 'Export format' }, ...EXPORT_FORMATS.map((f) => el('option', { value: f.id, text: f.label })));
-  fmt.addEventListener('change', () => void (exportState.format = fmt.value as ExportFormat));
-  const space = el('select', { id: 'export-space', 'aria-label': 'Export colour space' }, ...EXPORT_SPACES.map((f) => el('option', { value: f.id, text: f.label })));
-  space.addEventListener('change', () => void (exportState.space = space.value as typeof exportState.space));
-  const saveRecipe = el('button', { type: 'button', id: 'save-recipe', title: 'Download the recipe and its history as JSON (it is also kept in the browser, by the file’s hash)', text: 'Save recipe' });
-  saveRecipe.addEventListener('click', () => {
-    const r = recipeJson();
-    if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
-  });
-  const variantSel = el('select', { id: 'variant', 'aria-label': 'Studio layout', title: 'Studio layout (variant)' }, ...Object.keys(VARIANTS).map((v) => el('option', { value: v, text: v })));
-  variantSel.value = def.id;
-  variantSel.addEventListener('change', () => {
-    const u = new URL(location.href);
-    u.searchParams.set('variant', variantSel.value);
-    location.href = u.toString();
-  });
-  const offline = el('span', { id: 'offline-state', class: 'small' });
-  const kids: (Node | string)[] = [el('span', { class: 'brand' }, 'Chromobench ', el('i', { text: def.label })), fileInput, openBtn, folderInput, folderBtn, reopen, el('span', { class: 'sep' }), undo, redo, el('span', { class: 'sep' }), exp, fmt, space, saveRecipe];
-  if (host.settings) {
-    const dust = el('input', { type: 'checkbox', id: 'dust' });
-    dust.addEventListener('change', () => void (host.settings!.dust = dust.checked));
-    kids.push(el('label', { for: 'dust', title: 'Detect and heal dust specks when a scan is opened (slow on big scans)' }, dust, ' dust'));
-    // CHB-012: open digital photos (camera RAW, TIFF, PNG) as scenes shot on film instead of as negatives
-    const photo = el('input', { type: 'checkbox', id: 'photo' });
-    photo.addEventListener('change', () => void (host.settings!.photo = photo.checked));
-    kids.push(el('label', { for: 'photo', title: 'Open files as photos: a digital RAW exposed onto the film stock, developed and printed (not a negative scan)' }, photo, ' photo'));
-  }
-  kids.push(el('span', { class: 'sp' }), offline, el('label', { for: 'variant', text: 'Layout' }), variantSel);
-  barEl.append(...kids);
+  // service worker state, in the status line
+  const offline = el('span', { id: 'offline-state', class: 'small', title: 'Whether the studio starts without a network connection' });
+  statusBarEl.insertBefore(offline, statusEl);
 
   // ── export and the recipe ──
   function recipeJson(): { json: string; fileName: string } | null {
@@ -409,10 +618,33 @@ async function main(): Promise<void> {
   }
 
   hook(rt, studio, def.id, host, exportFrame, chat);
-  status('ready: open a scan (Open files…)');
+  // a selection restored from last time that is not open: cleared, so the first click on it opens its file
+  if (studio.current && isOffline(rt.state, studio.current)) {
+    rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
+    lastSel = null;
+  }
+  armed = true;
+  const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => isOffline(rt.state, x)).length ?? 0;
+  status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
   document.body.dataset['variant'] = def.id;
+}
+
+/** A rendered thumbnail as a small JPEG data URL, drawn as the shell's thumb draws it (F5: kept in the catalog). */
+function thumbUrl(image: PresentImage): string | null {
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = image.width;
+    cv.height = image.height;
+    const pres = new Canvas2DPresenter(cv);
+    pres.setImages(image, null);
+    const reg = image.region;
+    pres.draw({ docW: reg.w, docH: reg.h, cx: reg.x + reg.w / 2, cy: reg.y + reg.h / 2, zoom: image.width / (reg.w || 1), dpr: 1, split: null }, { stage: [0, 0, 0], frame: [0, 0, 0] });
+    return cv.toDataURL('image/jpeg', 0.8);
+  } catch {
+    return null;
+  }
 }
 
 /** Connects to a bridge when one serves this page, or when ?bridge[=ws-url] asks for it. */

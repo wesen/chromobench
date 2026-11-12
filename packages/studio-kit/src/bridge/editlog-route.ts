@@ -83,6 +83,12 @@ export class EditLogRoute implements RouteAdapter {
         api.publish(this.mirror(e), { init: true });
         offs.push(e.log.on(ev => this.onLog(e, ev)));
       }),
+      // a frame removed (CHB-027): its recipe and proposals leave the store
+      this.frames.onRemoved(e => {
+        if (this.frames.get(e.id)) return;
+        this.previewed.delete(e.id);
+        api.publish([{ path: ['recipes', e.id], value: undefined }, { path: ['proposals', e.id], value: undefined }], { init: true });
+      }),
     );
     return () => {
       for (const f of offs) f();
@@ -116,7 +122,7 @@ export class EditLogRoute implements RouteAdapter {
     this.api?.publish(this.mirror(e));
   }
   private onLog(e: FrameEntry, ev: LogEvent): void {
-    if (ev.type === 'preview' || ev.type === 'mode' || this.quiet) return;
+    if (ev.type === 'preview' || ev.type === 'mode' || this.quiet || this.frames.get(e.id) !== e) return;
     this.publish(e);
     if ((ev.type === 'apply' || ev.type === 'approve') && this.api) {
       this.stats.pushes++;
@@ -135,12 +141,14 @@ export class EditLogRoute implements RouteAdapter {
   // ── history parts ──
   part(e: FrameEntry, tx: string, label: string): HistoryPart {
     const log = e.log;
+    // a frame removed or re-opened in the other mode since: its old log is out of the studio, the step is skipped
+    const gone = (): boolean => this.frames.get(e.id) !== e;
     return {
       source: 'recipes',
       label,
       channel: e.id,
       undo: () => {
-        if (log.cursor === 0 || log.units[log.cursor - 1]!.tx !== tx) {
+        if (gone() || log.cursor === 0 || log.units[log.cursor - 1]!.tx !== tx) {
           this.stats.skips++;
           return false;
         }
@@ -149,7 +157,7 @@ export class EditLogRoute implements RouteAdapter {
         return this.mirror(e);
       },
       redo: () => {
-        if (log.cursor >= log.units.length || log.units[log.cursor]!.tx !== tx) {
+        if (gone() || log.cursor >= log.units.length || log.units[log.cursor]!.tx !== tx) {
           this.stats.skips++;
           return false;
         }

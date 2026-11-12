@@ -284,3 +284,34 @@ Looks resolve to plain `set` mutations (decided). If the photographer wants "cha
 look and re-sync the roll", the recipe would need `looks: [{ id, params, amount }]` folded before explicit edits —
 a fold change for every consumer. Not requested now; the batch id (`look:<id>:…`) and the unit label
 ("Look: warm print at 60 %") already record which look made a unit, so a "reapply" command can be built without it.
+
+# Contract requests from CHB-027 (WS-A, open mode)
+
+## R10. The decode mode is part of a source's identity in the graph
+
+**What.** `source.open` takes `mode: 'scan' | 'photo'` (bound from `source.decode.mode`, like `encoding`), so its
+node id, and every id downstream, differs between a file opened as a negative and the same file opened as a photo.
+Optionally `Engine.open(source, o?: { decode?: Partial<DecodeOptions> })`, so the decode mode reaches an engine
+without a host-side opener.
+
+**Why.** CHB-027 lets the photographer re-open a frame as a photo or as a negative (F3, F6). The same file is then
+decoded differently (camera RAW: CFA-binned scan mode vs demosaiced photo mode, different working sizes), but
+`source.open(sha, encoding)` names the same node, so every engine would serve cached results and stale node infos
+(sizes) of the old decode.
+
+**Workaround now.** `RefEngine.forgetSource(sha)` and `GpuEngine.forgetSource(sha)` (host glue next to
+`openDecoded`) drop cached results and rebuild the engine graph; `StudioEngine` replaces its graph and calls them
+when a sha is registered again in another mode; each frame entry gets a fresh `Graph`. Studio-kit passes the mode
+through its own `SourceOpener`, not `Engine.open`.
+
+**Proposed diff** (`packages/contract/src/catalog/source-scan-invert.ts`):
+
+```diff
+     args: {
+       source: { type: 'string', path: '', doc: 'SHA-256 of the source file (FrameRecipe.source.sha256); the engine must have opened it.' },
+       encoding: { type: 'enum', values: ['linear', 'srgb', 'gamma22'], default: 'linear', doc: 'Transfer encoding of the stored samples.', ui: { widget: 'segmented', label: 'Encoding', group: 'Source' } },
++      mode: { type: 'enum', values: ['scan', 'photo'], default: 'scan', doc: 'How the file was decoded (FrameRecipe.source.decode.mode): a negative scan or a photo. Part of the source identity.' },
+     },
+```
+
+Engines then key their sources by `(sha, mode)` (`openDecoded(info, data, mode)`).

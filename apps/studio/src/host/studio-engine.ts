@@ -36,14 +36,39 @@ export interface Decoded {
   baseT?: Vec3 | null;
   /** 'digital-raw': opened as a photo (CHB-012): shot on film by the forward path, no negative conditioning. */
   kind?: 'negative-scan' | 'digital-raw';
+  /** What the pixels look like (CHB-027: ingest's guessOpenMode on the working image), whatever the decode mode. */
+  guess?: OpenGuess;
 }
+
+/** Photo or negative, guessed from the pixels (ingest's OpenModeGuess, structurally). */
+export interface OpenGuess {
+  kind: 'photo' | 'negative';
+  /** false: ask the photographer, with `kind` preselected */
+  confident: boolean;
+  /** why, in a photographer's words */
+  why: string;
+}
+
+/** The decode modes (contract DecodeOptions.mode): 'scan' for a negative, 'photo' for a digital photo. */
+export type DecodeMode = 'scan' | 'photo';
+/** How to open: guess (auto), or as the photographer says. */
+export type OpenAs = 'auto' | 'photo' | 'negative';
+/** Asks the photographer when the guess is unsure; resolves to his answer. */
+export type AskOpenMode = (guess: OpenGuess, name: string) => Promise<'photo' | 'negative'>;
 
 /** What the host file (engines.ts) provides: everything that needs core, gpu or ingest. */
 export interface HostServices {
-  /** Decodes a file; `mode` photo or scan (a negative), else the host's setting. */
-  decode(bytes: Uint8Array, sha256: string, name: string, mode?: 'photo' | 'scan'): Promise<Decoded>;
-  /** Registers a decoded source with the physics engine (openDecoded, CHB-023 glue in core and gpu); not called when decode returned no data. */
-  register(engine: Engine, info: SourceInfo, data: Float32Array): void;
+  /** Decodes in the mode asked (CHB-027: explicit, per file) and guesses photo or negative from the pixels. */
+  decode(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode): Promise<Decoded>;
+  /** The decode to try first when guessing (classifier hook: ingest's openPrior): a camera RAW is decoded as a photo. */
+  prior?(name: string): 'photo' | 'negative' | null;
+  /** Drops a source and everything computed from it in the physics engine (before the file is decoded another way). */
+  forget?(engine: Engine, sha256: string): void;
+  /**
+   * Registers the last decode of a source with the physics engine (openDecoded, CHB-023 glue in core and gpu). `data`
+   * is absent when the decode kept the pixels where the engine runs (the engine worker, CHB-027).
+   */
+  register(engine: Engine, info: SourceInfo, data: Float32Array | undefined): void;
   /** Core's per-pixel scan class: density above the rebate, σ per channel, solve residual → 0 ok, 1 blank, 2 below base, 3 out of gamut. */
   classify(D: ArrayLike<number>, sigma: ArrayLike<number>, residual: number): number;
   defaultSigma: Vec3;
@@ -163,7 +188,8 @@ const result = (n: Node, info: ImageInfo, base: { region: Box; scale: number; wa
 
 export class StudioEngine implements Engine {
   readonly id: EngineId;
-  readonly graph = new Graph();
+  /** Replaced when a source is decoded another way (re-open as photo / negative). */
+  graph = new Graph();
   readonly primary: Engine;
   /** What the status line shows: engine, adapter, working size. */
   readonly label: string;
@@ -186,16 +212,55 @@ export class StudioEngine implements Engine {
     return { ...c, ops: [...new Set([...c.ops, ...HOST_OPS])].sort() };
   }
 
+  /** Engine.open: decodes as the pixels suggest (a guess that is unsure stays with the first decode). */
   async open(source: SourceRef): Promise<SourceInfo> {
+    return (await this.openAs(source, 'auto')).info;
+  }
+
+  /**
+   * Opens a source as a photo, as a negative, or as the pixels suggest (CHB-027, F1). 'auto' decodes in the
+   * file type's likely mode first (a camera RAW as a photo, everything else as a scan), reads the guess, asks
+   * when it is unsure and `ask` is given, and decodes again in the other mode when the answer differs.
+   */
+  async openAs(source: SourceRef, as: OpenAs, ask?: AskOpenMode): Promise<{ info: SourceInfo; kind: 'negative-scan' | 'digital-raw'; guess: OpenGuess | null }> {
     if (!source.bytes) fail('E_FORMAT', 'open needs source.bytes');
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = source.sha256 || sha256Hex(bytes);
-    const d = await this.host.decode(bytes, sha, source.name ?? source.path ?? 'scan');
-    if (d.data) this.host.register(this.primary, d.info, d.data);
+    const name = source.name ?? source.path ?? 'scan';
+    let mode: DecodeMode = as === 'photo' ? 'photo' : as === 'negative' ? 'scan' : this.host.prior?.(name) === 'photo' ? 'photo' : 'scan';
+    // the decoder may transfer the bytes to its worker (LibRaw): keep a copy for a second decode
+    const again = as === 'auto' ? bytes.slice() : null;
+    let d = await this.host.decode(bytes, sha, name, mode);
+    if (again && d.guess) {
+      const want = d.guess.confident || !ask ? d.guess.kind : await ask(d.guess, name);
+      const m2: DecodeMode = want === 'photo' ? 'photo' : 'scan';
+      if (m2 !== mode) {
+        mode = m2;
+        d = await this.host.decode(again, sha, name, mode);
+      }
+    }
+    const kind = d.kind ?? (mode === 'photo' ? 'digital-raw' : 'negative-scan');
+    const before = this.notes.get(sha);
+    if (before && (before.kind ?? 'negative-scan') !== kind) this.forget(sha);
+    this.host.register(this.primary, d.info, d.data);
     this.graph.registerSource(d.info);
+    // the pixels are the engine's once registered
     const { data: _pixels, ...kept } = d;
-    this.notes.set(sha, kept);
-    return d.info;
+    this.notes.set(sha, { ...kept, kind });
+    return { info: d.info, kind, guess: d.guess ?? null };
+  }
+
+  /** The file is decoded another way now: drop what the engines computed from the old decode. */
+  private forget(sha: string): void {
+    this.host.forget?.(this.primary, sha);
+    const old = this.graph;
+    this.graph = new Graph();
+    for (const k of this.notes.keys()) {
+      const info = k === sha ? undefined : old.source(k);
+      if (info) this.graph.registerSource(info);
+    }
+    this.supported.clear();
+    this.notes.delete(sha);
   }
 
   adopt(defs: readonly NodeDef[]): void {

@@ -32,9 +32,11 @@ async function start(engine: 'reference' | 'none' = 'reference'): Promise<{ clie
   const we = new WorkerEngine(client, init.caps!);
   const host: HostServices = {
     decode: (b, s, name, mode) => client.decode(b, s, name, mode ?? 'scan', { long: 0, dust: false, keep: 'register' }),
-    register: () => {
-      throw new Error('the worker registered the pixels');
+    register: (_e, info, px) => {
+      expect(px).toBeUndefined(); // the pixels stayed in the worker
+      we.register(info.sha256);
     },
+    forget: (_e, s) => we.forgetSource(s),
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,
   };
@@ -90,6 +92,23 @@ describe('engine worker (CHB-027)', () => {
     await expect(p).rejects.toMatchObject({ diag: { code: 'E_CANCELLED' } });
     const r = await studio!.evaluate(n, { scale: 'full', precision: 'preview' });
     expect(r.width).toBe(studio!.graph.source(sha)!.width);
+  });
+
+  it('re-open as a photo (WS-A openAs): the worker forgets the negative decode and registers the photo one', async () => {
+    const { studio } = await start();
+    const a = await studio!.openAs({ kind: 'file', sha256: sha, name: 'm1.tif', bytes }, 'negative');
+    expect(a.kind).toBe('negative-scan');
+    const b = await studio!.openAs({ kind: 'file', sha256: sha, name: 'm1.tif', bytes }, 'photo');
+    expect(b.kind).toBe('digital-raw');
+    expect(studio!.notes.get(sha)?.notes.join(' ')).toMatch(/^photo:/);
+    const g = new Graph();
+    g.registerSource(b.info);
+    const src = g.intern('source.open', [], { source: sha }).node;
+    studio!.adopt(g.closure(src.id));
+    const r = await studio!.evaluate(src, { scale: 'full', precision: 'preview' });
+    // the photo decode's pixels, as decoded in this thread
+    const local = await decodeFile(bytes, sha, 'm1.tif', 'photo', { long: 0, dust: false, roll: new Map(), raw: noRaw });
+    expect(Array.from(await r.read())).toEqual(Array.from(local.data, (v) => v));
   });
 
   it('decode-only (the GPU engine on the main thread): the working image comes back, resampled', async () => {

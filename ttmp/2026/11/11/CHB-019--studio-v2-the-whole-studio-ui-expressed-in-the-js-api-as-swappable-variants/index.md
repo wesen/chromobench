@@ -1,7 +1,7 @@
 ---
 Title: 'Studio v2: the whole studio UI expressed in the JS API, as swappable variants'
 Ticket: CHB-019
-Status: active
+Status: complete
 Topics:
     - ui
     - product
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T15:10:20.063827475-05:00
+LastUpdated: 2026-11-12T14:47:51.217613763-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

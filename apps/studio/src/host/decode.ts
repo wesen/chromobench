@@ -6,9 +6,10 @@
 import type { Box, SourceInfo, Vec3 } from '@chromobench/contract';
 import { DEFAULT_SIGMA_D, rebateBox } from '@chromobench/core';
 import {
-  conditionScan, decodeAsync, detectSpecks, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask, type FrameBase, type RawDecoder,
+  conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask,
+  type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
-import type { Decoded as DecodedMeta } from './studio-engine.ts';
+import type { Decoded as DecodedMeta, OpenGuess } from './studio-engine.ts';
 import type { DecodeMode } from './worker-protocol.ts';
 
 export type { DecodeMode };
@@ -27,6 +28,13 @@ export interface DecodeOptions {
 }
 
 const fmt3 = (v: ArrayLike<number>): string => Array.from(v, (x) => x.toFixed(2)).join(' ');
+
+/** Photo or negative from the working image (ingest's classifier); scan-mode camera data is white-balanced first. */
+function guessOf(raw: RawImage, data: Float32Array, w: number, h: number, name: string, mode: DecodeMode, layout: FilmLayout | null): OpenGuess {
+  const wb = mode === 'scan' && raw.meta.format === 'raw' ? raw.meta.camera?.daylightMultipliers ?? null : null;
+  const g = guessOpenMode(data, w, h, { name, format: raw.meta.format, wb, layout });
+  return { kind: g.kind, confident: g.confident, why: g.why };
+}
 
 /** Dust in scanner density: detect (ingest detectSpecks), heal (patch), back to transmittance. */
 export function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
@@ -59,7 +67,7 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
   if (s < 1) notes.push(`working image ${w}×${h}`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = { ...info0, width: w, height: h, channels: 3, notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }] };
-  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw' };
+  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
 }
 
 /** Decode → linear → area-averaged working image → conditioning. */
@@ -84,7 +92,10 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   // the roll opened so far.
   const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
   const c = conditionScan(data, w, h, { id: sha256, rollVeil, subtract: false });
-  roll.set(sha256, c.frame);
+  const guess = guessOf(raw, data, w, h, name, 'scan', c.layout);
+  // a photo opened as a negative must not lend its "base" to the roll
+  if (guess.kind === 'negative' || !guess.confident) roll.set(sha256, c.frame);
+  else roll.delete(sha256);
   const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
   // the base as scanned (veil still in): the dust healer measures density against it
   const Treb: Vec3 = c.layout.rebate?.Traw ?? ([0, 1, 2].map((k) => {
@@ -103,10 +114,11 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess };
 }
 
 /** Decodes a file in the given mode. */
 export function decodeFile(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: DecodeOptions): Promise<Decoded> {
+  if (mode === 'photo') o.roll.delete(sha256);
   return mode === 'photo' ? decodePhoto(bytes, sha256, name, o) : decodeScan(bytes, sha256, name, o);
 }

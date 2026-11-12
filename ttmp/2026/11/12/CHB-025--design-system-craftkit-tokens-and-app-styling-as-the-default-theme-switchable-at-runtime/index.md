@@ -1,7 +1,7 @@
 ---
 Title: 'Design system: CraftKit tokens and app styling as the default theme, switchable at runtime'
 Ticket: CHB-025
-Status: active
+Status: complete
 Topics:
     - ui
 DocType: index
@@ -24,7 +24,7 @@ RelatedFiles:
       Note: 'lint: no literal colours outside theme files'
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-12T10:04:29.915261342-05:00
+LastUpdated: 2026-11-12T14:44:41.917896832-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

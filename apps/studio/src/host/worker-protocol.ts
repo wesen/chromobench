@@ -33,7 +33,11 @@ export interface DecodeJob {
   /** Working image long side (0 = the file's own size). */
   long: number;
   dust: boolean;
-  /** 'register': the worker's engine keeps the pixels (no copy back); 'return': they come back (the GPU engine registers them). */
+  /**
+   * 'register': the pixels stay in the worker (no copy back) until a 'register' message makes them the engine's
+   * source (StudioEngine.openAs may decode twice, or forget the old decode first); 'return': they come back (the GPU
+   * engine registers them).
+   */
   keep: 'register' | 'return';
 }
 
@@ -57,6 +61,10 @@ export type ToWorker =
   | EvaluateJob
   | MeasureJob
   | { kind: 'prepare'; id: number; keys: TableKey[] }
+  /** Registers the last 'register' decode of a source with the worker's engine (no reply; ordered before later jobs). */
+  | { kind: 'register'; sha256: string }
+  /** Drops a source and everything computed from it (RefEngine.forgetSource; no reply). */
+  | { kind: 'forget'; sha256: string }
   /** Makes nodes known to the worker's engine (no reply; ordered before later jobs). */
   | { kind: 'adopt'; defs: NodeDef[] }
   /** Drops a queued job, or aborts a running one between stages (no reply; the job rejects with E_CANCELLED). */

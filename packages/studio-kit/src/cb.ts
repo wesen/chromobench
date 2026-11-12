@@ -18,7 +18,8 @@ import { DARKROOM, allParameters, type Arrangement } from './model/arrangement.t
 import { controlModels } from './kit/args.ts';
 import { diffRecipes, PRINT_SETTINGS, VIEW_MODES, type ViewMode } from './model/recipes.ts';
 import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
-import type { Studio } from './studio.ts';
+import type { HostFlags, Studio } from './studio.ts';
+import type { OpenAs } from './bridge/frames.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
@@ -35,6 +36,10 @@ export interface CatalogFrame {
   stars: number;
   label: string | null;
   keywords: string[];
+  /** how the file is open: as a photo or as a negative (CHB-027) */
+  kind?: 'photo' | 'negative';
+  /** a small JPEG of the last print (data URL), so the library shows the frame after a reload (F5) */
+  thumb?: string;
 }
 export interface CbState {
   catalog: { frames: Record<string, CatalogFrame>; order: string[] };
@@ -42,8 +47,9 @@ export interface CbState {
   recipes: Record<string, FrameRecipe>;
   proposals: Record<string, any[]>;
   view: { module?: string; mode: string; view: ViewMode; compare: string; split: number; step: string; filter: { text: string; flag: string | null }; thumbSize: number; vp: Record<string, unknown> };
-  ui: { selection: { ids: string[]; primary: string | null; anchor: string | null }; tool: string | null; toolOptions: Record<string, any>; focusPath: string | null; probe: [number, number] | null; showProposal: string | null; approvals: Record<string, { off?: number[]; stale?: { code: string; message: string }[] }> };
-  prefs: { agentMode: 'read-only' | 'ask' | 'auto' };
+  ui: { selection: { ids: string[]; primary: string | null; anchor: string | null }; tool: string | null; toolOptions: Record<string, any>; focusPath: string | null; probe: [number, number] | null; showProposal: string | null; approvals: Record<string, { off?: number[]; stale?: { code: string; message: string }[] }>; host?: HostFlags };
+  /** openAs: how File ▸ Open opens (CHB-027, remembered); dust: heal dust on open */
+  prefs: { agentMode: 'read-only' | 'ask' | 'auto'; openAs?: OpenAs; dust?: boolean };
   workspace: Record<string, unknown>;
 }
 
@@ -75,15 +81,32 @@ const targets = (ctx: any): string[] => (sel(ctx.state).length ? sel(ctx.state) 
 /** the frames of the catalog in roll order, after the library filter; frames not open in this session (their bytes
  *  were not opened since a reload, so there is no recipe to show) are left out until their file is opened again */
 export function visibleFrames(s: any): CatalogFrame[] {
+  return libraryFrames(s).filter(x => !s.recipes || !!s.recipes[x.id]);
+}
+
+/** every frame of the library in roll order, after the filter, including those not open in this session (CHB-027,
+ *  F5: listed with their saved thumbnail; selecting one asks the host to read its file again) */
+export function libraryFrames(s: any): CatalogFrame[] {
   const c = s?.catalog;
   if (!c) return [];
   const f = s.view?.filter ?? {};
   const text = String(f.text ?? '').toLowerCase();
   return (c.order as string[])
     .map(id => c.frames[id])
-    .filter((x: CatalogFrame | undefined): x is CatalogFrame => !!x && (!s.recipes || !!s.recipes[x.id]))
+    .filter((x: CatalogFrame | undefined): x is CatalogFrame => !!x)
     .filter(x => (!text || x.name.toLowerCase().includes(text) || x.keywords.some(k => k.toLowerCase().includes(text))) && (!f.flag || (f.flag === 'unflagged' ? !x.flag : x.flag === f.flag)));
 }
+
+/** true for a library frame whose file is not open in this session */
+export const isOffline = (s: any, id: string): boolean => !!s?.catalog?.frames?.[id] && !s?.recipes?.[id];
+
+/** the host's actions (ui.host, written by Studio.setHost) */
+const hostHas = (s: any, action: string): boolean => !!s?.ui?.host?.actions?.includes(action);
+const kindIn = (s: any, id: string | null): 'photo' | 'negative' | null =>
+  id ? (s?.recipes?.[id] ? (s.recipes[id].kind === 'digital-raw' ? 'photo' : 'negative') : (s?.catalog?.frames?.[id]?.kind ?? null)) : null;
+
+/** the thumbnail context menu (CHB-027, F6) */
+export const FRAME_CONTEXT = ['frame.reopenAsPhoto', 'frame.reopenAsNegative', '-', 'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.remove'];
 
 export function createCb(ck: Ck) {
   const node = (form: string, props: Record<string, unknown> = {}, kids: unknown[] = []): any => ck.node(form, props, kids);
@@ -169,6 +192,7 @@ export function createCb(ck: Ck) {
       .state('view', { init: CORE_STATE.view, view: true })
       .state('ui', { init: CORE_STATE.ui, view: true })
       .state('prefs', { init: CORE_STATE.prefs, view: true })
+      .keys('global', { 'Mod+O': 'file.open', 'Mod+E': 'file.export' })
       .forms(...CB_FORMS)
       .fragments(testStripFragment, padFragment)
       .passes(argsPass, handlesPass)
@@ -178,6 +202,31 @@ export function createCb(ck: Ck) {
           ctx.tx(label, (t: any) => {
             for (const id of targets(ctx)) if (t.catalog.frames[id]) t.catalog.frames[id].flag = v;
           });
+        const hostRun = (ctx: any, action: string, ...args: unknown[]): unknown => {
+          const h = studioOf(ctx).host as Record<string, unknown> | null;
+          const f = h?.[action];
+          if (typeof f === 'function') return (f as (...a: unknown[]) => unknown).apply(h, args);
+          ctx.toast('Not available in this window', { kind: 'why' });
+          return null;
+        };
+        const reopenAs = async (ctx: any, id: string | null, as: 'photo' | 'negative'): Promise<unknown> => {
+          if (!id) return null;
+          const studio = studioOf(ctx);
+          const name = ctx.state.catalog?.frames?.[id]?.name ?? id;
+          if (!studio.frames.get(id)) {
+            ctx.toast(`${name} is not open: select it to open its file first`, { kind: 'why' });
+            return null;
+          }
+          ctx.toast(`Re-opening ${name} as a ${as}…`, { kind: 'info' });
+          try {
+            const r = await studio.reopen(id, as);
+            ctx.toast(`${name} is open as a ${as} now${r.outcome === 'resumed' ? ` (its saved recipe as a ${as})` : ''}`, { kind: 'ok' });
+            return r.entry.id;
+          } catch (e) {
+            ctx.toast(`${name}: ${String((e as { diag?: { message?: string } })?.diag?.message ?? (e as Error)?.message ?? e)}`, { kind: 'error' });
+            return null;
+          }
+        };
         c.add('frame.pick', { label: 'Flag as Pick', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, 'pick', 'Flag as Pick') })
           .add('frame.reject', { label: 'Reject', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, 'reject', 'Reject') })
           .add('frame.unflag', { label: 'Unflag', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, null, 'Unflag') })
@@ -207,6 +256,75 @@ export function createCb(ck: Ck) {
             run: (ctx, id: string) => {
               studioOf(ctx).route.endBurst();
               ctx.set({ ui: { selection: { ids: [id], primary: id, anchor: id }, showProposal: null } });
+            },
+          })
+          .add('frame.reopenAsPhoto', {
+            label: 'Re-open as Photo',
+            menu: 'Frame',
+            enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
+            why: 'Open a frame first',
+            hidden: (s: any) => kindIn(s, current(s)) === 'photo',
+            run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'photo'),
+          })
+          .add('frame.reopenAsNegative', {
+            label: 'Re-open as Negative',
+            menu: 'Frame',
+            enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
+            why: 'Open a frame first',
+            hidden: (s: any) => kindIn(s, current(s)) === 'negative',
+            run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'negative'),
+          })
+          .add('frame.remove', {
+            label: (s: any) => (sel(s).length > 1 ? `Remove ${sel(s).length} Frames from Library` : 'Remove from Library'),
+            menu: 'Frame',
+            ...needFrame,
+            run: ctx => {
+              const ids = targets(ctx);
+              if (!ids.length) return;
+              const names = ids.map(id => ctx.state.catalog?.frames?.[id]?.name ?? id);
+              studioOf(ctx).remove(ids);
+              ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its recipe`, { kind: 'info' });
+            },
+          })
+          // ── the host's actions (CHB-027: the top bar folded into the menus); hidden where the host has none ──
+          .add('file.open', { label: 'Open Files…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => hostRun(ctx, 'openFiles') })
+          .add('file.openFolder', { label: 'Open Folder…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFolder'), run: ctx => hostRun(ctx, 'openFolder') })
+          .add('file.reopenFolder', {
+            label: (s: any) => `Reopen ${s.ui?.host?.folder ?? 'Last Folder'}`,
+            menu: 'File',
+            hidden: (s: any) => !hostHas(s, 'reopenFolder') || !s.ui?.host?.folder,
+            run: ctx => hostRun(ctx, 'reopenFolder'),
+          })
+          .add('file.openAs.auto', { label: 'Photo or Negative: Guess', menu: 'File', palette: false, checked: (s: any) => (s.prefs?.openAs ?? 'auto') === 'auto', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'auto' } }) })
+          .add('file.openAs.photo', { label: 'Open as Photos', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'photo', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'photo' } }) })
+          .add('file.openAs.negative', { label: 'Open as Negatives', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'negative', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'negative' } }) })
+          .add('file.dust', {
+            label: 'Heal Dust on Open',
+            menu: 'File',
+            checked: (s: any) => !!s.prefs?.dust,
+            hidden: (s: any) => !hostHas(s, 'dust'),
+            run: ctx => {
+              const on = !ctx.state.prefs?.dust;
+              ctx.set({ prefs: { dust: on } });
+              return hostRun(ctx, 'dust', on);
+            },
+          })
+          // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
+          .add('file.export', { label: 'Export…', menu: 'File', ...needFrame, run: ctx => (hostHas(ctx.state, 'exportPrint') ? hostRun(ctx, 'exportPrint') : ctx.run('output.save')) })
+          .add('file.saveRecipe', { label: 'Save Recipe', menu: 'File', ...needFrame, hidden: (s: any) => !hostHas(s, 'saveRecipe'), run: ctx => hostRun(ctx, 'saveRecipe') })
+          .add('view.layout', {
+            label: 'Layout…',
+            menu: 'View',
+            hidden: (s: any) => !hostHas(s, 'setLayout') || !(s.ui?.host?.layouts?.length > 0),
+            run: async (ctx, id?: string) => {
+              if (typeof id === 'string') return hostRun(ctx, 'setLayout', id);
+              const h = ctx.state.ui?.host;
+              const pick = await studioOf(ctx).rt!.chrome.dialog({
+                title: 'Layout of the studio',
+                buttons: (h?.layouts ?? []).map((l: { id: string; label: string }) => ({ label: l.label, value: l.id, primary: l.id === h?.layout })),
+              }).result;
+              if (typeof pick === 'string' && pick !== h?.layout) return hostRun(ctx, 'setLayout', pick);
+              return null;
             },
           })
           .add('frame.next', { label: 'Next Frame', menu: 'Frame', run: ctx => step(ctx, 1) })
@@ -362,7 +480,7 @@ export function createCb(ck: Ck) {
           })
           .add('output.save', {
             label: 'Save the Print',
-            menu: 'File',
+            // in menus as File ▸ Export… (file.export, CHB-027), which runs this where the host has no export dialog
             ...needFrame,
             run: ctx => {
               const save = ctx.services['save'] as ((f: string) => unknown) | undefined;
@@ -470,7 +588,7 @@ export function createCb(ck: Ck) {
   });
 
   function step(ctx: any, dir: number): void {
-    const list = visibleFrames(ctx.state);
+    const list = libraryFrames(ctx.state);
     if (!list.length) return;
     const i = list.findIndex(x => x.id === current(ctx.state));
     const next = list[Math.max(0, Math.min(list.length - 1, (i < 0 ? 0 : i) + dir))]!;
@@ -575,26 +693,37 @@ export function createCb(ck: Ck) {
   const cellFrame = (o: { size?: 'large' | 'small'; badges?: boolean; print?: boolean } = {}) => (item: CatalogFrame) =>
     ck.column(
       { class: `cb-cell${o.size === 'large' ? ' is-large' : ''}` },
-      ck.view.thumb({ image: (s: any) => frame(s, item.id)?.print() ?? null, max: o.size === 'large' ? 320 : 160, badge: (s: any) => badgeOf(s, item.id) } as any),
+      ck.view.thumb({
+        image: (s: any) => frame(s, item.id)?.print() ?? null,
+        // a frame not open in this session: the thumbnail saved with the library (F5)
+        src: (s: any) => (isOffline(s, item.id) ? (s.catalog.frames[item.id].thumb ?? null) : null),
+        max: o.size === 'large' ? 320 : 160,
+        badge: (s: any) => badgeOf(s, item.id),
+      } as any),
       ck.text((s: any) => cellCaption(s.catalog?.frames?.[item.id] ?? item), { dim: true }),
     );
+  const EMPTY = 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here';
+  const LIBRARY_KEYS = { Delete: 'frame.remove', Backspace: 'frame.remove' };
   const strip = (o: { vertical?: boolean; id?: string } = {}) =>
-    (o.vertical ? ck.view.list : ck.view.filmstrip)((s: any) => visibleFrames(s), {
+    (o.vertical ? ck.view.list : ck.view.filmstrip)((s: any) => libraryFrames(s), {
       id: o.id ?? (o.vertical ? 'strip-v' : 'strip'),
       ...(o.vertical ? { row: cellFrame() } : { cell: cellFrame() }),
       key: (x: CatalogFrame) => x.id,
       select: { bind: (s: any) => s.ui.selection, mode: 'multi' },
-      empty: 'Open a negative (File ▸ Open, or drop a TIFF)',
+      context: FRAME_CONTEXT,
+      keys: LIBRARY_KEYS,
+      empty: EMPTY,
     } as any);
   const grid = (o: { cell?: any; id?: string; keys?: Record<string, unknown>; source?: (s: any) => CatalogFrame[]; size?: 'large' } = {}) =>
-    ck.view.grid(o.source ?? ((s: any) => visibleFrames(s)), {
+    ck.view.grid(o.source ?? ((s: any) => libraryFrames(s)), {
       id: o.id ?? 'grid',
       cell: o.cell ?? cellFrame(o.size ? { size: o.size } : {}),
       key: (x: CatalogFrame) => x.id,
       size: (s: any) => (o.size === 'large' ? 320 : s.view.thumbSize),
       select: { bind: (s: any) => s.ui.selection, mode: 'multi' },
-      ...(o.keys ? { keys: o.keys } : {}),
-      empty: 'No frames yet: open a negative',
+      context: FRAME_CONTEXT,
+      keys: { ...LIBRARY_KEYS, ...(o.keys ?? {}) },
+      empty: EMPTY,
     } as any);
   const loupe = () => viewer(s => frame(s)?.print() ?? null, { id: 'loupe' });
   const compareView = () =>
@@ -603,7 +732,7 @@ export function createCb(ck: Ck) {
       viewer(s => frame(s)?.print() ?? null, { id: 'cmp-a' }),
       viewer(s => frame(s, sel(s).find(x => x !== current(s)) ?? null)?.print() ?? null, { id: 'cmp-b', label: (s: any) => s.catalog?.frames?.[sel(s).find(x => x !== current(s)) ?? '']?.name ?? 'Select a second frame' }),
     );
-  const survey = () => grid({ id: 'survey', source: (s: any) => visibleFrames(s).filter(x => sel(s).includes(x.id)), size: 'large' });
+  const survey = () => grid({ id: 'survey', source: (s: any) => libraryFrames(s).filter(x => sel(s).includes(x.id)), size: 'large' });
   const libraryViews = () =>
     ck.match((s: any) => s.view.mode, { grid: grid(), loupe: loupe(), compare: compareView(), survey: survey() }, { of: ['grid', 'loupe', 'compare', 'survey'] });
 
@@ -625,6 +754,7 @@ export function createCb(ck: Ck) {
     current,
     frame,
     visible: visibleFrames,
+    library: libraryFrames,
     recipe: (s: any, f?: string): FrameRecipe | undefined => s?.recipes?.[f ?? current(s) ?? ''],
     studio: (name: string, opts: Record<string, unknown> = {}) =>
       ck
@@ -690,7 +820,7 @@ const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negativ
 
 const badgeOf = (s: any, id: string): string => {
   const pending = s.proposals?.[id]?.length ?? 0;
-  return [pending ? `agent ${pending}` : '', rollTag(s, id)].filter(Boolean).join(' · ');
+  return [isOffline(s, id) ? 'not open' : '', pending ? `agent ${pending}` : '', rollTag(s, id)].filter(Boolean).join(' · ');
 };
 const cellCaption = (f: CatalogFrame): string => `${f.flag === 'pick' ? '⚑ ' : f.flag === 'reject' ? '✕ ' : ''}${f.name}${f.stars ? ' ' + '★'.repeat(f.stars) : ''}`;
 

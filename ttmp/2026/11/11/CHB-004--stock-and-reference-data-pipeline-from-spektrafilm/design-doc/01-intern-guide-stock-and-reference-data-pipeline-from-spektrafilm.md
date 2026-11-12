@@ -670,6 +670,11 @@ Keeping them in separate packs also matters for Section 4 of CC BY-SA ("Sui Gene
 
 ### 12.4 Decision record and the owner's list
 
+> **Owner decision, 2026-11-12:** this version is **not public**: chromobench is for the owner's family (the
+> photographer) only, so the licence questions below are **deferred until a public release is considered**.
+> Development keeps the attribution strings and licence files as planned, so a later release starts from a
+> clean state. The non-commercial packs may be used in this private version.
+
 - **Decision (proposed).** Ship stock packs as CC BY-SA 4.0 with `SPEKTRAFILM_LICENSE.txt` verbatim, a `CHANGELOG.txt` and the attribution string in every manifest, every `StockData.attribution`, the About screen and any exported LUT. Ship measured cameras as a separate CC BY-NC-SA 4.0 pack. License the exporter GPLv3. Keep precomputed derived tables out of the shipped app unless they carry the CC BY-SA notice.
 - **Owner decisions, blocking release but not development:** (1) is chromobench ever commercial (decides the NC packs); (2) the GPL question for ported algorithms; (3) asking hanatos about the table's licence and the CIE about its data; (4) whether to use the name "spektrafilm" anywhere beyond factual credit.
 

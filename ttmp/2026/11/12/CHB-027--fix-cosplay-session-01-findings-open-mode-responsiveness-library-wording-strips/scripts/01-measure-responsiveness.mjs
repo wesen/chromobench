@@ -119,7 +119,8 @@ function summary(name, t0, w, extra = {}) {
 }
 
 async function openFile(page, file, photo, label) {
-  await page.locator('#photo').setChecked(photo);
+  // before WS-A a 'photo' checkbox chose the decode; since, Open is 'Auto' (a NEF opens as a photo, the DNG as a negative)
+  if (await page.locator('#photo').count()) await page.locator('#photo').setChecked(photo);
   const t0 = await now(page);
   const wall = Date.now();
   const name = file.split('/').pop();
@@ -131,9 +132,7 @@ async function openFile(page, file, photo, label) {
     const st = window.chromobench.studio;
     return !/opening/.test(s) && st.frames.get(st.current)?.name === n;
   }, name, { timeout: TIMEOUT, polling: 50 });
-  const sel = await now(page);
-  // …and the main viewer has rendered since
-  await page.waitForFunction((t) => window.__wsb.renders.some((r) => r[0] >= t && r[2] !== 'draft' && r[1] === 'main'), sel - 50, { timeout: TIMEOUT, polling: 50 });
+  // (the status leaves "opening …" with the first render of the new frame, or an error)
   await idle(page);
   const w = await window_(page, t0);
   return summary(label, t0, w, { wallMs: Date.now() - wall, status: await page.locator('#status').textContent(), notes: (await page.locator('#notes').textContent())?.slice(0, 160) });
