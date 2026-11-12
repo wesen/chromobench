@@ -1173,3 +1173,79 @@ knee, the shared vocabulary. With the contract settled, five feature agents star
 ### Technical details
 
 - Running: CHB-021, CHB-022, CHB-012, CHB-008, CHB-020 follow-up.
+
+## Step 18: Roll follow-up, finish, looks and the assistant merged into main
+
+Four of the five feature agents finished and were merged into main: the CHB-020 follow-up (base/flare in recipes,
+roll batches, Roll module in classic), CHB-022 (crop/straighten, spot heal/clone, finish kit), CHB-021 (looks,
+Amount, compare/survey, apply to roll/library, agent `cb.looks`) and CHB-008 (DSL in a worker, chat panel with a
+Claude transport and a scripted demo, Go MCP bridge, playbooks). After merge resolution main has 2528 passing unit
+tests, the studio builds, and the bridge's Go tests pass. CHB-012 (film look for digital) is still running.
+
+### Prompt Context
+
+**User prompt (verbatim):** see Step 16; plus "how far are we?" (answered from the worktrees' git logs).
+**Assistant interpretation:** Keep merging the wave as it lands.
+**Inferred user intent:** A complete app.
+**Commit (code):** 51d1184 (roll follow-up), 442b46a (finish), 89555fe + 5b58d71 (looks + test fix), 3a… vitest
+timeout commit, f55cfd0 (agent)
+
+### What I did
+
+- Merged `task/chb-020-followup` (clean, 2418).
+- Merged `task/chb-022-finish`: conflicts in studio-kit `src/cb.ts` (roll `rollTag` import vs finish kit import),
+  `variants/classic.js` (`.use(roll).use(finish)`, `finishMenu(rollMenu(menus(m)))`) and the variants snapshot
+  (took ours, regenerated with `vitest -u`). Six failures in the full run were 5 s timeouts under load; the four
+  files passed alone (48 tests).
+- Merged `task/chb-021-looks`: seven conflicting files in studio-kit (package.json exports, `editlog-route.ts`
+  batch id → `batch: o.batch ?? tx`, cb.ts kit installs, variants index/d.ts, CONTRACT-REQUESTS.md sections,
+  snapshot). One real interaction: the looks test assumed `roll.fromFrames` writes no EditLog units, but the CHB-020
+  follow-up now writes the roll fields → the test now counts units relative to after roll setup (5b58d71).
+- Raised vitest's `testTimeout` to 30 s (property/golden tests hit 5 s under load; failures show as wrong values,
+  not slowness): full suite 74 files, 2493 passed.
+- Merged `task/chb-008-agent`: conflicts in `apps/studio/src/main.ts` (renderers → `{ ...ROLL_RENDERERS,
+  ...CHAT_RENDERERS }` plus chat and rollPhysics), studio-kit package.json, cb.ts, classic.js (finish and assistant
+  modules), snapshot (2 updated). `pnpm gen` (26 files incl. bridge resources); lint 325 file checks; `pnpm test`
+  80 files, 2528 passed; studio build ✓ 4.91 s; `cd bridge && GOFLAGS=-mod=mod GOPROXY=off go test ./...` ok.
+- Removed merged worktrees.
+
+### Why
+
+- Combine kits rather than pick sides: each conflict was two kits registering in the same lists.
+
+### What worked
+
+- All merges; the only behavioural interaction (looks × roll follow-up) was a test assumption.
+
+### What didn't work
+
+- Load-induced timeouts until the timeout change.
+
+### What I learned
+
+- Every kit adds lines to the same five studio-kit files (package.json exports, cb.ts, classic.js, variants index,
+  snapshot); a registration-by-directory scheme would remove these conflicts.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- CHB-008: the chat calls the Claude API from the page with the photographer's key (stored in localStorage when
+  "remember" is ticked); no proxy yet. In auto mode a concurrent edit by the photographer to the same path does not
+  wait for approval (agent R1).
+- CHB-022: `finishing.clarity` exists only in the mock; classic leaves the tones panel out.
+- CHB-021: imported look files do not run in the sandbox yet.
+
+### What should be done in the future
+
+- Merge CHB-012; a final pass: browser suite on main, open-task sweep, decisions list for the user.
+
+### Code review instructions
+
+- `git log --first-parent --oneline -12 main`.
+
+### Technical details
+
+- Assistant: Assistant module in classic/lab; "Scripted demo (offline)" needs no key. MCP: `bridge/README.md`.
