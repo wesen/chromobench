@@ -484,3 +484,68 @@ record whether the hang reproduces on a real GPU.
 
 ### Technical details
 - KV keys: `frames/thumb:<frameId>` = JPEG data URL (~1.5 kB for the 96×64 fixture, 160 px long side).
+
+## Step 7: Real GPU check, full browser suite, merge of main, hand-off
+
+The hang of Step 6 does not reproduce on a real GPU with the pre-fix build. The whole browser suite passes on my
+ports after one spec followed the top bar's removal, `main` (docs only since the last merge) merged cleanly, and
+the two WS-A tasks are checked.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1; the coordinator's real-GPU request is quoted in Step 6.
+**Assistant interpretation:** Record the real-GPU result, run the gates, hand off.
+**Inferred user intent:** A branch the orchestrator can merge.
+**Commit (code):** ce79b28 (Step 6 fix); 667e26a — "CHB-027 WS-A: theme spec reads the status line (no top bar); Mac real-GPU repro script for the idle hang"; merge 1fd4fb6.
+
+### What I did
+- Mac (M1 Max, Chrome, Metal; lock taken as WS-A after the orchestrator released it, released after):
+  `scripts/ws-a-01-mac-idle-hang.mjs`, the pre-fix build (f14262b's dist, saved in the scratchpad and served on
+  :4711): open the fixture on `engine=gpu`, `idle()`, Time ×2, `idle()`; then from 1.7 s to ~4.5 s alternate
+  views with `idle()` after each, so the catalog write (2 s after the change) lands among renders. 10 runs:
+  **10/10 ok** ("GPU · apple metal-3 · 4000 px"), thumbnail written into the catalog in every run, `idle()` after a
+  change 3.1–4.6 s for the whole loop. A first 10-run series without the view loop: 10/10 ok, `idle()` 8–28 ms.
+- `CI=1 STUDIO_PORT=4721 STUDIO_KIT_PORT=4722 SHELL_DEMO_PORT=4723 GPU_PARITY_PORT=4724 pnpm test:browser`:
+  90 passed, 1 failed — `e2e/theme.spec.ts` read the background of `#bar` (gone). It now reads `#statusbar`
+  (the host frame left) and passes. So 91/91.
+- `git merge main` (docs and other tickets only; no conflicts), then `pnpm typecheck`, `pnpm lint`, `pnpm test`
+  (91 files, 2678 passed, 7 skipped).
+- `docmgr task check --ticket CHB-027 --id 9wcz,j9hg`.
+
+### Why
+- The coordinator asked whether the hang is SwiftShader-only; it changes its priority.
+
+### What worked
+- See above.
+
+### What didn't work
+- My first Mac series could not hit the trigger: on Metal `idle()` is done in milliseconds, long before the 2 s
+  thumbnail timer, and every Time change re-arms the timer; switching views re-renders without a log event.
+
+### What I learned
+- The busy loop needs SwiftShader's slow renders (or timing only it produces); on Metal the same write during
+  renders is harmless. The CI browser still runs SwiftShader, so the KV fix stays.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- See Step 6 (root cause unknown).
+
+### What should be done in the future
+- WS-D: frame identity is `(sha, mode)` with the id `frame_<sha8>`; strip frames need `(sha, mode, index)` and
+  their own ids — `Frames.load` takes the id from the log (`log.frame`) or the replaced entry.
+
+### Code review instructions
+- `node ttmp/2026/11/12/CHB-027--…/scripts/ws-a-01-mac-idle-hang.mjs 10` (needs the tunnel, the lock and a preview on :4711).
+
+### Technical details
+
+| Finding | State on this branch |
+|---|---|
+| F1 NEF opens inverted | Fixed: per-file Auto guess (ingest `guessOpenMode`), all 33 NEFs → photo; File ▸ Open As remembered |
+| F2 re-open stuck "opening…" | Fixed: outcomes opened/resumed/already/conflict; status always ends; toast; conflict → confirm and re-open |
+| F3 mode stuck to the hash | Fixed: logs keyed `(sha, mode)`, old logs only when the kind matches; Re-open as photo/negative; engines forget the old decode |
+| F5 library empty after reload | Fixed: catalog listed with saved thumbnails and "not open"; relink by file handle or "Where is …?" |
+| F6 no remove / re-open / context menu | Fixed: Frame ▸ Re-open as…, Remove from Library (Delete), the studio's context menu on strip and grid; File menu |
+| F11 empty state | Fixed: "No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here"; drop opens files; top bar folded into menus |
+| F15 no "looks like a negative" | Fixed: mode pill and hint in the status line |
