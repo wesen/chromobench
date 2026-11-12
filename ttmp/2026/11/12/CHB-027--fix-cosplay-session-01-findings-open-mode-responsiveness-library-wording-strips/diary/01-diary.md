@@ -259,3 +259,60 @@ document it as a playbook and write a deep-dive project report (vault convention
 
 ### Technical details
 - Mac setup state: server log `/tmp/chromobench-pw/server.log`; lock `/tmp/chromobench-pw/lock` (absent = free).
+
+## Step 5: WS-A merged; WS-D launched
+
+WS-A (open mode, library, menus) reported done, and I merged `task/chb-027-open-mode` into main without
+conflicts; typecheck, lint and the unit suite are green on main. WS-A fixed F1, F2, F3, F5, F6, F11 (empty state)
+and F15, folded the top bar into the menus, and found the cause of its GPU-test hang on SwiftShader (a catalog
+write during a GPU render). With frame identity now `(sha, mode)`, WS-D (strips into frames) could start.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Merge finished workstreams, start the dependent one.
+**Inferred user intent:** Finish CHB-027.
+**Commit (code):** 365ce53 — "Merge task/chb-027-open-mode (CHB-027 WS-A: open mode, library, menus)"
+
+### What I did
+- `git merge --no-ff task/chb-027-open-mode`; `pnpm typecheck`, `pnpm lint`, `pnpm test` on main.
+- Message to WS-B: merge main; the new `HostServices.decode(bytes, sha, name, mode)`, `prior`/`forget` hooks,
+  `openAs`, `guessOpenMode`; the WorkerEngine must forward `forgetSource`; transfer a copy of the bytes (Auto may
+  decode a DNG twice); `#photo` is gone.
+- Created `diary/05-diary-ws-d-strip-frames.md`; launched WS-D (`task/chb-027-strip-frames`, ports 5011/5021–5024).
+
+### Why
+- WS-D builds on WS-A's identity; WS-B is still reducing its final-render times, so A went in first.
+
+### What worked
+- Merge without conflicts (WS-A had merged main itself, including WS-C).
+- `pnpm test`: 91 files, 2678 passed, 7 skipped. Lint: boundaries 333 file checks ok, check-colours ok.
+- WS-A's reported browser suite on its branch: 91/91 after the theme spec fix (`#bar` → `#statusbar`).
+
+### What didn't work
+- N/A in this step. (WS-A's hang root cause stays unknown: a document-tier store write during a SwiftShader GPU
+  render keeps the renderer's main thread busy; on the M1 Max 10/10 runs passed. Workaround: thumbnails go to KV
+  during the session.)
+
+### What I learned
+- Contract request R10 (studio-kit): `source.open` should carry the decode mode, so node ids differ by decode
+  and `forgetSource` becomes unnecessary. To apply when the contract is next revised.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- Store writes during GPU renders under SwiftShader (shell/GPU owners).
+- Auto decoding a DNG twice (scan then photo) costs a second decode; the copy of the bytes is required.
+
+### What should be done in the future
+- Manual check in a real Chrome: reload, then click a "not open" library thumbnail (file-handle re-read) — not
+  testable headless.
+- `CI=1 pnpm test:browser` on main after B and D merge.
+
+### Code review instructions
+- WS-A diary `02-diary-ws-a-open-mode-and-library.md` step 7 (findings table);
+  `packages/ingest/src/conditioning/open-mode.ts`; `packages/studio-kit/src/bridge/frames.ts`.
+
+### Technical details
+- Findings now fixed on main: F1, F2, F3, F5, F6, F7, F8, F9, F11 (partly), F12, F13, F15; F14 not reproducible.
+  Open: F4/F10 (WS-B), F16 (WS-D).
