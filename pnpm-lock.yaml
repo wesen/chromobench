@@ -47,6 +47,9 @@ importers:
 
   apps/studio:
     dependencies:
+      '@chromobench/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../../packages/contract

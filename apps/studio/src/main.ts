@@ -15,7 +15,10 @@ import { buildVariant, createStudio, frameRef, memoryKV, setKnownValues, type In
 import type { DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import '@chromobench/studio-kit/studio-kit.css';
+import { CHAT_RENDERERS } from '@chromobench/studio-kit/kits/chat/dom';
+import '@chromobench/studio-kit/kits/chat/chat.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
+import { createStudioChat, type StudioChat } from './host/chat.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withRebate } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
@@ -130,6 +133,7 @@ async function main(): Promise<void> {
   }
   const device = q.has('canvas2d') ? null : await presentDevice();
   const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}) });
+  const chat = createStudioChat(studio);
   const presenter = hostPresenter({
     device,
     onSpace: (space, why) => {
@@ -141,7 +145,8 @@ async function main(): Promise<void> {
   const save = (f: string): Promise<unknown> => exportFrame(f, 'picker');
 
   root.innerHTML = '';
-  const { rt } = await mountStudio(built.app, root, studio, { presenter, save });
+  const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, renderers: CHAT_RENDERERS });
+  chat.attach(rt);
   // the presenters exist now: the display space follows the main viewer's canvas
   const vp0 = viewports(rt)[0];
   if (vp0) studio.bridge.displaySpace = vp0.presenter.colorSpace;
@@ -317,7 +322,7 @@ async function main(): Promise<void> {
     }).catch(() => undefined);
   }
 
-  hook(rt, studio, def.id, host, exportFrame);
+  hook(rt, studio, def.id, host, exportFrame, chat);
   status('ready: open a scan (Open files…)');
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
@@ -332,12 +337,12 @@ function viewports(rt: Runtime): DomViewport[] {
 
 type ExportFn = (f: string, to: 'picker' | 'memory', o?: { format?: ExportFormat; space?: 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' }) => Promise<{ width: number; height: number; bytes: number; mime: string; name: string; bits: number } | null>;
 
-function hook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn): void {
-  window.chromobench = makeHook(rt, studio, variant, host, exportFrame);
+function hook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn, chat: StudioChat): void {
+  window.chromobench = makeHook(rt, studio, variant, host, exportFrame, chat);
 }
 
 /** The test and agent hook (CHB-009's surface on studio-kit; CHB-007/008 replace propose with a real DSL eval). */
-function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn) {
+function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn, chat: StudioChat) {
   const cur = (): string => studio.current ?? '';
   const vp = (): DomViewport | null => viewports(rt)[0] ?? null;
   const idle = async (): Promise<void> => {
@@ -460,6 +465,11 @@ function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, expo
       return studio.propose(ms, why ? { why } : {});
     },
     chainRunsByShown: () => Object.fromEntries(studio.bridge.runs),
+    /** the assistant's chat session (CHB-008) and its service (connect('demo'), …) */
+    chat: chat.session,
+    chatService: chat,
+    /** dev entry point: run DSL code in its own worker session on the selected frame (edits are proposals) */
+    eval: (code: string, o: { frame?: string; timeoutMs?: number; signal?: AbortSignal } = {}) => chat.devEval(code, o),
   };
   return h;
 }

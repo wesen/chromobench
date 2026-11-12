@@ -121,6 +121,24 @@ module print "Print" key D
              cb.approvals
   bottom dockcol  width 124
            filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module assistant "Assistant"
+  left   dockcol  width 220
+           panel navigator-assistant "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel history-assistant "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           viewport assistant τ  before τ  compare  image τ  overlays:   tools [probe]
+             hud:
+               cb.readout
+  right  dockcol  width 400
+           panel chat "Assistant"
+             cb.chat
+  bottom dockcol  width 124
+           filmstrip strip-assistant  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
 module output "Output" key Mod+Shift+E
   center gridview picks  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
   right  dockcol  width 260
@@ -158,7 +176,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 51 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 60 · keys 56 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -384,6 +402,24 @@ module print "Print" key D
              cb.why
   bottom dockcol  width 124
            filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module assistant "Assistant"
+  left   dockcol  width 220
+           panel navigator-assistant "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel history-assistant "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           viewport assistant τ  before τ  compare  image τ  overlays:   tools [probe]
+             hud:
+               cb.readout
+  right  dockcol  width 400
+           panel chat "Assistant"
+             cb.chat
+  bottom dockcol  width 124
+           filmstrip strip-assistant  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
 module lab "Lab" key L
   left   dockcol  width 280
            panel controls-all "All parameters"
@@ -518,7 +554,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 63 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 60 · keys 68 in 6 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `

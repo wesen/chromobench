@@ -63,6 +63,7 @@ export default {
     const s = cb.studio('Chromobench').theme('chromogen').menus(menus);
     s.module('library', libraryModule(ck, cb));
     s.module('print', printModule(ck, cb));
+    s.module('assistant', cb.kits.chat.module());
     s.module('output', m =>
       m
         .label('Output')
