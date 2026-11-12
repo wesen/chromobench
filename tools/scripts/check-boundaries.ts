@@ -18,6 +18,8 @@ const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?:
     except: ['apps/studio/src/host/engines.ts'],
   },
   { dir: 'packages/dsl/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the DSL never calls physics code directly' },
+  // CHB-008: the agent reaches physics only through the injected Engine, and the UI kits never import it
+  { dir: 'packages/agent/src', forbid: /^@chromobench\/(core|gpu|ingest|studio-kit|shell)(\/|$)/, why: 'the agent reaches the engine by injection and knows no UI' },
   { dir: 'packages/shell/src', forbid: /^(?!\.\.?\/)/, why: 'the shell imports only its own files (generic, no dependencies)' },
   ...['core', 'ir', 'build', 'app', 'themes', 'testing'].map(d => ({ dir: `packages/shell/src/${d}`, forbid: /(^|\/)dom\//, why: 'the headless half of the shell never imports the DOM half' })),
   { dir: 'packages/shell/src', forbid: /^\.\/dom\//, why: 'the shell entry point is headless; the DOM half is @chromobench/shell/dom' },
