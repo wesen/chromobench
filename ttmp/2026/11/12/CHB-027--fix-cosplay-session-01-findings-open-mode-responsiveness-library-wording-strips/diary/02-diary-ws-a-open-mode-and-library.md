@@ -265,3 +265,82 @@ built app (reference engine), every step of the F1–F3 repro now ends right.
 ### Technical details
 - Outcomes: `opened` (new recipe), `resumed` (saved log of that mode), `already`, `conflict` (open in the other
   mode while a specific mode was asked: the host confirms, then `reopen`).
+
+## Step 4: Merge of main (WS-C), and the library across reloads (task j9hg, host part)
+
+I merged `main` early (WS-C's wording branch had landed), before restructuring `main.ts` further, then made the
+library survive a reload: each frame's catalog entry keeps a small JPEG of its print, frames not open in the session
+are listed with it and a "not open" badge, and selecting one reads its file again through its saved handle or asks
+where it is. Drop onto the window opens files, so the empty-state text tells the truth.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Coordinator message (relayed): "WS-C (wording) is merged into main (merge
+444f153). Before your final commit, please `git merge main` into your branch and resolve conflicts yourself …
+please route open-file errors in openFiles through it [Runtime.explainError] …"
+**Assistant interpretation:** Merge now; keep WS-C's status line (summary text, technical detail in tooltips) and
+use `rt.explainError` for open errors.
+**Inferred user intent:** One coherent main.ts after all merges.
+**Commit (code):** 87d750b — "CHB-027 WS-A: open mode per file (guessed), logs keyed by mode, re-open as photo/negative, remove frame"; merge 66f9401; this step's commit follows.
+
+### What I did
+- `git merge main`: two conflicts in `main.ts` (the studio-kit import line; the store listener where WS-C put
+  `notesSummary` and I put `lastEntry`/`showMode`) — kept both. Open errors now read
+  `rt.explainError?.(err, {})?.text ?? msgOf(err)`, the technical text goes to the status tooltip (`detail`).
+- `main.ts`: `scheduleThumb` (2 s after a non-preview log event, 0.5 s after an open) asks
+  `rt.renders.thumb(print, 160, …)` — the filmstrip's own cache key, so usually a cache hit — and writes
+  `catalog.frames.<id>.thumb` (JPEG 0.8, ~1.5 kB for the fixture) at document tier, which the shell autosaves.
+  `relink(id)`: handle `handles/file:<sha>` → `reconnect` (permission) → `openFiles([…], {as: catalog kind,
+  expect})`; otherwise a dialog "Where is NAME?" (Remove from library / Not now / Locate…). Selection restored at
+  boot that is not open is cleared, so the first click opens it; a right-click (context menu) does not trigger it.
+  Document-level drop with `getAsFileSystemHandle` (handles kept). Ready text: "ready: N frames in the library;
+  select one to open its file again" or "ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them
+  here)".
+- `storage/fsa.ts`: `PickedFile.handle`; `hasFilePicker`, `pickFiles` (showOpenFilePicker), `fromHandles`;
+  `listScans` keeps the handles of a folder's files.
+- `studio-kit.css`: a saved thumbnail hides the empty canvas beside it. `app.css`: `#app { z-index: 1 }` so the
+  shell's menus paint over the status line (the context menu's last item was hidden under it).
+- `e2e/studio-open-mode.spec.ts` (2 tests, reference engine, synthetic files): auto guess for a camera DNG and a
+  negative TIFF in one batch; "already open"; re-open as photo by command, the hint back, the negative's edit (14 s)
+  resumed; reload with thumbnails, "not open", the "Where is" dialog, the studio's context menu, Delete removes.
+
+### Why
+- Thumbnails from the shell's thumbnail cache cost nothing extra on the engine; the catalog was already persisted.
+
+### What worked
+- `CI=1 STUDIO_PORT=4721 … npx playwright test e2e/studio-open-mode.spec.ts e2e/studio-photo.spec.ts` → 3 passed.
+- Drive on the built app (scratchpad `wsa/drive2.mjs`, synthetic fixture; screenshots in `various/ws-a/`
+  01-empty, 02-after-reload, 03-where-is, 04-context-menu): thumbnail saved (1471 chars), after reload "1 frame in
+  the library", cell with `data:image/jpeg` and badge "not open", dialog, re-open resumes Time 14 s, context menu
+  "Re-open as Photo · Flag as Pick · Reject · Unflag · Remove from Library". No page errors.
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` (91 files, 2678 passed, 7 skipped) green after the merge.
+
+### What didn't work
+- First e2e run: `scene.dng: Cannot perform Construct on a detached ArrayBuffer` — Auto decodes a DNG in scan mode
+  first, finds a photo and decodes again, but LibRaw's worker had taken the bytes (transferred). Fix:
+  `StudioEngine.openAs` keeps a copy for the second decode when guessing; `Frames`' default reader keeps a copy
+  too. The NEF path never re-decodes (prior = photo), which is why the real-file drive in Step 3 did not see it.
+- One drive run timed out waiting for the "Where is" dialog after an immediate click; two re-runs and the e2e
+  passed. Not reproduced; noted.
+
+### What I learned
+- `structuredClone`-able `FileSystemFileHandle`s go straight into the IndexedDB KV; `setInputFiles` gives none, so
+  e2e covers the "locate" path and not the handle path.
+
+### What was tricky to build
+- Relink needs a user gesture for `requestPermission`; it runs from the store listener of the click's selection
+  change (within Chrome's transient activation), never at boot.
+
+### What warrants a second pair of eyes
+- The handle path (`reconnect` → re-read) is untested headless; try it by hand in Chrome: open with
+  File ▸ Open Files…, reload, click the thumbnail.
+
+### What should be done in the future
+- A "missing file" mark and Locate in the Metadata panel, not only the dialog.
+
+### Code review instructions
+- `apps/studio/src/main.ts`: `scheduleThumb`, `relink`, `chooseFiles`, the drop handler; `storage/fsa.ts`.
+- `CI=1 STUDIO_PORT=4721 STUDIO_KIT_PORT=4722 SHELL_DEMO_PORT=4723 GPU_PARITY_PORT=4724 npx playwright test e2e/studio-open-mode.spec.ts`.
+
+### Technical details
+- KV: `handles/file:<sha256>` = FileSystemFileHandle; `logs/<sha>:photo|negative` = EditLogData;
+  `workspace/<app>:<ver>:doc` holds the catalog with `kind` and `thumb`.

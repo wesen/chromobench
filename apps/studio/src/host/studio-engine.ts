@@ -221,13 +221,15 @@ export class StudioEngine implements Engine {
     const sha = source.sha256 || sha256Hex(bytes);
     const name = source.name ?? source.path ?? 'scan';
     let mode: DecodeMode = as === 'photo' ? 'photo' : as === 'negative' ? 'scan' : this.host.prior?.(name) === 'photo' ? 'photo' : 'scan';
+    // the decoder may transfer the bytes to its worker (LibRaw): keep a copy for a second decode
+    const again = as === 'auto' ? bytes.slice() : null;
     let d = await this.host.decode(bytes, sha, name, mode);
-    if (as === 'auto' && d.guess) {
+    if (again && d.guess) {
       const want = d.guess.confident || !ask ? d.guess.kind : await ask(d.guess, name);
       const m2: DecodeMode = want === 'photo' ? 'photo' : 'scan';
       if (m2 !== mode) {
         mode = m2;
-        d = await this.host.decode(bytes, sha, name, mode);
+        d = await this.host.decode(again, sha, name, mode);
       }
     }
     const kind = d.kind ?? (mode === 'photo' ? 'digital-raw' : 'negative-scan');

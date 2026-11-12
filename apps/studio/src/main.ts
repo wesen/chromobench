@@ -9,10 +9,10 @@
 import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
-import type { Runtime } from '@chromobench/shell';
+import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, explainError, frameRef, memoryKV, setKnownValues, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio } from '@chromobench/studio-kit';
-import type { DomViewport } from '@chromobench/shell/dom';
+import { buildVariant, createStudio, explainError, frameRef, isOffline, memoryKV, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio } from '@chromobench/studio-kit';
+import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
 import '@chromobench/studio-kit/kits/roll/roll.css';
@@ -33,7 +33,7 @@ import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
 import { openIdb } from './storage/db.ts';
-import { addScanExtensions, fromFileList, hasDirectoryPicker, listScans, pickDirectory, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
+import { addScanExtensions, fromFileList, fromHandles, hasDirectoryPicker, hasFilePicker, isScan, listScans, pickDirectory, pickFiles, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
 import './app.css';
 
 const q = new URLSearchParams(location.search);
@@ -322,12 +322,12 @@ async function main(): Promise<void> {
    * Opens files as File ▸ Open As says (Auto guesses each file; one question per batch when unsure). The status line
    * always ends with what happened (F2): opened, already open, or the error.
    */
-  async function openFiles(files: PickedFile[]): Promise<void> {
+  async function openFiles(files: PickedFile[], o: { as?: OpenAs; expect?: CatalogFrame } = {}): Promise<void> {
     if (!files.length) {
       status(`no photos or scans among the files (${SCAN_EXTENSIONS.join(', ')})`, { error: true });
       return;
     }
-    const as = openAsPref();
+    const as = o.as ?? openAsPref();
     let answer: Promise<'photo' | 'negative'> | null = null;
     askOpen = (g, name) => (answer ??= askMode(g, name, files.length));
     const opened: string[] = [];
@@ -352,6 +352,7 @@ async function main(): Promise<void> {
             rt.chrome.toast(`${pf.name} is already open (as a ${asWord(r.entry.kind)})`, { kind: 'info' });
           } else opened.push(pf.name);
           if (pf.handle) void kv.put('handles', `file:${r.entry.sha}`, pf.handle).catch(() => undefined);
+          if (o.expect && o.expect.sha256 !== r.entry.sha) rt.chrome.toast(`${pf.name} is not the file ${o.expect.name} was made from: it opened as a frame of its own`, { kind: 'warn' });
           if (first) {
             first = false;
             rt.runCommand('frame.select', null, r.entry.id);
@@ -373,6 +374,102 @@ async function main(): Promise<void> {
     if (failed.length) parts.push(failed.length === 1 ? failed[0]! : `${failed.length} could not be opened (${failed[0]})`);
     status(parts.join(' · ') || 'nothing opened', { error: failed.length > 0 && !opened.length && !already.length, ...(details.length ? { detail: details.join('\n') } : {}) });
   }
+
+  // ── the library across reloads (F5): a thumbnail of each frame's print is kept in its catalog entry; a frame not
+  //    open in this session is read again through its file handle (one permission click) or located by him ──
+  const thumbTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function scheduleThumb(id: string, ms = 2000): void {
+    clearTimeout(thumbTimers.get(id));
+    thumbTimers.set(id, setTimeout(() => {
+      thumbTimers.delete(id);
+      const r = rt.store.peek(['recipes', id]) as FrameRecipe | undefined;
+      if (!r) return;
+      // the filmstrip's own thumbnail (same key and size: a cache hit when it is drawn already)
+      rt.renders.thumb(frameRef(id, r).print(), 160, (x) => {
+        const url = thumbUrl(x.image);
+        const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
+        if (url && c && c.thumb !== url) rt.store.writeDoc([{ path: ['catalog', 'frames', id, 'thumb'], value: url }], { tier: 'document' });
+      });
+    }, ms));
+  }
+  studio.frames.onAdded((e) => {
+    scheduleThumb(e.id, 500);
+    e.log.on((ev) => {
+      if (ev.type !== 'preview' && studio.frames.get(e.id) === e) scheduleThumb(e.id);
+    });
+  });
+  const relinking = new Set<string>();
+  /** A library frame whose file is not open: its handle (a permission click), else he locates the file. */
+  async function relink(id: string): Promise<void> {
+    const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
+    if (!c || relinking.has(id) || studio.frames.get(id)) return;
+    relinking.add(id);
+    try {
+      const as: OpenAs = c.kind ?? 'auto';
+      const h = await kv.get<FileSystemFileHandle>('handles', `file:${c.sha256}`).catch(() => undefined);
+      if (h) {
+        status(`opening ${c.name} again…`);
+        if (await reconnect(h).catch(() => false)) return await openFiles(await fromHandles([h]), { as, expect: c });
+      }
+      const r = await rt.chrome.dialog({
+        title: `Where is ${c.name}?`,
+        body: el('p', { text: `The library keeps ${c.name} and its recipe, but the browser needs the file again to show it.` }),
+        buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${c.name}…`, value: 'locate', primary: true }],
+      }).result;
+      if (r === 'remove') studio.remove([id]);
+      else if (r === 'locate') {
+        const files = await chooseFiles(false);
+        if (files.length) await openFiles(files, { as, expect: c });
+      } else status(`${c.name} is not open: select it again to open its file`);
+    } finally {
+      relinking.delete(id);
+    }
+  }
+  /** Files through the File System Access picker (handles kept with the library), else an <input type=file>. */
+  async function chooseFiles(multiple = true): Promise<PickedFile[]> {
+    if (hasFilePicker()) {
+      try {
+        return await pickFiles(multiple);
+      } catch (e) {
+        if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
+        return [];
+      }
+    }
+    return new Promise((ok) => {
+      const input = el('input', { type: 'file', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(','), ...(multiple ? { multiple: '' } : {}) });
+      input.addEventListener('change', () => ok(fromFileList(input.files ?? [])), { once: true });
+      input.addEventListener('cancel', () => ok([]), { once: true });
+      input.click();
+    });
+  }
+  // selecting a frame that is not open (after a reload) opens its file again; not the selection restored at boot
+  // (a right-click selects too, for the context menu: that one does not ask for the file)
+  let armed = false;
+  let lastSel: string | null = studio.current;
+  let rightAt = 0;
+  document.addEventListener('pointerdown', (e) => void (e.button === 2 && (rightAt = performance.now())), true);
+  rt.store.on(() => {
+    const f = studio.current;
+    if (f === lastSel) return;
+    lastSel = f;
+    if (armed && f && isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
+  });
+  // drop files anywhere on the window ("or drop them here"); Chrome hands file handles too
+  document.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+  });
+  document.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (!dt?.files.length) return;
+    e.preventDefault();
+    const items = [...dt.items].filter((i) => i.kind === 'file');
+    const handles = items.map((i) => (i as DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> }).getAsFileSystemHandle?.() ?? Promise.resolve(null));
+    const files = fromFileList(dt.files);
+    void Promise.all(handles).then((hs) => {
+      const byName = new Map(hs.filter((h): h is FileSystemFileHandle => h?.kind === 'file').map((h) => [h.name, h]));
+      return openFiles(files.map((f) => ({ ...f, ...(byName.get(f.name) ? { handle: byName.get(f.name)! } : {}) })));
+    });
+  });
 
   // ── the bar ──
   const fileInput = el('input', { type: 'file', id: 'file', multiple: '', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(',') });
@@ -500,10 +597,33 @@ async function main(): Promise<void> {
   }
 
   hook(rt, studio, def.id, host, exportFrame, chat);
-  status('ready: open a scan (Open files…)');
+  // a selection restored from last time that is not open: cleared, so the first click on it opens its file
+  if (studio.current && isOffline(rt.state, studio.current)) {
+    rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
+    lastSel = null;
+  }
+  armed = true;
+  const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => isOffline(rt.state, x)).length ?? 0;
+  status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
   document.body.dataset['variant'] = def.id;
+}
+
+/** A rendered thumbnail as a small JPEG data URL, drawn as the shell's thumb draws it (F5: kept in the catalog). */
+function thumbUrl(image: PresentImage): string | null {
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = image.width;
+    cv.height = image.height;
+    const pres = new Canvas2DPresenter(cv);
+    pres.setImages(image, null);
+    const reg = image.region;
+    pres.draw({ docW: reg.w, docH: reg.h, cx: reg.x + reg.w / 2, cy: reg.y + reg.h / 2, zoom: image.width / (reg.w || 1), dpr: 1, split: null }, { stage: [0, 0, 0], frame: [0, 0, 0] });
+    return cv.toDataURL('image/jpeg', 0.8);
+  } catch {
+    return null;
+  }
 }
 
 /** Connects to a bridge when one serves this page, or when ?bridge[=ws-url] asks for it. */

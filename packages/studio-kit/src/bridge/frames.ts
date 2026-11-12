@@ -132,7 +132,9 @@ export class Frames {
   async openFile(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
     const sha = sha256Hex(bytes);
     const as = o.as ?? 'auto';
-    this.readers.set(sha, o.read ?? (async () => bytes));
+    // no reader from the host: a copy (an engine may transfer the bytes it decodes to a worker)
+    const copy = o.read ? null : bytes.slice();
+    this.readers.set(sha, o.read ?? (async () => copy!));
     const pending = this.opening.get(sha);
     if (pending) {
       // opened twice at once: the first open wins

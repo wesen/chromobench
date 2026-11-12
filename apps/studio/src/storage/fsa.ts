@@ -72,6 +72,33 @@ export async function fileAt(dir: FileSystemDirectoryHandle, relPath: string): P
   return (await d.getFileHandle(parts.at(-1)!)).getFile();
 }
 
+interface FilePickerWindow {
+  showOpenFilePicker?: (o: { id?: string; multiple?: boolean; excludeAcceptAllOption?: boolean; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle[]>;
+}
+
+export const hasFilePicker = (): boolean => typeof (globalThis as FilePickerWindow).showOpenFilePicker === 'function';
+
+/** Files through the File System Access picker: each with its handle, so the library can read it again after a reload. */
+export async function pickFiles(multiple = true): Promise<PickedFile[]> {
+  const hs = await (globalThis as FilePickerWindow).showOpenFilePicker!({
+    id: 'photos',
+    multiple,
+    types: [{ description: 'Photos and scans', accept: { 'image/*': SCAN_EXTENSIONS.map((x) => `.${x}`) } }],
+  });
+  return fromHandles(hs);
+}
+
+/** PickedFiles from file handles (the picker, a drop, the library's saved handles). */
+export async function fromHandles(hs: FileSystemFileHandle[]): Promise<PickedFile[]> {
+  const out: PickedFile[] = [];
+  for (const h of hs) {
+    if (!isScan(h.name)) continue;
+    const f = await h.getFile();
+    out.push({ name: h.name, relPath: h.name, size: f.size, lastModified: f.lastModified, file: () => h.getFile(), handle: h });
+  }
+  return out;
+}
+
 /** Files from <input type=file> (with or without webkitdirectory). */
 export function fromFileList(list: FileList | File[]): PickedFile[] {
   return [...list]

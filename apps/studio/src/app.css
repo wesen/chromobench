@@ -17,6 +17,8 @@ body {
   right: 0;
   /* .ck-app sets height: 100%, which would run the app under the status line */
   height: auto;
+  /* menus and dialogs of the shell (inside #app) paint over the status line, not under it */
+  z-index: 1;
 }
 .hb {
   position: fixed;
