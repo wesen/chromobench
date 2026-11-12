@@ -6,7 +6,7 @@
 import type { Box, SourceInfo, Vec3 } from '@chromobench/contract';
 import { DEFAULT_SIGMA_D, rebateBox } from '@chromobench/core';
 import {
-  conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask,
+  conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask, stripFrames,
   type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
 import type { Decoded as DecodedMeta, OpenGuess } from './studio-engine.ts';
@@ -108,13 +108,16 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   if (c.flare) notes.push(`scan.flare ${fmt3(c.flare)} % from the veil ${c.veil!.map((v) => v.toExponential(1)).join(' ')} (${c.veilFrom}), removed by the engine`);
   else notes.push('no veil measured: scan.flare 0');
   for (const n of c.notes) notes.push(`${n.code}: ${n.message}`);
+  // a strip of several frames (CHB-027 WS-D, F16): one frame per box, all on this decode (shared base and veil)
+  const strip = guess.kind === 'negative' || !guess.confident ? stripFrames(data, w, h, { layout: c.layout }) : null;
+  if (strip?.split) notes.push(`strip of ${strip.frames.length} frames along ${strip.axis} (confidence ${strip.confidence.toFixed(2)})`);
   if (o.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess, frames: strip?.split ? strip.frames.map((f) => f.box) : null };
 }
 
 /** Decodes a file in the given mode. */

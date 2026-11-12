@@ -38,6 +38,8 @@ export interface Decoded {
   kind?: 'negative-scan' | 'digital-raw';
   /** What the pixels look like (CHB-027: ingest's guessOpenMode on the working image), whatever the decode mode. */
   guess?: OpenGuess;
+  /** A strip of several frames (CHB-027 WS-D, ingest's stripFrames): one box per frame, working-image px; null for one frame. */
+  frames?: Box[] | null;
 }
 
 /** Photo or negative, guessed from the pixels (ingest's OpenModeGuess, structurally). */
@@ -222,7 +224,7 @@ export class StudioEngine implements Engine {
    * file type's likely mode first (a camera RAW as a photo, everything else as a scan), reads the guess, asks
    * when it is unsure and `ask` is given, and decodes again in the other mode when the answer differs.
    */
-  async openAs(source: SourceRef, as: OpenAs, ask?: AskOpenMode): Promise<{ info: SourceInfo; kind: 'negative-scan' | 'digital-raw'; guess: OpenGuess | null }> {
+  async openAs(source: SourceRef, as: OpenAs, ask?: AskOpenMode): Promise<{ info: SourceInfo; kind: 'negative-scan' | 'digital-raw'; guess: OpenGuess | null; frames: Box[] | null }> {
     if (!source.bytes) fail('E_FORMAT', 'open needs source.bytes');
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = source.sha256 || sha256Hex(bytes);
@@ -247,7 +249,7 @@ export class StudioEngine implements Engine {
     // the pixels are the engine's once registered
     const { data: _pixels, ...kept } = d;
     this.notes.set(sha, { ...kept, kind });
-    return { info: d.info, kind, guess: d.guess ?? null };
+    return { info: d.info, kind, guess: d.guess ?? null, frames: d.frames ?? null };
   }
 
   /** The file is decoded another way now: drop what the engines computed from the old decode. */

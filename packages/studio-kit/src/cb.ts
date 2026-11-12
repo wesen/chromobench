@@ -40,6 +40,8 @@ export interface CatalogFrame {
   kind?: 'photo' | 'negative';
   /** a small JPEG of the last print (data URL), so the library shows the frame after a reload (F5) */
   thumb?: string;
+  /** a frame of a strip (CHB-027 WS-D): the file's name (`name` adds the frame's place, "raw010.dng · 2/3") */
+  file?: string;
 }
 export interface CbState {
   catalog: { frames: Record<string, CatalogFrame>; order: string[] };
