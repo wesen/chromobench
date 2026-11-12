@@ -2,7 +2,7 @@
 // the left, the contact sheet in the centre (cull keys P X U 0–5, R reference, M match), the balance bar and the
 // analysis inspector on the right — then the classic Print module with the roll's frames in the strip.
 // Receives ck and cb (the roll kit is cb.kits.roll); imports only sibling variant parts.
-import { menus, printModule } from './classic.js';
+import { menus, printModule, rollMenu, rollModule } from './classic.js';
 
 export default {
   id: 'roll',
@@ -14,16 +14,9 @@ export default {
       .studio('Chromobench')
       .theme('chromogen')
       .use(roll.kit)
-      .menus(m => menus(m).menu('Roll', ['roll.fromFrames', 'roll.analyse', 'roll.firstPrint', '-', 'roll.setReference', 'roll.matchToReference', 'roll.clearMatch', '-', 'roll.contact.mode', 'roll.cull.sweep', 'roll.exportSheet']));
-    s.module('roll', m =>
-      m
-        .label('Roll')
-        .key('G')
-        .left(ck.dock.column({ width: 300 }, roll.library(), roll.setup()))
-        .center(roll.contactSheet({ size: 180 }))
-        .right(ck.dock.column({ width: 320 }, roll.balanceBar(), roll.inspector(), cb.panel.history({ id: 'history-roll' })))
-        .keys(roll.cullKeys),
-    );
+      .menus(m => rollMenu(menus(m)));
+    // the same Roll module as the classic variant, here first and on G
+    s.module('roll', m => rollModule(ck, cb)(m).key('G'));
     s.module('print', printModule(ck, cb));
     return s;
   },

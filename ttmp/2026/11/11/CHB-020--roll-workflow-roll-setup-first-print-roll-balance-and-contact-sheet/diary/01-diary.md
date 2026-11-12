@@ -279,3 +279,63 @@ Step 2's hand-off said the studio's file opening should call `conditionScan`. Th
 ### Code review instructions
 - `apps/studio/src/host/engines.ts` (`decodeScan`), `first-print.ts` (`withRebate`), `main.ts` (`initial`), `apps/studio/test/host.test.ts` (last describe), `playwright.config.ts`.
 - `pnpm typecheck && pnpm lint && pnpm test`; `STUDIO_PORT=4511 STUDIO_KIT_PORT=4512 SHELL_DEMO_PORT=4513 GPU_PARITY_PORT=4514 CI=1 pnpm test:browser`.
+
+## Step 4: Contract 0.3 in the roll workflow: flare and base in the recipe, batch ids, the Roll module in the classic app
+
+Contract 0.3 (CHB-024) gave recipes `scan.baseT`, per-channel `scan.flare`, `FrameRecipe.roll` and `LoggedMutation.batch`. This step moves the roll workflow onto them. The studio host no longer subtracts the holder's veil from the decoded pixels: the veil goes into the recipe as `scan.flare` and the measured base as `scan.baseT`, so the preview, the export and the roll analysis all run the same chain. The roll first print writes the roll's base and veil to every frame and names the roll. The main app also mounts the roll renderers and the host's roll physics, which it did not do before, and the default `classic` variant has a Roll module.
+
+### Prompt Context
+**User prompt (verbatim):** "Follow-up on ticket CHB-020 (roll workflow) ... Roll kit and app host: write the measured base into `scan.baseT` and the measured veil/flare into `scan.flare` in the recipe instead of subtracting the veil from pixels at decode ...; set `FrameRecipe.roll`; use the contract's batch fields for 'print the roll like this frame' and the roll first print (one card, batch approve/reject). Remaining CHB-020 open tasks that are cheap: film-strip roll badge / `frame.roll()` fragment, before/after thumbnails on the batch card, CHB-010 filtration in the first print where it makes sense. ... Make the roll first print and roll balance reachable from the main app's default `classic` variant."
+**Assistant interpretation:** Replace pixel subtraction by recipe settings, carry the roll through recipes and log entries, finish the cheap stage 6/7/8 items, expose the roll workflow in the default variant.
+**Inferred user intent:** The roll workflow uses the contract as designed and is usable from the app people actually open.
+**Commit (code):** ed71115 — "veil and base as scan.flare / scan.baseT in the recipe, FrameRecipe.roll, batch ids in the log, first-print card"; 34402ae — "Roll module in the classic variant, host roll physics, before/after thumbnails, roll badge and frame.roll(), opt-in filtration bake"
+
+### What I did
+- ingest `conditionScan` (`roll-base.ts`): option `subtract: false` leaves the pixels alone; the result has `flare` (percent per channel, `veilToFlare`: f = 100 L / (1 - L), clamped to the catalog's 20) and `scanBaseT` ((T - L) / (1 - L)). Test in `film-layout.test.ts`.
+- `apps/studio/src/host/engines.ts` `decodeScan`: `conditionScan(..., { subtract: false })`; `Decoded` (`studio-engine.ts`) carries `flare` and `baseT`; the dust healer reads the base as scanned (`layout.rebate.Traw`). `first-print.ts` `withMeasured` writes `scan.rebate`, `scan.flare` (only when non-zero) and `scan.baseT`; `main.ts` calls it.
+- Roll kit: `SHARED_PATHS` gains `scan.baseT`; `analyse` writes the roll median base (`baseOfVeilFree`) and veil (`flareOfVeil`) into the fragment; `firstPrintBatch` sets `roll: {id}` and drops `scan.baseT` for frames the analysis flags as mixed; `roll.fromFrames` adds a `roll:members-*` 'auto' batch only for frames the first print did not name; `roll.firstPrint` (command and the library button) now plans a pending `first-print` card (approve/reject, `E_STALE` checked); the automatic first print on a new roll is still applied at once.
+- `EditLogRoute.applyBatch` passes `batch: tx` to `log.apply`, so every entry of a roll batch carries `LoggedMutation.batch`.
+- Card: `dom.ts` shows before/after print thumbnails per frame (the shell's `thumb` form via `makeNode` and `m.mount`, `frameRef(...).print()`, first 12 frames).
+- `rollTag` badge on the film strip and grid cells (`cb.ts` `badgeOf`), `FrameRef.roll()` in `handles.ts`.
+- `first-print.ts` option `bake` (core `bakeRecipe` through `HostEngine.bake`), switched by `?filtration=1` in `main.ts`.
+- `engines.ts` builds the roll kit's physics (`buildRollPhysics`, with `scannerForward` for the stock ranking); `main.ts` passes it as `rollPhysics` with `ROLL_RENDERERS` and imports `roll.css`.
+- `variants/classic.js`: `rollModule`, `rollMenu`; classic `.use(roll.kit)` and has a Roll module (Mod+Alt+R); `roll.js` reuses both. Snapshot updated.
+- Tests: host (flare+baseT print equals the subtracted print within 0.05; bake within 0.05), ingest, roll kit (recipes carry baseT/flare/roll, batch ids, first-print card reject/approve), browser: roll spec thumbnails on the card, `e2e/studio-real.spec.ts` Roll module in classic on the reference engine.
+
+### Why
+- Subtraction at decode hid the veil from every engine path but the one that decoded; with the recipe path the veil is data a photographer or agent can see and edit. The exact relation is a holder reading f/(1+f), so f = L/(1 - L), and T'(1+f) - f = (T' - L)/(1 - L); `scan.density` divides by the base on the same scale, so the density is unchanged.
+- The roll first print stays in lights because a roll's analysis measures under the frame's own filtration and `print.enlarger.filtration` is a roll-shared setting; baking per frame would double count (see below).
+
+### What worked
+- `pnpm test`: 2418 passed (baseline 2413 plus 5 new). `pnpm typecheck`, `pnpm lint` clean. `STUDIO_PORT=4561 STUDIO_KIT_PORT=4562 SHELL_DEMO_PORT=4563 GPU_PARITY_PORT=4564 CI=1 pnpm test:browser`: 70 passed.
+- No existing roll test needed changing; the roll analysis already handled raw (veil-carrying) pixels through `physics.layout`.
+
+### What didn't work
+- First e2e run: `Locator: locator('.ck-thumb-badge').filter({ hasText: 'roll 1' })` not found, because the Roll module has no film strip; the test now goes to the Library module for the badge.
+- Second run: `#roll-pending` never appeared. The library button called `roll.firstPrint` with no argument, which plans only frames without a first print (none after a new roll). The button now passes `true` (all frames) and is labelled "First print…".
+- Several multi-line shell heredocs were refused by the harness ("too complex to verify that it stays inside the worktree"); I wrote scripts with the file tools instead.
+
+### What I learned
+- The main app mounted no roll renderers and no `rollPhysics` service: the `roll` variant worked only in the studio-kit demo. Wiring it in `main.ts` was needed for any variant.
+- `conditionScan` returned the veil-corrected `baseT` on the pixel scale; the recipe's `scan.baseT` is on the flare-corrected scale (divided by 1 - L). The two are not interchangeable.
+
+### What was tricky to build
+- Keeping the baked first print consistent: the roll analysis measures X under each frame's recipe and treats `total = lights + time`. A baked filtration changes X without being in `total`, so a roll first print on top of baked frames would double count the filtration. For that reason the bake is opt-in (`?filtration=1`), single-frame, and the roll batch keeps lights. Roll integration of filtration (neutral-pack measurement, baking the roll batch) stays open.
+
+### What warrants a second pair of eyes
+- Mixed-base frames keep their own `scan.baseT` while taking the roll's `scan.flare`.
+- Flare is clamped to the catalog maximum of 20 percent; a stronger veil is silently capped (the decode note still prints the measured veil).
+- "Batch approve/reject" is the kit's pending card (`rollView.pending`) applying through `applyBatch`; the log entries carry `batch`, but the card is not a set of pending `EditLog` proposals (`log.propose` / `approve({batch})`), so the Approvals panel does not list it.
+- Undoing the roll creation does not undo `FrameRecipe.roll` (the first print batch names it, and it undoes with the first print).
+
+### What should be done in the future
+- Roll first print with filtration (CHB-010) and CHB-013's measured per-channel flare from wedge fits instead of the holder's veil.
+- Cull keys with peek spring (`mv3s`), GPU reductions (`qvyu`) and the 40 MP dust timing (`j972`) remain open.
+- A roll card as real `EditLog` proposals if the agent chat (CHB-008) wants to show it in Approvals.
+
+### Code review instructions
+- `packages/ingest/src/conditioning/roll-base.ts` (`conditionScan`, `veilToFlare`); `apps/studio/src/host/engines.ts` (`decodeScan`, `buildRollPhysics`), `first-print.ts` (`withMeasured`, `bake`), `main.ts`; `packages/studio-kit/kits/roll/src/kit.ts` (`analyse`, `planFirstPrint`, `membersBatch`, `rollTag`), `dom.ts` (card thumbnails); `variants/classic.js`.
+- `pnpm typecheck && pnpm lint && pnpm test`; `STUDIO_PORT=4561 STUDIO_KIT_PORT=4562 SHELL_DEMO_PORT=4563 GPU_PARITY_PORT=4564 CI=1 pnpm test:browser`.
+
+### Technical details
+- Veil as recipe settings: pixel P = (T + f) / (1 + f); holder L = f / (1 + f); `scan.flare` = 100 f per channel; `scan.baseT` = (T_rebate - L) / (1 - L).

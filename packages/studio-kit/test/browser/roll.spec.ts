@@ -54,6 +54,8 @@ test('roll: new roll, first print, cull, reference, match, approve, undo', async
   await page.keyboard.press('m');
   await expect(page.locator('#roll-pending')).toBeVisible();
   await expect(page.locator('#roll-skipped')).toContainText('roll-05.tif (rejected)');
+  // before and after thumbnails of the four frames the batch changes
+  await expect(page.locator('#roll-pending .cb-change-thumb[data-rendered]')).toHaveCount(8, { timeout: 30_000 });
   expect(await methods(page)).toEqual(Array(6).fill('roll'));
 
   await page.locator('#roll-approve').click();

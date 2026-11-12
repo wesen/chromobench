@@ -14,10 +14,12 @@ import '@chromobench/shell/shell.css';
 import { buildVariant, createStudio, frameRef, memoryKV, setKnownValues, type InitialRecipe, type KV, type Studio } from '@chromobench/studio-kit';
 import type { DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
+import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
+import '@chromobench/studio-kit/kits/roll/roll.css';
 import '@chromobench/studio-kit/studio-kit.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
-import { firstPrint, withRebate } from './host/first-print.ts';
+import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -74,6 +76,8 @@ interface Host {
   initial?: InitialRecipe;
   notes(sha: string): string[];
   settings: HostSettings | null;
+  /** The roll kit's physics service; the mock engine has none (the Roll panels say so). */
+  rollPhysics?: unknown;
 }
 
 async function startEngine(): Promise<Host> {
@@ -88,9 +92,11 @@ async function startEngine(): Promise<Host> {
   return {
     engine: se,
     label: se.label,
-    initial: (d, g) => firstPrint(se, g, withRebate(d, se.notes.get(d.source.sha256)?.rebate), { integrate: h.integrate }),
+    // ?filtration=1: the first print's colour goes into the enlarger's filtration and time (CHB-010 bake), not the printer lights
+    initial: (d, g) => firstPrint(se, g, withMeasured(d, se.notes.get(d.source.sha256)), { integrate: h.integrate, ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) }),
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
+    rollPhysics: h.rollPhysics,
   };
 }
 
@@ -141,7 +147,7 @@ async function main(): Promise<void> {
   const save = (f: string): Promise<unknown> => exportFrame(f, 'picker');
 
   root.innerHTML = '';
-  const { rt } = await mountStudio(built.app, root, studio, { presenter, save });
+  const { rt } = await mountStudio(built.app, root, studio, { presenter, save, renderers: ROLL_RENDERERS, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) });
   // the presenters exist now: the display space follows the main viewer's canvas
   const vp0 = viewports(rt)[0];
   if (vp0) studio.bridge.displaySpace = vp0.presenter.colorSpace;

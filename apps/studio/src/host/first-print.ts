@@ -4,7 +4,7 @@
 // mean density goes into the enlarger time (on the slider's 1/6-stop grid) and the colour remainder
 // into the printer lights. Two passes, so a time model that is not exactly log-linear still lands.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
-import { compile, type Box, type Engine, type FrameRecipe, type Graph, type Node, type Vec3 } from '@chromobench/contract';
+import { applyMutation, compile, type Box, type Engine, type FrameRecipe, type Graph, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
 
 /** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
 export type IntegrateToGrey = (frameLatd: Vec3, alpha: number) => Vec3;
@@ -16,6 +16,12 @@ export interface FirstPrintOptions {
   /** Pixels analysed (default 200 000). */
   analysisPixels?: number;
   passes?: number;
+  /**
+   * CHB-010 filtration: the dials that carry the first print's lights (core's bakeRecipe, injected by the host).
+   * The colour correction then sits in print.enlarger.filtration and the time, the lights go to what the dials
+   * cannot carry. Off by default: a roll's analysis and batches work in lights, with the pack as a roll setting.
+   */
+  bake?: (r: FrameRecipe) => Mutation[];
 }
 
 const r6 = (x: number): number => Number(x.toFixed(6));
@@ -81,7 +87,7 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
     t = t2;
     r = { ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, time_s: t }, lights: { ...r.print.lights, logH: lights } } };
   }
-  return {
+  const out: FrameRecipe = {
     ...r,
     print: {
       ...r.print,
@@ -91,9 +97,30 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
       },
     },
   };
+  // the auto record keeps the proposal in lights (what was measured); the dials carry it
+  return o.bake ? o.bake(out).reduce((x, m) => applyMutation(x, m).recipe, out) : out;
 }
 
 /** The new recipe with the measured rebate box (CHB-020) as its scan base; no box leaves scan.density's own rule. */
 export function withRebate(recipe: FrameRecipe, rebate: Box | null | undefined): FrameRecipe {
   return rebate && recipe.scan ? { ...recipe, scan: { ...recipe.scan, rebate } } : recipe;
+}
+
+/** What the host measured at decode (conditionScan), for the new recipe's scan settings (contract 0.3). */
+export interface MeasuredScan {
+  rebate?: Box | null;
+  /** scan.flare, percent per channel, from the holder's veil */
+  flare?: Vec3 | null;
+  /** scan.baseT: the flare-corrected base */
+  baseT?: Vec3 | null;
+}
+
+/** The recipe with the measured scan settings: rebate box, per-channel flare and base. Nothing measured leaves the default. */
+export function withMeasured(recipe: FrameRecipe, m: MeasuredScan | null | undefined): FrameRecipe {
+  if (!m || !recipe.scan) return recipe;
+  const scan = { ...recipe.scan };
+  if (m.rebate) scan.rebate = m.rebate;
+  if (m.flare && m.flare.some((f) => f > 0)) scan.flare = [...m.flare] as Vec3;
+  if (m.baseT) scan.baseT = [...m.baseT] as Vec3;
+  return { ...recipe, scan };
 }

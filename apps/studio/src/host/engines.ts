@@ -4,13 +4,13 @@
 // CHB-004's data packs, decodes scans through packages/ingest (TIFF, PNG, DNG, camera RAW via LibRaw
 // in a worker), conditions them on open, and hands the UI a StudioEngine plus a few injected
 // functions. Nothing else in the studio sees physics code.
-import type { Box, Engine, SourceInfo, Vec3 } from '@chromobench/contract';
+import type { Box, Engine, FrameRecipe, Mutation, SourceInfo, Vec3 } from '@chromobench/contract';
 import {
-  CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine, rebateBox, SCANNER_IDS, type PhysicsData,
+  bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine, rebateBox, SCANNER_IDS, scannerForward, type PhysicsData,
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
-  conditionScan, decodeAsync, detectSpecks, heal, linearise, RAW_EXTENSIONS, region, rollBase, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type FrameBase, type RawDecoder,
+  classifyImage, conditionScan, decodeAsync, detectSpecks, filmLayout, heal, linearise, rankStocks, RAW_EXTENSIONS, region, rollBase, sigmaD, sourceInfo, spotsMask, workerRawDecoder, type FrameBase, type RawDecoder,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import type { IntegrateToGrey } from './first-print.ts';
@@ -34,11 +34,18 @@ export interface HostSettings {
   dust: boolean;
 }
 
+/** What the roll kit's physics needs (studio-kit's RollPhysics, structurally): ingest's film layout and roll base, core's integrate-to-grey. */
+export type HostRollPhysics = ReturnType<typeof buildRollPhysics>;
+
 export interface HostEngine {
   engine: StudioEngine;
+  /** The service `rollPhysics` of the roll kit (CHB-020). */
+  rollPhysics: HostRollPhysics;
   /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
   catalog: Record<string, string[]>;
   integrate: IntegrateToGrey;
+  /** CHB-010: a recipe's printer lights as filtration and time (core's bakeRecipe), for the first print's `bake` option. */
+  bake: (r: FrameRecipe) => Mutation[];
   settings: HostSettings;
   /** File extensions the decoder accepts. */
   extensions: string[];
@@ -91,30 +98,65 @@ async function decodeScan(bytes: Uint8Array, sha256: string, name: string, long:
     ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
     : `${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
-  // Film layout (CHB-020): the holder's veil comes off the pixels, and the rebate box (film outside the image
-  // frame, never a sprocket hole or the holder) goes into the recipe's scan.rebate. A frame with no holder gets
-  // the veil of the roll opened so far.
+  // Film layout (CHB-020, contract 0.3): the pixels stay as scanned. The holder's veil goes into the recipe as
+  // scan.flare (per channel, percent) and the measured base as scan.baseT, so the engine removes the flare and
+  // the preview, the export and the roll analysis all see the same chain; the rebate box (film outside the image
+  // frame, never a sprocket hole or the holder) goes into scan.rebate. A frame with no holder gets the veil of
+  // the roll opened so far.
   const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
-  const c = conditionScan(data, w, h, { id: sha256, rollVeil });
+  const c = conditionScan(data, w, h, { id: sha256, rollVeil, subtract: false });
   roll.set(sha256, c.frame);
   const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
-  const Treb: Vec3 = c.baseT ?? ([0, 1, 2].map((k) => {
+  // the base as scanned (veil still in): the dust healer measures density against it
+  const Treb: Vec3 = c.layout.rebate?.Traw ?? ([0, 1, 2].map((k) => {
     let t = 0, m = 0;
     for (let y = rb.y; y < rb.y + rb.h; y++) for (let x = rb.x; x < rb.x + rb.w; x++) { t += data[(y * w + x) * 3 + k]!; m++; }
     return Math.max(t / Math.max(m, 1), 1e-6);
   }) as Vec3);
-  if (c.rebate) notes.push(`base ${fmt3(Treb.map((t) => -Math.log10(t)))} D (rebate ${rb.w}×${rb.h} at ${rb.x},${rb.y}, ${c.layout.rebate?.from})`);
+  if (c.rebate) notes.push(`base ${fmt3((c.baseT ?? Treb).map((t) => -Math.log10(t)))} D (rebate ${rb.w}×${rb.h} at ${rb.x},${rb.y}, ${c.layout.rebate?.from})`);
   else notes.push('no rebate found: the base is the brightest 5 % of columns (scan.density default)');
-  if (c.veil) notes.push(`veil ${c.veil.map((v) => v.toExponential(1)).join(' ')} subtracted (${c.veilFrom})`);
+  if (c.flare) notes.push(`scan.flare ${fmt3(c.flare)} % from the veil ${c.veil!.map((v) => v.toExponential(1)).join(' ')} (${c.veilFrom}), removed by the engine`);
+  else notes.push('no veil measured: scan.flare 0');
   for (const n of c.notes) notes.push(`${n.code}: ${n.message}`);
   if (settings.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
-  notes.push('scanner flare (scan.flare) not set');
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate };
+  return { info, data, full: { width: W, height: H }, notes, rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT };
+}
+
+function subBox(rgb: Float32Array, w: number, b: Box): Float32Array {
+  const out = new Float32Array(b.w * b.h * 3);
+  for (let y = 0; y < b.h; y++) out.set(rgb.subarray(((b.y + y) * w + b.x) * 3, ((b.y + y) * w + b.x + b.w) * 3), y * b.w * 3);
+  return out;
+}
+
+/** The roll kit's physics (RollPhysics) on this host's data packs; the stock ranking reads the scanner's forward model. */
+function buildRollPhysics(data: PhysicsData, stocks: string[]) {
+  const fwd = scannerForward(data, 'xt5-rgb-led');
+  return {
+    layout: (rgb: Float32Array, w: number, h: number) => filmLayout(rgb, w, h),
+    rollBase: (frames: FrameBase[]) => rollBase(frames),
+    integrateToGrey: (latd: Vec3, aim: { latd: Vec3; lights: Vec3 }, alpha: number): Vec3 =>
+      [...integrateToGrey(latd, { latd: aim.latd, lights: Lights.fromLogH(aim.lights) }, alpha).logH] as Vec3,
+    // sigma on the rebate box at this size, else on thin film
+    noise: (rgb: Float32Array, w: number, h: number, T: Vec3, box: Box | null): Vec3 | null => {
+      if (box && box.w >= 2 && box.h >= 2) {
+        const s = sigmaD(subBox(rgb, w, box), box.w, box.h, T);
+        if (s) return s;
+      }
+      const thin = (i: number): boolean => [0, 1, 2].every((k) => -Math.log10(Math.max(rgb[3 * i + k]!, 1e-6) / T[k]!) <= 0.08);
+      return sigmaD(rgb, w, h, T, thin);
+    },
+    classes: (rgb: Float32Array, w: number, h: number, T: Vec3, sigma: Vec3) => {
+      const s = classifyImage(rgb, w, h, T, sigma).stats;
+      return { blank: s.blank, below: s.below, above: s.above };
+    },
+    // absolute base density needs an open gate; without one no stock is named
+    rank: (base: { absD: Vec3 | null }, ids?: string[]) => (base.absD ? rankStocks(base.absD, ids ?? stocks, fwd) : null),
+  };
 }
 
 function catalogOf(data: PhysicsData): Record<string, string[]> {
@@ -178,7 +220,8 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   };
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
   return {
-    engine, catalog: catalogOf(data), settings,
+    engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []),
+    bake: (r) => bakeRecipe(r, data, DEFAULT_CONVENTIONS).mutations,
     integrate: (latd, alpha) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3,
     extensions: ['tif', 'tiff', 'dng', 'png', 'jpg', 'jpeg', ...RAW_EXTENSIONS],
   };

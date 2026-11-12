@@ -5,11 +5,11 @@ import {
   compile, defaultRecipe, Graph, ORIENTATIONS, sha256Hex,
   type Engine, type EngineCaps, type EvalTarget, type FrameRecipe, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
-import { CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine } from '@chromobench/core';
+import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, interimData, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { conditionScan, plantedStrip } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
-import { firstPrint, gridTime, integratedExposure, measureExposure, withRebate } from '../src/host/first-print.ts';
+import { firstPrint, gridTime, integratedExposure, measureExposure, withMeasured, withRebate } from '../src/host/first-print.ts';
 import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
 import { bandBoxes, evaluateBands, stripRecipe, stripValues } from '@chromobench/studio-kit';
 
@@ -242,5 +242,61 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     expect(dist(hole, truth)).toBeGreaterThan(0.3);
     expect(withRebate(r0, null).scan?.rebate).toBeNull();
     expect(withRebate(r0, c.rebate).scan?.rebate).toEqual(c.rebate);
+  }, 60_000);
+
+  it('CHB-010 bake: the first print can carry its colour in the filtration dials; the print stays within the dials\' rounding', async () => {
+    const strip = plantedStrip({ castD: [0.12, 0, -0.1] });
+    const sha = 'd'.repeat(64);
+    const info: SourceInfo = {
+      sha256: sha, format: 'tiff', width: strip.w, height: strip.h, channels: 3, bits: 16, sample: 'uint',
+      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
+      cfa: 'none', clippedFraction: 0, notes: [],
+    };
+    const c = conditionScan(Float32Array.from(strip.rgb), strip.w, strip.h, { id: sha, subtract: false });
+    const e = new RefEngine();
+    e.openDecoded(info, Float32Array.from(strip.rgb));
+    const g = new Graph();
+    g.registerSource(info);
+    const r0 = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
+    const plain = await firstPrint(e, g, r0, { integrate });
+    const baked = await firstPrint(e, g, r0, { integrate, bake: (r) => bakeRecipe(r, interimData(), DEFAULT_CONVENTIONS).mutations });
+    expect(baked.print.enlarger.filtration).not.toEqual(plain.print.enlarger.filtration);
+    expect(Math.max(...baked.print.lights.logH.map(Math.abs))).toBeLessThan(Math.max(...plain.print.lights.logH.map(Math.abs)) + 1e-9);
+    expect(baked.print.lights.auto.logH).toEqual(plain.print.lights.auto.logH);
+    const x = async (r: typeof plain): Promise<number[]> => [...(await measureExposure(e, g, r))];
+    const [xp, xb] = [await x(plain), await x(baked)];
+    expect(Math.max(...xp.map((v, k) => Math.abs(v - xb[k]!)))).toBeLessThan(0.05);
+  }, 60_000);
+
+  it('the veil goes into the recipe (scan.flare, scan.baseT), not out of the pixels: same print as subtracting it', async () => {
+    const strip = plantedStrip();
+    const sha = 'e'.repeat(64);
+    const info: SourceInfo = {
+      sha256: sha, format: 'tiff', width: strip.w, height: strip.h, channels: 3, bits: 16, sample: 'uint',
+      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
+      cfa: 'none', clippedFraction: 0, notes: [],
+    };
+    const raw = Float32Array.from(strip.rgb);
+    const kept = conditionScan(raw, strip.w, strip.h, { id: sha, subtract: false });
+    expect(raw).toEqual(Float32Array.from(strip.rgb)); // untouched
+    expect(kept.flare!.every((f) => f > 0 && f <= 20)).toBe(true);
+    const gone = Float32Array.from(strip.rgb);
+    const sub = conditionScan(gone, strip.w, strip.h, { id: sha });
+    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'strip' });
+    const printed = async (px: Float32Array, m: Parameters<typeof withMeasured>[1]): Promise<number[]> => {
+      const e = new RefEngine();
+      e.openDecoded(info, px);
+      const g = new Graph();
+      g.registerSource(info);
+      const r = await firstPrint(e, g, withMeasured(r0, m), { integrate });
+      return r.print.lights.logH.map((l) => l + Math.log10(r.print.enlarger.time_s));
+    };
+    const measured = { rebate: kept.rebate, flare: kept.flare, baseT: kept.scanBaseT };
+    const viaRecipe = await printed(raw, measured);
+    const viaPixels = await printed(gone, { rebate: sub.rebate });
+    expect(Math.max(...viaRecipe.map((v, k) => Math.abs(v - viaPixels[k]!)))).toBeLessThan(0.05);
+    const r = withMeasured(r0, measured);
+    expect(r.scan?.flare).toEqual(kept.flare);
+    expect(r.scan?.baseT).toEqual(kept.scanBaseT);
   }, 60_000);
 });

@@ -27,7 +27,8 @@ export const ROLL_TX = 'roll:';
 
 /**
  * Settings shared by every frame of a roll (decision record 1: copied into each recipe, tracked by the roll).
- * Not shared: scan.rebate (a box in one frame's pixels), crop, orientation, dust, the lights and the time
+ * scan.flare and scan.baseT are the roll's measured veil and base (contract 0.3); a frame whose base the analysis
+ * flags as mixed keeps its own scan.baseT. Not shared: scan.rebate (a box in one frame's pixels), crop, orientation, dust, the lights and the time
  * (each frame's own exposure and colour), exposures and masks.
  */
 export const SHARED_PATHS = [
@@ -37,6 +38,7 @@ export const SHARED_PATHS = [
   'scan.flat',
   'scan.openGate',
   'scan.flare',
+  'scan.baseT',
   'print.paper',
   'print.aim',
   'print.enlarger.mode',
