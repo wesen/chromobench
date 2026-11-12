@@ -753,3 +753,66 @@ Reference engine on the M1 Max (CPU, 512 px):
 
 ### Technical details
 - JSON: `various/ws-b/mac-before.json`, `mac-after-run1.json` (before the WebCrypto hash), `mac-after.json`.
+
+## Step 11: Browser tests, two races in WS-A's open-mode spec, final state
+
+The full browser suite on the branch had two failures, both in WS-A's `e2e/studio-open-mode.spec.ts`. Both were
+timing races that the worker engine exposed, not product bugs. Main (aa2d752, extracted into the scratchpad and run
+with my ports) passes that spec, because there opening a file blocks until it is decoded. After two test fixes the
+whole suite passes: 92 passed.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Leave the branch with green checks, attribute every browser failure, and close task 6p1c.
+
+**Inferred user intent:** Merge WS-B without breaking WS-A's tests.
+
+**Commit (code):** (this step's commit) — "CHB-027 WS-B: open-mode spec waits for both files and for the saved thumbnails; diary step 11"
+
+### What I did
+- Ran `e2e/studio-open-mode.spec.ts` on main (an archive of aa2d752 extracted into the scratchpad,
+  `pnpm install --offline`, same ports): 3 passed.
+- Failure 1, "photo or negative is guessed per file…": the status line matched `rendered` after the *first* file
+  while the second was still opening (decodes go through the worker now). The spec now also waits for 2 frames and
+  for no `opening` in the status line, in both tests that open two files.
+- Failure 2, "the library survives a reload…": after the reload the photo's catalog cell had no thumbnail. Logging
+  the KV right after the spec's "thumbnails are in the KV" wait showed both `thumb:<id>` entries still undefined. The
+  wait was `page.waitForFunction(async () => …)`, and Playwright treats the async predicate's promise as truthy, so
+  it returned at once. The reload 1.5 s later then raced `scheduleThumb` (500 ms after the frame was added, then
+  retries every 3 s until the filmstrip's thumbnail is in the cache). On main the thumbnails happened to be ready in
+  time. The spec now uses `expect.poll(() => page.evaluate(async …)).toBe(true)`.
+- `--repeat-each 3` of the spec: 9 passed. Full `CI=1 pnpm test:browser` with ports 4821–4824: 92 passed,
+  conformance 320/320.
+
+### Why
+- With the engine in a worker, "rendered" in the status line and "all files open" are no longer the same moment.
+
+### What worked
+- Comparing against main pinned failure 2 on timing. The KV log showed that the wait never waited.
+
+### What didn't work
+- My first guess (the background lane preempted by `preemptBackground`) was wrong: disabling it did not help.
+
+### What I learned
+- `page.waitForFunction` with an async predicate is not a wait. No other spec in `e2e/` uses that pattern (grep).
+
+### What was tricky to build
+- N/A (test-only change).
+
+### What warrants a second pair of eyes
+- The WS-A owner may want to know about the `waitForFunction(async …)` pattern.
+
+### What should be done in the future
+- The thumbnail for the KV could be saved when the filmstrip draws it (an event) instead of polling `peekThumb`
+  with retries.
+
+### Code review instructions
+- The diff of `e2e/studio-open-mode.spec.ts`; run `npx playwright test e2e/studio-open-mode.spec.ts --repeat-each 3`.
+
+### Technical details
+- Final state: `pnpm test` 93 files, 2693 passed, 7 skipped; typecheck and lint green; browser 92 passed.
+- Findings: F4 fixed. Neither engine stalls during drags or typing. On CPU, opens stall 0–250 ms (from 3.5–5.8 s).
+  On the M1 Max's GPU, the NEF open stalls 200 ms (from 1000). F10 partly fixed: the GPU is sharp at 4000 px. The CPU
+  stays at 512 px by default, with `?refLong=1024` as an opt-in (finals 3× slower).
