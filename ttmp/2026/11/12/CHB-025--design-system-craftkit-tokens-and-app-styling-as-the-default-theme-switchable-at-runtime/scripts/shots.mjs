@@ -2,7 +2,7 @@
 // looks. Usage (dev server already running on BASE):
 //   node shots.mjs <outdir> <prefix> [looks...]    looks: current | craftkit-light | craftkit-dark | chromogen | gray-N
 // BASE defaults to http://localhost:4173; VARIANTS=classic,lab narrows the set. Extra shots: lab with an agent's
-// proposal waiting (approval card, ribbon), classic's other modules (library grid, roll, finish, assistant).
+// proposal waiting (approval card, ribbon), classic's View ▸ Theme menu, the command palette and its other modules (library grid, roll, finish, assistant).
 import { chromium } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,6 +47,18 @@ for (const look of looks) {
       await page.locator('#pending .show').first().click().catch(() => {});
     }
     await shoot(v);
+    if (v === 'classic') {
+      // View ▸ Theme open, then the command palette
+      await page.locator('.ck-menubar-t', { hasText: 'View' }).click();
+      await page.locator('.ck-menu-i', { hasText: /^Theme/ }).hover();
+      await shoot(`${v}.menu`);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => window.chromobench.run('app.palette'));
+      await page.keyboard.type('gray');
+      await shoot(`${v}.palette`);
+      await page.keyboard.press('Escape');
+    }
     if (v === 'classic')
       for (const m of ['library', 'roll', 'finish', 'assistant']) {
         await page.evaluate((id) => window.chromobench.rt.go(id), m);

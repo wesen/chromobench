@@ -131,3 +131,72 @@ Chromogen look one menu click away, and stay consistent as new UI is added.
   accsoft hover active sel selline track knob knobline canvas cell cellsel cellhi menu shadow ok warn err info pending
   onpending pendsoft tip ontip hud onhud star scroll well onwell label-{red,yellow,green,blue,purple} font mono
   fontSize radius rule.
+
+## Step 2: Screenshots per variant in CraftKit light, CraftKit dark and Chromogen; outliers fixed
+
+With the switch in place, `scripts/shots.mjs` was extended (lab with two agent proposals waiting and one shown, so the
+approval cards and the ribbon are in the picture; classic's View ▸ Theme menu, the command palette and its library,
+roll, finish and assistant modules) and run for all seven variants in the three looks, plus gray 3 for classic and lab.
+I looked at the images and fixed what was off: the looks library cells (step 1's flex rules squeezed the name and
+caption, the second button was cut off, then the labels were truncated). The other variants needed nothing further.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Task c8jc — screenshots under the ticket's various/ folder, compared with CraftKit, fix outliers.
+**Inferred user intent:** Evidence that the studio now looks like CraftKit Studio, and that Chromogen still works.
+**Commit (code):** the commit following this entry — "CHB-025: screenshots per variant and theme; looks cells fixed"
+
+### What I did
+- `BASE=http://localhost:4290 node scripts/shots.mjs various/after after craftkit-light craftkit-dark chromogen`
+  (dev server `pnpm --filter @chromobench/studio exec vite --port 4290`, 4173 was in use) → 39 images; then
+  `VARIANTS=classic,lab … gray-3` → 8 more. Names: `after-<variant>[.<module>|.menu|.palette]-<look>.png`.
+- looks.css: `.cb-look-cell > * { flex: none }`, the thumbnail takes the rest (`flex: 1 1 0; min-height: 40px`), the
+  caption lost its 2.6em minimum, the action row does not wrap and its buttons keep their width (`flex: none; padding: 0 5px`).
+- Re-shot the looks variant in the three looks.
+
+### Why
+- Reviewing the images directly (Read on the PNGs) was the acceptance check; the reference is the shell demo on the
+  CraftKit theme (`various/before/ref-shell-demo-*.png`) and CHB-016's app.css.
+
+### What worked
+- Every variant renders on CraftKit greys with Lightroom sliders, lib-cell grid/filmstrip cells (selected cell light,
+  others darker), the canvas-grey stage around the print (#9a9a9a light, #161616 dark), blue accent on primary buttons
+  and the selected segment, approval cards and the "Agent proposal, not applied" ribbon in the pending red. Chromogen
+  keeps its white ground, Arial, square corners, black primary buttons and red selection/pending. Gray 3 re-tints the
+  whole page, the host bar included. No page errors in any run.
+
+### What didn't work
+- After step 1, `after-looks-craftkit-dark.png` showed the look cells' "Survey ±" buttons cut off at the bottom; after
+  the first fix (`flex-wrap: nowrap`) the labels were ellipsised ("Previ…", "Surve…"). Fixed as above.
+
+### What I learned
+- The roll module's sheet is empty until a roll exists, so its screenshot shows only the empty state; the roll kit's
+  cards are covered by the studio-kit browser tests, not by these screenshots.
+
+### What was tricky to build
+- Nothing beyond the look cells; the screenshot script drives the app through `window.chromobench` (run, propose,
+  rt.go) so it needs no test ids.
+
+### What warrants a second pair of eyes
+- Whether the pending tint (`--pendsoft`, red at 10 % on the panel) is too strong in CraftKit light.
+
+### What should be done in the future
+- The slider rows show the value twice (head and editable field), as before this ticket; CraftKit shows it once.
+  Left alone (polish; browser tests read `.cb-arg-v`).
+
+### Code review instructions
+- Compare `various/before/before-<variant>-current.png` with `various/after/after-<variant>-craftkit-light.png`.
+- Re-run: start the studio dev server, then `BASE=http://localhost:<port> node scripts/shots.mjs <out> after craftkit-light`.
+
+### Technical details
+- 1440×900, `colorScheme` light for craftkit-light and chromogen, dark for craftkit-dark; four 96×64 synthetic frames.
+
+### Validation before the commit (Step 2)
+- `pnpm typecheck` clean; `pnpm lint` ok (check-colours: 132 files); `pnpm gen:check` ok (26 files);
+  `pnpm test` 2642 passed | 7 skipped.
+- `CI=1 STUDIO_PORT=4390 SHELL_DEMO_PORT=4391 GPU_PARITY_PORT=4392 STUDIO_KIT_PORT=4393 pnpm test:browser`, first run:
+  86 passed, 1 failed — `e2e/studio.spec.ts:161 › tools: test strip band …`: `Expected substring: "rendered"`,
+  `Received string: "opened 3 files"` in `open()`. The status line race: with three files, the renders can finish
+  before the last file is opened, and `opened 3 files` overwrites `rendered N`. Not touched by this ticket (status text
+  comes from main.ts's `rendered` handler and the open loop). `--repeat-each 4 -g "tools: test strip"`: 4 passed.
+  Second full run: 87 passed (86 + `e2e/theme.spec.ts`).
