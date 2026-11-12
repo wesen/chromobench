@@ -1039,3 +1039,71 @@ snapshot change. 2350 unit tests pass; the studio builds.
 ### Technical details
 
 - Try the roll kit: `pnpm --filter @chromobench/studio-kit demo` → http://localhost:4187/demo/?variant=roll
+
+## Step 16: Housekeeping, main fast-forwarded, contract 0.3 and host wiring started
+
+The user said "ok build … all the way to the end". This step cleans up (stale servers, 16 finished worktrees),
+fast-forwards `main` to the integrated work (first time anything is on main), creates CHB-024 (contract 0.3) and
+starts two agents: contract 0.3 and a small host-wiring task (CHB-020's base/flare detection in the app's file
+opening, plus a configurable gpu-parity port).
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok build, commit at appropriate intervals and keep a detailed diary as you work (using
+the diary format from the skill) all the way to the end."
+**Assistant interpretation:** Execute the plan from my "what's next" answer — quick wins, contract 0.3, then the
+remaining feature tickets — committing and logging throughout, without stopping for confirmation.
+**Inferred user intent:** Reach a complete app while he works with his father.
+**Commit (code):** 249de7c — "CHB-024: contract 0.3 ticket"; main fast-forwarded to 1810a72
+
+### What I did
+
+- `kill 2027709 2027766`: Vite servers on 4471 and 4185 left by the CHB-023 agent's timing run (its worktree's
+  `vite --port 4471` and the parity-page vite). Ports free afterwards.
+- For each `.claude/worktrees/*`: checked `git status --porcelain` (all 0) and `git merge-base --is-ancestor <branch>
+  task/phase2-integration` (all merged), then `git worktree unlock` + `git worktree remove`; 16 removed; branches kept.
+- `git worktree remove ../chromobench-integration`; `git switch main`; `git merge --ff-only task/phase2-integration`
+  (main was b71b91f, the initial commit); `pnpm install --offline`; `pnpm test` "68 passed (68) files, 2350 passed".
+- Created CHB-024 with 8 tasks from the seven CONTRACT-REQUESTS.md files and guide proposals; committed before
+  launch. Launched `task/chb-024-contract-0.3` and `task/chb-020-host-wiring` (sonnet), with disjoint port sets
+  (4501–4503, 4511–4514).
+
+### Why
+
+- `main` had only the initial commit; integrated, green work belongs there now that no demo session depends on
+  the old checkout state.
+- The removed worktrees were clean and merged, so nothing is lost; branches remain for reference.
+
+### What worked
+
+- All of the above.
+
+### What didn't work
+
+- No failures.
+
+### What I learned
+
+- `git worktree remove` needs `unlock` first for the harness-locked agent worktrees.
+
+### What was tricky to build
+
+- N/A.
+
+### What warrants a second pair of eyes
+
+- Contract 0.3 touches every package; the host-wiring agent edits apps/studio/src/host/engines.ts and
+  playwright.config.ts in parallel — both prompts name the other's files.
+
+### What should be done in the future
+
+- After CHB-024: CHB-021, CHB-022, CHB-012, CHB-008 in parallel; CHB-013 needs the photographer's files.
+
+### Code review instructions
+
+- `git log --oneline -3 main`; `docmgr task list --ticket CHB-024`.
+
+### Technical details
+
+- Branch tips kept: task/chb-0NN-* for every merged ticket; task/ui-guides and task/phase2-integration are ancestors
+  of main.
