@@ -708,3 +708,92 @@ end when the work has ended, with `window.chromobench.idle()` after.
 ### Technical details
 - Timeouts kept per spec: mock-engine specs 30 s (the `waitForFunction` default; they used `expect`'s 5 s before),
   real-engine specs their previous 60/120/240 s.
+
+## Step 10: Split packages/dsl/src/host.ts by vocabulary area (task 6qs1)
+
+`host.ts` (804 lines) is now 209 lines plus eight modules in `packages/dsl/src/host/`: `calls.ts` (op calls on
+handles: `unmarshal`, `literal`, `recipeOf`, `callOp`, `rewrite`), `print.ts` (frame accessors and the print()
+macro: `cutOf`, `closureIds`, `printChain`, `printOpts`, `printMacro`, `macro`, `vocab`, `printOf`), `look.ts`
+(`look`, `explain`), `edits.ts` (`edit`, `queue`), `named-looks.ts` (cb.looks.*), `errors.ts` (the prelude's traps:
+`unknownMethodErr`, `unknownMember`, `notAwaited`, `immutable`, `immutableRecipe`), `words.ts` (pure helpers:
+`dslOps`, `suggest`, `editFix`, `HANDLE_MEMBERS`, …) and `types.ts` (the records and the two provider interfaces).
+The class keeps the per-eval state, the dispatcher, frames and node handles; each native is a function of the
+`Host`. The package's public exports are unchanged.
+
+The same method as Step 6: a script cut each method out by its signature line and rewrote `this.` to the host
+parameter; a second script reverses that on all 28 functions and compares them with HEAD's methods. All 28 bodies
+are the original text. Unit tests, the generated docs and bindings (`pnpm gen:check`) and the DSL goldens are
+unchanged.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7.
+**Assistant interpretation:** Task 6qs1: split `host.ts` by vocabulary area; generated bindings and DSL tests
+unchanged.
+**Inferred user intent:** One file per DSL area, so a change to cb.looks or to frame.edit does not mean reading the
+whole host.
+**Commit (code):** see the next commit, "CHB-032: split dsl host.ts into host/{calls,print,look,edits,named-looks,errors,words,types}.ts".
+
+### What I did
+- `grep` for importers: `session.ts` (Host, DocsProvider, LooksProvider, FrameEntry, QueuedEdit; members `begin`,
+  `dispatch`, `docs`, `looksProvider`, `edits`, `looks`, `logs`, `warnings`, `ops`, `vocabulary`, `state`),
+  `telemetry.ts`, `docs/generate.ts`, `docs/provider.ts`, `results/looks.ts`, `index.ts`, and
+  `packages/studio-kit/test/kit.test.ts` (`new Host(…).printOf`).
+- `<scratchpad>/chb032/split-host.py`: area modules; `split-host-head.py`: `words.ts`, `types.ts`, the new head of
+  `host.ts` (module list in the header comment, re-exports of the moved names and types), visibility, two fixes.
+- Visibility: `frames`, `exprs`, `editCounter`, `whatIfs`, `batchCounter`, `noFrame()`, `node()`, `intern()` are no
+  longer `private` (marked `@internal`); the public methods `closureIds`, `printChain`, `printOf` stay on the class
+  as one-line delegates.
+- Renamed three functions whose method names clash or read badly as free functions: `cut` → `cutOf` (the contract's
+  `cut` is imported in the same module), `call` → `callOp`, `unknown` → `unknownMember`.
+- `pnpm typecheck` 0; `pnpm lint` 0 (import boundaries ok, 344 file checks); `pnpm gen:check` → `gen:check ok (26 files)`;
+  `pnpm vitest run packages/dsl packages/agent packages/studio-kit/test/kit.test.ts` → 16 files, 132 tests passed;
+  `pnpm test` → 95 files, 2733 passed, 7 skipped (= baseline).
+- `<scratchpad>/chb032/verify-host-split.py HEAD` → `functions: 28 different: 1`; the one is `edit`, where the reverse
+  transform itself turned the hint text `'build one with h.mask.*'` into `this.mask.*`; the module has the original.
+
+### Why
+- Functions of the host instead of mixins or helper classes: the bodies stay the same text, the dispatcher reads as
+  before, and no new object lifetimes appear.
+
+### What worked
+- Line counts: host.ts 209, calls 103, print 177, look 29, edits 82, named-looks 106, errors 73, words 24, types 75.
+
+### What didn't work
+- The first run of the split script stopped at its own check: `AssertionError: ('macro', …)` — the check for a left
+  `this` matched the word in the error text "this handle is …"; narrowed it to `this` followed by `.`, `,`, `;`, `)`
+  or `]`.
+- The generated delegate for `printChain` split its parameter list on the comma inside `Record<string, unknown>`
+  (`printChain(this, dyes, r, opts, unknown>, at)`); fixed by hand in the second script.
+- `tsc`: `packages/dsl/src/host/calls.ts(30,13): error TS7022: 'h' implicitly has type 'any' …` and `(30,17): error
+  TS2448: Block-scoped variable 'h' used before its declaration.` — `literal` had a local `const h` (the handle of
+  a node) that now shadowed the host parameter; renamed it `hd`. A grep for other local `h` bindings found none.
+- An e2e run of Step 9 had rewritten a tracked CHB-027 screenshot
+  (`e2e/studio-strip.spec.ts:51` writes `ttmp/…CHB-027…/various/ws-d/01-synthetic-strip-frame2.png`); restored it
+  with `git checkout --` before staging.
+
+### What I learned
+- `FrameState` was a non-exported interface used in the public `state()` signature; it is exported from
+  `host/types.ts` now (not from the package index).
+
+### What was tricky to build
+- Import cycles: the modules import `type { Host }` from `../host.ts` only as a type, and `host.ts` imports their
+  functions, so there is no runtime cycle; `named-looks.ts` → `edits.ts` → `print.ts` → `calls.ts` → `errors.ts`
+  are one-way.
+
+### What warrants a second pair of eyes
+- The `@internal` members are reachable from outside the package through `Host`; nothing outside `packages/dsl`
+  uses them today.
+
+### What should be done in the future
+- `e2e/studio-strip.spec.ts:51` writes a screenshot into a tracked CHB-027 file; it should write under
+  `test-results/` (left: the file is CHB-027's evidence).
+
+### Code review instructions
+- `packages/dsl/src/host.ts` (header lists the modules), `packages/dsl/src/host/*.ts`.
+- `pnpm typecheck && pnpm gen:check && pnpm vitest run packages/dsl packages/agent`;
+  `python3 <scratchpad>/chb032/verify-host-split.py <commit before this one>`.
+
+### Technical details
+- Public exports of `@chromobench/dsl` from host.ts: `Host`, `PRINT_OPTIONS`, `dslOps`, `suggest`, `HandleInfo`,
+  `LooksProvider` (unchanged); host.ts also re-exports `editFix`, `HANDLE_MEMBERS`, `isDslOp`, `DocsProvider`,
+  `FrameEntry`, `LogLine`, `LookRequest`, `QueuedEdit` for the package's own importers.
