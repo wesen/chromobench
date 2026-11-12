@@ -83,6 +83,7 @@ export default {
     s.module('print', printModule(ck, cb));
     // CHB-022: crop, straighten, spot removal and finishing tones after the print
     s.module('finish', finishModule(ck, cb, { tones: false }));
+    s.module('assistant', cb.kits.chat.module());
     s.module('output', m =>
       m
         .label('Output')

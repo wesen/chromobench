@@ -22,6 +22,7 @@ import type { Studio } from './studio.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
+import { createChatKit } from '../kits/chat/src/kit.ts';
 
 // variants' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
@@ -679,6 +680,7 @@ export function createCb(ck: Ck) {
   cb.kits['roll'] = createRollKit(ck, cb as any);
   cb.kits['finish'] = createFinishKit(ck, cb as any);
   cb.kits['looks'] = createLooksKit(ck, cb as any);
+  cb.kits['chat'] = createChatKit(ck, cb as any); // CHB-008: the assistant chat
   return cb;
 }
 

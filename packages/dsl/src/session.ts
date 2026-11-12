@@ -114,6 +114,8 @@ export class DslSession {
   private queue: Promise<unknown> = Promise.resolve();
   private restartNote: string | null = null;
   private disposed = false;
+  private running = false;
+  private cancelled = false;
 
   private constructor(opts: DslSessionOptions) {
     this.engine = opts.engine;
@@ -169,6 +171,20 @@ export class DslSession {
     if (this.disposed) return;
     this.disposed = true;
     this.disposeVm();
+  }
+
+  /**
+   * Stops the running eval (CHB-008: Stop in the chat, MCP cancellation): the interrupt handler fires at the
+   * next check, pending engine calls are aborted, and the eval ends with E_CANCELLED; its edits are dropped.
+   * Returns false when no eval is running.
+   */
+  interrupt(): boolean {
+    if (!this.running) return false;
+    this.cancelled = true;
+    this.deadline = 0;
+    for (const p of this.pending) p.ac.abort();
+    this.wake();
+    return true;
   }
 
   /** Runs one eval. Evals of one session run one at a time, in order. */
@@ -353,6 +369,8 @@ export class DslSession {
     this.sources.delete(n - 50);
     const frame = req.frame ?? null;
     this.host.begin(n, frame);
+    this.running = true;
+    this.cancelled = false;
     let outcome: Outcome;
     if (frame !== null && !this.frameEntries.has(frame)) {
       outcome = { ok: false, error: diag('E_NO_FRAME', `no frame "${frame}"`, { valid: [...this.frameEntries.keys()] }) };
@@ -367,9 +385,12 @@ export class DslSession {
       sH.dispose();
       if (b.error) b.error.dispose();
       else b.value.dispose();
-      this.deadline = Date.now() + Math.min(req.timeoutMs ?? this.limits.defaultTimeoutMs, this.limits.maxTimeoutMs);
+      this.deadline = this.cancelled ? 0 : Date.now() + Math.min(req.timeoutMs ?? this.limits.defaultTimeoutMs, this.limits.maxTimeoutMs);
       outcome = await this.pump(req.code, n);
     }
+    this.running = false;
+    if (this.cancelled && !outcome.ok) outcome = { ok: false, error: diag('E_CANCELLED', 'the eval was stopped before it finished', { hint: 'nothing it asked to change was submitted; mem is intact' }), ...(outcome.fatal ? { fatal: outcome.fatal } : {}) };
+    this.cancelled = false;
     const warnings: Diagnostic[] = [...this.host.warnings];
     // host work still in flight: the agent did not await it
     if (this.pending.size > 0) {

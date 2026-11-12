@@ -32,7 +32,8 @@ export default defineConfig({
   worker: { format: 'es' },
   // LibRaw's module locates libraw.wasm beside itself; the host passes the URL explicitly (?url), and
   // keeping the package out of the pre-bundle keeps that path valid in the dev server too.
-  optimizeDeps: { exclude: ['@colorhythm/libraw-wasm'] },
+  // The same holds for QuickJS (the DSL worker, CHB-008): its module loads emscripten-module.wasm beside itself.
+  optimizeDeps: { exclude: ['@colorhythm/libraw-wasm', '@jitl/quickjs-wasmfile-release-sync'] },
   build: { target: 'es2022', chunkSizeWarningLimit: 2000 },
   server: { port: 4173, strictPort: true, fs: { allow: ['../..'] } },
   preview: { port: 4173, strictPort: true },

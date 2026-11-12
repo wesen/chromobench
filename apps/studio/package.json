@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@chromobench/agent": "workspace:*",
     "@chromobench/contract": "workspace:*",
     "@chromobench/core": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",

@@ -17,7 +17,10 @@
     "./kits/finish": "./kits/finish/src/index.ts",
     "./kits/looks": "./kits/looks/src/index.ts",
     "./kits/looks/dom": "./kits/looks/src/dom.ts",
-    "./kits/looks/looks.css": "./kits/looks/src/looks.css"
+    "./kits/looks/looks.css": "./kits/looks/src/looks.css",
+    "./kits/chat": "./kits/chat/src/index.ts",
+    "./kits/chat/dom": "./kits/chat/src/dom.ts",
+    "./kits/chat/chat.css": "./kits/chat/src/chat.css"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"
