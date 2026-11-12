@@ -1,0 +1,634 @@
+[
+ {
+  "kind": "cold",
+  "query": "",
+  "engine": "reference · CPU f64 (tabulated previews, exact export) (worker) (no WebGPU: E_EVAL: no GPU adapter) · 640 px",
+  "swControlled": true,
+  "wallMs": 8859,
+  "readyMs": 775,
+  "openAt": 777,
+  "presentMs": 3685,
+  "firstScreenMs": 7945,
+  "firstScreen": [
+   8722,
+   "main",
+   "screen",
+   640,
+   428,
+   3789
+  ],
+  "status": [
+   [
+    -562,
+    "starting the engine…"
+   ],
+   [
+    -560,
+    "loading data packs…"
+   ],
+   [
+    -371,
+    "starting WebGPU…"
+   ],
+   [
+    -370,
+    "starting the engine worker…"
+   ],
+   [
+    -54,
+    "ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)"
+   ],
+   [
+    30,
+    "opening DSC_8559.NEF…"
+   ],
+   [
+    3635,
+    "opened DSC_8559.NEF"
+   ],
+   [
+    7962,
+    "rendered 1 · screen"
+   ]
+  ],
+  "page": [
+   {
+    "name": "/assets/index-BBGRlnHz.js",
+    "n": 1,
+    "start": 42,
+    "end": 97,
+    "bytes": 339891
+   },
+   {
+    "name": "/assets/index-ChPxfydo.css",
+    "n": 1,
+    "start": 42,
+    "end": 51,
+    "bytes": 9987
+   },
+   {
+    "name": "/assets/engines-DiC-pse_.js",
+    "n": 1,
+    "start": 187,
+    "end": 196,
+    "bytes": 67537
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 217,
+    "end": 219,
+    "bytes": 32136
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 217,
+    "end": 219,
+    "bytes": 4746
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 225,
+    "end": 227,
+    "bytes": 2462
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 225,
+    "end": 227,
+    "bytes": 809
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 227,
+    "end": 229,
+    "bytes": 23977
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 227,
+    "end": 228,
+    "bytes": 2436
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 230,
+    "end": 231,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 231,
+    "end": 233,
+    "bytes": 4564
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 233,
+    "end": 235,
+    "bytes": 8612
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 237,
+    "end": 238,
+    "bytes": 14724
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 239,
+    "end": 240,
+    "bytes": 3372
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 240,
+    "end": 242,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 242,
+    "end": 243,
+    "bytes": 16159
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 246,
+    "end": 248,
+    "bytes": 781
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 249,
+    "end": 250,
+    "bytes": 6316
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 250,
+    "end": 403,
+    "bytes": 5977
+   },
+   {
+    "name": "/assets/engine-worker-pXyUzGwx.js",
+    "n": 1,
+    "start": 415,
+    "end": 416,
+    "bytes": 92709
+   }
+  ],
+  "worker": [
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 27,
+    "end": 29,
+    "bytes": 32136
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 27,
+    "end": 29,
+    "bytes": 4746
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 35,
+    "end": 36,
+    "bytes": 2462
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 35,
+    "end": 37,
+    "bytes": 809
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 37,
+    "end": 38,
+    "bytes": 23977
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 38,
+    "end": 39,
+    "bytes": 2436
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 39,
+    "end": 40,
+    "bytes": 4564
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 40,
+    "end": 41,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 41,
+    "end": 42,
+    "bytes": 8612
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 42,
+    "end": 43,
+    "bytes": 14724
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 46,
+    "end": 47,
+    "bytes": 3372
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 48,
+    "end": 49,
+    "bytes": 5484
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 49,
+    "end": 50,
+    "bytes": 16159
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 51,
+    "end": 52,
+    "bytes": 781
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 53,
+    "end": 54,
+    "bytes": 6316
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 55,
+    "end": 173,
+    "bytes": 5977
+   },
+   {
+    "name": "/assets/libraw-IP__XGtL.wasm",
+    "n": 1,
+    "start": 565,
+    "end": 581,
+    "bytes": 0
+   }
+  ]
+ },
+ {
+  "kind": "warm",
+  "query": "",
+  "engine": "reference · CPU f64 (tabulated previews, exact export) (worker) (no WebGPU: E_EVAL: no GPU adapter) · 640 px",
+  "swControlled": true,
+  "wallMs": 8774,
+  "readyMs": 781,
+  "openAt": 782,
+  "presentMs": 3370,
+  "firstScreenMs": 7909,
+  "firstScreen": [
+   8691,
+   "main",
+   "screen",
+   640,
+   428,
+   4573
+  ],
+  "status": [
+   [
+    -635,
+    "starting the engine…"
+   ],
+   [
+    -633,
+    "loading data packs…"
+   ],
+   [
+    -300,
+    "starting WebGPU…"
+   ],
+   [
+    -298,
+    "starting the engine worker…"
+   ],
+   [
+    -8,
+    "ready: 1 frame in the library; select one to open its file again"
+   ],
+   [
+    39,
+    "opening DSC_8559.NEF…"
+   ],
+   [
+    3319,
+    "opened DSC_8559.NEF"
+   ],
+   [
+    7922,
+    "rendered 1 · screen"
+   ]
+  ],
+  "page": [
+   {
+    "name": "/assets/index-BBGRlnHz.js",
+    "n": 1,
+    "start": 17,
+    "end": 58,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/index-ChPxfydo.css",
+    "n": 1,
+    "start": 17,
+    "end": 25,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/engines-DiC-pse_.js",
+    "n": 1,
+    "start": 113,
+    "end": 122,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 149,
+    "end": 157,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 149,
+    "end": 157,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 164,
+    "end": 170,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 164,
+    "end": 170,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 170,
+    "end": 175,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 171,
+    "end": 175,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 176,
+    "end": 181,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 176,
+    "end": 180,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 182,
+    "end": 187,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 187,
+    "end": 192,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 192,
+    "end": 196,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 197,
+    "end": 201,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 202,
+    "end": 206,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 207,
+    "end": 211,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 211,
+    "end": 214,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 215,
+    "end": 479,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/engine-worker-pXyUzGwx.js",
+    "n": 1,
+    "start": 493,
+    "end": 494,
+    "bytes": 300
+   }
+  ],
+  "worker": [
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/manifest.json",
+    "n": 1,
+    "start": 22,
+    "end": 24,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/manifest.json",
+    "n": 1,
+    "start": 22,
+    "end": 24,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/CHANGELOG.txt",
+    "n": 1,
+    "start": 30,
+    "end": 32,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/LICENSE.txt",
+    "n": 1,
+    "start": 30,
+    "end": 31,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/SPEKTRAFILM_LICENSE.txt",
+    "n": 1,
+    "start": 32,
+    "end": 34,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/cameras/generic-bayer.safetensors",
+    "n": 1,
+    "start": 32,
+    "end": 33,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/cie/cmf-1931-2deg.safetensors",
+    "n": 1,
+    "start": 35,
+    "end": 38,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/illustrative%401/lights/lights.safetensors",
+    "n": 1,
+    "start": 35,
+    "end": 37,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/dichroics.safetensors",
+    "n": 1,
+    "start": 38,
+    "end": 39,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/enlarger/neutral-print-filters.json",
+    "n": 1,
+    "start": 39,
+    "end": 40,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/filters.safetensors",
+    "n": 1,
+    "start": 41,
+    "end": 42,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/light/illuminants.safetensors",
+    "n": 1,
+    "start": 43,
+    "end": 44,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/dir-couplers.json",
+    "n": 1,
+    "start": 45,
+    "end": 46,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/grain.json",
+    "n": 1,
+    "start": 47,
+    "end": 48,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/spektrafilm%400.3.2%2B3bb2c2d/presets/halation.json",
+    "n": 1,
+    "start": 49,
+    "end": 50,
+    "bytes": 0
+   },
+   {
+    "name": "/packs/…/stocks/*",
+    "n": 56,
+    "start": 51,
+    "end": 178,
+    "bytes": 0
+   },
+   {
+    "name": "/assets/libraw-IP__XGtL.wasm",
+    "n": 1,
+    "start": 417,
+    "end": 429,
+    "bytes": 0
+   }
+  ]
+ }
+]

@@ -14,3 +14,4 @@
 - [ ] [from CHB-016 vp7c] Diagnostics table: every CK-/CB- code with family, title, owner and fix template <!-- t:d552 -->
 - [ ] [from CHB-016 no98] Help topic 'Writing a variant' from the declarations and examples <!-- t:v4fu -->
 - [ ] [from CHB-019 xupn] Dev hot reload of layouts (import.meta.hot); Load Variant moved to CHB-030 <!-- t:0x4k -->
+- [ ] Exports at the file's own size on both engines: an export is the working image's size (apps/studio/src/host/export.ts), so the CPU engine exports 640 px (512 before CHB-031) and the GPU its 4000 px default; decode at full size for an export (tiled), keep previews at the working size <!-- t:qfae -->

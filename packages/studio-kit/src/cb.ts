@@ -22,6 +22,7 @@ import type { HostFlags, Studio } from './studio.ts';
 import type { OpenAs } from './bridge/frames.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
+import { orientFrame } from '../kits/finish/src/geometry.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
 
@@ -50,8 +51,8 @@ export interface CbState {
   proposals: Record<string, any[]>;
   view: { module?: string; mode: string; view: ViewMode; compare: string; split: number; step: string; filter: { text: string; flag: string | null }; thumbSize: number; vp: Record<string, unknown> };
   ui: { selection: { ids: string[]; primary: string | null; anchor: string | null }; tool: string | null; toolOptions: Record<string, any>; focusPath: string | null; probe: [number, number] | null; showProposal: string | null; approvals: Record<string, { off?: number[]; stale?: { code: string; message: string }[] }>; host?: HostFlags };
-  /** openAs: how File ▸ Open opens (CHB-027, remembered); dust: heal dust on open */
-  prefs: { agentMode: 'read-only' | 'ask' | 'auto'; openAs?: OpenAs; dust?: boolean };
+  /** openAs: how File ▸ Open opens (CHB-027); openAsKeep: keep it after a restart (CHB-031 F18: else Guess at start); dust: heal dust on open */
+  prefs: { agentMode: 'read-only' | 'ask' | 'auto'; openAs?: OpenAs; openAsKeep?: boolean; dust?: boolean };
   workspace: Record<string, unknown>;
 }
 
@@ -108,7 +109,7 @@ const kindIn = (s: any, id: string | null): 'photo' | 'negative' | null =>
   id ? (s?.recipes?.[id] ? (s.recipes[id].kind === 'digital-raw' ? 'photo' : 'negative') : (s?.catalog?.frames?.[id]?.kind ?? null)) : null;
 
 /** the thumbnail context menu (CHB-027, F6) */
-export const FRAME_CONTEXT = ['frame.reopenAsPhoto', 'frame.reopenAsNegative', '-', 'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.remove'];
+export const FRAME_CONTEXT = ['frame.reopenAsPhoto', 'frame.reopenAsNegative', '-', 'frame.rotateLeft', 'frame.rotateRight', '-', 'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.remove'];
 
 export function createCb(ck: Ck) {
   const node = (form: string, props: Record<string, unknown> = {}, kids: unknown[] = []): any => ck.node(form, props, kids);
@@ -211,6 +212,14 @@ export function createCb(ck: Ck) {
           ctx.toast('Not available in this window', { kind: 'why' });
           return null;
         };
+        const openFrame = { enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!], why: 'Open a frame first' };
+        const orientCurrent = (ctx: any, step: 'cw90' | 'ccw90' | 'flipH', label: string): void => {
+          const f = current(ctx.state);
+          const r = f ? recipeOf(ctx, f) : undefined;
+          if (!f || !r) return;
+          const next = orientFrame(r.view.frame, step);
+          ctx.tx(label, (t: any) => t.$set(['recipes', f, 'view', 'frame'], { ...next, crop: next.crop ? { ...next.crop } : null }));
+        };
         const reopenAs = async (ctx: any, id: string | null, as: 'photo' | 'negative'): Promise<unknown> => {
           if (!id) return null;
           const studio = studioOf(ctx);
@@ -288,6 +297,10 @@ export function createCb(ck: Ck) {
               ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its recipe`, { kind: 'info' });
             },
           })
+          // CHB-031 F20: turn or mirror the frame shown (view.frame.orientation; a strip's frames may come sideways)
+          .add('frame.rotateLeft', { label: 'Rotate Left', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'ccw90', 'Rotate Left') })
+          .add('frame.rotateRight', { label: 'Rotate Right', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'cw90', 'Rotate Right') })
+          .add('frame.flip', { label: 'Flip Left to Right', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'flipH', 'Flip') })
           // ── the host's actions (CHB-027: the top bar folded into the menus); hidden where the host has none ──
           .add('file.open', { label: 'Open Files…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => hostRun(ctx, 'openFiles') })
           .add('file.openFolder', { label: 'Open Folder…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFolder'), run: ctx => hostRun(ctx, 'openFolder') })
@@ -300,6 +313,8 @@ export function createCb(ck: Ck) {
           .add('file.openAs.auto', { label: 'Photo or Negative: Guess', menu: 'File', palette: false, checked: (s: any) => (s.prefs?.openAs ?? 'auto') === 'auto', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'auto' } }) })
           .add('file.openAs.photo', { label: 'Open as Photos', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'photo', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'photo' } }) })
           .add('file.openAs.negative', { label: 'Open as Negatives', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'negative', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'negative' } }) })
+          // F18: Photos / Negatives last until the studio restarts (then Guess), unless kept
+          .add('file.openAs.keep', { label: 'Keep This Choice After Restart', menu: 'File', palette: false, checked: (s: any) => !!s.prefs?.openAsKeep, hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAsKeep: !ctx.state.prefs?.openAsKeep } }) })
           .add('file.dust', {
             label: 'Heal Dust on Open',
             menu: 'File',

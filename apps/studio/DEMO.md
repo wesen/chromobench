@@ -33,8 +33,9 @@ plus every parameter, the raw journal and the node list.
   in the Print module; the others appear in the film strip as they are decoded.
 - TIFF and PNG (16-bit, linear or sRGB), DNG, and camera RAW (`.nef .cr2 .cr3 .arw .raf .orf .rw2 …`,
   decoded by LibRaw in a worker, in scan mode: linear camera RGB, no white balance).
-- Scans are reduced to a working image (4000 px on the long side on the GPU, 512 px on the reference
-  engine) on open; the status line shows what was read and the film base it found.
+- Scans are reduced to a working image (4000 px on the long side on the GPU, 640 px on the reference
+  engine, each frame of a strip about as much) on open; the status line shows what was read and the film base it
+  found.
 - Each frame's recipe and history are saved in the browser by the file's hash: reopening the same
   file (even renamed or moved) brings its print back. After a reload the strip shows only the frames
   opened again in this session.

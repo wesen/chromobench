@@ -5,7 +5,7 @@
 //
 // URL options: ?variant=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
-// reference engine's, default 512); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
+// reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
 import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
@@ -139,7 +139,9 @@ async function startEngine(): Promise<Host> {
   const { createHostEngine } = await import('./host/engines.ts');
   const long = q.get('long');
   const refLong = q.get('refLong');
+  const refMode = q.get('refMode');
   const h = await createHostEngine({
+    ...(refMode === 'exact' || refMode === 'tabulated' ? { refMode } : {}),
     want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), ...(refLong !== null ? { refLong: Number(refLong) } : {}),
     worker: q.get('worker') !== '0', onStatus: (s) => status(s),
   });
@@ -305,6 +307,23 @@ async function main(): Promise<void> {
 
   // ── files ──
   const openAsPref = (): OpenAs => ((rt.store.peek(['prefs', 'openAs']) as OpenAs | undefined) ?? 'auto');
+  // ── File ▸ Open As in the status line while it is not Guess (CHB-031 F18): new files open that way, not guessed ──
+  const openAsEl = el('button', { type: 'button', id: 'open-as', class: 'pill is-hint' });
+  openAsEl.hidden = true;
+  statusBarEl.insertBefore(openAsEl, modeEl);
+  let shownAs = '';
+  const showOpenAs = (): void => {
+    const a = openAsPref();
+    if (a === shownAs) return;
+    shownAs = a;
+    openAsEl.hidden = a === 'auto';
+    openAsEl.dataset['as'] = a;
+    openAsEl.textContent = a === 'photo' ? 'Opening as photos' : 'Opening as negatives';
+    openAsEl.title = `File ▸ Open As: files you open now open as ${a === 'photo' ? 'photos' : 'negatives'}, not guessed. Click to let the studio guess again.`;
+  };
+  rt.store.on(showOpenAs);
+  openAsEl.addEventListener('click', () => void rt.runCommand('file.openAs.auto', null));
+
   /** One question per open batch when a guess is unsure (F1): photos from a camera, or scans of negatives? */
   async function askMode(g: OpenGuess, name: string, count: number): Promise<'photo' | 'negative'> {
     const body = el('div', {},
@@ -340,6 +359,8 @@ async function main(): Promise<void> {
       return;
     }
     const as = o.as ?? openAsPref();
+    // how the library had each file before this open (F18: say so when Open As overrides it)
+    const libKind = new Map(Object.values((rt.store.peek(['catalog', 'frames']) as Record<string, CatalogFrame> | undefined) ?? {}).map((c) => [c.sha256, c.kind]));
     let answer: Promise<'photo' | 'negative'> | null = null;
     askOpen = (g, name) => (answer ??= askMode(g, name, files.length));
     const opened: string[] = [];
@@ -362,7 +383,13 @@ async function main(): Promise<void> {
           if (r.outcome === 'already' || r.outcome === 'conflict') {
             already.push(pf.name);
             rt.chrome.toast(`${pf.name} is already open (as a ${asWord(r.entry.kind)})`, { kind: 'info' });
-          } else opened.push(r.entries.length > 1 ? `${pf.name} (${r.entries.length} frames)` : pf.name);
+          } else {
+            opened.push(r.entries.length > 1 ? `${pf.name} (${r.entries.length} frames)` : pf.name);
+            const was = libKind.get(r.entry.sha);
+            if (as !== 'auto' && was && was !== asWord(r.entry.kind)) {
+              rt.chrome.toast(`${pf.name} opened as a ${asWord(r.entry.kind)} (File ▸ Open As); your library had it as a ${was}: Frame ▸ Re-open as ${was === 'photo' ? 'Photo' : 'Negative'} brings that back`, { kind: 'info' });
+            }
+          }
           if (pf.handle) void kv.put('handles', `file:${r.entry.sha}`, pf.handle).catch(() => undefined);
           if (o.expect && o.expect.sha256 !== r.entry.sha) rt.chrome.toast(`${pf.name} is not the file ${o.expect.name} was made from: it opened as a frame of its own`, { kind: 'warn' });
           if (first) {
@@ -619,6 +646,9 @@ async function main(): Promise<void> {
     }).catch(() => undefined);
   }
 
+  // F18: Open as Photos / Negatives lasts until a restart, then Guess again, unless he kept it (File ▸ Open As)
+  if (openAsPref() !== 'auto' && !rt.store.peek(['prefs', 'openAsKeep'])) void rt.runCommand('file.openAs.auto', null);
+  showOpenAs();
   hook(rt, studio, def.id, host, exportFrame, chat);
   // a selection restored from last time that is not open: cleared, so the first click on it opens its file
   if (studio.current && isOffline(rt.state, studio.current)) {

@@ -8,8 +8,11 @@
 // cancel drops a queued job, or aborts a running evaluation at the next stage boundary (RefEngine yields between
 // stages with a macrotask, so the cancel message lands): the main thread's render queue aborts superseded renders,
 // and the worker stops spending time on them.
-import { toDiagnostic, type NodeRef } from '@chromobench/contract';
-import { RefEngine } from '@chromobench/core';
+import {
+  toDiagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageResult, type Measurement, type MeasureSpec, type NodeDef, type NodeRef, type SourceInfo,
+  type SourceRef, type TableKey,
+} from '@chromobench/contract';
+import { RefEngine, type RefEngineOptions } from '@chromobench/core';
 import { loadDefaultPhysicsData } from '@chromobench/gpu';
 import { LibRawDecoder, setLibRawWasm, type FrameBase, type RawDecoder } from '@chromobench/ingest';
 import { decodeFile } from './decode.ts';
@@ -36,9 +39,66 @@ function macrotasks(): () => Promise<void> {
 
 type Job = Exclude<ToWorker, { kind: 'adopt' | 'cancel' | 'dispose' | 'register' | 'forget' }>;
 
+/** What the studio's hosts use of a reference engine (RefEngine, or TabulatedPreviews over two of them). */
+export type RefLike = Engine & Pick<RefEngine, 'openDecoded' | 'forgetSource'>;
+
+/**
+ * The reference engine as the studio runs it by default (CHB-031 F10): previews through core's tables ('tabulated',
+ * what the GPU engine's previews compute; 2–5× faster than exact on the CPU) and the export precision exact (every
+ * pixel through the physics, as the GPU engine's export path). Two RefEngines on the same sources, each with its own
+ * caches; the exact one is used only by exports (and measurements asked at export precision).
+ */
+export class TabulatedPreviews implements Engine {
+  readonly id = 'reference' as const;
+  readonly preview: RefEngine;
+  readonly exact: RefEngine;
+  constructor(o: RefEngineOptions) {
+    this.preview = new RefEngine({ ...o, mode: 'tabulated' });
+    // exports run at full resolution and are not repeated: a small cache
+    this.exact = new RefEngine({ ...o, mode: 'exact', cacheLimit: 8, cacheBytes: Math.min(o.cacheBytes ?? Infinity, 256 * 2 ** 20) });
+  }
+  capabilities(): EngineCaps {
+    return this.preview.capabilities();
+  }
+  async open(source: SourceRef): Promise<SourceInfo> {
+    await this.exact.open(source);
+    return this.preview.open(source);
+  }
+  openDecoded(info: SourceInfo, data: Float32Array | Float64Array): SourceInfo {
+    this.exact.openDecoded(info, data);
+    return this.preview.openDecoded(info, data);
+  }
+  forgetSource(sha: string): void {
+    this.exact.forgetSource(sha);
+    this.preview.forgetSource(sha);
+  }
+  adopt(defs: readonly NodeDef[]): void {
+    this.preview.adopt(defs);
+    this.exact.adopt(defs);
+  }
+  evaluate(node: NodeRef, target: EvalTarget): Promise<ImageResult> {
+    return (target.precision === 'export' ? this.exact : this.preview).evaluate(node, target);
+  }
+  measure(node: NodeRef, spec?: MeasureSpec): Promise<Measurement> {
+    return (spec?.precision === 'export' ? this.exact : this.preview).measure(node, spec);
+  }
+  prepare(keys: TableKey[]): Promise<void> {
+    return this.preview.prepare(keys);
+  }
+  dispose(): void {
+    this.preview.dispose();
+    this.exact.dispose();
+  }
+}
+
+/** A reference engine in `mode`: 'exact' everywhere, or 'tabulated' previews with exact exports (TabulatedPreviews). */
+export function referenceEngine(o: RefEngineOptions): RefLike {
+  return o.mode === 'tabulated' ? new TabulatedPreviews(o) : new RefEngine({ ...o, mode: 'exact' });
+}
+
 /** Serves engine jobs on scope. `raw` replaces LibRaw (tests). */
 export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): void {
-  let engine: RefEngine | null = null;
+  let engine: RefLike | null = null;
   let raw: RawDecoder | null = o.raw ?? null;
   const roll = new Map<string, FrameBase>();
   /** The last 'register' decode per source, waiting for its 'register' message. */
@@ -49,7 +109,7 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
   let busy = false;
 
   const reply = (m: FromWorker, transfer: Transferable[] = []): void => scope.postMessage(m, transfer);
-  const need = (): RefEngine => {
+  const need = (): RefLike => {
     if (!engine) throw new Error('the engine worker hosts no engine (init with engine: "reference")');
     return engine;
   };
@@ -63,8 +123,8 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
         }
         if (job.engine === 'reference') {
           const data = await loadDefaultPhysicsData(job.packsBase);
-          engine = new RefEngine({
-            data, yield: macrotask, sampled: job.sampled ?? true,
+          engine = referenceEngine({
+            data, yield: macrotask, sampled: job.sampled ?? true, mode: job.mode ?? 'exact',
             ...(job.cacheLimit ? { cacheLimit: job.cacheLimit } : {}), ...(job.cacheBytes ? { cacheBytes: job.cacheBytes } : {}),
           });
         }

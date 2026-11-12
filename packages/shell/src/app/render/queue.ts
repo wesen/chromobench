@@ -143,11 +143,17 @@ export class RenderQueue {
   private pump(s: Slot, later = false): void {
     if (s.inflight || !s.waiting) return this.checkIdle();
     const w = s.waiting;
-    // live preempts background: try again when the page is idle (or when live work finishes). With preemptBackground a
-    // background render never starts at once either, so a live request of the same frame goes to the engine first.
-    if (w.opts.lane === 'bg' && (this.liveBusy() || (this.preemptBackground && !later && this.opts.idle))) {
-      if (this.opts.idle) this.opts.idle(() => this.pump(s, true), 'render:' + s.id);
-      return;
+    if (w.opts.lane === 'bg') {
+      // live preempts background: it waits until live work finishes (after() and cancel() let it go). Not polled from an
+      // idle callback (CHB-031 F22): while a worker computed the live render the main thread was idle, so the callback
+      // that queued itself again ran ≈ 10 000 times a second, a core spinning against the engine worker.
+      if (this.liveBusy()) return;
+      // with preemptBackground a background render never starts at once either, so a live request of the same frame
+      // goes to the engine first: it starts when the page is next idle
+      if (this.preemptBackground && !later && this.opts.idle) {
+        this.opts.idle(() => this.pump(s, true), 'render:' + s.id);
+        return;
+      }
     }
     s.waiting = null;
     const ctl = new AbortController();
@@ -192,9 +198,12 @@ export class RenderQueue {
   }
   private after(s: Slot): void {
     this.pump(s);
-    // live work done: let waiting background slots go
-    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== s && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x, true);
+    this.releaseBackground(s);
     this.checkIdle();
+  }
+  /** Live work done: waiting background slots go. */
+  private releaseBackground(except?: Slot): void {
+    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== except && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x, true);
   }
   private isCached(r: Rendered): boolean {
     for (const v of this.thumbs.values()) if (v.r === r) return true;
@@ -228,6 +237,10 @@ export class RenderQueue {
     if (s.inflight) {
       s.inflight.ctl.abort();
       this.stats.aborted++;
+    } else {
+      // nothing in flight here, so no after() follows: background slots that waited for this one go now
+      this.releaseBackground(s);
+      this.checkIdle();
     }
   }
 
