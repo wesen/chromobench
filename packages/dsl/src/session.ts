@@ -13,7 +13,7 @@ import {
   type AgentMode, type Box, type ContextBlock, type Diagnostic, type EditLog, type Engine, type EvalRequest, type EvalResult,
   type FrameRecipe, type ImageInfo, type LoggedMutation, type Look, type NodeDef, type SourceInfo,
 } from '@chromobench/contract';
-import { Host, type DocsProvider, type FrameEntry, type QueuedEdit } from './host.ts';
+import { Host, type DocsProvider, type LooksProvider, type FrameEntry, type QueuedEdit } from './host.ts';
 import { PRELUDE } from './prelude/prelude.ts';
 import { assemble, describeMutation } from './results/assemble.ts';
 import { locate, toDiagnostic, topLevelNames, type GuestError } from './results/diagnostics.ts';
@@ -49,6 +49,8 @@ export interface DslSessionOptions {
   frames?: Record<string, DslFrame>;
   limits?: Partial<DslLimits>;
   docs?: DocsProvider;
+  /** cb.looks.* (CHB-021): the studio's looks registry */
+  looks?: LooksProvider;
 }
 
 /** Extra per-eval data for the harness (CHB-008 telemetry, §5.13). */
@@ -118,6 +120,7 @@ export class DslSession {
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
     this.host = new Host(this.graph, this.frameEntries);
     if (opts.docs) this.host.docs = opts.docs;
+    if (opts.looks) this.host.looksProvider = opts.looks;
     for (const [id, f] of Object.entries(opts.frames ?? {})) this.addFrame(id, f);
   }
 
@@ -392,7 +395,8 @@ export class DslSession {
         const ms = qs.flatMap((q) => q.mutations);
         const why = qs.map((q) => q.why).filter((w): w is string => !!w).join('; ');
         try {
-          const entries = log.propose(ms, { tx: evalId, ...(why ? { why } : {}), label: `agent ${evalId}` });
+          const batch = qs.find((q) => q.batch)?.batch;
+          const entries = log.propose(ms, { tx: evalId, ...(why ? { why } : {}), label: `agent ${evalId}`, ...(batch ? { batch } : {}) });
           mutations.push(...entries);
           this.proposals.push({ tx: evalId, frame: fid, seqs: entries.map((e) => e.seq) });
           let k = 0;

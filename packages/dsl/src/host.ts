@@ -32,6 +32,8 @@ export interface QueuedEdit {
   was: unknown[];
   why?: string;
   line?: number;
+  /** cross-frame batch (cb.looks.apply): proposed with LoggedMutation.batch so the studio shows one card */
+  batch?: string;
 }
 
 export interface LookRequest {
@@ -100,6 +102,10 @@ export class Host {
   private editCounter = 0;
   private readonly exprs = new Map<string, HandleInfo>();
   docs: DocsProvider = EMPTY_DOCS;
+  /** cb.looks.* (CHB-021): the studio's looks registry, injected by the host; null = no looks */
+  looksProvider: LooksProvider | null = null;
+  private whatIfs = new Map<string, FrameRecipe>();
+  private batchCounter = 0;
 
   constructor(graph: Graph, frames: Map<string, FrameEntry>) {
     this.graph = graph;
@@ -116,6 +122,7 @@ export class Host {
     this.warnings = [];
     this.ops = {};
     this.vocabulary = {};
+    this.whatIfs = new Map();
   }
 
   tables(): unknown {
@@ -151,6 +158,11 @@ export class Host {
       case 'why': return this.entry(a['frame'] as string).log.formatWhy(String(a['path']));
       case 'pending': return this.entry(a['frame'] as string).log.pending().map((e) => ({ seq: e.seq, tx: e.tx, m: e.m, ...(e.why ? { why: e.why } : {}) }));
       case 'edit': return this.edit(a);
+      case 'looks.list': return this.needLooks().list();
+      case 'looks.targets': return this.lookTargets(a['to'], null).map((id) => this.lookFrameInfo(id));
+      case 'looks.apply': return this.looksApply(a);
+      case 'looks.whatIf': return this.looksWhatIf(a);
+      case 'looks.diff': return this.looksDiff(a);
       case 'help': return this.docs.help((a['name'] as string | null) ?? null);
       case 'docs': return this.docs.docs(a);
       case 'log': {
@@ -553,6 +565,18 @@ export class Host {
       if (!m || typeof m !== 'object' || !('__node' in m)) throw new ChromobenchError(diag('E_ARG_TYPE', 'frame.edit.mask.set(id, mask) needs a mask handle', { hint: 'build one with h.mask.*' }));
       ms.push({ op: 'mask.set', id: String(a['id']), mask: { version: 1, nodes: this.graph.closure((m as { __node: string }).__node) } });
     }
+    const q = this.queue(frame, ms, why, a['at'] as At);
+    const preview = this.info(this.printOf(this.state(frame).draft), frame, `${fx}.print() after ${q.id}`);
+    preview.expr = 'receipt.preview';
+    return {
+      id: q.id, status: 'queued', mutations: q.mutations, preview,
+      note: log.mode === 'ask' ? 'submitted when this eval ends; ask mode: waits for the photographer' : 'submitted when this eval ends; auto mode: applied at once',
+    };
+  }
+
+  /** Validate mutations against the frame's draft and queue them for submission at the end of the eval (DR-3). */
+  private queue(frame: string, ms: readonly Mutation[], why: string | undefined, at: At, batch?: string): QueuedEdit {
+    const fx = this.frameExpr(frame);
     const s = this.state(frame);
     let r = s.draft;
     const out: Mutation[] = [];
@@ -563,7 +587,7 @@ export class Host {
         was.push(m.op === 'set' ? getPath(r, m.path) : undefined);
         out.push(m.op === 'set' ? { ...m, value: res.value } : m);
         r = res.recipe;
-        for (const w of res.warnings) this.warnings.push(a['at'] && (a['at'] as { eval: number }).eval === this.evalN ? { ...w, where: { line: (a['at'] as { line: number }).line } } : w);
+        for (const w of res.warnings) this.warnings.push(at && at.eval === this.evalN ? { ...w, where: { line: at.line } } : w);
       } catch (e) {
         if (e instanceof ChromobenchError && e.diag.code === 'E_PATH' && m.op === 'set') {
           const guess = suggest(m.path, settablePaths());
@@ -576,16 +600,110 @@ export class Host {
     }
     s.draft = r;
     this.editCounter += 1;
-    const at = a['at'] as At;
-    const q: QueuedEdit = { id: `e${this.editCounter}`, frame, mutations: out, was, ...(why !== undefined ? { why } : {}), ...(at && at.eval === this.evalN ? { line: at.line } : {}) };
+    const q: QueuedEdit = { id: `e${this.editCounter}`, frame, mutations: out, was, ...(why !== undefined ? { why } : {}), ...(at && at.eval === this.evalN ? { line: at.line } : {}), ...(batch ? { batch } : {}) };
     this.edits.push(q);
-    this.vocabulary['frame.edit'] = (this.vocabulary['frame.edit'] ?? 0) + 1;
-    const preview = this.info(this.printOf(r), frame, `${fx}.print() after ${q.id}`);
-    preview.expr = 'receipt.preview';
+    const key = batch ? 'cb.looks.apply' : 'frame.edit';
+    this.vocabulary[key] = (this.vocabulary[key] ?? 0) + 1;
+    return q;
+  }
+
+  // ---- cb.looks (CHB-021) --------------------------------------------------------------------
+  private needLooks(): LooksProvider {
+    if (!this.looksProvider) throw new ChromobenchError(diag('E_NOT_IMPLEMENTED', 'no looks are available in this session', { hint: 'the studio provides cb.looks; describe the change with frame.edit instead' }));
+    return this.looksProvider;
+  }
+
+  /** Frames a look goes to: the bound frame (default), an id, ids, 'all', or { roll: id }; where: 'unedited'. */
+  private lookTargets(to: unknown, where: unknown): string[] {
+    let ids: string[];
+    if (to === undefined || to === null || to === 'frame') ids = this.bound ? [this.bound] : this.noFrame();
+    else if (to === 'all') ids = [...this.frames.keys()];
+    else if (typeof to === 'string') ids = [to];
+    else if (Array.isArray(to)) ids = to.map((x) => (x && typeof x === 'object' && 'id' in x ? String((x as { id: unknown }).id) : String(x)));
+    else if (to && typeof to === 'object' && 'roll' in to) ids = [...this.frames.keys()].filter((f) => this.entry(f).log.committed.roll?.id === (to as { roll: unknown }).roll);
+    else throw new ChromobenchError(diag('E_ARG_TYPE', "cb.looks.apply: `to` is a frame id, an array of ids, 'all' or { roll: id }", { fix: "{ to: 'all' }" }));
+    for (const f of ids) this.entry(f);
+    if (where === 'unedited') ids = ids.filter((f) => this.lookFrameInfo(f).unedited);
+    else if (where !== undefined && where !== null) throw new ChromobenchError(diag('E_ARG_TYPE', "cb.looks.apply: `where` is a function of the frame (x => x.unedited) or 'unedited'"));
+    return ids;
+  }
+
+  private lookFrameInfo(id: string): { id: string; name: string; kind: string; unedited: boolean; stock: string | null; roll: string | null } {
+    const f = this.entry(id);
+    const r = f.log.committed;
+    return { id, name: f.name ?? id, kind: r.kind, unedited: f.log.inEffect().every((e) => e.by === 'auto' || e.m.op === 'frame.add'), stock: r.scan?.stock ?? r.capture?.stock ?? null, roll: r.roll?.id ?? null };
+  }
+
+  private looksApply(a: Record<string, unknown>): unknown {
+    const P = this.needLooks();
+    const name = String(a['name'] ?? '');
+    const params = (this.literal('cb.looks.apply', 'params', a['params'] ?? {}) ?? {}) as Record<string, unknown>;
+    const o = (a['opts'] ?? {}) as Record<string, unknown>;
+    const amount = o['amount'] === undefined ? 1 : Number(o['amount']);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 2) throw new ChromobenchError(diag('E_ARG_RANGE', `cb.looks.apply: amount ${String(o['amount'])} is outside [0, 2] (1 = 100 %)`, { fix: '{ amount: 0.6 }' }));
+    const ids = this.lookTargets(o['to'], o['where']);
+    if (!ids.length) throw new ChromobenchError(diag('E_NO_FRAME', 'cb.looks.apply: no frame matches `to` / `where`', { valid: [...this.frames.keys()] }));
+    for (const f of ids)
+      if (this.entry(f).log.mode === 'read-only') throw new ChromobenchError(diag('E_READONLY', `the agent is read-only for ${f}: cb.looks.apply cannot propose changes`, { hint: 'describe the change instead; the photographer can switch the mode' }));
+    this.batchCounter += 1;
+    const batch = `look:${this.evalN}-${this.batchCounter}`;
+    const from = o['from'] === 'defaults' ? ('defaults' as const) : undefined;
+    const at = a['at'] as At;
+    const skipped: { frame: string; why: string }[] = [];
+    const queued: string[] = [];
+    const diff = new Map<string, number>();
+    let label = name;
+    for (const f of ids) {
+      const res = P.resolve(name, { id: f, recipe: this.state(f).draft }, params, { amount, ...(from ? { from } : {}) });
+      label = res.label;
+      if (res.skip) {
+        skipped.push({ frame: f, why: res.skip.hint ?? res.skip.message });
+        continue;
+      }
+      if (!res.mutations.length) {
+        skipped.push({ frame: f, why: 'no change' });
+        continue;
+      }
+      const why = typeof o['why'] === 'string' ? (o['why'] as string) : res.label;
+      this.queue(f, res.mutations.map((m) => (m.op === 'set' ? { op: 'set' as const, path: m.path, value: m.value } : m)), why, at, batch);
+      queued.push(f);
+      for (const d of res.diff) diff.set(d.shown, (diff.get(d.shown) ?? 0) + 1);
+    }
     return {
-      id: q.id, status: 'queued', mutations: out, preview,
-      note: log.mode === 'ask' ? 'submitted when this eval ends; ask mode: waits for the photographer' : 'submitted when this eval ends; auto mode: applied at once',
+      id: batch, status: queued.length ? 'queued' : 'nothing to do', label, frames: queued.length, skipped,
+      diff: [...diff].map(([t, n]) => (n === queued.length ? t : `${t} (${n} frames)`)),
+      note: queued.length ? 'submitted when this eval ends as one batch: the photographer approves it on one card' : 'no frame changes',
     };
+  }
+
+  private looksWhatIf(a: Record<string, unknown>): unknown {
+    const P = this.needLooks();
+    const frame = String(a['frame'] ?? this.bound ?? '');
+    if (!frame) this.noFrame();
+    const o = (a['opts'] ?? {}) as Record<string, unknown>;
+    const params = (this.literal('cb.looks.whatIf', 'params', a['params'] ?? {}) ?? {}) as Record<string, unknown>;
+    const base = this.state(frame).draft;
+    const res = P.resolve(String(a['name'] ?? ''), { id: frame, recipe: base }, params, { amount: o['amount'] === undefined ? 1 : Number(o['amount']), ...(o['from'] === 'defaults' ? { from: 'defaults' as const } : {}) });
+    let r = base;
+    for (const m of res.mutations) r = applyMutation(r, m.op === 'set' ? { op: 'set', path: m.path, value: m.value } : m, { graph: this.graph }).recipe;
+    const key = `w${this.whatIfs.size + 1}`;
+    this.whatIfs.set(key, r);
+    const preview = this.info(this.printOf(r), frame, `cb.looks.whatIf(${this.frameExpr(frame)}, ${JSON.stringify(res.look.name)}).print()`);
+    this.vocabulary['cb.looks.whatIf'] = (this.vocabulary['cb.looks.whatIf'] ?? 0) + 1;
+    return { key, look: res.look.name, label: res.label, frame, preview, diff: res.diff.map((d) => d.shown), mutations: res.mutations.length, ...(res.skip ? { skipped: res.skip.hint ?? res.skip.message } : {}) };
+  }
+
+  private looksDiff(a: Record<string, unknown>): string[] {
+    const P = this.needLooks();
+    const recipe = (x: unknown): FrameRecipe => {
+      if (x && typeof x === 'object' && 'whatIf' in x) {
+        const r = this.whatIfs.get(String((x as { whatIf: unknown }).whatIf));
+        if (r) return r;
+      }
+      if (x && typeof x === 'object' && 'frame' in x) return this.state(String((x as { frame: unknown }).frame)).draft;
+      throw new ChromobenchError(diag('E_ARG_TYPE', 'cb.looks.diff(a, b) compares two frames or what-ifs', { fix: "cb.looks.diff(frame, cb.looks.whatIf(frame, 'warm print'))" }));
+    };
+    return P.diff(recipe(a['a']), recipe(a['b'])).map((d) => d.shown);
   }
 
   // ---- structured errors ---------------------------------------------------------------------
@@ -658,6 +776,21 @@ export class Host {
 
   /** Units constants for docs. */
   static readonly DOMAIN_UNITS = Object.fromEntries(Object.entries(DOMAINS).map(([d, i]) => [d, i.unit]));
+}
+
+/**
+ * The studio's looks, injected by the host (CHB-021: packages/studio-kit's cb.kits.looks.provider()). Resolving a look
+ * is pure: the frame's recipe in, `set` mutations out, with the Amount and diff passes of the studio.
+ */
+export interface LooksProvider {
+  list(): { id: string; name: string; group: string; requires: string; params: Record<string, { type: string; unit?: string; min?: number; max?: number; default?: unknown }> }[];
+  resolve(
+    id: string,
+    frame: { id: string; recipe: FrameRecipe },
+    params: Record<string, unknown>,
+    opts: { amount?: number; from?: 'current' | 'defaults' },
+  ): { look: { id: string; name: string }; label: string; mutations: Mutation[]; diff: { path: string; shown: string }[]; skip?: Diagnostic };
+  diff(a: FrameRecipe, b: FrameRecipe): { path: string; shown: string }[];
 }
 
 export interface DocsProvider {

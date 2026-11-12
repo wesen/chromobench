@@ -14,7 +14,10 @@
     "./kits/roll": "./kits/roll/src/index.ts",
     "./kits/roll/dom": "./kits/roll/src/dom.ts",
     "./kits/roll/roll.css": "./kits/roll/src/roll.css",
-    "./kits/finish": "./kits/finish/src/index.ts"
+    "./kits/finish": "./kits/finish/src/index.ts",
+    "./kits/looks": "./kits/looks/src/index.ts",
+    "./kits/looks/dom": "./kits/looks/src/dom.ts",
+    "./kits/looks/looks.css": "./kits/looks/src/looks.css"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"

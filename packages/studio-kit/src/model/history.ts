@@ -24,6 +24,8 @@ export interface HistoryGroup {
 export interface PendingGroup {
   tx: string;
   why?: string;
+  /** the cross-frame batch the entries belong to (LoggedMutation.batch, contract 0.3) */
+  batch?: string;
   seqs: number[];
   changes: Change[];
 }
@@ -108,6 +110,7 @@ export function pendingGroups(log: EditLog, lookup: ModelLookup): PendingGroup[]
   return [...by].map(([tx, es]) => ({
     tx,
     ...(es[0]?.why ? { why: es[0].why } : {}),
+    ...(es[0]?.batch ? { batch: es[0].batch } : {}),
     seqs: es.map((e) => e.seq),
     changes: es.map((e) => ({ seq: e.seq, text: describe(e.m, log.committed, lookup) })),
   }));

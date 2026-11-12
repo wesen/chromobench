@@ -291,7 +291,7 @@ export class EditLogRoute implements RouteAdapter {
    * for the automatic first print (as ingest's frame.add). Every entry carries the shared tx as its
    * LoggedMutation.batch (contract 0.3), so a log can list, approve or reject the batch's entries.
    */
-  applyBatch(entries: { frame: string; mutations: Mutation[] }[], label: string, o: { by?: 'user' | 'auto'; tx?: string; detail?: string } = {}): UndoUnit[] {
+  applyBatch(entries: { frame: string; mutations: Mutation[] }[], label: string, o: { by?: 'user' | 'auto'; tx?: string; detail?: string; batch?: string } = {}): UndoUnit[] {
     this.endBurst();
     const plan: { e: FrameEntry; ms: Mutation[] }[] = [];
     for (const { frame, mutations } of entries) {
@@ -307,8 +307,8 @@ export class EditLogRoute implements RouteAdapter {
     const parts: HistoryPart[] = [];
     for (const { e, ms } of plan) {
       this.previewed.delete(e.id);
-      // the batch id is the shared tx: every entry carries LoggedMutation.batch (contract 0.3)
-      units.push(this.withQuiet(() => e.log.apply(ms, o.by ?? 'user', label, { tx, batch: tx })));
+      // the batch id is the shared tx unless the caller names one: every entry carries LoggedMutation.batch (contract 0.3)
+      units.push(this.withQuiet(() => e.log.apply(ms, o.by ?? 'user', label, { tx, batch: o.batch ?? tx })));
       this.stats.applies++;
       parts.push(this.part(e, tx, label));
       this.publish(e);
@@ -324,6 +324,34 @@ export class EditLogRoute implements RouteAdapter {
     const e = this.frames.get(frame);
     if (!e) throw new Error(`no frame ${frame}`);
     return e.log.approve(seqs, { force });
+  }
+  /**
+   * Approve pending entries on several frames as one global undo step (CHB-021: one card for an agent's look batch).
+   * Each frame is approved on its own (EditLog.approve); a frame refused (E_STALE, …) is reported and the others
+   * are committed, so the card can offer Apply anyway or Skip for the refused ones.
+   */
+  approveBatch(items: { frame: string; seqs: number[] }[], label: string, o: { force?: boolean } = {}): { units: { frame: string; unit: UndoUnit }[]; refused: { frame: string; diags: Diagnostic[] }[] } {
+    this.endBurst();
+    const units: { frame: string; unit: UndoUnit }[] = [];
+    const refused: { frame: string; diags: Diagnostic[] }[] = [];
+    const parts: HistoryPart[] = [];
+    for (const { frame, seqs } of items) {
+      const e = this.frames.get(frame);
+      if (!e || !seqs.length) continue;
+      const res = this.withQuiet(() => e.log.approve(seqs, { force: !!o.force }));
+      if (Array.isArray(res)) {
+        refused.push({ frame, diags: res });
+        continue;
+      }
+      units.push({ frame, unit: res });
+      parts.push(this.part(e, res.tx, label));
+      this.publish(e);
+    }
+    if (parts.length && this.api) {
+      this.stats.pushes++;
+      this.api.push({ label, channel: parts.length === 1 ? units[0]!.frame : null, parts });
+    }
+    return { units, refused };
   }
   reject(frame: string, seqs: number[]): void {
     this.frames.get(frame)?.log.reject(seqs);

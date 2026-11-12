@@ -21,6 +21,7 @@ import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposu
 import type { Studio } from './studio.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
+import { createLooksKit } from '../kits/looks/src/kit.ts';
 
 // variants' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
@@ -677,6 +678,7 @@ export function createCb(ck: Ck) {
   // kits built on cb.core reach variants as cb.kits.<name> (CHB-020 roll; CHB-021 looks and CHB-022 finish later)
   cb.kits['roll'] = createRollKit(ck, cb as any);
   cb.kits['finish'] = createFinishKit(ck, cb as any);
+  cb.kits['looks'] = createLooksKit(ck, cb as any);
   return cb;
 }
 

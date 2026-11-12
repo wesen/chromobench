@@ -261,3 +261,26 @@ The kit's `FINISHING_PATHS` grows by these paths once they exist; the engines (c
   the `finish` variant shows it. For CHB-015.
 - `scan.heal` (dust on the film) is a pass-through in the mock and missing in core and the GPU. The spot tool offers
   its Dust mode only when the engine lists `scan.heal` and the frame is a negative scan; the default mode is Heal.
+
+
+# Contract requests from the looks kit (CHB-021)
+
+Status: none needed to ship. Contract 0.3 already has what the looks kit uses: `LoggedMutation.batch` on
+`EditLog.apply` / `propose`, `approve({ batch })` / `reject({ batch })`, `fieldSpec` / `checkSet` for the Amount
+rules and range checks, `MOVED_PATHS` for preset migration, `PRINT_OPTION_PATHS` for the what-if form of a look.
+Two candidates for a later contract step, neither blocking:
+
+## R8. (optional) Kit diagnostic codes
+
+The kit reports `CB-L110` (Amount leaves a path's range; fix = the clamped value), `CB-L111` (clamped silently),
+`CB-L120` (a look sets a roll-balance path absolutely on a frame of a roll; the guide's `CB-LOOK-CONFLICT`) and
+`CB-L130` (a preset path migrated). They are kit codes (like CB-R…) built as plain `Diagnostic` objects, because
+`diag()` takes only the contract's closed `ErrorCode` list. If they should reach the agent through the DSL with a
+contract meaning, add `W_LOOK_RANGE`, `W_LOOK_CONFLICT`, `W_PRESET_MIGRATED` to `ERROR_CODES`.
+
+## R9. (open question 12.1) Symbolic looks
+
+Looks resolve to plain `set` mutations (decided). If the photographer wants "change Amount later" or "update the
+look and re-sync the roll", the recipe would need `looks: [{ id, params, amount }]` folded before explicit edits —
+a fold change for every consumer. Not requested now; the batch id (`look:<id>:…`) and the unit label
+("Look: warm print at 60 %") already record which look made a unit, so a "reapply" command can be built without it.

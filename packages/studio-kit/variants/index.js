@@ -7,5 +7,6 @@ export const VARIANTS = {
   tiny: () => import('./tiny.js'),
   roll: () => import('./roll.js'),
   finish: () => import('./finish.js'),
+  looks: () => import('./looks.js'),
 };
 export const DEFAULT_VARIANT = 'classic';
