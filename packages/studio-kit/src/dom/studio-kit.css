@@ -132,3 +132,8 @@
 .cb-band-r { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 1; }
 .cb-band.is-current .cb-band-r { stroke: var(--accent); stroke-width: 2; }
 .cb-band-t { fill: #fff; font: 600 12px var(--font, system-ui), sans-serif; paint-order: stroke; stroke: rgba(0,0,0,.7); stroke-width: 3px; }
+
+/* CHB-027 (F5): a library frame not open in this session shows its saved thumbnail (img) instead of the canvas */
+.cb-cell .ck-thumb:has(> .ck-thumb-i:not([hidden])) > .ck-thumb-c {
+  display: none;
+}

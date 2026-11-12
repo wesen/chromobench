@@ -3,7 +3,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const token = (page: Page, t: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim(), t);
-const barBg = (page: Page) => page.evaluate(() => getComputedStyle(document.getElementById('bar')!).backgroundColor);
+// the host frame: the status line (CHB-027: the top bar is gone, its actions are in the menus)
+const barBg = (page: Page) => page.evaluate(() => getComputedStyle(document.getElementById('statusbar')!).backgroundColor);
 
 async function boot(page: Page, extra = ''): Promise<void> {
   await page.goto(`/?nosw&engine=mock&variant=classic${extra}`);

@@ -59,7 +59,8 @@ const cancelled = (): ChromobenchError => new ChromobenchError({ code: 'E_CANCEL
 
 export class RefEngine implements Engine {
   readonly id = 'reference' as const;
-  readonly graph = new Graph();
+  /** Replaced (not mutated) by forgetSource. */
+  graph = new Graph();
   private readonly ops: Set<string>;
   private readonly env: PhysicsEnv;
   private readonly conv: Conventions;
@@ -120,6 +121,23 @@ export class RefEngine implements Engine {
     this.sources.set(info.sha256, img);
     this.graph.registerSource(info);
     return info;
+  }
+
+  /**
+   * Host glue (CHB-027): forgets a source and everything computed from it, before the host registers the same file
+   * decoded another way (re-opened as a photo or as a negative). source.open's node id names the file, not the
+   * decode, so cached results and node infos (sizes) of the old decode would otherwise survive.
+   */
+  forgetSource(sha: string): void {
+    const old = this.graph;
+    this.sources.delete(sha);
+    this.full.clear();
+    this.results.clear();
+    this.graph = new Graph();
+    for (const k of this.sources.keys()) {
+      const info = old.source(k);
+      if (info) this.graph.registerSource(info);
+    }
   }
 
   adopt(defs: readonly NodeDef[]): void {

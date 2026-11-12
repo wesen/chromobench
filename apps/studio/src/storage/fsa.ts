@@ -18,6 +18,8 @@ export interface PickedFile {
   size: number;
   lastModified: number;
   file(): Promise<File>;
+  /** The file's handle when the File System Access API gave one: kept with the library, so the file opens again after a reload (F5). */
+  handle?: FileSystemFileHandle;
 }
 
 interface PickerWindow {
@@ -56,7 +58,7 @@ export async function listScans(dir: FileSystemDirectoryHandle, prefix = '', dep
     if (h.kind === 'directory' && depth > 0) out.push(...(await listScans(h as FileSystemDirectoryHandle, `${prefix}${name}/`, depth - 1)));
     else if (h.kind === 'file' && isScan(name)) {
       const f = await (h as FileSystemFileHandle).getFile();
-      out.push({ name, relPath: `${prefix}${name}`, size: f.size, lastModified: f.lastModified, file: () => (h as FileSystemFileHandle).getFile() });
+      out.push({ name, relPath: `${prefix}${name}`, size: f.size, lastModified: f.lastModified, file: () => (h as FileSystemFileHandle).getFile(), handle: h as FileSystemFileHandle });
     }
   }
   return out.sort((a, b) => a.relPath.localeCompare(b.relPath));
@@ -68,6 +70,33 @@ export async function fileAt(dir: FileSystemDirectoryHandle, relPath: string): P
   let d = dir;
   for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p);
   return (await d.getFileHandle(parts.at(-1)!)).getFile();
+}
+
+interface FilePickerWindow {
+  showOpenFilePicker?: (o: { id?: string; multiple?: boolean; excludeAcceptAllOption?: boolean; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle[]>;
+}
+
+export const hasFilePicker = (): boolean => typeof (globalThis as FilePickerWindow).showOpenFilePicker === 'function';
+
+/** Files through the File System Access picker: each with its handle, so the library can read it again after a reload. */
+export async function pickFiles(multiple = true): Promise<PickedFile[]> {
+  const hs = await (globalThis as FilePickerWindow).showOpenFilePicker!({
+    id: 'photos',
+    multiple,
+    types: [{ description: 'Photos and scans', accept: { 'image/*': SCAN_EXTENSIONS.map((x) => `.${x}`) } }],
+  });
+  return fromHandles(hs);
+}
+
+/** PickedFiles from file handles (the picker, a drop, the library's saved handles). */
+export async function fromHandles(hs: FileSystemFileHandle[]): Promise<PickedFile[]> {
+  const out: PickedFile[] = [];
+  for (const h of hs) {
+    if (!isScan(h.name)) continue;
+    const f = await h.getFile();
+    out.push({ name: h.name, relPath: h.name, size: f.size, lastModified: f.lastModified, file: () => h.getFile(), handle: h });
+  }
+  return out;
 }
 
 /** Files from <input type=file> (with or without webkitdirectory). */

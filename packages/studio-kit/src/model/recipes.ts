@@ -15,8 +15,9 @@ export interface Snapshot {
   recipe: FrameRecipe;
 }
 
-export function defaultFor(sha: string, name: string): FrameRecipe {
-  return defaultRecipe('negative-scan', { sha256: sha, name });
+/** The neutral first recipe of a file opened as a negative (default) or as a photo. */
+export function defaultFor(sha: string, name: string, kind: FrameRecipe['kind'] = 'negative-scan'): FrameRecipe {
+  return defaultRecipe(kind, { sha256: sha, name });
 }
 
 /**
