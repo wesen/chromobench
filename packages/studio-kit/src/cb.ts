@@ -665,7 +665,7 @@ export function createCb(ck: Ck) {
       } as any,
     );
     const parts: any[] = [];
-    if (views) parts.push(ck.ui.segmented(views.map(v => ({ value: v, label: VIEW_LABELS[v] ?? v })), { bind: (s: any) => s.view.view, label: 'View', small: true } as any));
+    if (views) parts.push(ck.ui.segmented(views.map(v => ({ value: v, label: VIEW_LABELS[v] ?? v, ...(VIEW_TIPS[v] ? { tip: VIEW_TIPS[v] } : {}) })), { bind: (s: any) => s.view.view, label: 'View', small: true } as any));
     parts.push(node('cb.ribbon', {}));
     const ring = o.tools?.includes('ring-around');
     const centre = ring ? ck.match((s: any) => (s.ui?.tool === 'ring-around' ? 'ring' : 'view'), { view: vp, ring: ring_({}) }, { of: ['view', 'ring'] }) : vp;
@@ -744,12 +744,12 @@ export function createCb(ck: Ck) {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
     const sections = a.groups.map(g =>
-      ck.section(g.title, {}, ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, class: 'cb-group-note' })] : []), ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {}))),
+      ck.section(g.title, {}, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, wrap: true })] : [])),
     );
     return ck.panel(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
   /** the children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
-  const ifFrame = (...kids: any[]): any => ck.when((s: any) => !!cb.recipe(s), ck.column({}, ...kids), ck.text(NO_FRAME, { dim: true, class: 'cb-empty' }));
+  const ifFrame = (...kids: any[]): any => ck.when((s: any) => !!cb.recipe(s), ck.column({}, ...kids), ck.text(NO_FRAME, { dim: true, wrap: true }));
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
     return ck.panel(pid ?? id, { title: t ?? title }, node(form, rest));
@@ -828,7 +828,14 @@ export type Cb = ReturnType<typeof createCb>;
 /** the empty state of the print controls (CHB-031 F19) */
 export const NO_FRAME = 'Select a photo to print it.';
 
-const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negative', dyes: 'Dyes', classes: 'Base & gamut' };
+// the views in a photographer's words, the technical name second, in the tooltip (CHB-031 F9)
+const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negative', dyes: 'No mask', classes: 'Clipping' };
+const VIEW_TIPS: Record<string, string> = {
+  print: 'The print on paper',
+  negative: 'The scan of the negative as it is',
+  dyes: 'The negative without its orange mask: the colour the print is made from (the dyes view)',
+  classes: 'Where the negative holds no picture (bare film base, prints black) or a colour the paper cannot reach (the base and gamut view)',
+};
 
 const badgeOf = (s: any, id: string): string => {
   const pending = s.proposals?.[id]?.length ?? 0;

@@ -7,7 +7,7 @@ import type { ControlModel } from './controls.ts';
 
 export interface Arrangement {
   name: string;
-  /** `note`: one line under the group's title for the selected frame's recipe ('' for none) */
+  /** `note`: a short wrapped line after the group's controls for the selected frame's recipe ('' for none) */
   groups: { title: string; paths: string[]; note?: (r: FrameRecipe) => string }[];
 }
 

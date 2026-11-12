@@ -48,10 +48,16 @@ plus every parameter, the raw journal and the node list.
 - **Enlarger controls** (Darkroom panel, right): time (seconds, stops readout), f-number, signed C/M/Y
   filtration (CC shift on the paper's neutral pack), printer lights (points, plus Lighter/Darker), paper,
   grade, preflash, film stock, scanner and viewing light (from the data packs). Drag, arrow keys (a burst
-  is one undo step), double-click a label to reset; type values with units (`+1/3 st`, `12 s`).
-- **Views**: Print, Negative (the scan), Dyes (the negative without its mask), Base & gamut
-  (blank film, below base, out of gamut) — keys 1–4. **Before / after** (Tools panel, or `\`) splits the
-  print against the first print.
+  is one undo step), double-click a label to reset. A typed number sets the value (`12`, `12 s`, `7,5`); a
+  change needs a sign and a unit (`+1/3 st`, `-5 s`); a bare `-5` on Time is refused with both spellings.
+- **Enlarger mode** (Exposure group): *Real enlarger* (time and aperture expose the paper; the default of
+  classic, darkroom and lab) or *Normalised* (the grey card prints at the aim whatever the time; the
+  default of simple and tiny). In normalised mode Time and Aperture are hidden and Lighter/Darker move
+  the printer lights; in real mode Lighter/Darker change the time by 1/3 stop. A saved frame keeps the
+  mode it was printed in.
+- **Views**: Print, Negative (the scan), No mask (the negative without its orange mask; the dyes view),
+  Clipping (blank film, below base, out of gamut; the base and gamut view) — keys 1–4. **Before /
+  after** (Tools panel, or `\`) splits the print against the first print.
 - **Densitometer** (Tools panel, or `i`): hover the print (visual density and R G B densities under the
   cursor, and in the Densitometer panel); `p` pins a probe into the recipe.
 - **History**: every change is one undo step (Ctrl+Z / Shift+Ctrl+Z, Undo/Redo in the top bar); click

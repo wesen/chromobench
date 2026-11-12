@@ -287,3 +287,158 @@ Print module and tiny): "Select a photo to print it."
 ### Technical details
 - `isRelativeEntry`: `/^\s*[+−-][^A-Za-z]*\s*(st|stops?|s|sec|pt|pts|points?|CC|cc)\s*$/`.
 - Bad-entry text for `-5` on Time: `Time: “-5” — to change the time, add a unit (−5 s or −1/3 st); to set it, type 5`.
+
+## Step 4: Resume after the restart — the uncommitted F9 work finished, F12 checked, darkroom's empty state, an e2e spec
+
+The session restarted after the Step 3 checkpoint (548abf9). The worktree held about 56 uncommitted lines in 8
+files and an untracked `various/` folder: the previous agent had started the F9 leftovers after the checkpoint. I
+reviewed the diff and kept all of it. It gives the engine and decode tooltips a plain sentence first and the
+technical text second (`engineTip`, `notesTip` in `status-text.ts`, with unit tests). It renames the view tabs
+"Dyes" → "No mask" and "Base & gamut" → "Clipping", with a tooltip that also gives the old technical name
+(`VIEW_TIPS`; a one-line change in the shell's `segmented` renderer, so a text option can carry a tip). It moves
+the Darkroom group notes below the group's controls and lets them wrap: `ck.text` ignores `class`, so the old
+`cb-group-note` and `cb-empty` classes never reached the DOM, and the notes were cut off at the panel's edge
+(`various/ws-a/06-tiny-negative-normalised.png`). What was missing: the updated snapshots, a DEMO.md line that
+had been half-edited, and the doc comment of `Arrangement.note`. The screenshots in `various/ws-a/` (01–08) are
+from Step 3's run and use synthetic files only (the M1 fixture and the synthetic DNG of `e2e/studio-photo.spec.ts`).
+
+F12 needed no code. CHB-027 already made Edit ▸ Undo/Redo name the frame (`builtins.ts` `edit.undo` label →
+`whereOf`, tested in `e2e/studio-wording.spec.ts` and `packages/studio-kit/test/messages.test.ts`). Session 02's
+verdict "menu label still 'Undo Time'" came from `s11-undo.mjs`, where the undo was on the frame on screen, and
+the label then correctly names no frame. Its own `shots/23-undo-menu-other-frame.png` shows "Redo Time (on
+raw010.dng · 3/3)". I then closed two gaps of F19/F17 in the darkroom layout and wrote the e2e spec from the resume
+list. The darkroom layout places its controls outside `cb.panel.controls`, so without a frame its Enlarger and
+Paper panels were empty boxes. And a frame saved in normalised mode, which is every frame opened before contract
+0.4, lost its Time and Aperture there with no way back.
+
+### Prompt Context
+**User prompt (verbatim):** "You continue an interrupted implementation: CHB-031 workstream **WS-A: enlarger and controls** in the chromobench monorepo. The previous agent was stopped when the session restarted; its work is committed up to a checkpoint, plus some uncommitted edits.
+
+**Work ONLY inside this existing git worktree** (do not create a new one): `/home/manuel/code/wesen/chromobench/.claude/worktrees/agent-a6d56059a7d1976ca` on branch `task/chb-031-enlarger` (last commit 548abf9). Start every shell command with `cd /home/manuel/code/wesen/chromobench/.claude/worktrees/agent-a6d56059a7d1976ca && …` and use absolute paths inside it for file edits. Do not touch the main checkout at /home/manuel/code/wesen/chromobench or other worktrees.
+
+Read first:
+1. The common brief: /tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/brief-common-v2.md (rules, checks, diary format, final reply; its \"Additions\" section matters).
+2. The plan: `ttmp/2026/11/12/CHB-031--cosplay-session-02-findings-enlarger-real-mode-by-default-open-as-panels-strip-frames-leftovers/design-doc/01-plan.md` (section WS-A) and that ticket's `diary/01-diary.md` (owner decisions).
+3. Your diary, which you continue: `ttmp/2026/11/12/CHB-031--…/diary/02-diary-ws-a-enlarger-and-controls.md` — read all steps; Step 3 is the checkpoint with the resume list.
+4. `git status` / `git diff` in the worktree: 8 modified files (apps/studio DEMO.md, main.ts, status-text.ts and its test, e2e/studio-real.spec.ts, e2e/studio.spec.ts, packages/shell/src/dom/forms/basic.ts, packages/studio-kit/src/cb.ts; ~56 lines) plus untracked screenshots under the ticket's `various/` — work the previous agent did after its checkpoint (likely the F9/F12 leftovers). Review it: finish it or revert deliberately.
+
+Then finish WS-A: the remaining items of the resume list (F9 and F12 leftovers and anything else open), full checks (`pnpm typecheck`, `pnpm lint`, `pnpm test`, and `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 pnpm test:browser`), check off plan tasks x86v 0xav 5ywv 9i1n 3z8z l1ny that are done (`docmgr task check --ticket CHB-031 --id …`), final report per the brief.
+
+The user's instruction (verbatim): \"commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)\". Continue the same diary file with the next step number: the investigation format from /home/manuel/.claude/skills/diary/references/investigation-entry.md, every section in every step; the first new step records the resume (what you found uncommitted and what you did with it) and quotes this prompt verbatim in its Prompt Context. Stage named paths only. Preview port 4711 if you run the app. The owner's Mac is closed: do NOT use the Mac/real-GPU path; record any GPU check as pending. Parallel agents are continuing CHB-031 WS-B (open flow, frames.ts, decode.ts) and CHB-032 (housekeeping) in their own worktrees; `cb.ts` is shared with WS-B — keep edits local."
+**Assistant interpretation:** Review the uncommitted F9 work and keep or revert it, then finish what is open (F9, F12, the e2e spec, the checks, the task check-offs) and report.
+**Inferred user intent:** No work lost across the restart. Each finding is either fixed or explained with evidence.
+**Commit (code):** this step's commit ("CHB-031 WS-A: F9 wording (tooltips, view tabs), wrapped group notes, darkroom empty state and mode select, e2e studio-enlarger spec; diary step 4")
+
+### What I did
+- Read the brief, the plan (WS-A), the CHB-031 diary, this diary (Steps 1–3), `git diff` (8 files) and the
+  scratch scripts `…/scratchpad/wsa/{drive.mjs,simple.mjs,mkdng.ts,drive.log}`. The log ends in Step 3's simple-layout
+  timeout (`locator.waitFor: Timeout 120000ms exceeded … locator('#status').filter({ hasText: 'rendered' })`).
+- Kept the uncommitted diff:
+  - `apps/studio/src/status-text.ts`: `engineTip`, `notesTip`. `main.ts` uses them for `engineEl.title` and `notesEl.title`, two local lines.
+  - `packages/studio-kit/src/cb.ts`: `VIEW_LABELS` and `VIEW_TIPS`. `controls()` puts the note after the paths with
+    `{ dim, wrap }`. `ifFrame`'s empty text gets `wrap`.
+  - `packages/shell/src/dom/forms/basic.ts`: `segmented` sets `data-tip` from `o.tip` for text options.
+  - `e2e/studio.spec.ts` and `e2e/studio-real.spec.ts`: the new tab names.
+- Finished it: rewrote the DEMO.md views line, the Enlarger-mode paragraph and the typed-entry rule (F8) in
+  `apps/studio/DEMO.md`. Changed the `Arrangement.note` doc comment in `model/arrangement.ts`. Ran
+  `npx vitest run packages/studio-kit -u`; the 6 snapshot diffs were exactly `class "cb-empty"` → `wrap` and the
+  note moving below the controls.
+- F12: no change. I read `packages/shell/src/app/builtins.ts` (`edit.undo` and `edit.redo` labels → `whereOf`), the
+  session-02 scripts `s11-undo.mjs` (one frame) and `s13-strip-frames.mjs`, and `shots/23-undo-menu-other-frame.png`.
+- `packages/studio-kit/variants/darkroom.js`: Enlarger and Paper panels wrapped in `cb.ifFrame(…)`.
+  `cb.arg('print.enlarger.mode')` added first in the Enlarger panel. `variants/looks.js`: its Enlarger panel wrapped in `cb.ifFrame`.
+- New `e2e/studio-enlarger.spec.ts` (5 tests, reference engine, synthetic files): classic negative, classic photo,
+  tiny, simple, darkroom (including a frame saved in normalised mode in tiny and opened again in darkroom, without `&fresh`).
+- App run: `pnpm --filter @chromobench/studio build`, `preview --port 4711 --strictPort` (background, stopped
+  afterwards). `node …/scratchpad/wsa/drive2.mjs <various/ws-a>` saved screenshots 08–13; log in `…/scratchpad/wsa/drive2.log`.
+- Checks: `pnpm typecheck` clean; `pnpm lint` clean ("import boundaries ok (338 file checks)"; check-colours clean);
+  `pnpm test` → 97 files, 2749 passed, 7 skipped (85 s). Spec: `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222
+  SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 npx playwright test e2e/studio-enlarger.spec.ts --project=chromium-webgpu` → 5 passed (1.2 min).
+
+### Why
+- I kept the F9 diff because it is what the plan asks for: human wording first, technical text second. The
+  technical text stays in the tooltips, so nothing is lost for a developer. "Clipping" is the word Lightroom uses
+  for "this part of the picture holds nothing". "No mask" says what the view shows.
+- I put the mode select in darkroom's Enlarger panel and did not add a migration, because saved recipes keep their
+  mode (owner decision). The photographer then needs to see the mode and be able to change it in every layout
+  that shows Time. Classic, lab and tiny have it in the Darkroom group. Darkroom had no way to show it.
+- The e2e spec uses the reference engine because the mock engine has no optics. A pixel check is only evidence on
+  the film and paper model.
+
+### What worked
+- Pixel evidence in the browser (classic, M1 negative, reference engine): 20 s prints darker than 10 s, 5 s lighter
+  (each by more than 0.02 of the display mean). Typing 10 again gives the 10 s picture back to 6 decimals. The pad's
+  Lighter moves Time from 10 to 7.94 s and leaves the lights unchanged. The strip bands read "6.3 s, 7.94 s, 10.0 s,
+  12.6 s, 15.87 s".
+- The app on :4711 (`drive2.log`):
+  - Views `["Print"…],["No mask","The negative without its orange mask: … (the dyes view)"],["Clipping","Where the
+    negative holds no picture … (the base and gamut view)"]`.
+  - Engine tip "The prints are computed on the processor, which is slower. Pictures are previewed smaller.\nTechnical:
+    reference · CPU f64 (worker) · 512 px".
+  - Decode tip "Synth Camera photo, 1 MP. Developed from the camera RAW with its own colour.\nTechnical: photo: camera
+    RAW (Synth Camera) via LibRaw, photo mode, 1200×800, camera matrix from dng · working image 512×341".
+- Darkroom with no frame: "Enlarger\nSelect a photo to print it." With the M1 negative: real, 7.071 s, lights
+  (0.033, 0.0063, −0.0186), mean 0.6221. Tiny, the same file: normalised, 10 s, lights (−0.1175, −0.1442, −0.1691),
+  mean 0.6221. The first print gives the same picture in both modes, with the density in the time or in the lights.
+- Simple (the measurements missing from Step 3): normalised, mean 0.6221. Lighter moves the lights to (−0.2179,
+  −0.2445, −0.2695), which is −0.1003 log H (⅓ stop) each, mean 0.6719. Lighter again gives mean 0.7232. Darker goes back to
+  0.6719. The time stays at 10 s. The History paths are only `print.lights.logH`.
+- The same classic test on the GPU engine: a throwaway copy of the spec with `engine=gpu` and the other tests
+  skipped (`e2e/zz-tmp-gpu-enlarger.spec.ts`, deleted after the run) passed on `GPU · google swiftshader (software) ·
+  4000 px` (the label asserted), 1 passed in 15.7 s. So Time changes the print on the GPU engine too (software WebGPU, not a real GPU).
+- Screenshots 09–13 look right: the Clipping tooltip, both notes wrapped in full, darkroom's empty panels, and
+  darkroom's mode select above Time.
+
+### What didn't work
+- First run of the new spec: 3 of 4 failed. Classic: `Expected: 7.937005259840998 Received: 10`. Tiny: `Expected:
+  -0.142525 Received: -0.117525`. Simple: `Expected: -0.21786833188799373 Received: -0.117525`. The Lighter/Darker
+  clicks go through `route.step` (a burst, like the arrow keys), and the burst reaches the EditLog only when it
+  ends. `chromobench.idle()` returned before that. Fixed with `expect.poll` on the log's value after each click.
+- `toHaveText([... '12.6 s', '15.9 s'])` failed: received `"15.87 s"`. The strip labels keep two decimals below
+  100 s and drop a trailing zero. Expectation corrected.
+- `pnpm typecheck`: `e2e/studio-enlarger.spec.ts(57,96): error TS2339: Property 'path' does not exist on type
+  'LoggedMutation'`. The path is at `e.m.path`. The two "History never records Time" assertions had passed
+  vacuously (every path read `undefined`). Fixed the helper, and each of those assertions now also checks that
+  `print.lights.logH` *is* recorded.
+
+### What I learned
+- `ck.text` renders only `strong`, `dim`, `mono`, `size` and `wrap`. A `class` prop is silently dropped. Use `wrap` for a sentence in a panel.
+- The F12 "partly" verdict of session 02 was a misreading: the label names the frame only when the undo acts on
+  another one, and in `s11` it did not.
+- A pad or nudge click is not synchronous with the log. Tests that read `log.committed` after a click must wait for the burst to end.
+
+### What was tricky to build
+- The "History never records an inert control" assertion: written against the wrong field, it passed without
+  testing anything. A negative assertion needs a positive control next to it. Here that control is "the lights
+  *are* recorded".
+- The saved-mode case in the browser: `&fresh` keeps the library in memory, so the test boots without it (a new
+  Playwright context starts with an empty IndexedDB). It opens the file in tiny, navigates to darkroom and opens the
+  same bytes again. The frame resumes its saved log by hash.
+
+### What warrants a second pair of eyes
+- The view renames are user-visible text that other places may quote (keys 1–4 have no label of their own; the help
+  and the DSL docs do not name the tabs; `apps/studio/src/host/studio-engine.ts` has a comment "Negative / Dyes / Base").
+- `packages/shell/src/dom/forms/basic.ts` is a shared package (one line). A segmented option with `tip` and no icon
+  now gets a tooltip where it had none.
+- The darkroom layout now always shows the mode select, also in real mode. That is one more line in a layout that
+  wanted to be lean. The alternative would be to show it only while the frame is normalised.
+
+### What should be done in the future
+- Darkroom's empty-state text appears twice (Enlarger and Paper). Its Exposures panel is empty without a frame (it was before too).
+- Real-GPU check pending (the owner's Mac is closed). The GPU engine itself was checked on SwiftShader (below,
+  "What worked"); on the M1 Max, repeat the classic test of `e2e/studio-enlarger.spec.ts` with `engine=gpu`.
+
+### Code review instructions
+- `git show` this commit. Start with `e2e/studio-enlarger.spec.ts`, then `packages/studio-kit/variants/darkroom.js`,
+  `packages/studio-kit/src/cb.ts` (`controls()`, `ifFrame`, `VIEW_LABELS`/`VIEW_TIPS`) and `apps/studio/src/status-text.ts`.
+- `npx vitest run apps/studio/test/status-text.test.ts packages/studio-kit`;
+  `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 npx playwright test e2e/studio-enlarger.spec.ts --project=chromium-webgpu`.
+
+### Technical details
+- The spec's helpers: `enlarger(page)` reads `log.committed.print`, and `mean(page)` averages a 9×9 grid of
+  `chromobench.pixel`. `paths(page)` returns `log.entries.map(e => e.m.path ?? e.m.op)`.
+- `engineTip`: `mock…` → "A preview without the film and paper model."; `GPU…(software)` → emulated graphics card;
+  `GPU…` → "on the graphics card"; `reference…` → "on the processor, which is slower[: this browser offers no
+  graphics card to compute on]. Pictures are previewed smaller."; then `\nTechnical: <label>`.
+- `notesTip`: the summary, then ". Developed from the camera RAW with its own colour." for `photo: … via LibRaw`, or
+  ". Read from the camera RAW without developing it, as a scan." for other LibRaw decodes, then `\nTechnical: <notes · joined>`.

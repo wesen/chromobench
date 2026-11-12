@@ -48,7 +48,7 @@ export default {
             looks.compare(),
             looks.card(),
             cb.panel.approvals(),
-            ck.panel('enlarger', { title: 'Enlarger' }, cb.arg('print.enlarger.time_s'), cb.arg('print.lights.logH').pad(), cb.arg('print.grade'), cb.arg('print.paper')),
+            ck.panel('enlarger', { title: 'Enlarger' }, cb.ifFrame(cb.arg('print.enlarger.time_s'), cb.arg('print.lights.logH').pad(), cb.arg('print.grade'), cb.arg('print.paper'))),
             looks.groups(),
             looks.presets(),
           ),

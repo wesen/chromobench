@@ -1,6 +1,6 @@
 // CHB-027 F9: the status line's engine label and decode notes, in the photographer's words.
 import { describe, expect, it } from 'vitest';
-import { engineSummary, notesSummary } from '../src/status-text.ts';
+import { engineSummary, engineTip, notesSummary, notesTip } from '../src/status-text.ts';
 
 describe('engineSummary', () => {
   it('says fast or compatibility mode; the technical label goes to the tooltip', () => {
@@ -33,4 +33,21 @@ describe('notesSummary', () => {
     expect(s).toBe('Colour negative (Nikon D750 RAW), 6.1 MP, no film edge found, it may be a photo, not a negative');
   });
   it('no notes, no summary', () => expect(notesSummary([])).toBe(''));
+});
+
+describe('tooltips: what it means first, the technical text second (CHB-031 F9)', () => {
+  it('engineTip', () => {
+    const t = engineTip('reference · CPU f64 (no WebGPU: E_EVAL: no GPU adapter) · 512 px');
+    expect(t.split('\n')[0]).toBe('The prints are computed on the processor, which is slower: this browser offers no graphics card to compute on. Pictures are previewed smaller.');
+    expect(t.split('\n')[1]).toBe('Technical: reference · CPU f64 (no WebGPU: E_EVAL: no GPU adapter) · 512 px');
+    expect(engineTip('GPU · NVIDIA RTX · 512 px')).toMatch(/^The prints are computed on the graphics card\.\nTechnical: GPU/);
+    expect(engineTip('mock engine (no physics)')).toMatch(/^A preview without the film and paper model\./);
+  });
+  it('notesTip', () => {
+    const notes = ['photo: camera RAW (Nikon D750) via LibRaw, photo mode, 6032×4032, camera matrix from LibRaw', 'working image 512×342'];
+    const t = notesTip(notes);
+    expect(t.split('\n')[0]).toBe('Nikon D750 photo, 24 MP. Developed from the camera RAW with its own colour.');
+    expect(t.split('\n')[1]).toBe(`Technical: ${notes.join(' · ')}`);
+    expect(notesTip([])).toBe('');
+  });
 });

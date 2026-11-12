@@ -4,14 +4,14 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
 "panel controls-darkroom "Darkroom"
   when  cond τ
     else:
-      text "Select a photo to print it."  class "cb-empty"  dim
+      text "Select a photo to print it."  dim  wrap
     then:
       column
         section "Exposure"
-          text τ  class "cb-group-note"  dim
           cb.arg  path "print.enlarger.mode"
           cb.arg  path "print.enlarger.time_s"
           cb.arg  path "print.enlarger.fstop"
+          text τ  dim  wrap
         section "Filtration"
           cb.arg  path "print.enlarger.filtration"
         section "Printer lights"
@@ -21,9 +21,9 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
           cb.arg  path "print.grade"
           cb.arg  path "print.preflash"
         section "Film and viewing"
-          text τ  class "cb-group-note"  dim
           cb.arg  path "capture.stock"
           cb.arg  path "scan.stock"
           cb.arg  path "scan.scanner"
-          cb.arg  path "view.illuminant""
+          cb.arg  path "view.illuminant"
+          text τ  dim  wrap"
 `;
