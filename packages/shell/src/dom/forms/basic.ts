@@ -438,6 +438,7 @@ defineRenderer('segmented', (n, m) => {
     if (o.icon) bt.append(icon(o.icon, 13));
     if (!o.icon || !p['icons']) bt.append(h('span', { text: o.label }));
     if (o.icon && p['icons']) bt.dataset['tip'] = o.tip || o.label;
+    else if (o.tip) bt.dataset['tip'] = o.tip;
     listen(m.scope, bt, 'click', () => {
       if (p['set']) m.run(p['set'], o.value);
       else if (b) b.set(o.value, `${b.label || 'Choose'}: ${o.label}`);

@@ -99,8 +99,10 @@ function nominalF(n: number, thirds: number): number {
 const ENTRY_RE = /^\s*([+−-])?\s*(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+))?(?:\s+(\d+)\/(\d+))?\s*(st|stops?|s|sec|pt|pts|points?|CC|cc)?\s*$/;
 
 /**
- * A typed value → the new stored value, or null when it does not parse. Relative entries (a sign) move from the
- * current value: '+1/3 st' on 10 s → 12.599 s; '+4 pt' adds 0.1 log H; '−5 CC' subtracts.
+ * A typed value → the new stored value, or null when it does not parse. A relative entry needs a sign and a unit
+ * (CHB-031 F8): '+1/3 st' on 10 s → 12.599 s; '−5 s' → 5 s; '+4 pt' adds 0.1 log H; '−5 CC' subtracts. A plain
+ * number sets the value: '4' and '−2' set points, '−10' sets a filtration shift. A bare sign on a control that
+ * cannot be negative (time, aperture: '−5') is refused (null), so it is never read as "5 less" or as −5 s.
  */
 export function parseEntry(a: ArgModel, text: string, current: unknown): unknown {
   const m = a.model;
@@ -130,6 +132,8 @@ export function parseEntry(a: ArgModel, text: string, current: unknown): unknown
     if (unit === 'pt' && m.displayUnit !== 'point') return null;
     if (unit === 'CC' && m.storageUnit !== 'CC') return null;
     if (unit === 'pt') return put(sign ? cur + sign * x * PT : x * PT);
+    // a sign without a unit: the signed value itself, where values can be negative (a shift, points)
+    if (sign && unit === null) return isSigned(m) ? put(m.fromDisplay(sign * x)) : null;
     const disp = sign ? m.toDisplay(cur) + sign * x : x;
     return put(m.fromDisplay(disp));
   }
@@ -137,6 +141,9 @@ export function parseEntry(a: ArgModel, text: string, current: unknown): unknown
   const d = parseValue(t, { current: m.toDisplay(cur) });
   return d.ok ? put(m.fromDisplay(d.value)) : null;
 }
+
+/** true for a control whose values may be negative (printer lights, the filtration shift): a plain '−2' sets it */
+export const isSigned = (m: ControlModel): boolean => (m.min ?? 0) < 0;
 
 /** the track's range for a value: the usual range, widened by a margin to take in x, never past the hard range */
 export function trackRange(sc: { min: number; max: number; step: number; hard: { min: number; max: number } }, x: number): { min: number; max: number } {

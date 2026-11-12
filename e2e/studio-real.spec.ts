@@ -59,7 +59,7 @@ for (const engine of ['gpu', 'reference'] as const) {
     expect(await centre(page)).toEqual(p0);
 
     // views: negative, dyes, base & gamut render; back to print
-    for (const v of ['Negative', 'Dyes', 'Base & gamut', 'Print']) {
+    for (const v of ['Negative', 'No mask', 'Clipping', 'Print']) {
       const before = await page.locator('.ck-vp').first().getAttribute('data-rendered');
       await page.getByRole('radio', { name: v, exact: true }).click();
       await idle(page);

@@ -107,7 +107,7 @@ describe('graph', () => {
       const g = mk();
       const d = g.intern('source.pattern', [], { domain: 'film-dyes' }).node;
       const a = g.intern('print.expose', [d.id], { time_s: t, filtration: { c, m, y: 0 } }).node;
-      const b = g.intern('print.expose', [d.id], { filtration: { y: -0, m, c }, fstop: 8, time_s: t, mode: 'normalised' }).node;
+      const b = g.intern('print.expose', [d.id], { filtration: { y: -0, m, c }, fstop: 8, time_s: t, mode: 'real' }).node;
       const other = g.intern('print.expose', [d.id], { time_s: t === 600 ? 599 : t + 0.001, filtration: { c, m, y: 0 } }).node;
       if (a.id !== b.id) return 'same call, different id';
       if (a.id === other.id) return 'different call, same id';

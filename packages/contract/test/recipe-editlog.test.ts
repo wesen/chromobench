@@ -284,7 +284,7 @@ describe('contract 0.3 (CHB-024)', () => {
   const nodeOf = (g: Graph, r: FrameRecipe, op: string) => g.closure(compile(r, g).id).find((n) => n.op === op)!;
 
   it('the version, recipe version 2, the roll and film-layout codes, Diagnostic.where.file', () => {
-    expect(CONTRACT_VERSION).toBe('0.3.0');
+    expect(CONTRACT_VERSION).toBe('0.4.0');
     expect(RECIPE_VERSION).toBe(2);
     for (const c of ['W_ROLL_MIXED', 'W_ROLL_STOCK_AMBIGUOUS', 'W_ROLL_BASE_WEAK', 'W_FRAME_DIVERGES', 'W_NO_SURROUND', 'W_SURROUND_BRIGHT', 'W_REBATE_BLANK', 'W_NO_REBATE', 'W_NO_FILM', 'W_VEIL_FROM_ROLL']) {
       expect(Object.keys(ERROR_CODES)).toContain(c);

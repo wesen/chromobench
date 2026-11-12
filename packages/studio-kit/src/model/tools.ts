@@ -2,7 +2,8 @@
 // Darkroom tool arithmetic and adapters (guide §5.9). Each tool turns a click into one transaction;
 // the op argument shapes are CHB-010's to finalise, so they are kept in this one file.
 import type { Exposure, FrameRecipe, Graph, MaskSpec, Mutation, Vec3 } from '@chromobench/contract';
-import { burnSeconds, dodgeSeconds, formatSeconds, formatStops, PT, signed, timeAtStops } from './units.ts';
+import { burnSeconds, dodgeSeconds, formatSeconds, formatStops, PT, signed, stopsBetween, timeAtStops } from './units.ts';
+import { isNormalised, shiftLights } from './enlarger.ts';
 
 // ---- test strip ----------------------------------------------------------------------------
 
@@ -19,12 +20,21 @@ export function stripValues(vary: StripVary, base: number, step: number, count: 
   return bandOffsets(count).map((k) => (vary === 'time' ? timeAtStops(base, k * step) : Math.max(FILTRATION_MIN_CC, base + k * step)));
 }
 
-export function stripLabel(vary: StripVary, v: number): string {
+/**
+ * A band's label: seconds for a time strip, or, when `r` prints in normalised mode (where the time does nothing and
+ * the strip moves the printer lights instead, CHB-031), the band's stops from the current exposure.
+ */
+export function stripLabel(vary: StripVary, v: number, r?: FrameRecipe): string {
+  if (vary === 'time' && r && isNormalised(r)) return `${formatStops(stopsBetween(r.print.enlarger.time_s, v))} st`;
   return vary === 'time' ? `${formatSeconds(v)} s` : `${signed(Number(v.toFixed(1)), Number.isInteger(Number(v.toFixed(1))) ? 0 : 1)} CC`;
 }
 
-/** The single mutation a band click writes. */
+/** the log H a time band moves the printer lights by in normalised mode (log10 of its time over the current one) */
+const bandLogH = (r: FrameRecipe, v: number): number => Math.log10(v / r.print.enlarger.time_s);
+
+/** The single mutation a band click writes (normalised mode: a time band is written as printer lights, CHB-031). */
 export function stripMutation(vary: StripVary, r: FrameRecipe, v: number): Mutation {
+  if (vary === 'time' && isNormalised(r)) return { op: 'set', path: 'print.lights.logH', value: shiftLights(r.print.lights.logH, bandLogH(r, v)) };
   if (vary === 'time') return { op: 'set', path: 'print.enlarger.time_s', value: Number(v.toFixed(4)) };
   const k = vary.slice(-1) as 'c' | 'm' | 'y';
   return { op: 'set', path: 'print.enlarger.filtration', value: { ...r.print.enlarger.filtration, [k]: Number(v.toFixed(2)) } };
@@ -33,6 +43,7 @@ export function stripMutation(vary: StripVary, r: FrameRecipe, v: number): Mutat
 /** The recipe one band of the strip prints with (the same change stripMutation writes; CHB-023). */
 export function stripRecipe(vary: StripVary, r: FrameRecipe, v: number): FrameRecipe {
   const e = r.print.enlarger;
+  if (vary === 'time' && isNormalised(r)) return { ...r, print: { ...r.print, lights: { ...r.print.lights, logH: shiftLights(r.print.lights.logH, bandLogH(r, v)) } } };
   if (vary === 'time') return { ...r, print: { ...r.print, enlarger: { ...e, time_s: Number(v.toFixed(4)) } } };
   const k = vary.slice(-1) as 'c' | 'm' | 'y';
   return { ...r, print: { ...r.print, enlarger: { ...e, filtration: { ...e.filtration, [k]: Number(v.toFixed(2)) } } } };

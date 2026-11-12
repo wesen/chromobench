@@ -118,21 +118,30 @@ module print "Print" key D
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
-             section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
-             section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
-             section "Printer lights"
-               cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             section "Paper"
-               cb.arg  path "print.paper"  rollScope "frame"  select
-               cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
-             section "Film and viewing"
-               cb.arg  path "scan.stock"  rollScope "frame"  select
-               cb.arg  path "scan.scanner"  rollScope "frame"  select
-               cb.arg  path "view.illuminant"  rollScope "frame"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Exposure"
+                     cb.arg  path "print.enlarger.mode"  rollScope "frame"  segmented
+                     cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
+                     text τ  dim  wrap
+                   section "Filtration"
+                     cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   section "Paper"
+                     cb.arg  path "print.paper"  rollScope "frame"  select
+                     cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
+                   section "Film and viewing"
+                     cb.arg  path "capture.stock"  rollScope "frame"  select
+                     cb.arg  path "scan.stock"  rollScope "frame"  select
+                     cb.arg  path "scan.scanner"  rollScope "frame"  select
+                     cb.arg  path "view.illuminant"  rollScope "frame"  select
+                     text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -352,13 +361,24 @@ module main "Chromobench"
                      button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
   right  dockcol  width 300
            panel enlarger "Enlarger"
-             cb.arg  path "print.enlarger.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
-             cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-             cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-             cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   cb.arg  path "print.enlarger.mode"  segmented
+                   cb.arg  path "print.enlarger.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
+                   cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                   cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
            panel paper "Paper"
-             cb.arg  path "print.paper"  select
-             cb.arg  path "print.grade"  slider  step 0.5 none
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   cb.arg  path "print.paper"  select
+                   cb.arg  path "print.grade"  slider  step 0.5 none
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -509,21 +529,30 @@ module print "Print" key D
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
-             section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-             section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-             section "Printer lights"
-               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             section "Paper"
-               cb.arg  path "print.paper"  select
-               cb.arg  path "print.grade"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
-             section "Film and viewing"
-               cb.arg  path "scan.stock"  select
-               cb.arg  path "scan.scanner"  select
-               cb.arg  path "view.illuminant"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Exposure"
+                     cb.arg  path "print.enlarger.mode"  segmented
+                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     text τ  dim  wrap
+                   section "Filtration"
+                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   section "Paper"
+                     cb.arg  path "print.paper"  select
+                     cb.arg  path "print.grade"  slider  step 0.5 none
+                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                   section "Film and viewing"
+                     cb.arg  path "capture.stock"  select
+                     cb.arg  path "scan.stock"  select
+                     cb.arg  path "scan.scanner"  select
+                     cb.arg  path "view.illuminant"  select
+                     text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -752,21 +781,30 @@ module print "Print" key D
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
-             section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-             section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-             section "Printer lights"
-               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             section "Paper"
-               cb.arg  path "print.paper"  select
-               cb.arg  path "print.grade"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
-             section "Film and viewing"
-               cb.arg  path "scan.stock"  select
-               cb.arg  path "scan.scanner"  select
-               cb.arg  path "view.illuminant"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Exposure"
+                     cb.arg  path "print.enlarger.mode"  segmented
+                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     text τ  dim  wrap
+                   section "Filtration"
+                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   section "Paper"
+                     cb.arg  path "print.paper"  select
+                     cb.arg  path "print.grade"  slider  step 0.5 none
+                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                   section "Film and viewing"
+                     cb.arg  path "capture.stock"  select
+                     cb.arg  path "scan.stock"  select
+                     cb.arg  path "scan.scanner"  select
+                     cb.arg  path "view.illuminant"  select
+                     text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -796,44 +834,49 @@ module assistant "Assistant"
 module lab "Lab" key L
   left   dockcol  width 280
            panel controls-all "All parameters"
-             section "Capture"
-               cb.arg  path "capture.stock"  select
-               cb.arg  path "capture.exposureEV"  slider  st  step 0.333 st
-               cb.arg  path "capture.whiteBalance.mode"  segmented
-               cb.arg  path "capture.whiteBalance.temperature_K"  slider  K  step 50 K
-               cb.arg  path "capture.whiteBalance.tint"  slider  step 1 none
-             section "Film"
-               cb.arg  path "capture.development.dir.amount"  slider  fraction  step 0.05 fraction
-               cb.arg  path "capture.development.dir.diffusion_um"  slider  um  step 1 um
-               cb.arg  path "capture.development.push"  stepper  st  step 1 st
-               cb.arg  path "capture.development.grain.amount"  slider  fraction  step 0.05 fraction
-               cb.arg  path "capture.development.grain.size_um"  slider  um  step 0.5 um
-               cb.arg  path "capture.development.halation.strength"  slider  fraction  step 0.05 fraction
-             section "Finishing"
-               cb.arg  path "finishing.values.clarity"  slider  fraction  step 0.01 fraction
-             section "Scan"
-               cb.arg  path "scan.stock"  select
-               cb.arg  path "scan.scanner"  select
-               cb.arg  path "scan.flare"  slider  percent  step 0.05 percent
-             section "Output"
-               cb.arg  path "view.output.rendering"  segmented
-             section "Frame"
-               cb.arg  path "view.frame.orientation"  select
-               cb.arg  path "view.frame.angle_deg"  slider  deg  step 0.1 deg  detent 0
-             section "Print"
-               cb.arg  path "print.grade"  slider  step 0.5 none
-               cb.arg  path "print.paper"  select
-               cb.arg  path "print.enlarger.mode"  segmented
-               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
-             section "Source"
-               cb.arg  path "source.decode.encoding"  segmented
-             section "View"
-               cb.arg  path "view.flare"  slider  percent  step 0.01 percent
-               cb.arg  path "view.illuminant"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Capture"
+                     cb.arg  path "capture.stock"  select
+                     cb.arg  path "capture.exposureEV"  slider  st  step 0.333 st
+                     cb.arg  path "capture.whiteBalance.mode"  segmented
+                     cb.arg  path "capture.whiteBalance.temperature_K"  slider  K  step 50 K
+                     cb.arg  path "capture.whiteBalance.tint"  slider  step 1 none
+                   section "Film"
+                     cb.arg  path "capture.development.dir.amount"  slider  fraction  step 0.05 fraction
+                     cb.arg  path "capture.development.dir.diffusion_um"  slider  um  step 1 um
+                     cb.arg  path "capture.development.push"  stepper  st  step 1 st
+                     cb.arg  path "capture.development.grain.amount"  slider  fraction  step 0.05 fraction
+                     cb.arg  path "capture.development.grain.size_um"  slider  um  step 0.5 um
+                     cb.arg  path "capture.development.halation.strength"  slider  fraction  step 0.05 fraction
+                   section "Finishing"
+                     cb.arg  path "finishing.values.clarity"  slider  fraction  step 0.01 fraction
+                   section "Scan"
+                     cb.arg  path "scan.stock"  select
+                     cb.arg  path "scan.scanner"  select
+                     cb.arg  path "scan.flare"  slider  percent  step 0.05 percent
+                   section "Output"
+                     cb.arg  path "view.output.rendering"  segmented
+                   section "Frame"
+                     cb.arg  path "view.frame.orientation"  select
+                     cb.arg  path "view.frame.angle_deg"  slider  deg  step 0.1 deg  detent 0
+                   section "Print"
+                     cb.arg  path "print.grade"  slider  step 0.5 none
+                     cb.arg  path "print.paper"  select
+                     cb.arg  path "print.enlarger.mode"  segmented
+                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                   section "Source"
+                     cb.arg  path "source.decode.encoding"  segmented
+                   section "View"
+                     cb.arg  path "view.flare"  slider  percent  step 0.01 percent
+                     cb.arg  path "view.illuminant"  select
   center column  class "cb-viewer"  grow 1
            segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
            cb.ribbon
@@ -1056,10 +1099,15 @@ module print "Print" key D
            panel approvals "Agent proposals"
              cb.approvals
            panel enlarger "Enlarger"
-             cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-             cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-             cb.arg  path "print.paper"  rollScope "frame"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                   cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
+                   cb.arg  path "print.paper"  rollScope "frame"  select
            panel looks-groups "Sync groups"
              looks.groups  model τ
            panel looks-presets "Presets"
@@ -1249,21 +1297,30 @@ module print "Print" key D
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
-             section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
-             section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
-             section "Printer lights"
-               cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             section "Paper"
-               cb.arg  path "print.paper"  rollScope "frame"  select
-               cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
-             section "Film and viewing"
-               cb.arg  path "scan.stock"  rollScope "frame"  select
-               cb.arg  path "scan.scanner"  rollScope "frame"  select
-               cb.arg  path "view.illuminant"  rollScope "frame"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Exposure"
+                     cb.arg  path "print.enlarger.mode"  rollScope "frame"  segmented
+                     cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
+                     text τ  dim  wrap
+                   section "Filtration"
+                     cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   section "Paper"
+                     cb.arg  path "print.paper"  rollScope "frame"  select
+                     cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
+                   section "Film and viewing"
+                     cb.arg  path "capture.stock"  rollScope "frame"  select
+                     cb.arg  path "scan.stock"  rollScope "frame"  select
+                     cb.arg  path "scan.scanner"  rollScope "frame"  select
+                     cb.arg  path "view.illuminant"  rollScope "frame"  select
+                     text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -1452,21 +1509,30 @@ module main "Chromobench"
            viewport main τ  image τ  overlays: 
   right  dockcol  width 300
            panel controls-darkroom "Darkroom"
-             section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-             section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-             section "Printer lights"
-               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-             section "Paper"
-               cb.arg  path "print.paper"  select
-               cb.arg  path "print.grade"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
-             section "Film and viewing"
-               cb.arg  path "scan.stock"  select
-               cb.arg  path "scan.scanner"  select
-               cb.arg  path "view.illuminant"  select
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   section "Exposure"
+                     cb.arg  path "print.enlarger.mode"  segmented
+                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     text τ  dim  wrap
+                   section "Filtration"
+                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   section "Paper"
+                     cb.arg  path "print.paper"  select
+                     cb.arg  path "print.grade"  slider  step 0.5 none
+                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                   section "Film and viewing"
+                     cb.arg  path "capture.stock"  select
+                     cb.arg  path "scan.stock"  select
+                     cb.arg  path "scan.scanner"  select
+                     cb.arg  path "view.illuminant"  select
+                     text τ  dim  wrap
            panel history "History"
              cb.history
 commands

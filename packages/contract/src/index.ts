@@ -1,7 +1,7 @@
 // @chromobench/contract — the shared vocabulary every ticket codes against.
 // Importing this module registers the catalog (contract 0.3: roll records, batches, flare, flash, density
 // masks, framing, retouch, shared vocabulary; CHB-024).
-export const CONTRACT_VERSION = '0.3.0';
+export const CONTRACT_VERSION = '0.4.0';
 
 export * from './errors.ts';
 export * from './units.ts';

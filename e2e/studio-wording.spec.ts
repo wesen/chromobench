@@ -40,10 +40,16 @@ test('typed values, names, undo naming and round drags', async ({ page }) => {
   await field.press('Enter');
   await expect(toast).toContainText('Time can be at most 600 s');
   expect(await time(page)).toBe(600);
-  // F8: a relative entry says what it did; a German comma works
-  await field.fill('-5');
+  // F8: a relative entry (a sign and a unit) says what it did; a bare '-5' is refused with both spellings
+  // (CHB-031); a German comma works
+  await field.fill('-5 s');
   await field.press('Enter');
   await expect(toast).toContainText('Time −5 s → 595.0 s');
+  await field.fill('-5');
+  await field.press('Enter');
+  await expect(toast).toContainText('to change the time, add a unit (−5 s or −1/3 st); to set it, type 5');
+  expect(await time(page)).toBe(595);
+  await field.press('Escape');
   await field.fill('7,5');
   await field.press('Enter');
   expect(await time(page)).toBe(7.5);

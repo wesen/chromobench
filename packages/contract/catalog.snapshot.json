@@ -1,5 +1,5 @@
 {
-  "contractVersion": "0.3.0",
+  "contractVersion": "0.4.0",
   "domains": {
     "camera-linear": {
       "channels": 3,
@@ -320,7 +320,7 @@
           "unit": "logH"
         },
         "mode": {
-          "default": "normalised",
+          "default": "real",
           "path": "print.enlarger.mode",
           "type": "enum",
           "values": [
@@ -1400,7 +1400,7 @@
           "unit": "none"
         },
         "mode": {
-          "default": "normalised",
+          "default": "real",
           "path": "print.enlarger.mode",
           "type": "enum",
           "values": [

@@ -85,7 +85,8 @@ describe('reference engine', () => {
     ];
     const outs: Float64Array[] = [];
     for (const [args, chain] of cases) {
-      const x = await read(I('print.expose', [pat], args));
+      // the chains below are normalised (makePrintChain's default); since contract 0.4 the op's default is 'real'
+      const x = await read(I('print.expose', [pat], { mode: 'normalised', ...args }));
       const ch = makePrintChain(chain);
       for (let i = 0; i < 6; i++) {
         const want = ch.xOfDyes([dyes[3 * i]!, dyes[3 * i + 1]!, dyes[3 * i + 2]!]);

@@ -6,7 +6,7 @@ import { argPath, canonicalJSON, convert, type ArgSpec, type OpDef, type Unit } 
 import {
   filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopIndex, fstopStops, num, signed, stopsBetween,
 } from './units.ts';
-import { valueName } from './names.ts';
+import { ENUM_NAMES, valueName } from './names.ts';
 
 export type Widget = 'slider' | 'wheel' | 'stepper' | 'segmented' | 'toggle' | 'select';
 export type ValueType = 'number' | 'vec3' | 'cmy' | 'enum' | 'string';
@@ -135,7 +135,7 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
     const s = shift ? signed(d, dec) : num(d, dec);
     return unitText ? `${s} ${unitText}` : s;
   };
-  const valueLabel = (v: unknown): string => (spec.valuesFrom && typeof v === 'string' ? valueName(spec.valuesFrom, v) : String(v));
+  const valueLabel = (v: unknown): string => (spec.valuesFrom && typeof v === 'string' ? valueName(spec.valuesFrom, v) : (ENUM_NAMES[path]?.[String(v)] ?? String(v)));
   const format = (v: unknown, k?: number): string => {
     if (type === 'enum' || type === 'string') return valueLabel(v);
     if (type === 'number') return Array.isArray(v) ? `(${v.map((x) => fmtNum(x as number)).join(', ')})` : fmtNum(v as number);
