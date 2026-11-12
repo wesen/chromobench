@@ -859,3 +859,252 @@ The orchestrator then asked for these diaries. I rebuilt the timeline from the s
 ### Technical details
 - Scratch folder: `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/guides/`.
 - This work wrote nothing under `ttmp/` or goja-cv. All its writes went to the scratch folder.
+
+## Step 16: Implementation — the DSL session in a Web Worker, the in-app chat, the MCP bridge, three playbooks
+
+This step implements CHB-008 on branch `task/chb-008-agent` in four commits, in the brief's priority order. The
+DSL session (CHB-007's `DslSession`) now runs in a Web Worker behind a small protocol; it reaches the engine only
+through `adopt`/`measure`/`evaluate`, reads recipes from mirror copies of the frames' EditLogs, and its proposals
+are replayed on the page's real logs through `EditLog.propose`. On top of that: `ChatSession` (the step loop) with
+pluggable model transports (a scripted model for tests and an offline demo, and the Claude API on
+`@anthropic-ai/sdk` with a key typed at runtime), the `cb.chat` panel as `kits/chat` in studio-kit with an
+Assistant module in the classic and lab variants, the Go bridge (`bridge/`, MCP over stdio and stateless HTTP,
+a WebSocket hub to the page), the page's bridge client, and three playbooks.
+
+The guide's stage-1 design (an `EvalHost` with its own `commit.ts` and `render.ts` around a CHB-007 `EvalRunner`)
+was written before CHB-007 existed. CHB-007's `DslSession` already stages edits, renders the YAML result and calls
+`EditLog.propose` at the end of a successful eval, and `EditLog.propose` (contract 0.2/0.3) already stamps
+`by: 'agent'`, honours the mode and records `expect`. So the host here is the worker client: the page's
+`EditLog.propose` is the safety boundary, and the guide's `channel.ts`/`commit.ts`/`render.ts` were not written.
+
+### Prompt Context
+**User prompt (verbatim):** the orchestrator's task (not the user's own words): "You implement ticket CHB-008
+(agent integration: eval transports, MCP bridge, in-app chat, playbooks) in the chromobench monorepo, in your own
+git worktree (based on main). […] Priorities, in order: (1) the DSL session in a Web Worker with RPC (session
+reaches the engine only via adopt/measure/evaluate); (2) the in-app chat panel as a studio-kit component/kit […] on
+a ChatSession that streams text, shows step cards, looks, approval cards, Stop, agent mode (read-only/ask/auto —
+only the photographer changes it) — the LLM transport must be pluggable; for tests use a scripted fake model; for
+real use, a provider adapter whose API key the user enters at runtime (never hard-code or commit keys […]); (3) the
+MCP bridge / external transport as the guide describes (an optional Go bridge may be stubbed or left as a
+documented TODO if large). Keep agent edits going through EditLog.propose → approval cards. […] Be pragmatic."
+**Assistant interpretation:** worker + RPC first, then the chat (session, transports, kit, studio wiring, e2e),
+then the bridge; everything through `EditLog.propose`; checks green at each commit.
+**Inferred user intent:** the photographer can talk to an assistant inside the studio now (with their own key, or
+the offline demo), and Claude Code/Desktop can reach the same darkroom through MCP, without either bypassing the
+approval cards.
+**Commit (code):** 5bfe010 — "CHB-008: DSL session in a Web Worker — worker protocol, mirror logs, proposals
+replayed on the page's EditLog"; a2ef70c — "CHB-008: in-app chat — ChatSession, pluggable model transports,
+cb.kits.chat panel, wired into the studio"; 079fbb1 — "CHB-008: the MCP bridge — Go hub, MCP server
+(eval/status/create_session, stdio + stateless HTTP), page client"; 3127217 — "CHB-008: playbooks (grey balance,
+test strip, ring-around), in the chat prompt and as MCP resources; contract requests"
+
+### What I did
+- Read the brief, the CHB-008 guide and tasks, `packages/dsl/src/{session,host,index}.ts`, the contract's
+  `editlog.ts`, `eval.ts`, `vocab.ts`, `engine.ts`, studio-kit's `studio.ts`, `bridge/frames.ts`, `cb.ts` (the
+  `cb.chat` slot, `agent.mode`), `dom/panels.ts`, the roll kit's layout, `apps/studio/src/main.ts`, the claude-api
+  skill (model ids, adaptive thinking, effort, fallbacks, eager input streaming).
+- `pnpm install --offline --frozen-lockfile`; `git checkout -b task/chb-008-agent`.
+- **Worker (commit 1).** `packages/agent/src/worker/{protocol,server,client,spawn,dsl.worker}.ts`:
+  - `serveDsl(endpoint)`: a `DslSession` on a `ProxyEngine` (adopt → fire-and-forget message; measure/evaluate →
+    request/reply with cancel; open/prepare not reachable) and `MirrorLog`s (an `EditLog` subclass built from
+    `toJSON()` snapshots whose `propose` also records the call in an outbox).
+  - `DslWorkerClient` (page side): serves engine calls (evaluate copies the samples before transferring them),
+    sends frame snapshots for logs that changed (a per-log version bumped by `log.on`), replays the outbox with
+    `log.propose` under a per-session tx prefix and substitutes the real entries in `EvalResult.mutations`
+    (refusals become `CONFLICT` warnings plus a `host:` section in the YAML), one eval at a time with `E_BUSY`
+    after `busyMs` (10 s), and a backstop: deadline + 2 s, or a cancel the VM does not honour within 2 s, terminates
+    and respawns the worker; the next eval carries `E_SESSION_RESET`.
+  - `createDslWorker()` (`new Worker(new URL('./dsl.worker.ts', import.meta.url), { type: 'module' })`) and
+    `inThreadWorker()` (the same server on a `MessageChannel`, for Node tests).
+  - `packages/dsl`: `DslSession.interrupt()` (sets the deadline to 0, aborts pending engine calls, wakes the pump;
+    the eval ends `E_CANCELLED` and keeps the `fatal` flag so the probe/restart logic still runs); `index.ts`
+    exports `genInstructions`, `genReference`.
+  - `tools/scripts/check-boundaries.ts`: `packages/agent/src` may not import core/gpu/ingest/studio-kit/shell.
+- **Chat (commit 2).** `packages/agent/src/chat/`:
+  - `model.ts`: `ChatModel` (send(request, sink, signal) → reply, Messages-API shapes from the SDK's beta
+    types), `ScriptedModel`, `ModelError` kinds.
+  - `anthropic.ts`: `AnthropicModel` on `@anthropic-ai/sdk` 0.123.0 (`client.beta.messages.stream`, `streamEvent`
+    deltas, `finalMessage()`): model `claude-opus-5-5` by default, `thinking: {type: 'adaptive', display:
+    'summarized'}`, explicit `output_config.effort`, top-level `cache_control`, `context_management`
+    `clear_tool_uses_20250919`, `fallbacks: 'default'` with betas `context-management-2025-06-27` and
+    `server-side-fallback-2026-07-01`, `dangerouslyAllowBrowser: true`; typed SDK errors → one sentence.
+  - `prompt.ts`: the outline (how to act, modes, units, safety) + generated DSL instructions + reference +
+    playbooks; `EVAL_TOOL` with `eager_input_streaming: true`, `additionalProperties: false`.
+  - `session.ts`: `ChatSession` — append-only messages (frozen system/tools at the first send; per-turn context as a
+    text block; a mode change since the model last heard is an appended `role: 'system'` message), the step loop
+    (refusal, pause_turn, max_tokens with a cut call, 10-step limit with the "answer now" note, carry of
+    `tool_result`s into the next user message), input validation (`E_TOOL_INPUT`), approvals inside the step
+    (`decide(step, seqs, 'approve'|'reject'|'later', {force})`, also resumed when the photographer decides in the
+    approvals panel, via `log.on`), `revertStep` (inverse mutations by `user`), `stop()`, looks as base64 image
+    blocks in the `tool_result`, a state snapshot and `ChatEvent`s.
+  - `demo.ts`: `demoModel` — a scripted assistant that measures the centre, solves lights in log exposure and
+    proposes them, then summarises from the tool results.
+  - studio-kit `kits/chat/src/{kit,dom,index}.ts`, `chat.css`: `ChatService`/`ChatSessionLike` contract (the
+    session arrives as service `chat`), `createChatKit` (`panel()`, `module()`), `CHAT_RENDERERS['cb.chat']`;
+    `cb.kits['chat']` in `cb.ts`; exports `./kits/chat`, `./kits/chat/dom`, `./kits/chat/chat.css`; an
+    `assistant` module in `variants/classic.js` and `lab.js`; explain snapshots updated (`-u`).
+  - `apps/studio/src/host/chat.ts`: `createStudioChat(studio)` — DSL worker sessions per prefix (`chat`, `dev`,
+    later `mcp…`), providers "Claude (your API key)" and "Scripted demo (offline)", key kept in memory or, when
+    "remember" is ticked, `localStorage['chromobench.chat.anthropic-key']`; mode via `rt.runCommand('agent.mode')`.
+    `main.ts`: the service and renderers passed to `mountStudio`, `window.chromobench.{chat, chatService, eval}`.
+  - `apps/studio/vite.config.ts`: `optimizeDeps.exclude` gains `@jitl/quickjs-wasmfile-release-sync`.
+  - Tests: `packages/agent/test/{worker,chat,anthropic,demo}.test.ts`; `e2e/chat.spec.ts`.
+- **Bridge (commit 3).** `bridge/` (module `github.com/wesen/chromobench/bridge`, Go 1.25, `go-sdk` v1.7.0 and
+  `coder/websocket` v1.8.15 from the module cache with `GOFLAGS=-mod=mod GOPROXY=off`):
+  - `internal/hub`: page registry, routing (session owner, else the focused/most recent page), ids `e-0001…`,
+    watchdog deadline + grace (5 s), `eval.cancel` with reason `client`/`timeout`, `E_NO_PAGE` on disconnect,
+    `create_session`, status; `ServePage` (Origin patterns, 64 MiB read limit).
+  - `internal/mcpserver`: tools `eval` (input descriptions say when to omit the optional fields), `status`,
+    `create_session`; resources `chromobench://instructions`, `chromobench://reference`; prompt
+    `chromobench-agent`; `Remote` backend for attach mode.
+  - `internal/guard`: loopback-only listen, Host check, bearer token, `bridge.json` (0600).
+  - `internal/server`: the ServeMux (`GET /{path...}` SPA from `--dir`, `GET /ws/page`, `POST|GET|DELETE /mcp`
+    stateless Streamable HTTP, `/api/agent/{eval,session,status}`, `GET /api/health` with `X-Chromobench-Bridge`).
+  - `cmd/chromobench`: `serve`, `mcp` (attach to a healthy bridge from `bridge.json`, else start one; MCP on
+    stdio; logs on stderr), `token`; `--config` overrides the bridge.json path.
+  - `tools/gen-docs/agent.ts`: writes `bridge/internal/mcpserver/generated/{instructions.md,reference.md,
+    eval-tool.txt}` (go:embed cannot reach outside the module).
+  - `packages/agent/src/bridge/page-client.ts`: `BridgePageClient` (hello, focus/mode updates, evals in DSL
+    sessions per bridge session, cancel, sessions, reconnect 0.5→8 s). The studio connects when `/api/health`
+    has the bridge header, or with `?bridge[=ws-url]`; status bar pill `#bridge`.
+  - Go tests `internal/server/server_test.go`; TS test `bridge-page.test.ts`; `bridge/README.md`.
+- **Playbooks (commit 4).** `packages/agent/playbooks/{grey-balance,test-strip,ring-around}.js`; gen-docs bundles
+  them into `packages/agent/src/playbooks.generated.ts` (system prompt section) and
+  `bridge/internal/mcpserver/generated/playbooks/` (resources `chromobench://playbooks/<name>`);
+  `playbooks.test.ts`; `packages/agent/CONTRACT-REQUESTS.md` (R1, R2).
+- `docmgr task check --ticket CHB-008` for gleu, 3h2u, dfuk, jlwa, 1fpn, hbf7, 1put, jf58, m3zx, 3hp8.
+
+### Why
+- Mirror logs instead of an async EditLog proxy: CHB-007's `Host` reads `log.committed`, `log.mode`,
+  `log.formatWhy`, `log.pending()` synchronously during an eval and calls `log.propose` synchronously at its end.
+  A full snapshot before each eval keeps `DslSession` unchanged; replaying the recorded `propose` calls on the page
+  keeps `EditLog.propose` the only door for agent writes, and the page's log (its mode, its current state) decides.
+- One worker per session (chat, dev, each MCP session): `mem` stays separate, and a forced restart loses only that
+  session's `mem`.
+- The model transport behind `ChatModel` so that tests, the offline demo and the Claude API go through the same loop;
+  the API key is typed by the photographer because there is no bridge proxy yet (guide §5.6's proxy is open).
+- The kit gets the session as a service and declares the shape it needs (`ChatSessionLike`): studio-kit's boundary
+  rule allows only the contract and the shell. `demo.test.ts` assigns a `ChatSession` to `ChatSessionLike` so a
+  drift breaks `pnpm typecheck`.
+- An Assistant module rather than a panel squeezed into the Print module's right column: the chat needs height.
+- Go `flag` instead of cobra and `--dir` instead of `go:embed`: fewer dependencies and no build-order coupling
+  for v0.
+
+### What worked
+- Commit 1: `npx vitest run packages/agent` 12 passed; `pnpm test` 69 files, 2425 passed (baseline 2413);
+  typecheck clean; `pnpm lint` "import boundaries ok (278 file checks)"; `pnpm gen:check` "gen:check ok (19 files)".
+- Worker test: the same E1 program via the worker and via an in-page `DslSession` gives identical `yaml` and
+  `context`, one look of equal byte length; `vi.spyOn` counts 0 calls to `open`, `prepare`, `dispose` and > 0 to
+  `adopt`, `measure`, `evaluate`.
+- Commit 2: `pnpm test` 2442 passed; browser `CI=1 pnpm test:browser` (ports 4551–4554) 73 passed (1.8 m),
+  including `e2e/chat.spec.ts` 4/4: the worker test returned `{ a: '3', b: 'E_CANCELLED', c: '42' }` with the
+  synchronous `for (;;) {}` stopped in under 3 s; the demo flow applied the lights after Approve and Revert
+  restored them; the routed fake API saw `x-api-key: sk-ant-test-not-a-real-key`, model `claude-opus-5-5` and
+  `anthropic-dangerous-direct-browser-access: true`, and the key appears in neither the store nor the log.
+- Screenshots (scratch spec, `?canvas2d`): `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/chat-approval.png`
+  shows the Assistant module with the print, step cards with code and a look, and the approval card
+  "print.lights.logH [0, 0, 0] → [-0.1125, -0.0125, 0.125]".
+- Commit 3: `go vet ./...` clean; `go test ./...` ok (in-memory MCP client: tools `create_session,eval,status`,
+  instructions 1000–3999 characters, resources, prompt; eval round trip with an `ImageContent`; `E_NO_PAGE`;
+  timeout sends `eval.cancel` reason `timeout`; client cancellation sends reason `client`; a page disconnect fails
+  the call with `E_NO_PAGE`; Host `evil.example:80` → 403, missing/wrong token → 401, foreign Origin on
+  `/ws/page` → 403; attach mode through `Remote`; stateless Streamable HTTP with the bearer token).
+- End to end with the real binary (scratch spec, not committed): `chromobench serve --addr 127.0.0.1:7355
+  --allow-origin localhost:4551 --config <scratchpad>/bridge.json`, the studio opened with
+  `?bridge=ws://127.0.0.1:7355/ws/page` showed "agents: connected"; `POST /api/agent/eval` returned the densities
+  `[0.94691, 0.80158, 0.58241]`, an `edits:` line "e1 pending: set print.enlarger.time_s = 12.6 (was 10)" and a
+  24752-character base64 look; `chromobench mcp --config …` logged "attaching to the running bridge" and answered
+  `tools/call eval` over stdio with "10 … proposals: eval-1 pending"; the page log's pending entry had
+  `{ tx: 'mcp-eval-1', by: 'agent' }`.
+- Commit 4: `playbooks.test.ts` 4 passed (grey balance points `-4.5, -0.5, 5` and value `[-0.1125, -0.0125,
+  0.125]` as in CHB-007 §7; `mem.stripTimes(12, 5, 1/3)` → `[7.56, 9.52, 12, 15.12, 19.05]`; 1/3 stop → 4.01 pt);
+  `pnpm gen:check` "gen:check ok (26 files)".
+
+### What didn't work
+- `pnpm typecheck`: `client.ts(84,23): error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is
+  enabled.` (and three in `server.ts`): constructor parameter properties; rewritten as fields.
+- Worker tests, first run (3 of 12 failed): the cancel test timed out after 5000 ms — in-thread, `for (;;) {}`
+  blocks the timers that would send the interrupt, so only the 30 s deadline could stop it; the test now cancels an
+  eval that awaits measurements, and the browser spec covers the synchronous loop in a real Worker. The replay
+  refusal test switched the mode before the eval had synced, so the DSL itself threw `E_READONLY`; the switch now
+  happens inside a spied `engine.measure`. `library.frames()` does not exist (`ReferenceError`); it is `cb.frames()`.
+- Chat test: "partial approval" read `step.approval.seqs` of undefined — the wait condition matched the first step
+  while it was still `waiting`; it now waits for the second step's own status.
+- `pnpm typecheck`: `Type 'BetaContentBlockParam' is not assignable to type 'BetaTextBlockParam | …'` for text
+  blocks inside `tool_result`; the helper now returns the narrow `{ type: 'text'; text: string }`.
+- `e2e/chat.spec.ts`, first run (2 of 4 failed): `Aborted(CompileError: WebAssembly.instantiate(): expected magic
+  word 00 61 73 6d, found 3c 21 64 6f @+0)` — Vite pre-bundled the QuickJS variant, so `new
+  URL("emscripten-module.wasm", import.meta.url)` resolved to the SPA fallback HTML. Fixed with
+  `optimizeDeps.exclude`.
+- The first screenshot showed an empty viewer: headless SwiftShader WebGPU canvases do not appear in screenshots
+  (as CHB-019 noted); with `?canvas2d` the print is there. It also showed the chat log pushing the composer off
+  screen; `.cb-chat` now has a viewport-based height and the log scrolls.
+- `go test`: `panic: pattern "/mcp" … conflicts with pattern "GET /{path...}"`; `/mcp` is registered per method.
+- The worktree guard refused several shell commands ("too complex to verify that it stays inside the worktree"):
+  `cat > file <<EOF` chains, `mkdir … && cd … && pnpm add`, an env-prefixed bridge start
+  (`XDG_CONFIG_HOME=…`, "injecting git configuration"). Files were written with the editor, commands split, and
+  the bridge got a `--config` flag.
+- `pnpm test` under a load average of 21–26 (other agents' worktrees) failed by timeouts in other packages
+  (`ch3.golden.test.ts` "Test timed out in 30000ms", `output` bug 4484, `ingest` dust, …); the failing files
+  passed when rerun alone (63/63), and the last full run had 2 timeouts (core ch3 33³ tables, output bug 4484), 2446
+  passed of 2448.
+
+### What I learned
+- `EditLog.propose` already carries the guide's commit rule except the "photographer's hand wins in auto mode"
+  downgrade; that one needs a contract option (R1).
+- go-sdk v1.7.0's `ImageContent.Data` is raw bytes (JSON-encoded as base64); the bridge decodes the page's base64.
+- The SDK 0.123.0 in the pnpm store already has `fallbacks`, `output_config.effort`, `eager_input_streaming`,
+  `role: 'system'` messages and `BetaFallbackBlock`.
+
+### What was tricky to build
+- Keeping three views of a log consistent: the worker's mirror (snapshot before each eval), the replay on the
+  page, and the session's own proposal list (used for the context block's "eval-1 pending/approved"). Seqs agree as
+  long as no one writes to the frame between the snapshot and the replay; the replay result is authoritative
+  (`EvalResult.mutations` carries the page's entries).
+- Stop at every point of a turn: while the model streams (nothing appended; a first request is taken back so Send
+  can retry), during an eval (interrupt; `E_CANCELLED` result in the carry), during an approval wait (the waiter
+  resolves "stopped", the changes stay pending), and between tool calls (later calls answered "not run").
+- A forced worker restart: late messages of the terminated worker are ignored by identity, engine calls in flight
+  are aborted, and the reset note is captured per eval so it lands on the next eval, not on the forced one.
+
+### What warrants a second pair of eyes
+- Security: the API key in `localStorage` when "remember" is ticked (any script on the origin can read it); the
+  mirror-log replay as the only path for agent writes (`server.ts` `MirrorLog`, `client.ts` `replay`); the
+  bridge's Origin check is `coder/websocket`'s pattern match (no page cookie yet, no `CrossOriginProtection`).
+- `DslSession.interrupt()` in CHB-007's package: the cancelled outcome keeps `fatal` so a VM interrupted inside
+  a synchronous loop is probed and restarted like a timeout.
+- The context block's proposal status can be wrong when the photographer edits the same frame during an eval
+  (mirror seqs ≠ page seqs).
+
+### What should be done in the future
+- Contract R1 (`propose({ pending })`) and then the auto-mode conflict downgrade; R2 (`origin`).
+- Thread storage in IndexedDB and attachments (downscale to 1568 px) — tasks 99av, 1m3u stay open.
+- The Claude proxy in the bridge (`/api/claude/…`, task ch9a), so the key can live outside the page.
+- `go:embed` of the built studio, the page cookie and `CrossOriginProtection` (jgyd, a4uc); go-sdk ≥ 1.8.0 when it
+  is in the module cache.
+- Dust-pass and roll-consistency playbooks (siva), transcripts/replay/metrics (hnav; `DslSession.traces` exists),
+  budget-gated evaluations and image-privacy settings (u7mw).
+- Run the Go tests in CI (`cd bridge && go test ./...`); they are not part of `pnpm test`.
+
+### Code review instructions
+- Start with `packages/agent/src/worker/client.ts` (`runOne`, `replay`, `kill`) and `worker/server.ts`
+  (`MirrorLog`, `ProxyEngine`), then `chat/session.ts` (`send`, `turn`, `runStep`, `waitDecision`, `decide`),
+  `chat/anthropic.ts` (`body`), `packages/studio-kit/kits/chat/src/dom.ts`, `apps/studio/src/host/chat.ts`,
+  `bridge/internal/hub/hub.go` (`Eval`), `bridge/internal/server/server.go`.
+- `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test`;
+  `STUDIO_PORT=4551 STUDIO_KIT_PORT=4552 SHELL_DEMO_PORT=4553 GPU_PARITY_PORT=4554 CI=1 pnpm test:browser`;
+  `cd bridge && GOFLAGS=-mod=mod GOPROXY=off go test ./...`.
+- In the app: `pnpm --filter @chromobench/studio dev`, open a scan, choose the Assistant module, pick "Scripted demo
+  (offline)" or "Claude (your API key)", Connect, ask.
+
+### Technical details
+- Worker protocol (`protocol.ts`): to the worker `init {engine: {id, caps}, limits}`, `frames {set: {id: {data, mode,
+  source, name}}}`, `eval {id, req}`, `interrupt {id}`, `engine.reply {call, ok|err}`; from the worker `ready`,
+  `adopt {defs}`, `engine {call, method: measure|evaluate, node, spec|target}`, `engine.cancel {call}`,
+  `result {id, result, proposals}`, `failed {id, error}`.
+- Tx prefixes: `chat-eval-N` (in-app chat), `dev-eval-N` (`window.chromobench.eval`), `mcp-eval-N` (default MCP
+  session), `mcp-s-K-eval-N` (created sessions).
+- Bridge ↔ page messages: as in the guide §5.4 (`hello`, `focus`, `eval`, `eval.cancel`, `eval.result`,
+  `session.create`, `session.created`); `PageMsg`/`BridgeMsg` in `bridge/internal/hub/hub.go`.
+- Test counts at the end: vitest 74 files, 2448 tests (2413 baseline + 35 new; the last loaded run had 2 unrelated
+  timeouts); browser 73 passed; Go `internal/server` 9 tests.
