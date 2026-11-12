@@ -16,6 +16,7 @@
 - [ ] [stage 5] Implement the six synthetic frame sets with truth.json, class masks and stable ids; check the cited textbook numbers within pre-registered tolerances <!-- t:8egr -->
 - [ ] [stage 5] Have CHB-006 decode the TIFF and PNG subset of the synthetic frames <!-- t:urgj -->
 - [x] [stage 6] Add licence files, CHANGELOG, attribution strings and About-screen data; script-check that no artefact mixes BY-SA and BY-NC-SA sources <!-- t:wlvi -->
-- [ ] [stage 6] Send the owner the decision list of Section 12.4 <!-- t:w6wv -->
+- [x] (answered 2026-11-12: not public in this version, licence questions deferred to a public release) [stage 6] Send the owner the decision list of Section 12.4 <!-- t:w6wv -->
 - [x] Check the shipped irradiance_xy_tc.npy size at export: textbook/LFP say 192x192x81, spektrafilm code defaults to lut_size=128 <!-- t:o0m6 -->
 - [ ] [from CHB-012 18c5] Export Portra 800 push 1 and push 2 profiles and verify the exposure-index convention against Kodak's Portra 800 datasheet <!-- t:6qfb -->
+- [ ] Before any public release: decide the Section 12.4 list (commercial use and the NC packs, GPL reach of ported algorithms, hanatos tables, CIE/filter licences, name, illustrative pack) <!-- t:7w8x -->
