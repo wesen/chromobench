@@ -74,7 +74,17 @@ async function window_(page, from) {
 }
 
 const now = (page) => page.evaluate(() => Math.round(performance.now()));
-const idle = (page) => page.evaluate(() => window.chromobench.idle());
+// every render done (renders run in a worker now, so the hook's idle() alone can return while one is in flight),
+// then the hook's idle (log writes, queued frames)
+const idle = async (page) => {
+  await page.waitForFunction(() => !window.chromobench.rt.renders.busy(), null, { timeout: 0, polling: 100 });
+  await page.evaluate(() => window.chromobench.idle());
+};
+/** A change's result: a screen (non-draft) render of the main viewer after page time t, then idle. */
+const settled = async (page, t) => {
+  await page.waitForFunction((t0) => window.__wsb.renders.some((r) => r[0] >= t0 && r[2] !== 'draft' && r[1] === 'main'), t, { timeout: 0, polling: 50 });
+  await idle(page);
+};
 
 /** The main viewer's renders: the viewport with the largest results. */
 function mainRenders(renders) {
@@ -109,8 +119,18 @@ async function openFile(page, file, photo, label) {
   await page.locator('#photo').setChecked(photo);
   const t0 = await now(page);
   const wall = Date.now();
+  const name = file.split('/').pop();
   await page.setInputFiles('#file', file);
-  await page.waitForFunction(() => /rendered|E_|error|failed/i.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: TIMEOUT, polling: 50 });
+  // opened: the new frame is the selected one and nothing is opening any more (or an error), then every render done
+  await page.waitForFunction((n) => {
+    const s = document.querySelector('#status')?.textContent ?? '';
+    if (/E_|error|failed/i.test(s)) return true;
+    const st = window.chromobench.studio;
+    return !/opening/.test(s) && st.frames.get(st.current)?.name === n;
+  }, name, { timeout: TIMEOUT, polling: 50 });
+  const sel = await now(page);
+  // …and the main viewer has rendered since
+  await page.waitForFunction((t) => window.__wsb.renders.some((r) => r[0] >= t && r[2] !== 'draft' && r[1] === 'main'), sel - 50, { timeout: TIMEOUT, polling: 50 });
   await idle(page);
   const w = await window_(page, t0);
   return summary(label, t0, w, { wallMs: Date.now() - wall, status: await page.locator('#status').textContent(), notes: (await page.locator('#notes').textContent())?.slice(0, 160) });
@@ -133,9 +153,10 @@ async function drag(page, label, px = 40, moves = 20, gapMs = 30) {
     await page.mouse.move(x + (px * i) / moves, y);
     await page.waitForTimeout(gapMs);
   }
+  const up0 = await now(page);
   await page.mouse.up();
   const dragWall = Date.now() - wall;
-  await idle(page);
+  await settled(page, up0);
   const w = await window_(page, t0);
   const up = w.marks.find((m) => m[0] === 'pointerup')?.[1] ?? t0;
   const down = w.marks.find((m) => m[0] === 'pointerdown')?.[1] ?? t0;
@@ -157,7 +178,7 @@ async function typed(page, label, text = '15') {
   await f.fill(text);
   const t0 = await now(page);
   await f.press('Enter');
-  await idle(page);
+  await settled(page, t0);
   const w = await window_(page, t0);
   return summary(label, t0, w);
 }
