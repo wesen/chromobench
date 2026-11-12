@@ -1,7 +1,7 @@
 ---
 Title: 'Shell: the CraftKit Shell ported to TypeScript as packages/shell'
 Ticket: CHB-018
-Status: active
+Status: complete
 Topics:
     - ui
     - js-api
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T15:10:19.987860822-05:00
+LastUpdated: 2026-11-12T14:47:50.877033703-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

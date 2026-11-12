@@ -1,7 +1,7 @@
 ---
 Title: 'CraftKit Studio study: UI toolkit and JS DSL for a Lightroom-class studio'
 Ticket: CHB-016
-Status: active
+Status: archived
 Topics:
     - ui
     - dsl
@@ -13,7 +13,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T12:56:14.01072102-05:00
+LastUpdated: 2026-11-12T14:47:50.576399571-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

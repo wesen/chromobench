@@ -1,0 +1,3 @@
+{"build":"main 0b381c6 (before CHB-027), served on :4600, tunnelled","where":"M1 Max Chrome 157 (Metal), driven via Playwright 1.65 run-server","engine":"GPU · apple metal-3 · 4000 px","file":"DSC_8559.NEF (30 MB, streamed by setInputFiles)",
+ "open":{"setInputFilesWallMs":56024,"uploadMsApprox":43900,"resultMsAfterUpload":9608,"stalls":[[43903,567],[49557,1008],[50582,308],[51132,208]],"worstStallMs":1008},
+ "drag":{"moves":20,"dragWallMs":1985,"resultMsAfterRelease":283,"renders":8,"stalls":[],"worstStallMs":0}}

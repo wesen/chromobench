@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "131b69b737ff364e1833f783584e4ceab461ba0cca37c1a2d4453405cbc9b59a",
+  "request": {
+    "ticket": "CHB-019",
+    "status": "complete",
+    "intent": "",
+    "entry": "Closed after audit (2026-11-12): render lanes and refine pass, catalog and library views, host, variants with snapshots and smokes, both engines done; leftovers moved to CHB-028 (and drag-latency measurement to CHB-027)"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-7b872cea1a564931323a95259aad085e",
+    "state": "committed",
+    "created_at": "2026-11-12T19:47:51.217682881Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "index.md": "ae6141ddd2c2c97059075abcb693199e9282d26a60b8b3625f5418b7e3d77d65"
+    },
+    "after": {
+      "changelog.md": "001c39de650147de5a63c683b0831d9938cbbf1bbcddf60a72b355cded74c322",
+      "index.md": "bc826aca7a4ecd6d079329a3356353f9f5922329ec6fe3a845e3ea71dcd5e27b"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTEKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMgoKQ2xvc2VkIGFmdGVyIGF1ZGl0ICgyMDI2LTExLTEyKTogcmVuZGVyIGxhbmVzIGFuZCByZWZpbmUgcGFzcywgY2F0YWxvZyBhbmQgbGlicmFyeSB2aWV3cywgaG9zdCwgdmFyaWFudHMgd2l0aCBzbmFwc2hvdHMgYW5kIHNtb2tlcywgYm90aCBlbmdpbmVzIGRvbmU7IGxlZnRvdmVycyBtb3ZlZCB0byBDSEItMDI4IChhbmQgZHJhZy1sYXRlbmN5IG1lYXN1cmVtZW50IHRvIENIQi0wMjcpCg=="
+    },
+    {
+      "path": "index.md",
+      "before": "ae6141ddd2c2c97059075abcb693199e9282d26a60b8b3625f5418b7e3d77d65",
+      "after": "LS0tClRpdGxlOiAnU3R1ZGlvIHYyOiB0aGUgd2hvbGUgc3R1ZGlvIFVJIGV4cHJlc3NlZCBpbiB0aGUgSlMgQVBJLCBhcyBzd2FwcGFibGUgdmFyaWFudHMnClRpY2tldDogQ0hCLTAxOQpTdGF0dXM6IGNvbXBsZXRlClRvcGljczoKICAgIC0gdWkKICAgIC0gcHJvZHVjdAogICAgLSBqcy1hcGkKRG9jVHlwZTogaW5kZXgKSW50ZW50OiBsb25nLXRlcm0KT3duZXJzOiBbXQpSZWxhdGVkRmlsZXM6IFtdCkV4dGVybmFsU291cmNlczogW10KU3VtbWFyeTogIiIKTGFzdFVwZGF0ZWQ6IDIwMjYtMTEtMTJUMTQ6NDc6NTEuMjE3NjEzNzYzLTA1OjAwCldoYXRGb3I6ICIiCldoZW5Ub1VzZTogIiIKLS0tCgojIFN0dWRpbyB2MjogdGhlIHdob2xlIHN0dWRpbyBVSSBleHByZXNzZWQgaW4gdGhlIEpTIEFQSSwgYXMgc3dhcHBhYmxlIHZhcmlhbnRzCgojIyBPdmVydmlldwoKPCEtLSBQcm92aWRlIGEgYnJpZWYgb3ZlcnZpZXcgb2YgdGhlIHRpY2tldCwgaXRzIGdvYWxzLCBhbmQgY3VycmVudCBzdGF0dXMgLS0+CgojIyBLZXkgTGlua3MKCi0gKipSZWxhdGVkIEZpbGVzKio6IFNlZSBmcm9udG1hdHRlciBSZWxhdGVkRmlsZXMgZmllbGQKLSAqKkV4dGVybmFsIFNvdXJjZXMqKjogU2VlIGZyb250bWF0dGVyIEV4dGVybmFsU291cmNlcyBmaWVsZAoKIyMgU3RhdHVzCgpDdXJyZW50IHN0YXR1czogKiphY3RpdmUqKgoKIyMgVG9waWNzCgotIHVpCi0gcHJvZHVjdAotIGpzLWFwaQoKIyMgVGFza3MKClNlZSBbdGFza3MubWRdKC4vdGFza3MubWQpIGZvciB0aGUgY3VycmVudCB0YXNrIGxpc3QuCgojIyBDaGFuZ2Vsb2cKClNlZSBbY2hhbmdlbG9nLm1kXSguL2NoYW5nZWxvZy5tZCkgZm9yIHJlY2VudCBjaGFuZ2VzIGFuZCBkZWNpc2lvbnMuCgojIyBTdHJ1Y3R1cmUKCi0gZGVzaWduLyAtIEFyY2hpdGVjdHVyZSBhbmQgZGVzaWduIGRvY3VtZW50cwotIHJlZmVyZW5jZS8gLSBQcm9tcHQgcGFja3MsIEFQSSBjb250cmFjdHMsIGNvbnRleHQgc3VtbWFyaWVzCi0gcGxheWJvb2tzLyAtIENvbW1hbmQgc2VxdWVuY2VzIGFuZCB0ZXN0IHByb2NlZHVyZXMKLSBzY3JpcHRzLyAtIFRlbXBvcmFyeSBjb2RlIGFuZCB0b29saW5nCi0gdmFyaW91cy8gLSBXb3JraW5nIG5vdGVzIGFuZCByZXNlYXJjaAotIGFyY2hpdmUvIC0gRGVwcmVjYXRlZCBvciByZWZlcmVuY2Utb25seSBhcnRpZmFjdHMK"
+    }
+  ]
+}

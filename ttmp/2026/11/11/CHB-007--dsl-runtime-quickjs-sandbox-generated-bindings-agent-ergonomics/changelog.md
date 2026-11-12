@@ -11,3 +11,7 @@ Closed: DR-1 (QuickJS) and DR-2 (sync build with host promises) confirmed by the
 ## 2026-11-11
 
 Reopened: DR-1/DR-2 still need the user's confirmation (the earlier 'ok' was general)
+
+## 2026-11-12
+
+Closed: the user confirmed DR-1 (QuickJS sandbox) and DR-2 (sync build with deferred promises, not asyncify) on 2026-11-12
