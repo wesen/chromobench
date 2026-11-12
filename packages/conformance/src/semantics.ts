@@ -110,6 +110,46 @@ const CASES: SemanticCase[] = [
     },
   },
   {
+    id: 'retouch.heal semantics: clone copies the source disc, nothing else changes, a region is the crop (CHB-022)', op: 'retouch.heal', needs: ['retouch.heal'],
+    async run(env) {
+      const x = env.input('print-xyz');
+      const spot = { mode: 'clone', x: 3, y: 5, r: 2, src: { x: 8, y: 5 }, feather: 0, opacity: 1, enabled: true };
+      const out = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: spot }) });
+      const [xa, oa] = [await read(env, x), await read(env, out)];
+      const W = (x.info as { width: number }).width;
+      let inside = 0;
+      check(worst(oa, 3, (i, k) => {
+        const px = i % W, py = Math.floor(i / W);
+        const d = Math.hypot(px + 0.5 - spot.x, py + 0.5 - spot.y);
+        if (d < spot.r) inside++;
+        return d < spot.r ? xa[3 * (i + 5) + k]! : xa[3 * i + k]!;
+      }) <= TOL, 'clone: the disc is not the source disc moved, or pixels outside it changed');
+      check(inside === 12 * 3, `clone: ${inside / 3} pixel centres in the disc, expected 12`);
+      const reg = { x: 1, y: 3, w: 5, h: 4 };
+      const part = await (await env.engine.evaluate(out, { scale: 'full', precision: 'export', region: reg })).read();
+      let off = 0;
+      for (let y = 0; y < reg.h; y++) for (let i = 0; i < reg.w; i++) for (let k = 0; k < 3; k++) off = Math.max(off, Math.abs(part[3 * (y * reg.w + i) + k]! - oa[3 * ((reg.y + y) * W + reg.x + i) + k]!));
+      check(off <= TOL, `clone: a region differs from the crop of the full result by ${off}`);
+      const none = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: { ...spot, opacity: 0 } }) });
+      check(worst(await read(env, none), 3, (i, k) => xa[3 * i + k]!) <= TOL, 'opacity 0 changed the image');
+    },
+  },
+  {
+    id: 'retouch.heal semantics: heal from the target itself is the identity; a later spot (natural id order) covers an earlier (CHB-022)', op: 'retouch.heal', needs: ['retouch.heal'],
+    async run(env) {
+      const x = env.input('print-xyz');
+      const xa = await read(env, x);
+      const self = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: { mode: 'heal', x: 6, y: 5, r: 3, src: { x: 6, y: 5 }, feather: 0.5, opacity: 1, enabled: true } }) });
+      check(worst(await read(env, self), 3, (i, k) => xa[3 * i + k]!) <= 1e-4 * 2, 'heal with the source on the target changed the image');
+      const W = (x.info as { width: number }).width;
+      const a = { mode: 'clone', x: 4, y: 4, r: 1.5, src: { x: 8, y: 4 }, feather: 0, opacity: 1, enabled: true };
+      const b = { ...a, src: { x: 4, y: 8 } };
+      const two = await read(env, env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s2: a, s10: b }) }));
+      const i = 4 * W + 4; // pixel (4, 4): centre (4.5, 4.5) in both discs
+      check(worst([two[3 * i]!, two[3 * i + 1]!, two[3 * i + 2]!], 3, (_, k) => xa[3 * (8 * W + 4) + k]!) <= TOL, 'spot s10 (after s2 in natural order) does not cover s2');
+    },
+  },
+  {
     id: 'mask semantics: and/or/not are min/max/1 − m', op: 'mask.and', needs: ['mask.and', 'mask.or', 'mask.not', 'mask.gradient', 'mask.ellipse'],
     async run(env) {
       const r = env.input('camera-linear');

@@ -1,5 +1,6 @@
 // classic: Lightroom's layout (guide §8.1). Modules across the top (Library G, Print D, Output), panels left and
-// right, the film strip of print thumbnails at the bottom. Receives ck and cb; imports nothing.
+// right, the film strip of print thumbnails at the bottom. Receives ck and cb; imports only sibling variant parts.
+import { finishMenu, finishModule } from './finish-module.js';
 
 /** the darkroom's tools as buttons (each is also a key: I, T, R, \) */
 export const toolsPanel = ck =>
@@ -76,10 +77,12 @@ export default {
   label: 'Classic',
   description: 'Lightroom-like modules: Library, Roll, Print, Output',
   build: (ck, cb) => {
-    const s = cb.studio('Chromobench').theme('chromogen').use(cb.kits.roll.kit).menus(m => rollMenu(menus(m)));
+    const s = cb.studio('Chromobench').theme('chromogen').use(cb.kits.roll.kit).use(cb.kits.finish.kit).menus(m => finishMenu(rollMenu(menus(m))));
     s.module('library', libraryModule(ck, cb));
     s.module('roll', rollModule(ck, cb));
     s.module('print', printModule(ck, cb));
+    // CHB-022: crop, straighten, spot removal and finishing tones after the print
+    s.module('finish', finishModule(ck, cb, { tones: false }));
     s.module('output', m =>
       m
         .label('Output')

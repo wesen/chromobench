@@ -159,3 +159,105 @@ catalog, the sidecar and CHB-013's fixture layout.
 `W_ROLL_MIXED` (a frame's base beyond 0.03 D of the roll's), `W_ROLL_STOCK_AMBIGUOUS` (top two stocks within
 0.025 D), `W_ROLL_BASE_WEAK` (no confident rebate on the roll), `W_FRAME_DIVERGES`, and ingest's `W_NO_SURROUND`,
 `W_SURROUND_BRIGHT`, `W_REBATE_BLANK`, `W_NO_REBATE`, `W_NO_FILM`: add them to the contract's diagnostic table.
+
+---
+
+# Contract requests from the finish kit (CHB-022)
+
+Contract 0.3 already gave CHB-022 `view.frame`, `retouch.spots.<id>` with null-delete and the `retouch.heal` node.
+These are what is still missing. Nothing below blocks the kit; each has a local workaround.
+
+## F1. `retouch.heal`: the doc no longer says "stub", and names the order and the algorithm
+
+**What.** Replace the last sentence of the op's `doc` and say how spots are ordered.
+
+**Why.** core, the GPU and the mock implement it now (no `W_PREVIEW_APPROX`). The composite order is the natural
+order of the spot ids (`s2` before `s10`), because `canonicalJSON` sorts the record's keys and the insertion order
+is lost; the doc should say so, since the order decides which spot covers which.
+
+**Proposed diff** (`packages/contract/src/catalog/view-output-mask.ts`):
+
+```diff
+-    doc: 'Heals and clones circular spots on the print (after view.adapt, before finishing). Every source is read from the image before retouching; a later spot covers an earlier one. Contract 0.3 stub: the engines pass the image through with W_PREVIEW_APPROX until CHB-022 implements it.',
++    doc: 'Heals and clones circular spots on the print (after view.adapt, before finishing). Every source is read from the image before retouching; spots are composited in the natural order of their ids (s2 before s10), a later one covering an earlier. Clone copies the source disc (bilinear at pixel centres); heal multiplies it by exp(u), u the harmonic (Poisson-integral) extension of log T − log S on the ring r + ½ … r + 2½ (core print/retouch.ts).',
+```
+
+## F2. Crop validity where the frame size is known: `compile()` or `cropFits` in `frame.ts`
+
+**What.** A `view.frame` whose crop, turned by the angle, leaves the frame should be refused with the largest valid
+box as the fix (guide §3.1). `assertRecipe` cannot do it (a recipe does not know the frame's size); `compile()` can,
+because the graph has the source's `SourceInfo`.
+
+**Why.** The finish kit never writes such a frame (its tools and commands keep the crop inside), but an agent or an
+old recipe can. Today such a frame renders with empty (0) corners.
+
+**Workaround now.** `cb.kits.finish.cropProblem(recipe, W, H)` → `CB-F110` with the fix, shown in the crop panel,
+and the command `crop.fix` (Finish menu) applies it. The geometry is `kits/finish/src/geometry.ts`
+(`fitsInside`, `constrain`), pure, so the contract can take it as it is.
+
+**Proposed diff** (`packages/contract/src/frame.ts` plus one call in `graph.ts` `compile`):
+
+```diff
++/** The crop's sampled region (the box turned by −sign·angle about its centre) lies inside the W × H frame. */
++export function cropFits(crop: Box, angle_deg: number, orientation: Orientation | string, W: number, H: number): boolean {
++  const t = (-sensorAngleSign(orientation) * angle_deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
++  const cx = crop.x + crop.w / 2, cy = crop.y + crop.h / 2;
++  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([a, b]) => {
++    const u = (a! * crop.w) / 2, v = (b! * crop.h) / 2;
++    const x = cx + u * c - v * s, y = cy + u * s + v * c;
++    return x >= -1e-6 && y >= -1e-6 && x <= W + 1e-6 && y <= H + 1e-6;
++  });
++}
+```
+
+```diff
+   const f = r.view.frame;
++  const src = g.sourceInfo?.(r.source.sha256);
++  if (src && f.crop && !cropFits(f.crop, f.angle_deg, f.orientation, src.width, src.height))
++    fail('E_ARG_RANGE', `view.frame: the crop turned by ${f.angle_deg}° leaves the ${src.width} × ${src.height} frame`, { path: 'view.frame.crop' });
+   return g.intern('output.frame', [d], …
+```
+
+(Or a `W_CROP_OUTSIDE` warning instead of a failure, if old recipes must keep rendering.)
+
+## F3. `finishing.tone` and `finishing.saturation` (guide §3.3)
+
+**What.** Two finishing ops on `print-xyz`, before `output.display`, `ui.group: 'Finishing'`, and their recipe fields
+`finishing.values.shadows | highlights | contrast | saturation`, compiled after `retouch.heal` like
+`finishing.clarity`.
+
+**Why.** The Finishing panel offers only Clarity today, because that is the only finishing value `compile()` turns
+into a node. Shadows, highlights and an S-curve on print lightness (chroma held) are what the photographer asks for
+after the print.
+
+**Proposed op** (`packages/contract/src/catalog/measure-darkroom-finishing.ts`):
+
+```ts
+defineOp({
+  name: 'finishing.tone', area: 'finishing', owner: 'CHB-022', on: 'Image', returns: 'Image', domainIn: 'print-xyz', domainOut: 'print-xyz',
+  class: 'pointwise', binding: 'setting', recipePath: 'finishing.values',
+  args: {
+    shadows: { type: 'number', unit: 'fraction', min: -1, max: 1, default: 0, path: 'finishing.values.shadows', doc: 'Lift (+) or deepen (−) the shadows, on print lightness, chroma held.', ui: { widget: 'slider', step: 0.01, label: 'Shadows', group: 'Finishing', bipolar: true } },
+    highlights: { type: 'number', unit: 'fraction', min: -1, max: 1, default: 0, path: 'finishing.values.highlights', doc: 'Pull (−) or push (+) the highlights.', ui: { widget: 'slider', step: 0.01, label: 'Highlights', group: 'Finishing', bipolar: true } },
+    contrast: { type: 'number', unit: 'fraction', min: -1, max: 1, default: 0, path: 'finishing.values.contrast', doc: 'An S-curve about mid-grey.', ui: { widget: 'slider', step: 0.01, label: 'Contrast', group: 'Finishing', bipolar: true } },
+  },
+  doc: 'Finishing tones on print lightness (digital, after the print; not a darkroom control).',
+}),
+```
+
+and in `compile()`, after `finishing.clarity`:
+
+```diff
++  const tone = ['shadows', 'highlights', 'contrast'].map((k) => r.finishing.values[k] ?? 0);
++  if (tone.some((x) => x !== 0)) v = I('finishing.tone', [v], { shadows: tone[0], highlights: tone[1], contrast: tone[2] });
+```
+
+The kit's `FINISHING_PATHS` grows by these paths once they exist; the engines (core, GPU, mock) come with them.
+
+## Notes (no contract change)
+
+- `finishing.clarity` is implemented by the mock engine only; core and the GPU fail with `E_NOT_IMPLEMENTED` when
+  Clarity is not 0. The `classic` variant's Finish module therefore leaves the tones panel out (`tones: false`);
+  the `finish` variant shows it. For CHB-015.
+- `scan.heal` (dust on the film) is a pass-through in the mock and missing in core and the GPU. The spot tool offers
+  its Dust mode only when the engine lists `scan.heal` and the frame is a negative scan; the default mode is Heal.
