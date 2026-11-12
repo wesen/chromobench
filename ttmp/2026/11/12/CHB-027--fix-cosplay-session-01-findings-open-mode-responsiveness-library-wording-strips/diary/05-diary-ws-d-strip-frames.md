@@ -288,3 +288,140 @@ re-open per frame.
 - Identity: whole file `frame_<sha8>`, `<sha>:negative|photo`; strip frame n `frame_<sha8>-<n>`, `<sha>:negative:<n>`.
 - Boxes are working-image pixels (the GPU's 4000 px long side keeps raw010 at full size; the reference engine's
   512 px makes them ~7× smaller), like every other recipe coordinate.
+
+## Step 4: raw010 in the built studio, the box inset, the merge of WS-B, and the real-file check again
+
+Driven headless on the built app, raw010.dng opens as three frames ("raw010.dng · 1/3 … 3/3"), each printed
+as a sensible positive by the automatic first print. The first drive showed a thin dark line of gap/rebate at the
+print's edges, so the boxes are now inset 1 % a side plus one working pixel. Then WS-B (engine worker) arrived in
+main; I merged it, moved the strip detection into its `decode.ts` (which runs in the engine worker), and measured
+again against current main: no main-thread stall regression.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Coordinator message (verbatim): "Orchestrator: WS-B (responsiveness) is merged into main (9a6d87c). Before your final commit please `git merge main` into task/chb-027-strip-frames and resolve conflicts yourself — expect them in apps/studio/src/host/engines.ts, studio-engine.ts and packages/studio-kit/src/bridge/frames.ts (WS-B added `hashBytes`/WebCrypto hashing). Important: decoding, linearise, resample and scan conditioning now run in a module worker (new host files decode.ts, worker-protocol.ts, engine-serve.ts, engine-worker.ts, worker-engine.ts; `?worker=0` falls back to the main thread). Your strip detection must run where conditioning runs — i.e. in the worker (decode.ts / engine-serve.ts), returning the frame boxes over the worker protocol — not on the main thread, or it brings back main-thread stalls. Keep `stripFrames` a pure ingest function. main.ts sets draftTargetMs=150, progressMs=250, preemptBackground=true for the real engines. After the merge: full checks incl. `CI=1 pnpm test:browser` on your ports, and your real-file check of raw010 (3 frames, each printing sensibly, no stall regression) with the probe."
+**Assistant interpretation:** Item 3 of the work; merge WS-B and keep the detection in the worker.
+**Inferred user intent:** The strip feature on top of the responsive engine, measured on the real file.
+**Commit (code):** 0e19c3d — "CHB-027 WS-D: frame boxes inset 1 % a side …"; f5b839c — "Merge main (WS-B
+responsiveness) into task/chb-027-strip-frames: strip detection moves into decode.ts (the engine worker)".
+
+### What I did
+- `scripts/wsd-01-strip-open.mjs` (committed; the private file and its screenshots stay out of the repo): opens a
+  file through `#file` in a built studio, installs CHB-026's rAF stall probe (gaps > 100 ms), waits until the render
+  counter is quiet, reads the catalog and recipes, clicks each frame in the filmstrip and screenshots it.
+- Builds: this branch and main, each copied into the scratchpad (`git checkout main -- apps packages`, build,
+  `git checkout HEAD -- apps packages`; tree clean after), served one after the other with
+  `npx vite preview --outDir … --port 5011 --strictPort`.
+- `stripFrames` boxes inset (`ia = 1 + 0.01·len` working px a side); the planted tests now ask that each box lies
+  inside its frame (± 1 px) and covers ≥ 85 % of it (80 % without holder and leader).
+- `git merge main` (681d2e3, WS-B): conflicts in `engines.ts` (took main's: decoding moved to `decode.ts`),
+  `studio-engine.ts` (WS-B drops the pixels from `notes`; kept that and my `frames` return) and `frames.ts`
+  (`hashBytes` in `openFile` with my `OpenResult`). The strip detection went into `decode.ts` `decodeScan`; the
+  `Decoded` meta (with `frames`) crosses the worker protocol as `WireDecoded` unchanged, so no protocol edit.
+- After the merge: `pnpm typecheck`, `pnpm lint` clean; `pnpm test` → 95 files, 2733 passed, 7 skipped.
+
+### Why
+- The detection runs right after `conditionScan` on the same working image and layout, which is in the worker now.
+
+### What worked
+- raw010.dng, `?nosw&fresh`, headless Chromium (SwiftShader), port 5011; "result" = until the render counter is
+  quiet for 2.5 s; stalls = rAF gaps > 100 ms during the open:
+
+| Build | Engine | Frames | Result ms | Stalls (worst / total ms) | Auto time per frame |
+|---|---|---|---|---|---|
+| main 681d2e3 | reference (worker), 512 px | 1 (whole strip) | 3441 | 150 / 267 | 2.227 s |
+| main 681d2e3 | reference (worker), 512 px | 1 | 3248 | 0 / 0 | 2.227 s |
+| this branch f5b839c | reference (worker), 512 px | **3** | 2624 | 0 / 0 | 2.227, 2.5, 2.806 s |
+| this branch f5b839c | reference (worker), 512 px | **3** | 3943 | 233 / 233 | 2.227, 2.5, 2.806 s |
+| main 681d2e3 | GPU SwiftShader, `long=1024` | 1 | 4090 | 333 / 666 | 2.227 s |
+| this branch f5b839c | GPU SwiftShader, `long=1024` | **3** | 3844 | 350 / 467 | 2.227, 2.5, 2.806 s |
+
+  Within the run-to-run noise of this loaded machine, opening the strip as three frames costs nothing on the main
+  thread (the detection is 60–100 ms in the worker; three first prints on crops of a third of the strip each).
+  Before WS-B (both builds decoding on the main thread) the open was one 3.4–12 s stall either way (main:
+  3417 and 11983 ms worst; this branch: 5566 and 6283 ms).
+- Crops (reference, 512 px): 209×143 at (8,16), 209×145 at (8,182), 209×145 at (8,348); at 1024 px: 420×288/290
+  at y 31, 364, 696. Printer lights per frame (log H): [0.011, −0.054, −0.178], [0.063, 0.016, −0.072],
+  [−0.009, 0.034, 0.034]; the whole strip on main got [0.041, 0.006, −0.063].
+- Screenshots (scratchpad only, private): each frame a positive — the corridor with the window and silhouette
+  (frame 1, a thin negative: flat and a little dark), the hydrangea on gravel (frame 2), the fence with the sign
+  (frame 3); no gap or rebate at the edges after the inset. No page errors.
+
+### What didn't work
+- First drive (before the inset): frame 3's print had a dark line along its top and sides — the box (512 px working
+  image, 1 px ≈ 7 file px) included the blurred frame edge and a sliver of gap, which prints black.
+- `sed`/`python3` edits and compound shell commands mentioning git were refused by the worktree guard; Edit worked.
+
+### What I learned
+- Frame 1 (a dark scene, a thin negative) and the others all land at or near the time slider's 2 s floor (2.227 s
+  is the lowest grid step); the remainder stays in the printer lights, so the prints still integrate to grey. F16's
+  note about the floor is a time-model question, not a strip one.
+
+### What was tricky to build
+- Measuring main and the branch on one port: two dists in the scratchpad, served one after the other.
+
+### What warrants a second pair of eyes
+- With `?worker=0` the detection runs on the main thread inside `decodeFile` (as all conditioning does there).
+
+### What should be done in the future
+- The 2 s time floor for this film (F16's second half) belongs to the time model / paper calibration.
+
+### Code review instructions
+- `apps/studio/src/host/decode.ts` `decodeScan` (the strip lines), `studio-engine.ts` `openAs`.
+- `node ttmp/…/scripts/wsd-01-strip-open.mjs 'http://127.0.0.1:5011/?nosw&fresh&engine=reference' ~/Downloads/raw010.dng <scratch dir> label`
+  against a preview of the build.
+
+### Technical details
+- Probe: `requestAnimationFrame` gaps > 100 ms from just before `setInputFiles` until the render counter is quiet.
+
+## Step 5: Browser e2e for a strip, the full browser suite, hand-off
+
+A new e2e spec opens a synthetic strip (ingest's `plantedFrames`: three 645 frames, the first 0.5 D denser) as a
+16-bit TIFF and checks the user-visible behaviour: three frames named "strip-07.tif · 1/3 … 3/3" from one file,
+crops in order down the strip, the dense frame printed with a longer time than the other two, frame 2 picked in the
+filmstrip, removed, and brought back by opening the file again. The whole browser suite passes on my ports.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1; the coordinator's merge message is quoted in Step 4.
+**Assistant interpretation:** The brief's "browser e2e for user-visible behaviour" and the final gates.
+**Inferred user intent:** A branch the orchestrator can merge with confidence.
+**Commit (code):** see the commit after this step ("CHB-027 WS-D: e2e for a strip …").
+
+### What I did
+- `e2e/studio-strip.spec.ts` (synthetic only; screenshot `various/ws-d/01-synthetic-strip-frame2.png`).
+- `STUDIO_PORT=5021 STUDIO_KIT_PORT=5022 SHELL_DEMO_PORT=5023 GPU_PARITY_PORT=5024 CI=1 pnpm test:browser`.
+- `docmgr task check --ticket CHB-027 --id iqvp`.
+
+### Why
+- The unit tests cover Frames with a mock opener; only the browser runs the real decode → worker → conditioning →
+  stripFrames → Frames → first print chain end to end.
+
+### What worked
+- Browser suite: **93 passed** (2.4 min), including `e2e/studio-strip.spec.ts` (5.6 s).
+- Unit: 95 files, 2733 passed, 7 skipped (after the merge, Step 4).
+
+### What didn't work
+- No failures in this step.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- See Steps 3–4 (catalog entries of strip frames are re-created on a strip ↔ photo re-open; removed strip frames
+  come back when the file is opened or relinked).
+
+### What should be done in the future
+- Remember removed strip frames per (sha, mode) if they coming back bothers the photographer.
+- F16's other half (auto time at the slider's 2 s floor) is for the time model.
+- Recipe coordinates in working-image pixels (crop, rebate) differ between engines' working sizes (pre-existing).
+
+### Code review instructions
+- `e2e/studio-strip.spec.ts`; `npx playwright test e2e/studio-strip.spec.ts` (with `STUDIO_PORT` free).
+
+### Technical details
+
+| Finding | State on this branch |
+|---|---|
+| F16 strip shows and prints as one image | Fixed: a strip opens as one frame per frame on it (raw010 → 3, the other 2025-08-09 strips → 3/3/3/2), each cropped inside its frame, own log, catalog entry, thumbnail and first print; base and veil from the whole strip. The auto time at the 2 s floor is left to the time model. |
