@@ -6,3 +6,6 @@ playwright-report/
 .vite/
 .playwright-mcp/
 dist-current/
+# browser profiles of cosplay testers (IndexedDB/cache with private photo thumbnails)
+ttmp/**/sessions/*/profile/
+**/chromium-profile/

@@ -369,3 +369,62 @@ earlier hangs (after drags, and SwiftShader GPU drags that never finished) was `
 
 ### Technical details
 - `?worker=0` keeps everything on the main thread (for comparison and debugging).
+
+## Step 7: WS-D merged; the full browser suite on main; an e2e race; the re-run tester launched
+
+WS-D (strips into frames) reported done and I merged `task/chb-027-strip-frames`; all four workstreams are now on
+main. The first full browser suite on merged main had one failure, a test race created by two correct changes
+meeting (WS-A's final "opened N files" status, WS-B's renders in a worker). I fixed the wait in three specs. Then I
+launched a cheaper-model tester (Sonnet) to re-run session 01 against main, per the CHB-026 protocol.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1; and from CHB-026 Step 1 the original request to "launch subagents that are less intelligent to do the same, keeping a detailed diary in the subagents as well and give yuo a report".
+**Assistant interpretation:** Merge, verify on main, then the acceptance re-run (task m5pv) by a cheaper tester.
+**Inferred user intent:** Proof that the photographer's session now works, from an independent tester.
+**Commit (code):** 3703d0a — merge WS-D; 1ffec8c — "e2e: wait for 'rendered' or 'opened …' after an open"
+
+### What I did
+- `git merge --no-ff task/chb-027-strip-frames`; `pnpm typecheck`, `pnpm lint`, `pnpm test`.
+- `STUDIO_PORT=5121 … CI=1 pnpm test:browser` on main (log in the scratchpad, `browser-main-3703d0a.log`).
+- Fixed `e2e/studio.spec.ts`, `e2e/chat.spec.ts`, `e2e/m1-walking-skeleton.spec.ts`: after `setInputFiles`, wait
+  for `toHaveText(/rendered|opened/)` instead of `toContainText('rendered')`, then `idle()`.
+- `playwright test` of the three specs with `--repeat-each 3`.
+- Rebuilt the 4650 preview (`vite build --outDir dist-current`) from 3703d0a; reachable on the Mac.
+- Launched the tester (model sonnet): CHB-026 protocol option B (own headless Playwright), app at :4650, output
+  in `CHB-026…/sessions/02-sonnet-rerun-session-01/` (diary, experience report with a before/after table F1–F16,
+  shots, scripts); optional one run on the M1.
+- Tasks checked: oimx (merges), 37lv (real-GPU check: WS-B's M1 numbers), akjc (drag latency in a test: WS-B's
+  `e2e/studio-responsive.spec.ts` and the measurement script).
+
+### Why
+- The suite had never run on a main containing all four workstreams; each branch had passed alone.
+
+### What worked
+- Unit: 95 files, 2733 passed, 7 skipped; lint ok (336 / 140 files).
+- Browser: 92 passed, 1 failed; GPU conformance 320/320. After the fix: the three specs 39/39 over 3 repeats.
+
+### What didn't work
+- `[chromium-webgpu] › e2e/studio.spec.ts:167:1 › tools: test strip band, ring-around tile, masks and exposures,
+  apply to selection`: `expect(locator('#status')).toContainText('rendered')` — `Received string: "opened 3 files"`
+  (12 polls), timeout 5000 ms. The open's last render finished before the final "opened 3 files" status was
+  written, so "rendered" never reappeared.
+
+### What I learned
+- Status text is a poor synchronisation point once work is asynchronous; `window.chromobench.idle()` (which waits
+  for worker renders since WS-B) is the right one, with the status only as "the open has finished".
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- Other specs that wait on status text could hit the same race under load; `grep -n "toContainText(" e2e/` lists them.
+
+### What should be done in the future
+- After the re-run: delete the merged task branches and agent worktrees (task 5dta); close CHB-027 if the table
+  shows the findings fixed.
+
+### Code review instructions
+- `git show 1ffec8c`.
+
+### Technical details
+- Open CHB-027 tasks: m5pv (re-run, running), 5dta (branch clean-up).
