@@ -176,7 +176,7 @@ export interface AppSummary {
 /** the whole app: header, modules with their regions, the program's commands, a summary line */
 export function explainApp(ir: UiIR, sum: AppSummary, o: ExplainOpts = {}): string {
   const kits = ir.kits.map(k => `${k.name}${k.version ? '@' + k.version : ''}${k.requires.length ? ` (requires ${k.requires.join(', ')})` : ''}`);
-  const out = [`shell ${JSON.stringify(ir.name)} · theme ${ir.theme ?? 'lightroom'} · kits: ${kits.length ? kits.join(', ') : 'none'}`];
+  const out = [`shell ${JSON.stringify(ir.name)} · theme ${ir.theme ?? 'craftkit'} · kits: ${kits.length ? kits.join(', ') : 'none'}`];
   const opts: ExplainOpts = { ...o, forms: ir.forms, panels: ir.panels };
   for (const m of ir.modules) {
     out.push(`module ${m.id} ${JSON.stringify(m.label)}${m.key ? ` key ${m.key}` : ''}`);

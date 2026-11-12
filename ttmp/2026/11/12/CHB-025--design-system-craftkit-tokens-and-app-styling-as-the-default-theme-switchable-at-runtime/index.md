@@ -7,7 +7,21 @@ Topics:
 DocType: index
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://e2e/theme.spec.ts
+      Note: runtime switch, host frame and persistence in the app
+    - Path: repo://packages/shell/src/app/builtins.ts
+      Note: view.theme.* and view.gray.* commands
+    - Path: repo://packages/shell/src/dom/theme.ts
+      Note: themeHandle writes tokens on the theme root
+    - Path: repo://packages/shell/src/themes/craftkit.ts
+      Note: CraftKit theme (default) as data, grays 1-4, pending token
+    - Path: repo://packages/shell/src/themes/tokens.ts
+      Note: 'themeTokens/resolveTheme: tokens for scheme and gray'
+    - Path: repo://packages/studio-kit/src/dom/studio-kit.css
+      Note: CraftKit app styling ported onto studio-kit components
+    - Path: repo://tools/scripts/check-colours.ts
+      Note: 'lint: no literal colours outside theme files'
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-12T10:04:29.915261342-05:00

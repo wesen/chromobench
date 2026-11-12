@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`explain > the mini studio explains deterministically (snapshot) 1`] = `
-"shell "Mini Studio" · theme lightroom · kits: none
+"shell "Mini Studio" · theme craftkit · kits: none
 module library "Library" key G
   left   dockcol  width 220
            panel navigator "Navigator"
@@ -40,5 +40,5 @@ commands
   dev.reset "Reset Develop Settings" (Settings) Ctrl+Shift+R
   view.grid "Show Grid Overlay" (View) \\
 tools probe (I)
-commands 31 · keys 29 in 4 scopes · tools 1 · passes 12 · diagnostics ✓ 0 errors · 0 warnings"
+commands 38 · keys 29 in 4 scopes · tools 1 · passes 12 · diagnostics ✓ 0 errors · 0 warnings"
 `;

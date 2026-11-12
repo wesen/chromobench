@@ -60,5 +60,7 @@ export { RenderQueue, chooseTarget, DRAFT_PIXELS } from './app/render/queue.ts';
 export type { RenderBridge, RenderTarget, Rendered, Presenter, PresentImage, ViewTransform, Colours, Rect, Lane, RenderPass } from './app/render/types.ts';
 
 // themes
-export { lightroom } from './themes/lightroom.ts';
+export { craftkit, lightroom } from './themes/craftkit.ts';
+export { THEME_GROUP, GRAY_GROUP } from './app/builtins.ts';
+export { themeTokens, resolveTheme, GRAY_IDS, DEFAULT_THEME, THEME_ALIASES, type ThemeTokens } from './themes/tokens.ts';
 export { chromogen } from './themes/chromogen.ts';

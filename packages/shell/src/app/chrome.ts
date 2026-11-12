@@ -7,6 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MenuItem } from '../build/types.ts';
 import type { Runtime } from './runtime.ts';
+import { GRAY_GROUP, THEME_GROUP } from './builtins.ts';
 
 export interface ToastOpts {
   kind?: 'info' | 'ok' | 'why' | 'error' | 'warn' | string;
@@ -169,6 +170,12 @@ export function resolveMenu(rt: Runtime<any>, items: MenuItem[] | undefined, arg
   return out;
 }
 
+/** the theme and gray choices as submenus: what 'app.theme' in a menu shows */
+export const THEME_MENU: MenuItem[] = [
+  { label: 'Theme', items: [{ label: 'Theme', group: THEME_GROUP }] },
+  { label: 'Interface Gray', items: [{ label: 'Interface Gray', group: GRAY_GROUP }] },
+];
+
 /** The menu bar: the program's menus (kits' merged in) or menus generated from the commands' `menu` field. Help stays last. */
 export function menuBar(rt: Runtime<any>): { label: string; items: MenuItem[] }[] {
   const ir = rt.app.ir;
@@ -183,6 +190,8 @@ export function menuBar(rt: Runtime<any>): { label: string; items: MenuItem[] }[
     }
     menus = [...byMenu.entries()].map(([label, items]) => ({ label, items }));
   }
+  // 'app.theme' in a menu stands for the View ▸ Theme and View ▸ Interface Gray submenus (CHB-025)
+  menus = menus.map(m => (m.items.includes('app.theme') ? { ...m, items: m.items.flatMap(it => (it === 'app.theme' ? THEME_MENU : [it])) } : m));
   const order = ['File', 'Edit'];
   return menus.slice().sort((a, b) => {
     const ra = a.label === 'Help' ? 99 : order.includes(a.label) ? order.indexOf(a.label) - 10 : 0;

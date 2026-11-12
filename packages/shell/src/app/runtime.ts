@@ -24,6 +24,7 @@ import { withDefaults } from '../build/checks.ts';
 import type { BuiltApp } from './built-app.ts';
 import { assemble } from './assemble.ts';
 import { builtinCommands, GRAYS } from './builtins.ts';
+import { DEFAULT_THEME, GRAY_IDS, resolveTheme } from '../themes/tokens.ts';
 import { RecordingChrome, type ChromeApi, type DialogSpec, type ToastOpts } from './chrome.ts';
 import { Workspace } from './workspace.ts';
 import { startAutosave, type PersistenceAdapter, type Saved, type SaveKey } from './persist.ts';
@@ -199,7 +200,7 @@ export class Runtime<S = any> {
           this.diagnostics.info('CK-T431', `Undo skipped a step that no longer applies`, { runtime: true, facts: [`${e.entry.label}: ${e.parts.map((p: any) => p.source).join(', ')}`] });
       }),
     );
-    const asm = assemble(ir, builtinCommands(() => this), this.platform, id => this.selectTool(id, true));
+    const asm = assemble(ir, builtinCommands(() => this, ir.themes.values()), this.platform, id => this.selectTool(id, true));
     this.commands = asm.commands;
     this.keymap = asm.keymap;
     this.keymap.bindings = this.keymap.bindings.filter(b => b.scope !== 'spring');
@@ -495,11 +496,29 @@ export class Runtime<S = any> {
   }
   /** interface gray: auto (follows the system), or 1 (darkest) … 4 (lightest) */
   cycleGray(): void {
-    const order = ['auto', '1', '2', '3', '4'];
+    const order: readonly string[] = GRAY_IDS;
     const cur = String(this.store.peek(['prefs', 'gray']) || 'auto');
-    const next = order[(order.indexOf(cur) + 1) % order.length]!;
+    this.setGray(order[(order.indexOf(cur) + 1) % order.length]!);
+  }
+  /** set the interface gray ('auto', '1'…'4'); saved in prefs (view tier) */
+  setGray(g: string): void {
+    const next = (GRAY_IDS as readonly string[]).includes(String(g)) ? String(g) : 'auto';
     this.store.set(['prefs', 'gray'], next);
     this.chrome.toast(`Interface gray: ${next === 'auto' ? 'Auto (follows the system)' : GRAYS[next]}`, { kind: 'info' });
+  }
+  /** the theme shown: prefs.theme when it names a registered theme, else the program's, else CraftKit (CHB-025) */
+  themeName(s: any = this.store.peek([])): string {
+    const ir = this.app.ir;
+    return (resolveTheme(ir.themes, s?.prefs?.theme) ?? resolveTheme(ir.themes, ir.theme) ?? resolveTheme(ir.themes, DEFAULT_THEME))?.name ?? DEFAULT_THEME;
+  }
+  /** show another registered theme; saved in prefs (view tier) */
+  setTheme(name: string): void {
+    const t = resolveTheme(this.app.ir.themes, name);
+    if (!t) {
+      this.chrome.toast(`No theme '${name}'`, { kind: 'error' });
+      return;
+    }
+    this.store.set(['prefs', 'theme'], t.name);
   }
 
   // ── keys ──

@@ -21,7 +21,7 @@ import { explainNode, explainKit, explainPass, explainFragment, explainDiags } f
 import type { Fragment, FragmentSpec, IrSpec, Kit, PassCtx, PassDef, ShellOpts, Theme } from './types.ts';
 import { BuiltApp, buildApp } from '../app/built-app.ts';
 import { Runtime } from '../app/runtime.ts';
-import { lightroom } from '../themes/lightroom.ts';
+import { craftkit } from '../themes/craftkit.ts';
 import { chromogen } from '../themes/chromogen.ts';
 
 // ── node types ─────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ export function createCk<S = any>(options: CkOptions = {}) {
   const fragments: Fragment[] = [];
   const passes: PassDef[] = [];
   const themes = new Map<string, Theme>([
-    [lightroom.name, lightroom],
+    [craftkit.name, craftkit],
     [chromogen.name, chromogen],
   ]);
   const irs = new Map<string, IrSpec>();

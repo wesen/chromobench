@@ -7,7 +7,7 @@ export default {
   build: (ck, cb) =>
     cb
       .studio('Chromobench')
-      .theme('chromogen')
+      .theme('craftkit')
       .top(cb.bar.steps(['pick', 'print', 'save'], { pick: '① Pick', print: '② Print', save: '③ Save' }))
       .center(
         ck.match(

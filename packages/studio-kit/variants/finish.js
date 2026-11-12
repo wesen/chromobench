@@ -10,7 +10,7 @@ export default {
   build: (ck, cb) => {
     const s = cb
       .studio('Chromobench')
-      .theme('chromogen')
+      .theme('craftkit')
       .use(cb.kits.finish.kit)
       .menus(m => finishMenu(menus(m)));
     s.module('library', libraryModule(ck, cb));

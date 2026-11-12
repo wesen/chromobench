@@ -142,6 +142,8 @@ export interface PendingBuilderCall {
 
 export interface Theme {
   name: string;
+  /** the name View ▸ Theme shows (default: the name, capitalised) */
+  label?: string;
   /** token → CSS value (app, panel, line, text, text2, accent, sel, track, knob, canvas, cell, menu, ok, warn, err, font, fontSize, radius, rule…) */
   light: Record<string, string>;
   dark?: Record<string, string>;

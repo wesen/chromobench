@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "node tools/scripts/check-boundaries.ts",
+    "lint": "node tools/scripts/check-boundaries.ts && node tools/scripts/check-colours.ts",
     "test": "vitest run",
     "test:browser": "playwright test",
     "e2e": "playwright test",

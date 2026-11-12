@@ -19,6 +19,10 @@ import '@chromobench/studio-kit/kits/roll/roll.css';
 import '@chromobench/studio-kit/studio-kit.css';
 import { CHAT_RENDERERS } from '@chromobench/studio-kit/kits/chat/dom';
 import '@chromobench/studio-kit/kits/chat/chat.css';
+import { LOOKS_RENDERERS } from '@chromobench/studio-kit/kits/looks/dom';
+import '@chromobench/studio-kit/kits/looks/looks.css';
+import { chromogen, craftkit, resolveTheme, type Runtime as ShellRuntime } from '@chromobench/shell';
+import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
@@ -35,6 +39,34 @@ const q = new URLSearchParams(location.search);
 const root = document.getElementById('app')!;
 const barEl = document.getElementById('bar')!;
 const statusBarEl = document.getElementById('statusbar')!;
+
+// ── theme boot (CHB-025): the last theme and interface gray, mirrored from prefs into localStorage, paint the host
+// frame before the studio mounts; after that the shell writes the theme on <html> (themeRoot) from prefs ──
+const THEME_KEY = 'chromobench.theme';
+const bootTheme = ((): { dispose(): void } => {
+  let saved: { theme?: string; gray?: string } = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(THEME_KEY) ?? '{}') as typeof saved;
+  } catch {
+    /* no storage: CraftKit */
+  }
+  const h = themeHandle(document.documentElement, craftkit);
+  h.set(resolveTheme(new Map([craftkit, chromogen].map((t) => [t.name, t])), saved.theme), saved.gray ?? 'auto');
+  return h;
+})();
+function mirrorTheme(rt: ShellRuntime): void {
+  rt.cell(
+    (s: { prefs?: { gray?: string } }) => `${rt.themeName(s)}|${s.prefs?.gray || 'auto'}`,
+    (v: string) => {
+      const [theme, gray] = v.split('|');
+      try {
+        localStorage.setItem(THEME_KEY, JSON.stringify({ theme, gray }));
+      } catch {
+        /* no storage */
+      }
+    },
+  );
+}
 
 // ── small DOM helpers ──
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -162,7 +194,9 @@ async function main(): Promise<void> {
   const save = (f: string): Promise<unknown> => exportFrame(f, 'picker');
 
   root.innerHTML = '';
-  const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, renderers: { ...ROLL_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) });
+  bootTheme.dispose();
+  const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) });
+  mirrorTheme(rt);
   chat.attach(rt);
   // external agents: a bridge serving this page (or ?bridge=ws://127.0.0.1:7341/ws/page from the dev server)
   const bridgeEl = el('span', { id: 'bridge', class: 'pill', title: 'External agents (Claude Code, Claude Desktop) through chromobench serve' });

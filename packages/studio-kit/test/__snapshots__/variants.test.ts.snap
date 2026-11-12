@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -280,11 +280,11 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 101 · keys 86 in 7 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 108 · keys 86 in 7 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1
+"shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 200
            listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
@@ -380,11 +380,11 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 25 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 64 · keys 25 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.finish@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -610,11 +610,11 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 83 · keys 62 in 5 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 90 · keys 62 in 5 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1
+"shell "Chromobench" · theme craftkit · kits: cb.core@1
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -888,11 +888,11 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 68 in 6 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 67 · keys 68 in 6 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -1094,11 +1094,11 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 109 · keys 53 in 4 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 116 · keys 53 in 4 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.roll@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core)
 module roll "Roll" key G
   left   dockcol  width 300
            panel roll-library "Rolls"
@@ -1251,11 +1251,11 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 75 · keys 48 in 4 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 82 · keys 48 in 4 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1
+"shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
   center match  of [pick, print, save]  on τ
@@ -1348,11 +1348,11 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 22 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 64 · keys 22 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme lightroom · kits: cb.core@1
+"shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 180
            listview strip-v  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  row θ  select ui.selection
@@ -1408,7 +1408,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 19 in 2 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 64 · keys 19 in 2 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
