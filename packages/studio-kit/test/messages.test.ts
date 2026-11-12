@@ -45,7 +45,7 @@ describe('explainError (F7)', () => {
 
 describe('typed values (F8)', () => {
   const a = argModel(TIME)!;
-  it('hints say what a field takes, and that a sign changes the value', () => {
+  it('hints say what a field takes, and that a sign and a unit change the value', () => {
     expect(entryHint(a.model)).toMatch(/7,5/);
     expect(entryHint(a.model)).toMatch(/\+1\/3 st/);
     expect(badEntryText(a.model, 'abc')).toMatch(/^Time: “abc” is not a value\. Type a time/);
@@ -53,12 +53,29 @@ describe('typed values (F8)', () => {
   });
   it('a German decimal comma reads as a point, also in a relative entry', () => {
     expect(parseEntry(a, '7,5', 15)).toBe(7.5);
-    expect(parseEntry(a, '-2,5', 15)).toBe(12.5);
+    expect(parseEntry(a, '-2,5 s', 15)).toBe(12.5);
+  });
+  it('CHB-031 F8: a change needs a sign and a unit; a plain number sets; a bare sign on a time is refused with both spellings', () => {
+    expect(parseEntry(a, '-5', 15)).toBe(null);
+    expect(parseEntry(a, '+5', 15)).toBe(null);
+    expect(parseEntry(a, '−5 s', 15)).toBe(10);
+    expect(parseEntry(a, '5', 15)).toBe(5);
+    expect(badEntryText(a.model, '-5')).toBe('Time: “-5” — to change the time, add a unit (−5 s or −1/3 st); to set it, type 5');
+    expect(badEntryText(argModel('print.enlarger.fstop')!.model, '+1')).toBe('Aperture: “+1” — to change the aperture, type +1/3 st; to set it, type f/1');
+    // signed values: a plain signed number sets them; with a unit it changes them
+    const r = argModel('print.lights.logH.r')!;
+    expect(parseEntry(r, '-2', [0.1, 0, 0])).toEqual([-0.05, 0, 0]);
+    expect(parseEntry(r, '-2 pt', [0.1, 0, 0])).toEqual([0.05, 0, 0]);
+    const y = argModel('print.enlarger.filtration.y')!;
+    expect(parseEntry(y, '-10', { c: 0, m: 0, y: 5 })).toEqual({ c: 0, m: 0, y: -10 });
+    expect(parseEntry(y, '-10 CC', { c: 0, m: 0, y: 5 })).toEqual({ c: 0, m: 0, y: -5 });
   });
   it('a relative entry says what it did', () => {
-    expect(isRelativeEntry('-5')).toBe(true);
+    expect(isRelativeEntry('-5 s')).toBe(true);
+    expect(isRelativeEntry('+1/3 st')).toBe(true);
+    expect(isRelativeEntry('-5')).toBe(false);
     expect(isRelativeEntry('5')).toBe(false);
-    expect(relativeText(a.model, '-5', 10, null)).toBe('Time −5 s → 10.0 s');
+    expect(relativeText(a.model, '-5 s', 10, null)).toBe('Time −5 s → 10.0 s');
     expect(relativeText(a.model, '+1/3 st', 12.6, null)).toBe('Time +1/3 st → 12.6 s');
   });
   it('out of range is held to the limit, and said', () => {

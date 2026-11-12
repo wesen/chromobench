@@ -203,3 +203,87 @@ normalised mode.
 ### Technical details
 - 1 stop = log10 2 = 0.30103 log H ≈ 12.04 points; ⅓ stop = 0.100343 log H.
 - `exposureStep(r, ±1/3)`: real → `time_s · 2^(±1/3)` clamped 0.1…600; normalised → lights ± 0.100343 (or ± points·0.025 with `lightsPoints`), clamped ±1.5.
+
+## Step 3: Checkpoint — the app driven by hand; F8 typed entries (a change needs a sign and a unit)
+
+The orchestrator asked for a checkpoint because the session may end. Two things are in this commit. First, the
+built app was driven like a user (preview on :4711, `?engine=reference`, synthetic files only), which confirms Step 2
+end to end. Second, the F8 leftover is in: a plain number sets a value, and a change needs a sign and a unit. A bare
+`−5` on Time or Aperture is refused with a toast that shows both spellings, instead of being read as "5 s less".
+
+App measurements (mean display value over a 9×9 grid of print pixels, `window.chromobench.pixel`), classic,
+synthetic DNG photo: opens `real`, 10 s, mean 0.4842. Typing Time 20 gives 0.2306, 5 gives 0.7504, back to 10 gives 0.4842.
+"Lighter" (lights pad) gives 7.937 s / 0.5794, then 6.300 s / 0.6696. History: "You Time 10.0 → 7.94 s (−1/3 st)". The
+test strip around 6.3 s shows bands "3.97 s, 5.0 s, 6.3 s, 7.94 s, 10.0 s". Tiny, M1 negative: opens `normalised`,
+10 s, lights (−0.1175, −0.1442, −0.1691) from the first print, mean 0.6221. Time and Aperture are hidden and the mode
+select is visible. "Lighter" moves lights by −1 pt each, mean 0.6343, History "You Printer lights (−5, −6, −7) →
+(−6, −7, −8) pt". Selecting "Real enlarger" in the visible select shows Time again. Empty Darkroom panel (classic
+Print module and tiny): "Select a photo to print it."
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Orchestrator relays during the step: "commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)" (from the user), and "Checkpoint NOW: … write a diary step "Checkpoint" … commit … report the commit hash".
+**Assistant interpretation:** Commit what is green, with a resume list, then continue.
+**Inferred user intent:** No work lost if the session stops.
+**Commit (code):** this step's commit ("CHB-031 WS-A: checkpoint — F8 typed entries; diary step 3"); Step 2 was 67a4a57.
+
+### What I did
+- `pnpm --filter @chromobench/studio build`; `pnpm --filter @chromobench/studio preview --port 4711 --strictPort` (background).
+- Scratch scripts (not committed): `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/wsa/mkdng.ts`
+  (writes the synthetic Bayer DNG of `e2e/studio-photo.spec.ts`), `/tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/wsa/drive.mjs`
+  (classic photo, tiny negative, simple negative; screenshots into `various/ws-a/`); log in `…/scratchpad/wsa/drive.log`.
+- F8: `packages/studio-kit/src/kit/args.ts` `parseEntry` (sign without unit: the signed value where `isSigned(m)`, i.e.
+  `min < 0`, else null) and new `isSigned`; `kit/messages.ts` `entryHint`, `entryPlaceholder`, `isRelativeEntry` (sign
+  and unit), `badEntryText` (bare sign on time/aperture: both spellings). Tests: `test/messages.test.ts` (new F8 case),
+  `e2e/studio-wording.spec.ts` (`-5 s` for the relative toast; `-5` refused, time unchanged).
+- Checks: `pnpm typecheck` clean, `pnpm lint` clean, `npx vitest run packages/studio-kit` → 184 passed. Full `pnpm test`
+  and the browser suite were not re-run for this checkpoint.
+
+### Why
+- F8 decision, with the persona in mind: Manfred reads "−5" as minus five, not "five less". The values that display
+  with a sign (printer lights "+4 pt", the filtration shift "−10 CC") are set by a signed number, as they read.
+  Values that cannot be negative refuse a bare sign and say how to write either intent, so the entry is never silently
+  turned into 0.1 s by the range clamp.
+
+### What worked
+- All app checks listed above. Real mode: the pixel mean follows time monotonically, and 10 s comes back exactly to
+  0.4842. Normalised: inert controls are hidden, and the mode switch works from the visible select.
+
+### What didn't work
+- `drive.mjs` first run: `locator.click: Timeout 30000ms exceeded … waiting for locator('.cb-strip-b')`. Classic has no
+  Strip button (only darkroom's `.testStrip()` has one). Second run: `getByRole('button', { name: 'Test strip', exact: true })`
+  timed out too (the button's accessible name is not exactly that). Third run: `.cb-tools` + `hasText` worked.
+- The simple-layout part of `drive.mjs` had not finished when this step was written (no "simple:" lines in the log yet).
+
+### What I learned
+- The classic Darkroom shows Time and Aperture for a photo in real mode, the capture film (not the scan film) and no
+  scanner (F23). A photo's first print is still the defaults (10 s), which is the same picture as before.
+
+### What was tricky to build
+- `isRelativeEntry` must agree with `parseEntry`: a bare `−5` on lights is now absolute, so its toast must not say
+  "−5 → …" as if relative. The regex requires a unit after the number.
+
+### What warrants a second pair of eyes
+- F8 changes behaviour that CHB-027 introduced (`-5` relative with a hint). Anyone with muscle memory for `+2` on
+  points now sets +2 instead of adding 2.
+
+### What should be done in the future
+- **Resume list.** Done: Step 1 verification; Step 2 (67a4a57) real default, contract 0.4, layout option, hidden inert
+  controls, Lighter/Darker, time strip in normalised mode, first print by mode, F19 empty state, F23 film controls by
+  kind; F8 (this commit). Half-done: none in code. Not started: F9 leftovers (engine tooltip: `apps/studio/src/main.ts`
+  line ~183 `engineEl.title` and `apps/studio/src/status-text.ts`; the LibRaw/camera-matrix note: `notesEl.title`
+  ~line 262; the view tabs "Dyes" / "Base & gamut": `packages/studio-kit/src/cb.ts` `VIEW_LABELS`), F12 (Edit ▸ Undo
+  label names the frame when it is not the current one: find the `edit.undo` command label in `cb.ts`/shell).
+- Next steps: (1) F9 wording; (2) F12 label; (3) e2e spec `e2e/studio-enlarger.spec.ts` (classic photo: typed Time
+  changes pixels; tiny: Time hidden, mode select, Lighter moves the lights; empty state); (4) `pnpm test`, then
+  `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 pnpm test:browser`;
+  (5) look at the screenshots in `various/ws-a/`, check off tasks x86v 0xav 5ywv 9i1n 3z8z l1ny with
+  `docmgr task check --ticket CHB-031 --id …`, final diary step.
+- Not yet recorded: the simple-layout nudge measurements (re-run `node …/scratchpad/wsa/drive.mjs <ws-a dir>` with the
+  preview on :4711).
+
+### Code review instructions
+- `packages/studio-kit/src/kit/args.ts` `parseEntry`/`isSigned`, `kit/messages.ts` F8 block; `npx vitest run packages/studio-kit/test/messages.test.ts`.
+
+### Technical details
+- `isRelativeEntry`: `/^\s*[+−-][^A-Za-z]*\s*(st|stops?|s|sec|pt|pts|points?|CC|cc)\s*$/`.
+- Bad-entry text for `-5` on Time: `Time: “-5” — to change the time, add a unit (−5 s or −1/3 st); to set it, type 5`.
