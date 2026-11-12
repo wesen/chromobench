@@ -8,7 +8,23 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://e2e/support.ts
+      Note: 'opened(): the open-flow wait (Step 9)'
+    - Path: repo://packages/core/src/engine-ref.ts
+      Note: RefEngine requires data (Step 5)
+    - Path: repo://packages/dsl/src/host.ts
+      Note: Host after the split; natives in host/ (Step 10)
+    - Path: repo://packages/gpu/src/engine-gpu.ts
+      Note: GpuEngine after the split; modules in engine/ (Step 6)
+    - Path: repo://packages/ingest/src/decode/tiff-write.ts
+      Note: encodeIfd, writeTiff, writeTiff16 (one TIFF encoder, Step 4)
+    - Path: repo://packages/studio-kit/kits/finish/src/kit.ts
+      Note: finish kit after the split (Step 13)
+    - Path: repo://packages/studio-kit/kits/looks/src/kit.ts
+      Note: looks kit after the split (Step 13)
+    - Path: repo://tools/scripts/unused-exports.mjs
+      Note: the unused-exports scanner (Step 14)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-12T17:10:49.957516312-05:00
@@ -1101,3 +1117,58 @@ list what is kept on purpose.
 ### Technical details
 - The scanner treats a module imported as a namespace or through `import()` as fully used, and judges a re-exported
   name at its original declaration.
+
+## Step 15: Full browser suite, final merge of main, ticket state
+
+The full browser suite ran on 9eca10d (every clean-up in, CHB-031 WS-A merged) with this agent's ports: 98 passed,
+GPU conformance 320/320. `main` had moved on by two commits that only add to a CHB-031 diary; I merged them
+(59a2a0a, no conflicts, no code) so the branch sits on top of `main` for the orchestrator's merge. Every CHB-032 task
+is ticked except dgz9 (the shell's `store.ts` and `viewport.ts` split), which waits for CHB-031 to finish as the
+task text says. The changelog has one entry for the ticket, and the diary relates the main implementation files.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7; the orchestrator's merge instruction is quoted in Step 11.
+**Assistant interpretation:** Run the browser suite with my ports before the final commit; merge `main` before it.
+**Inferred user intent:** A branch the orchestrator can merge as is.
+**Commit (code):** 59a2a0a — "Merge main (CHB-031 orchestrator diaries) into task/chb-032-housekeeping"; then the
+next commit, "CHB-032: diary step 15, full browser suite 98 passed, changelog".
+
+### What I did
+- `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm test:browser` (log in
+  the scratchpad, `chb032/browser-full.log`).
+- `git log e2af842..main` → 2608ac3, 6710305 (CHB-031 diaries only); `git merge main`.
+- `docmgr changelog update --ticket CHB-032 --entry …`; `docmgr doc relate --doc …/diary/01-diary.md` with 8 files;
+  `docmgr doctor --ticket CHB-032` → all checks passed.
+
+### Why
+- The browser suite once, at the end, over all the clean-ups: the GPU split, the e2e waits, the kit splits and the
+  dead-code removal all reach it.
+
+### What worked
+- `98 passed (3.2m)`; `conformance {"total":320,"passed":320,"failures":[]}`. The library-thumbnail test that failed
+  once under load in Step 9 passed in this full run. `git status` stayed clean after the run (no spec writes into
+  `ttmp/` any more).
+
+### What didn't work
+- No failures observed.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The merge of CHB-031 WS-B (main.ts, frames.ts, decode.ts) will meet two things from this branch: RefEngine needs
+  `data` (a new `new RefEngine()` without it is a compile error), and the e2e specs' open waits are `opened()` from
+  `e2e/support.ts` (a new spec that opens files should use it).
+
+### What should be done in the future
+- dgz9 after CHB-031; an "open finished" promise on the `window.chromobench` hook (Step 9); the kept unused names
+  (Step 14) when their owners next edit those files.
+
+### Code review instructions
+- `git log --first-parent 9d10010..HEAD`; per-step review notes above.
+
+### Technical details
+- Unit tests at the end: 97 files, 2749 passed, 7 skipped (95 files, 2733 passed before the merge of CHB-031 WS-A).
