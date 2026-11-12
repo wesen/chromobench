@@ -8,6 +8,7 @@ import { allOps, AREAS, argPath, CONTRACT_VERSION, type ArgSpec, type OpDef } fr
 import { MockEngine } from '@chromobench/engine-mock';
 import { buildSnapshot } from './snapshot.ts';
 import { dslFiles } from './dsl.ts';
+import { agentFiles } from './agent.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const check = process.argv.includes('--check');
@@ -119,6 +120,7 @@ const files: [string, string][] = [
   ['packages/contract/catalog.snapshot.json', `${JSON.stringify(buildSnapshot(), null, 2)}\n`],
   ...AREAS.map((a): [string, string] => [`docs/reference/ops/${a}.md`, genAreaDoc(a, implemented)]),
   ...dslFiles(root), // CHB-007
+  ...agentFiles(), // CHB-008: the MCP server's embedded texts
 ];
 
 let drift = 0;

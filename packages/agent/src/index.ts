@@ -9,3 +9,4 @@ export { ScriptedModel, ModelError, EFFORTS, lastToolResult, lastUserText, type 
 export { AnthropicModel, DEFAULT_MODEL, MODELS, toModelError, type AnthropicModelOptions } from './chat/anthropic.ts';
 export { EVAL_TOOL, EVAL_TOOL_DESCRIPTION, MODE_TEXT, systemPrompt, type PromptOptions } from './chat/prompt.ts';
 export { demoModel, type DemoOptions } from './chat/demo.ts';
+export { BridgePageClient, type BridgePageOptions, type BridgeToPage, type PageToBridge, type SocketLike, type EvalRunner, type LookPayload } from './bridge/page-client.ts';

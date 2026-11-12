@@ -18,6 +18,7 @@ import '@chromobench/studio-kit/studio-kit.css';
 import { CHAT_RENDERERS } from '@chromobench/studio-kit/kits/chat/dom';
 import '@chromobench/studio-kit/kits/chat/chat.css';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
+import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withRebate } from './host/first-print.ts';
@@ -147,6 +148,14 @@ async function main(): Promise<void> {
   root.innerHTML = '';
   const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, renderers: CHAT_RENDERERS });
   chat.attach(rt);
+  // external agents: a bridge serving this page (or ?bridge=ws://127.0.0.1:7341/ws/page from the dev server)
+  const bridgeEl = el('span', { id: 'bridge', class: 'pill', title: 'External agents (Claude Code, Claude Desktop) through chromobench serve' });
+  bridgeEl.hidden = true;
+  statusBarEl.insertBefore(bridgeEl, notesEl);
+  const bridge = await startBridge(chat, (s) => {
+    bridgeEl.hidden = false;
+    bridgeEl.textContent = `agents: ${s}`;
+  });
   // the presenters exist now: the display space follows the main viewer's canvas
   const vp0 = viewports(rt)[0];
   if (vp0) studio.bridge.displaySpace = vp0.presenter.colorSpace;
@@ -159,10 +168,15 @@ async function main(): Promise<void> {
   });
   rt.on('renderError', (e: { error: unknown }) => status(msgOf(e.error), { error: true }));
   let lastFrame: string | null = null;
+  let lastMode = studio.frames.mode;
   let lastLog: unknown = null;
   rt.store.on(() => {
     const f = studio.current;
     const e = f ? studio.frames.get(f) : undefined;
+    if (bridge && (f !== lastFrame || studio.frames.mode !== lastMode)) {
+      lastMode = studio.frames.mode;
+      bridge.update();
+    }
     if (f !== lastFrame) {
       lastFrame = f;
       notesEl.textContent = e ? host.notes(e.sha).join(' · ') : '';
@@ -327,6 +341,20 @@ async function main(): Promise<void> {
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
   document.body.dataset['variant'] = def.id;
+}
+
+/** Connects to a bridge when one serves this page, or when ?bridge[=ws-url] asks for it. */
+async function startBridge(chat: StudioChat, onStatus: (s: string) => void): Promise<BridgePageClient | null> {
+  const want = q.get('bridge');
+  const sameOrigin = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/page`;
+  if (want !== null) return chat.connectBridge(want || sameOrigin, onStatus);
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    if (r.headers.get('X-Chromobench-Bridge')) return chat.connectBridge(sameOrigin, onStatus);
+  } catch {
+    // no bridge
+  }
+  return null;
 }
 
 /** the mounted viewports, the visible ones first */

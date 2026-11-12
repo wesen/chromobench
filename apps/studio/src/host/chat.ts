@@ -6,7 +6,7 @@
 // scripted demo (no network). Mode changes go through the studio's `agent.mode` command, so the chat, the
 // approvals panel and the frames' logs agree.
 import type { AgentMode, EvalRequest } from '@chromobench/contract';
-import { AnthropicModel, ChatSession, createDslWorker, DEFAULT_MODEL, demoModel, DslWorkerClient, MODELS, type FrameSource } from '@chromobench/agent';
+import { AnthropicModel, BridgePageClient, ChatSession, createDslWorker, DEFAULT_MODEL, demoModel, DslWorkerClient, MODELS, type FrameSource } from '@chromobench/agent';
 import type { ChatService } from '@chromobench/studio-kit/kits/chat';
 import type { Runtime } from '@chromobench/shell';
 import type { Studio } from '@chromobench/studio-kit';
@@ -24,6 +24,11 @@ const storage = (): Storage | null => {
 export interface StudioChat extends ChatService {
   readonly session: ChatSession;
   attach(rt: Runtime): void;
+  /**
+   * Connects the page to a running bridge (`chromobench serve`) so external agents (Claude Code, Claude Desktop over
+   * MCP) can run evals here, each MCP session in its own DSL worker session.
+   */
+  connectBridge(url: string, onStatus?: (s: string) => void): BridgePageClient;
   /** the dev entry point window.chromobench.eval(code): its own DSL session */
   devEval(code: string, o?: { frame?: string; timeoutMs?: number; signal?: AbortSignal }): ReturnType<DslWorkerClient['eval']>;
 }
@@ -85,6 +90,26 @@ export function createStudioChat(studio: Studio): StudioChat {
     forgetKey: () => storage()?.removeItem(KEY_STORE),
     attach(r) {
       rt = r;
+    },
+    connectBridge(url, onStatus) {
+      let n = 0;
+      const known = new Set(['default']);
+      const b = new BridgePageClient({
+        url,
+        frames,
+        currentFrame: () => studio.current,
+        mode: () => studio.frames.mode,
+        focused: () => document.hasFocus(),
+        session: (id) => (known.has(id) ? dsl(id === 'default' ? 'mcp' : `mcp-${id}`) : null),
+        createSession: () => {
+          const id = `s-${++n}`;
+          known.add(id);
+          return id;
+        },
+        ...(onStatus ? { onStatus } : {}),
+      });
+      b.start();
+      return b;
     },
     async devEval(code, o = {}) {
       const f = o.frame ?? studio.current ?? undefined;
