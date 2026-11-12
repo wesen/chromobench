@@ -127,3 +127,53 @@ own diaries per agent; checkpoint before a possible quit.
 ### Technical details
 - Owner decision (Step 1): real enlarger mode by default for darkroom-style layouts; normalised default for simple
   and tiny, with Time/Aperture hidden.
+
+## Step 3: Session restart; continuation agents in the existing worktrees
+
+The user restarted the session. The three agents had stopped and the harness refuses to resume stopped agents
+("Treat its work as cancelled; only launch a new agent if the user explicitly asks"). The user asked for new ones.
+Each continuation agent works inside the stopped agent's existing worktree, so the edits made after the checkpoints
+are kept, and continues the same diary from its checkpoint step. The Mac is closed, so no real-GPU work.
+
+### Prompt Context
+**User prompt (verbatim):** "ok, restarted", "i closed the mac for now", then "yes" (to starting new agents in the existing worktrees)
+**Assistant interpretation:** Resume CHB-031 A/B and CHB-032 from their checkpoints without the Mac.
+**Inferred user intent:** Carry on where the work stopped.
+**Commit (code):** N/A
+
+### What I did
+- Checked state: `task/chb-031-enlarger` 548abf9 (+8 modified files, ~56 lines, after its checkpoint),
+  `task/chb-031-open-strips` db1c5f7 (+untracked screenshots), `task/chb-032-housekeeping` aef2d3d (+an untracked
+  reference doc draft). `ssh mimimi-2.local`: "Connection timed out" (the Mac is closed).
+- `SendMessage` to the three stopped agents: refused ("was stopped and won't be resumed").
+- Launched three agents without isolation, each told to work only in `/home/manuel/code/wesen/chromobench/.claude/
+  worktrees/agent-<old id>` on its branch, read brief v2, the plan, its diary's checkpoint resume list, review the
+  uncommitted edits, continue the same diary (next step quotes the new prompt), and skip the Mac.
+
+### Why
+- A new isolated worktree would start from main and lose the uncommitted edits; the old worktrees hold them.
+
+### What worked
+- The checkpoint steps (WS-A step 3, WS-B step 4, CHB-032 step 6) gave each continuation agent its resume list.
+
+### What didn't work
+- Resuming the stopped agents by message: `"Agent … was stopped and won't be resumed."`
+
+### What I learned
+- Stopped background agents cannot be resumed after a session restart in this harness; checkpoints in the diary
+  plus committed work are what carries over.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- Agents without isolation share the process's working directory; each prompt pins its commands to its worktree.
+
+### What should be done in the future
+- Same plan: merge WS-A, WS-B, CHB-032; session-03 re-run; CHB-032 dgz9; CHB-029. Real-GPU checks wait for the Mac.
+
+### Code review instructions
+- N/A.
+
+### Technical details
+- Preview servers 4600/4650 and the Mac tunnels were not restarted (the Mac is closed).
