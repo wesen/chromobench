@@ -15,7 +15,7 @@ const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?:
   { dir: 'packages/contract/src', forbid: /^(?!@noble\/hashes|\.\.?\/)/, why: 'the contract depends only on @noble/hashes' },
   {
     dir: 'apps/studio/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the UI never calls physics code directly',
-    except: ['apps/studio/src/host/engines.ts'],
+    except: ['apps/studio/src/host/engines.ts', 'apps/studio/src/host/decode.ts', 'apps/studio/src/host/engine-serve.ts'],
   },
   { dir: 'packages/dsl/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the DSL never calls physics code directly' },
   // CHB-008: the agent reaches physics only through the injected Engine, and the UI kits never import it

@@ -37,6 +37,8 @@ interface Slot {
   waiting: Waiting | null;
   inflight: { gen: number; key: string; ctl: AbortController; bridge: RenderBridge<any> } | null;
   shown: { r: Rendered; bridge: RenderBridge<any> } | null;
+  /** when the slot last presented (or was made), on the queue's clock */
+  shownAt: number;
 }
 
 export interface QueueStats {
@@ -60,6 +62,14 @@ export class RenderQueue {
   /** thumbnail cache, LRU by key|max */
   readonly thumbs = new Map<string, { r: Rendered; bridge: RenderBridge<any> }>();
   thumbLimit: number;
+  /**
+   * Progress guarantee (CHB-027, F4): when > 0, a slot that has presented nothing for this many ms lets its
+   * in-flight render finish instead of aborting it for a newer request. 0 (default): superseded work is always
+   * aborted (right for a fast engine; a slow one would show nothing until the hand stops).
+   */
+  progressMs = 0;
+  /** the clock (tests replace it) */
+  now: () => number = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   private readonly opts: { idle?: (f: () => void, key: string) => void; onError?: (e: unknown) => void; thumbLimit?: number };
   constructor(bridges: RenderBridge<any>[] = [], opts: { idle?: (f: () => void, key: string) => void; onError?: (e: unknown) => void; thumbLimit?: number } = {}) {
     this.opts = opts;
@@ -81,7 +91,7 @@ export class RenderQueue {
   private slot(id: string, lane: Lane): Slot {
     let s = this.slots.get(id);
     if (!s) {
-      s = { id, gen: 0, shownGen: 0, lane, waiting: null, inflight: null, shown: null };
+      s = { id, gen: 0, shownGen: 0, lane, waiting: null, inflight: null, shown: null, shownAt: this.now() };
       this.slots.set(id, s);
     }
     s.lane = lane;
@@ -99,7 +109,10 @@ export class RenderQueue {
     this.stats.requests++;
     const gen = ++s.gen;
     s.waiting = { gen, r, bridge, key, opts: { ...o, pass, lane } };
-    if (s.inflight && s.inflight.key !== key) {
+    // progress (CHB-027): with progressMs set, a slot that has shown nothing for that long lets its in-flight render
+    // finish, so a slow engine still shows something while the hand keeps moving (the newest request runs after it)
+    const starved = this.progressMs > 0 && s.inflight !== null && this.now() - s.shownAt >= this.progressMs;
+    if (s.inflight && s.inflight.key !== key && !starved) {
       s.inflight.ctl.abort();
       this.stats.aborted++;
     }
@@ -137,6 +150,7 @@ export class RenderQueue {
         } else {
           const prev = s.shown;
           s.shownGen = w.gen;
+          s.shownAt = this.now();
           s.shown = { r: res, bridge: w.bridge };
           this.stats.presented++;
           try {

@@ -24,6 +24,33 @@ describe('render queue', () => {
     expect(shown).toEqual(['300']);
     expect(q.stats.presented).toBe(1);
   });
+  it('progressMs (CHB-027): a slot that has shown nothing for that long lets its in-flight render finish', async () => {
+    const b = fakeBridge({ manual: true });
+    const q = new RenderQueue([b]);
+    let t = 0;
+    q.now = () => t;
+    q.progressMs = 250;
+    const shown: string[] = [];
+    const present = (r: any) => void shown.push(`${r.image.width}`);
+    q.request('vp:main:after', fakeImage('a', { w: 1000, h: 500 }), { maxSide: 100, present });
+    t = 100;
+    q.request('vp:main:after', fakeImage('b', { w: 1000, h: 500 }), { maxSide: 200, present });
+    expect(q.stats.aborted).toBe(1); // shown recently (the slot is new): superseded work is aborted
+    await flush();
+    t = 400;
+    q.request('vp:main:after', fakeImage('c', { w: 1000, h: 500 }), { maxSide: 300, present });
+    expect(q.stats.aborted).toBe(1); // nothing shown for 400 ms: b finishes and is shown, then c runs
+    b.resolve();
+    await flush();
+    expect(shown).toEqual(['200']);
+    t = 450;
+    q.request('vp:main:after', fakeImage('d', { w: 1000, h: 500 }), { maxSide: 400, present });
+    expect(q.stats.aborted).toBe(2); // shown 50 ms ago: c is aborted for d again
+    await flush();
+    b.resolve();
+    await flush();
+    expect(shown).toEqual(['200', '400']);
+  });
   it('same key in flight is not aborted; results are presented in increasing generation', async () => {
     const b = fakeBridge({ manual: true });
     const q = new RenderQueue([b]);

@@ -34,23 +34,107 @@ export interface RefEngineOptions {
   cacheLimit?: number;
   /** Spectral upsampling table of the forward path (default: core's sigmoid fit; CHB-012). */
   spectra?: SpectraTable;
+  /**
+   * Byte budget of the image caches (full-resolution node images, sampled images, results), least recently
+   * used dropped first (default: unbounded). A host with a large working image sets it with cacheLimit (CHB-027).
+   */
+  cacheBytes?: number;
+  /**
+   * Previews on the target's sample grid (CHB-027): a preview at scale < 1 or of a region computes only the
+   * pixels the result samples, for every stage that is pointwise from the nearest cached image on (spatial
+   * stages run at full resolution and are cached). Nearest sampling commutes with pointwise ops, so the result
+   * is bit-identical to the full-resolution path. Default off (every stage at full resolution).
+   */
+  sampled?: boolean;
+  /**
+   * Called between the stages of an evaluation, after which the signal is checked (CHB-027): a worker passes a
+   * macrotask yield so a cancel message can land between stages. Default: a microtask.
+   */
+  yield?: () => Promise<void>;
 }
 
-/** LRU helpers over a Map's insertion order (CHB-023 host glue). */
-function recall<K, V>(m: Map<K, V>, k: K): V | undefined {
-  const v = m.get(k);
-  if (v !== undefined) {
-    m.delete(k);
-    m.set(k, v);
+/**
+ * Ops a sampled preview computes on the sample grid (CHB-027): each output pixel depends only on the same pixel
+ * of its inputs and on its args (no neighbourhood, no pixel coordinates), so nearest sampling commutes with it.
+ * The print side only: the negative's stages (scan.*, invert.*, the forward path's capture and film) are pointwise
+ * too, but they change rarely and cost most (invert.dyes solves per pixel), so they run once at full resolution
+ * and stay cached, and every grid (draft, screen, a region) samples them.
+ */
+export const GRID_OPS: ReadonlySet<string> = new Set([
+  'print.expose', 'print.lights', 'print.preflash', 'print.develop', 'print.combine',
+  'mask.luminance', 'mask.not', 'mask.and', 'mask.or',
+  'view.reflect', 'view.flare', 'view.adapt', 'output.display',
+]);
+
+/** An LRU over a Map's insertion order, bounded by entry count and bytes (CHB-023 host glue, CHB-027 bytes). */
+class Lru<V> {
+  private readonly m = new Map<string, { v: V; bytes: number }>();
+  private total = 0;
+  private readonly limit: number;
+  private readonly bytes: number;
+  constructor(limit: number, bytes: number) {
+    this.limit = limit;
+    this.bytes = bytes;
   }
-  return v;
+  peek(k: string): V | undefined {
+    return this.m.get(k)?.v;
+  }
+  recall(k: string): V | undefined {
+    const e = this.m.get(k);
+    if (!e) return undefined;
+    this.m.delete(k);
+    this.m.set(k, e);
+    return e.v;
+  }
+  remember(k: string, v: V, bytes: number): V {
+    this.delete(k);
+    this.m.set(k, { v, bytes });
+    this.total += bytes;
+    // the newest entry always stays, even when it alone is over the budget
+    while (this.m.size > 1 && (this.m.size > this.limit || this.total > this.bytes)) this.delete(this.m.keys().next().value as string);
+    return v;
+  }
+  delete(k: string): void {
+    const e = this.m.get(k);
+    if (!e) return;
+    this.total -= e.bytes;
+    this.m.delete(k);
+  }
+  clear(): void {
+    this.m.clear();
+    this.total = 0;
+  }
 }
-function remember<K, V>(m: Map<K, V>, k: K, v: V, limit: number): V {
-  m.delete(k);
-  m.set(k, v);
-  while (m.size > limit) m.delete(m.keys().next().value as K);
-  return v;
+
+/** The pixels a result samples (nearest, as evaluate() always sampled): columns xs and rows ys of the W × H grid. */
+interface Grid { key: string; W: number; H: number; xs: Int32Array; ys: Int32Array }
+
+function gridOf(W: number, H: number, region: Box, width: number, height: number): Grid {
+  const xs = new Int32Array(width), ys = new Int32Array(height);
+  for (let x = 0; x < width; x++) xs[x] = region.x + Math.min(region.w - 1, Math.floor(((x + 0.5) * region.w) / width));
+  for (let y = 0; y < height; y++) ys[y] = region.y + Math.min(region.h - 1, Math.floor(((y + 0.5) * region.h) / height));
+  return { key: `${W}x${H}|${region.x},${region.y},${region.w},${region.h}|${width}x${height}`, W, H, xs, ys };
 }
+
+/** img at the grid's pixels, or null when img is not on the grid's W × H. */
+function sampleImg(img: Img, g: Grid): Img | null {
+  if (img.w !== g.W || img.h !== g.H) return null;
+  const w = g.xs.length, h = g.ys.length, c = img.c;
+  const out = newImg(w, h, c);
+  for (let y = 0; y < h; y++) {
+    const row = g.ys[y]! * img.w;
+    for (let x = 0; x < w; x++) {
+      const i = (row + g.xs[x]!) * c, j = (y * w + x) * c;
+      for (let k = 0; k < c; k++) out.data[j + k] = img.data[i + k]!;
+    }
+  }
+  return img.warnings ? { ...out, warnings: img.warnings } : out;
+}
+
+/** Thrown inside a sampled evaluation when a stage's image is not on the grid: evaluate falls back to full resolution. */
+class OffGrid extends Error {}
+
+const imgBytes = (i: Img): number => i.data.byteLength + 64;
 
 /** Every op the reference engine implements. */
 export const REFERENCE_OPS: readonly string[] = [...Object.keys(IMAGE_OPS), ...Object.keys(VALUE_OPS)].sort();
@@ -64,13 +148,22 @@ export class RefEngine implements Engine {
   private readonly env: PhysicsEnv;
   private readonly conv: Conventions;
   private readonly sources = new Map<string, Img>();
-  private readonly full = new Map<string, Img>();
-  private readonly results = new Map<string, { data: Float64Array; width: number; height: number; region: Box; scale: number; warnings: Diagnostic[] }>();
+  /** Node images: 'F:<id>' at full resolution, 'S:<id>@<grid>' on a sample grid (sampled previews). */
+  private readonly full: Lru<Img>;
+  private readonly results: Lru<{ data: Float64Array; width: number; height: number; region: Box; scale: number; warnings: Diagnostic[] }>;
   private disposed = false;
-  private readonly limit: number;
+  private readonly sampled: boolean;
+  private readonly yieldFn: () => Promise<void>;
+  /** Stages computed since construction (tests and profiling: what a change recomputed, and how many pixels). */
+  readonly computed = { full: 0, sampled: 0, pixels: 0 };
 
   constructor(o: RefEngineOptions = {}) {
-    this.limit = Math.max(4, o.cacheLimit ?? Infinity);
+    const limit = Math.max(4, o.cacheLimit ?? Infinity);
+    const bytes = o.cacheBytes ?? Infinity;
+    this.full = new Lru(limit, bytes);
+    this.results = new Lru(limit, bytes / 4);
+    this.sampled = o.sampled ?? false;
+    this.yieldFn = o.yield ?? (() => Promise.resolve());
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
     this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
@@ -145,7 +238,7 @@ export class RefEngine implements Engine {
     if (!this.ops.has(n.op)) fail('E_NOT_IMPLEMENTED', `${n.op} is not implemented by the reference engine`, { valid: [...this.ops] });
   }
 
-  private ctx(n: Node, image: boolean): OpCtx {
+  private ctx(n: Node, image: boolean, at: (id: string) => Img = (id) => this.compute(id)): OpCtx {
     const op = getOp(n.op);
     const nArgs = new Set(nodeArgs(op).flatMap((a) => {
       const v = n.args[a];
@@ -165,14 +258,14 @@ export class RefEngine implements Engine {
     };
     return {
       args: n.args,
-      recv: recvId ? this.compute(recvId) : undefined,
+      recv: recvId ? at(recvId) : undefined,
       recvDomain: recvNode && recvNode.info.kind === 'Image' ? (recvNode.info.domain as Domain) : undefined,
-      extra: n.inputs.slice(recvId ? 1 : 0).filter((i) => nArgs.has(i)).map((i) => this.compute(i)),
+      extra: n.inputs.slice(recvId ? 1 : 0).filter((i) => nArgs.has(i)).map((i) => at(i)),
       info: image && n.info.kind === 'Image' ? n.info : undefined,
       source: (sha) => this.sources.get(sha) ?? fail('E_NO_SOURCE', `source ${sha.slice(0, 12)}… is not open in the reference engine`),
       sourceInfo: (sha) => this.graph.source(sha),
       up,
-      image: (id) => this.compute(id),
+      image: (id) => at(id),
       node: (id) => {
         const m = this.graph.get(id);
         return m ? { op: m.op, args: m.args, id: m.id, inputs: m.inputs } : undefined;
@@ -182,16 +275,77 @@ export class RefEngine implements Engine {
   }
 
   private compute(id: string): Img {
-    const hit = recall(this.full, id);
+    const hit = this.full.recall(`F:${id}`);
     if (hit) return hit;
     const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
     this.check(n);
     const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no reference image implementation`);
-    return remember(this.full, id, f(this.ctx(n, true)), this.limit);
+    const img = f(this.ctx(n, true));
+    this.computed.full++;
+    this.computed.pixels += img.w * img.h;
+    return this.full.remember(`F:${id}`, img, imgBytes(img));
+  }
+
+  /** True when node n runs on a sample grid (GRID_OPS: its pixels need only the same pixels of its inputs). */
+  private pointwise(n: Node): boolean {
+    return GRID_OPS.has(n.op);
+  }
+
+  /** Node id's image on grid g: sampled from its full-resolution image when that is cached, else computed pointwise on the grid. */
+  private computeAt(id: string, g: Grid): Img {
+    const sk = `S:${id}@${g.key}`;
+    const hit = this.full.recall(sk);
+    if (hit) return hit;
+    const whole = this.full.recall(`F:${id}`);
+    const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
+    let img: Img | null;
+    if (whole || !this.pointwise(n)) {
+      img = sampleImg(whole ?? this.compute(id), g);
+      if (!img) throw new OffGrid(n.op);
+    } else {
+      this.check(n);
+      const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no reference image implementation`);
+      img = f(this.ctx(n, true, (i) => this.computeAt(i, g)));
+      if (img.w !== g.xs.length || img.h !== g.ys.length) throw new OffGrid(n.op);
+      this.computed.sampled++;
+      this.computed.pixels += img.w * img.h;
+    }
+    return this.full.remember(sk, img, imgBytes(img));
+  }
+
+  /** The image nodes of id's closure, inputs first. */
+  private order(id: string): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const visit = (nid: string): void => {
+      if (seen.has(nid)) return;
+      seen.add(nid);
+      const m = this.graph.get(nid);
+      if (!m) return;
+      for (const i of m.inputs) visit(i);
+      if (m.info.kind === 'Image') out.push(nid);
+    };
+    visit(id);
+    return out;
+  }
+
+  /**
+   * Computes id stage by stage, inputs first (on grid g, or at full resolution), yielding between stages and
+   * stopping with E_CANCELLED when the signal aborts. Finished stages stay cached; nothing partial is kept.
+   */
+  private async staged(id: string, g: Grid | null, signal: AbortSignal | undefined): Promise<Img> {
+    for (const nid of this.order(id)) {
+      if (this.full.peek(`F:${nid}`) || (g && this.full.peek(`S:${nid}@${g.key}`))) continue;
+      if (g) this.computeAt(nid, g);
+      else this.compute(nid);
+      await this.yieldFn();
+      if (signal?.aborted) throw cancelled();
+    }
+    return g ? this.computeAt(id, g) : this.compute(id);
   }
 
   /** Warnings the ops of a node's closure attached to their images (e.g. W_DODGE_EXCEEDS_MAIN), deduplicated. */
-  private warningsOf(id: string): Diagnostic[] {
+  private warningsOf(id: string, grid?: Grid): Diagnostic[] {
     const out: Diagnostic[] = [];
     const seen = new Set<string>();
     const visited = new Set<string>();
@@ -200,7 +354,8 @@ export class RefEngine implements Engine {
       visited.add(nid);
       const m = this.graph.get(nid);
       for (const i of m?.inputs ?? []) visit(i);
-      for (const w of this.full.get(nid)?.warnings ?? []) {
+      const img = this.full.peek(`F:${nid}`) ?? (grid ? this.full.peek(`S:${nid}@${grid.key}`) : undefined);
+      for (const w of img?.warnings ?? []) {
         const k = `${w.code}|${w.message}`;
         if (!seen.has(k)) { seen.add(k); out.push(w); }
       }
@@ -222,23 +377,31 @@ export class RefEngine implements Engine {
     const scale = quantizeScale(target.scale);
     if (!(scale > 0 && scale <= 1)) fail('E_ARG_RANGE', `scale ${target.scale} must be in (0, 1] or 'full'`);
     const key = `${n.id}|${scale}|${region.x},${region.y},${region.w},${region.h}|${target.precision}`;
-    let res = recall(this.results, key);
+    let res = this.results.recall(key);
     if (!res) {
       await Promise.resolve();
       if (target.signal?.aborted) throw cancelled();
-      const img = this.compute(n.id);
       const width = Math.max(1, Math.round(region.w * scale));
       const height = Math.max(1, Math.round(region.h * scale));
-      const data = new Float64Array(width * height * img.c);
-      for (let y = 0; y < height; y++) {
-        const sy = region.y + Math.min(region.h - 1, Math.floor(((y + 0.5) * region.h) / height));
-        for (let x = 0; x < width; x++) {
-          const sx = region.x + Math.min(region.w - 1, Math.floor(((x + 0.5) * region.w) / width));
-          for (let k = 0; k < img.c; k++) data[(y * width + x) * img.c + k] = img.data[(sy * img.w + sx) * img.c + k]!;
+      const grid = gridOf(info.width, info.height, region, width, height);
+      const whole = width === info.width && height === info.height;
+      let data: Float64Array | null = null;
+      let warnings: Diagnostic[] = [];
+      if (this.sampled && !whole && target.precision === 'preview') {
+        try {
+          data = (await this.staged(n.id, grid, target.signal)).data;
+          warnings = this.warningsOf(n.id, grid);
+        } catch (e) {
+          if (!(e instanceof OffGrid)) throw e;
         }
       }
+      if (!data) {
+        const img = await this.staged(n.id, null, target.signal);
+        data = sampleImg(img, grid)?.data ?? fail('E_INTERNAL', `${n.op}: image ${img.w}×${img.h} is not the node's ${info.width}×${info.height}`);
+        warnings = this.warningsOf(n.id);
+      }
       if (target.signal?.aborted) throw cancelled();
-      res = remember(this.results, key, { data, width, height, region, scale, warnings: this.warningsOf(n.id) }, this.limit);
+      res = this.results.remember(key, { data, width, height, region, scale, warnings }, data.byteLength);
     }
     const r = res;
     return {

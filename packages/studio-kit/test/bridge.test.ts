@@ -4,7 +4,7 @@
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { canonicalJSON, sha256Hex } from '@chromobench/contract';
 import { describe, expect, it, vi } from 'vitest';
-import { BURST_MS, memoryKV } from '../src/index.ts';
+import { BURST_MS, frameRef, memoryKV } from '../src/index.ts';
 import { recipePath, started } from './helpers.ts';
 
 const TIME = 'print.enlarger.time_s';
@@ -238,5 +238,30 @@ describe('persistence', () => {
     b.rt.run('snapshot.restore', 's1');
     expect((b.rt.state as any).recipes[b.f].print.enlarger.time_s).toBe(15);
     expect(b.studio.frames.get(b.f)!.log.units.at(-1)!.label).toBe('Restore "warm"');
+  });
+});
+
+describe('adaptive drafts (CHB-027)', () => {
+  it('a draft is sized to the time budget from the measured speed, on half-octave steps; a screen pass is not', async () => {
+    const { rt, studio, f } = await started();
+    const b = studio.bridge;
+    const h = frameRef(f, rt.store.peek(['recipes', f]) as never).print();
+    const t = (pass: 'draft' | 'screen') => ({ slot: 's', epoch: 1, lane: 'live' as const, pass, maxSide: 4096, signal: new AbortController().signal });
+    const full = await b.render(h, t('draft'));
+    b.draftTargetMs = 100;
+    b.draftMinPixels = 1000;
+    b.pxPerMs = 20; // 2000 px in 100 ms
+    const small = await b.render(h, t('draft'));
+    const n = small.image.width * small.image.height;
+    expect(n).toBeLessThanOrEqual(2100);
+    expect(n).toBeGreaterThan(500);
+    expect(n).toBeLessThan(full.image.width * full.image.height);
+    expect((await b.render(h, t('screen'))).image.width).toBe(full.image.width);
+    expect(b.draftScale(1, 1e6)).toBeCloseTo(2 ** (Math.floor(2 * Math.log2(Math.sqrt(2000 / 1e6))) / 2), 9);
+    b.pxPerMs = 20;
+    b.measured(10_000, 10); // too short to count
+    expect(b.pxPerMs).toBe(20);
+    b.measured(10_000, 100);
+    expect(b.pxPerMs).toBeCloseTo(0.6 * 20 + 0.4 * 100, 9);
   });
 });

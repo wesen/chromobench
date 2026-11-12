@@ -19,8 +19,12 @@ import {
 /** A decoded scan, reduced to the working image the engines compute on. */
 export interface Decoded {
   info: SourceInfo;
-  /** Interleaved linear RGB, 0 = black level, 1 = white level, info.width × info.height × 3. */
-  data: Float32Array;
+  /**
+   * Interleaved linear RGB, 0 = black level, 1 = white level, info.width × info.height × 3. Absent when the
+   * physics engine already holds the pixels (the reference engine in the engine worker, CHB-027), and in
+   * StudioEngine.notes (the pixels are the engine's once registered).
+   */
+  data?: Float32Array;
   /** Size of the decoded file before reduction. */
   full: { width: number; height: number };
   /** One line per conditioning step taken on open (for the status line and the diary). */
@@ -36,8 +40,9 @@ export interface Decoded {
 
 /** What the host file (engines.ts) provides: everything that needs core, gpu or ingest. */
 export interface HostServices {
-  decode(bytes: Uint8Array, sha256: string, name: string): Promise<Decoded>;
-  /** Registers a decoded source with the physics engine (openDecoded, CHB-023 glue in core and gpu). */
+  /** Decodes a file; `mode` photo or scan (a negative), else the host's setting. */
+  decode(bytes: Uint8Array, sha256: string, name: string, mode?: 'photo' | 'scan'): Promise<Decoded>;
+  /** Registers a decoded source with the physics engine (openDecoded, CHB-023 glue in core and gpu); not called when decode returned no data. */
   register(engine: Engine, info: SourceInfo, data: Float32Array): void;
   /** Core's per-pixel scan class: density above the rebate, σ per channel, solve residual → 0 ok, 1 blank, 2 below base, 3 out of gamut. */
   classify(D: ArrayLike<number>, sigma: ArrayLike<number>, residual: number): number;
@@ -186,9 +191,10 @@ export class StudioEngine implements Engine {
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = source.sha256 || sha256Hex(bytes);
     const d = await this.host.decode(bytes, sha, source.name ?? source.path ?? 'scan');
-    this.host.register(this.primary, d.info, d.data);
+    if (d.data) this.host.register(this.primary, d.info, d.data);
     this.graph.registerSource(d.info);
-    this.notes.set(sha, d);
+    const { data: _pixels, ...kept } = d;
+    this.notes.set(sha, kept);
     return d.info;
   }
 

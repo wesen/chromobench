@@ -4,7 +4,8 @@
 // window.chromobench.
 //
 // URL options: ?variant=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
-// engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?canvas2d
+// engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
+// reference engine's, default 1024); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
 import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
@@ -129,7 +130,11 @@ async function startEngine(): Promise<Host> {
   if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null };
   const { createHostEngine } = await import('./host/engines.ts');
   const long = q.get('long');
-  const h = await createHostEngine({ want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), onStatus: (s) => status(s) });
+  const refLong = q.get('refLong');
+  const h = await createHostEngine({
+    want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), ...(refLong !== null ? { refLong: Number(refLong) } : {}),
+    worker: q.get('worker') !== '0', onStatus: (s) => status(s),
+  });
   setKnownValues(h.catalog);
   addScanExtensions(h.extensions);
   const se: StudioEngine = h.engine;
@@ -198,6 +203,12 @@ async function main(): Promise<void> {
   const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) });
   mirrorTheme(rt);
   chat.attach(rt);
+  // CHB-027 (F4): on a real engine, drags show drafts sized to ≈150 ms, and a slow engine still shows one
+  // render per 250 ms while the hand moves (else every move would abort the render in flight)
+  if (host.settings) {
+    studio.bridge.draftTargetMs = 150;
+    rt.renders.progressMs = 250;
+  }
   // external agents: a bridge serving this page (or ?bridge=ws://127.0.0.1:7341/ws/page from the dev server)
   const bridgeEl = el('span', { id: 'bridge', class: 'pill', title: 'External agents (Claude Code, Claude Desktop) through chromobench serve' });
   bridgeEl.hidden = true;
