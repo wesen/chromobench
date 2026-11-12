@@ -6,6 +6,14 @@ import { describe, expect, it } from 'vitest';
 import type { Box } from '@chromobench/contract';
 import { conditionScan, decodeAsync, LibRawDecoder, linearise, plantedFrames, plantedStrip, region, stripFrames, type PlantedFramesOptions } from '@chromobench/ingest';
 
+/** Share of b covered by a. */
+const cover = (a: Box, b: Box): number => {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return (ix * iy) / (b.w * b.h);
+};
+/** a inside b, within one pixel */
+const inside = (a: Box, b: Box): boolean => a.x >= b.x - 1 && a.y >= b.y - 1 && a.x + a.w <= b.x + b.w + 1 && a.y + a.h <= b.y + b.h + 1;
 /** Intersection over union of two boxes. */
 const iou = (a: Box, b: Box): number => {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
@@ -13,7 +21,8 @@ const iou = (a: Box, b: Box): number => {
   return (ix * iy) / (a.w * a.h + b.w * b.h - ix * iy);
 };
 
-function check(o: PlantedFramesOptions, minIou = 0.9): void {
+/** Each box inside its planted frame (no gap, no rebate in the print) and covering most of it. */
+function check(o: PlantedFramesOptions, minCover = 0.85): void {
   const p = plantedFrames(o);
   const r = stripFrames(p.rgb, p.w, p.h);
   if (p.truth.frames.length === 1) {
@@ -26,7 +35,9 @@ function check(o: PlantedFramesOptions, minIou = 0.9): void {
   expect(r.axis).toBe(o.axis ?? 'y');
   expect(r.frames.map((f) => f.box)).toHaveLength(p.truth.frames.length);
   r.frames.forEach((f, i) => {
-    expect(iou(f.box, p.truth.frames[i]!), `frame ${i + 1}: ${JSON.stringify(f.box)} vs ${JSON.stringify(p.truth.frames[i])}`).toBeGreaterThan(minIou);
+    const at = `frame ${i + 1}: ${JSON.stringify(f.box)} vs ${JSON.stringify(p.truth.frames[i])}`;
+    expect(inside(f.box, p.truth.frames[i]!), at).toBe(true);
+    expect(cover(f.box, p.truth.frames[i]!), at).toBeGreaterThan(minCover);
   });
   expect(r.confidence).toBeGreaterThan(0.5);
 }
@@ -43,7 +54,7 @@ describe('stripFrames on planted strips', () => {
   it('a dark frame nearly at base is one frame, not split, not lost', () => check({ frames: 3, dark: [1] }));
   it('a dark frame with a band at base right across its middle is not split', () => check({ frames: 3, dark: [1], darkBand: 0.2 }));
   it('a dark first frame of a 135 strip', () => check({ film: '135', frames: 4, dark: [0], darkBand: 0.15 }));
-  it('no holder, no leader', () => check({ frames: 3, holder: false, leaderMm: 0 }, 0.85));
+  it('no holder, no leader', () => check({ frames: 3, holder: false, leaderMm: 0 }, 0.8));
   it('the noisy scan', () => check({ frames: 3, sigma: 0.02 }));
   it('the single 135 frame with slivers of its neighbours (CHB-020 planted strip) is one frame', () => {
     const p = plantedStrip();
@@ -60,7 +71,10 @@ describe('stripFrames on planted strips', () => {
     const p = plantedFrames({ frames: 3, pxPerMm: 8 });
     const r = stripFrames(p.rgb, p.w, p.h, { long: 256 });
     expect(r.frames).toHaveLength(3);
-    r.frames.forEach((f, i) => expect(iou(f.box, p.truth.frames[i]!)).toBeGreaterThan(0.9));
+    r.frames.forEach((f, i) => {
+      expect(inside(f.box, p.truth.frames[i]!)).toBe(true);
+      expect(cover(f.box, p.truth.frames[i]!)).toBeGreaterThan(0.85);
+    });
   });
 });
 

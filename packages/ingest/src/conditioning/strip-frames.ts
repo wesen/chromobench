@@ -226,9 +226,11 @@ export function stripFrames(rgb: ArrayLike<number>, width: number, height: numbe
   // a thin strip with little exposed film: the film's width
   if (c0 < 0 || c1 - c0 + 1 < 0.5 * F) { c0 = f0; c1 = f1; }
   const toInput = (a0: number, a1: number): Box => {
-    // inwards: the box stays inside the working-image segment
-    const p0 = Math.ceil(a0 / s), p1 = Math.min(axis === 'x' ? width : height, Math.floor((a1 + 1) / s));
-    const q0 = Math.ceil(c0 / s), q1 = Math.min(axis === 'x' ? height : width, Math.floor((c1 + 1) / s));
+    // inwards: the box stays inside the working-image segment, less one working pixel and 1 % a side (the
+    // blurred edge of the frame against the gap and the rebate; a negative carrier masks it too)
+    const ia = 1 + 0.01 * (a1 - a0 + 1), ic = 1 + 0.01 * (c1 - c0 + 1);
+    const p0 = Math.ceil((a0 + ia) / s), p1 = Math.min(axis === 'x' ? width : height, Math.floor((a1 + 1 - ia) / s));
+    const q0 = Math.ceil((c0 + ic) / s), q1 = Math.min(axis === 'x' ? height : width, Math.floor((c1 + 1 - ic) / s));
     return axis === 'x' ? { x: p0, y: q0, w: Math.max(1, p1 - p0), h: Math.max(1, q1 - q0) } : { x: q0, y: p0, w: Math.max(1, q1 - q0), h: Math.max(1, p1 - p0) };
   };
   const M2 = quantile(segs.map(len), 0.5);
