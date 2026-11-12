@@ -12,6 +12,7 @@ import { nodePhysicsData as interimData } from '@chromobench/data/node';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
 import { conventionsKey, DEFAULT_CONVENTIONS, type Conventions } from './spectral/conventions.ts';
+import type { SpectraTable } from './film/upsample.ts';
 
 export interface RefEngineOptions {
   data?: PhysicsData;
@@ -31,6 +32,8 @@ export interface RefEngineOptions {
    * (default: unbounded). An interactive host sets it: every slider step makes new nodes (CHB-023).
    */
   cacheLimit?: number;
+  /** Spectral upsampling table of the forward path (default: core's sigmoid fit; CHB-012). */
+  spectra?: SpectraTable;
 }
 
 /** LRU helpers over a Map's insertion order (CHB-023 host glue). */
@@ -69,7 +72,7 @@ export class RefEngine implements Engine {
   constructor(o: RefEngineOptions = {}) {
     this.limit = Math.max(4, o.cacheLimit ?? Infinity);
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
-    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}) });
+    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
   }
 
@@ -167,6 +170,7 @@ export class RefEngine implements Engine {
       extra: n.inputs.slice(recvId ? 1 : 0).filter((i) => nArgs.has(i)).map((i) => this.compute(i)),
       info: image && n.info.kind === 'Image' ? n.info : undefined,
       source: (sha) => this.sources.get(sha) ?? fail('E_NO_SOURCE', `source ${sha.slice(0, 12)}… is not open in the reference engine`),
+      sourceInfo: (sha) => this.graph.source(sha),
       up,
       image: (id) => this.compute(id),
       node: (id) => {

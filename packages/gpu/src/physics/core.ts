@@ -4,7 +4,7 @@
 // table arrays, uniforms and the 1-D paper-curve row.
 import {
   BRADFORD, conventionsKey, D50, D65, DEFAULT_CONVENTIONS, developerAt, displaySetupAt, exposeSettings, filmOf, flareWhite,
-  gradePivot, gradeToGamma, mulMV, paperDeveloper, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt,
+  gradePivot, gradeToGamma, isCapture, mulMV, paperDeveloper, paperOf, pdArrays, PhysicsEnv, printArrays, solveArrays, whiteAt,
   type ChainCtx, type Conventions, type DisplaySetup, type ExposeSettings, type PhysicsData, type UpNode,
 } from '@chromobench/core';
 import { A_RANGE, CP_RANGE, C_RANGE, N3, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs, type Vec3 } from '../tables/inputs.ts';
@@ -112,7 +112,7 @@ export class CorePhysics {
 
   /** print.expose settings of a node in context (film from the upstream invert.dyes). */
   exposeSettings(ctx: ChainCtx, args: Readonly<Record<string, unknown>>): ExposeSettings {
-    return exposeSettings(args, filmOf(ctx));
+    return exposeSettings(args, filmOf(ctx), isCapture(ctx));
   }
 
   paperOf(ctx: ChainCtx): string {

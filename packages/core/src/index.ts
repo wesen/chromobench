@@ -31,7 +31,19 @@ export * from './tables/tables.ts';
 export * from './tables/arrays.ts';
 export {
   DEFAULT_FILM, DEFAULT_PAPER, DEFAULT_SIGMA_D, densitiesOf, developerAt, displaySetupAt, exposeSettings, filmOf, flareWhite, gradePivot, paperOf, PhysicsEnv,
-  clearExposure, flashExposure, rebateBox, viewOf, whiteAt,
+  clearExposure, flashExposure, isCapture, rebateBox, viewOf, whiteAt,
   type ChainCtx, type ExposeSettings, type UpNode,
 } from './ops/ops.ts';
+export * from './film/upsample.ts';
+export * from './film/expose.ts';
+export * from './film/camera.ts';
+export * from './film/curves.ts';
+export * from './film/couple.ts';
+export * from './film/blur.ts';
+export * from './film/halation.ts';
+export * from './film/rng.ts';
+export * from './film/grain.ts';
+export * from './film/develop.ts';
+export * from './film/forward.ts';
+export * from './ops/film.ts';
 export * from './engine-ref.ts';
