@@ -1,6 +1,6 @@
 // The studio's host file (CHB-023; CHB-019 guide §7.1): the one module in apps/studio allowed to
 // import @chromobench/core, gpu and ingest (tools/scripts/check-boundaries.ts names it, with its helpers
-// host/decode.ts and the engine worker host/engine-worker.ts). It builds the physics engine — GpuEngine when
+// host/decode.ts and host/engine-serve.ts, the engine worker's job loop). It builds the physics engine — GpuEngine when
 // WebGPU works, else core's RefEngine on a working image — on CHB-004's data packs, decodes files through
 // packages/ingest, conditions them on open, and hands the UI a StudioEngine plus a few injected functions.
 // Nothing else in the studio sees physics code.

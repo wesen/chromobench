@@ -5,8 +5,8 @@
 //   view.inspect    the Negative / Dyes / Base views as display RGB
 //   invert.classes  and invert.classify when the physics engine lacks them (the GPU): the per-pixel
 //                   classification is core's, injected by the host file (host/engines.ts)
-//   output.display  in Display P3 when the engine encodes sRGB only (the GPU): the sRGB result,
-//                   re-encoded (both D65, same transfer curve; colours outside sRGB stay clipped)
+//   output.display  in Display P3 when a set host.nativeSpaces lacks it (the studio sets none: GpuEngine encodes
+//                   every space since CHB-011): the sRGB result re-encoded (both D65; outside sRGB stays clipped)
 // Decoding is the host's too (packages/ingest, injected): open() hands the physics engine a decoded
 // working image. Everything here speaks only the contract, so it is unit-tested with any engine.
 import {
@@ -74,7 +74,7 @@ export interface HostServices {
   /** Core's per-pixel scan class: density above the rebate, σ per channel, solve residual → 0 ok, 1 blank, 2 below base, 3 out of gamut. */
   classify(D: ArrayLike<number>, sigma: ArrayLike<number>, residual: number): number;
   defaultSigma: Vec3;
-  /** Output spaces the physics engine encodes itself (default: all). The GPU encodes sRGB only. */
+  /** Output spaces the physics engine encodes itself (default: all; GpuEngine and RefEngine encode every space). */
   nativeSpaces?: readonly string[];
 }
 

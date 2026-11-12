@@ -555,3 +555,77 @@ changing behaviour.
 ### Technical details
 - The suite's tests with negative controls still fail their controls as designed (`LOG2_10 = 3.32` pd table
   `"pass":false`, row-major print matrix `"pass":false`), which the specs assert.
+
+## Step 8: The two reference docs (tasks m6qo and vrrs)
+
+The docs sub-agent of Step 6 had left two complete drafts in `reference/` (created with `docmgr doc add`, frontmatter
+and RelatedFiles filled). I reviewed them rather than rewrote them: checked a sample of 33 file:line references
+against the tree, parsed and rendered every mermaid block in headless Chromium, and fixed what was stale. Both are
+textbook-ordered (definitions, ownership, mechanism, worked sequences, tests) and use no analogies.
+
+The engines doc listed comments that contradict the code. Two of them were in studio files outside CHB-031's set
+and are plain comments, so I corrected them (`studio-engine.ts` header and `nativeSpaces` doc, `engines.ts` header)
+within the same line counts, so the doc's line references stay valid, and rewrote the doc's Section 7 as facts. The
+third is in `packages/contract`, which this ticket does not edit; the doc states it.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7.
+**Assistant interpretation:** Finish the untracked drafts as docmgr reference docs with mermaid diagrams, textbook
+style; commit them.
+**Inferred user intent:** Two pages a newcomer can read before touching undo or engine selection.
+**Commit (code):** see the next commit, "CHB-032: reference docs on undo/history and on which engine computes what; correct two stale studio comments".
+
+### What I did
+- Spot-checked references with `sed -n <line>p` over 33 cited lines (studio-engine.ts, engines.ts, main.ts,
+  engine-ref.ts, editlog.ts, editlog-route.ts, history.ts, store.ts, model/history.ts, the looks kit, four tests)
+  and the GPU references against the split (`engine/defs.ts:8-16` GPU_OPS, `engine-gpu.ts:40,94,125,167,197,209,233,267`).
+- Wrote `<scratchpad>/chb032/mermaid-check.mjs`: extracts each ```mermaid block and runs `mermaid.parse` and
+  `mermaid.render` (mermaid 11.17.2 from the npx cache) in the repository's Playwright Chromium.
+- Doc 02: replaced the "GPU line numbers may shift" note; added a sequence diagram to Section 5 (one preview render
+  in the reference configuration: adopt, `frame()`, the worker job, the transfer, cancellation); rewrote Section 7.
+- `apps/studio/src/host/studio-engine.ts:8-9,77` and `apps/studio/src/host/engines.ts:2-3`: comments only.
+- `docmgr doctor --ticket CHB-032` → all checks passed; `pnpm typecheck` 0, `pnpm lint` 0 (import boundaries ok,
+  336 file checks).
+- `docmgr task check --ticket CHB-032 --id m6qo,vrrs`.
+
+### Why
+- Correcting the comments instead of only documenting the disagreement: the next reader of `studio-engine.ts`
+  would otherwise believe the GPU path re-encodes P3 from sRGB.
+- Same line counts in the edited comments: the doc cites `studio-engine.ts` lines below the header.
+
+### What worked
+- All 33 sampled references pointed at the cited code. Mermaid: five diagrams, all `ok`
+  (`01-…:257`, `:333`, `:380`; `02-…:258`, `:335`).
+
+### What didn't work
+- `node mermaid-check.mjs` with `require('playwright')` → `Error: Cannot find module 'playwright'` (the worktree has
+  only `@playwright/test` at the top level); `require('@playwright/test')` works.
+- A `find / -maxdepth 6 -name mermaid` search ran past the 120 s tool limit and was moved to the background; I
+  stopped it (the npx cache path had already turned up).
+- My first comment fix grew the header by one line, which would have shifted every `studio-engine.ts` reference in
+  the doc; rewritten within two lines.
+
+### What I learned
+- `StudioEngine.native()` treats an unset `nativeSpaces` as "every space", so the P3 branch is dead in the studio
+  today; it stays as the path for a primary without `output.display`.
+
+### What was tricky to build
+- N/A (documents).
+
+### What warrants a second pair of eyes
+- Doc 01 cites `packages/studio-kit/kits/looks/src/kit.ts` lines; the kit split (j38l) moves them, and that commit
+  must update the doc.
+
+### What should be done in the future
+- Update `packages/contract/src/engine.ts:2-3` ("all pass the conformance suite generated from the registry") when
+  the contract is next edited.
+
+### Code review instructions
+- `ttmp/2026/11/12/CHB-032--…/reference/01-undo-and-history-across-the-layers.md`,
+  `ttmp/2026/11/12/CHB-032--…/reference/02-which-engine-computes-what.md`; `git diff HEAD~1 -- apps/studio/src/host`.
+- `node <scratchpad>/chb032/mermaid-check.mjs $PWD <doc.md>…` re-checks the diagrams.
+
+### Technical details
+- Doc 01 diagrams: slider drag/release/Mod+Z (sequence), agent proposal approved later (sequence), Mod+Z routing
+  (flowchart). Doc 02 diagrams: components and threads (flowchart), one preview render in the reference
+  configuration (sequence).
