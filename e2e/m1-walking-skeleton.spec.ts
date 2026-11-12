@@ -34,7 +34,7 @@ async function open(page: Page): Promise<void> {
   await page.goto('/?engine=mock&variant=lab&nosw&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toContainText('rendered');
+  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
   await idle(page);
 }
 

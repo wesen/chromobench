@@ -11,7 +11,7 @@ async function boot(page: Page): Promise<void> {
   await page.goto('/?nosw&engine=mock&variant=classic&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toContainText('rendered');
+  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
   await idle(page);
   await page.evaluate(() => window.chromobench.rt.go('assistant'));
   await expect(page.locator('#chat')).toBeVisible();

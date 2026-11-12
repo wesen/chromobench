@@ -33,7 +33,7 @@ async function boot(page: Page, extra = ''): Promise<void> {
 }
 async function open(page: Page, files: string | { name: string; mimeType: string; buffer: Buffer }[] = FIXTURE): Promise<void> {
   await page.setInputFiles('#file', files);
-  await expect(page.locator('#status')).toContainText('rendered');
+  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
   await idle(page);
 }
 
