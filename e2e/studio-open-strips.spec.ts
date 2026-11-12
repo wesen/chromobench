@@ -1,11 +1,11 @@
 // CHB-031 WS-B: Remove from Library never opens "Where is …?" by itself (F21); File ▸ Open As shows while it is not
 // Guess and resets at the next start unless kept (F18); strip frames open upright, at the working size of a picture,
 // with Rotate in the Frame menu, and a strip whose film edge lies on a thin frame takes its base from the gaps (F20).
-// Synthetic files only.
+// Synthetic files only. Screenshots go to the test's output folder (test-results/, ignored); the ones in CHB-031's
+// various/ws-b/ were taken by this spec once.
 import { expect, test, type Page } from '@playwright/test';
 import { plantedFrames, writeTiff, writeTiff16 } from '@chromobench/ingest';
-
-const SHOTS = 'ttmp/2026/11/12/CHB-031--cosplay-session-02-findings-enlarger-real-mode-by-default-open-as-panels-strip-frames-leftovers/various/ws-b';
+import { opened } from './support.ts';
 
 /** A colour negative scan: orange base, a density ramp (its slope makes each file distinct), a rebate band at the left. */
 function negativeTiff(slope: number): Buffer {
@@ -32,7 +32,6 @@ const STRIP = { name: 'strip-31.tif', mimeType: 'image/tiff', buffer: stripTiff(
 
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const ready = (page: Page) => page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
-const opened = (page: Page, n: number) => page.waitForFunction((k) => window.chromobench.studio.frames.all().length === k && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), n, { timeout: 120_000 });
 /** a database of its own for this test (not ?fresh: the reload must find the library and the prefs) */
 async function emptyLibrary(page: Page): Promise<void> {
   await page.goto('/?nosw&canvas2d&engine=reference');
@@ -60,16 +59,14 @@ test('F21: Remove from Library on the open frame does not open "Where is …?" f
   test.setTimeout(180_000);
   await emptyLibrary(page);
   await page.setInputFiles('#file', [A, B]);
-  await opened(page, 2);
-  await idle(page);
+  await opened(page, 2, 120_000);
   await page.waitForTimeout(1500); // the shell's autosave (debounced)
   await page.reload();
   await ready(page);
   await expect(page.locator('#status')).toContainText('2 frames in the library');
   // A again: open; B stays "not open" in the library
   await page.setInputFiles('#file', A);
-  await opened(page, 1);
-  await idle(page);
+  await opened(page, 1, 120_000);
   const a = await page.evaluate(() => window.chromobench.studio.current);
   expect(await page.evaluate(() => window.chromobench.studio.frames.get(window.chromobench.studio.current!)?.name)).toBe('scan-a.tif');
   // remove A as he would: right-click its cell, Remove from Library
@@ -109,7 +106,7 @@ test('F18: File ▸ Open As shows in the status line, resets at the next start, 
   await page.reload();
   await ready(page);
   await expect(pill).toHaveText('Opening as negatives');
-  await page.screenshot({ path: `${SHOTS}/02-open-as-pill.png` });
+  await page.screenshot({ path: test.info().outputPath('02-open-as-pill.png') });
   // the pill is a way back to Guess
   await pill.click();
   await expect(pill).toBeHidden();
@@ -121,8 +118,7 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   await page.goto('/?nosw&canvas2d&fresh&engine=reference');
   await ready(page);
   await page.setInputFiles('#file', STRIP);
-  await opened(page, 3);
-  await idle(page);
+  await opened(page, 3, 120_000);
   const frames = await page.evaluate(() => {
     const s = window.chromobench.state() as any;
     return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.recipes[id].view.frame.crop, orientation: s.recipes[id].view.frame.orientation }));
@@ -138,13 +134,13 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   expect(notes).toMatch(/from the gaps between frames/);
   await page.getByText('strip-31.tif · 2/3', { exact: true }).first().click();
   await idle(page);
-  await page.screenshot({ path: `${SHOTS}/01-synthetic-strip-frame2-upright.png` });
+  await page.screenshot({ path: test.info().outputPath('01-synthetic-strip-frame2-upright.png') });
   // Frame ▸ Rotate Right, then Rotate Left: back as it was
   const orientation = () => page.evaluate(() => (window.chromobench.state() as any).recipes[window.chromobench.studio.current!].view.frame.orientation);
   await menu(page, 'Frame', 'frame.rotateRight');
   await idle(page);
   expect(await orientation()).toBe('flipH');
-  await page.screenshot({ path: `${SHOTS}/03-synthetic-strip-frame2-rotated.png` });
+  await page.screenshot({ path: test.info().outputPath('03-synthetic-strip-frame2-rotated.png') });
   await menu(page, 'Frame', 'frame.rotateLeft');
   await idle(page);
   expect(await orientation()).toBe('transpose');

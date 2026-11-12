@@ -2,13 +2,14 @@
 // export precision exact (engine-serve.ts TabulatedPreviews), directly and behind the engine worker.
 import { MessageChannel } from 'node:worker_threads';
 import { compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe, type Node } from '@chromobench/contract';
-import { RefEngine } from '@chromobench/core';
+import { nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { afterEach, describe, expect, it } from 'vitest';
 import { decodeFile } from '../src/host/decode.ts';
 import { referenceEngine, serveEngine, TabulatedPreviews, type EngineScope } from '../src/host/engine-serve.ts';
 import { WorkerClient, WorkerEngine, type WorkerLike } from '../src/host/worker-engine.ts';
 
+const data = nodePacksData();
 const bytes = makeM1Tiff();
 const sha = sha256Hex(bytes);
 const noRaw = { name: 'none', decode: () => Promise.reject(new Error('no camera RAW in this test')) };
@@ -39,9 +40,9 @@ describe('TabulatedPreviews (CHB-031 F10)', () => {
     const g = new Graph();
     g.registerSource(d.info);
     const n = chain(g, d);
-    const two = new TabulatedPreviews({ sampled: true });
-    const tab = new RefEngine({ sampled: true, mode: 'tabulated' });
-    const exact = new RefEngine({ sampled: true, mode: 'exact' });
+    const two = new TabulatedPreviews({ data, sampled: true });
+    const tab = new RefEngine({ data, sampled: true, mode: 'tabulated' });
+    const exact = new RefEngine({ data, sampled: true, mode: 'exact' });
     for (const e of [two, tab, exact]) {
       e.openDecoded(d.info, d.data);
       e.adopt(g.closure(n.id));
@@ -65,7 +66,7 @@ describe('TabulatedPreviews (CHB-031 F10)', () => {
     const g = new Graph();
     g.registerSource(d.info);
     const n = chain(g, d);
-    const two = new TabulatedPreviews({});
+    const two = new TabulatedPreviews({ data });
     two.openDecoded(d.info, d.data);
     two.adopt(g.closure(n.id));
     await px(two, n, 'preview');
@@ -76,8 +77,8 @@ describe('TabulatedPreviews (CHB-031 F10)', () => {
   });
 
   it('referenceEngine: exact is one RefEngine, tabulated the pair', () => {
-    expect(referenceEngine({ mode: 'exact' })).toBeInstanceOf(RefEngine);
-    expect(referenceEngine({ mode: 'tabulated' })).toBeInstanceOf(TabulatedPreviews);
+    expect(referenceEngine({ data, mode: 'exact' })).toBeInstanceOf(RefEngine);
+    expect(referenceEngine({ data, mode: 'tabulated' })).toBeInstanceOf(TabulatedPreviews);
   });
 
   it('the engine worker in mode tabulated: previews tabulated, exports exact', async () => {
@@ -96,8 +97,8 @@ describe('TabulatedPreviews (CHB-031 F10)', () => {
     g.registerSource(d.info);
     const n = chain(g, d);
     we.adopt(g.closure(n.id));
-    const tab = new RefEngine({ sampled: true, mode: 'tabulated' });
-    const exact = new RefEngine({ sampled: true, mode: 'exact' });
+    const tab = new RefEngine({ data, sampled: true, mode: 'tabulated' });
+    const exact = new RefEngine({ data, sampled: true, mode: 'exact' });
     for (const e of [tab, exact]) {
       e.openDecoded(d.info, d.data);
       e.adopt(g.closure(n.id));
