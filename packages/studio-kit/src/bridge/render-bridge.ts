@@ -93,9 +93,12 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   bands(h: ImageHandle): Band[] | null {
     return this.lower(h).bands ?? null;
   }
+  /** the shown node's size: a crop or a quarter-turn (view.frame, CHB-022) changes it from the frame's */
   naturalSize(h: ImageHandle): [number, number] | null {
     const e = this.frames.get(h.frame);
-    return e ? [e.info.width, e.info.height] : null;
+    if (!e) return null;
+    const info = this.lower(h).shown.info as ImageInfo;
+    return [info.width, info.height];
   }
   explain(h: ImageHandle): string {
     const l = this.lower(h);
@@ -181,8 +184,8 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     const e = this.entry(h);
     const { shown, bands } = this.lower(h);
     for (const n of bands ? bands.map(b => b.node) : [shown]) this.engine.adopt(e.graph.closure(n.id));
-    const W = e.info.width;
-    const H = e.info.height;
+    const W = (shown.info as ImageInfo).width;
+    const H = (shown.info as ImageInfo).height;
     const region = t.region;
     const side = region ? Math.max(region.w, region.h) : Math.max(W, H);
     const scale = Math.min(1, t.maxSide / side);

@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1
+"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -121,6 +121,55 @@ module print "Print" key D
              cb.approvals
   bottom dockcol  width 124
            filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module finish "Finish" key F
+  left   dockcol  width 236
+           panel navigator-finish "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel history-finish "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           cb.ribbon
+           viewport finish τ  before τ  compare  image τ  overlays:   tools [crop, spot]
+             hud:
+               cb.readout
+  right  dockcol  width 300
+           panel finish-crop "Crop & straighten"
+             row  class "cb-finish-tools"
+               button  run tool.crop  small  text "Crop (R)"
+               button  run crop.done  small  text "Done"
+             select "Aspect"  bind finish.crop.aspect  options [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…  set crop.aspect
+             checkbox "Lock aspect"  bind finish.crop.locked  switch
+             text τ  class "cb-crop-readout"  dim
+             row  class "cb-finish-angle"
+               button "−1°"  run crop.straighten(-1)  small
+               button "−0.1°"  run crop.straighten(-0.1)  small
+               button "0°"  run crop.straighten({to})  small
+               button "+0.1°"  run crop.straighten(0.1)  small
+               button "+1°"  run crop.straighten(1)  small
+             row  class "cb-finish-orient"
+               button  run orient.ccw  small  text "⟲"
+               button  run orient.cw  small  text "⟳"
+               button  run orient.flipH  small  text "⇋"
+               button  run orient.flipV  small  text "⇵"
+               button  run crop.swap  small  text "Swap"
+               button  run crop.reset  small  text "Reset"
+             text τ  class "cb-warn"
+           panel finish-retouch "Spot removal"
+             row  class "cb-finish-tools"
+               button  run tool.spot  small  text "Spots (Q)"
+               button  run spot.show  small  text "Show"
+             segmented "Mode"  bind finish.spot.mode  options [{…}, {…}, {…}]  small
+             slider 1…200 "Size"  bind finish.spot.r  decimals 0  step 1  unit "px"
+             slider 0…1 "Feather"  bind finish.spot.feather  decimals 2  step 0.05
+             slider 0…1 "Opacity"  bind finish.spot.opacity  decimals 2  step 0.05
+             listview finish-spots  empty "No spots: choose the tool (Q) and click a spec…  items τ  key θ  row θ
+             row  class "cb-finish-spot-cmds"
+               button  run spot.delete  small  text "Delete"
+               button  run spot.clear  small  text "Clear all"
+             text "Heal and clone work on the print; Dust works o…  dim
+  bottom dockcol  width 124
+           filmstrip strip-finish  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
 module output "Output" key Mod+Shift+E
   center gridview picks  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
   right  dockcol  width 260
@@ -157,8 +206,29 @@ commands
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 51 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+  crop.reset "Reset Crop" (Finish) ← cb.finish
+  crop.aspect "Crop Aspect" ← cb.finish
+  crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
+  crop.swap "Swap Crop Aspect" (Finish) X ← cb.finish
+  crop.straighten "Straighten" ← cb.finish
+  crop.fix "Fix Crop (Keep Inside)" (Finish) ← cb.finish
+  crop.done "Done Cropping" Enter ← cb.finish
+  orient.cw "Rotate Right" (Finish) ← cb.finish
+  orient.ccw "Rotate Left" (Finish) ← cb.finish
+  orient.flipH "Flip Horizontal" (Finish) ← cb.finish
+  orient.flipV "Flip Vertical" (Finish) ← cb.finish
+  spot.mode "Spot Mode" ← cb.finish
+  spot.size "Spot Size" ← cb.finish
+  spot.delete "Delete Spot" (Finish) Del ← cb.finish
+  spot.clear "Clear All Spots" (Finish) ← cb.finish
+  spot.show "Show Spots" (Finish) ← cb.finish
+  spot.next "Next Spot" Shift+] ← cb.finish
+  spot.prev "Previous Spot" Shift+[ ← cb.finish
+  spot.select "Select Spot" ← cb.finish
+  finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
+  finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
+commands 84 · keys 63 in 5 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -258,7 +328,237 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 25 in 3 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 25 in 3 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+`;
+
+exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.finish@1 (requires cb.core)
+module library "Library" key G
+  left   dockcol  width 236
+           panel navigator "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel library "Library"
+             cb.library
+  center column  grow 1
+           cb.filter
+           match  of [grid, loupe, compare, survey]  on τ
+             cases.grid:
+               gridview grid  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+             cases.loupe:
+               column  class "cb-viewer"  grow 1
+                 cb.ribbon
+                 viewport loupe τ  image τ  overlays: 
+             cases.compare:
+               row  grow 1
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-a τ  image τ  overlays: 
+                 column  class "cb-viewer"  grow 1
+                   cb.ribbon
+                   viewport cmp-b τ  image τ  overlays: 
+             cases.survey:
+               gridview survey  cell θ  empty "No frames yet: open a negative"  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 260
+           panel metadata "Metadata"
+             cb.metadata
+  bottom dockcol  width 124
+           filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module print "Print" key D
+  left   dockcol  width 236
+           panel navigator-print "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel snapshots "Snapshots"
+             cb.snapshots
+           panel history "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
+           cb.ribbon
+           match  of [view, ring]  on τ
+             cases.view:
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+                 hud:
+                   cb.readout
+             cases.ring:
+               column  class "cb-ring"  grow 1
+                 text "Ring-around, 4 pt: click the print that looks …  strong
+                 grid  class "cb-ring-grid"  cols 3
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+Y (−B)"  run ring.apply([-0.05, -0.05, …, "Ring-around +Y…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+R (−C)"  run ring.apply([-0.1, 0.05, 0.…, "Ring-around +R…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+M (−G)"  run ring.apply([-0.05, 0.1, -0…, "Ring-around +M…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+G (−M)"  run ring.apply([0.05, -0.1, 0.…, "Ring-around +G…)  small
+                   column  class "cb-ring-tile is-current"
+                     thumb  image τ
+                     button  run tool.none  small  text "Keep this one"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+B (−Y)"  run ring.apply([0.05, 0.05, -0…, "Ring-around +B…)  small
+                   spacer
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+C (−R)"  run ring.apply([0.1, -0.05, -0…, "Ring-around +C…)  small
+                   spacer
+                 row  class "cb-ring-density"
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−2 step"  run ring.apply([-0.2, -0.2, -0…, "Ring-around −2…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "−1 step"  run ring.apply([-0.1, -0.1, -0…, "Ring-around −1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+1 step"  run ring.apply([0.1, 0.1, 0.1], "Ring-around +1…)  small
+                   column  class "cb-ring-tile"
+                     thumb  image τ
+                     button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
+  right  dockcol  width 300
+           panel tools "Tools"
+             row  class "cb-tools"
+               button  run tool.probe  small  text "Densitometer"
+               button  run tool.test-strip  small  text "Test strip"
+               button  run tool.ring-around  small  text "Ring-around"
+               button  run view.beforeAfter  small  text "Before / after"
+           panel densitometer "Densitometer"
+             cb.densitometer
+           panel controls-darkroom "Darkroom"
+             section "Exposure"
+               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+             section "Filtration"
+               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+             section "Printer lights"
+               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             section "Paper"
+               cb.arg  path "print.paper"  select
+               cb.arg  path "print.grade"  slider  step 0.5 none
+               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+             section "Film and viewing"
+               cb.arg  path "scan.stock"  select
+               cb.arg  path "scan.scanner"  select
+               cb.arg  path "view.illuminant"  select
+           panel exposures "Exposures"
+             cb.exposures
+           panel approvals "Agent proposals"
+             cb.approvals
+  bottom dockcol  width 124
+           filmstrip strip-print  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module finish "Finish" key F
+  left   dockcol  width 236
+           panel navigator-finish "Navigator"
+             thumb  image τ
+             text τ  dim
+           panel history-finish "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           cb.ribbon
+           viewport finish τ  before τ  compare  image τ  overlays:   tools [crop, spot]
+             hud:
+               cb.readout
+  right  dockcol  width 300
+           panel finish-crop "Crop & straighten"
+             row  class "cb-finish-tools"
+               button  run tool.crop  small  text "Crop (R)"
+               button  run crop.done  small  text "Done"
+             select "Aspect"  bind finish.crop.aspect  options [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…  set crop.aspect
+             checkbox "Lock aspect"  bind finish.crop.locked  switch
+             text τ  class "cb-crop-readout"  dim
+             row  class "cb-finish-angle"
+               button "−1°"  run crop.straighten(-1)  small
+               button "−0.1°"  run crop.straighten(-0.1)  small
+               button "0°"  run crop.straighten({to})  small
+               button "+0.1°"  run crop.straighten(0.1)  small
+               button "+1°"  run crop.straighten(1)  small
+             row  class "cb-finish-orient"
+               button  run orient.ccw  small  text "⟲"
+               button  run orient.cw  small  text "⟳"
+               button  run orient.flipH  small  text "⇋"
+               button  run orient.flipV  small  text "⇵"
+               button  run crop.swap  small  text "Swap"
+               button  run crop.reset  small  text "Reset"
+             text τ  class "cb-warn"
+           panel finish-retouch "Spot removal"
+             row  class "cb-finish-tools"
+               button  run tool.spot  small  text "Spots (Q)"
+               button  run spot.show  small  text "Show"
+             segmented "Mode"  bind finish.spot.mode  options [{…}, {…}, {…}]  small
+             slider 1…200 "Size"  bind finish.spot.r  decimals 0  step 1  unit "px"
+             slider 0…1 "Feather"  bind finish.spot.feather  decimals 2  step 0.05
+             slider 0…1 "Opacity"  bind finish.spot.opacity  decimals 2  step 0.05
+             listview finish-spots  empty "No spots: choose the tool (Q) and click a spec…  items τ  key θ  row θ
+             row  class "cb-finish-spot-cmds"
+               button  run spot.delete  small  text "Delete"
+               button  run spot.clear  small  text "Clear all"
+             text "Heal and clone work on the print; Dust works o…  dim
+           panel finish-tones "Finishing (digital, after the print)"
+             text "Not darkroom controls: they change the finishe…  dim
+             cb.arg  path "finishing.values.clarity"  why "finishing, not darkroom"  slider  fraction  step 0.01 fraction
+             row  class "cb-finish-tone-cmds"
+               button  run finish.toggle  small  text "Before / after"
+               button  run finish.resetTones  small  text "Reset"
+  bottom dockcol  width 124
+           filmstrip strip-finish  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+commands
+  frame.pick "Flag as Pick" (Frame) P ← cb.core
+  frame.reject "Reject" (Frame) X ← cb.core
+  frame.unflag "Unflag" (Frame) U ← cb.core
+  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.label "Set Colour Label" ← cb.core
+  frame.select "Select Frame" ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
+  view.mode "Library View" ← cb.core
+  view.show "Show View" ← cb.core
+  view.beforeAfter "Before / After" (View) \\ ← cb.core
+  view.sideBySide "Side by Side" (View) Y ← cb.core
+  step.go "Go to Step" ← cb.core
+  history.jump "Jump in History" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  snapshot.new "New Snapshot" (Frame) S ← cb.core
+  snapshot.restore "Restore Snapshot" ← cb.core
+  print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
+  probe.pin "Pin Probe" (Frame) P ← cb.core
+  ring.apply "Use This Print" ← cb.core
+  exposure.add "Add Exposure" (Frame) ← cb.core
+  exposure.remove "Remove Exposure" ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  output.save "Save the Print" (File) ← cb.core
+  crop.reset "Reset Crop" (Finish) ← cb.finish
+  crop.aspect "Crop Aspect" ← cb.finish
+  crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
+  crop.swap "Swap Crop Aspect" (Finish) X ← cb.finish
+  crop.straighten "Straighten" ← cb.finish
+  crop.fix "Fix Crop (Keep Inside)" (Finish) ← cb.finish
+  crop.done "Done Cropping" Enter ← cb.finish
+  orient.cw "Rotate Right" (Finish) ← cb.finish
+  orient.ccw "Rotate Left" (Finish) ← cb.finish
+  orient.flipH "Flip Horizontal" (Finish) ← cb.finish
+  orient.flipV "Flip Vertical" (Finish) ← cb.finish
+  spot.mode "Spot Mode" ← cb.finish
+  spot.size "Spot Size" ← cb.finish
+  spot.delete "Delete Spot" (Finish) Del ← cb.finish
+  spot.clear "Clear All Spots" (Finish) ← cb.finish
+  spot.show "Show Spots" (Finish) ← cb.finish
+  spot.next "Next Spot" Shift+] ← cb.finish
+  spot.prev "Previous Spot" Shift+[ ← cb.finish
+  spot.select "Select Spot" ← cb.finish
+  finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
+  finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
+tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
+commands 83 · keys 62 in 5 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
@@ -518,7 +818,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 63 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 60 · keys 63 in 5 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
@@ -675,7 +975,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 75 · keys 48 in 4 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 75 · keys 48 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
@@ -772,7 +1072,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 22 in 3 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 22 in 3 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -832,13 +1132,14 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 57 · keys 19 in 2 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 57 · keys 19 in 2 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
 {
   "classic": [],
   "darkroom": [],
+  "finish": [],
   "lab": [],
   "roll": [],
   "simple": [],

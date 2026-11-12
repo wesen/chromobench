@@ -20,6 +20,7 @@ import { diffRecipes, PRINT_SETTINGS, VIEW_MODES, type ViewMode } from './model/
 import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
 import type { Studio } from './studio.ts';
 import { createRollKit } from '../kits/roll/src/kit.ts';
+import { createFinishKit } from '../kits/finish/src/kit.ts';
 
 // variants' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
@@ -675,6 +676,7 @@ export function createCb(ck: Ck) {
   };
   // kits built on cb.core reach variants as cb.kits.<name> (CHB-020 roll; CHB-021 looks and CHB-022 finish later)
   cb.kits['roll'] = createRollKit(ck, cb as any);
+  cb.kits['finish'] = createFinishKit(ck, cb as any);
   return cb;
 }
 
