@@ -35,8 +35,10 @@ interface Slot {
   shownGen: number;
   lane: Lane;
   waiting: Waiting | null;
-  inflight: { gen: number; key: string; ctl: AbortController; bridge: RenderBridge<any> } | null;
+  inflight: { gen: number; key: string; ctl: AbortController; bridge: RenderBridge<any>; job: Waiting } | null;
   shown: { r: Rendered; bridge: RenderBridge<any> } | null;
+  /** when the slot last presented (or was made), on the queue's clock */
+  shownAt: number;
 }
 
 export interface QueueStats {
@@ -60,6 +62,20 @@ export class RenderQueue {
   /** thumbnail cache, LRU by key|max */
   readonly thumbs = new Map<string, { r: Rendered; bridge: RenderBridge<any> }>();
   thumbLimit: number;
+  /**
+   * Progress guarantee (CHB-027, F4): when > 0, a slot that has presented nothing for this many ms lets its
+   * in-flight render finish instead of aborting it for a newer request. 0 (default): superseded work is always
+   * aborted (right for a fast engine; a slow one would show nothing until the hand stops).
+   */
+  progressMs = 0;
+  /**
+   * Live requests abort background renders in flight, which run again when live work is done (CHB-027). Off by
+   * default: with an engine that computes on the main thread an abort saves nothing; with one in a worker (or on
+   * the GPU) the thumbnails no longer delay the main viewer.
+   */
+  preemptBackground = false;
+  /** the clock (tests replace it) */
+  now: () => number = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   private readonly opts: { idle?: (f: () => void, key: string) => void; onError?: (e: unknown) => void; thumbLimit?: number };
   constructor(bridges: RenderBridge<any>[] = [], opts: { idle?: (f: () => void, key: string) => void; onError?: (e: unknown) => void; thumbLimit?: number } = {}) {
     this.opts = opts;
@@ -81,7 +97,7 @@ export class RenderQueue {
   private slot(id: string, lane: Lane): Slot {
     let s = this.slots.get(id);
     if (!s) {
-      s = { id, gen: 0, shownGen: 0, lane, waiting: null, inflight: null, shown: null };
+      s = { id, gen: 0, shownGen: 0, lane, waiting: null, inflight: null, shown: null, shownAt: this.now() };
       this.slots.set(id, s);
     }
     s.lane = lane;
@@ -99,28 +115,43 @@ export class RenderQueue {
     this.stats.requests++;
     const gen = ++s.gen;
     s.waiting = { gen, r, bridge, key, opts: { ...o, pass, lane } };
-    if (s.inflight && s.inflight.key !== key) {
+    // progress (CHB-027): with progressMs set, a slot that has shown nothing for that long lets its in-flight render
+    // finish when the newer request is another draft, so a slow engine still shows something while the hand keeps
+    // moving (the newest request runs after it); a screen or refine pass (the hand stopped) aborts it at once
+    const starved = this.progressMs > 0 && pass === 'draft' && s.inflight !== null && this.now() - s.shownAt >= this.progressMs;
+    if (s.inflight && s.inflight.key !== key && !starved) {
       s.inflight.ctl.abort();
       this.stats.aborted++;
     }
+    if (lane === 'live' && this.preemptBackground) this.preempt();
     this.pump(s);
     return gen;
+  }
+  /** Live work preempts background renders in flight (CHB-027): each is aborted and waits to run again. */
+  private preempt(): void {
+    for (const x of this.slots.values()) {
+      if (x.lane !== 'bg' || !x.inflight || x.inflight.ctl.signal.aborted) continue;
+      if (!x.waiting) x.waiting = x.inflight.job;
+      x.inflight.ctl.abort();
+      this.stats.aborted++;
+    }
   }
   private liveBusy(): boolean {
     for (const s of this.slots.values()) if (s.lane === 'live' && (s.inflight || s.waiting)) return true;
     return false;
   }
-  private pump(s: Slot): void {
+  private pump(s: Slot, later = false): void {
     if (s.inflight || !s.waiting) return this.checkIdle();
     const w = s.waiting;
-    if (w.opts.lane === 'bg' && this.liveBusy()) {
-      // live preempts background: try again when the page is idle (or when live work finishes)
-      if (this.opts.idle) this.opts.idle(() => this.pump(s), 'render:' + s.id);
+    // live preempts background: try again when the page is idle (or when live work finishes). With preemptBackground a
+    // background render never starts at once either, so a live request of the same frame goes to the engine first.
+    if (w.opts.lane === 'bg' && (this.liveBusy() || (this.preemptBackground && !later && this.opts.idle))) {
+      if (this.opts.idle) this.opts.idle(() => this.pump(s, true), 'render:' + s.id);
       return;
     }
     s.waiting = null;
     const ctl = new AbortController();
-    s.inflight = { gen: w.gen, key: w.key, ctl, bridge: w.bridge };
+    s.inflight = { gen: w.gen, key: w.key, ctl, bridge: w.bridge, job: w };
     this.stats.renders++;
     let p: Promise<Rendered>;
     try {
@@ -137,6 +168,7 @@ export class RenderQueue {
         } else {
           const prev = s.shown;
           s.shownGen = w.gen;
+          s.shownAt = this.now();
           s.shown = { r: res, bridge: w.bridge };
           this.stats.presented++;
           try {
@@ -161,7 +193,7 @@ export class RenderQueue {
   private after(s: Slot): void {
     this.pump(s);
     // live work done: let waiting background slots go
-    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== s && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x);
+    if (!this.liveBusy()) for (const x of this.slots.values()) if (x !== s && x.lane === 'bg' && x.waiting && !x.inflight) this.pump(x, true);
     this.checkIdle();
   }
   private isCached(r: Rendered): boolean {

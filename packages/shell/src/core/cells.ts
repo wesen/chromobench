@@ -199,7 +199,10 @@ export class Scheduler {
   runIdle(deadline?: IdleDeadline): void {
     this.idleScheduled = false;
     const t0 = this.clock.now();
-    while (this.idleQ.length && (this.clock.now() - t0 < 12 || (deadline && deadline.didTimeout))) {
+    // only the tasks queued before this run (CHB-027): a task that queues itself again (a background render
+    // waiting for live work to finish) runs in the next idle period, or a timed-out deadline would loop forever
+    let n = this.idleQ.length;
+    while (n-- > 0 && this.idleQ.length && (this.clock.now() - t0 < 12 || (deadline && deadline.didTimeout))) {
       const { fn } = this.idleQ.shift()!;
       this.guard(fn);
     }
