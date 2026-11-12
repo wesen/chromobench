@@ -5,6 +5,12 @@
 // Canvas2D presentation (?canvas2d): presenting a WebGPU canvas loses the device on SwiftShader.
 import { expect, test, type Page } from '@playwright/test';
 
+/** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
+async function menu(page: Page, title: string, command: string): Promise<void> {
+  await page.locator('.ck-menubar-t', { hasText: title }).click();
+  await page.locator(`.ck-menu-i[data-command="${command}"]`).click();
+}
+
 const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url).pathname;
 
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
@@ -48,7 +54,7 @@ for (const engine of ['gpu', 'reference'] as const) {
     const p1 = (await centre(page))!;
     expect(p1[1]!).toBeLessThan(p0[1]!);
     // undo restores the picture exactly
-    await page.click('#undo');
+    await menu(page, 'Edit', 'edit.undo');
     await idle(page);
     expect(await centre(page)).toEqual(p0);
 
@@ -104,7 +110,7 @@ for (const engine of ['gpu', 'reference'] as const) {
     const lb = await page.evaluate(() => window.chromobench.log!.state.print.lights.logH[2]);
     await page.locator('.cb-ring-tile').filter({ hasText: '+Y' }).getByRole('button').click();
     expect(await page.evaluate(() => window.chromobench.log!.state.print.lights.logH[2])).toBeGreaterThan(lb);
-    await page.click('#undo');
+    await menu(page, 'Edit', 'edit.undo');
     await idle(page);
 
     // export through packages/output: an 8-bit PNG and a 16-bit TIFF at the working size

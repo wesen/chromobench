@@ -11,7 +11,7 @@ import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, explainError, frameRef, isOffline, memoryKV, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio } from '@chromobench/studio-kit';
+import { buildVariant, createStudio, explainError, frameRef, isOffline, memoryKV, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
@@ -38,7 +38,6 @@ import './app.css';
 
 const q = new URLSearchParams(location.search);
 const root = document.getElementById('app')!;
-const barEl = document.getElementById('bar')!;
 const statusBarEl = document.getElementById('statusbar')!;
 
 // ── theme boot (CHB-025): the last theme and interface gray, mirrored from prefs into localStorage, paint the host
@@ -378,18 +377,23 @@ async function main(): Promise<void> {
   // ── the library across reloads (F5): a thumbnail of each frame's print is kept in its catalog entry; a frame not
   //    open in this session is read again through its file handle (one permission click) or located by him ──
   const thumbTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  function scheduleThumb(id: string, ms = 2000): void {
+  function scheduleThumb(id: string, ms = 2000, tries = 6): void {
     clearTimeout(thumbTimers.get(id));
     thumbTimers.set(id, setTimeout(() => {
       thumbTimers.delete(id);
       const r = rt.store.peek(['recipes', id]) as FrameRecipe | undefined;
       if (!r) return;
-      // the filmstrip's own thumbnail (same key and size: a cache hit when it is drawn already)
-      rt.renders.thumb(frameRef(id, r).print(), 160, (x) => {
-        const url = thumbUrl(x.image);
-        const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
-        if (url && c && c.thumb !== url) rt.store.writeDoc([{ path: ['catalog', 'frames', id, 'thumb'], value: url }], { tier: 'document' });
-      });
+      // the filmstrip's own thumbnail from the shell's thumbnail cache (same key and size). Only a cache hit: asking
+      // for a render here as well made a second evaluation of the same node race the filmstrip's, and idle() then
+      // hung now and then on the GPU engine. Not drawn yet (no filmstrip in this module): try again later.
+      const x = rt.renders.peekThumb(frameRef(id, r).print(), 160);
+      if (!x) {
+        if (tries > 1) scheduleThumb(id, 3000, tries - 1);
+        return;
+      }
+      const url = thumbUrl(x.image);
+      const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
+      if (url && c && c.thumb !== url) rt.store.writeDoc([{ path: ['catalog', 'frames', id, 'thumb'], value: url }], { tier: 'document' });
     }, ms));
   }
   studio.frames.onAdded((e) => {
@@ -471,86 +475,83 @@ async function main(): Promise<void> {
     });
   });
 
-  // ── the bar ──
-  const fileInput = el('input', { type: 'file', id: 'file', multiple: '', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(',') });
+  // ── the host's actions in the studio's menus (CHB-027: the top bar folded into File and View; Edit has Undo and
+  //    Redo already). Hidden file inputs stay for browsers without the File System Access API, and for tests. ──
+  const fileInput = el('input', { type: 'file', id: 'file', multiple: '', hidden: '', accept: SCAN_EXTENSIONS.map((x) => `.${x}`).join(',') });
   fileInput.addEventListener('change', () => {
     void openFiles(fromFileList(fileInput.files ?? []));
     fileInput.value = '';
   });
-  const openBtn = el('label', { class: 'file', for: 'file', title: 'Open scans: TIFF, PNG, DNG, camera RAW', text: 'Open files…' });
-  const folderInput = el('input', { type: 'file', id: 'folder', webkitdirectory: '', multiple: '' });
+  const folderInput = el('input', { type: 'file', id: 'folder', webkitdirectory: '', multiple: '', hidden: '' });
   folderInput.addEventListener('change', () => {
     void openFiles(fromFileList(folderInput.files ?? []));
     folderInput.value = '';
   });
-  const folderBtn = el('button', { type: 'button', id: 'open-folder', title: 'Open every scan in a folder', text: 'Open folder…' });
-  folderBtn.addEventListener('click', () => {
-    if (!hasDirectoryPicker()) return folderInput.click();
-    void (async () => {
+  document.body.append(fileInput, folderInput);
+  let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
+  if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
+  const layouts = Object.keys(VARIANTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
+  const hostActions: StudioHost = {
+    openFiles: async () => {
+      if (!hasFilePicker()) return fileInput.click();
+      const files = await chooseFiles(true);
+      if (files.length) await openFiles(files);
+    },
+    openFolder: async () => {
+      if (!hasDirectoryPicker()) return folderInput.click();
       try {
         const dir = await pickDirectory();
         await kv.put('handles', 'last-folder', dir);
-        reopen.hidden = true;
+        lastDir = dir;
+        studio.setHost({ ...hostActions, folder: dir.name });
         await openFiles(await listScans(dir));
       } catch (e) {
         if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
       }
-    })();
-  });
-  // the last folder (Chrome keeps the handle; reading it again needs a click)
-  const reopen = el('button', { type: 'button', id: 'reopen-folder', text: 'Reopen folder' });
-  reopen.hidden = true;
-  const lastDir = await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined);
-  if (lastDir && hasDirectoryPicker()) {
-    reopen.hidden = false;
-    reopen.textContent = `Reopen ${lastDir.name}`;
-    reopen.title = 'Open the scans of the folder you used last time';
-    reopen.addEventListener('click', () => {
-      void (async () => {
-        if (!(await reconnect(lastDir))) return status(`no access to ${lastDir.name}`, { error: true });
-        reopen.hidden = true;
-        await openFiles(await listScans(lastDir));
-      })();
-    });
+    },
+    // the last folder (Chrome keeps the handle; reading it again needs a click)
+    reopenFolder: async () => {
+      if (!lastDir) return;
+      if (!(await reconnect(lastDir))) return status(`no access to ${lastDir.name}`, { error: true });
+      await openFiles(await listScans(lastDir));
+    },
+    folder: lastDir?.name ?? null,
+    exportPrint: () => exportDialog(),
+    saveRecipe: () => {
+      const r = recipeJson();
+      if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
+    },
+    ...(host.settings ? { dust: (on: boolean) => void (host.settings!.dust = on) } : {}),
+    layouts,
+    layout: def.id,
+    setLayout: (v: string) => {
+      const u = new URL(location.href);
+      u.searchParams.set('variant', v);
+      location.href = u.toString();
+    },
+  };
+  studio.setHost(hostActions);
+
+  /** File ▸ Export…: format and colour space, then where to (the picker) */
+  async function exportDialog(): Promise<void> {
+    const f = studio.current;
+    if (!f || !studio.frames.get(f)) return;
+    const fmt = el('select', { id: 'export-format', 'aria-label': 'Export format' }, ...EXPORT_FORMATS.map((x) => el('option', { value: x.id, text: x.label })));
+    fmt.value = exportState.format;
+    const sp = el('select', { id: 'export-space', 'aria-label': 'Export colour space' }, ...EXPORT_SPACES.map((x) => el('option', { value: x.id, text: x.label })));
+    sp.value = exportState.space;
+    const row = (label: string, c: HTMLElement): HTMLElement => el('label', { class: 'cb-export-row' }, el('span', { text: label }), c);
+    const body = el('div', { class: 'cb-export' }, row('Format', fmt), row('Colour space', sp),
+      el('p', { class: 'small', text: pickerAvailable() ? 'You choose where the file goes next.' : 'The file is downloaded.' }));
+    const r = await rt.chrome.dialog({ title: `Export ${studio.frames.get(f)!.name}`, body, buttons: [{ label: 'Cancel', value: 'cancel' }, { label: 'Export', value: 'export', primary: true }] }).result;
+    if (r !== 'export') return;
+    exportState.format = fmt.value as ExportFormat;
+    exportState.space = sp.value as typeof exportState.space;
+    await exportFrame(f, 'picker');
   }
-  const undo = el('button', { type: 'button', id: 'undo', title: 'Undo (Ctrl+Z)', text: 'Undo' });
-  undo.addEventListener('click', () => rt.runCommand('edit.undo', null));
-  const redo = el('button', { type: 'button', id: 'redo', title: 'Redo (Shift+Ctrl+Z)', text: 'Redo' });
-  redo.addEventListener('click', () => rt.runCommand('edit.redo', null));
-  const exp = el('button', { type: 'button', id: 'export', class: 'primary', title: `Export the print${pickerAvailable() ? ' (you choose where)' : ' (downloaded)'}`, text: 'Export' });
-  exp.addEventListener('click', () => void rt.runCommand('output.save', null));
-  const fmt = el('select', { id: 'export-format', 'aria-label': 'Export format' }, ...EXPORT_FORMATS.map((f) => el('option', { value: f.id, text: f.label })));
-  fmt.addEventListener('change', () => void (exportState.format = fmt.value as ExportFormat));
-  const space = el('select', { id: 'export-space', 'aria-label': 'Export colour space' }, ...EXPORT_SPACES.map((f) => el('option', { value: f.id, text: f.label })));
-  space.addEventListener('change', () => void (exportState.space = space.value as typeof exportState.space));
-  const saveRecipe = el('button', { type: 'button', id: 'save-recipe', title: 'Download the recipe and its history as JSON (it is also kept in the browser, by the file’s hash)', text: 'Save recipe' });
-  saveRecipe.addEventListener('click', () => {
-    const r = recipeJson();
-    if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
-  });
-  const variantSel = el('select', { id: 'variant', 'aria-label': 'Studio layout', title: 'Studio layout (variant)' }, ...Object.keys(VARIANTS).map((v) => el('option', { value: v, text: v })));
-  variantSel.value = def.id;
-  variantSel.addEventListener('change', () => {
-    const u = new URL(location.href);
-    u.searchParams.set('variant', variantSel.value);
-    location.href = u.toString();
-  });
-  const offline = el('span', { id: 'offline-state', class: 'small' });
-  const kids: (Node | string)[] = [el('span', { class: 'brand' }, 'Chromobench ', el('i', { text: def.label })), fileInput, openBtn, folderInput, folderBtn, reopen, el('span', { class: 'sep' }), undo, redo, el('span', { class: 'sep' }), exp, fmt, space, saveRecipe];
-  if (host.settings) {
-    const dust = el('input', { type: 'checkbox', id: 'dust' });
-    dust.addEventListener('change', () => void (host.settings!.dust = dust.checked));
-    kids.push(el('label', { for: 'dust', title: 'Detect and heal dust specks when a scan is opened (slow on big scans)' }, dust, ' dust'));
-    // CHB-027 (F1): photo or negative per file, guessed (Auto) or as said; remembered in prefs
-    const openAs = el('select', { id: 'open-as', 'aria-label': 'Open files as', title: 'Open files as photos from a camera, as scans of negatives, or let the studio guess each file' },
-      el('option', { value: 'auto', text: 'Open as: guess' }), el('option', { value: 'photo', text: 'Open as: photos' }), el('option', { value: 'negative', text: 'Open as: negatives' }));
-    openAs.value = openAsPref();
-    openAs.addEventListener('change', () => void rt.runCommand(`file.openAs.${openAs.value}`, null));
-    rt.cell((s: { prefs?: { openAs?: string } }) => s.prefs?.openAs ?? 'auto', (v: string) => void (openAs.value = v));
-    kids.push(openAs);
-  }
-  kids.push(el('span', { class: 'sp' }), offline, el('label', { for: 'variant', text: 'Layout' }), variantSel);
-  barEl.append(...kids);
+  // service worker state, in the status line
+  const offline = el('span', { id: 'offline-state', class: 'small', title: 'Whether the studio starts without a network connection' });
+  statusBarEl.insertBefore(offline, statusEl);
 
   // ── export and the recipe ──
   function recipeJson(): { json: string; fileName: string } | null {

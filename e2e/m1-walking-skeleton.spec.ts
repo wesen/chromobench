@@ -7,6 +7,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
+/** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
+async function menu(page: Page, title: string, command: string): Promise<void> {
+  await page.locator('.ck-menubar-t', { hasText: title }).click();
+  await page.locator(`.ck-menu-i[data-command="${command}"]`).click();
+}
+
 const golden = JSON.parse(readFileSync(new URL('../fixtures/golden/contract.json', import.meta.url), 'utf8')).m1Trace;
 const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url).pathname;
 const P = { x: 48, y: 32 };
@@ -72,7 +78,7 @@ test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page })
   expect(runs.slice(0, 4)).toEqual([{ op: 'source.open', runs: 1 }, { op: 'scan.density', runs: 1 }, { op: 'invert.dyes', runs: 1 }, { op: 'print.expose', runs: 1 }]);
 
   // 3. undo: pixel and state hash return exactly
-  await page.click('#undo');
+  await menu(page, 'Edit', 'edit.undo');
   await idle(page);
   expect(await hash(page)).toBe(s0);
   expect(await pixel(page)).toEqual(p0);

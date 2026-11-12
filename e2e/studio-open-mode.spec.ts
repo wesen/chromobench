@@ -125,3 +125,31 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
   await page.keyboard.press('Delete');
   await expect(cells).toHaveCount(1);
 });
+
+test('the host top bar is folded into the menus: File (open, open as, export, recipe), View ▸ Layout', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/?nosw&canvas2d&fresh&engine=reference');
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
+  await expect(page.locator('#bar')).toHaveCount(0);
+  await page.locator('.ck-menubar-t', { hasText: 'File' }).click();
+  for (const c of ['file.open', 'file.openFolder', 'file.export', 'file.saveRecipe']) await expect(page.locator(`.ck-menu-i[data-command="${c}"]`)).toBeVisible();
+  // File ▸ Open As ▸ Open as Photos: remembered, checked
+  await page.locator('.ck-menu-i', { hasText: 'Open As' }).hover();
+  await page.locator('.ck-menu-i[data-command="file.openAs.photo"]').click();
+  expect(await page.evaluate(() => window.chromobench.state().prefs.openAs)).toBe('photo');
+  // a file opened now is a photo, whatever it looks like (and the hint says so)
+  await page.setInputFiles('#file', FILES.negative);
+  await expect(page.locator('#frame-mode')).toHaveText('Photo', { timeout: 60_000 });
+  await expect(page.locator('#mode-hint')).toContainText('Looks like a negative');
+  // Export…: format and colour space in a dialog
+  await page.locator('.ck-menubar-t', { hasText: 'File' }).click();
+  await page.locator('.ck-menu-i[data-command="file.export"]').click();
+  await expect(page.locator('.ck-dialog #export-format')).toBeVisible();
+  await expect(page.locator('.ck-dialog #export-space')).toBeVisible();
+  await page.locator('.ck-dialog button', { hasText: 'Cancel' }).click();
+  // View ▸ Layout… lists the variants
+  await page.locator('.ck-menubar-t', { hasText: 'View' }).click();
+  await page.locator('.ck-menu-i[data-command="view.layout"]').click();
+  await expect(page.locator('.ck-dialog')).toContainText('Darkroom');
+  await page.keyboard.press('Escape');
+});
