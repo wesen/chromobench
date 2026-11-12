@@ -344,3 +344,143 @@ use `rt.explainError` for open errors.
 ### Technical details
 - KV: `handles/file:<sha256>` = FileSystemFileHandle; `logs/<sha>:photo|negative` = EditLogData;
   `workspace/<app>:<ver>:doc` holds the catalog with `kind` and `thumb`.
+
+## Step 5: The host top bar folded into the studio's menus
+
+The host page no longer draws a bar of its own above the shell. Its actions are studio commands contributed at
+mount time (`studio.setHost`), referenced by the variants' menus and hidden where a host does not offer them (the
+studio-kit dev host, tests). The window now has the shell's menu bar on top and the status line at the bottom.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Coordinator message (relayed from the user's question "couldn't we merge
+the top bar commands into the menus proper? why is it separate anyway?"): "fold the host top bar into the shell's
+menus proper, as part of your WS-A work … File: Open Files… (Ctrl+O), Open Folder…, Reopen <last folder> (when a
+handle exists), Open as ▸ Auto / Photo / Negative (your new setting), Export… (Ctrl+E; format TIFF/PNG and colour
+space chosen in an export dialog instead of the two top-bar selects), Save Recipe. Edit: Undo/Redo already exist →
+drop the duplicate buttons. View: Layout ▸ classic / darkroom / simple / … (replaces the Layout select). "offline
+ready" → the status bar; "dust" → an option … Then remove the top bar (keep one place showing the app name). Make
+it work for every variant … hide such items … Update e2e specs that click top-bar elements … record it as its own
+diary step and commit."
+**Assistant interpretation:** Commands in studio-kit that call host actions, hidden without a host; host
+registers them; variants' menus list them; remove `#bar`.
+**Inferred user intent:** One place for every action, like a desktop application.
+**Commit (code):** f14262b — "CHB-027 WS-A: the host top bar folded into the studio's menus (File: open, open as, export dialog, recipe; View: layout); thumbnails from the cache only"
+
+### What I did
+- `studio-kit` (in Step 3 already): `StudioHost` actions → `ui.host.actions` flags; commands `file.open` (Mod+O),
+  `file.openFolder`, `file.reopenFolder` ("Reopen <folder>"), `file.openAs.{auto,photo,negative}` (checked,
+  prefs.openAs), `file.dust` (checked, prefs.dust), `file.export` (Mod+E; the host's dialog, else `output.save`),
+  `file.saveRecipe`, `view.layout` (a dialog of layouts, or an id). Classic (and the variants built on it) has
+  File ▸ Open Files…, Open Folder…, Reopen …, Open As ▸ {guess, photos, negatives, Heal Dust on Open},
+  Export…, Save Recipe, Find a Command…; View ▸ Layout…. Variants without menus (darkroom, simple, tiny) get the
+  same commands in their generated File/View menus (flat).
+- `main.ts`: the bar code replaced by `hostActions` (open through `showOpenFilePicker` when present, else the
+  hidden `#file` input; folder picker; reopen folder; export dialog with `#export-format` and `#export-space`;
+  recipe download; dust; layouts from `VARIANTS`); `#file`/`#folder` stay as hidden inputs on `<body>`;
+  `#offline-state` moved into the status line. `index.html`: no `<header id="bar">`. `app.css`: `#app` from the top;
+  status-line buttons (mode pill, hint) styled; export dialog rows.
+- e2e: `#undo`/`#redo` clicks → Edit menu items (`.ck-menubar-t` "Edit", `.ck-menu-i[data-command="edit.undo"]`)
+  in `studio.spec.ts`, `studio-real.spec.ts`, `m1-walking-skeleton.spec.ts`; a third test in
+  `studio-open-mode.spec.ts`: no `#bar`; File shows open/folder/export/recipe; Open As ▸ Open as Photos sets
+  prefs and a negative TIFF then opens as a photo with the "Looks like a negative" hint; Export… dialog has format
+  and colour space; View ▸ Layout… lists the layouts.
+- Screenshots (synthetic fixture): `various/ws-a/05-no-top-bar-empty.png`, `06-file-menu-open-as.png`,
+  `07-frame-menu.png`, `08-export-dialog.png`.
+
+### Why
+- Commands give one label, shortcut, enabled-with-why and palette entry per action; hiding by host flag keeps
+  studio-kit free of host code (it imports only contract and shell).
+
+### What worked
+- `npx playwright test e2e/studio-open-mode.spec.ts e2e/studio.spec.ts e2e/m1-walking-skeleton.spec.ts e2e/studio-real.spec.ts`
+  → 15 passed, 1 failed (below). Unit tests 2678 passed.
+
+### What didn't work
+- `studio-real.spec.ts › gpu: first print …` timed out at line 53 (`idle()` after a Time change), twice in a row.
+  Reproduced outside the test with a small script (scratchpad `wsa/drive4.mjs`: open the fixture on the GPU engine,
+  set Time ×2, `idle()` with a 20 s limit): on my built branch 1 in 4 to 1 in 6 runs hang and the page stops
+  answering `evaluate`; on main's sources (checked out into this worktree, built, then restored) 0 of 6. My first
+  suspect was the library thumbnail capture asking the render queue for a thumbnail in the filmstrip cell's own slot
+  (`rt.renders.thumb(…, 160, cb)` uses slot `thumb:<key>`): with captures off (`?nothumbs`, a temporary switch)
+  0 of 4 hung; with a slot of its own still 1 of 6; with `peekThumb` only (no render requested at all) still 1 of 6.
+  So the capture is not (or not alone) the cause; investigation continues in Step 6.
+
+### What I learned
+- The status line's own buttons inherited `.hb button` sizing from the old bar; the bar's CSS had to go with it.
+
+### What was tricky to build
+- A context menu's last item was hidden under the fixed status line: `#app` has `z-index: 1` so the shell's layers
+  paint over it.
+
+### What warrants a second pair of eyes
+- The GPU `idle()` hang (Step 6).
+
+### What should be done in the future
+- The name "Chromobench" is still shown in the shell's module bar and title; the host frame shows it nowhere now.
+
+### Code review instructions
+- `apps/studio/src/main.ts` (`hostActions`, `exportDialog`), `packages/studio-kit/src/cb.ts` (`file.*`,
+  `view.layout`), `packages/studio-kit/variants/classic.js` (menus).
+
+### Technical details
+- Host flags in state: `ui.host = { actions: string[], folder, layouts: {id,label}[], layout }` (view tier; `ui`
+  keeps only selection and toolOptions across reloads, so stale flags never survive).
+
+## Step 6: The GPU `idle()` hang: a catalog write during a render; thumbnails go to the KV instead
+
+`studio-real.spec.ts › gpu: first print` hung at `idle()` after a Time change on every run of the e2e (3 of 3),
+while main's sources passed (8.1 s). I narrowed it down by switching parts off in the e2e itself: it is the
+library thumbnail's write into the catalog (`catalog.frames.<id>.thumb`, document tier) during the session. The
+thumbnails now go into the KV (`frames/thumb:<id>`) and into the catalog once at the next start, before anything
+renders; the e2e passes.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Coordinator message (relayed): a real GPU (the owner's M1 Max, Chrome +
+Metal) is drivable through a Playwright server; run the drive4-style repro there (~10 runs) under the lock and
+record whether the hang reproduces on a real GPU.
+**Assistant interpretation:** Find and remove the hang; check it on real hardware.
+**Inferred user intent:** No freezes for the photographer, whatever the CI browser does.
+**Commit (code):** see the commit after this step.
+
+### What I did
+- Baseline: `git checkout main -- apps packages e2e` in this worktree, the one e2e test (passed, 8.1 s), then
+  `git checkout HEAD -- apps packages e2e` (tree clean again).
+- A CDP pause on the hung page (`Debugger.pause` from a temporary copy of the test's `idle`): even
+  `newCDPSession(...).send('Debugger.enable')` never answered — the renderer's main thread was busy, not waiting.
+  `Runtime.settle()` itself is bounded (50 rounds, a `setTimeout(0)` race), so it is not a microtask spin there.
+- Switches, each one run of the e2e test: thumbnails off → pass (9.1 s); thumbnails captured from the cache but not
+  written to the store → pass (8.6 s); written → hang. Earlier variants (own render slot; `peekThumb` only, no extra
+  render) still hung because they still wrote the catalog.
+- Fix (`main.ts`): `scheduleThumb` stores the JPEG in `kv.put('frames', 'thumb:<id>')`; at start, the saved
+  thumbnails of the catalog's frames are written into the catalog in one `writeDoc` before any render. The e2e
+  library test waits for the thumbnails in the KV (`studio.kv`) before reloading.
+
+### Why
+- The catalog only needs the thumbnail after a reload; writing it then avoids store traffic during renders.
+
+### What worked
+- `npx playwright test e2e/studio-real.spec.ts e2e/studio-open-mode.spec.ts` → 7 passed (gpu first print 11.0 s).
+
+### What didn't work
+- The standalone repro script (`wsa/drive4.mjs`, preview build) hung only 1 in 4–6 runs and 0 of 8 in another
+  series, too noisy to bisect with; the e2e test was deterministic, so I bisected inside it.
+
+### What I learned
+- The trigger is a document-tier store write (catalog entry of the frame shown) while the GPU engine renders on
+  SwiftShader; the busy loop itself is somewhere in the shell's reaction or the GPU engine — not found.
+
+### What was tricky to build
+- Telling "busy" from "waiting": a page whose `evaluate` never returns and that refuses a CDP session is busy.
+
+### What warrants a second pair of eyes
+- The underlying busy loop is not understood; any other store write during a GPU render (agent, roll kit) may hit
+  it too. A shell/GPU owner should look: repro = the pre-fix build (this branch at f14262b), studio-real gpu test.
+
+### What should be done in the future
+- Root-cause the busy loop (shell render queue × GpuEngine on SwiftShader).
+
+### Code review instructions
+- `apps/studio/src/main.ts` `scheduleThumb` and the block after it.
+
+### Technical details
+- KV keys: `frames/thumb:<frameId>` = JPEG data URL (~1.5 kB for the 96×64 fixture, 160 px long side).

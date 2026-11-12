@@ -103,7 +103,12 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
   await page.setInputFiles('#file', [FILES.photo, FILES.negative]);
   await expect(page.locator('#status')).toContainText(/opened 2 files|rendered/, { timeout: 120_000 });
   await idle(page);
-  await page.waitForFunction(() => Object.values(window.chromobench.state().catalog.frames as Record<string, { thumb?: string }>).every((f) => f.thumb?.startsWith('data:image/jpeg')), null, { timeout: 30_000 });
+  // the thumbnails are kept in the KV during the session and go into the catalog at the next start
+  await page.waitForFunction(async () => {
+    const st = window.chromobench.studio;
+    const urls = await Promise.all(st.frames.ids().map((id) => st.kv!.get<string>('frames', `thumb:${id}`)));
+    return urls.length === 2 && urls.every((u) => u?.startsWith('data:image/jpeg'));
+  }, null, { timeout: 30_000 });
   await page.waitForTimeout(1500); // the shell's autosave (debounced)
   await page.reload();
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });

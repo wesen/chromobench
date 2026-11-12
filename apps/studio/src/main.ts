@@ -391,10 +391,18 @@ async function main(): Promise<void> {
         if (tries > 1) scheduleThumb(id, 3000, tries - 1);
         return;
       }
+      // into the KV, not the store: a catalog write while the GPU engine renders made idle() hang on SwiftShader
+      // (studio-real "gpu: first print", every run). The catalog takes the saved thumbnails at the next start.
       const url = thumbUrl(x.image);
-      const c = rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined;
-      if (url && c && c.thumb !== url) rt.store.writeDoc([{ path: ['catalog', 'frames', id, 'thumb'], value: url }], { tier: 'document' });
+      if (url) void kv.put('frames', `thumb:${id}`, url).catch(() => undefined);
     }, ms));
+  }
+  // the thumbnails saved last session, into the catalog before anything renders
+  {
+    const ids = (rt.store.peek(['catalog', 'order']) as string[] | undefined) ?? [];
+    const got = await Promise.all(ids.map((id) => kv.get<string>('frames', `thumb:${id}`).catch(() => undefined)));
+    const writes = ids.flatMap((id, i) => (got[i] && (rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined)?.thumb !== got[i] ? [{ path: ['catalog', 'frames', id, 'thumb'], value: got[i] }] : []));
+    if (writes.length) rt.store.writeDoc(writes, { tier: 'document' });
   }
   studio.frames.onAdded((e) => {
     scheduleThumb(e.id, 500);
