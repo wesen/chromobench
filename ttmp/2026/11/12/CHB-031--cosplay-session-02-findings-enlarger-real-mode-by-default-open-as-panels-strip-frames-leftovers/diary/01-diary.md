@@ -269,7 +269,8 @@ before CHB-031, and the tester's brief.
 - Cross-checked WS-B's added lines (`git diff 9d10010` in its worktree) against the 64 export names removed by
   9eca10d and against the RefEngine data requirement. Five `new RefEngine(...)` calls had no data (the
   TabulatedPreviews class and tests). `CLASS_CODE` matched, but WS-B imports core's, and CHB-032 removed only
-  ingest's. The other matches were common words (`note`, `round`, `idle`, `stops`, `latd` as a local name).
+  ingest's. The other matches are not imports of the removed exports: `latd` is a local parameter name, WS-B's specs define
+  their own local `idle`, and no WS-B import names `note` (ingest), `round` (shell) or `stops` (core).
 - Merged with `--no-ff`; `git diff --quiet 51bfa5a HEAD` → identical trees. The agent's checks at 51bfa5a therefore
   stand for main: `pnpm test` 97 files, 2749 passed, 7 skipped; typecheck, lint, `gen:check` OK; browser suite
   98 passed, GPU conformance 320/320.
