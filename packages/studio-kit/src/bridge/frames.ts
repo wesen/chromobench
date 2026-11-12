@@ -4,9 +4,14 @@
 // both, so a moved file re-attaches its recipe and a photo's recipe never lands on the file opened as a negative
 // (F3). A file is open once: opening it again finds the open frame; re-opening it in the other mode replaces the
 // frame (same id) with a fresh decode and that mode's recipe.
+//
+// A scan of a strip of film (CHB-027 WS-D, F16) is several frames: the opener reports one box per frame on the
+// strip, and each becomes a frame of its own — same file and source (the whole strip, so the strip's base and veil
+// are shared), its recipe cropped to its box (view.frame.crop), identity (sha, mode, index): id
+// `frame_<sha8>-<n>`, log key `<sha>:<mode>:<n>`. A file with one frame keeps its id and key without an index.
 import {
   EditLog, fail, Graph, sha256Hex,
-  type AgentMode, type EditLogData, type Engine, type FrameRecipe, type SourceInfo, type SourceRef,
+  type AgentMode, type Box, type EditLogData, type Engine, type FrameRecipe, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
 import { defaultFor } from '../model/recipes.ts';
 import type { KV } from './kv.ts';
@@ -19,11 +24,19 @@ export type OpenAs = 'auto' | 'photo' | 'negative';
 export const kindOf = (as: 'photo' | 'negative'): FrameKind => (as === 'photo' ? 'digital-raw' : 'negative-scan');
 export const asOf = (k: FrameKind): 'photo' | 'negative' => (k === 'digital-raw' ? 'photo' : 'negative');
 
+/** What an opener reports: the source, the mode it opened in, and the frames on a strip (≥ 2 boxes, source px). */
+export interface Opened {
+  info: SourceInfo;
+  kind: FrameKind;
+  /** one box per frame when the scan is a strip of several frames; absent or null for one frame */
+  frames?: Box[] | null;
+}
+
 /**
  * Opens a source in the engine in a mode. The studio host's engine decodes as asked and guesses on 'auto' (it may
  * ask the photographer); the default opener (any contract Engine) opens as a negative unless told 'photo'.
  */
-export type SourceOpener = (source: SourceRef, as: OpenAs) => Promise<{ info: SourceInfo; kind: FrameKind }>;
+export type SourceOpener = (source: SourceRef, as: OpenAs) => Promise<Opened>;
 
 export interface FrameEntry {
   readonly id: string;
@@ -35,6 +48,8 @@ export interface FrameEntry {
   readonly log: EditLog;
   /** the recipe frame.add created */
   readonly initial: FrameRecipe;
+  /** a frame of a strip: its place (1-based), the strip's frame count and its box (source px); absent for a whole file */
+  readonly strip?: { index: number; of: number; box: Box };
 }
 
 /**
@@ -55,6 +70,15 @@ export type OpenOutcome =
   /** the file is open in the other mode: the caller may re-open it (after asking) */
   | 'conflict';
 
+/** What opening (or re-opening) a file did, and its frames: one, or one per frame on a strip. */
+export interface OpenResult {
+  /** the first frame (the file's only frame, or the first of its strip) */
+  entry: FrameEntry;
+  outcome: OpenOutcome;
+  /** every frame of the file now open (one for a whole file) */
+  entries: FrameEntry[];
+}
+
 export interface OpenFileOptions {
   initial?: FrameRecipe | InitialRecipe;
   /** default 'auto' */
@@ -70,8 +94,18 @@ export interface FramesOptions {
   opener?: SourceOpener;
 }
 
-/** The KV key of a frame's log: the hash and the mode. */
-export const logKey = (sha: string, kind: FrameKind): string => `${sha}:${asOf(kind)}`;
+/** The KV key of a frame's log: the hash and the mode, and the frame's place on a strip. */
+export const logKey = (sha: string, kind: FrameKind, index?: number): string => `${sha}:${asOf(kind)}${index ? `:${index}` : ''}`;
+/** The id of a frame of a strip (a whole file keeps the recipe's `frame_<sha8>`). */
+export const stripFrameId = (sha: string, index: number): string => `frame_${sha.slice(0, 8)}-${index}`;
+
+/** A strip frame's recipe: its id and its box as the crop. */
+export function stripFrameRecipe(r: FrameRecipe, id: string, box: Box): FrameRecipe {
+  return { ...r, frame: id, view: { ...r.view, frame: { ...r.view.frame, crop: { ...box } } } };
+}
+
+/** A decoded file: what every frame of it shares. */
+interface Decoded { name: string; kind: FrameKind; info: SourceInfo; boxes: Box[] | null }
 
 export class Frames {
   readonly engine: Engine;
@@ -81,9 +115,11 @@ export class Frames {
   private readonly opener: SourceOpener;
   private readonly map = new Map<string, FrameEntry>();
   private readonly readers = new Map<string, () => Promise<Uint8Array>>();
+  /** the files decoded now, by hash (their frames may be fewer: one removed) */
+  private readonly decoded = new Map<string, Decoded>();
   private readonly listeners = new Set<(e: FrameEntry) => void>();
   private readonly removedListeners = new Set<(e: FrameEntry) => void>();
-  private readonly opening = new Map<string, Promise<{ entry: FrameEntry; outcome: OpenOutcome }>>();
+  private readonly opening = new Map<string, Promise<OpenResult>>();
   private saving: Promise<unknown> = Promise.resolve();
 
   constructor(engine: Engine, o: FramesOptions = {}) {
@@ -105,6 +141,10 @@ export class Frames {
   }
   bySha(sha: string): FrameEntry | undefined {
     return this.all().find(e => e.sha === sha);
+  }
+  /** every open frame of a file (one, or the frames of a strip in order) */
+  allBySha(sha: string): FrameEntry[] {
+    return this.all().filter(e => e.sha === sha).sort((a, b) => (a.strip?.index ?? 0) - (b.strip?.index ?? 0));
   }
   /** called for frames added now and later, and for a frame replaced by a re-open (same id, new entry) */
   onAdded(f: (e: FrameEntry) => void): () => void {
@@ -129,21 +169,30 @@ export class Frames {
   }
 
   /** Opens bytes and says what happened: opened, resumed, already open, or open in the other mode. */
-  async openFile(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
+  async openFile(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<OpenResult> {
     const sha = sha256Hex(bytes);
     const as = o.as ?? 'auto';
     // no reader from the host: a copy (an engine may transfer the bytes it decodes to a worker)
     const copy = o.read ? null : bytes.slice();
     this.readers.set(sha, o.read ?? (async () => copy!));
     const pending = this.opening.get(sha);
+    const same = (k: FrameKind): boolean => as === 'auto' || kindOf(as) === k;
     if (pending) {
       // opened twice at once: the first open wins
       const r = await pending;
-      return { entry: r.entry, outcome: as === 'auto' || kindOf(as) === r.entry.kind ? 'already' : 'conflict' };
+      return { ...r, outcome: same(r.entry.kind) ? 'already' : 'conflict' };
     }
-    const existing = this.bySha(sha);
-    if (existing) return { entry: existing, outcome: as === 'auto' || kindOf(as) === existing.kind ? 'already' : 'conflict' };
-    const p = this.load(bytes, sha, name, as, o.initial, null);
+    const existing = this.allBySha(sha);
+    if (existing.length) {
+      const d = this.decoded.get(sha);
+      // a strip with frames taken out of the studio: opening the file again brings them back
+      if (d?.boxes && existing.length < d.boxes.length && same(d.kind)) return this.track(sha, this.build(sha, d, o.initial, existing));
+      return { entry: existing[0]!, entries: existing, outcome: same(existing[0]!.kind) ? 'already' : 'conflict' };
+    }
+    return this.track(sha, this.load(bytes, sha, name, as, o.initial, []));
+  }
+
+  private async track(sha: string, p: Promise<OpenResult>): Promise<OpenResult> {
     this.opening.set(sha, p);
     try {
       return await p;
@@ -155,35 +204,71 @@ export class Frames {
   /**
    * Re-opens an open frame as a photo or as a negative (F3, F6): decodes the file again in that mode and resumes
    * that mode's saved log or starts that mode's recipe. The frame keeps its id; the other mode's log stays saved.
+   * A frame of a strip re-opens the whole file (the engine holds one decode per file): all its frames are replaced
+   * by the file's frames in the new mode.
    */
-  async reopen(id: string, as: 'photo' | 'negative', o: { initial?: FrameRecipe | InitialRecipe } = {}): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
+  async reopen(id: string, as: 'photo' | 'negative', o: { initial?: FrameRecipe | InitialRecipe } = {}): Promise<OpenResult> {
     const e = this.map.get(id) ?? fail('E_NO_FRAME', `frame ${id} is not open`);
     const read = this.readers.get(e.sha) ?? fail('E_NO_SOURCE', `${e.name} is not at hand: open the file again`, { hint: 'File ▸ Open Files…' });
     const bytes = await read();
     const sha = sha256Hex(bytes);
     if (sha !== e.sha) fail('E_NO_SOURCE', `${e.name} changed on disk since it was opened`, { hint: 'Open the file again: it is a new frame now' });
-    return this.load(bytes, sha, e.name, as, o.initial, e);
+    return this.load(bytes, sha, e.name, as, o.initial, this.allBySha(sha));
   }
 
-  private async load(bytes: Uint8Array, sha: string, name: string, as: OpenAs, initial: FrameRecipe | InitialRecipe | undefined, replacing: FrameEntry | null): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
-    const { info, kind } = await this.opener({ kind: 'file', sha256: sha, name, bytes }, as);
-    const graph = new Graph();
-    graph.registerSource(info);
-    const saved = await this.savedLog(sha, kind);
-    const opts = { mode: this.mode, graph, ...(this.now ? { now: this.now } : {}) };
-    const defaults = defaultFor(sha, name, kind);
-    const first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && initial.kind === kind ? initial : null;
-    const log = saved ? new EditLog(saved, opts) : EditLog.create(first ?? defaults, { ...opts, by: 'auto' });
-    const entry: FrameEntry = { id: replacing?.id ?? log.frame, sha, name, kind, info, graph, log, initial: log.toJSON().initial };
-    this.add(entry);
-    return { entry, outcome: saved ? 'resumed' : 'opened' };
+  private async load(bytes: Uint8Array, sha: string, name: string, as: OpenAs, initial: FrameRecipe | InitialRecipe | undefined, replacing: FrameEntry[]): Promise<OpenResult> {
+    const r = await this.opener({ kind: 'file', sha256: sha, name, bytes }, as);
+    const boxes = r.frames && r.frames.length >= 2 ? r.frames.map(b => ({ ...b })) : null;
+    const d: Decoded = { name, kind: r.kind, info: r.info, boxes };
+    this.decoded.set(sha, d);
+    return this.build(sha, d, initial, replacing);
   }
 
-  /** The saved log of (sha, kind); an old log saved by hash alone counts only when its kind matches (F3). */
-  private async savedLog(sha: string, kind: FrameKind): Promise<EditLogData | undefined> {
+  /**
+   * The frames of a decoded file: the whole file, or one per box of its strip. Frames open already (`present`) are
+   * replaced in place when the id stays (re-open), else removed; frames missing are created or resumed.
+   */
+  private async build(sha: string, d: Decoded, initial: FrameRecipe | InitialRecipe | undefined, present: FrameEntry[]): Promise<OpenResult> {
+    const reopening = present.length > 0 && present[0]!.kind !== d.kind;
+    const keep = reopening ? [] : present;
+    const plan = d.boxes
+      ? d.boxes.map((box, i) => ({ index: i + 1, box, id: stripFrameId(sha, i + 1) as string | null }))
+      // a whole file keeps the id it had (a re-open) or takes its saved log's
+      : [{ index: 0, box: null as Box | null, id: present.length === 1 && !present[0]!.strip ? present[0]!.id : null }];
+    const made: FrameEntry[] = [];
+    let resumed = 0;
+    for (const p of plan) {
+      const open = keep.find(e => (p.id ? e.id === p.id : !e.strip));
+      if (open) {
+        made.push(open);
+        continue;
+      }
+      const graph = new Graph();
+      graph.registerSource(d.info);
+      const saved = await this.savedLog(sha, d.kind, p.index || undefined);
+      const opts = { mode: this.mode, graph, ...(this.now ? { now: this.now } : {}) };
+      let defaults = defaultFor(sha, d.name, d.kind);
+      if (p.box) defaults = stripFrameRecipe(defaults, p.id!, p.box);
+      let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && initial.kind === d.kind ? initial : null;
+      if (first && p.box) first = stripFrameRecipe(first, p.id!, p.box);
+      const log = saved ? new EditLog(saved, opts) : EditLog.create(first ?? defaults, { ...opts, by: 'auto' });
+      if (saved) resumed++;
+      const strip = p.box && d.boxes ? { index: p.index, of: d.boxes.length, box: { ...p.box } } : undefined;
+      made.push({ id: p.id ?? log.frame, sha, name: d.name, kind: d.kind, info: d.info, graph, log, initial: log.toJSON().initial, ...(strip ? { strip } : {}) });
+    }
+    // frames of the old decode that have no place in the new one leave the studio (their logs stay saved)
+    for (const e of present) if (!made.some(m => m.id === e.id)) this.drop(e);
+    const added = made.filter(m => !present.includes(m) || reopening);
+    for (const e of added) this.add(e);
+    const fresh = made.filter(m => !keep.includes(m));
+    return { entry: made[0]!, entries: made, outcome: fresh.length && resumed === fresh.length ? 'resumed' : 'opened' };
+  }
+
+  /** The saved log of (sha, kind[, index]); an old log saved by hash alone counts only for a whole file of its kind (F3). */
+  private async savedLog(sha: string, kind: FrameKind, index?: number): Promise<EditLogData | undefined> {
     if (!this.kv) return undefined;
-    const now = await this.kv.get<EditLogData>('logs', logKey(sha, kind)).catch(() => undefined);
-    if (now) return now;
+    const now = await this.kv.get<EditLogData>('logs', logKey(sha, kind, index)).catch(() => undefined);
+    if (now || index) return now;
     const old = await this.kv.get<EditLogData>('logs', sha).catch(() => undefined);
     return old && old.initial?.kind === kind ? old : undefined;
   }
@@ -198,14 +283,22 @@ export class Frames {
     return e;
   }
 
-  /** Takes a frame out of the studio (its log stays saved: opening the file again resumes it). */
+  /** Takes a frame out of the studio (its log stays saved: opening the file again resumes it). Other frames of its strip stay. */
   remove(id: string): FrameEntry | undefined {
     const e = this.map.get(id);
     if (!e) return undefined;
-    this.map.delete(id);
-    this.readers.delete(e.sha);
-    for (const f of this.removedListeners) f(e);
+    this.drop(e);
+    if (!this.bySha(e.sha)) {
+      this.readers.delete(e.sha);
+      this.decoded.delete(e.sha);
+    }
     return e;
+  }
+
+  private drop(e: FrameEntry): void {
+    if (this.map.get(e.id) !== e) return;
+    this.map.delete(e.id);
+    for (const f of this.removedListeners) f(e);
   }
 
   setMode(mode: AgentMode): void {
@@ -217,7 +310,7 @@ export class Frames {
     if (!this.kv) return;
     const kv = this.kv;
     const data = e.log.toJSON();
-    this.saving = this.saving.then(() => kv.put('logs', logKey(e.sha, e.kind), data)).catch(() => undefined);
+    this.saving = this.saving.then(() => kv.put('logs', logKey(e.sha, e.kind, e.strip?.index), data)).catch(() => undefined);
   }
   /** resolves when every queued log write has finished */
   flush(): Promise<unknown> {

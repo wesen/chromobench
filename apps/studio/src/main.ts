@@ -349,7 +349,7 @@ async function main(): Promise<void> {
           if (r.outcome === 'already' || r.outcome === 'conflict') {
             already.push(pf.name);
             rt.chrome.toast(`${pf.name} is already open (as a ${asWord(r.entry.kind)})`, { kind: 'info' });
-          } else opened.push(pf.name);
+          } else opened.push(r.entries.length > 1 ? `${pf.name} (${r.entries.length} frames)` : pf.name);
           if (pf.handle) void kv.put('handles', `file:${r.entry.sha}`, pf.handle).catch(() => undefined);
           if (o.expect && o.expect.sha256 !== r.entry.sha) rt.chrome.toast(`${pf.name} is not the file ${o.expect.name} was made from: it opened as a frame of its own`, { kind: 'warn' });
           if (first) {
@@ -423,10 +423,11 @@ async function main(): Promise<void> {
         status(`opening ${c.name} again…`);
         if (await reconnect(h).catch(() => false)) return await openFiles(await fromHandles([h]), { as, expect: c });
       }
+      const file = c.file ?? c.name;
       const r = await rt.chrome.dialog({
-        title: `Where is ${c.name}?`,
+        title: `Where is ${file}?`,
         body: el('p', { text: `The library keeps ${c.name} and its recipe, but the browser needs the file again to show it.` }),
-        buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${c.name}…`, value: 'locate', primary: true }],
+        buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${file}…`, value: 'locate', primary: true }],
       }).result;
       if (r === 'remove') studio.remove([id]);
       else if (r === 'locate') {

@@ -207,3 +207,84 @@ holder, CHB-020's single planted frame, and the photographer's nine scans (the c
 - Separators: runs of positions with share ≥ 0.9, single misses bridged; runs touching either end are leader.
 - Frame confidence: min(separator purity (0.9 → 0, 0.98 → 1), length agreement with the median (±10 % free, 0 at
   ±40 %)).
+
+## Step 3: The studio opens one frame per box
+
+The host's `decodeScan` calls `stripFrames` on the working image with `conditionScan`'s layout and hands the boxes
+up through `StudioEngine.openAs`; studio-kit's `Frames` makes one frame per box: id `frame_<sha8>-<n>`, log key
+`<sha>:negative:<n>`, recipe with `view.frame.crop` = the box, its own graph, log, catalog entry ("raw010.dng · 2/3")
+and thumbnail (the existing per-frame thumbnail path). A whole file keeps `frame_<sha8>` and `<sha>:<mode>`. The
+first print measures the central 80 % of the crop. 5 new studio-kit tests and 1 host test pass; the full unit suite
+is green (93 files, 2718 passed, 7 skipped).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Item 2 of the work: strip frames in the studio, single files unchanged, remove and
+re-open per frame.
+**Inferred user intent:** Three printable frames from raw010, each with its own recipe and history.
+**Commit (code):** see the commit after this step ("CHB-027 WS-D: a strip opens as one frame per box …").
+
+### What I did
+- `apps/studio/src/host/engines.ts` (5 lines, in `decodeScan` only): `stripFrames(data, w, h, { layout: c.layout })`
+  when the guess is a negative (or unsure); `Decoded.frames` = the boxes when `split`; a note "strip of 3 frames…".
+- `host/studio-engine.ts`: `Decoded.frames`; `openAs` returns `frames`.
+- `host/first-print.ts` `measureExposure`: the central 80 % of `view.frame.crop` when set (else of the source, as
+  before).
+- `packages/studio-kit/src/bridge/frames.ts`: `Opened` (opener result with `frames?`), `OpenResult` (+ `entries`),
+  `FrameEntry.strip = { index, of, box }`, `logKey(sha, kind, index?)`, `stripFrameId`, `stripFrameRecipe`;
+  `load` decodes once and `build` makes/keeps/replaces the file's frames; `decoded` per sha remembers the boxes;
+  `openFile` on a strip with a frame removed brings the missing frames back (`resumed`); `remove` keeps the reader
+  while other frames of the file are open; `reopen` of any frame re-opens the whole file.
+- `studio.ts`: `frameName` ("raw010.dng · 2/3") for the catalog, `CatalogFrame.file` (the file's name);
+  `reopen` selects the file's first frame when the shown frame was replaced. `cb.ts`: `CatalogFrame.file`.
+- `apps/studio/src/main.ts` (2 small edits): status "opened raw010.dng (3 frames)"; the relink dialog names the
+  file (`c.file ?? c.name`).
+- Tests: `packages/studio-kit/test/strip-frames.test.ts` (5: ids, keys, crops, catalog; own logs resumed in a new
+  session; a single frame unchanged; remove one, open again; re-open as photo and back), `apps/studio/test/
+  host.test.ts` "a frame of a strip … is printed for its own crop".
+
+### Why
+- Re-open acts on the file because the engines hold one decode per sha (WS-A's `forgetSource`): frames 1 and 3 as
+  negatives and frame 2 as a photo cannot coexist. The file is what was misread; re-opening it is the honest unit.
+- Strip logs are keyed with the index, so an old whole-strip log (`<sha>:negative`, from before this branch) is not
+  put onto frame 1; the strip simply starts fresh as three frames.
+
+### What worked
+- `npx vitest run packages/studio-kit/test/strip-frames.test.ts` → 5 passed at the first run;
+  `apps/studio/test/host.test.ts -t strip` passed (dense frame time > 1.5 × the others, each frame's exposure
+  |x| < 0.05 after its first print; without the crop change all three would get one time).
+- `pnpm typecheck`, `pnpm lint` clean; `pnpm test` → 93 files, 2718 passed, 7 skipped.
+
+### What didn't work
+- `pnpm typecheck` after the first edit: `apps/studio/test/host.test.ts(186,37): error TS2345: Argument of type
+  'string' is not assignable to parameter of type 'FrameRecipe'` — my new export `stripRecipe` shadowed the test
+  strips' `stripRecipe` in `@chromobench/studio-kit`. Renamed mine `stripFrameRecipe`.
+
+### What I learned
+- The roll kit's analysis already crops to `view.frame.crop` (`analysePixels`' `pickedCrop`), so roll analysis of
+  strip frames measures each frame, while the base and veil come from the shared source.
+
+### What was tricky to build
+- `build()` covers four transitions with one plan: fresh open (create all), open again with a frame removed (keep
+  the open ones, create the missing), re-open in the other mode single→single (same id, replaced in place, as WS-A
+  did), and strip↔single (ids change: frames without a place in the new decode are dropped first, then the new
+  ones added, so the catalog and selection follow).
+
+### What warrants a second pair of eyes
+- A strip re-opened as a photo and back drops and re-creates the catalog entries: flags, stars and keywords of
+  strip frames are lost on that round trip (the logs and recipes are kept).
+- After a reload, relinking one library frame of a strip opens the whole file, so a frame removed in an earlier
+  session comes back. Removing is not remembered per frame (as for a whole file: opening it again brings it back).
+
+### What should be done in the future
+- Remember removed strip frames per (sha, mode) if the photographer finds them coming back annoying.
+
+### Code review instructions
+- `packages/studio-kit/src/bridge/frames.ts` `load` / `build` / `remove`, then `studio.ts` `catalogue` / `reopen`,
+  `apps/studio/src/host/engines.ts` `decodeScan`, `first-print.ts` `measureExposure`.
+- `npx vitest run packages/studio-kit/test/strip-frames.test.ts packages/studio-kit/test/open-mode.test.ts apps/studio/test/host.test.ts`.
+
+### Technical details
+- Identity: whole file `frame_<sha8>`, `<sha>:negative|photo`; strip frame n `frame_<sha8>-<n>`, `<sha>:negative:<n>`.
+- Boxes are working-image pixels (the GPU's 4000 px long side keeps raw010 at full size; the reference engine's
+  512 px makes them ~7× smaller), like every other recipe coordinate.

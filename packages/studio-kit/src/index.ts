@@ -5,7 +5,7 @@ export { defineVariant, buildVariant, type VariantDef, type VariantEnv, type Bui
 export { Studio, createStudio, type StudioOptions, type StudioHost, type HostFlags } from './studio.ts';
 export { frameRef, isImageHandle, isFrameRef, effectiveRecipe, ACCESSORS, PRINT_OPTIONS, type FrameRef, type ImageHandle, type Accessor } from './handles.ts';
 export { EditLogRoute, recipePathOf, BURST_MS, type Proposal } from './bridge/editlog-route.ts';
-export { Frames, kindOf, asOf, logKey, type FrameEntry, type InitialRecipe, type FrameKind, type OpenAs, type OpenOutcome, type SourceOpener, type OpenFileOptions } from './bridge/frames.ts';
+export { Frames, kindOf, asOf, logKey, stripFrameId, stripFrameRecipe, type FrameEntry, type Opened, type OpenResult, type InitialRecipe, type FrameKind, type OpenAs, type OpenOutcome, type SourceOpener, type OpenFileOptions } from './bridge/frames.ts';
 export { FrameRenderBridge, evaluateBands, type Band, type Lowered } from './bridge/render-bridge.ts';
 export { memoryKV, localStorageKV, KV_STORES, type KV, type KvStore } from './bridge/kv.ts';
 export { kvPersistence } from './bridge/persistence.ts';

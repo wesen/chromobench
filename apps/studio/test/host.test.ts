@@ -7,7 +7,7 @@ import {
 } from '@chromobench/contract';
 import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, interimData, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
-import { conditionScan, plantedStrip } from '@chromobench/ingest';
+import { conditionScan, plantedFrames, plantedStrip, stripFrames } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
 import { firstPrint, gridTime, integratedExposure, measureExposure, withMeasured, withRebate } from '../src/host/first-print.ts';
 import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
@@ -156,6 +156,36 @@ describe('first print (core RefEngine)', () => {
     const m = (r.print.lights.logH[0] + r.print.lights.logH[1] + r.print.lights.logH[2]) / 3;
     expect(Math.abs(m)).toBeLessThanOrEqual(Math.log10(2) / 12 + 1e-9);
   });
+
+  it('a frame of a strip (CHB-027 WS-D) is printed for its own crop: each frame integrates to grey on its own', async () => {
+    // three frames, the first 0.5 D denser (overexposed): the strip's average would print the others too light
+    const strip = plantedFrames({ frames: 3, pxPerMm: 1.5, exposureD: [0.5, 0, 0] });
+    const sha = 'd'.repeat(64);
+    const info: SourceInfo = {
+      sha256: sha, format: 'tiff', width: strip.w, height: strip.h, channels: 3, bits: 16, sample: 'uint',
+      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
+      cfa: 'none', clippedFraction: 0, notes: [],
+    };
+    const c = conditionScan(Float32Array.from(strip.rgb), strip.w, strip.h, { id: sha, subtract: false });
+    const boxes = stripFrames(strip.rgb, strip.w, strip.h, { layout: c.layout });
+    expect(boxes.split).toBe(true);
+    const e = new RefEngine();
+    e.openDecoded(info, Float32Array.from(strip.rgb));
+    const g = new Graph();
+    g.registerSource(info);
+    const base = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
+    const times: number[] = [];
+    for (const f of boxes.frames) {
+      const r0 = { ...base, view: { ...base.view, frame: { ...base.view.frame, crop: f.box } } };
+      const r = await firstPrint(e, g, r0, { integrate });
+      times.push(r.print.enlarger.time_s);
+      const x = await measureExposure(e, g, r);
+      for (const v of x) expect(Math.abs(v)).toBeLessThan(0.05);
+    }
+    // the dense frame passes 0.5 D less light: it needs a longer time; the two alike frames get about the same
+    expect(times[0]!).toBeGreaterThan(times[1]! * 1.5);
+    expect(Math.abs(Math.log2(times[1]! / times[2]!))).toBeLessThan(0.5);
+  }, 60_000);
 
   it('integratedExposure: log of the mean of 10^x, clamped, NaN skipped', () => {
     expect(integratedExposure([0, 0, 0, 0, 0, 0], 2)).toEqual([0, 0, 0]);

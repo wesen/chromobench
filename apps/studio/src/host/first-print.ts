@@ -60,7 +60,9 @@ export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, 
   const n = lightsNode(r, g);
   engine.adopt(g.closure(n.id));
   const info = n.info as { width: number; height: number };
-  const box = { x: Math.round(info.width * 0.1), y: Math.round(info.height * 0.1), w: Math.max(1, Math.round(info.width * 0.8)), h: Math.max(1, Math.round(info.height * 0.8)) };
+  // the central 80 % of the frame: of its crop when it has one (a frame of a strip, CHB-027 WS-D), else of the source
+  const c = r.view.frame?.crop ?? { x: 0, y: 0, w: info.width, h: info.height };
+  const box = { x: c.x + Math.round(c.w * 0.1), y: c.y + Math.round(c.h * 0.1), w: Math.max(1, Math.round(c.w * 0.8)), h: Math.max(1, Math.round(c.h * 0.8)) };
   const scale = Math.min(1, Math.sqrt(analysisPixels / (box.w * box.h)));
   const res = await engine.evaluate(n, { scale: scale >= 1 ? 'full' : Math.max(1e-3, Number(scale.toFixed(4))), precision: 'preview', region: box });
   return integratedExposure(await res.read(), res.width * res.height, res.info.channels);

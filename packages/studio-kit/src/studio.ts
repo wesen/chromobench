@@ -9,12 +9,15 @@
 import type { AgentMode, Engine, FrameRecipe, LoggedMutation, Mutation, OutputSpaceId } from '@chromobench/contract';
 import { memoryPersistence, type Runtime, type Services } from '@chromobench/shell';
 import { EditLogRoute } from './bridge/editlog-route.ts';
-import { asOf, Frames, type FrameEntry, type InitialRecipe, type OpenAs, type OpenOutcome, type SourceOpener } from './bridge/frames.ts';
+import { asOf, Frames, type FrameEntry, type InitialRecipe, type OpenAs, type OpenResult, type SourceOpener } from './bridge/frames.ts';
 import type { KV } from './bridge/kv.ts';
 import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
 import { explainError } from './kit/messages.ts';
 import type { CatalogFrame } from './cb.ts';
+
+/** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
+export const frameName = (f: Pick<FrameEntry, 'name' | 'strip'>): string => (f.strip ? `${f.name} · ${f.strip.index}/${f.strip.of}` : f.name);
 
 export interface StudioOptions {
   engine: Engine;
@@ -144,7 +147,7 @@ export class Studio {
     const cat = st.peek(['catalog']) as { frames: Record<string, CatalogFrame>; order: string[] } | undefined;
     const had = cat?.frames?.[f.id];
     if (!had) {
-      const entry: CatalogFrame = { id: f.id, sha256: f.sha, name: f.name, flag: null, stars: 0, label: null, keywords: [], kind: asOf(f.kind) };
+      const entry: CatalogFrame = { id: f.id, sha256: f.sha, name: frameName(f), flag: null, stars: 0, label: null, keywords: [], kind: asOf(f.kind), ...(f.strip ? { file: f.name } : {}) };
       writes.push({ path: ['catalog', 'frames', f.id], value: entry });
     } else if (had.kind !== asOf(f.kind) || had.sha256 !== f.sha) {
       // re-opened in the other mode (or a library entry from an older version): the catalog says how it is open
@@ -181,14 +184,18 @@ export class Studio {
     return (await this.openFile(bytes, name, o)).entry;
   }
   /** open, and say what happened: opened, resumed, already open, or open in the other mode */
-  async openFile(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe | InitialRecipe; as?: OpenAs; read?: () => Promise<Uint8Array> } = {}): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
+  async openFile(bytes: Uint8Array, name: string, o: { initial?: FrameRecipe | InitialRecipe; as?: OpenAs; read?: () => Promise<Uint8Array> } = {}): Promise<OpenResult> {
     const initial = o.initial ?? this.initial;
     return this.frames.openFile(bytes, name, { ...(initial ? { initial } : {}), ...(o.as ? { as: o.as } : {}), ...(o.read ? { read: o.read } : {}) });
   }
   /** re-open a frame as a photo or as a negative (F3, F6): decoded again, that mode's recipe */
-  async reopen(id: string, as: 'photo' | 'negative'): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
+  async reopen(id: string, as: 'photo' | 'negative'): Promise<OpenResult> {
     this.route.endBurst();
-    return this.frames.reopen(id, as, this.initial ? { initial: this.initial } : {});
+    const r = await this.frames.reopen(id, as, this.initial ? { initial: this.initial } : {});
+    // a strip re-opened as one photo (or a photo as a strip): the frame shown was replaced, show the file's first
+    const cur = this.current;
+    if (this.rt && (!cur || !this.frames.get(cur))) this.rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [r.entry.id], primary: r.entry.id, anchor: r.entry.id } }], { tier: 'view' });
+    return r;
   }
   /** take frames out of the library (their recipes stay saved: opening the file again resumes them) */
   remove(ids: string[]): void {
