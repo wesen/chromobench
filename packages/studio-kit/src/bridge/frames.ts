@@ -11,6 +11,19 @@ import {
 import { defaultFor } from '../model/recipes.ts';
 import type { KV } from './kv.ts';
 
+/**
+ * SHA-256 of a file as hex (the frame's identity). WebCrypto when the page has it: native and asynchronous, so a
+ * 25 MB camera RAW does not hold the main thread for a third of a second (CHB-027, F4); else the contract's sha256Hex.
+ */
+export async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle || bytes.byteLength < 1 << 20) return sha256Hex(bytes);
+  const d = new Uint8Array(await subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
+  let hex = '';
+  for (const b of d) hex += b.toString(16).padStart(2, '0');
+  return hex;
+}
+
 /** What a frame is: a colour negative or a photo from a digital camera (the recipe's kind). */
 export type FrameKind = FrameRecipe['kind'];
 /** How the photographer asked to open: let the studio guess, or say. */
@@ -130,7 +143,7 @@ export class Frames {
 
   /** Opens bytes and says what happened: opened, resumed, already open, or open in the other mode. */
   async openFile(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<{ entry: FrameEntry; outcome: OpenOutcome }> {
-    const sha = sha256Hex(bytes);
+    const sha = await hashBytes(bytes);
     const as = o.as ?? 'auto';
     // no reader from the host: a copy (an engine may transfer the bytes it decodes to a worker)
     const copy = o.read ? null : bytes.slice();
@@ -160,7 +173,7 @@ export class Frames {
     const e = this.map.get(id) ?? fail('E_NO_FRAME', `frame ${id} is not open`);
     const read = this.readers.get(e.sha) ?? fail('E_NO_SOURCE', `${e.name} is not at hand: open the file again`, { hint: 'File ▸ Open Files…' });
     const bytes = await read();
-    const sha = sha256Hex(bytes);
+    const sha = await hashBytes(bytes);
     if (sha !== e.sha) fail('E_NO_SOURCE', `${e.name} changed on disk since it was opened`, { hint: 'Open the file again: it is a new frame now' });
     return this.load(bytes, sha, e.name, as, o.initial, e);
   }

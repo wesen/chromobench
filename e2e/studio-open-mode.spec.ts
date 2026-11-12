@@ -59,6 +59,8 @@ test('photo or negative is guessed per file; re-open the other way and back; an 
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.setInputFiles('#file', [FILES.photo, FILES.negative]);
   await expect(page.locator('#status')).toContainText(/opened 2 files|rendered/, { timeout: 120_000 });
+  // with the engine in a worker (CHB-027 WS-B) the first file renders while the second still opens
+  await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 2 && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: 120_000 });
   await idle(page);
   expect((await frames(page)).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
     { name: 'DSC_0001.dng', kind: 'digital-raw', mode: 'photo' },
@@ -102,13 +104,16 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
   await expect(page.locator('.ck-coll-empty:visible').first()).toContainText('No photos yet');
   await page.setInputFiles('#file', [FILES.photo, FILES.negative]);
   await expect(page.locator('#status')).toContainText(/opened 2 files|rendered/, { timeout: 120_000 });
+  // with the engine in a worker (CHB-027 WS-B) the first file renders while the second still opens
+  await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 2 && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: 120_000 });
   await idle(page);
   // the thumbnails are kept in the KV during the session and go into the catalog at the next start
-  await page.waitForFunction(async () => {
+  // (expect.poll, not waitForFunction: waitForFunction takes the async predicate's promise as truthy and returns at once)
+  await expect.poll(() => page.evaluate(async () => {
     const st = window.chromobench.studio;
     const urls = await Promise.all(st.frames.ids().map((id) => st.kv!.get<string>('frames', `thumb:${id}`)));
     return urls.length === 2 && urls.every((u) => u?.startsWith('data:image/jpeg'));
-  }, null, { timeout: 30_000 });
+  }), { timeout: 30_000 }).toBe(true);
   await page.waitForTimeout(1500); // the shell's autosave (debounced)
   await page.reload();
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });

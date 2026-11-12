@@ -1,0 +1,33 @@
+[
+ {
+  "engine": "gpu",
+  "label": "GPU · google swiftshader (software) · 512 px",
+  "bootMs": 8147,
+  "steps": [
+   {
+    "step": "open NEF as photo",
+    "resultMs": 34319,
+    "firstRenderMs": 34319,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     6337
+    ],
+    "stalls": 6,
+    "worstStallMs": 1933,
+    "stallTotalMs": 5583,
+    "wallMs": 34466,
+    "status": "rendered 1 · screen",
+    "notes": "photo: camera RAW (Nikon D750) via LibRaw, photo mode, 6032×4032, camera matrix from adobe · working image 512×342"
+   },
+   {
+    "step": "drag Time 40 px (photo)",
+    "timedOut": 300000
+   }
+  ],
+  "errors": [],
+  "error": "drag Time 40 px (photo): no result in 300000 ms"
+ }
+]

@@ -24,6 +24,63 @@ describe('render queue', () => {
     expect(shown).toEqual(['300']);
     expect(q.stats.presented).toBe(1);
   });
+  it('progressMs (CHB-027): a slot that has shown nothing for that long lets its in-flight render finish', async () => {
+    const b = fakeBridge({ manual: true });
+    const q = new RenderQueue([b]);
+    let t = 0;
+    q.now = () => t;
+    q.progressMs = 250;
+    const shown: string[] = [];
+    const present = (r: any) => void shown.push(`${r.image.width}`);
+    q.request('vp:main:after', fakeImage('a', { w: 1000, h: 500 }), { maxSide: 100, pass: 'draft', present });
+    t = 100;
+    q.request('vp:main:after', fakeImage('b', { w: 1000, h: 500 }), { maxSide: 200, pass: 'draft', present });
+    expect(q.stats.aborted).toBe(1); // shown recently (the slot is new): superseded work is aborted
+    await flush();
+    t = 400;
+    q.request('vp:main:after', fakeImage('c', { w: 1000, h: 500 }), { maxSide: 300, pass: 'draft', present });
+    expect(q.stats.aborted).toBe(1); // nothing shown for 400 ms: b finishes and is shown, then c runs
+    b.resolve();
+    await flush();
+    expect(shown).toEqual(['200']);
+    t = 450;
+    q.request('vp:main:after', fakeImage('d', { w: 1000, h: 500 }), { maxSide: 400, pass: 'draft', present });
+    expect(q.stats.aborted).toBe(2); // shown 50 ms ago: c is aborted for d again
+    await flush();
+    b.resolve();
+    await flush();
+    expect(shown).toEqual(['200', '400']);
+    // the hand stops: a screen pass aborts the draft in flight even when nothing was shown for a while
+    t = 2000;
+    q.request('vp:main:after', fakeImage('e', { w: 1000, h: 500 }), { maxSide: 100, pass: 'draft', present });
+    t = 3000;
+    q.request('vp:main:after', fakeImage('f', { w: 1000, h: 500 }), { maxSide: 500, pass: 'screen', present });
+    expect(q.stats.aborted).toBe(3);
+  });
+  it('preemptBackground (CHB-027): a live request aborts a background render in flight, which runs again after', async () => {
+    const b = fakeBridge({ manual: true });
+    const idle: (() => void)[] = [];
+    const q = new RenderQueue([b], { idle: (f) => void idle.push(f) });
+    q.preemptBackground = true;
+    const thumbs: string[] = [];
+    q.request('thumb:x', fakeImage('t', { w: 1000, h: 500 }), { maxSide: 50, lane: 'bg', present: (r: any) => void thumbs.push(`${r.image.width}`) });
+    expect(b.pending).toBe(0); // a background render waits for an idle moment, so a live request of the same frame goes first
+    idle.shift()!();
+    expect(b.pending).toBe(1);
+    q.request('vp:main:after', fakeImage('m', { w: 1000, h: 500 }), { maxSide: 300, present: () => undefined });
+    expect(q.stats.aborted).toBe(1);
+    await flush();
+    expect(q.busy('thumb:x')).toBe(true); // waiting again
+    expect(b.pending).toBe(1); // only the main render: the thumbnail's was aborted
+    b.resolve();
+    await flush();
+    for (let i = 0; i < 10 && idle.length; i++) idle.shift()!();
+    await flush();
+    b.resolve();
+    await flush();
+    expect(thumbs).toEqual(['50']);
+    expect(q.busy()).toBe(false);
+  });
   it('same key in flight is not aborted; results are presented in increasing generation', async () => {
     const b = fakeBridge({ manual: true });
     const q = new RenderQueue([b]);

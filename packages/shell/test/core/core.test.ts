@@ -243,3 +243,20 @@ describe('cells: exact run counts (so the tests can fail)', () => {
     expect(loops).toBe(1);
   });
 });
+
+describe('idle tasks (CHB-027)', () => {
+  it('a task that queues itself again runs once per idle run, even with a timed-out deadline (no endless loop)', () => {
+    const sch = sched(new Store(init()));
+    let runs = 0;
+    const again = (): void => {
+      runs++;
+      sch.idle(again, 'again');
+    };
+    sch.idle(again, 'again');
+    sch.runIdle({ timeRemaining: () => 50, didTimeout: true });
+    expect(runs).toBe(1);
+    expect(sch.idleQ.length).toBe(1);
+    sch.runIdle({ timeRemaining: () => 50, didTimeout: true });
+    expect(runs).toBe(2);
+  });
+});

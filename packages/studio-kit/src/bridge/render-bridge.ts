@@ -73,6 +73,32 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   /** evaluations started, by shown node id (CHB-009's chainRuns, for tests and the lab's node panel) */
   readonly runs = new Map<string, number>();
   private readonly cache = new WeakMap<FrameRecipe, Map<string, Lowered>>();
+  /**
+   * Adaptive drafts (CHB-027, F4): when set, a draft pass (a slider drag) is sized to take about this many ms on
+   * this engine, from the speed measured on earlier renders, between draftMinPixels and the viewport's draft
+   * size. A slow engine (the reference engine on the CPU) then shows coarse drafts while the hand moves and the
+   * full screen render after. null: the viewport's draft size.
+   */
+  draftTargetMs: number | null = null;
+  draftMinPixels = 30_000;
+  /** Measured engine speed in result pixels per ms, smoothed over renders that took ≥ 20 ms (NaN: none yet). */
+  pxPerMs = NaN;
+
+  /** The scale of a draft under the time budget, on half-octave steps (so successive drafts share one sample grid). */
+  draftScale(scale: number, area: number): number {
+    if (this.draftTargetMs === null || area <= 0) return scale;
+    const budget = Number.isFinite(this.pxPerMs) ? Math.max(this.draftMinPixels, this.pxPerMs * this.draftTargetMs) : this.draftMinPixels;
+    const s = Math.sqrt(budget / area);
+    if (s >= scale) return scale;
+    return Math.min(scale, 2 ** (Math.floor(2 * Math.log2(s)) / 2));
+  }
+
+  /** Folds a render's speed into the estimate. */
+  measured(pixels: number, ms: number): void {
+    if (ms < 20 || pixels <= 0) return;
+    const rate = pixels / ms;
+    this.pxPerMs = Number.isFinite(this.pxPerMs) ? 0.6 * this.pxPerMs + 0.4 * rate : rate;
+  }
 
   constructor(frames: Frames, o: { displaySpace?: OutputSpaceId } = {}) {
     this.frames = frames;
@@ -188,7 +214,8 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     const H = (shown.info as ImageInfo).height;
     const region = t.region;
     const side = region ? Math.max(region.w, region.h) : Math.max(W, H);
-    const scale = Math.min(1, t.maxSide / side);
+    let scale = Math.min(1, t.maxSide / side);
+    if (t.pass === 'draft' && !bands) scale = this.draftScale(scale, region ? region.w * region.h : W * H);
     this.runs.set(shown.id, (this.runs.get(shown.id) ?? 0) + 1);
     const target = { scale: scale >= 1 ? ('full' as const) : scale, precision: 'preview' as const, signal: t.signal, ...(region ? { region } : {}) };
     let res: ImageResult;
@@ -201,6 +228,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     if (t.signal.aborted) throw new DOMException('aborted', 'AbortError');
     const image: PresentImage = { width: res.width, height: res.height, channels: res.info.channels, data, region: res.region, scale: res.scale };
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (!bands) this.measured(res.width * res.height, now - t0);
     return { image, srcW: W, srcH: H, ms: now - t0 };
   }
 }

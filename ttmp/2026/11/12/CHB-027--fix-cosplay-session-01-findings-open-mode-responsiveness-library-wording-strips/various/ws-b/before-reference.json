@@ -1,0 +1,129 @@
+[
+ {
+  "engine": "reference",
+  "label": "reference · CPU f64 · 512 px",
+  "bootMs": 501,
+  "steps": [
+   {
+    "step": "open NEF as photo",
+    "resultMs": 9842,
+    "firstRenderMs": 9816,
+    "renders": 2,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     3109,
+     13
+    ],
+    "stalls": 2,
+    "worstStallMs": 3533,
+    "stallTotalMs": 4000,
+    "wallMs": 9870,
+    "status": "rendered 2 · screen",
+    "notes": "photo: camera RAW (Nikon D750) via LibRaw, photo mode, 6032×4032, camera matrix from adobe · working image 512×342"
+   },
+   {
+    "step": "drag Time 40 px (photo)",
+    "resultMs": 15870,
+    "firstRenderMs": 1863,
+    "renders": 7,
+    "drafts": 6,
+    "lastSize": "512×342",
+    "draftSize": "512×342",
+    "renderMs": [
+     1771,
+     1896,
+     2847,
+     3164,
+     2499,
+     2606,
+     4
+    ],
+    "stalls": 6,
+    "worstStallMs": 3183,
+    "stallTotalMs": 14883,
+    "dragWallMs": 15881,
+    "pointerDownToUpMs": 15842,
+    "upToResultMs": 5,
+    "rendersDuringDrag": 6,
+    "value": "Time 10.0 seconds → Time 20.16 seconds"
+   },
+   {
+    "step": "type 15 + Enter (photo)",
+    "resultMs": 2432,
+    "firstRenderMs": 2432,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     2411
+    ],
+    "stalls": 1,
+    "worstStallMs": 2417,
+    "stallTotalMs": 2417
+   },
+   {
+    "step": "open DNG as negative",
+    "resultMs": 5108,
+    "firstRenderMs": 5108,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "232×512",
+    "draftSize": null,
+    "renderMs": [
+     1044
+    ],
+    "stalls": 1,
+    "worstStallMs": 5067,
+    "stallTotalMs": 5067,
+    "wallMs": 5125,
+    "status": "rendered 11 · screen",
+    "notes": "DNG 1672×3695, 16-bit · working image 232×512 · base 0.12 0.41 0.71 D (rebate 18×150 at 196,22, edge) · scan.flare 0.13 0.06 0.04 % from the veil 1.3e-3 5.5e-4 "
+   },
+   {
+    "step": "drag Time 40 px (negative)",
+    "resultMs": 11849,
+    "firstRenderMs": 1741,
+    "renders": 7,
+    "drafts": 6,
+    "lastSize": "232×512",
+    "draftSize": "232×512",
+    "renderMs": [
+     1707,
+     2194,
+     1765,
+     1709,
+     1750,
+     1706,
+     5
+    ],
+    "stalls": 6,
+    "worstStallMs": 2200,
+    "stallTotalMs": 10868,
+    "dragWallMs": 11855,
+    "pointerDownToUpMs": 11828,
+    "upToResultMs": 5,
+    "rendersDuringDrag": 6,
+    "value": "Time 2.23 seconds → Time 4.49 seconds"
+   },
+   {
+    "step": "type 15 + Enter (negative)",
+    "resultMs": 1806,
+    "firstRenderMs": 1806,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "232×512",
+    "draftSize": null,
+    "renderMs": [
+     1791
+    ],
+    "stalls": 1,
+    "worstStallMs": 1800,
+    "stallTotalMs": 1800
+   }
+  ],
+  "errors": []
+ }
+]
