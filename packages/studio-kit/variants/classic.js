@@ -46,6 +46,22 @@ export const libraryModule = (ck, cb) => m =>
     .bottom(ck.dock.column({ width: 124 }, cb.view.strip()))
     .keys({ ...cb.keys.cull, ...cb.keys.libraryModes });
 
+/** the Roll module, shared with roll: rolls and their setup left, the contact sheet in the centre, the balance bar and analysis right */
+export const rollModule = (ck, cb) => m => {
+  const roll = cb.kits.roll;
+  return m
+    .label('Roll')
+    .key('Mod+Alt+R')
+    .left(ck.dock.column({ width: 300 }, roll.library(), roll.setup()))
+    .center(roll.contactSheet({ size: 180 }))
+    .right(ck.dock.column({ width: 320 }, roll.balanceBar(), roll.inspector(), cb.panel.history({ id: 'history-roll' })))
+    .keys(roll.cullKeys);
+};
+
+/** the Roll menu: new roll, analysis, first print, reference and match */
+export const rollMenu = m =>
+  m.menu('Roll', ['roll.fromFrames', 'roll.analyse', 'roll.firstPrint', '-', 'roll.setReference', 'roll.matchToReference', 'roll.clearMatch', '-', 'roll.contact.mode', 'roll.cull.sweep', 'roll.exportSheet']);
+
 export const menus = m =>
   m
     .menu('File', ['output.save', '-', 'app.palette'])
@@ -58,10 +74,11 @@ export const menus = m =>
 export default {
   id: 'classic',
   label: 'Classic',
-  description: 'Lightroom-like modules: Library, Print, Output',
+  description: 'Lightroom-like modules: Library, Roll, Print, Output',
   build: (ck, cb) => {
-    const s = cb.studio('Chromobench').theme('chromogen').menus(menus);
+    const s = cb.studio('Chromobench').theme('chromogen').use(cb.kits.roll.kit).menus(m => rollMenu(menus(m)));
     s.module('library', libraryModule(ck, cb));
+    s.module('roll', rollModule(ck, cb));
     s.module('print', printModule(ck, cb));
     s.module('output', m =>
       m

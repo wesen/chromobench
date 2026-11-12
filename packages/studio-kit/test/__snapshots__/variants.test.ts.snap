@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme chromogen · kits: cb.core@1
+"shell "Chromobench" · theme chromogen · kits: cb.core@1, cb.roll@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -33,6 +33,24 @@ module library "Library" key G
              cb.metadata
   bottom dockcol  width 124
            filmstrip strip  cell θ  empty "Open a negative (File ▸ Open, or drop a TIFF)"  items τ  key θ  select ui.selection
+module roll "Roll" key Mod+Alt+R
+  left   dockcol  width 300
+           panel roll-library "Rolls"
+             roll.library
+           panel roll-setup "Roll setup"
+             roll.setup
+  center column  class "cb-roll-sheet"  grow 1
+           row  class "cb-roll-sheet-bar"
+             segmented "Contact sheet"  bind rollView.contact.mode  options [{…}, {…}]  small
+             roll.progress
+           gridview contact  cell θ  empty "No roll yet: open the scans, then Roll ▸ New R…  items τ  key θ  select ui.selection  size τ
+  right  dockcol  width 320
+           panel roll-balance "Print the roll like…"
+             roll.balanceBar
+           panel roll-inspector "Roll analysis"
+             roll.inspector
+           panel history-roll "History"
+             cb.history
 module print "Print" key D
   left   dockcol  width 236
            panel navigator-print "Navigator"
@@ -101,20 +119,20 @@ module print "Print" key D
              cb.densitometer
            panel controls-darkroom "Darkroom"
              section "Exposure"
-               cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-               cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+               cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+               cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
              section "Filtration"
-               cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+               cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
              section "Printer lights"
-               cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+               cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
              section "Paper"
-               cb.arg  path "print.paper"  select
-               cb.arg  path "print.grade"  slider  step 0.5 none
-               cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+               cb.arg  path "print.paper"  rollScope "frame"  select
+               cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
+               cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
              section "Film and viewing"
-               cb.arg  path "scan.stock"  select
-               cb.arg  path "scan.scanner"  select
-               cb.arg  path "view.illuminant"  select
+               cb.arg  path "scan.stock"  rollScope "frame"  select
+               cb.arg  path "scan.scanner"  rollScope "frame"  select
+               cb.arg  path "view.illuminant"  rollScope "frame"  select
            panel exposures "Exposures"
              cb.exposures
            panel approvals "Agent proposals"
@@ -157,8 +175,24 @@ commands
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" (File) ← cb.core
+  roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
+  roll.select "Select Roll" ← cb.roll
+  roll.analyse "Analyse Roll" (Roll) ← cb.roll
+  roll.firstPrint "First Print of the Roll" (Roll) ← cb.roll
+  roll.setReference "Set as Roll Reference" (Roll) R ← cb.roll
+  roll.matchToReference "Print the Roll Like the Reference" (Roll) M ← cb.roll
+  roll.alpha "Roll Consistency" ← cb.roll
+  roll.pending.toggle "Include Frame" ← cb.roll
+  roll.pending.approve "Approve Roll Batch" ← cb.roll
+  roll.pending.reject "Reject Roll Batch" ← cb.roll
+  roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
+  roll.setShared "Set on the Roll" ← cb.roll
+  roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
+  roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
+  roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
+  roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 60 · keys 51 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 77 · keys 69 in 5 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `

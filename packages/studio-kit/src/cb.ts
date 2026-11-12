@@ -19,7 +19,7 @@ import { controlModels } from './kit/args.ts';
 import { diffRecipes, PRINT_SETTINGS, VIEW_MODES, type ViewMode } from './model/recipes.ts';
 import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
 import type { Studio } from './studio.ts';
-import { createRollKit } from '../kits/roll/src/kit.ts';
+import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 
 // variants' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
@@ -684,7 +684,7 @@ const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negativ
 
 const badgeOf = (s: any, id: string): string => {
   const pending = s.proposals?.[id]?.length ?? 0;
-  return pending ? `agent ${pending}` : '';
+  return [pending ? `agent ${pending}` : '', rollTag(s, id)].filter(Boolean).join(' · ');
 };
 const cellCaption = (f: CatalogFrame): string => `${f.flag === 'pick' ? '⚑ ' : f.flag === 'reject' ? '✕ ' : ''}${f.name}${f.stars ? ' ' + '★'.repeat(f.stars) : ''}`;
 

@@ -4,7 +4,7 @@
 // mean density goes into the enlarger time (on the slider's 1/6-stop grid) and the colour remainder
 // into the printer lights. Two passes, so a time model that is not exactly log-linear still lands.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
-import { compile, type Box, type Engine, type FrameRecipe, type Graph, type Node, type Vec3 } from '@chromobench/contract';
+import { applyMutation, compile, type Box, type Engine, type FrameRecipe, type Graph, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
 
 /** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
 export type IntegrateToGrey = (frameLatd: Vec3, alpha: number) => Vec3;
@@ -16,6 +16,12 @@ export interface FirstPrintOptions {
   /** Pixels analysed (default 200 000). */
   analysisPixels?: number;
   passes?: number;
+  /**
+   * CHB-010 filtration: the dials that carry the first print's lights (core's bakeRecipe, injected by the host).
+   * The colour correction then sits in print.enlarger.filtration and the time, the lights go to what the dials
+   * cannot carry. Off by default: a roll's analysis and batches work in lights, with the pack as a roll setting.
+   */
+  bake?: (r: FrameRecipe) => Mutation[];
 }
 
 const r6 = (x: number): number => Number(x.toFixed(6));
@@ -81,7 +87,7 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
     t = t2;
     r = { ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, time_s: t }, lights: { ...r.print.lights, logH: lights } } };
   }
-  return {
+  const out: FrameRecipe = {
     ...r,
     print: {
       ...r.print,
@@ -91,6 +97,8 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
       },
     },
   };
+  // the auto record keeps the proposal in lights (what was measured); the dials carry it
+  return o.bake ? o.bake(out).reduce((x, m) => applyMutation(x, m).recipe, out) : out;
 }
 
 /** The new recipe with the measured rebate box (CHB-020) as its scan base; no box leaves scan.density's own rule. */

@@ -5,7 +5,7 @@ import {
   compile, defaultRecipe, Graph, ORIENTATIONS, sha256Hex,
   type Engine, type EngineCaps, type EvalTarget, type FrameRecipe, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
-import { CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine } from '@chromobench/core';
+import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, interimData, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { conditionScan, plantedStrip } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
@@ -242,6 +242,30 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     expect(dist(hole, truth)).toBeGreaterThan(0.3);
     expect(withRebate(r0, null).scan?.rebate).toBeNull();
     expect(withRebate(r0, c.rebate).scan?.rebate).toEqual(c.rebate);
+  }, 60_000);
+
+  it('CHB-010 bake: the first print can carry its colour in the filtration dials; the print stays within the dials\' rounding', async () => {
+    const strip = plantedStrip({ castD: [0.12, 0, -0.1] });
+    const sha = 'd'.repeat(64);
+    const info: SourceInfo = {
+      sha256: sha, format: 'tiff', width: strip.w, height: strip.h, channels: 3, bits: 16, sample: 'uint',
+      encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' },
+      cfa: 'none', clippedFraction: 0, notes: [],
+    };
+    const c = conditionScan(Float32Array.from(strip.rgb), strip.w, strip.h, { id: sha, subtract: false });
+    const e = new RefEngine();
+    e.openDecoded(info, Float32Array.from(strip.rgb));
+    const g = new Graph();
+    g.registerSource(info);
+    const r0 = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
+    const plain = await firstPrint(e, g, r0, { integrate });
+    const baked = await firstPrint(e, g, r0, { integrate, bake: (r) => bakeRecipe(r, interimData(), DEFAULT_CONVENTIONS).mutations });
+    expect(baked.print.enlarger.filtration).not.toEqual(plain.print.enlarger.filtration);
+    expect(Math.max(...baked.print.lights.logH.map(Math.abs))).toBeLessThan(Math.max(...plain.print.lights.logH.map(Math.abs)) + 1e-9);
+    expect(baked.print.lights.auto.logH).toEqual(plain.print.lights.auto.logH);
+    const x = async (r: typeof plain): Promise<number[]> => [...(await measureExposure(e, g, r))];
+    const [xp, xb] = [await x(plain), await x(baked)];
+    expect(Math.max(...xp.map((v, k) => Math.abs(v - xb[k]!)))).toBeLessThan(0.05);
   }, 60_000);
 
   it('the veil goes into the recipe (scan.flare, scan.baseT), not out of the pixels: same print as subtracting it', async () => {

@@ -122,6 +122,31 @@ for (const engine of ['gpu', 'reference'] as const) {
   });
 }
 
+// CHB-020 follow-up: the Roll module of the default (classic) variant on the real reference engine: the host's
+// roll physics, a new roll with its automatic first print, the roll badge on the film strip, and the first print
+// of the roll as one card with before/after thumbnails, rejected.
+test('classic variant: the Roll module makes a roll, badges the strip and shows the first-print card with thumbnails', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, 'reference');
+  expect(await page.evaluate(() => window.chromobench.variant)).toBe('classic');
+  await page.evaluate(() => window.chromobench.rt.go('roll'));
+  await expect(page.locator('#roll-new')).toBeVisible();
+  await page.locator('#roll-new').click();
+  await expect(page.locator('#rolls li')).toContainText('first-printed', { timeout: 120_000 });
+  // the recipe names the roll
+  expect(await page.evaluate(() => window.chromobench.log!.state.roll)).toEqual({ id: 'roll-1' });
+  // the film strip's roll badge (the Library module shows the strip)
+  await page.evaluate(() => window.chromobench.rt.go('library'));
+  await expect(page.locator('.ck-thumb-badge').filter({ hasText: 'roll 1' }).first()).toBeVisible();
+  // First print of the roll: one card, before and after thumbnails, reject leaves the frame alone
+  await page.evaluate(() => window.chromobench.rt.go('roll'));
+  await page.locator('#roll-first-print').click();
+  await expect(page.locator('#roll-pending')).toBeVisible();
+  await expect(page.locator('#roll-pending .cb-change-thumb')).toHaveCount(2);
+  await page.locator('#roll-reject').click();
+  await expect(page.locator('#roll-pending')).toHaveCount(0);
+});
+
 test('offline: after one online visit the real engine starts without a network (packs from the service worker)', async ({ page, context }) => {
   test.setTimeout(180_000);
   await page.goto('/?canvas2d&engine=gpu&fresh');

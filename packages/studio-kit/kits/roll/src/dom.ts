@@ -7,7 +7,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { canonicalJSON, getPath, type Vec3 } from '@chromobench/contract';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
-import type { NodeData } from '@chromobench/shell';
+import { makeNode, type NodeData } from '@chromobench/shell';
+import { frameRef } from '../../../src/handles.ts';
+import { previewOf } from './engine/batch.ts';
 import { SHARED_PATHS } from './engine/constants.ts';
 import { divergence, type Roll } from './engine/model.ts';
 import { rollFrames, rollOf } from './kit.ts';
@@ -51,8 +53,8 @@ const library = panelOf('cb-roll-library', (s) => ({ d: s.roll, p: s.rollView?.p
   run(m, b1, 'roll.fromFrames');
   const b2 = btn('Analyse', '', { id: 'roll-analyse' });
   run(m, b2, 'roll.analyse');
-  const b3 = btn('First print', '', { id: 'roll-first-print' });
-  run(m, b3, 'roll.firstPrint');
+  const b3 = btn('First print…', '', { id: 'roll-first-print', title: 'Plan the first print of every frame as one card to approve' });
+  run(m, b3, 'roll.firstPrint', true);
   bar.append(b1, b2, b3);
   el.append(bar);
   if (v.p) el.append(h('p', { class: 'cb-dim', text: `Analysing ${v.p.done}/${v.p.total}…` }));
@@ -104,13 +106,14 @@ const setup = panelOf('cb-roll-setup', (s) => {
       el.append(row('Scanner', String(r.fragment['scan.scanner'] ?? '–'), 'estimated, not calibrated (CHB-013 measures the scanner)', over('scan.scanner')));
     } else if (sec === 'base' && a) {
       const b = a.base;
-      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}` : 'no rebate found';
-      el.append(row('Base', b.T ? `T ${d3(b.T)}` : '–', ev, b.mixed.length ? `mixed: ${b.mixed.map((f) => `${nameOf(s, f)} (${b.deviationD[f]!.toFixed(3)} D)`).join(', ')}` : null));
+      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; written to every frame's scan.baseT` : 'no rebate found';
+      const mixedNote = b.mixed.length ? `mixed: ${b.mixed.map((f) => `${nameOf(s, f)} (${b.deviationD[f]!.toFixed(3)} D)`).join(', ')} keep their own base` : null;
+      el.append(row('Base', b.T ? `T ${d3(b.T)}` : '–', ev, mixedNote ?? over('scan.baseT')));
     } else if (sec === 'veil' && a) {
       const b = a.base;
       const veilOfBase = b.veil && b.T ? (b.veil.map((x, k) => x / b.T![k]!) as Vec3) : null;
       const ev = b.veil
-        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
+        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base, written to scan.flare${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
         : 'no opaque holder in view: the veil is not measured or corrected';
       el.append(row('Veil (flare)', b.veil ? d3(b.veil.map((x) => x * 1000)) + ' ‰' : '–', ev, over('scan.flare')));
     } else if (sec === 'noise' && a) {
@@ -125,7 +128,16 @@ const setup = panelOf('cb-roll-setup', (s) => {
   }
 });
 
-const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: s.ui?.selection?.primary, cat: s.catalog }), (el, v, m) => {
+const BATCH_THUMBS = 12;
+/** a small print thumbnail (the shell's thumb form), mounted from a renderer */
+const thumb = (m: MountCtx, image: unknown, which: 'before' | 'after'): Node => {
+  const el = m.mount(makeNode(null, 'thumb', { image, max: 72 }, [], null)) as HTMLElement;
+  el.classList.add('cb-change-thumb', `is-${which}`);
+  el.title = which === 'before' ? 'now' : 'with the batch';
+  return el;
+};
+
+const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: s.ui?.selection?.primary, cat: s.catalog, rec: s.rollView?.pending ? s.recipes : null }), (el, v, m) => {
   const r: Roll | null = v.r;
   if (!r) return void el.append(h('p', { class: 'cb-empty', text: 'No roll selected' }));
   const s = { catalog: v.cat };
@@ -147,12 +159,20 @@ const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollV
     h('div', { class: 'cb-card-h' }, h('strong', { text: b.label }), ` · ${b.frames.length - off.length} frame${b.frames.length - off.length === 1 ? '' : 's'}`),
     h('div', { class: 'cb-dim', text: b.why }));
   const list = h('div', { class: 'cb-changes' });
+  let shown = 0;
   for (const f of b.frames) {
     const box = h('input', { type: 'checkbox', 'aria-label': `Include ${nameOf(s, f.frame)}` }) as HTMLInputElement;
     box.checked = !off.includes(f.frame);
     listen(m.scope, box, 'change', () => void m.rt.runCommand('roll.pending.toggle', null, f.frame));
-    list.append(h('div', { class: 'cb-change' }, h('label', {}, box, ` ${nameOf(s, f.frame)}`)));
+    // before and after: the frame's print as it is, and as the batch would make it (the same thumbnail cache as the sheet)
+    const cur = v.rec?.[f.frame];
+    const thumbs = cur && shown++ < BATCH_THUMBS
+      ? h('span', { class: 'cb-change-thumbs' },
+        thumb(m, frameRef(f.frame, cur).print(), 'before'), h('span', { class: 'cb-dim', text: '→' }), thumb(m, frameRef(f.frame, previewOf(b, f.frame, cur)).print(), 'after'))
+      : null;
+    list.append(h('div', { class: 'cb-change' }, h('label', {}, box, ` ${nameOf(s, f.frame)}`), thumbs));
   }
+  if (b.frames.length > BATCH_THUMBS) list.append(h('div', { class: 'cb-dim', text: `before and after shown for the first ${BATCH_THUMBS} of ${b.frames.length} frames` }));
   card.append(list);
   if (b.skipped.length) card.append(h('div', { class: 'cb-dim', id: 'roll-skipped', text: `${b.skipped.length} skipped: ${b.skipped.map((x: any) => `${nameOf(s, x.frame)} (${x.why})`).join(', ')}` }));
   const stale = v.v.stale ?? [];

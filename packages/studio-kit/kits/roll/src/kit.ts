@@ -91,6 +91,16 @@ export function rollBadge(s: any, f: FrameId): string {
   if (s?.rollView?.pending?.frames?.some((x: any) => x.frame === f) && !s.rollView.off?.includes(f)) out.push('preview');
   return out.join(' · ');
 }
+/** the film strip's roll badge: which roll a frame belongs to (FrameRecipe.roll), ★ for the reference, ≠ when it diverges */
+export function rollTag(s: any, f: FrameId): string {
+  const d = s?.roll as RollDoc | undefined;
+  if (!d?.order?.length) return '';
+  const r = s?.recipes?.[f] as FrameRecipe | undefined;
+  const id = r?.roll?.id ?? d.order.find((x) => d.rolls[x]?.frames.includes(f));
+  const roll = id ? d.rolls[id] : undefined;
+  if (!roll) return '';
+  return `roll ${d.order.indexOf(roll.id) + 1}${roll.reference === f ? ' ★' : ''}${r && divergenceOf(roll, r) ? ' ≠' : ''}`;
+}
 const divergenceOf = (roll: Roll, r: FrameRecipe): boolean => Object.keys(divergence({ fragment: roll.fragment, frames: [r.frame] }, () => r)).length > 0;
 
 const ROLL_DOCS = `## cb.kits.roll
@@ -481,6 +491,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     /** the cull keys plus M (match) and R (reference); scope them to the module that shows the sheet */
     cullKeys: { ...cb.keys.cull, M: 'roll.matchToReference', R: 'roll.setReference' } as Record<string, any>,
     badge: rollBadge,
+    tag: rollTag,
     of: rollOf,
     frames: rollFrames,
     /** CHB-021's "apply look to the roll": per-frame mutations as one batch */

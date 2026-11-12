@@ -36,6 +36,8 @@ export interface FrameRef {
   view(mode: ViewMode): ImageHandle;
   testStrip(o?: { vary?: string; step?: number; count?: number }): ImageHandle;
   ringTile(offset: Vec3): ImageHandle;
+  /** The roll this frame belongs to (FrameRecipe.roll, contract 0.3): {id} or null; the roll kit's record is cb.kits.roll.of(state, id). */
+  roll(): { readonly id: string } | null;
   initial(): FrameRef;
   withRecipe(r: FrameRecipe, expr?: string): FrameRef;
 }
@@ -66,6 +68,7 @@ export function frameRef(frame: string, recipe: FrameRecipe | 'initial', expr = 
     view: (mode: ViewMode) => (mode === 'print' ? self.print() : image(self, 'view', { mode }, `${expr}.view('${mode}')`)),
     testStrip: (o: { vary?: string; step?: number; count?: number } = {}) => image(self, 'testStrip', { vary: o.vary ?? 'time', step: o.step ?? 1 / 3, count: o.count ?? 5 }, `cb.testStrip(${expr}, ${JSON.stringify(o)})`),
     ringTile: (offset: Vec3) => image(self, 'ringTile', { offset }, `${expr}.print({ lights: +${JSON.stringify(offset)} })`),
+    roll: () => (recipe === 'initial' ? null : recipe.roll ?? null),
     initial: () => frameRef(frame, 'initial', `${expr}.initial()`),
     withRecipe: (r: FrameRecipe, e = expr) => frameRef(frame, r, e),
   });
