@@ -671,3 +671,85 @@ mode)`, `prior`, `forget`, `openAs`, `guessOpenMode` in the worker, `forgetSourc
 
 ### Technical details
 - N/A.
+
+## Step 10: Real GPU (the owner's M1 Max): BEFORE and AFTER
+
+The orchestrator made the owner's MacBook Pro (Apple M1 Max, Chrome, Metal WebGPU) drivable through a Playwright
+1.65 server and an SSH tunnel (`scripts/mac-README.md` on main). I added `--mac` to the measurement script
+(`chromium.connect('ws://127.0.0.1:9333/', …channel 'chrome', headless false…)`, WebGPU presenter instead of
+Canvas2D), took the lock, measured BEFORE on the Mac's port 4600 (a build of main at 0b381c6, before CHB-027) and
+AFTER on 4811 (this branch, twice: before and after the WebCrypto hash), both engines, and released the lock.
+
+On a real GPU the drags were already fluid before (renders of 30–80 ms, no stalls); what froze the window there
+was **opening** (decode, conditioning and hashing on the main thread). After: the DNG open has no stall, the NEF
+open one of 200 ms; drags and typed values unchanged. The reference engine on the M1 Max shows the CPU story of
+Step 8 cleanly (an otherwise idle machine): every stall gone, final renders equal to before.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1 (and the orchestrator's message: record BEFORE (port 4600) and AFTER numbers
+on the real GPU, note what differs from SwiftShader)
+**Assistant interpretation:** Real-GPU numbers for the diary next to the CPU ones.
+**Inferred user intent:** Decide on evidence from Manfred's kind of machine, not a software adapter.
+**Commit (code):** 20c6e02 — "CHB-027 WS-B: measurement --mac (the M1 Max over the Playwright tunnel); after/before JSON"
+
+### What I did
+- `ssh mimimi-2.local 'mkdir /tmp/chromobench-pw/lock && echo WS-B > /tmp/chromobench-pw/lock/owner'` (held by
+  "orchestrator" at first; a Monitor retried every 60 s), then:
+  `node …/01-measure-responsiveness.mjs --mac --base http://localhost:4600 --engines gpu,reference --step-timeout 300000 --out …/mac-before.json`
+  and the same with `--base http://localhost:4811` → `mac-after-run1.json`, `mac-after.json` (final build).
+- `ssh mimimi-2.local 'rm -rf /tmp/chromobench-pw/lock'` at the end.
+
+### Why
+- SwiftShader's GPU numbers (Step 2) were a software adapter's, and its "never finishing" drags were the settle()
+  hang of Step 6.
+
+### What worked
+GPU engine (`GPU · apple metal-3 · 4000 px`):
+
+| step | BEFORE result / worst stall (stalls) | AFTER result / worst stall (stalls) |
+|---|---|---|
+| open NEF as photo | 46786 / 1000 ms (3, 1767 ms) | 51475 / 200 ms (2, 308 ms) |
+| drag Time 40 px (photo) | 1602 / 0 (drag wall 1543, renders 45–65 ms) | 1665 / 0 (wall 1615, renders 29–63 ms) |
+| type 15 + Enter (photo) | 94 / 0 | 72 / 0 |
+| open DNG as negative | 28920 / 1158 ms | 26178 / **0** |
+| drag Time 40 px (negative) | 1718 / 0 | 1909 / 0 |
+| type 15 + Enter (negative) | 118 / 0 | 71 / 0 |
+
+Reference engine on the M1 Max (CPU, 512 px):
+
+| step | BEFORE result / worst stall (stalls, total) | AFTER result / worst stall |
+|---|---|---|
+| open NEF as photo | 47815 / 2525 ms (2, 3083) | 44450 / **0** |
+| drag Time 40 px (photo) | 9255 / 1292 ms (6, 7693); drag wall 9269 ms | 2824 / **0**; wall 1582, first draft 339 ms, final 1246 ms after release |
+| type 15 + Enter (photo) | 1283 / 1276 ms | 1268 / **0** |
+| open DNG as negative | 29605 / 2700 ms | 25911 / **0** |
+| drag Time 40 px (negative) | 7658 / 883 ms (7, 6117); wall 7587 ms | 2394 / **0**; wall 1549, first draft 267 ms, final 849 ms after release |
+| type 15 + Enter (negative) | 914 / 883 ms | 872 / **0** |
+
+### What didn't work
+- My first Mac BEFORE run used the script version with the broken open wait (Step 8); after its photo steps it
+  waited out the DNG open; I stopped it and ran again (`mac-before-run1.log` kept in the scratchpad only).
+
+### What I learned
+- Different from SwiftShader: on Metal the GPU engine renders a 896×599 screen in ≈ 50 ms, drafts are not even
+  needed; the GPU drags never stalled. SwiftShader drafts took seconds and made the GPU look like the CPU.
+- Open times on the Mac (26–51 s) are dominated by streaming the file through the tunnel (`setInputFiles` uploads
+  25 MB / 12 MB to the remote browser); compare stalls there, not open durations.
+- The remaining 200 ms on the GPU's NEF open is GpuEngine's own main-thread work (it packs the 4000 px working image
+  into an upload buffer, `engine-gpu.ts` texture upload) — out of scope (GpuEngine stays on the main thread).
+
+### What was tricky to build
+- One user at a time on the Mac: the lock and a 60 s retry loop; my local runs went on meanwhile.
+
+### What warrants a second pair of eyes
+- N/A.
+
+### What should be done in the future
+- GpuEngine: upload the working image tile by tile across frames (or from the worker as an ImageBitmap/buffer) to
+  remove the last open stall.
+
+### Code review instructions
+- `scripts/01-measure-responsiveness.mjs --mac` (needs the tunnel and the lock).
+
+### Technical details
+- JSON: `various/ws-b/mac-before.json`, `mac-after-run1.json` (before the WebCrypto hash), `mac-after.json`.
