@@ -24,6 +24,8 @@ Contract v0 covers everything ingest needed (`SourceRef`, `DecodeOptions`, `Sour
 
 ## 2. (Reminder, already deferred) per-channel flare
 
+**Contract 0.3 (CHB-024):** applied. `scan.flare` is `number | Vec3` (`ArgSpec.perChannel`), T = T′(1 + f) − f per channel in the mock, core and GPU engines.
+
 `fitFlare` returns a per-channel `f` (`Vec3`), and `region()` accepts `number | Vec3`. The recipe keeps a single percent (`scan.flare`). CONTRACT-DECISIONS lists the widening as deferred. Decide it before CHB-013 calibrates flare. No change is requested now.
 
 ## 3. A note for compile/engines, not a type change

@@ -49,7 +49,7 @@ export type PixelAnalysis = Omit<FrameAnalysis, 'latd' | 'auto' | 'under' | 'id'
 
 /**
  * The pixel half of a frame's analysis, on its source at the analysis size. A rebate or crop the photographer
- * picked (scan.rebate, scan.crop, source px) wins over the search.
+ * picked (scan.rebate, view.frame.crop, source px) wins over the search.
  */
 export function analysePixels(px: Pixels, recipe: FrameRecipe | null, physics: RollPhysics, o: { veil?: boolean; conditionedVeil?: Vec3 | null } = {}): PixelAnalysis {
   const { rgb, w, h, scale } = px;
@@ -57,7 +57,7 @@ export function analysePixels(px: Pixels, recipe: FrameRecipe | null, physics: R
   const useVeil = o.veil !== false;
   const veil: Vec3 = useVeil && lay.surround ? lay.surround.L : [0, 0, 0];
   const picked = recipe ? (getPath(recipe, 'scan.rebate') as Box | null | undefined) : null;
-  const pickedCrop = recipe ? (getPath(recipe, 'scan.crop') as Box | null | undefined) : null;
+  const pickedCrop = recipe ? (getPath(recipe, 'view.frame.crop') as Box | null | undefined) : null;
   let rebate: FrameAnalysis['layout']['rebate'] = null;
   let rebateA: Box | null = null;
   if (picked) {
@@ -112,7 +112,7 @@ export async function analyseFrame(engine: Engine, e: AnalyseEntry, physics: Rol
   const t = totalOf(r);
   const latd = r6v(X.map((x, k) => -(x - t[k]!)));
   const auto = r6v(physics.integrateToGrey(latd, { latd: [0, 0, 0], lights: [0, 0, 0] }, o.alpha ?? ALPHA));
-  const under = canonicalJSON({ stock: r.scan?.stock ?? null, scanner: r.scan?.scanner ?? null, rebate: r.scan?.rebate ?? null, crop: r.scan?.crop ?? null, long });
+  const under = canonicalJSON({ stock: r.scan?.stock ?? null, scanner: r.scan?.scanner ?? null, rebate: r.scan?.rebate ?? null, crop: r.view.frame.crop ?? null, long });
   return { id: e.id, sha256: e.sha256, ...p, latd, auto, under };
 }
 

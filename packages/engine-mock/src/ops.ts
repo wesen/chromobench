@@ -1,7 +1,7 @@
 // Mock maths for every catalog op. f64, deterministic, deliberately simple, but each formula moves
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
-import { DOMAINS, fail, LOGH_PER_POINT, mulberry32, type Box, type Cmy, type Domain, type ImageInfo, type Point, type Vec3 } from '@chromobench/contract';
+import { DOMAINS, fail, LOGH_PER_POINT, mulberry32, straighten, type Box, type Cmy, type Domain, type ImageInfo, type Point, type Vec3 } from '@chromobench/contract';
 
 export interface Img {
   w: number;
@@ -19,6 +19,8 @@ export interface OpCtx {
   info: ImageInfo | undefined;
   /** Source images by sha256. */
   source(sha: string): Img;
+  /** The definition of a node the engine knows (print.combine reads its flashes' print.expose args). */
+  def?(id: string): { op: string; args: Readonly<Record<string, unknown>> } | undefined;
 }
 
 export type ImageOp = (ctx: OpCtx) => Img;
@@ -280,14 +282,16 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return map(r, r.c, (px, x, y) => px.map((v, k) => v / Math.max(flat.data[(y * flat.w + x) * flat.c + Math.min(k, flat.c - 1)]!, 1e-8)));
   },
   'scan.flare': (ctx) => {
+    // T = T′(1 + f) − f per channel, T′ relative to the open gate (contract 0.3; ingest removeFlareValue)
     const r = recv(ctx);
-    const mean = boxMean(r, { x: 0, y: 0, w: r.w, h: r.h });
-    const f = num(ctx, 'flare') / 100;
-    return map(r, r.c, (px) => px.map((v, k) => Math.max(0, v - f * mean[k]!)));
+    const a = A(ctx, 'flare') as number | Vec3;
+    const f = [0, 1, 2].map((k) => (Array.isArray(a) ? a[k]! : a) / 100);
+    return map(r, r.c, (px) => px.map((v, k) => (k < 3 ? v * (1 + f[k]!) - f[k]! : v)));
   },
   'scan.density': (ctx) => {
     const r = recv(ctx);
-    const { T } = rebateOf(r, A(ctx, 'rebate') as Box | undefined);
+    const base = A(ctx, 'baseT') as Vec3 | undefined;
+    const T = base ?? rebateOf(r, A(ctx, 'rebate') as Box | undefined).T;
     return map(r, outC(ctx), (px) => Array.from({ length: outC(ctx) }, (_, k) => -Math.log10(Math.max(px[k] ?? 0, 1e-8) / T[Math.min(k, T.length - 1)]!)));
   },
   'scan.baseClass': (ctx) => map(recv(ctx), 1, (px) => {
@@ -318,28 +322,48 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
   'print.preflash': (ctx) => map(recv(ctx), 3, (px) => rgb3(px).map((v) => Math.log10(10 ** v + num(ctx, 'amount')))),
   'print.combine': (ctx) => {
-    const exps = (A(ctx, 'exposures') as string[]).length;
+    // H = 10^−Σd·(10^x ± Σ m·10^x_i) + Σ_flash m·10^x_flash (contract 0.3: flashes and density masks)
+    const ids = A(ctx, 'exposures') as string[];
+    const exps = ids.length;
     const modes = A(ctx, 'modes') as string[];
+    const dms = ctx.extra.slice(2 * exps);
+    // a flash is its print.expose evaluated uniformly at dye amounts 0 (the mock's film has no base: open = base)
+    const flash = ids.map((id, i) => {
+      if (!modes[i]!.startsWith('flash')) return null;
+      const d = ctx.def?.(id);
+      return d?.op === 'print.expose' ? exposeX([0, 0, 0], { time_s: d.args['time_s'] as number, fstop: d.args['fstop'] as number, filtration: d.args['filtration'] as Cmy }) : null;
+    });
     const r = recv(ctx);
     return map(r, 3, (px, x, y) => rgb3(px).map((v, k) => {
       let H = 10 ** v;
+      let F = 0;
       for (let i = 0; i < exps; i++) {
         const e = ctx.extra[i]!;
         const m = ctx.extra[exps + i]!;
         const w = m.data[y * m.w + x]!;
-        H += (modes[i] === 'subtract' ? -1 : 1) * w * 10 ** e.data[(y * e.w + x) * e.c + k]!;
+        const fx = flash[i];
+        if (modes[i]!.startsWith('flash')) F += w * 10 ** (fx ? fx[k]! : e.data[(y * e.w + x) * e.c + k]!);
+        else H += (modes[i] === 'subtract' ? -1 : 1) * w * 10 ** e.data[(y * e.w + x) * e.c + k]!;
       }
-      return Math.log10(Math.max(H, 1e-8));
+      let d = 0;
+      for (const dm of dms) d += dm.data[(y * dm.w + x) * dm.c]!;
+      return Math.log10(Math.max(H * 10 ** -d + F, 1e-8));
     }));
   },
   'print.develop': (ctx) => map(recv(ctx), 3, (px) => developA(rgb3(px), num(ctx, 'grade'))),
   'print.densityMask': (ctx) => {
+    // d_m from the blurred mean transmittance 10^−PD, PD = −x in the mock (its clear film is x = 0); box blur
     const r = recv(ctx);
     const a = num(ctx, 'amount');
-    if (a === 0) return r;
-    const blur = boxBlur(r, 4);
-    return map(r, r.c, (px, x, y) => px.map((v, k) => v - a * (blur.data[(y * r.w + x) * r.c + k]! - v)));
+    const T = map(r, 1, (px) => [rgb3(px).reduce((s, v) => s + 10 ** v, 0) / 3]);
+    const Hm = boxBlur(T, 4);
+    let lo = Infinity, hi = -Infinity;
+    for (const v of Hm.data) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const same = A(ctx, 'polarity') === 'same';
+    return map(Hm, 1, (px) => [a === 0 ? 0 : same ? a * (Math.log10(hi) - Math.log10(px[0]!)) : a * (Math.log10(px[0]!) - Math.log10(lo))]);
   },
+  // contract 0.3 stub: CHB-022 implements heal and clone
+  'retouch.heal': (ctx) => recv(ctx),
   'view.reflect': (ctx) => map(recv(ctx), 3, (px) => reflectXYZ(rgb3(px))),
   'view.flare': (ctx) => {
     const f = num(ctx, 'flare') / 100;
@@ -352,9 +376,18 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   }),
   'output.display': (ctx) => map(recv(ctx), 3, (px) => mul(MINV, rgb3(px)).map((v) => srgbEncode(clamp(v, 0, 1)))),
   'output.frame': (ctx) => {
+    const src = recv(ctx);
     const c = A(ctx, 'crop') as Box | undefined;
-    const r = c ? crop(recv(ctx), c) : recv(ctx);
-    return orient(r, A(ctx, 'orientation') as string);
+    const angle = (A(ctx, 'angle_deg') as number | undefined) ?? 0;
+    const o = A(ctx, 'orientation') as string;
+    if (angle !== 0) {
+      // straighten: the crop's content turned about its centre (the contract's reference sampling)
+      const b = c ?? { x: 0, y: 0, w: src.w, h: src.h };
+      const data = straighten(src.data, src.w, src.h, src.c, { x: 0, y: 0 }, src.w, src.h, b, angle, o);
+      return orient({ w: b.w, h: b.h, c: src.c, data }, o);
+    }
+    const r = c ? crop(src, c) : src;
+    return orient(r, o);
   },
   'mask.luminance': (ctx) => map(recv(ctx), 1, (px) => {
     // above ≤ 0 / below ≥ 1 leave that side open (core's rule: compile's whole-frame mask stays 1 off-range)
@@ -539,12 +572,15 @@ export const VALUE_OPS: Record<string, ValueOp> = {
   'darkroom.lightsToFiltration': (ctx) => {
     const l = A(ctx, 'logH') as Vec3;
     const top = Math.max(...l);
-    return { filtration: { c: 100 * (top - l[0]), m: 100 * (top - l[1]), y: 100 * (top - l[2]) }, residual: 0 };
+    return { filtration: { c: 100 * (top - l[0]), m: 100 * (top - l[1]), y: 100 * (top - l[2]) }, time_s: num(ctx, 'time_s') ?? 10, stops: 0, lights: [0, 0, 0], residual: 0 };
   },
   'output.encode': (ctx) => {
     const r = recv(ctx);
     const f = A(ctx, 'format') as string;
     const bps = f.endsWith('16') ? 2 : 1;
-    return { format: f, name: `export.${f.replace(/\d+$/, '')}`, bytes: r.w * r.h * 3 * bps, sha256: '0'.repeat(64) };
+    return {
+      format: f, name: `export.${f.replace(/\d+$/, '')}`, bytes: r.w * r.h * 3 * bps, sha256: '0'.repeat(64),
+      mime: f.startsWith('png') ? 'image/png' : f === 'jpeg' ? 'image/jpeg' : 'image/tiff', width: r.w, height: r.h, bits: 8 * bps, space: 'srgb', iccSha256: '', recipeSha256: '',
+    };
   },
 };

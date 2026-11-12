@@ -1,6 +1,6 @@
 # Contract decisions
 
-`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017) is the last section before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
+`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017) and contract 0.3 (`'0.3.0'`, CHB-024) are the last sections before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
 
 - **accepted**: in v0 as proposed;
 - **adapted**: in v0 in a different shape, with the reason given;
@@ -300,6 +300,105 @@ tests:     studio maskSpec/parseMask round trip; a tilted ellipse covers its rot
 
 CC-007  error codes W_DECODE_NOTE, SyntaxError, ReferenceError, TypeError, RangeError, Error (CHB-006 #1, CHB-007 R1)
 class:     additive
+```
+
+## Contract 0.3 (CHB-024: roll records, batches, flare, flash, density masks, framing, retouch, shared vocabulary)
+
+`CONTRACT_VERSION = '0.3.0'`, `RECIPE_VERSION = 2`, `EditLogData.version = 2`. The 0.2.0 catalog is kept as
+`baselines/catalog-0.2.0.json`; `pnpm contract:check` compares against `main` (0.2.0) or that file: 50 changes,
+7 breaking (allowed under 0.x, each with a note below). `contract:check` now also reports `perChannel` and
+Value-field changes. Decisions marked **(review)** were taken with sensible defaults and should be looked at by the user.
+
+Sources: `packages/{core,dsl,gpu,ingest,output,studio-kit}/CONTRACT-REQUESTS.md`, `apps/studio/CONTRACT-REQUESTS.md`,
+CHB-020 guide §7, CHB-022 guide §3.1/§6/§7.1, CHB-016 guide (Diagnostic.where), CHB-001 diary Step 8.
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| studio-kit R1, CHB-016/019 | `EditLog.preview` takes several mutations | accepted | `preview(m \| m[] \| null)`; `state` folds them in order; `[]` clears. The event is `{type: 'preview', mutation: first or null, mutations}` (0.2 listeners keep working) |
+| studio-kit R2, CHB-016/019 | Shared frame vocabulary | adapted | In the contract (`src/vocab.ts`), not a new package: both users already depend on it. `FRAME_ACCESSORS` (name, domain, op), `ACCESSORS`, `PRINT_OPTIONS`, `PRINT_OPTION_PATHS`, `cut(r, g, op, opts)`, `accessorNode`. `packages/dsl` Host and `packages/studio-kit` handles and render bridge import it; studio-kit's copy is gone; the parity test now asserts that both re-exports are the contract's objects (`toBe`). The node-id parity test (viewer vs DSL `frame.print()`) stays |
+| studio-kit R3, CHB-020 #1 | `scan.baseT: Vec3 \| null` | accepted | `scan.density.baseT` (vec3, fraction, 1e-6…100, optional) wins over `rebate`; compile passes only `baseT` when set, so the node does not depend on the box. Mock, core and GPU implement it (conformance semantic case). The roll kit still writes per-frame rebate boxes; switching roll setup to `baseT` is CHB-020's |
+| studio-kit R4, CHB-020 #2, ingest #2 | `scan.flare: number \| Vec3`, in every engine **(review)** | accepted | New `ArgSpec.perChannel` (a number argument that also takes `[r, g, b]`, range per component; DSL type `number \| Vec3`). Formula everywhere: T = T′(1 + f) − f per channel (ingest `removeFlareValue`), T′ the signal relative to the open gate. **Review:** engines assume the signal is already open-gate-normalised (after `scan.flatField` with an open-gate flat); `scan.openGate` has no op yet. The mock's old rule (subtract f × the frame mean) is replaced. Core: new op; GPU: `OP.AFFINE` (16) in the pointwise kernel. CHB-013 still calibrates the numbers |
+| studio-kit R5, CHB-020 #3 | `LoggedMutation.batch`, batch approval | accepted | `apply(…, {tx, batch})`, `propose(…, {tx, batch})`; `approve` / `reject` take `seqs` or `{batch}` (every pending entry of that batch in this log; an empty batch gives `E_MUTATION`) |
+| studio-kit R6, CHB-020 #4–5 | `FrameRecipe.roll` and the `Roll` record **(review)** | adapted | `roll: {id} \| null` is a required recipe field and a settable path (custom rule), not an optional `roll?`, so validation and migrations treat it like every other field. `Roll<A, F>` (`src/roll.ts`) keeps the analysis opaque; `ROLL_SIDECAR = 'roll.json'`, `ROLL_STATUSES`, `validateRoll` (fragment keys must be settable paths). The roll kit's `Roll` is now `Roll<RollAnalysis, RollFragment>` from the contract |
+| studio-kit R7, CHB-020 #7 | Roll and film-layout codes | accepted | `W_ROLL_MIXED W_ROLL_STOCK_AMBIGUOUS W_ROLL_BASE_WEAK W_FRAME_DIVERGES W_NO_SURROUND W_SURROUND_BRIGHT W_REBATE_BLANK W_NO_REBATE W_NO_FILM`, plus `W_VEIL_FROM_ROLL` (ingest already emitted it) |
+| CHB-020 #6 | `AutoBalance` for roll / match | noted | Doc only: for `'roll'` and `'match'`, `logH` is the applied result and `method` the provenance |
+| core C1 | `darkroom.lightsToFiltration` sees the print settings | accepted | Arguments with recipe paths (`logH`, `paper`, `mode`, `lamp`, `filtration`, `time_s`, `fstop`, `aim`, `aimView`) and the fields `filtration time_s stops lights residual`. `mode` defaults to `'normalised'` like `print.expose` (the request said `'real'`; a recipe-backed call takes the recipe's anyway). `logH`'s new path is "breaking" in `contract:check`: a DSL call without `logH` now uses the recipe's lights. Mock returns the new fields |
+| core C2, C3 | Grade and magnification docs | accepted | Doc only (grade as a gamma about the aim grey; magnification ∝ 1/(m+1)², reference 8×). Versioning the calibration in the data pack stays CHB-004's |
+| core C4 | Real enlarger mode as the default **(review)** | deferred (open) | The photographer has not decided. Default stays `'normalised'` in the catalog and `defaultRecipe`; the change is a one-line default plus `defaultRecipe` when decided (old recipes keep their mode: it is written into every frame) |
+| core C5 | Density masks reach the print **(review)** | adapted | Not as an `Image` input of `print.expose` (a second image input to a pointwise op, which the GPU chain cannot take without a barrier). Instead `print.densityMask` takes the **main `print.expose`'s paper log H** (`paper-logH` → `scalar-field` d_m), recovers PD = x_clear − x (x_clear: that exposure's clear-film x; 0 without one), and `print.combine.densityMasks: Image[]` multiplies every exposure through the negative by 10^−Σd_m (flashes not). Recipe `print.densityMasks: Record<id, DensityMask>` (`set print.densityMasks.<id> null` deletes; the same pattern as retouch spots, so no new mutation op). New arg `polarity: 'positive' \| 'same'`; `kind: 'contrast' \| 'unsharp'` is stored for the UI but not passed (same maths, the radius differs); highlight masks with a threshold are deferred to CHB-010. Core, GPU (combine.wgsl modes 6, 9, 10) and mock implement it; two conformance semantic cases |
+| core C6 | A flash goes through the film base | accepted | `print.combine.modes` gains `'flash-base'` and `'flash-open'`; compile maps a flash with `through: 'open'` to `'flash-open'`, otherwise `'flash-base'`. Engines evaluate the flash's `print.expose` uniformly: core's `flashExposure` (dye amounts 0, or the clear-film x); the GPU uses the same f64 values. Conformance law: an unmasked base flash adds the same H to every pixel. Existing recipes with flashes now print the flash uniformly (they printed it through the image, which was wrong) |
+| core C7, C8 | `print.combine` normalised weighting; mask argument docs | accepted | Doc only |
+| output R1 | CAM16-UCS knee **(review)** | accepted (option a) | Recipe version 2: `migrations[1]` does the 0.2 rename `'cam16-ucs'` → `'oklch'` for version-1 documents only (`renameLegacyValues` left the version-less path); `KneeMethod` gains `'cam16-ucs'` = CAM16-UCS proper (`KNEE_METHODS`). Core already implements it (`displaySetupAt`). **GPU keeps the OkLCh kernel with `W_PREVIEW_APPROX`**: a WGSL CAM16 (forward and inverse with the viewing-condition constants, plus the knee in J′a′b′) is a port of roughly 150 lines with its own parity work, not done here. D = 1 (output's review note) stands |
+| output R2 | `output.encode` fields | accepted | `mime width height bits space iccSha256 recipeSha256`; the mock returns them |
+| output R3 | Knee strength, Rec.2020 transfer | noted | No change |
+| CHB-016 | `Diagnostic.where.file` | accepted | `where?: {line, col?, file?}` |
+| CHB-022 §3.1, §6.1 | `view.frame {orientation, angle_deg, crop}` for both frame kinds **(review)** | adapted | Replaces `scan.orientation` / `scan.crop` (`output.frame.recipePath = 'view.frame'`). **The crop stays in sensor pixels of the un-oriented frame** (as `scan.crop` was, as dust spots and the rebate are), not a box on the oriented, rotated canvas as the guide proposed: one coordinate system for every stored box (DR-3), old crops keep their meaning, the roll kit's picked crop keeps working. The box's content is turned about its centre by `angle_deg` (−45…45, clockwise as shown, so mirrored orientations turn the other way in sensor space), then oriented; the output has the box size. Reference sampling: `straighten()` in `src/frame.ts` (bilinear, empty corners 0), used by the mock and the studio host (the engines that implement `output.frame`). Crop validity (corners inside the picture) needs the source size, so the contract does not check it: CHB-022's tool does. No group `set view.frame`: a gesture writes the three leaves in one `apply` (one undo unit). Old paths give `E_PATH` with `fix` naming the new one (`MOVED_PATHS`); `migrations[1]` and version-1 logs move them |
+| CHB-022 §6.2, §7.1 | `retouch.spots.<id>`, null deletes; `retouch.heal` | accepted | `RetouchSpot {mode, x, y, r, src, feather, opacity, enabled}`; `FieldRule` custom `deletes: true` lets `set <entry> null` remove the key (missing key: no-op). Op `retouch.heal` (area `retouch`, owner CHB-022, `spots` = canonical JSON of the enabled spots, no recipe path); compile puts it after `view.adapt`, before `finishing.*`, and omits it without enabled spots. **Stub:** core and GPU pass the print through with `W_PREVIEW_APPROX`, the mock silently; CHB-022 implements the heal |
+| CHB-019 | Studio host may import core/gpu | noted | Already in `tools/scripts/check-boundaries.ts` (`apps/studio/src/host/engines.ts` exception) |
+
+What the next tickets can rely on:
+
+- **CHB-020 (roll):** `scan.baseT` in every engine; `scan.flare` per channel in every engine (so the veil need not be
+  subtracted at decode); `LoggedMutation.batch` with `approve/reject({batch})`; `FrameRecipe.roll`; the `Roll` type,
+  `validateRoll`, `ROLL_SIDECAR`; the roll codes. `view.frame.crop` replaces `scan.crop` (the kit already reads it).
+- **CHB-021 (looks):** `EditLog.preview([...])` for several paths at once; the shared vocabulary (`cut`, `accessorNode`).
+- **CHB-022 (finish):** `view.frame` with `angle_deg` for both frame kinds and the reference `straighten()`;
+  `retouch.spots.<id>` with null-delete; the `retouch.heal` node in compile (implement it in the engines; it is a
+  pass-through now). Note that `frame.print()` (the `view.adapt` node) is before retouch and finishing.
+- **CHB-010 / CHB-012:** flashes through the base or an empty gate; density masks from the recipe
+  (`print.densityMasks`) applied by `print.combine`; `lightsToFiltration` with the recipe's print settings.
+- **CHB-011:** `'cam16-ucs'` selectable; `output.encode` fields.
+
+### Change notes (contract 0.3)
+
+```text
+CC-008  scan.density.baseT; recipe scan.baseT (CHB-020 R3)
+class:     additive (optional arg; recipe field with a migration)
+changes:   vec3 fraction [1e-6, 100], optional; wins over rebate in compile and engines
+consumers: engines (mock, ref, gpu), roll kit (later)
+migration: migrations[1] adds scan.baseT null
+tests:     contract compile; conformance "scan.density semantics: baseT"
+
+CC-009  scan.flare: number | Vec3 (CHB-020 R4, CHB-006 #2)
+class:     additive (ArgSpec.perChannel), engine-visible formula change in the mock
+changes:   T = T′(1 + f) − f per channel; core and gpu implement scan.flare (gpu OP.AFFINE)
+consumers: DSL (number | Vec3), studio-kit controls (per-channel value shows its mean), engines
+migration: none
+tests:     contract set/compile; conformance "scan.flare semantics"
+
+CC-010  EditLog.preview(Mutation[]); LoggedMutation.batch; approve/reject({batch}) (CHB-019 R1, CHB-020 R5)
+class:     additive (the preview event gains `mutations`)
+tests:     contract preview and batch tests
+
+CC-011  view.frame {orientation, angle_deg, crop}; output.frame.angle_deg (CHB-022)
+class:     breaking (recipe paths scan.orientation / scan.crop moved; output.frame arg paths changed)
+changes:   output.frame.recipePath 'view.frame'; angle_deg deg [−45, 45] default 0; contract straighten()
+consumers: mock, studio host (output.frame), roll kit (view.frame.crop), DSL/UI (generated)
+migration: migrations[1]; EditLog version 1 → 2 moves logged set paths; E_PATH fix names the new path
+tests:     contract migration, moved-path hint, both kinds; studio host vs mock with an angle
+
+CC-012  retouch.spots.* (null deletes); op retouch.heal (CHB-022)
+class:     additive (new area 'retouch')
+consumers: engines (stub pass-through), CHB-022
+migration: migrations[1] adds retouch {spots: {}}
+tests:     contract null-delete, compile order
+
+CC-013  print.combine modes flash-base / flash-open; print.combine.densityMasks;
+        print.densityMask paper-logH → scalar-field + polarity; recipe print.densityMasks.* (CHB-010 C5, C6)
+class:     breaking (print.densityMask domains)
+consumers: engines (mock, ref, gpu: combine.wgsl modes 6 8 9 10), compile
+migration: migrations[1] adds print.densityMasks {}
+tests:     contract compile; conformance flash and density-mask semantic cases; core chb010 test
+
+CC-014  darkroom.lightsToFiltration: recipe-backed print settings, five fields (CHB-010 C1)
+class:     breaking in contract:check (logH gains a path), additive otherwise
+
+CC-015  output.display.knee / view.output.export.knee.method 'cam16-ucs' (CHB-011 R1); output.encode fields (R2)
+class:     additive; recipe version 2 (migrations[1] renames version-1 'cam16-ucs' to 'oklch')
+consumers: core (CAM16-UCS), gpu (W_PREVIEW_APPROX, oklch kernel), mock (ignores the knee)
+
+CC-016  RECIPE_VERSION 2; EditLogData.version 2; roll; Roll record; vocab; Diagnostic.where.file; ten W_ codes
+class:     additive (version bump with migrations)
 ```
 
 ## Change-note template

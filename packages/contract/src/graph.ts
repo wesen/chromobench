@@ -256,8 +256,10 @@ export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): No
   if (r.kind === 'negative-scan') {
     const s = r.scan ?? fail('E_RECIPE', 'negative-scan recipe without scan settings');
     if (s.flat) n = I('scan.flatField', [n], { flat: s.flat });
-    if (s.flare) n = I('scan.flare', [n], { flare: s.flare });
-    n = I('scan.density', [n], s.rebate ? { rebate: s.rebate } : {});
+    // scan.flare: a number or a per-channel vec3 (contract 0.3); omitted when zero
+    if (Array.isArray(s.flare) ? s.flare.some((f) => f !== 0) : s.flare) n = I('scan.flare', [n], { flare: s.flare });
+    // the roll's base wins over the frame's rebate box (CHB-020 scan.baseT)
+    n = I('scan.density', [n], s.baseT ? { baseT: s.baseT } : s.rebate ? { rebate: s.rebate } : {});
     if (s.dust.spots.length > 0) n = I('scan.heal', [n], { spots: canonicalJSON(s.dust.spots), method: s.dust.method, marginPx: s.dust.marginPx });
     dyes = I('invert.dyes', [n], { stock: s.stock, scanner: s.scanner });
   } else {
@@ -277,7 +279,11 @@ export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): No
   });
   let x = I('print.expose', [dyes], exposeArgs(e.time_s));
   const extra = p.exposures.filter((ex) => ex.enabled);
-  if (extra.length > 0) {
+  // density masks (CHB-010 C5): made from the main exposure, applied by print.combine to every exposure
+  // through the negative (not to flashes); several masks multiply (their densities add)
+  const dms = Object.keys(p.densityMasks).sort().map((id) => p.densityMasks[id]!).filter((m) => m.enabled && m.amount > 0)
+    .map((m) => I('print.densityMask', [x], { amount: m.amount, radius_um: m.radius_um, polarity: m.polarity }));
+  if (extra.length > 0 || dms.length > 0) {
     const exposures: string[] = [];
     const masks: string[] = [];
     const modes: string[] = [];
@@ -289,9 +295,10 @@ export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): No
       const maskNodes = spec ? g.adopt(spec.nodes) : [];
       const m = maskNodes.length ? maskNodes[maskNodes.length - 1]!.id : I('mask.luminance', [x], { above: 0, below: 1, softness: 0 });
       masks.push(m);
-      modes.push(ex.kind === 'dodge' ? 'subtract' : 'add');
+      // a flash goes through the film base (or an empty gate), not through the image (CHB-010 C6)
+      modes.push(ex.kind === 'dodge' ? 'subtract' : ex.kind === 'flash' ? (ex.through === 'open' ? 'flash-open' : 'flash-base') : 'add');
     }
-    x = I('print.combine', [x], { exposures, masks, modes });
+    x = I('print.combine', [x], { exposures, masks, modes, densityMasks: dms });
   }
   x = I('print.lights', [x], { logH: p.lights.logH });
   if (p.preflash > 0) x = I('print.preflash', [x], { amount: p.preflash });
@@ -299,10 +306,12 @@ export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): No
   let v = I('view.reflect', [pd], { illuminant: r.view.illuminant });
   v = I('view.flare', [v], { flare: r.view.output.rendering === 'scan-of-print' ? 0 : r.view.flare });
   v = I('view.adapt', [v], { to: r.view.output.white });
+  // retouch (CHB-022): after the adaptation, before finishing; omitted when no spot is enabled
+  const spots = Object.fromEntries(Object.entries(r.retouch.spots).filter(([, sp]) => sp.enabled));
+  if (Object.keys(spots).length > 0) v = I('retouch.heal', [v], { spots: canonicalJSON(spots) });
   const clarity = r.finishing.values['clarity'] ?? 0;
   if (clarity !== 0) v = I('finishing.clarity', [v], { amount: clarity, radius_px: r.finishing.values['clarity_radius_px'] ?? 40 });
   const d = I('output.display', [v], { space: opts.displaySpace ?? 'srgb', rendering: r.view.output.rendering, knee: r.view.output.display.knee.method });
-  const orientation = r.scan?.orientation ?? 'none';
-  const crop = r.scan?.crop ?? null;
-  return g.intern('output.frame', [d], crop ? { orientation, crop } : { orientation }).node;
+  const f = r.view.frame;
+  return g.intern('output.frame', [d], { orientation: f.orientation, angle_deg: f.angle_deg, ...(f.crop ? { crop: f.crop } : {}) }).node;
 }

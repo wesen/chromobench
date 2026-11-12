@@ -8,7 +8,8 @@ import type { ArgSpec, Box, Cmy, Vec3 } from './spec.ts';
 import type { DecodeOptions, SourceRef } from './source.ts';
 import type { NodeDef } from './graph-types.ts';
 
-export const RECIPE_VERSION = 1 as const;
+/** 2 since contract 0.3 (migrations[1]: view.frame, scan.baseT, retouch, density masks, roll, the knee rename). */
+export const RECIPE_VERSION = 2 as const;
 
 export type Orientation = 'none' | 'cw90' | 'rot180' | 'ccw90' | 'flipH' | 'flipV' | 'transpose' | 'transverse';
 export const ORIENTATIONS: readonly Orientation[] = ['none', 'cw90', 'rot180', 'ccw90', 'flipH', 'flipV', 'transpose', 'transverse'];
@@ -24,7 +25,7 @@ export interface AutoBalance {
   matchAmount: number | null;
   /** Whether `logH` below was applied to print.lights.logH. */
   applied: boolean;
-  /** The automatic proposal, in log H. */
+  /** The automatic proposal, in log H. For 'roll' and 'match' it is the applied result; `method` records provenance (CHB-020 #6). */
   logH: Vec3;
 }
 
@@ -37,13 +38,16 @@ export interface ScanSettings {
   format: FilmFormat;
   /** null = automatic detection. */
   rebate: Box | null;
+  /**
+   * Linear value of the film base (veil- and flat-corrected), the zero of scanner density; null = measure on
+   * `rebate`. Roll setup writes the roll's base to every frame (CHB-020, contract 0.3).
+   */
+  baseT: Vec3 | null;
   /** SHA-256 of the flat-field frame, or null. */
   flat: string | null;
   openGate: Box | 'flat' | null;
-  /** Scanner flare, percent of the open-gate signal (per-channel flare deferred, see CONTRACT-DECISIONS). */
-  flare: number;
-  orientation: Orientation;
-  crop: Box | null;
+  /** Scanner flare, percent of the open-gate signal; a vec3 is per channel (R, G, B) (contract 0.3). */
+  flare: number | Vec3;
   dust: DustSettings;
 }
 
@@ -79,8 +83,12 @@ export interface Exposure {
   through: 'base' | 'open' | null;
 }
 
-/** 'oklch' was called 'cam16-ucs' before contract 0.2 (migrateRecipe rewrites it); CAM16-UCS proper is CHB-011's. */
-export type KneeMethod = 'oklch' | 'tanh-shoulder' | 'clip';
+/**
+ * 'oklch' was called 'cam16-ucs' before contract 0.2; since contract 0.3 'cam16-ucs' is CAM16-UCS proper
+ * (CHB-011), and migrations[1] rewrites version-1 recipes' 'cam16-ucs' to 'oklch'.
+ */
+export type KneeMethod = 'oklch' | 'cam16-ucs' | 'tanh-shoulder' | 'clip';
+export const KNEE_METHODS: readonly KneeMethod[] = ['oklch', 'cam16-ucs', 'tanh-shoulder', 'clip'];
 /** Adapted from CHB-011: one strength parameter (p for oklch, s for tanh-shoulder). */
 export interface KneeSpec { method: KneeMethod; strength: number }
 export type OutputSpaceId = 'srgb' | 'display-p3' | 'rec2020' | 'adobe-rgb' | 'prophoto';
@@ -114,6 +122,44 @@ export interface MaskSpec { version: 1; nodes: NodeDef[] }
 
 export interface Probe { x: number; y: number; r: number }
 
+/**
+ * Orientation, straightening and crop, applied last by output.frame (contract 0.3, CHB-022). Both frame
+ * kinds have it (it was scan.orientation / scan.crop). Order: the crop box (sensor px of the un-oriented
+ * source; null = the whole frame) is cut out with its content rotated by angle_deg about the box centre,
+ * then the orientation is applied. angle_deg is clockwise as shown (after the orientation).
+ */
+export interface FrameSettings { orientation: Orientation; angle_deg: number; crop: Box | null }
+
+/**
+ * A neutral silver density mask made from the negative (CHB-010 §6.6, contract 0.3): print.densityMask on the
+ * main exposure, applied by print.combine to every exposure through the negative (not to flashes).
+ * `kind` is the photographer's name for it (contrast: wide blur; unsharp: thin spacer); the maths is the same.
+ */
+export interface DensityMask {
+  kind: 'contrast' | 'unsharp';
+  /** positive lowers large-area contrast; same raises it. */
+  polarity: 'positive' | 'same';
+  /** Mask gamma γ_m (0.6: large-area contrast falls to 40 %). */
+  amount: number;
+  /** Gaussian σ of the blur on the film, µm. */
+  radius_um: number;
+  enabled: boolean;
+}
+
+/** One retouch spot (CHB-022 §6.2): sensor px of the un-oriented source, so a crop never moves it. */
+export interface RetouchSpot {
+  mode: 'heal' | 'clone';
+  x: number;
+  y: number;
+  r: number;
+  /** Source centre, sensor px (always explicit). */
+  src: { x: number; y: number };
+  /** 0..1 of r. */
+  feather: number;
+  opacity: number;
+  enabled: boolean;
+}
+
 export interface FinishingSettings {
   look: number;
   values: Record<string, number>;
@@ -135,13 +181,19 @@ export interface FrameRecipe {
     enlarger: { mode: 'real' | 'normalised'; lamp: string; filtration: Cmy; time_s: number; fstop: number; magnification: number | null };
     lights: { logH: Vec3; auto: AutoBalance };
     exposures: Exposure[];
+    /** Keyed by id; `set print.densityMasks.<id> null` deletes one (contract 0.3). */
+    densityMasks: Record<string, DensityMask>;
     grade: number;
     preflash: number;
   };
-  view: { illuminant: string; flare: number; output: OutputSettings };
+  view: { illuminant: string; flare: number; output: OutputSettings; frame: FrameSettings };
   masks: Record<string, MaskSpec>;
   probes: Record<string, Probe>;
+  /** Heal and clone on the print (CHB-022); `set retouch.spots.<id> null` deletes a spot. */
+  retouch: { spots: Record<string, RetouchSpot> };
   finishing: FinishingSettings;
+  /** The roll the frame belongs to (CHB-020); the Roll record itself lives beside the frames (roll.ts). */
+  roll: { id: string } | null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -152,15 +204,41 @@ export interface FrameRecipe {
 export type FieldRule =
   | { kind: 'op'; doc?: string }
   | { kind: 'spec'; spec: ArgSpec; nullable?: boolean }
-  | { kind: 'custom'; check: (v: unknown) => string | null; doc: string };
+  /** `deletes`: a record entry ('*' last); `set <path> null` removes the key (contract 0.3). */
+  | { kind: 'custom'; check: (v: unknown) => string | null; doc: string; deletes?: boolean };
 
 const spec = (s: ArgSpec, nullable = false): FieldRule => ({ kind: 'spec', spec: s, nullable });
 const OP: FieldRule = { kind: 'op' };
 const custom = (doc: string, check: (v: unknown) => string | null): FieldRule => ({ kind: 'custom', doc, check });
+const entry = (doc: string, check: (v: unknown) => string | null): FieldRule => ({ kind: 'custom', doc, check, deletes: true });
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const vec3 = (v: unknown): boolean => Array.isArray(v) && v.length === 3 && v.every(fin);
+const frac = (v: unknown): boolean => fin(v) && v >= 0 && v <= 1;
+
+function checkDensityMask(v: unknown): string | null {
+  if (!isObj(v)) return 'expected {kind, polarity, amount, radius_um, enabled}';
+  if (v['kind'] !== 'contrast' && v['kind'] !== 'unsharp') return "kind must be 'contrast' or 'unsharp'";
+  if (v['polarity'] !== 'positive' && v['polarity'] !== 'same') return "polarity must be 'positive' or 'same'";
+  if (!frac(v['amount'])) return 'amount must be in [0, 1]';
+  if (!fin(v['radius_um']) || v['radius_um'] < 0 || v['radius_um'] > 5000) return 'radius_um must be in [0, 5000]';
+  if (typeof v['enabled'] !== 'boolean') return 'enabled must be a boolean';
+  const extra = Object.keys(v).filter((k) => !['kind', 'polarity', 'amount', 'radius_um', 'enabled'].includes(k));
+  return extra.length ? `unknown field ${extra[0]}` : null;
+}
+
+function checkSpot(v: unknown): string | null {
+  if (!isObj(v)) return 'expected {mode, x, y, r, src: {x, y}, feather, opacity, enabled}';
+  if (v['mode'] !== 'heal' && v['mode'] !== 'clone') return "mode must be 'heal' or 'clone'";
+  if (!fin(v['x']) || !fin(v['y'])) return 'x and y must be numbers (sensor px)';
+  if (!fin(v['r']) || v['r'] <= 0) return 'r must be a positive number (px)';
+  const src = v['src'];
+  if (!isObj(src) || !fin(src['x']) || !fin(src['y'])) return 'src must be {x, y} in sensor px';
+  if (!frac(v['feather']) || !frac(v['opacity'])) return 'feather and opacity must be in [0, 1]';
+  if (typeof v['enabled'] !== 'boolean') return 'enabled must be a boolean';
+  return null;
+}
 
 export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze({
   // source (identity is fixed by frame.add; decode options are settable)
@@ -173,11 +251,10 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'scan.stock': OP,
   'scan.format': spec({ type: 'enum', values: ['135', '645', '66', '67', '45'], doc: 'film format; sets umPerPx.film' }),
   'scan.rebate': OP,
+  'scan.baseT': OP,
   'scan.flat': OP,
   'scan.openGate': custom('Box, "flat" or null (sensor px)', (v) => (v === null || v === 'flat' || (isObj(v) && ['x', 'y', 'w', 'h'].every((k) => fin(v[k]))) ? null : 'expected a box, "flat" or null')),
   'scan.flare': OP,
-  'scan.orientation': OP,
-  'scan.crop': OP,
   'scan.dust.spots': custom('DustSpot[] in sensor px', (v) => (Array.isArray(v) && v.every((d) => isObj(d) && typeof d['id'] === 'string' && fin(d['x']) && fin(d['y']) && fin(d['r'])) ? null : 'expected [{id, x, y, r}]')),
   'scan.dust.method': OP,
   'scan.dust.marginPx': OP,
@@ -221,6 +298,7 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'print.exposures.*.stops': spec({ type: 'number', unit: 'stop', min: -6, max: 6, doc: 'relative to the main time' }, true),
   'print.exposures.*.filtration': spec({ type: 'cmy', unit: 'CC', min: -100, max: 200, doc: "the exposure's own pack, a shift on the database neutral like print.enlarger.filtration" }, true),
   'print.exposures.*.through': spec({ type: 'enum', values: ['base', 'open'], doc: 'flash through the base or open gate' }, true),
+  'print.densityMasks.*': entry('DensityMask {kind, polarity, amount, radius_um, enabled}; null deletes', checkDensityMask),
   'print.grade': OP,
   'print.preflash': OP,
   // view and output (CHB-011)
@@ -233,7 +311,7 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'view.output.display.proof': custom('ProofSettings or null', (v) => (v === null || isObj(v) ? null : 'expected ProofSettings or null')),
   'view.output.export.format': OP,
   'view.output.export.space': spec({ type: 'enum', values: [...OUTPUT_SPACES], doc: 'export colour space' }),
-  'view.output.export.knee.method': spec({ type: 'enum', values: ['oklch', 'tanh-shoulder', 'clip'], doc: 'export knee' }),
+  'view.output.export.knee.method': spec({ type: 'enum', values: [...KNEE_METHODS], doc: 'export knee' }),
   'view.output.export.knee.strength': spec({ type: 'number', unit: 'none', min: 0, max: 20, doc: 'export knee strength' }),
   'view.output.export.scale': custom("'full' or a number in (0, 1]", (v) => (v === 'full' || (fin(v) && v > 0 && v <= 1) ? null : "expected 'full' or a number in (0, 1]")),
   'view.output.export.dpi': OP,
@@ -241,6 +319,13 @@ export const RECIPE_FIELDS: Readonly<Record<string, FieldRule>> = Object.freeze(
   'view.output.export.signal': spec({ type: 'enum', values: ['icc', 'icc+cicp', 'none'], doc: 'colour signalling' }),
   'view.output.export.recipe': spec({ type: 'enum', values: ['sidecar', 'embedded', 'none'], doc: 'recipe storage' }),
   'view.output.printer': custom('PrinterSettings or null', (v) => (v === null || isObj(v) ? null : 'expected PrinterSettings or null')),
+  // frame (contract 0.3: was scan.orientation / scan.crop; output.frame owns them)
+  'view.frame.orientation': OP,
+  'view.frame.angle_deg': OP,
+  'view.frame.crop': OP,
+  // retouch (CHB-022) and roll (CHB-020)
+  'retouch.spots.*': entry('RetouchSpot {mode, x, y, r, src, feather, opacity, enabled} in sensor px; null deletes', checkSpot),
+  'roll': custom('{id} or null', (v) => (v === null || (isObj(v) && typeof v['id'] === 'string' && v['id'].length > 0 && Object.keys(v).length === 1) ? null : 'expected {id: string} or null')),
   // probes (CHB-009) and finishing (CHB-015)
   'probes.*': custom('{x, y, r} in sensor px', (v) => (isObj(v) && fin(v['x']) && fin(v['y']) && fin(v['r']) && v['r'] > 0 ? null : 'expected {x, y, r} with r > 0')),
   'finishing.look': spec({ type: 'number', unit: 'fraction', min: 0, max: 1, doc: 'look amount' }),

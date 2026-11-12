@@ -40,7 +40,7 @@ One-channel noise gain 1/σ₃ of the dye solve.
 
 ## `scan.density`
 
-Scanner density relative to the rebate: d = −log10(T / T_rebate).
+Scanner density relative to the film base: d = −log10(T / T_base), T_base = baseT when given, else the mean over the rebate box.
 
 - Owner: CHB-006
 - On: Image (camera-linear) → Image (scanner-density)
@@ -51,10 +51,11 @@ Scanner density relative to the rebate: d = −log10(T / T_rebate).
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
 | `rebate` (optional) | box | px |  |  |  | scan.rebate | Box in source (sensor) pixels; absent means automatic. |
+| `baseT` (optional) | vec3 | fraction | [0.000001, 100] |  |  | scan.baseT | Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box. |
 
 ## `scan.flare`
 
-Removes scanner flare.
+Removes scanner flare: T = T′(1 + f) − f per channel, with T′ the signal relative to the open gate (after scan.flatField with an open-gate flat; ingest removeFlareValue).
 
 - Owner: CHB-006
 - On: Image (camera-linear) → Image (camera-linear)
@@ -63,7 +64,7 @@ Removes scanner flare.
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `flare` | number | percent | [0, 20] | [0, 3] | `0` | scan.flare | Scanner veiling flare, percent of the open-gate signal. |
+| `flare` | number | percent | [0, 20] | [0, 3] | `0` | scan.flare | Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel). |
 
 ## `scan.flatField`
 

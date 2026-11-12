@@ -29,6 +29,7 @@ const OP_MASK_LUM: u32 = 12u;      // mean rgb normalised to p1.xy, band p0 = (a
 const OP_MASK_GRADIENT: u32 = 13u; // p0 = (from.x, from.y, to.x, to.y), at the frame pixel centre
 const OP_MASK_ELLIPSE: u32 = 14u;  // p0 = (cx, cy, a, b), p1 = (cos, sin): antialiased tilted ellipse
 const OP_MASK_NOT: u32 = 15u;      // 1 − m
+const OP_AFFINE: u32 = 16u;        // v.rgb · p0.rgb + p1.rgb (scan.flare, contract 0.3)
 
 // Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
 const BRAD = mat3x3<f32>(vec3<f32>(0.8951, -0.7502, 0.0389), vec3<f32>(0.2664, 1.7135, -0.0685), vec3<f32>(-0.1614, 0.0367, 1.0296));
@@ -381,6 +382,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         v = vec4<f32>(m, m, m, 1.0);
       }
       case 15u: { let m = 1.0 - v.r; v = vec4<f32>(m, m, m, 1.0); }
+      case 16u: { v = vec4<f32>(v.rgb * p0.rgb + p1.rgb, v.a); }
       default: {}
     }
   }

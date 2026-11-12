@@ -1,5 +1,8 @@
 # Contract requests from studio-kit (CHB-019)
 
+> **Status (CHB-024, contract 0.3.0):** decided. Applied, adapted, deferred or noted item by item in
+> `packages/contract/CONTRACT-DECISIONS.md`, section "Contract 0.3". Kept here as the record of the request.
+
 ## R1. `EditLog.preview` takes several mutations
 
 **What.** `preview(m: Mutation | Mutation[] | null)`.

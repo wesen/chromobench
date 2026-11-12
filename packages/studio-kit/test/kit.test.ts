@@ -2,7 +2,8 @@
 import { Host, PRINT_OPTIONS as DSL_PRINT_OPTIONS } from '@chromobench/dsl';
 import { createCk } from '@chromobench/shell';
 import { describe, expect, it } from 'vitest';
-import { argModel, argProblem, createCb, frameRef, parseEntry, PRINT_OPTIONS, stepValue, parseStep, type ImageHandle } from '../src/index.ts';
+import { ACCESSORS, argModel, argProblem, createCb, frameRef, parseEntry, PRINT_OPTIONS, stepValue, parseStep, type ImageHandle } from '../src/index.ts';
+import { ACCESSORS as CONTRACT_ACCESSORS, PRINT_OPTIONS as CONTRACT_PRINT_OPTIONS } from '@chromobench/contract';
 import { recipePath, started } from './helpers.ts';
 
 const studioWith = (body: (ck: ReturnType<typeof createCk>, cb: ReturnType<typeof createCb>) => unknown) => {
@@ -60,8 +61,10 @@ describe('cb.arg', () => {
 });
 
 describe('frame handles and the render bridge', () => {
-  it('the accessor table and print() options match the DSL host', () => {
-    expect(PRINT_OPTIONS).toEqual(DSL_PRINT_OPTIONS);
+  it('the accessor table and print() options are the contract\'s shared vocabulary (one module, CHB-024)', () => {
+    expect(PRINT_OPTIONS).toBe(CONTRACT_PRINT_OPTIONS);
+    expect(DSL_PRINT_OPTIONS).toBe(CONTRACT_PRINT_OPTIONS);
+    expect(ACCESSORS).toBe(CONTRACT_ACCESSORS);
   });
   it('vocabulary parity: cb.frame(s).print() names the node the DSL frame.print() names', async () => {
     const { rt, studio, f } = await started();

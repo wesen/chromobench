@@ -5,7 +5,7 @@
 import { ChromobenchError, diag, fail, type Diagnostic } from './errors.ts';
 import { canonicalJSON, sha256Hex, type Graph } from './graph.ts';
 import { applyMutation, currentValue, mutationPaths, type Author, type LoggedMutation, type Mutation } from './mutations.ts';
-import { assertRecipe, getPath, renameLegacyValues } from './paths.ts';
+import { assertRecipe, getPath, migratePathV1, migrateRecipe } from './paths.ts';
 import type { FrameRecipe } from './recipe.ts';
 
 export type AgentMode = 'read-only' | 'ask' | 'auto';
@@ -16,8 +16,11 @@ export interface UndoUnit {
   label: string;
 }
 
+/** 2 since contract 0.3 (recipe version 2); version-1 logs are migrated on load (migrateEditLogData). */
+export const EDIT_LOG_VERSION = 2 as const;
+
 export interface EditLogData {
-  version: 1;
+  version: 1 | typeof EDIT_LOG_VERSION;
   frame: string;
   /** The recipe frame.add created. */
   initial: FrameRecipe;
@@ -49,7 +52,8 @@ export type LogEvent =
   | { type: 'propose'; entries: LoggedMutation[] }
   | { type: 'approve'; unit: UndoUnit }
   | { type: 'reject'; seqs: number[] }
-  | { type: 'preview'; mutation: Mutation | null }
+  /** `mutation` is the first of `mutations` (contract 0.2 listeners); `mutations` is the whole overlay. */
+  | { type: 'preview'; mutation: Mutation | null; mutations: Mutation[] }
   | { type: 'mode'; mode: AgentMode };
 
 export interface EditLogOptions {
@@ -57,6 +61,35 @@ export interface EditLogOptions {
   now?: () => number;
   /** Lets mask.set adopt MaskSpecs for a full check. */
   graph?: Graph;
+}
+
+/** Which pending entries approve()/reject() act on: sequence numbers, or every pending entry of a batch. */
+export type EntrySelector = readonly number[] | { batch: string };
+
+/**
+ * Migrates a persisted log to the current version: a version-1 log (contracts 0.1, 0.2) gets its initial and
+ * frame.add recipes migrated (migrateRecipe), its set paths moved (scan.orientation → view.frame.orientation,
+ * scan.crop → view.frame.crop) and its knee values renamed ('cam16-ucs' → 'oklch', which it always was).
+ */
+export function migrateEditLogData(data: EditLogData): EditLogData {
+  if (data.version === EDIT_LOG_VERSION) return data;
+  const d = structuredClone(data) as EditLogData;
+  d.initial = migrateRecipe(d.initial as unknown as Record<string, unknown>);
+  for (const e of d.entries) {
+    const m = e.m as { op: string; path?: string; value?: unknown; expect?: unknown; recipe?: unknown };
+    if (m.op === 'frame.add' && m.recipe) m.recipe = migrateRecipe(m.recipe as Record<string, unknown>);
+    if (m.op !== 'set' || typeof m.path !== 'string') continue;
+    m.path = migratePathV1(m.path);
+    if (/^view\.output\.(display|export)\.knee(\.method)?$/.test(m.path)) {
+      for (const k of ['value', 'expect'] as const) {
+        const v = m[k];
+        if (v === 'cam16-ucs') m[k] = 'oklch';
+        else if (v && typeof v === 'object' && (v as { method?: unknown }).method === 'cam16-ucs') m[k] = { ...(v as object), method: 'oklch' };
+      }
+    }
+  }
+  d.version = EDIT_LOG_VERSION;
+  return d;
 }
 
 export interface ApproveOptions {
@@ -69,24 +102,17 @@ export class EditLog {
   private modeValue: AgentMode;
   private readonly now: () => number;
   private readonly graph: Graph | undefined;
-  private overlay: Mutation | null = null;
+  private overlay: Mutation[] | null = null;
   private committedCache: FrameRecipe | null = null;
   private stateCache: FrameRecipe | null = null;
   private readonly listeners = new Set<(e: LogEvent) => void>();
   private txCounter = 0;
 
   constructor(data: EditLogData, opts: EditLogOptions = {}) {
-    // Logs persisted under contract 0.1 may name the knee 'cam16-ucs' (renamed 'oklch' in 0.2).
-    const initial = renameLegacyValues(data.initial as unknown as Record<string, unknown>) as unknown as FrameRecipe;
-    assertRecipe(initial);
-    this.data = structuredClone({ ...data, initial });
-    for (const e of this.data.entries) {
-      const m = e.m as { op: string; path?: string; value?: unknown };
-      if (m.op === 'set' && /^view\.output\.(display|export)\.knee(\.method)?$/.test(m.path ?? '')) {
-        if (m.value === 'cam16-ucs') m.value = 'oklch';
-        else if (m.value && typeof m.value === 'object' && (m.value as { method?: unknown }).method === 'cam16-ucs') m.value = { ...(m.value as object), method: 'oklch' };
-      }
-    }
+    // Logs persisted under contracts 0.1 / 0.2 (version 1) are migrated to version 2 first.
+    const migrated = migrateEditLogData(data);
+    assertRecipe(migrated.initial);
+    this.data = migrated === data ? structuredClone(data) : migrated;
     this.modeValue = opts.mode ?? 'ask';
     this.now = opts.now ?? Date.now;
     this.graph = opts.graph;
@@ -95,7 +121,7 @@ export class EditLog {
   /** A new log for a frame whose recipe frame.add created. */
   static create(initial: FrameRecipe, opts: EditLogOptions & { by?: Author } = {}): EditLog {
     const now = opts.now ?? Date.now;
-    return new EditLog({ version: 1, frame: initial.frame, initial, initialBy: opts.by ?? 'auto', initialTs: now(), entries: [], units: [], cursor: 0 }, opts);
+    return new EditLog({ version: EDIT_LOG_VERSION, frame: initial.frame, initial, initialBy: opts.by ?? 'auto', initialTs: now(), entries: [], units: [], cursor: 0 }, opts);
   }
 
   toJSON(): EditLogData {
@@ -158,7 +184,7 @@ export class EditLog {
   /** The committed state with the transient preview overlay applied last (what the viewer renders). */
   get state(): FrameRecipe {
     if (!this.overlay) return this.committed;
-    if (!this.stateCache) this.stateCache = applyMutation(this.committed, this.overlay).recipe;
+    if (!this.stateCache) this.stateCache = this.overlay.reduce((r, m) => applyMutation(r, m).recipe, this.committed);
     return this.stateCache;
   }
 
@@ -200,8 +226,10 @@ export class EditLog {
     return { ms: out, warnings };
   }
 
-  private append(m: Mutation, by: Author, status: LoggedMutation['status'], tx: string, why?: string): LoggedMutation {
-    const e: LoggedMutation = { seq: this.data.entries.length + 1, frame: this.data.frame, m, by, tx, ts: this.now(), status, ...(why !== undefined ? { why } : {}) };
+  private append(m: Mutation, by: Author, status: LoggedMutation['status'], tx: string, why?: string, batch?: string): LoggedMutation {
+    const e: LoggedMutation = {
+      seq: this.data.entries.length + 1, frame: this.data.frame, m, by, tx, ...(batch !== undefined ? { batch } : {}), ts: this.now(), status, ...(why !== undefined ? { why } : {}),
+    };
     this.data.entries.push(e);
     return e;
   }
@@ -222,11 +250,11 @@ export class EditLog {
    * Applies mutations as one undo unit (a gesture, a transaction). Validates all first: on any
    * failure nothing is appended and the ChromobenchError is thrown. Clears the preview overlay.
    */
-  apply(ms: readonly Mutation[], by: Exclude<Author, 'agent'>, label: string, opts: { tx?: string } = {}): UndoUnit & { warnings: Diagnostic[] } {
+  apply(ms: readonly Mutation[], by: Exclude<Author, 'agent'>, label: string, opts: { tx?: string; batch?: string } = {}): UndoUnit & { warnings: Diagnostic[] } {
     if ((by as Author) === 'agent') fail('E_READONLY', 'agent mutations enter through propose()');
     const { ms: norm, warnings } = this.check(ms, this.committed);
     const tx = opts.tx ?? this.nextTx();
-    const seqs = norm.map((m) => this.append(m, by, 'applied', tx).seq);
+    const seqs = norm.map((m) => this.append(m, by, 'applied', tx, undefined, opts.batch).seq);
     const unit: UndoUnit = { tx, seqs, label };
     this.overlay = null;
     this.pushUnit(unit);
@@ -235,7 +263,7 @@ export class EditLog {
   }
 
   /** Agent mutations. read-only: E_READONLY; ask: pending; auto: applied at once as one unit. */
-  propose(ms: readonly Mutation[], meta: { tx: string; why?: string; label?: string }): LoggedMutation[] {
+  propose(ms: readonly Mutation[], meta: { tx: string; why?: string; label?: string; batch?: string }): LoggedMutation[] {
     if (this.modeValue === 'read-only') fail('E_READONLY', 'the agent is read-only for this frame', { hint: 'the photographer can switch the agent to ask mode' });
     const base = this.committed;
     const { ms: norm } = this.check(ms, base);
@@ -246,11 +274,11 @@ export class EditLog {
       return out;
     });
     if (this.modeValue === 'ask') {
-      const entries = withExpect.map((m) => this.append(m, 'agent', 'pending', meta.tx, meta.why));
+      const entries = withExpect.map((m) => this.append(m, 'agent', 'pending', meta.tx, meta.why, meta.batch));
       this.emit({ type: 'propose', entries });
       return entries;
     }
-    const entries = withExpect.map((m) => this.append(m, 'agent', 'applied', meta.tx, meta.why));
+    const entries = withExpect.map((m) => this.append(m, 'agent', 'applied', meta.tx, meta.why, meta.batch));
     const unit: UndoUnit = { tx: meta.tx, seqs: entries.map((e) => e.seq), label: meta.label ?? `agent ${meta.tx}` };
     this.pushUnit(unit);
     this.emit({ type: 'apply', unit });
@@ -265,7 +293,9 @@ export class EditLog {
    * Approves pending entries as one unit. Re-validates each and compares `expect` with the current
    * value (DR-7): on any problem returns the diagnostics (E_STALE, …) and applies nothing.
    */
-  approve(seqs: readonly number[], opts: ApproveOptions = {}): UndoUnit | Diagnostic[] {
+  approve(which: EntrySelector, opts: ApproveOptions = {}): UndoUnit | Diagnostic[] {
+    const seqs = this.select(which);
+    if (seqs.length === 0 && !Array.isArray(which)) return [diag('E_MUTATION', `no pending entries in batch ${(which as { batch: string }).batch}`)];
     const diags: Diagnostic[] = [];
     const entries = [...seqs].sort((a, b) => a - b).map((s) => this.data.entries[s - 1]);
     let r = this.committed;
@@ -302,7 +332,15 @@ export class EditLog {
     return unit;
   }
 
-  reject(seqs: readonly number[]): void {
+  /** Sequence numbers of a selector: the given ones, or every pending entry of the batch, in order. */
+  private select(which: EntrySelector): number[] {
+    if (Array.isArray(which)) return [...(which as readonly number[])];
+    const b = (which as { batch: string }).batch;
+    return this.data.entries.filter((e) => e.status === 'pending' && e.batch === b).map((e) => e.seq);
+  }
+
+  reject(which: EntrySelector): void {
+    const seqs = this.select(which);
     for (const s of seqs) {
       const e = this.data.entries[s - 1];
       if (e && e.status === 'pending') e.status = 'rejected';
@@ -326,12 +364,16 @@ export class EditLog {
     return true;
   }
 
-  /** Transient overlay for drags: applied last by `state`, never logged, never hashed. null clears. */
-  preview(m: Mutation | null): void {
-    if (m) applyMutation(this.committed, m); // validate; throws on an invalid preview
-    this.overlay = m;
+  /**
+   * Transient overlay for drags: applied last by `state` (in order), never logged, never hashed. One mutation
+   * or several (a gesture that moves two paths at once; contract 0.3); null or [] clears.
+   */
+  preview(m: Mutation | readonly Mutation[] | null): void {
+    const ms = m === null ? [] : Array.isArray(m) ? [...(m as readonly Mutation[])] : [m as Mutation];
+    ms.reduce((r, x) => applyMutation(r, x).recipe, this.committed); // validate; throws on an invalid preview
+    this.overlay = ms.length ? ms : null;
     this.stateCache = null;
-    this.emit({ type: 'preview', mutation: m });
+    this.emit({ type: 'preview', mutation: ms[0] ?? null, mutations: ms });
   }
 
   /** In-effect entries that wrote `path`, an ancestor or a descendant; the initial value first. */

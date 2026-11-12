@@ -1,6 +1,9 @@
 // v0 catalog: capture and film (CHB-012), print (CHB-003, CHB-010).
 import { defineOp, type OpDef } from '../registry.ts';
 
+/** print.combine's modes (contract 0.3 adds the flashes). */
+export const COMBINE_MODES: readonly string[] = ['add', 'subtract', 'flash-base', 'flash-open'];
+
 export const captureOps: OpDef[] = [
   defineOp({
     name: 'capture.expose', area: 'capture', owner: 'CHB-012', on: 'Image', returns: 'Image', domainIn: 'scene-xyz', domainOut: 'film-logH',
@@ -61,7 +64,7 @@ export const printOps: OpDef[] = [
       filtration: { type: 'cmy', unit: 'CC', min: -100, max: 200, default: { c: 0, m: 0, y: 0 }, doc: 'Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0.', ui: { widget: 'slider', step: 1, detents: [0], label: 'Filtration', group: 'Print', components: ['C', 'M', 'Y'] } },
       time_s: { type: 'number', unit: 's', min: 0.1, max: 600, usual: [2, 60], default: 10, doc: 'Exposure time.', ui: { widget: 'slider', step: 0.1, label: 'Time', group: 'Print', scale: 'log2', aside: 'stop' } },
       fstop: { type: 'number', unit: 'fstop', min: 2.8, max: 45, default: 8, doc: 'Enlarger lens aperture.', ui: { widget: 'stepper', label: 'Aperture', group: 'Print', scale: 'log2' } },
-      magnification: { type: 'number', unit: 'none', min: 0.5, max: 20, optional: true, doc: "Enlarger magnification; absent = the calibration's reference (CHB-010)." },
+      magnification: { type: 'number', unit: 'none', min: 0.5, max: 20, optional: true, doc: "Enlarger magnification (light ∝ 1/(m + 1)²); absent = the calibration's reference, 8×. Real mode only (CHB-010)." },
       aim: { type: 'enum', values: ['grey-0.184', 'midgray-normalised'], default: 'grey-0.184', path: 'print.aim', doc: 'What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone.' },
       aimView: { type: 'string', valuesFrom: 'illuminants', default: 'D50', path: 'view.illuminant', doc: 'Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light).' },
     },
@@ -96,34 +99,36 @@ export const printOps: OpDef[] = [
     name: 'print.combine', area: 'print', owner: 'CHB-010', on: 'Image', returns: 'Image', domainIn: 'paper-logH', domainOut: 'paper-logH',
     class: 'pointwise', binding: 'setting',
     args: {
-      exposures: { type: 'Image[]', default: [], doc: 'Additional paper-logH exposures, summed in linear H.' },
+      exposures: { type: 'Image[]', default: [], doc: 'Additional paper-logH exposures (print.expose nodes), summed in linear H.' },
       masks: { type: 'Mask[]', default: [], doc: 'One mask per additional exposure.' },
-      modes: { type: 'string[]', default: [], doc: "Per exposure: 'add' (burn, flash, split) or 'subtract' (dodge)." },
+      modes: { type: 'string[]', default: [], doc: "Per exposure: 'add' (burn, split), 'subtract' (dodge), 'flash-base' or 'flash-open' (a flash: the exposure's print.expose settings evaluated uniformly, through the film base with no image (dye amounts 0), or through an empty gate (no film))." },
+      densityMasks: { type: 'Image[]', default: [], doc: 'print.densityMask densities d_m (scalar-field): every exposure through the negative is multiplied by 10^−Σd_m, flashes are not (CHB-010 §6.6).' },
     },
     validate: (a) => {
       const n = (a['exposures'] as unknown[]).length;
       const modes = a['modes'] as string[];
       if ((a['masks'] as unknown[]).length !== n || modes.length !== n) return 'exposures, masks and modes must have the same length';
-      return modes.every((m) => m === 'add' || m === 'subtract') ? null : "modes must be 'add' or 'subtract'";
+      return modes.every((m) => COMBINE_MODES.includes(m)) ? null : "modes must be 'add', 'subtract', 'flash-base' or 'flash-open'";
     },
-    doc: 'Sums several exposures in linear H (dodge, burn, flash, split; CHB-010).',
+    doc: 'Sums several exposures in linear H (dodge, burn, flash, split; CHB-010): H = 10^−Σd_m·(max(10^x − Σ_dodge r·m·10^x_i, 0) + Σ_add r·m·10^x_i) + Σ_flash r·m·10^x_flash, one log at the end. In normalised mode each print.expose term is weighted by its seconds over the main time (r = t_i / t_main; 1 in real mode, where the time is already in x).',
   }),
   defineOp({
     name: 'print.develop', area: 'print', owner: 'CHB-003', on: 'Image', returns: 'Image', domainIn: 'paper-logH', domainOut: 'paper-dyes',
     class: 'pointwise', binding: 'stock',
     args: {
       paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', path: 'print.paper', doc: 'Colour paper.' },
-      grade: { type: 'number', unit: 'none', min: 0, max: 5, usual: [1, 4], default: 2, path: 'print.grade', doc: 'Contrast grade.', ui: { widget: 'slider', step: 0.5, label: 'Grade', group: 'Print' } },
+      grade: { type: 'number', unit: 'none', min: 0, max: 5, usual: [1, 4], default: 2, path: 'print.grade', doc: 'Contrast grade: a gamma about the aim grey, so the grey card stays (0 → 0.7, 1 → 0.82, 2 → 1 the paper as made, 3 → 1.2, 4 → 1.45, 5 → 1.8). Colour papers have no grades; this is a contrast control.', ui: { widget: 'slider', step: 0.5, label: 'Grade', group: 'Print' } },
     },
     doc: 'Develops paper log exposure to paper dye amounts through the paper curves.',
   }),
   defineOp({
-    name: 'print.densityMask', area: 'print', owner: 'CHB-010', on: 'Image', returns: 'Image', domainIn: 'printing-density', domainOut: 'printing-density',
+    name: 'print.densityMask', area: 'print', owner: 'CHB-010', on: 'Image', returns: 'Image', domainIn: 'paper-logH', domainOut: 'scalar-field',
     class: 'spatial', binding: 'scan',
     args: {
-      amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0, doc: 'Strength of the unsharp density mask.' },
-      radius_um: { type: 'number', unit: 'um', min: 0, max: 5000, default: 500, doc: 'Blur radius on the film.' },
+      amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0, doc: 'Mask gamma γ_m (0.6: large-area contrast falls to 40 %).' },
+      radius_um: { type: 'number', unit: 'um', min: 0, max: 5000, default: 500, doc: 'Gaussian σ of the blur on the film (spacer and diffuser).' },
+      polarity: { type: 'enum', values: ['positive', 'same'], default: 'positive', doc: "positive lowers large-area contrast (d_m = γ(log10 H_m − log10 min H_m)); same raises it (d_m = γ(log10 max H_m − log10 H_m))." },
     },
-    doc: 'Contrast-reducing density mask (unsharp mask in printing density).',
+    doc: "The density d_m ≥ 0 of a neutral silver mask made from the negative: H_m = blur of the negative's mean transmittance 10^−PD, with PD = x_clear − x read from the receiver (the main print.expose; x_clear its clear-film exposure, 0 without one). print.combine applies it (densityMasks).",
   }),
 ];

@@ -63,8 +63,8 @@ export const scanOps: OpDef[] = [
   defineOp({
     name: 'scan.flare', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'camera-linear',
     class: 'pointwise', binding: 'scan', recipePath: 'scan',
-    args: { flare: { type: 'number', unit: 'percent', min: 0, max: 20, usual: [0, 3], default: 0, doc: 'Scanner veiling flare, percent of the open-gate signal.', ui: { widget: 'slider', step: 0.05, label: 'Scanner flare', group: 'Scan' } } },
-    doc: 'Removes scanner flare.',
+    args: { flare: { type: 'number', unit: 'percent', min: 0, max: 20, usual: [0, 3], default: 0, perChannel: true, doc: 'Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel).', ui: { widget: 'slider', step: 0.05, label: 'Scanner flare', group: 'Scan' } } },
+    doc: 'Removes scanner flare: T = T′(1 + f) − f per channel, with T′ the signal relative to the open gate (after scan.flatField with an open-gate flat; ingest removeFlareValue).',
   }),
   defineOp({
     name: 'scan.rebate', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Value', domainIn: 'camera-linear',
@@ -79,8 +79,11 @@ export const scanOps: OpDef[] = [
   defineOp({
     name: 'scan.density', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'scanner-density',
     class: 'pointwise', binding: 'scan', recipePath: 'scan',
-    args: { rebate: { type: 'box', unit: 'px', optional: true, doc: BOX_DOC } },
-    doc: 'Scanner density relative to the rebate: d = −log10(T / T_rebate).',
+    args: {
+      rebate: { type: 'box', unit: 'px', optional: true, doc: BOX_DOC },
+      baseT: { type: 'vec3', unit: 'fraction', min: 1e-6, max: 100, optional: true, doc: "Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box." },
+    },
+    doc: 'Scanner density relative to the film base: d = −log10(T / T_base), T_base = baseT when given, else the mean over the rebate box.',
     see: ['scan.rebate', 'invert.dyes'],
   }),
   defineOp({

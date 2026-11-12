@@ -64,11 +64,26 @@ const read = async (e: Engine, g: Graph, id: string, t: EvalTarget): Promise<{ w
 };
 
 describe('StudioEngine host ops', () => {
+  it('output.frame: a straightened crop (contract 0.3) equals the mock engine, every orientation, with a region', async () => {
+    const { wrap, mock, g } = await both(['output.frame']);
+    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    for (const o of ORIENTATIONS) {
+      const rr: FrameRecipe = { ...r, view: { ...r.view, frame: { orientation: o, angle_deg: 3.5, crop: { x: 10, y: 6, w: 70, h: 50 } } } };
+      const n = compile(rr, g);
+      const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
+      expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
+      const info = n.info as { width: number; height: number };
+      const region = { x: 3, y: 5, w: info.width - 9, h: info.height - 11 };
+      const part = await read(wrap, g, n.id, { scale: 0.5, precision: 'preview', region });
+      expect(part, `${o} region`).toEqual(await read(mock, g, n.id, { scale: 0.5, precision: 'preview', region }));
+    }
+  });
+
   it('output.frame: every orientation, with a crop and a region, equals the mock engine', async () => {
     const { wrap, mock, g } = await both(['output.frame']);
     const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
     for (const o of ORIENTATIONS) {
-      const rr: FrameRecipe = { ...r, scan: { ...r.scan!, orientation: o, crop: { x: 10, y: 6, w: 70, h: 50 } } };
+      const rr: FrameRecipe = { ...r, view: { ...r.view, frame: { orientation: o, angle_deg: 0, crop: { x: 10, y: 6, w: 70, h: 50 } } } };
       const n = compile(rr, g);
       const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
       expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));

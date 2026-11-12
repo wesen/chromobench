@@ -31,7 +31,7 @@ export * from './tables/tables.ts';
 export * from './tables/arrays.ts';
 export {
   DEFAULT_FILM, DEFAULT_PAPER, DEFAULT_SIGMA_D, densitiesOf, developerAt, displaySetupAt, exposeSettings, filmOf, flareWhite, gradePivot, paperOf, PhysicsEnv,
-  rebateBox, viewOf, whiteAt,
+  clearExposure, flashExposure, rebateBox, viewOf, whiteAt,
   type ChainCtx, type ExposeSettings, type UpNode,
 } from './ops/ops.ts';
 export * from './engine-ref.ts';

@@ -4,7 +4,7 @@
 
 ## `print.combine`
 
-Sums several exposures in linear H (dodge, burn, flash, split; CHB-010).
+Sums several exposures in linear H (dodge, burn, flash, split; CHB-010): H = 10^−Σd_m·(max(10^x − Σ_dodge r·m·10^x_i, 0) + Σ_add r·m·10^x_i) + Σ_flash r·m·10^x_flash, one log at the end. In normalised mode each print.expose term is weighted by its seconds over the main time (r = t_i / t_main; 1 in real mode, where the time is already in x).
 
 - Owner: CHB-010
 - On: Image (paper-logH) → Image (paper-logH)
@@ -13,23 +13,25 @@ Sums several exposures in linear H (dodge, burn, flash, split; CHB-010).
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `exposures` | Image[] |  |  |  | `[]` |  | Additional paper-logH exposures, summed in linear H. |
+| `exposures` | Image[] |  |  |  | `[]` |  | Additional paper-logH exposures (print.expose nodes), summed in linear H. |
 | `masks` | Mask[] |  |  |  | `[]` |  | One mask per additional exposure. |
-| `modes` | string[] |  |  |  | `[]` |  | Per exposure: 'add' (burn, flash, split) or 'subtract' (dodge). |
+| `modes` | string[] |  |  |  | `[]` |  | Per exposure: 'add' (burn, split), 'subtract' (dodge), 'flash-base' or 'flash-open' (a flash: the exposure's print.expose settings evaluated uniformly, through the film base with no image (dye amounts 0), or through an empty gate (no film)). |
+| `densityMasks` | Image[] |  |  |  | `[]` |  | print.densityMask densities d_m (scalar-field): every exposure through the negative is multiplied by 10^−Σd_m, flashes are not (CHB-010 §6.6). |
 
 ## `print.densityMask`
 
-Contrast-reducing density mask (unsharp mask in printing density).
+The density d_m ≥ 0 of a neutral silver mask made from the negative: H_m = blur of the negative's mean transmittance 10^−PD, with PD = x_clear − x read from the receiver (the main print.expose; x_clear its clear-film exposure, 0 without one). print.combine applies it (densityMasks).
 
 - Owner: CHB-010
-- On: Image (printing-density) → Image (printing-density)
+- On: Image (paper-logH) → Image (scalar-field)
 - Class: spatial; binding: scan
 - Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
-| `amount` | number | fraction | [0, 1] |  | `0` |  | Strength of the unsharp density mask. |
-| `radius_um` | number | um | [0, 5000] |  | `500` |  | Blur radius on the film. |
+| `amount` | number | fraction | [0, 1] |  | `0` |  | Mask gamma γ_m (0.6: large-area contrast falls to 40 %). |
+| `radius_um` | number | um | [0, 5000] |  | `500` |  | Gaussian σ of the blur on the film (spacer and diffuser). |
+| `polarity` | enum positive/same |  |  |  | `"positive"` |  | positive lowers large-area contrast (d_m = γ(log10 H_m − log10 min H_m)); same raises it (d_m = γ(log10 max H_m − log10 H_m)). |
 
 ## `print.develop`
 
@@ -43,7 +45,7 @@ Develops paper log exposure to paper dye amounts through the paper curves.
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
 | `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `grade` | number | none | [0, 5] | [1, 4] | `2` | print.grade | Contrast grade. |
+| `grade` | number | none | [0, 5] | [1, 4] | `2` | print.grade | Contrast grade: a gamma about the aim grey, so the grey card stays (0 → 0.7, 1 → 0.82, 2 → 1 the paper as made, 3 → 1.2, 4 → 1.45, 5 → 1.8). Colour papers have no grades; this is a contrast control. |
 
 ## `print.expose`
 
@@ -63,7 +65,7 @@ Exposes paper through the negative: the per-stock table from dye amounts to pape
 | `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0. |
 | `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | print.enlarger.time_s | Exposure time. |
 | `fstop` | number | fstop | [2.8, 45] |  | `8` | print.enlarger.fstop | Enlarger lens aperture. |
-| `magnification` (optional) | number | none | [0.5, 20] |  |  | print.enlarger.magnification | Enlarger magnification; absent = the calibration's reference (CHB-010). |
+| `magnification` (optional) | number | none | [0.5, 20] |  |  | print.enlarger.magnification | Enlarger magnification (light ∝ 1/(m + 1)²); absent = the calibration's reference, 8×. Real mode only (CHB-010). |
 | `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | print.aim | What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone. |
 | `aimView` | string |  |  |  | `"D50"` | view.illuminant | Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light). |
 

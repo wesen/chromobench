@@ -1,7 +1,7 @@
-// The roll as data (guide §6.1–6.2). A roll record lives in the catalog-like document slice `roll` (until the
-// contract has a Roll record, CONTRACT-REQUESTS R3/R5); recipes hold plain copies of the shared settings, and
-// divergence is computed, never stored.
-import { canonicalJSON, getPath, type Box, type Diagnostic, type FrameRecipe, type Vec3 } from '@chromobench/contract';
+// The roll as data (guide §6.1–6.2). A roll record (the contract's Roll, contract 0.3) lives in the
+// catalog-like document slice `roll`; recipes hold plain copies of the shared settings, and divergence is
+// computed, never stored.
+import { canonicalJSON, getPath, type Box, type Roll as ContractRoll, type Diagnostic, type FrameRecipe, type RollStatus, type Vec3 } from '@chromobench/contract';
 import { SHARED_PATHS, type SharedPath } from './constants.ts';
 
 export type FrameId = string;
@@ -106,18 +106,9 @@ export interface RollAnalysis {
   diagnostics: Diagnostic[];
 }
 
-export type RollStatus = 'imported' | 'analysed' | 'set-up' | 'first-printed' | 'balanced';
-
-export interface Roll {
-  id: string;
-  label: string;
-  frames: FrameId[];
-  fragment: RollFragment;
-  analysis: RollAnalysis | null;
-  reference: FrameId | null;
-  match: { alpha: number; appliedAt: number; batch: string } | null;
-  status: RollStatus;
-}
+/** The contract's roll record (contract 0.3, CHB-020 R6) with the kit's analysis and fragment types. */
+export type { RollStatus };
+export type Roll = ContractRoll<RollAnalysis, RollFragment>;
 
 export const newRoll = (id: string, label: string, frames: FrameId[], fragment: RollFragment = {}): Roll => ({
   id, label, frames, fragment, analysis: null, reference: null, match: null, status: 'imported',

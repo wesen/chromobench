@@ -75,6 +75,8 @@ function componentKey(type: ValueType, k: number): string | number {
 export function componentOf(type: ValueType, v: unknown, k = 0): number {
   if (type === 'vec3') return (v as number[])[k]!;
   if (type === 'cmy') return (v as Record<string, number>)[componentKey(type, k) as string]!;
+  // a per-channel number (scan.flare [r, g, b], contract 0.3) shows its mean; the slider writes one number
+  if (Array.isArray(v)) return (v as number[]).reduce((s, x) => s + x, 0) / Math.max(1, v.length);
   return v as number;
 }
 
@@ -130,7 +132,7 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   };
   const format = (v: unknown, k?: number): string => {
     if (type === 'enum' || type === 'string') return String(v);
-    if (type === 'number') return fmtNum(v as number);
+    if (type === 'number') return Array.isArray(v) ? `(${v.map((x) => fmtNum(x as number)).join(', ')})` : fmtNum(v as number);
     if (k !== undefined) return fmtNum(componentOf(type, v, k));
     const parts = [0, 1, 2].map((i) => {
       const d = toDisplay(componentOf(type, v, i));
@@ -147,7 +149,7 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   const valueText = (v: unknown, k?: number): string => {
     const comp = k !== undefined && ui.components ? `${ui.components[k]} ` : '';
     if (type === 'enum' || type === 'string') return `${label} ${String(v)}`;
-    const x = k !== undefined ? componentOf(type, v, k) : (v as number);
+    const x = k !== undefined || Array.isArray(v) ? componentOf(type, v, k ?? 0) : (v as number);
     if (isTime) return `${label} ${formatSeconds(x)} seconds`;
     if (isFstop) return `${label} f ${Number(x.toFixed(1))}`;
     const d = toDisplay(x);

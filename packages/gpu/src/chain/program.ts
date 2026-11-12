@@ -9,6 +9,8 @@ export const OP = Object.freeze({
   DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11,
   // CHB-010 masks
   MASK_LUM: 12, MASK_GRADIENT: 13, MASK_ELLIPSE: 14, MASK_NOT: 15,
+  // contract 0.3: v.rgb · p0.rgb + p1.rgb (scan.flare per channel)
+  AFFINE: 16,
 });
 export const MAXOPS = 12;
 /** Table lookup modes: hardware trilinear (preview), manual tetrahedral (export), manual trilinear, broken (no half-texel). */

@@ -6,7 +6,7 @@ import {
 
 function argSnapshot(op: OpDef, name: string, s: ArgSpec): Record<string, unknown> {
   const out: Record<string, unknown> = { type: s.type };
-  for (const k of ['unit', 'min', 'max', 'usual', 'values', 'valuesFrom', 'default', 'optional', 'integer'] as const) {
+  for (const k of ['unit', 'min', 'max', 'usual', 'values', 'valuesFrom', 'default', 'optional', 'integer', 'perChannel'] as const) {
     if (s[k] !== undefined) out[k] = s[k];
   }
   const p = argPath(op, name, s);

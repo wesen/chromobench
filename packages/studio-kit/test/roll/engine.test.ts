@@ -207,7 +207,7 @@ describe('Gold 200: the kit reports σ and class shares with their size (CHB-006
     const base = defaultRecipe('negative-scan', { sha256: golden.sha256, name: 'gold200.png' });
     const [rx, ry, rw, rh] = golden.oriented.rebate;
     const [cx, cy, cw, ch] = golden.oriented.crop;
-    recipe = { ...base, scan: { ...base.scan!, rebate: orientedToSensorBox('flipH', { x: rx, y: ry, w: rw, h: rh }, 1292, 863), crop: orientedToSensorBox('flipH', { x: cx, y: cy, w: cw, h: ch }, 1292, 863) } };
+    recipe = { ...base, scan: { ...base.scan!, rebate: orientedToSensorBox('flipH', { x: rx, y: ry, w: rw, h: rh }, 1292, 863) }, view: { ...base.view, frame: { ...base.view.frame, crop: orientedToSensorBox('flipH', { x: cx, y: cy, w: cw, h: ch }, 1292, 863) } } };
   });
   it('with the picked boxes at full size: σ (0.0090, 0.0069, 0.0122) D, blank 21.5 %, below 7.2 % at 1090×754', () => {
     const p = analysePixels({ rgb: full, w: 1292, h: 863, scale: 1 }, recipe, physics(), { veil: false });

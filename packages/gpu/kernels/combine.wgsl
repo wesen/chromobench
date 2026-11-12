@@ -7,8 +7,12 @@
 // mode 2: x = log10(max(flags & 1 ? max(a, 0) : a, 1e-8))   (back to paper log H, H_FLOOR)
 // mode 3: min(a, b) (mask.and)      mode 4: max(a, b) (mask.or)
 // mode 5: T = mean_k 10^(−a_k)       (the mask film's exposure before the blur)
-// mode 6: PD + w.x · (log10 b − w.y)  (density mask: w.x strength, w.y = log10 of the smallest blurred T)
+// mode 6: d = w.x · (log10 b − w.y)   (density mask d_m, contract 0.3: w.x = ±strength, w.y = log10 of the
+//                                       smallest (positive) or largest (same) blurred T; w.x = 0 gives 0)
 // mode 7: copy a
+// mode 8: H = (flags & 1 ? max(a, 0) : a) + m · w.xyz  (a uniform flash, w.xyz = ratio · 10^x_flash; contract 0.3)
+// mode 9: H = (flags & 1 ? max(a, 0) : a) · 10^(−b.r)  (a density mask holds back the exposures through the negative)
+// mode 10: T = mean_k 10^(a_k − w_k)  (the mask film's exposure from paper log H: PD = w − x, w = x_clear)
 
 const LOG2_10: f32 = 3.321928094887362;
 const LOG10_2: f32 = 0.3010299956639812;
@@ -46,9 +50,21 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
     case 4u: { let v = max(va.r, textureLoad(b, p, 0).r); out = vec4<f32>(v, v, v, 1.0); }
     case 5u: { let t = dot(p10(-va.rgb), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
     case 6u: {
-      let d = U.w.x * (log2(textureLoad(b, p, 0).r) * LOG10_2 - U.w.y);
-      out = vec4<f32>(va.rgb + vec3<f32>(d), va.a);
+      var d = 0.0;
+      if (U.w.x != 0.0) { d = U.w.x * (log2(textureLoad(b, p, 0).r) * LOG10_2 - U.w.y); }
+      out = vec4<f32>(d, d, d, 1.0);
     }
+    case 8u: {
+      var base = va.rgb;
+      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
+      out = vec4<f32>(base + textureLoad(m, p, 0).r * U.w.xyz, 0.0);
+    }
+    case 9u: {
+      var base = va.rgb;
+      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
+      out = vec4<f32>(base * exp2(-LOG2_10 * textureLoad(b, p, 0).r), 0.0);
+    }
+    case 10u: { let t = dot(p10(va.rgb - U.w.xyz), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
     default: {}
   }
   textureStore(dst, p, out);

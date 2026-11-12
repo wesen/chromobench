@@ -3,7 +3,7 @@
 // snapshot); only `evaluate` (deferred) and the end-of-eval submission reach the engine/edit log.
 import {
   AREAS, ChromobenchError, DOMAINS, LOG10_2, LOGH_PER_POINT, CONTRACT_VERSION, allOps, applyMutation, canonicalJSON, closest,
-  compile, diag, formatValue, getOp, getPath, nodeArgs, recipeBackedArgs, settablePaths,
+  cut, diag, FRAME_ACCESSORS, formatValue, getOp, getPath, nodeArgs, PRINT_OPTIONS, recipeBackedArgs, settablePaths,
   type Diagnostic, type Domain, type EditLog, type FrameRecipe, type Graph, type Mutation, type Node, type OpDef,
 } from '@chromobench/contract';
 
@@ -57,27 +57,10 @@ interface FrameState {
 
 type At = { eval: number; line: number } | null;
 
-/** Options of the `neg.print({…})` macro → the op argument that owns and validates each one. */
-export const PRINT_OPTIONS: Readonly<Record<string, readonly [string, string]>> = Object.freeze({
-  paper: ['print.expose', 'paper'],
-  time_s: ['print.expose', 'time_s'],
-  fstop: ['print.expose', 'fstop'],
-  filtration: ['print.expose', 'filtration'],
-  lights: ['print.lights', 'logH'],
-  grade: ['print.develop', 'grade'],
-  preflash: ['print.preflash', 'amount'],
-  illuminant: ['view.reflect', 'illuminant'],
-  flare: ['view.flare', 'flare'],
-});
-
-/** Vocabulary accessors on `frame`, the op whose node they return, and the domain it has. */
-const ACCESSORS: readonly { name: string; domain: Domain }[] = [
-  { name: 'negative', domain: 'film-dyes' },
-  { name: 'print', domain: 'print-xyz' },
-  { name: 'scan', domain: 'scanner-density' },
-  { name: 'source', domain: 'camera-linear' },
-  { name: 'display', domain: 'display-rgb' },
-];
+// The frame vocabulary (accessors, print() options, cut) is the contract's (contract 0.3, vocab.ts), shared with
+// packages/studio-kit's viewer handles so viewer and agent name the same node for the same words.
+export { PRINT_OPTIONS };
+const ACCESSORS = FRAME_ACCESSORS;
 
 export const HANDLE_MEMBERS = ['look', 'explain', 'id', 'domain', 'kind', 'width', 'height'];
 
@@ -345,15 +328,7 @@ export class Host {
   // ---- vocabulary ----------------------------------------------------------------------------
   /** The node of a frame's compiled chain with the given op (the last one in the closure). */
   private cut(r: FrameRecipe, op: string): Node {
-    const top = compile(r, this.graph);
-    if (op === 'output.frame') return top;
-    let found: Node | undefined;
-    for (const id of this.closureIds(top.id)) {
-      const n = this.node(id);
-      if (n.op === op) found = n;
-    }
-    if (!found) throw new ChromobenchError(diag('E_INTERNAL', `compiled chain has no ${op}`));
-    return found;
+    return cut(r, this.graph, op);
   }
 
   /** Node ids in closure order (same order as Graph.closure). */

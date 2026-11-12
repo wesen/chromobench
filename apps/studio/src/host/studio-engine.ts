@@ -1,7 +1,7 @@
 // The engine the studio talks to when it runs on real physics (CHB-023). It wraps one physics engine
 // (GpuEngine, or RefEngine without WebGPU) and adds what neither implements yet, as plain image work
 // on the physics engine's results:
-//   output.frame    orientation and crop (CHB-011 owns the op; the studio's display chain ends in it)
+//   output.frame    crop, straighten (contract 0.3) and orientation (CHB-011 owns the op; the display chain ends in it)
 //   view.inspect    the Negative / Dyes / Base views as display RGB
 //   invert.classes  and invert.classify when the physics engine lacks them (the GPU): the per-pixel
 //                   classification is core's, injected by the host file (host/engines.ts)
@@ -10,7 +10,7 @@
 // Decoding is the host's too (packages/ingest, injected): open() hands the physics engine a decoded
 // working image. Everything here speaks only the contract, so it is unit-tested with any engine.
 import {
-  ChromobenchError, fail, Graph, quantizeScale, sha256Hex,
+  ChromobenchError, fail, Graph, quantizeScale, sha256Hex, straighten, straightenFootprint,
   type Box, type Domain, type Engine, type EngineCaps, type EngineId, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type Orientation, type SampleData, type SourceInfo,
   type SourceRef, type TableKey, type Vec3,
@@ -265,6 +265,8 @@ export class StudioEngine implements Engine {
     const o = (n.args['orientation'] as Orientation | undefined) ?? 'none';
     const crop = (n.args['crop'] as Box | undefined) ?? { x: 0, y: 0, w: inInfo.width, h: inInfo.height };
     const region = target.region ?? { x: 0, y: 0, w: info.width, h: info.height };
+    const angle = (n.args['angle_deg'] as number | undefined) ?? 0;
+    if (angle !== 0) return this.straightened(n, inner, o, crop, angle, region, target);
     const b = unorientBox(o, region, crop.w, crop.h);
     const inRegion = { x: b.x + crop.x, y: b.y + crop.y, w: b.w, h: b.h };
     const full = inRegion.x === 0 && inRegion.y === 0 && inRegion.w === inInfo.width && inRegion.h === inInfo.height;
@@ -275,6 +277,32 @@ export class StudioEngine implements Engine {
     }
     const px = orientPixels(o, await r.read(), r.width, r.height, r.info.channels);
     return result(n, info, { region, scale: r.scale, warnings: r.warnings }, px.data, px.width, px.height);
+  }
+
+  /**
+   * A straightened crop: the footprint at full resolution, the contract's reference sampling (straighten), the
+   * orientation, then the region at the target scale by nearest sampling (as the mock engine scales).
+   */
+  private async straightened(n: Node, inner: Node, o: Orientation, crop: Box, angle: number, region: Box, target: EvalTarget): Promise<ImageResult> {
+    const info = n.info as ImageInfo;
+    const inInfo = inner.info as ImageInfo;
+    const fp = straightenFootprint(crop, angle, inInfo.width, inInfo.height);
+    const whole = fp.x === 0 && fp.y === 0 && fp.w === inInfo.width && fp.h === inInfo.height;
+    const r = await this.evaluate(inner, { scale: 'full', precision: target.precision, ...(target.signal ? { signal: target.signal } : {}), ...(whole ? {} : { region: fp }) });
+    const c = r.info.channels;
+    const st = straighten(await r.read(), r.width, r.height, c, { x: fp.x, y: fp.y }, inInfo.width, inInfo.height, crop, angle, o);
+    const px = orientPixels(o, st, crop.w, crop.h, c);
+    const scale = quantizeScale(target.scale);
+    const width = Math.max(1, Math.round(region.w * scale)), height = Math.max(1, Math.round(region.h * scale));
+    const out = new Float64Array(width * height * c);
+    for (let y = 0; y < height; y++) {
+      const sy = region.y + Math.min(region.h - 1, Math.floor(((y + 0.5) * region.h) / height));
+      for (let x = 0; x < width; x++) {
+        const sx = region.x + Math.min(region.w - 1, Math.floor(((x + 0.5) * region.w) / width));
+        for (let k = 0; k < c; k++) out[(y * width + x) * c + k] = px.data[(sy * px.width + sx) * c + k]!;
+      }
+    }
+    return result(n, info, { region, scale, warnings: r.warnings }, out, width, height);
   }
 
   private async inspect(n: Node, target: EvalTarget): Promise<ImageResult> {

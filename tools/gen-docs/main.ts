@@ -16,7 +16,7 @@ const pascal = (s: string): string => s.split(/[.\-_]/).map((w) => w.charAt(0).t
 
 function tsType(s: ArgSpec): string {
   switch (s.type) {
-    case 'number': return 'number';
+    case 'number': return s.perChannel ? 'number | Vec3' : 'number';
     case 'vec3': return 'Vec3';
     case 'enum': return (s.values ?? []).map((v) => JSON.stringify(v)).join(' | ');
     case 'bool': return 'boolean';

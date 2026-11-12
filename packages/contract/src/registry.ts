@@ -10,8 +10,8 @@ import { UNITS } from './units.ts';
 
 export type Kind = 'Image' | 'Mask' | 'Value' | 'Regions' | 'Table';
 export type Area = 'source' | 'scan' | 'invert' | 'capture' | 'film' | 'print'
-  | 'view' | 'output' | 'mask' | 'measure' | 'darkroom' | 'finishing';
-export const AREAS: readonly Area[] = ['source', 'scan', 'invert', 'capture', 'film', 'print', 'view', 'output', 'mask', 'measure', 'darkroom', 'finishing'];
+  | 'view' | 'retouch' | 'output' | 'mask' | 'measure' | 'darkroom' | 'finishing';
+export const AREAS: readonly Area[] = ['source', 'scan', 'invert', 'capture', 'film', 'print', 'view', 'retouch', 'output', 'mask', 'measure', 'darkroom', 'finishing'];
 export type OpClass = 'pointwise' | 'spatial' | 'global' | 'decoration' | 'measure' | 'geometric';
 export type Binding = 'stock' | 'scan' | 'setting' | 'pixel';
 
