@@ -509,3 +509,165 @@ on the next new grid. Sampled stages now live in their own LRU (8× the entries,
 
 ### Technical details
 - N/A.
+
+## Step 8: Final-render times — where the extra time went, and what I changed
+
+The orchestrator pointed out that the AFTER run of Step 7 (`after-reference.json`, 1024 px working image) was free
+of stalls but slower to the *final* render than before: open NEF 15.4 → 24.7 s, typed 15 + Enter 2.0 → 7.9 s
+(photo) and 2.1 → 3.2 s (negative), open DNG 5.7 → 10.6 s; target ≤ ≈ 1.2× before with stalls < 100 ms. I
+separated the causes by measurement, then fixed them.
+
+1. **The working image (≈ 3× of the slowdown).** At 1024 px the screen render shows 896×599 = 537 k pixels instead
+   of 512×342 = 175 k, and the photo's spatial film stages (couple, halation, grain) run at 4× the pixels on open.
+   At ≈ 14 µs per pixel for a print-only change (Step 3) that is 7–8 s per final render. A run with the worker and
+   `?refLong=512` (`after-reference-ref512.json`) was back near the old times (typed photo 4.2 s, negative 2.8 s,
+   opens 10.0 and 5.4 s). **Decision: the reference engine's default working image is 512 px again;**
+   `?refLong=1024` remains for a sharper CPU preview (F10 on the CPU engine stays open: sharpness costs 3× time
+   there; on the GPU engine F10 does not apply, its working image is 4000 px).
+2. **Thumbnails ahead of the main viewer (≈ 1–1.5 s per change on the photo).** A probe of three typed commits
+   showed per commit: 3 requests (main viewer, navigator, filmstrip), 5 renders, 2 aborted, and the main render
+   taking 3.0–4.0 s in the worker against 2.0–2.8 s for the same stages in Node. The background thumbnails were
+   requested in the same frame, *before* the main viewer, started at once (the live lane was still idle), and the
+   worker runs one job at a time, so the main render queued behind them. Fixes in the shell queue: with
+   `preemptBackground` (set by the studio) a background render never starts at once but in an idle moment, so a live
+   request of the same frame reaches the engine first; and a live request aborts background renders in flight
+   (they wait and run again after).
+3. **A kept draft delaying the final pass.** `progressMs` now keeps an in-flight render only when the newer request
+   is another draft; a screen or refine pass (the hand stopped, a typed value) aborts it at once.
+4. **Open stall: hashing.** The file's SHA-256 (the frame identity, studio-kit `frames.ts`) ran synchronously on the
+   main thread: a 25 MB NEF cost ≈ 0.5 s of stall. It now uses WebCrypto (`crypto.subtle.digest`, native and
+   asynchronous) for files ≥ 1 MB, same hex.
+5. **Not causes (checked):** transfers are zero-copy and small (a 512×342×3 f64 result is 4 MB); the per-stage
+   macrotask yield costs ≈ 10 stages × < 1 ms; worker start-up (LibRaw init, data packs loaded a second time in the
+   worker) shows in boot (507 → 676–946 ms), not in renders; the copies of `bytes.slice()` (frames,
+   openAs, the worker transfer) are ≈ 10 ms each for 25 MB.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1 (plus the orchestrator's request: explain the slower final render in the
+diary and reduce it to ≤ ≈ 1.2× before, stalls < 100 ms)
+**Assistant interpretation:** Find where the extra time goes; fix what is ours; trade sharpness for time on the CPU.
+**Inferred user intent:** No freeze *and* no slower photographer workflow.
+**Commit (code):** 5fd261b — "…live renders preempt background ones…; a screen pass aborts a kept draft; reference working image back to 512 (?refLong=1024 opt-in)"; 054cd8e — "…background renders start in an idle moment…; files hashed with WebCrypto on open; Mac BEFORE numbers"
+
+### What I did
+- `packages/shell/src/app/render/queue.ts`: `preemptBackground`, `preempt()`, `pump(s, later)`, in-flight keeps its
+  `job`; `progressMs` only for draft-after-draft. Tests in `render-queue.test.ts`.
+- `apps/studio/src/host/engines.ts`: `DEFAULT_REF_LONG = 512`. `apps/studio/src/main.ts`:
+  `rt.renders.preemptBackground = true` with the other two settings.
+- `packages/studio-kit/src/bridge/frames.ts`: `hashBytes` (WebCrypto ≥ 1 MB, else `sha256Hex`); test in
+  `studio-kit/test/bridge.test.ts`.
+- A temporary probe script (three typed commits, queue stats and render events), deleted after.
+- Measured: `node …/01-measure-responsiveness.mjs --engines reference` after each change (runs after5–after8;
+  after5's open "hang" was the script: its open wait required a render *after* the frame was selected, but the
+  status leaves "opening…" only with that render; fixed by waiting for "selected and not opening").
+- Re-measured BEFORE with the fixed script on a build of the branch base a10ae32 (`git archive a10ae32`, built in
+  the scratchpad, served on 4811) → `before-reference-run2.json`.
+
+### Why
+- The final render must not be slower for the photographer; with one worker, order of jobs is everything.
+
+### What worked
+Reference engine, this machine (load 2–4), BEFORE (two runs) → AFTER (`after-reference-final.json`):
+
+| step | before: result / worst stall | after: result / worst stall | ratio |
+|---|---|---|---|
+| open NEF as photo | 9842 / 3533; 15408 / 5783 ms | 13969 / **0** ms | 0.9–1.4× (concurrent Mac upload) |
+| drag Time 40 px (photo), total | 15870 / 3183; 17986 / 3800 ms | 3874 / **0** ms (drag wall 1021 ms, draft at 419 ms) | 0.22× |
+| type 15 + Enter (photo) | 2432 / 2417; 2012 / 2000 ms | 2600 / **0** ms | 1.07–1.29× |
+| open DNG as negative | 5108 / 5067; 5691 / 5633 ms | 4667 / 250 ms | 0.82–0.91× |
+| drag Time 40 px (negative), total | 11849 / 2200; 12719 / 2517 ms | 3370 / **0** ms (wall 1069 ms, draft at 434 ms) | 0.27× |
+| type 15 + Enter (negative) | 1806 / 1800; 2108 / 2100 ms | 1668 / **0** ms | 0.79–0.92× |
+
+The drag's wall time (20 mouse moves) went from 15.9–18.0 s to ≈ 1.0 s: the window answers every move.
+
+### What didn't work
+- `after5` (preemption build, first try of the new open wait): "open NEF as photo: no result in 180000 ms" — the
+  script bug above, not the studio (a probe showed the open done in 10 s).
+- A first version of the preemption test resolved the wrong pending render (`b.resolve(b.calls.findIndex(…))`
+  indexes calls, not pending renders) and looped forever in its idle loop; fixed with `b.resolve()` and a bounded
+  loop. The SwiftShader GPU BEFORE re-run on the base build twice failed to boot within 240 s
+  ("page.waitForFunction: Timeout 240000ms exceeded") under load; superseded by the real-GPU numbers (Step 9).
+
+### What I learned
+- One worker serialises everything: the order in which work reaches it matters more than its raw speed.
+- Typed 15 + Enter on the photo is still 1.07–1.29× before: the remaining cost is the navigator and filmstrip
+  thumbnails that now really render (before, the main thread blocked so they piggy-backed on cached full images);
+  they run after the main render and no longer delay it, but they share the CPU on a loaded machine.
+
+### What was tricky to build
+- Re-queuing a preempted background job: the in-flight record now keeps its `Waiting`, so an abort can put it back
+  as waiting (unless a newer request already is), and its present callback (the thumbnail cache) still runs.
+
+### What warrants a second pair of eyes
+- `preemptBackground` changes when thumbnails start (an idle moment instead of at once) — only when the host sets it.
+- The 250 ms stall left on the DNG open (CPU engine) is main-thread work I have not attributed yet (candidates: the
+  roll kit's film layout on the main thread, the first presentation).
+
+### What should be done in the future
+- F10 on the CPU engine: sharper previews need cheaper pixels (core: `output.display` and `print.expose` are
+  ≈ 70 % of a print change) or tiles at 1:1 on zoom; `?refLong=1024` is there to try.
+- Attribute the remaining open stalls (Step 9 for the GPU engine).
+
+### Code review instructions
+- `packages/shell/src/app/render/queue.ts` (`request`, `preempt`, `pump`); `render-queue.test.ts`.
+- `packages/studio-kit/src/bridge/frames.ts` `hashBytes`.
+
+### Technical details
+- JSON: `various/ws-b/before-reference.json`, `before-reference-run2.json`, `after-reference.json` (1024 px),
+  `after-reference-ref512.json`, `after-reference-merged.json`, `after-reference-final.json`.
+
+## Step 9: Merge of WS-A (open mode) into the worker design
+
+WS-A changed `HostServices.decode` to take an explicit mode, added the photo/negative guess (`guessOpenMode`) to
+the decode, `prior` and `forget` hooks, `StudioEngine.openAs` (Auto may decode twice), and `forgetSource` on both
+engines. `git merge main` conflicted in `engines.ts` and `studio-engine.ts`. I kept WS-A's `openAs` flow as it is
+and fitted the worker under it: the guess runs in the worker (in `decode.ts`, the same `guessOf` code); a decode
+with `keep: 'register'` no longer registers itself in the worker but waits there until `HostServices.register`
+posts a `register` message, so `openAs` can decode twice and call `forget` (a `forget` message →
+`RefEngine.forgetSource`) *before* the new decode becomes the engine's source — the order WS-A relies on.
+`WorkerEngine` forwards `forgetSource`; `RefEngine.forgetSource` also clears the sampled-stage LRU. The caller's
+bytes are never transferred: `WorkerClient.decode` posts a copy (WS-A's `again` copy stays valid).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1 (and the orchestrator's merge request: `HostServices.decode(bytes, sha, name,
+mode)`, `prior`, `forget`, `openAs`, `guessOpenMode` in the worker, `forgetSource` forwarded, copies not transfers)
+**Assistant interpretation:** Merge main and make WS-A's open flow work through the worker.
+**Inferred user intent:** One branch with both workstreams working.
+**Commit (code):** d590a5f — "Merge main (WS-A open mode) into task/chb-027-responsive"
+
+### What I did
+- Resolved `studio-engine.ts` (WS-A's interface; `register(engine, info, data | undefined)`; notes keep no pixels).
+- Rebuilt `engines.ts` from my side plus WS-A's: no `settings.photo`; `prior: openPrior`, `forget` →
+  `forgetSource`, `register` → `WorkerEngine.register(sha)` for the worker, `openDecoded` otherwise.
+- `decode.ts`: `guessOf`, the roll rule (a confident photo lends no base; photo mode drops the roll entry).
+- `worker-protocol.ts` / `engine-serve.ts` / `worker-engine.ts`: `register` and `forget` messages.
+- Test: "re-open as a photo (WS-A openAs): the worker forgets the negative decode and registers the photo one".
+- Measurement script: the `#photo` checkbox is optional (main opens Auto: the NEF as a photo, the DNG as a negative).
+
+### Why
+- Registering at decode time would have let `openAs`'s `forget` (called after the decode) delete the new source.
+
+### What worked
+- `pnpm test`: 93 files, 2692 passed, 7 skipped. `pnpm typecheck`, `pnpm lint` green.
+
+### What didn't work
+- N/A beyond the conflicts.
+
+### What I learned
+- Splitting "decode" from "make it the engine's" keeps the host's ordering decisions on the main thread.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- `engine-serve.ts` keeps one pending decode per source until `register`; an Auto open that decodes twice
+  overwrites it (intended).
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `apps/studio/src/host/engines.ts` (`host.decode`, `register`, `forget`), `engine-serve.ts` (`register`, `forget`).
+
+### Technical details
+- N/A.

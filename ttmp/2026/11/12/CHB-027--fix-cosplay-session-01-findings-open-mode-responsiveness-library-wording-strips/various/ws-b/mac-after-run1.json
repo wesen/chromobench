@@ -1,0 +1,254 @@
+[
+ {
+  "engine": "gpu",
+  "label": "Fast (graphics card)",
+  "bootMs": 5227,
+  "steps": [
+   {
+    "step": "open NEF as photo",
+    "resultMs": 47808,
+    "firstRenderMs": 47808,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "896×599",
+    "draftSize": null,
+    "renderMs": [
+     58
+    ],
+    "stalls": 3,
+    "worstStallMs": 567,
+    "stallTotalMs": 875,
+    "wallMs": 47982,
+    "status": "rendered 1 · screen",
+    "notes": "Nikon D750 photo, 24 MP"
+   },
+   {
+    "step": "drag Time 40 px (photo)",
+    "resultMs": 1804,
+    "firstRenderMs": 208,
+    "renders": 7,
+    "drafts": 6,
+    "lastSize": "896×599",
+    "draftSize": "865×578",
+    "renderMs": [
+     62,
+     63,
+     37,
+     33,
+     29,
+     45,
+     63
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 1741,
+    "pointerDownToUpMs": 1699,
+    "upToResultMs": 64,
+    "rendersDuringDrag": 6,
+    "value": "Time 10.0 seconds → Time 20.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (photo)",
+    "resultMs": 77,
+    "firstRenderMs": 77,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "896×599",
+    "draftSize": null,
+    "renderMs": [
+     56
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   },
+   {
+    "step": "open DNG as negative",
+    "resultMs": 31131,
+    "firstRenderMs": 31131,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "290×640",
+    "draftSize": null,
+    "renderMs": [
+     73
+    ],
+    "stalls": 1,
+    "worstStallMs": 658,
+    "stallTotalMs": 658,
+    "wallMs": 31269,
+    "status": "rendered 10 · screen",
+    "notes": "Colour negative (DNG), 6.2 MP, film edge found"
+   },
+   {
+    "step": "drag Time 40 px (negative)",
+    "resultMs": 2244,
+    "firstRenderMs": 88,
+    "renders": 8,
+    "drafts": 7,
+    "lastSize": "290×640",
+    "draftSize": "418×924",
+    "renderMs": [
+     22,
+     21,
+     13,
+     20,
+     20,
+     10,
+     24,
+     19
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 2229,
+    "pointerDownToUpMs": 2184,
+    "upToResultMs": 21,
+    "rendersDuringDrag": 7,
+    "value": "Time 2.23 seconds → Time 5.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (negative)",
+    "resultMs": 78,
+    "firstRenderMs": 78,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "290×640",
+    "draftSize": null,
+    "renderMs": [
+     11
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   }
+  ],
+  "errors": []
+ },
+ {
+  "engine": "reference",
+  "label": "Compatibility mode: slower",
+  "bootMs": 7203,
+  "steps": [
+   {
+    "step": "open NEF as photo",
+    "resultMs": 50015,
+    "firstRenderMs": 50015,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     1852
+    ],
+    "stalls": 1,
+    "worstStallMs": 558,
+    "stallTotalMs": 558,
+    "wallMs": 50046,
+    "status": "rendered 1 · screen",
+    "notes": "Nikon D750 photo, 24 MP"
+   },
+   {
+    "step": "drag Time 40 px (photo)",
+    "resultMs": 2899,
+    "firstRenderMs": 336,
+    "renders": 6,
+    "drafts": 5,
+    "lastSize": "512×342",
+    "draftSize": "181×121",
+    "renderMs": [
+     167,
+     235,
+     193,
+     225,
+     158,
+     1307
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 1608,
+    "pointerDownToUpMs": 1533,
+    "upToResultMs": 1309,
+    "rendersDuringDrag": 5,
+    "value": "Time 10.0 seconds → Time 20.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (photo)",
+    "resultMs": 1290,
+    "firstRenderMs": 1290,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "512×342",
+    "draftSize": null,
+    "renderMs": [
+     1246
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   },
+   {
+    "step": "open DNG as negative",
+    "resultMs": 33637,
+    "firstRenderMs": 33637,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "232×512",
+    "draftSize": null,
+    "renderMs": [
+     860
+    ],
+    "stalls": 1,
+    "worstStallMs": 668,
+    "stallTotalMs": 668,
+    "wallMs": 33675,
+    "status": "rendered 9 · screen",
+    "notes": "Colour negative (DNG), 6.2 MP, film edge found"
+   },
+   {
+    "step": "drag Time 40 px (negative)",
+    "resultMs": 2611,
+    "firstRenderMs": 251,
+    "renders": 7,
+    "drafts": 6,
+    "lastSize": "232×512",
+    "draftSize": "116×256",
+    "renderMs": [
+     218,
+     214,
+     227,
+     216,
+     222,
+     217,
+     890
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0,
+    "dragWallMs": 1732,
+    "pointerDownToUpMs": 1701,
+    "upToResultMs": 891,
+    "rendersDuringDrag": 6,
+    "value": "Time 2.23 seconds → Time 5.0 seconds"
+   },
+   {
+    "step": "type 15 + Enter (negative)",
+    "resultMs": 899,
+    "firstRenderMs": 899,
+    "renders": 1,
+    "drafts": 0,
+    "lastSize": "232×512",
+    "draftSize": null,
+    "renderMs": [
+     877
+    ],
+    "stalls": 0,
+    "worstStallMs": 0,
+    "stallTotalMs": 0
+   }
+  ],
+  "errors": []
+ }
+]
