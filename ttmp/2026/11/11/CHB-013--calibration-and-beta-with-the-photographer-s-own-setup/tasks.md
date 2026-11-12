@@ -19,3 +19,4 @@
 - [x] [errata] Line ~279: a 3% camera-curve error moves the fitted LED peak by ~1 nm, not 'several nanometres' (replacement text in diary Step 13) <!-- t:gc6o -->
 - [ ] [from CHB-006 w3tp] Test LibRaw on real camera RAWs: the photographer's own camera files first, plus public samples (raw.pixls.us: Bayer, X-Trans, two-illuminant DNG; check licences), including non-zero sensor margins <!-- t:ehco -->
 - [ ] [from CHB-001 0d32] Ask the photographer: capture setup (scanner or camera scanning, light source), B&W need, print output target, desktop vs browser. ('Digital RAWs' = his camera photos, answered 2026-11-12.) <!-- t:gb3u -->
+- [ ] Known from the scan archive (2026-11-12): Epson Perfection V600 via VueScan 9, DNG Linear Raw 16-bit; current conversions in Negative Lab Pro v3.0.2 (Noritsu model, ProPhoto). Use the NLP positives as references; still ask about light source settings, film stocks, B&W, print target (see CHB-026 test material) <!-- t:5yc4 -->

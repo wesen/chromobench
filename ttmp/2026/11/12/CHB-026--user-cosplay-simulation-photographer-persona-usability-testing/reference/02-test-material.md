@@ -68,3 +68,30 @@ finding on a strip, base and flare reading, and the negative→print path.
 - A file's first open **mode** (photo vs negative) is remembered by its content hash in the browser's storage and
   re-used on every later open (finding F3). If you need a clean start for a file, load the app with `?fresh`
   (an in-memory store: nothing is saved) — but note in your diary that a real user cannot do that.
+
+## More scans (added 2026-11-12)
+
+The owner's scan archive is on the MacBook (`mimimi-2.local:~/Dropbox/Photos/RAW/Scans/`, 2024–2025, about 2,500
+DNG and 300 TIFF files, 235 GB, by date and, for 2025-10-07, by roll folder `roll-NNN`). Facts from the headers:
+
+- **Scanner:** Epson Perfection V600 (flatbed) through **VueScan 9** (9.8.37–9.8.45), saved as DNG "Linear Raw",
+  16-bit RGB. (This answers part of the capture-setup question in CHB-013.)
+- **Current conversion workflow:** several DNGs have `-positive.tif` siblings written by **Negative Lab Pro
+  v3.0.2** (16-bit, ProPhoto RGB; e.g. "Color Model: Noritsu | Pre-Sat: 4 | Tone Profile: LAB - Soft | WB: Kodak |
+  LUT: Natural"). Each positive is **one frame** of a multi-frame strip: reference results for frame finding and
+  for comparing chromobench's inversion with the tool the photographer uses today.
+- An 8-bit greyscale VueScan TIFF (2024-10-05) suggests black-and-white film as well (CHB-014, parked).
+
+A small varied set is copied to the git-ignored `.playwright-mcp/scans/` (names `<date>_<file>`):
+
+| File | Size | Notes |
+|---|---|---|
+| 2025-08-09_raw000/004/013.dng | ~1650×3640 | strips, likely 3 frames each (like raw010) |
+| 2025-08-09_raw007.dng | 1672×2457 | likely 2 frames |
+| 2025-08-09_raw000/004/007/010/013-positive.tif | ~1470×1050 | NLP conversions, one frame each |
+| 2025-10-07_roll-102_raw000/001.dng | ~3640×2830 | larger layout, landscape |
+| 2024-12-07_raw0001.dng | 3112×4986 | larger layout |
+| 2024-10-05_2024-10-05-0001.tif | 7136×7024, 8-bit grey | probably B&W |
+
+Copy more with `scp mimimi-2.local:'~/Dropbox/Photos/RAW/Scans/<path>' .playwright-mcp/scans/<date>_<name>`.
+The same privacy rules apply as for the NEFs.
