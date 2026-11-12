@@ -247,3 +247,77 @@ tasks (`e2af842`). WS-B and CHB-032 were told to merge main before their final c
 ### Technical details
 - Branch commits: 67a4a57 (real by default, layout option, F19, F23), 548abf9 (checkpoint, F8), b90d7ef (F9
   wording, darkroom mode select, e2e spec), 8d8e71e (tasks, diary step 5).
+
+## Step 5: CHB-032 merged before WS-B; session-03 setup
+
+CHB-032 (housekeeping) finished before WS-B, with every check green on a branch that already contained current
+main. I merged it as `02fd314`, ahead of WS-B and against the plan's A-then-B-then-CHB-032 order. A cross-check of
+WS-B's diff showed it builds `new RefEngine(...)` without data, which CHB-032 made a compile error. WS-B's agent
+knows its F10 tabulated-preview code and is still running, so it is better placed to fix that than I am after
+the fact. While waiting I also prepared session 03: an "old library" browser profile made with the build from
+before CHB-031, and the tester's brief.
+
+### Prompt Context
+**User prompt (verbatim):** none new (see step 4).
+**Assistant interpretation:** Merge finished work as it arrives and keep the remaining branch on top of main.
+**Inferred user intent:** CHB-031 and CHB-032 land cleanly; then the session-03 re-run.
+**Commit (code):** 02fd314 — "Merge task/chb-032-housekeeping (CHB-032: audits of CHB-008/010, one TIFF writer, RefEngine data required, engine-gpu/dsl host/looks/finish splits, e2e open waits, reference docs, 63 unused exports removed)"
+
+### What I did
+- Read CHB-032's final report and checked its diary: steps 1–15, each with all eleven investigation sections;
+  step 7 quotes the resume prompt verbatim.
+- Cross-checked WS-B's added lines (`git diff 9d10010` in its worktree) against the 64 export names removed by
+  9eca10d and against the RefEngine data requirement. Five `new RefEngine(...)` calls had no data (the
+  TabulatedPreviews class and tests). `CLASS_CODE` matched, but WS-B imports core's, and CHB-032 removed only
+  ingest's. The other matches were common words (`note`, `round`, `idle`, `stops`, `latd` as a local name).
+- Merged with `--no-ff`; `git diff --quiet 51bfa5a HEAD` → identical trees. The agent's checks at 51bfa5a therefore
+  stand for main: `pnpm test` 97 files, 2749 passed, 7 skipped; typecheck, lint, `gen:check` OK; browser suite
+  98 passed, GPU conformance 320/320.
+- Messaged WS-B to merge main again, with four items: RefEngine data, the removed exports list, `opened()` in
+  e2e specs, and the split files.
+- Removed the merged worktrees and branches of CHB-032 and WS-A (`git worktree remove`, `git branch -d`), after
+  `git status` showed no leftovers.
+- Session 03 setup: served the pre-CHB-031 build (`apps/studio/dist-current`, built 16:28 from main before WS-A,
+  contract 0.3.0) at :4650. Ran `sessions/03-sonnet-rerun-session-02/scripts/s00-seed-old-library.mjs` (CHB-026)
+  to make a library with DSC_8541.NEF and raw010.dng frames 1–3 in a git-ignored profile
+  (`profile/old-library`). Wrote the tester brief (scratchpad `session-03-brief.md`).
+
+### Why
+- Merging the finished branch first moves the conflict resolution to the agent that wrote the conflicting code.
+- An old-build profile tests what the photographer meets after an update: frames saved in normalised mode, opened
+  by a build whose darkroom layouts default to real mode. That is more realistic than making normalised frames in
+  the Simple layout.
+
+### What worked
+- Identical trees after the merge, so no re-run was needed.
+- The seed script opened both files in the old build: the NEF as a photo, and the strip as three negative frames.
+
+### What didn't work
+- A second seed step (`s00b`, deleted) tried to record a Lighter edit on DSC_8541. In a headless browser a library
+  frame has no file handle, so selecting it opens "Where is …?", and the edit never reached the frame. The old
+  frames carry only "Auto Frame added". The tester's brief tells them to answer the dialog.
+- The first seed script's `getByRole('button', { name: /Lighter/ })` timed out after 30 s; the button is found by
+  its text, not by role.
+
+### What I learned
+- The studio's service worker is network-first for the app shell (`sw.js`), so an old profile picks up a new build
+  on its first load; only the data packs are cache-first.
+
+### What was tricky to build
+- Seeding has to use the same origin (port 4650) as the session, because IndexedDB and the service worker are per
+  origin. The old build is therefore served first, then replaced by the new build on the same port.
+
+### What warrants a second pair of eyes
+- The order change (CHB-032 before WS-B) puts a second merge of main on WS-B, which has already merged WS-A.
+
+### What should be done in the future
+- On WS-B's report: review, merge, then run `CI=1 pnpm test:browser` on main. Rebuild `dist-current` from main and
+  restart :4650 (sirv lists files at start), then launch the session-03 tester. CHB-032 dgz9 (store.ts/viewport.ts
+  split) can start after WS-B is merged.
+
+### Code review instructions
+- `git show 02fd314 --stat`; the CHB-032 diary (steps 7–15) explains each commit.
+
+### Technical details
+- Removed export names: scratchpad `removed-exports.txt` (from `git show 9eca10d`); CHB-032's full scanner report
+  is `ttmp/2026/11/12/CHB-032--…/various/01-unused-exports-after.txt`.
