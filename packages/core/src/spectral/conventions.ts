@@ -2,7 +2,6 @@
 // Chromogen's and spektrafilm's. A golden number is reproducible only under its own conventions,
 // so they are one explicit, versioned object. The contract's `PhysicsConventions` (engine.ts) carries
 // only the version string; this is the full set behind that string.
-import type { PhysicsConventions } from '@chromobench/contract';
 
 export interface Conventions {
   /** Missing spectral samples: no light (spektrafilm) or zero density (Chromogen). */
@@ -20,6 +19,12 @@ export interface Conventions {
 export const SPEKTRAFILM: Conventions = Object.freeze({
   nan: 'opaque', cmf: 'cie1931-2deg', curveMin: 'subtract', paperCurve: 'model-3cdf', printNormalise: 'midgray-geomean', version: 1,
 });
+/**
+ * Chromogen's choices, kept to reproduce the textbook's Chromogen numbers: the golden tests
+ * (packages/core/test/ch*.golden.test.ts, chb010.*) and the law harnesses in src/laws/ that compare both
+ * conventions. No engine or host selects them: engines run DEFAULT_CONVENTIONS, and the fitted CMFs
+ * ('chromogen-fit', spectrum.ts cmfChromogenFit) are reached only through this object.
+ */
 export const CHROMOGEN: Conventions = Object.freeze({
   nan: 'zero', cmf: 'chromogen-fit', curveMin: 'keep', paperCurve: 'table', printNormalise: 'none', version: 1,
 });
@@ -30,6 +35,3 @@ export function conventionsKey(c: Conventions): string {
   return `core-v${c.version}:${c.nan}/${c.cmf}/${c.curveMin}/${c.paperCurve}/${c.printNormalise}`;
 }
 
-export function toContract(c: Conventions, aim: PhysicsConventions['aim'] = 'grey-0.184'): PhysicsConventions {
-  return { version: conventionsKey(c), grid: '380:780:5', greyCard: 0.184, aim };
-}

@@ -5,8 +5,9 @@ import { decode as decodePngFast } from 'fast-png';
 import UTIF from 'utif';
 import { describe, expect, it } from 'vitest';
 import { defaultRecipe, Graph, sha256Hex, type ExportSettings, type Node } from '@chromobench/contract';
-import { RefEngine } from '@chromobench/core';
-import { makeM1Tiff, writeTiff16 } from '@chromobench/engine-mock';
+import { nodePacksData, RefEngine } from '@chromobench/core';
+import { makeM1Tiff } from '@chromobench/engine-mock';
+import { writeTiff16 } from '@chromobench/ingest';
 import { toU16 } from '../src/encode/quantise.ts';
 import { MemorySink, opfsSink } from '../src/encode/sinks.ts';
 import { exportFrame, exportNode, type ExportProgress } from '../src/export/run.ts';
@@ -16,7 +17,7 @@ const SETTINGS: ExportSettings = { format: 'png16', space: 'srgb', knee: { metho
 
 /** A frame in the reference engine and its export node (output.display; the reference engine has no output.frame). */
 async function setup(tiff = makeM1Tiff(), space: ExportSettings['space'] = 'srgb') {
-  const e = new RefEngine();
+  const e = new RefEngine({ data: nodePacksData() });
   const g = new Graph();
   const info = await e.open({ kind: 'file', sha256: sha256Hex(tiff), bytes: tiff });
   g.registerSource(info);

@@ -6,15 +6,9 @@ export type Key = string | number;
 export type Path = readonly Key[];
 
 export const isObj = (v: unknown): v is Record<string | number | symbol, any> => v !== null && typeof v === 'object';
-export const isPlain = (v: unknown): v is Record<string, any> =>
-  isObj(v) && (Object.getPrototypeOf(v) === Object.prototype || Array.isArray(v) || Object.getPrototypeOf(v) === null);
 export const isPlainObject = (v: unknown): v is Record<string, any> =>
   isObj(v) && !Array.isArray(v) && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
 export const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
-export const round = (v: number, d = 0): number => {
-  const k = 10 ** d;
-  return Math.round(v * k) / k;
-};
 
 // ── paths ────────────────────────────────────────────────────────────────
 // A path is an array of keys. Its string form joins with '.', and is what the path index and diagnostics use.
@@ -49,15 +43,6 @@ export function setIn(obj: any, path: Path, value: unknown, i = 0): any {
   return c;
 }
 
-export function hasPath(obj: unknown, path: Path): boolean {
-  let v: any = obj;
-  for (const k of path) {
-    if (!isObj(v) || !(k in v)) return false;
-    v = v[k];
-  }
-  return true;
-}
-
 /** a is a prefix of b (or equal) */
 export const prefixOf = (a: Path, b: Path): boolean => a.length <= b.length && a.every((k, i) => String(b[i]) === String(k));
 
@@ -89,8 +74,6 @@ export function deepMerge(base: unknown, patch: unknown): any {
   for (const [k, v] of Object.entries(patch)) out[k] = isPlainObject(v) ? deepMerge(out[k], v) : v;
   return out;
 }
-
-export const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
 // ── suggestions (did you mean) ─────────────────────────────────────────────
 /** edit distance with transpositions (optimal string alignment): 'stpe' is one step from 'step' */
@@ -129,9 +112,6 @@ export function suggest<T extends Key>(name: Key, pool: Iterable<T>, k = 3): T[]
     .map(x => x[0]);
 }
 
-export const esc = (s: unknown): string =>
-  String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
 /** a cheap stable hash for render caches and signatures */
 export function hash(s: unknown): string {
   let h = 2166136261;
@@ -164,4 +144,3 @@ export function detectPlatform(): Platform {
   return nav && /Mac|iPhone|iPad/.test(nav.platform || nav.userAgent || '') ? MAC : OTHER;
 }
 
-export const isFn = (v: unknown): v is (...a: any[]) => any => typeof v === 'function';

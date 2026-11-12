@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  adaptBradford, addFlare, cam16, compressOutput, D65, displayLinear, displayPixel, displaySetup, interimData, jmhToUcs, knee, makePrintChain,
+  adaptBradford, addFlare, cam16, compressOutput, D65, displayLinear, displayPixel, displaySetup, nodePacksData, jmhToUcs, knee, makePrintChain,
   mulMV, outputSpace, perceptual, SPEKTRAFILM, tanhShoulder, type KneeName, type Vec3,
 } from '@chromobench/core';
 import { SPACE_IDS } from '../src/spaces.ts';
@@ -12,7 +12,7 @@ import { SPACE_IDS } from '../src/spaces.ts';
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/chb-011.json', import.meta.url), 'utf8'));
 const R = fx.renderings;
 // the textbook's print: Portra 400 on Portra Endura under a 5,000 K light (core ch2 goldens' setup)
-const ch = makePrintChain({ data: interimData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: { ...SPEKTRAFILM, cmf: 'chromogen-fit' }, view: 'bb5000', aim: 'midgray-normalised' });
+const ch = makePrintChain({ data: nodePacksData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: { ...SPEKTRAFILM, cmf: 'chromogen-fit' }, view: 'bb5000', aim: 'midgray-normalised' });
 // print-xyz after view.adapt to D65 (what output.display receives)
 const toD65 = (X: ArrayLike<number>): Vec3 => adaptBradford(X, ch.white, D65);
 const paperWhite = toD65(ch.paperWhite);
@@ -73,7 +73,7 @@ describe('renderings (guide §2.5)', () => {
     const { Graph } = await import('@chromobench/contract');
     const { RefEngine } = await import('@chromobench/core');
     const g = new Graph();
-    const e = new RefEngine({ data: interimData() });
+    const e = new RefEngine({ data: nodePacksData() });
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}) => { const n = g.intern(op, inputs, args).node; e.adopt(g.closure(n.id)); return n.id; };
     const pat = I('source.pattern', [], { domain: 'paper-dyes', width: 4, height: 2, seed: 3 });
     const xyz = I('view.adapt', [I('view.flare', [I('view.reflect', [pat], { illuminant: 'D50' })], { flare: 0 })], { to: 'D65' });

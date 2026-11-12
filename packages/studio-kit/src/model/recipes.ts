@@ -6,15 +6,6 @@ import { canonicalJSON, defaultRecipe, getPath, RECIPE_FIELDS, type FrameRecipe,
 export type ViewMode = 'print' | 'negative' | 'dyes' | 'classes';
 export const VIEW_MODES: readonly ViewMode[] = ['print', 'negative', 'dyes', 'classes'];
 
-export interface Snapshot {
-  id: string;
-  frame: string;
-  name: string;
-  ts: number;
-  stateHash: string;
-  recipe: FrameRecipe;
-}
-
 /** The neutral first recipe of a file opened as a negative (default) or as a photo. */
 export function defaultFor(sha: string, name: string, kind: FrameRecipe['kind'] = 'negative-scan'): FrameRecipe {
   return defaultRecipe(kind, { sha256: sha, name });

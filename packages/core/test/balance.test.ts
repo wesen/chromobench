@@ -2,11 +2,11 @@
 // Endura with a 3,200 K lamp and viewed at 5,000 K (CHROMOGEN conventions, Figure 3.5 setup).
 import { describe, expect, it } from 'vitest';
 import {
-  blackbody, CHROMOGEN, deltaE2000, exposeSpectral, greyPatchX, integrateToGrey, interimData, lab, latdFromPD, Lights, lightsToSliders,
+  blackbody, CHROMOGEN, deltaE2000, exposeSpectral, greyPatchX, integrateToGrey, nodePacksData, lab, latdFromPD, Lights, lightsToSliders,
   colourOffset, makePrintChain, greyPick,
 } from '../src/index.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const ch = makePrintChain({ data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: CHROMOGEN, lamp: 'bb3200', filtration: { c: 0, m: 0, y: 0 }, view: 'bb5000', aim: 'grey-0.184' });
 const E55 = blackbody(5500).values;
 const E38 = blackbody(3800).values;

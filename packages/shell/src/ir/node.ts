@@ -124,7 +124,6 @@ export function rebuildNode<N extends NodeData>(n: N, patch: NodePatch): N {
   if (typeof f === 'function') return f(patch);
   return makeNode(null, n.$, patch.props ?? n.props, patch.kids ?? n.kids, n.at, patch.calls ?? n.calls, patch.diags ?? n.diags);
 }
-export const hostOf = (n: NodeData): NodeHost | null => (n as any)[HOST] ?? null;
 
 // ── walking a tree (the build does this) ───────────────────────────────────
 /** Visit every node: kids, and nodes inside props (ck.match cases, tabs, a viewport's hud, overlays…). */

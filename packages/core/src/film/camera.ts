@@ -58,7 +58,3 @@ export function cameraMatrix(cam: CameraColour | undefined, wb: WhiteBalance): {
   return { M: mulMM(cat16Matrix(W, D65), base), white: D65 };
 }
 
-/** One pixel: camera RGB → scene XYZ. */
-export function cameraToSceneXYZ(rgb: ArrayLike<number>, cam: CameraColour | undefined, wb: WhiteBalance): Vec3 {
-  return mulMV(cameraMatrix(cam, wb).M, rgb);
-}

@@ -7,15 +7,15 @@ import {
   type Box, type Diagnostic, type Domain, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
-import { readTiff } from '@chromobench/engine-mock';
-import { nodePhysicsData as interimData } from '@chromobench/data/node';
+import { readTiffCodes } from '@chromobench/ingest';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
 import { conventionsKey, DEFAULT_CONVENTIONS, type Conventions } from './spectral/conventions.ts';
 import type { SpectraTable } from './film/upsample.ts';
 
 export interface RefEngineOptions {
-  data?: PhysicsData;
+  /** Stocks, papers, lights and observer (required: in Node, core's nodePacksData(); in a browser, the packs loaded by the host). */
+  data: PhysicsData;
   conv?: Conventions;
   /** Restrict capabilities().ops. */
   ops?: string[];
@@ -160,7 +160,7 @@ export class RefEngine implements Engine {
   /** Stages computed since construction (tests and profiling: what a change recomputed, and how many pixels). */
   readonly computed = { full: 0, sampled: 0, pixels: 0 };
 
-  constructor(o: RefEngineOptions = {}) {
+  constructor(o: RefEngineOptions) {
     const limit = Math.max(4, o.cacheLimit ?? Infinity);
     const bytes = o.cacheBytes ?? Infinity;
     this.full = new Lru(limit, bytes);
@@ -170,7 +170,7 @@ export class RefEngine implements Engine {
     this.sampled = o.sampled ?? false;
     this.yieldFn = o.yield ?? (() => Promise.resolve());
     this.conv = o.conv ?? DEFAULT_CONVENTIONS;
-    this.env = new PhysicsEnv(o.data ?? interimData(), this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
+    this.env = new PhysicsEnv(o.data, this.conv, { mode: o.mode ?? 'exact', ...(o.N ? { N: o.N } : {}), ...(o.spectra ? { spectra: o.spectra } : {}) });
     this.ops = new Set(o.ops ?? REFERENCE_OPS);
   }
 
@@ -186,7 +186,7 @@ export class RefEngine implements Engine {
     const bytes = source.bytes instanceof Uint8Array ? source.bytes : new Uint8Array(source.bytes);
     const sha = sha256Hex(bytes);
     if (source.sha256 && source.sha256 !== sha) fail('E_DATA_HASH', `source bytes hash to ${sha.slice(0, 12)}…, not ${source.sha256.slice(0, 12)}…`);
-    const raw = readTiff(bytes);
+    const raw = readTiffCodes(bytes);
     const max = raw.bits === 16 ? 65535 : 255;
     const img = newImg(raw.width, raw.height, 3);
     let clipped = 0;

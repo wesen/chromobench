@@ -4,6 +4,7 @@
 // probe); the bounds are generous for a loaded CI machine — before CHB-027 a 1024 px frame stalled for seconds.
 import { expect, test, type Page } from '@playwright/test';
 import { writeTiff } from '@chromobench/ingest';
+import { opened } from './support.ts';
 
 const W = 1500, H = 1000;
 
@@ -47,8 +48,7 @@ test('reference engine in the worker: no frozen window on open or drag; drafts c
   });
   await stalls(page);
   await page.setInputFiles('#file', { name: 'neg.tif', mimeType: 'image/tiff', buffer: Buffer.from(negative()) });
-  await expect(page.locator('#status')).toContainText('rendered', { timeout: 240_000 });
-  await page.evaluate(() => window.chromobench.idle());
+  await opened(page, 1, 240_000);
   expect(await page.evaluate(() => window.chromobench.size())).toEqual({ width: 1024, height: 683 });
   const openStalls = await stalls(page);
   expect(Math.max(0, ...openStalls), `open stalls ${openStalls}`).toBeLessThan(2000);

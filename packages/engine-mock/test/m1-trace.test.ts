@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { check, compile, defaultRecipe, EditLog, Graph, law, sha256Hex, type FrameRecipe, type Node } from '@chromobench/contract';
-import { M1, makeM1Tiff, MockEngine, readTiff } from '@chromobench/engine-mock';
+import { M1, makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
+import { readTiffCodes } from '@chromobench/ingest';
 
 const golden = JSON.parse(readFileSync(new URL('../../../fixtures/golden/contract.json', import.meta.url), 'utf8')).m1Trace;
 const fixture = new URL('../../../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url);
@@ -36,7 +37,7 @@ const close = (a: number[], b: number[], tol = 1e-4): void => {
 describe('M1 fixture', () => {
   it('the checked-in fixture equals the generator output', () => {
     expect(Buffer.from(readFileSync(fixture)).equals(Buffer.from(makeM1Tiff()))).toBe(true);
-    const raw = readTiff(makeM1Tiff());
+    const raw = readTiffCodes(makeM1Tiff());
     expect([raw.width, raw.height, raw.bits, raw.samples]).toEqual([96, 64, 16, 3]);
     const i = (M1.patchCentre.y * 96 + M1.patchCentre.x) * 3;
     expect(Array.from(raw.data.slice(i, i + 3))).toEqual([13107, 6554, 3277]);

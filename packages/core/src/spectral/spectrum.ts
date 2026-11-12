@@ -80,11 +80,6 @@ export function interp(xs: ArrayLike<number>, ys: ArrayLike<number>, x: number, 
   return ys[lo]! + t * (ys[hi]! - ys[lo]!);
 }
 
-/** Resamples a table onto the grid (linear, 0 outside). */
-export function tabulate(wl_nm: ArrayLike<number>, values: ArrayLike<number>, kind: SpectrumKind, grid: Grid = GRID): Spectrum {
-  return new Spectrum(Array.from(grid.wl, (w) => interp(wl_nm, values, w)), kind, grid);
-}
-
 /** Planck radiator normalised to 1 at 560 nm (Chromogen blackbody). */
 export function blackbody(T_K: number, grid: Grid = GRID): Spectrum {
   const c1 = 3.741771852e-16;
@@ -105,19 +100,8 @@ export function gaussian(centre_nm: number, fwhm_nm: number | [number, number], 
   return new Spectrum(Array.from(grid.wl, (w) => Math.exp(-0.5 * ((w - centre_nm) / (w < centre_nm ? sl : sr)) ** 2)), kind, grid);
 }
 
-/** Jakob–Hanika sigmoid reflectance: S(c0u² + c1u + c2), u = (λ − 380)/400 (§1.8). */
-export function sigmoid(c: readonly [number, number, number], grid: Grid = GRID): Spectrum {
-  return new Spectrum(Array.from(grid.wl, (w) => {
-    const x = (w - 380) / 400;
-    const u = c[0] * x * x + c[1] * x + c[2];
-    return 0.5 + u / (2 * Math.sqrt(1 + u * u));
-  }), 'reflectance', grid);
-}
-
 /** c2 of the sigmoid that is flat at reflectance r (c0 = c1 = 0). */
 export const sigmoidFlatC2 = (r: number): number => (2 * r - 1) / (2 * Math.sqrt(r * (1 - r)));
-
-export const flat = (v: number, kind: SpectrumKind = 'reflectance', grid: Grid = GRID): Spectrum => new Spectrum(new Array(grid.n).fill(v), kind, grid);
 
 /** Chromogen's fitted multi-lobe CMFs (05-inline.js 324–337). Legacy: for reproducing Chromogen fixtures only. */
 export function cmfChromogenFit(grid: Grid = GRID): [Float64Array, Float64Array, Float64Array] {

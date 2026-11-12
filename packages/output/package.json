@@ -9,7 +9,8 @@
   "dependencies": {
     "@chromobench/contract": "workspace:*",
     "@chromobench/core": "workspace:*",
-    "lcms-wasm": "1.0.5"
+    "lcms-wasm": "1.0.5",
+    "@chromobench/ingest": "workspace:*"
   },
   "devDependencies": {
     "@chromobench/engine-mock": "workspace:*",

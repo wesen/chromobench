@@ -7,7 +7,7 @@ import { lm, mulMV, type Vec3 } from '../spectral/linalg.ts';
 import { resolveStock, type Stock } from '../spectral/stock.ts';
 import { cmfChromogenFit } from '../spectral/spectrum.ts';
 import {
-  adaptBradford, addFlare, D50, D65, lab, observe, outputSpace, paperWhiteXYZ, reflectance, whiteXYZ,
+  adaptBradford, D65, lab, observe, outputSpace, paperWhiteXYZ, reflectance, whiteXYZ,
   type OutputSpaceId, type Viewing,
 } from './colour.ts';
 import { makeEnlarger, REFERENCE_OPTICS, type Enlarger, type EnlargerOptics } from './enlarger.ts';
@@ -141,13 +141,6 @@ export function displayEncode(XYZ_D65: ArrayLike<number>, space: OutputSpace = '
   const lin = mulMV(S.fromXYZ, adaptBradford(XYZ_D65, D65, S.white));
   const k = compressOutput(lin, { ...compress, space });
   return k.map((v) => S.encode(v)) as Vec3;
-}
-
-/** XYZ under the viewing white → flare → Bradford to D65 → display. */
-export function viewToDisplay(XYZ: ArrayLike<number>, viewWhite: ArrayLike<number>, o: { flare?: number; flareWhite?: ArrayLike<number>; to?: 'D65' | 'D50'; space?: OutputSpace; compress?: CompressSpec } = {}): Vec3 {
-  const f = addFlare(XYZ, o.flare ?? 0, o.flareWhite ?? viewWhite);
-  const a = adaptBradford(f, viewWhite, o.to === 'D50' ? D50 : D65);
-  return displayEncode(o.to === 'D50' ? adaptBradford(a, D50, D65) : a, o.space ?? 'srgb', o.compress ?? DEFAULT_COMPRESS);
 }
 
 /** spektrafilm _compute_raw_preflash: φ_k = amount · H_k through the base alone (c = 0) with the filtered lamp. */

@@ -2,10 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyHalation, applyHalationLinear, crystals, edgeResponse, FilmCurves, grainDraw, grainHalo, grainImage, grainSpec, halationForStock, halationKernel,
-  interimData, KeyedUniforms, pcg4d, poisson, resolveStock, rmsGranularity48, selwynG, SPEKTRAFILM, sublayerSplit, sublayersOf, uniformAt,
+  nodePacksData, KeyedUniforms, pcg4d, poisson, resolveStock, rmsGranularity48, selwynG, SPEKTRAFILM, sublayerSplit, sublayersOf, uniformAt,
 } from './film-helpers.ts';
 
-const data = interimData();
+const data = nodePacksData();
 const portra = resolveStock(data.stock('kodak_portra_400'), SPEKTRAFILM);
 const f = FilmCurves.ofStock(portra);
 const hal = halationForStock(portra);

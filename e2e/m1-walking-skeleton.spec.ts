@@ -6,6 +6,7 @@
 // the status line.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { opened } from './support.ts';
 
 /** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
 async function menu(page: Page, title: string, command: string): Promise<void> {
@@ -34,8 +35,7 @@ async function open(page: Page): Promise<void> {
   await page.goto('/?engine=mock&variant=lab&nosw&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
-  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
-  await idle(page);
+  await opened(page);
 }
 
 test('M1: open, drag +4 pt red, undo, agent proposal approved', async ({ page }) => {

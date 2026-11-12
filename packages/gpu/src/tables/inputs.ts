@@ -28,8 +28,6 @@ export interface SpectralInputs extends SpectralArrays {
   N: number;
 }
 
-export type TableInputs = SolveInputs | SpectralInputs;
-
 /** A built N³ table, x fastest, four f32 per node. */
 export interface Table {
   N: number;

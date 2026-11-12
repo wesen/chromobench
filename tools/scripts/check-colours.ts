@@ -19,7 +19,7 @@ const ALLOW: Record<string, { max: number; why: string }> = {
   'packages/shell/src/dom/forms/plane.ts': { max: 7, why: 'curve and histogram channel colours, the colour wheel puck (data colours)' },
   'packages/shell/src/dom/presenter-2d.ts': { max: 2, why: 'the 2D presenter paints the stage colour and the split line on the picture' },
   'packages/studio-kit/src/dom/studio-kit.css': { max: 3, why: "the test strip's bands drawn on the print" },
-  'packages/studio-kit/kits/finish/src/kit.ts': { max: 13, why: 'crop frame, thirds, handles and spot circles drawn on the picture (SVG presentation attributes)' },
+  'packages/studio-kit/kits/finish/src/tools.ts': { max: 13, why: 'crop frame, thirds, handles and spot circles drawn on the picture (SVG presentation attributes)' },
   'apps/studio/index.html': { max: 1, why: 'meta theme-color is a literal by definition' },
 };
 

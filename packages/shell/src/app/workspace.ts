@@ -7,7 +7,6 @@
 import type { Runtime } from './runtime.ts';
 
 export const SIDES = ['left', 'right', 'bottom', 'top'] as const;
-export type Side = (typeof SIDES)[number];
 
 export class Workspace {
   /** panel id → open by default (Reset Workspace goes back to these) */

@@ -2,12 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  adaptBradford, addFlare, CHROMOGEN, encodeSRGB, greyPatchX, hex, interimData, knee, lab, Lights, makeEnlarger,
+  adaptBradford, addFlare, CHROMOGEN, encodeSRGB, greyPatchX, hex, nodePacksData, knee, lab, Lights, makeEnlarger,
   makePrintChain, mulMV, paperDevelop, paperSlope, SPEKTRAFILM, whiteXYZ, XYZ_TO_SRGB, type Conventions,
 } from '../src/index.ts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/core/ch2.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const CONV: Record<string, Conventions> = {
   SPEKTRAFILM, CHROMOGEN, 'SPEKTRAFILM+fit': { ...SPEKTRAFILM, cmf: 'chromogen-fit' }, 'SPEKTRAFILM/none': { ...SPEKTRAFILM, printNormalise: 'none' },
 };

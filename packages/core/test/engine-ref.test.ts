@@ -5,13 +5,13 @@ import { allOps, Graph, sha256Hex } from '@chromobench/contract';
 import { runConformance } from '@chromobench/conformance';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import {
-  adaptBradford, D65, displayPixel, displaySetup, interimData, makeForward, makePrintChain, makeScanner, REFERENCE_OPS, RefEngine, resolveStock, solveDyes, SPEKTRAFILM,
+  adaptBradford, D65, displayPixel, displaySetup, nodePacksData, makeForward, makePrintChain, makeScanner, REFERENCE_OPS, RefEngine, resolveStock, solveDyes, SPEKTRAFILM,
 } from '../src/index.ts';
 
-runConformance('reference', () => new RefEngine());
+runConformance('reference', () => new RefEngine({ data: nodePacksData() }));
 
 async function setup() {
-  const e = new RefEngine();
+  const e = new RefEngine({ data: nodePacksData() });
   const g = new Graph();
   const bytes = makeM1Tiff();
   g.registerSource(await e.open({ kind: 'file', sha256: sha256Hex(bytes), bytes }));
@@ -31,7 +31,7 @@ describe('reference engine', () => {
     for (const op of ['invert.dyes', 'invert.classify', 'invert.classes', 'print.expose', 'print.lights', 'print.preflash', 'print.develop', 'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'measure.stats', 'measure.densitometer']) {
       expect(REFERENCE_OPS).toContain(op);
     }
-    expect(new RefEngine().capabilities().conventions).toMatch(/^core-v1:opaque/);
+    expect(new RefEngine({ data: nodePacksData() }).capabilities().conventions).toMatch(/^core-v1:opaque/);
   });
 
   it('invert.dyes: reachable pixels re-read to their input density; channel 4 is the residual', async () => {
@@ -39,7 +39,7 @@ describe('reference engine', () => {
     const pat = I('source.pattern', [], { domain: 'scanner-density', width: 6, height: 5, seed: 11 });
     const dy = I('invert.dyes', [pat], { stock: 'kodak_portra_400', scanner: 'xt5-rgb-led' });
     const [d, c] = [await read(pat), await read(dy)];
-    const f = makeForward(makeScanner(interimData(), 'xt5-rgb-led'), resolveStock(interimData().stock('kodak_portra_400'), SPEKTRAFILM));
+    const f = makeForward(makeScanner(nodePacksData(), 'xt5-rgb-led'), resolveStock(nodePacksData().stock('kodak_portra_400'), SPEKTRAFILM));
     for (let i = 0; i < 30; i++) {
       const dd = [0, 1, 2].map((k) => d[3 * i + k]! + f.Dbase[k]!);
       const s = solveDyes(f, dd);
@@ -56,7 +56,7 @@ describe('reference engine', () => {
     const xyz = I('view.reflect', [I('print.develop', [x], { grade: 2 })], { illuminant: 'D50' });
     const out = I('output.display', [I('view.adapt', [I('view.flare', [xyz], { flare: 0 })])], { rendering: 'print-as-seen', knee: 'oklch' });
     const [dyes, rgb] = [await read(pat), await read(out)];
-    const ch = makePrintChain({ data: interimData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' });
+    const ch = makePrintChain({ data: nodePacksData(), film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' });
     // CHB-011: print-as-seen adapts from print-xyz's white (D65 after view.adapt); its lightness knee starts at the paper white
     const ds = displaySetup({ rendering: 'print-as-seen', white: D65, paperWhite: adaptBradford(ch.paperWhite, ch.white, D65), space: 'srgb', knee: 'oklch' });
     for (let i = 0; i < 12; i++) {
@@ -76,7 +76,7 @@ describe('reference engine', () => {
     const { I, read } = await setup();
     const pat = I('source.pattern', [], { domain: 'film-dyes', width: 3, height: 2, seed: 9 });
     const dyes = await read(pat);
-    const data = interimData();
+    const data = nodePacksData();
     const cases: [Record<string, unknown>, Parameters<typeof makePrintChain>[0]][] = [
       [{}, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50' }],
       [{ filtration: { c: 0, m: -10, y: 5 } }, { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50', filtrationShift: { c: 0, m: -10, y: 5 } }],

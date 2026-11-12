@@ -5,6 +5,7 @@
 // band on the left) so the first print has something to balance.
 import { expect, test, type Page } from '@playwright/test';
 import { writePng, writeTiff } from '@chromobench/ingest';
+import { opened } from './support.ts';
 
 const W = 1200, H = 800;
 
@@ -66,8 +67,7 @@ for (const [kind, make] of Object.entries(FILES)) {
     await expect(page.locator('#engine')).toHaveAttribute('data-engine', /GPU/, { timeout: 60_000 });
     await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
     await page.setInputFiles('#file', make());
-    await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
-    await idle(page);
+    await opened(page, 1, 120_000);
     await expect(page.locator('#notes')).toHaveAttribute('title', kind === 'dng' ? /camera RAW \(Synth Scanner\) via LibRaw/ : new RegExp(kind.toUpperCase()));
     await expect(page.locator('#notes')).toHaveAttribute('title', /base/);
     await expect(page.locator('#notes')).toContainText('Colour negative');

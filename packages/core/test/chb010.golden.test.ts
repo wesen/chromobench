@@ -3,12 +3,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  blackbody, CHROMOGEN, deltaE2000, exposeSpectral, gradeToGamma, gradeX, greyPatchX, holdDensity, interimData, lab, Lights, lm,
+  blackbody, CHROMOGEN, deltaE2000, exposeSpectral, gradeToGamma, gradeX, greyPatchX, holdDensity, nodePacksData, lab, Lights, lm,
   makePrintChain, observe, opticsLogH, reflectance, SPEKTRAFILM, warmthVector, type PrintChainOptions,
 } from '../src/index.ts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/chb010-enlarger.json', import.meta.url), 'utf8'));
-const data = interimData();
+const data = nodePacksData();
 const BASE: PrintChainOptions = { data, film: 'kodak_portra_400', paper: 'kodak_portra_endura', conv: SPEKTRAFILM, view: 'D50', aim: 'midgray-normalised' };
 const real = (o: Partial<PrintChainOptions> = {}) => makePrintChain({ ...BASE, mode: 'real', ...o });
 const norm = (o: Partial<PrintChainOptions> = {}) => makePrintChain({ ...BASE, mode: 'normalised', ...o });

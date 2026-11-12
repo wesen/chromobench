@@ -5,7 +5,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'vitest';
 import { canonicalJSON, getPath } from '@chromobench/contract';
-import { m1Codes, M1, MockEngine, writeTiff16 } from '@chromobench/engine-mock';
+import { m1Codes, M1, MockEngine } from '@chromobench/engine-mock';
+import { writeTiff16 } from '@chromobench/ingest';
 import { manualClock } from '@chromobench/shell/testing';
 import { DslSession } from '@chromobench/dsl';
 import { buildVariant, createStudio, defineVariant, memoryKV } from '../../src/index.ts';

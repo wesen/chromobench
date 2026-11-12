@@ -9,15 +9,11 @@ export const EXPOSURE_PIXELS = 200_000;
 export const ALPHA = 0.75;
 /** First print: how far each frame's colour moves to the roll's mean colour (guide §6.3, open question 8.5). */
 export const ROLL_CONSISTENCY = 0.5;
-/** A frame whose base differs from the roll's by more than this is flagged (W_ROLL_MIXED). */
-export const ROLL_MIXED_D = 0.03;
 /** Top two stocks closer than this: the scan cannot tell them apart (W_ROLL_STOCK_AMBIGUOUS). Gold 200 and C200
  *  are 0.020 D apart (CHB-006 §2.3) and must count as ambiguous with a few thousandths of measurement error. */
 export const STOCK_AMBIGUOUS_D = 0.025;
 /** Blank share (at the analysis size) above which a frame is a probable under-exposure: a cull hint. */
 export const UNDER_BLANK = 0.4;
-/** Below this the frame's rebate is not trusted for the roll median (rebate search confidence). */
-export const MIN_REBATE_CONFIDENCE = 0.5;
 /** Enlarger time grid: 10 s · 2^(k/6), clamped (the time slider's 1/6-stop grid, CHB-023). */
 export const TIME_REF_S = 10;
 export const TIME_MIN_S = 2;

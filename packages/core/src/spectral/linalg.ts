@@ -31,8 +31,6 @@ export const norm2 = (r: ArrayLike<number>): number => {
   return s;
 };
 export const sub3 = (a: ArrayLike<number>, b: ArrayLike<number>): Vec3 => [a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!];
-export const add3 = (a: ArrayLike<number>, b: ArrayLike<number>): Vec3 => [a[0]! + b[0]!, a[1]! + b[1]!, a[2]! + b[2]!];
-export const scale3 = (a: ArrayLike<number>, k: number): Vec3 => [a[0]! * k, a[1]! * k, a[2]! * k];
 export const eye3 = (): Mat3 => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /** Eigenvalues of a symmetric 3×3 matrix, ascending (cyclic Jacobi). */

@@ -138,7 +138,3 @@ function normalise(v: Vec3): Vec3 {
   return [v[0] / v[1], 1, v[2] / v[1]];
 }
 
-/** "Colour negative" / "Photo" in a sentence, for notes and the status line. */
-export function describeGuess(g: OpenModeGuess): string {
-  return `${g.kind === 'negative' ? 'looks like a colour negative' : 'looks like a photo'} (${g.why}${g.confident ? '' : ', not sure'})`;
-}

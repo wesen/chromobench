@@ -2,7 +2,7 @@
 // Normalised mode prints the grey card at the aim whatever the optics, so a time change (and the test strip in
 // seconds) changes nothing; real mode exposes the paper for the time, so a longer time prints darker.
 import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo } from '@chromobench/contract';
-import { integrateToGrey, Lights, RefEngine } from '@chromobench/core';
+import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { stripRecipe, stripValues } from '@chromobench/studio-kit';
 import { describe, expect, it } from 'vitest';
 import { firstPrint, measureExposure } from '../src/host/first-print.ts';
@@ -35,7 +35,7 @@ function setup(kind: Kind) {
   const { info, data } = source(kind);
   const g = new Graph();
   g.registerSource(info);
-  const e = new RefEngine();
+  const e = new RefEngine({ data: nodePacksData() });
   e.openDecoded(info, data);
   const r0 = defaultRecipe(kind, { sha256: info.sha256, name: kind });
   const print = async (r: FrameRecipe): Promise<Float32Array> => {

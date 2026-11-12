@@ -7,11 +7,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '@chromobench/contract';
 import { baseCheck, conditioningMap, rankStocks, rebateAbsoluteD, sigmaAt, sigmaTable } from '@chromobench/ingest';
-import { CHROMOGEN, interimData, scannerForward, type PhysicsData } from '../src/index.ts';
+import { CHROMOGEN, nodePacksData, scannerForward, type PhysicsData } from '../src/index.ts';
 
 const laws = JSON.parse(readFileSync(new URL('../../../fixtures/golden/ingest-laws.json', import.meta.url), 'utf8'));
 const stockIds = Object.keys(laws.stockBases.D);
-const data = interimData();
+const data = nodePacksData();
 // The guide's illustrative X-T5 scanner: Gaussian LEDs 678/532/472 nm, 20 nm FWHM × generic-bayer.
 // The golden table was computed with Chromogen's maths, where a missing sample has zero density
 // (conventions nan: 'zero'); a golden number is reproducible only under its own conventions (§5.2).

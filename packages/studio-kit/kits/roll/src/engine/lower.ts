@@ -180,14 +180,3 @@ export function clearMatchBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecip
   return { id: o.id ?? `${ROLL_TX}clear-${Date.now().toString(36)}`, kind: 'clear-match', by: 'user', frames, skipped: [], label: 'Clear roll match', why: 'Frames back to their own roll-consistent first print' };
 }
 
-/** A roll-level setting: the same value on every frame (rollScope('roll'), the setup panel's overrides). */
-export function setupBatch(roll: Roll, path: string, value: unknown, recipeOf: (f: FrameId) => FrameRecipe | undefined, o: { id?: string } = {}): MutationBatch {
-  const frames: MutationBatch['frames'] = [];
-  for (const f of roll.frames) {
-    const rec = recipeOf(f);
-    if (!rec) continue;
-    const ms = changedSets(rec, { [path]: value });
-    if (ms.length) frames.push({ frame: f, mutations: ms });
-  }
-  return { id: o.id ?? `${ROLL_TX}setup-${path}-${Date.now().toString(36)}`, kind: 'setup', by: 'user', frames, skipped: [], label: `Roll: ${path}`, why: `${path} set on the roll (${frames.length} frame${frames.length === 1 ? '' : 's'})` };
-}

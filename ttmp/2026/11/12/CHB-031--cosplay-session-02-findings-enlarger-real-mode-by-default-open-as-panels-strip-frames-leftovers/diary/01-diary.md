@@ -177,3 +177,73 @@ are kept, and continues the same diary from its checkpoint step. The Mac is clos
 
 ### Technical details
 - Preview servers 4600/4650 and the Mac tunnels were not restarted (the Mac is closed).
+
+## Step 4: WS-A merged into main
+
+WS-A (enlarger and controls) reported done after five diary steps, its browser suite at 98 passed. I reviewed its
+diary and diff and merged `task/chb-031-enlarger` into main as `e7df8a0`. Real enlarger mode is now the default for
+the darkroom-style layouts (contract 0.4.0, decision CC-017), and normalised mode is a layout option for simple and
+tiny, with Time, Aperture and magnification hidden. On main the checks pass. WS-A left open edges, now CHB-031
+tasks (`e2af842`). WS-B and CHB-032 were told to merge main before their final commits.
+
+### Prompt Context
+**User prompt (verbatim):** none new; this follows "we can do them all as planned, no need to compomise" and "031 then 029" (see step 1).
+**Assistant interpretation:** Merge the workstreams as they finish, A then B, then CHB-032.
+**Inferred user intent:** The darkroom controls do what their labels say, for the photographer.
+**Commit (code):** e7df8a0 — "Merge task/chb-031-enlarger (CHB-031 WS-A: real enlarger by default, normalised option, controls and wording)"; e2af842 — "CHB-031: tasks for WS-A's open edges"
+
+### What I did
+- Read WS-A's diary (steps 1–5) for format and for its evidence. Steps 1–2 verify F17 first, as the plan asks:
+  in normalised mode the seconds test strip printed identical bands. Step 3 is the checkpoint with app
+  measurements, and step 5 records the browser suite.
+- Reviewed the branch diff (4 commits, 67a4a57..8d8e71e). The contract bump has a 0.3.0 catalogue baseline;
+  `print.enlarger.mode` defaults to `real`. There is a layout option (`enlargerMode` in `variant.ts`, read by
+  `model/enlarger.ts` when a recipe is made), and the first print sets the time in real mode. Typed entries in
+  `dom/arg.ts` treat a plain number as absolute; a change needs a sign and a unit. `status-text.ts` gains
+  `engineTip`/`notesTip`, the view tabs are renamed "No mask" and "Clipping", and `e2e/studio-enlarger.spec.ts` is new.
+- Merged with `--no-ff` and checked on main: `pnpm typecheck` OK; `pnpm lint` (boundaries 338 file checks,
+  check-colours 141 files) OK; `pnpm test` 97 files, 2749 passed, 7 skipped.
+- Added WS-A's open edges as CHB-031 tasks: in the edit log, the looks "density" look, agent proposals and the DSL
+  time strip can still set or vary Time on a normalised recipe; the darkroom layout with no frame shows the empty
+  text twice.
+- Messaged WS-B: merge main first. Regenerate `variants.test.ts.snap` with `-u` and read the diff, regenerate docs
+  with `pnpm gen`, and check the strip tests now that a first print sets Time per frame. Messaged CHB-032: merge
+  main too, and make `e2e/studio-strip.spec.ts:51` stop rewriting a CHB-027 screenshot under `ttmp/`.
+
+### Why
+- A merges first because its contract bump and catalogue defaults change explain snapshots and generated docs that
+  B and CHB-032 would otherwise rebase over twice.
+
+### What worked
+- The merge had no conflicts; main was unchanged since the branch point except for orchestrator diary commits.
+
+### What didn't work
+- N/A. I did not run the browser suite on main here; it waits until WS-B is merged (one run for both).
+
+### What I learned
+- Session 02's "Time does nothing" was a mode default, not a broken engine. The verification step in WS-A's
+  diary shows it with identical bands, which makes the change easy to review.
+
+### What was tricky to build
+- N/A for the orchestrator. WS-A's tricky part was keeping inert controls out of view without removing them from
+  saved recipes. Normalised recipes keep their mode, and only the layout default changes.
+
+### What warrants a second pair of eyes
+- Saved recipes: no migration is needed because every recipe and EditLog stores `print.enlarger.mode` explicitly
+  (CONTRACT-DECISIONS.md, CC-017), so a recipe saved before 0.4.0 reopens `normalised` in a real-mode layout.
+  The case is in `packages/studio-kit/test/enlarger-mode.test.ts` ("a recipe saved in normalised mode … opens
+  normalised in a real-mode layout, and vice versa").
+- Contract 0.4.0 is a minor bump with a catalogue baseline; the bridge reference docs were regenerated.
+
+### What should be done in the future
+- Merge WS-B (after it merges main), then CHB-032; then `CI=1 pnpm test:browser` on main; then task l1ny after F10;
+  CHB-032 dgz9; session 03; close CHB-031; CHB-029.
+
+### Code review instructions
+- Start at `packages/studio-kit/src/model/enlarger.ts` and `apps/studio/src/host/first-print.ts`, then
+  `packages/studio-kit/src/dom/arg.ts` (typed entries). Validate with `pnpm test` and
+  `CI=1 pnpm exec playwright test e2e/studio-enlarger.spec.ts` on unique ports.
+
+### Technical details
+- Branch commits: 67a4a57 (real by default, layout option, F19, F23), 548abf9 (checkpoint, F8), b90d7ef (F9
+  wording, darkroom mode select, e2e spec), 8d8e71e (tasks, diary step 5).

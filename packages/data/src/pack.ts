@@ -548,4 +548,3 @@ export class Pack {
 }
 
 export const openPack = (src: DataSource, packId: string, opts?: OpenOptions): Promise<Pack> => Pack.open(src, packId, opts);
-export const openPackSync = (src: DataSource, packId: string, opts?: OpenOptions): Pack => Pack.openSync(src, packId, opts);

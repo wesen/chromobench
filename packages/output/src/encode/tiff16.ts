@@ -5,7 +5,9 @@
 //
 // Layout. Uncompressed: header, IFD and its values first, then the strips as rows arrive (sizes are
 // known). Deflate: a header with a placeholder IFD offset, the strips as they are compressed, then the
-// IFD at the end, and the IFD offset patched at bytes 4–7 (needs sink.writeAt).
+// IFD at the end, and the IFD offset patched at bytes 4–7 (needs sink.writeAt). The IFD itself is encoded by
+// @chromobench/ingest's encodeIfd, the same encoder as the fixture writer (writeTiff).
+import { encodeIfd, type TagValue } from '@chromobench/ingest';
 import { deflateAll } from './deflate.ts';
 import type { ByteSink } from './sinks.ts';
 
@@ -33,7 +35,7 @@ const ASCII = 2;
 const UNDEFINED = 7;
 const TYPE_SIZE: Record<number, number> = { [ASCII]: 1, [SHORT]: 2, [LONG]: 4, [RATIONAL]: 8, [UNDEFINED]: 1 };
 
-interface Tag { tag: number; type: number; values: number[] | Uint8Array }
+type Tag = TagValue;
 
 const ascii = (s: string): Uint8Array => {
   const b = new TextEncoder().encode(s);
@@ -46,48 +48,8 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
 export const tiffDateTime = (d: Date): string =>
   `${d.getFullYear()}:${pad2(d.getMonth() + 1)}:${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 
-function tagBytes(t: Tag): number {
-  const n = t.values instanceof Uint8Array ? t.values.length : t.values.length;
-  return TYPE_SIZE[t.type]! * (t.type === RATIONAL ? n / 2 : n);
-}
-
-/** Serialises an IFD at `at` with out-of-line values after it (word aligned). */
-function buildIfd(tags: Tag[], at: number): Uint8Array {
-  tags.sort((a, b) => a.tag - b.tag); // TIFF requires ascending tag order
-  const head = 2 + tags.length * 12 + 4;
-  let extra = 0;
-  for (const t of tags) {
-    const b = tagBytes(t);
-    if (b > 4) extra += b + (b & 1);
-  }
-  const out = new Uint8Array(head + extra);
-  const dv = new DataView(out.buffer);
-  dv.setUint16(0, tags.length, true);
-  let ext = head; // relative offset of the next out-of-line value
-  tags.forEach((t, i) => {
-    const e = 2 + 12 * i;
-    const count = t.type === RATIONAL ? (t.values as number[]).length / 2 : t.values.length;
-    dv.setUint16(e, t.tag, true);
-    dv.setUint16(e + 2, t.type, true);
-    dv.setUint32(e + 4, count, true);
-    const b = tagBytes(t);
-    const write = (o: number) => {
-      if (t.values instanceof Uint8Array) out.set(t.values, o);
-      else t.values.forEach((v, k) => {
-        if (t.type === SHORT) dv.setUint16(o + 2 * k, v, true);
-        else dv.setUint32(o + 4 * k, v, true); // LONG, and RATIONAL as LONG pairs
-      });
-    };
-    if (b <= 4) write(e + 8);
-    else {
-      dv.setUint32(e + 8, at + ext, true);
-      write(ext);
-      ext += b + (b & 1);
-    }
-  });
-  dv.setUint32(2 + tags.length * 12, 0, true); // no next IFD
-  return out;
-}
+/** Serialises an IFD at `at` (little-endian, no next IFD). */
+const buildIfd = (tags: Tag[], at: number): Uint8Array => encodeIfd(tags, at, { littleEndian: true });
 
 export class Tiff16Writer {
   private y = 0;
@@ -132,8 +94,8 @@ export class Tiff16Writer {
         { tag: 277, type: SHORT, values: [3] },
         { tag: 278, type: LONG, values: [rps] },
         { tag: 279, type: LONG, values: counts },
-        { tag: 282, type: RATIONAL, values: [Math.round(dpi * 1000), 1000] },
-        { tag: 283, type: RATIONAL, values: [Math.round(dpi * 1000), 1000] },
+        { tag: 282, type: RATIONAL, values: [dpi], denominator: 1000 },
+        { tag: 283, type: RATIONAL, values: [dpi], denominator: 1000 },
         { tag: 284, type: SHORT, values: [1] }, // chunky
         { tag: 296, type: SHORT, values: [2] }, // inch
         { tag: 305, type: ASCII, values: ascii(o.software ?? 'chromobench') },

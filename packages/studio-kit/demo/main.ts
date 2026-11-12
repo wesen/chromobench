@@ -8,7 +8,8 @@
 // The real host is apps/studio (IndexedDB KV, WebGPU presenter, engine choice, ingest, first print, export).
 
 import { closest } from '@chromobench/contract';
-import { m1Codes, MockEngine, M1, writeTiff16 } from '@chromobench/engine-mock';
+import { m1Codes, MockEngine, M1 } from '@chromobench/engine-mock';
+import { writeTiff16 } from '@chromobench/ingest';
 import type { Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import { buildVariant, createStudio, localStorageKV, memoryKV, type Studio } from '../src/index.ts';

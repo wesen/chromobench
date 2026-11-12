@@ -1,12 +1,12 @@
-// Interim PhysicsData from packages/core/data/interim (written by tools/interim-data/convert.ts from the
-// CHB-001 extracts). Stock data: spektrafilm, Andrea Volpato, CC BY-SA 4.0.
+// The retired CHB-001 interim PhysicsData from packages/core/data/interim (written by
+// tools/interim-data/convert.ts from the CHB-001 extracts). Stock data: spektrafilm, Andrea Volpato, CC BY-SA 4.0.
+// Engines and hosts use CHB-004's packs (@chromobench/data; core's nodePacksData in Node). This set stays for
+// the tests that pin numbers computed on it (packs-parity.test.ts compares the two).
 //
 // Two ways in, one provider:
-//   interimFromJson(src): pure, browser-safe; the caller hands over the parsed JSON (packages/gpu bundles
-//     it with Vite, see its physics/data.ts);
-//   interimData(): Node; reads the files. It reaches node:fs through process.getBuiltinModule rather than a
-//     static import, so this module (and the package index) also loads in a browser.
-// SWITCH POINT (CHB-004): the data packs implement PhysicsData; callers pass them instead of these.
+//   interimFromJson(src): pure, browser-safe; the caller hands over the parsed JSON;
+//   chb001InterimData(): Node; reads the files. It reaches node:fs through process.getBuiltinModule rather
+//     than a static import, so this module (and the package index) also loads in a browser.
 import { fail } from '@chromobench/contract';
 import { blackbody } from '../spectral/spectrum.ts';
 import type { StockData } from '../spectral/stock.ts';
@@ -75,12 +75,15 @@ export function interimFromJson(src: InterimJson, id = 'interim-chb001'): Physic
 
 let cached: PhysicsData | undefined;
 
-/** The interim PhysicsData read from packages/core/data/interim (Node only). */
-export function interimData(): PhysicsData {
+/**
+ * The retired CHB-001 interim data set, read from packages/core/data/interim (Node only). Tests that pin
+ * numbers computed on it (packs-parity) use it; engines and hosts use CHB-004's packs.
+ */
+export function chb001InterimData(): PhysicsData {
   if (cached) return cached;
   const proc = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process;
   const fs = proc?.getBuiltinModule?.('node:fs') as typeof import('node:fs') | undefined;
-  if (!fs) return fail('E_DATA_SCHEMA', 'interimData() reads files and needs Node', { hint: 'in a browser, pass a PhysicsData (interimFromJson over bundled JSON, or a CHB-004 pack)' });
+  if (!fs) return fail('E_DATA_SCHEMA', 'chb001InterimData() reads files and needs Node', { hint: 'in a browser, pass a PhysicsData (interimFromJson over bundled JSON, or a CHB-004 pack)' });
   const dir = new URL('../../data/interim/', import.meta.url);
   const readJSON = (p: string): any => JSON.parse(fs.readFileSync(new URL(p, dir), 'utf8'));
   cached = interimFromJson({ reference: readJSON('reference.json'), index: readJSON('index.json'), stock: (id) => readJSON(`stocks/${id}.json`) });
