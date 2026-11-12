@@ -9,12 +9,12 @@
   "dependencies": {
     "@chromobench/contract": "workspace:*",
     "@chromobench/core": "workspace:*",
-    "lcms-wasm": "1.0.5"
+    "lcms-wasm": "1.0.5",
+    "@chromobench/ingest": "workspace:*"
   },
   "devDependencies": {
     "@chromobench/engine-mock": "workspace:*",
     "fast-png": "8.0.0",
-    "utif": "3.1.0",
-    "@chromobench/ingest": "workspace:*"
+    "utif": "3.1.0"
   }
 }

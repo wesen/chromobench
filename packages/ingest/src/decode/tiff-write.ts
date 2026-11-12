@@ -1,7 +1,8 @@
 // A general TIFF/DNG writer for fixtures and tests (guide §7 stage 1 "fixture generator"): either byte
 // order, 8/16/32-bit integer or 16/32-bit float samples, none/LZW/Deflate/PackBits, predictors 2 and 3,
 // strips or tiles, chunky or planar, 1/3/4 samples, extra tags (DNG levels and colour), SubIFDs of
-// type LONG or IFD. Also writes the M1 walking-skeleton TIFF (writeTiff16).
+// type LONG or IFD. Also writes the M1 walking-skeleton TIFF (writeTiff16), and owns the one IFD encoder
+// (encodeIfd) that @chromobench/output's streaming export writer (Tiff16Writer) uses too.
 import { deflate, floatToHalf, lzwEncode, packbitsEncode } from './codecs.ts';
 import type { Plane } from './types.ts';
 
@@ -9,7 +10,10 @@ export interface TagValue {
   tag: number;
   /** TIFF field type: 1 BYTE, 2 ASCII, 3 SHORT, 4 LONG, 5 RATIONAL, 8 SSHORT, 9 SLONG, 10 SRATIONAL, 11 FLOAT, 12 DOUBLE, 13 IFD. */
   type: number;
-  values: number[] | string;
+  /** Numbers (RATIONAL/SRATIONAL as decimals), a string (ASCII, NUL added), or raw bytes for a 1-byte type. */
+  values: number[] | string | Uint8Array;
+  /** Denominator for RATIONAL/SRATIONAL values (default 1 000 000). */
+  denominator?: number;
 }
 
 export interface TiffImageSpec {
@@ -28,6 +32,12 @@ export interface TiffImageSpec {
   extraSamples?: number[];
   newSubfileType?: number;
   tags?: TagValue[];
+  /**
+   * ImageWidth, ImageLength and RowsPerStrip as SHORT and no SampleFormat tag: the minimal baseline form the
+   * M1 negative was first written in. writeTiff16 uses it so the M1 bytes (whose hash the studio-kit and
+   * shell snapshots pin) stay the same.
+   */
+  shortFields?: boolean;
 }
 
 export interface TiffFileSpec {
@@ -44,7 +54,7 @@ export interface TiffFileSpec {
 
 const SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4 };
 
-interface Entry { tag: number; type: number; count: number; values: number[] | string; pos?: number; fill?: 'blocks' | 'subifds' }
+interface Entry extends TagValue { fill?: 'blocks' | 'subifds' }
 interface IfdLayout { entries: Entry[]; blocks: Uint8Array[]; pos: number; blockPos: number[]; sub: IfdLayout[] }
 
 function encodeBlocks(img: TiffImageSpec, le: boolean): { blocks: Uint8Array[]; th: number; tw: number } {
@@ -120,29 +130,91 @@ function layoutImage(img: TiffImageSpec, le: boolean, extra: TagValue[]): IfdLay
   const spp = img.planes.length;
   const comp = { none: 1, lzw: 5, deflate: 8, packbits: 32773 }[img.compression ?? 'none'];
   const e: Entry[] = [];
-  const add = (tag: number, type: number, values: number[] | string): void => {
-    e.push({ tag, type, count: typeof values === 'string' ? values.length + 1 : values.length, values });
+  const add = (tag: number, type: number, values: TagValue['values'], denominator?: number): void => {
+    e.push(denominator === undefined ? { tag, type, values } : { tag, type, values, denominator });
   };
+  const dim = img.shortFields ? 3 : 4;
   if (img.newSubfileType !== undefined) add(254, 4, [img.newSubfileType]);
-  add(256, 4, [img.width]);
-  add(257, 4, [img.height]);
+  add(256, dim, [img.width]);
+  add(257, dim, [img.height]);
   add(258, 3, new Array<number>(spp).fill(img.bits));
   add(259, 3, [comp]);
   add(262, 3, [img.photometric ?? (spp >= 3 ? 2 : 1)]);
   const offTag = img.tile ? 324 : 273;
   const cntTag = img.tile ? 325 : 279;
-  e.push({ tag: offTag, type: 4, count: blocks.length, values: new Array<number>(blocks.length).fill(0), fill: 'blocks' });
+  e.push({ tag: offTag, type: 4, values: new Array<number>(blocks.length).fill(0), fill: 'blocks' });
   add(277, 3, [spp]);
-  if (!img.tile) add(278, 4, [th]);
+  if (!img.tile) add(278, dim, [th]);
   add(cntTag, 4, blocks.map((b) => b.length));
   add(284, 3, [img.planar ? 2 : 1]);
   if ((img.predictor ?? 1) !== 1) add(317, 3, [img.predictor!]);
   if (img.tile) { add(322, 4, [tw]); add(323, 4, [th]); }
   if (img.extraSamples) add(338, 3, img.extraSamples);
-  add(339, 3, new Array<number>(spp).fill(img.sampleFormat === 'float' ? 3 : 1));
-  for (const t of [...(img.tags ?? []), ...extra]) add(t.tag, t.type, t.values);
+  if (!img.shortFields) add(339, 3, new Array<number>(spp).fill(img.sampleFormat === 'float' ? 3 : 1));
+  for (const t of [...(img.tags ?? []), ...extra]) add(t.tag, t.type, t.values, t.denominator);
   e.sort((a, b) => a.tag - b.tag);
   return { entries: e, blocks, pos: 0, blockPos: [], sub: [] };
+}
+
+const countOf = (t: TagValue): number => (typeof t.values === 'string' ? t.values.length + 1 : t.values.length);
+const bytesOf = (t: TagValue): number => SIZE[t.type]! * countOf(t);
+
+/** Bytes of an IFD as encodeIfd writes it: the directory, then each value over 4 bytes, word aligned. */
+export function ifdLength(tags: readonly TagValue[]): number {
+  let n = 2 + 12 * tags.length + 4;
+  for (const t of tags) {
+    const b = bytesOf(t);
+    if (b > 4) n += b + (b & 1);
+  }
+  return n;
+}
+
+/**
+ * One IFD at file offset `at` (even): the directory (entries in ascending tag order), the offset of the next
+ * IFD (`next`, default 0 = none), then the values that do not fit in an entry, each on a word boundary.
+ * Returns ifdLength(tags) bytes.
+ */
+export function encodeIfd(tags: readonly TagValue[], at: number, o: { littleEndian?: boolean; next?: number } = {}): Uint8Array {
+  const le = o.littleEndian ?? true;
+  const sorted = [...tags].sort((a, b) => a.tag - b.tag);
+  const out = new Uint8Array(ifdLength(sorted));
+  const dv = new DataView(out.buffer);
+  const writeVal = (p: number, type: number, v: number, d: number): void => {
+    switch (type) {
+      case 1: case 7: dv.setUint8(p, v); break;
+      case 6: dv.setInt8(p, v); break;
+      case 3: dv.setUint16(p, v, le); break;
+      case 8: dv.setInt16(p, v, le); break;
+      case 4: case 13: dv.setUint32(p, v, le); break;
+      case 9: dv.setInt32(p, v, le); break;
+      case 5: dv.setUint32(p, Math.round(v * d), le); dv.setUint32(p + 4, d, le); break;
+      case 10: dv.setInt32(p, Math.round(v * d), le); dv.setInt32(p + 4, d, le); break;
+      case 11: dv.setFloat32(p, v, le); break;
+      case 12: dv.setFloat64(p, v, le); break;
+    }
+  };
+  const head = 2 + 12 * sorted.length;
+  dv.setUint16(0, sorted.length, le);
+  let ext = head + 4; // relative offset of the next out-of-line value
+  sorted.forEach((t, k) => {
+    const e = 2 + 12 * k;
+    dv.setUint16(e, t.tag, le);
+    dv.setUint16(e + 2, t.type, le);
+    dv.setUint32(e + 4, countOf(t), le);
+    const b = bytesOf(t);
+    let p = e + 8;
+    if (b > 4) {
+      p = ext;
+      dv.setUint32(e + 8, at + ext, le);
+      ext += b + (b & 1);
+    }
+    const v = t.values;
+    if (typeof v === 'string') for (let j = 0; j < v.length; j++) out[p + j] = v.charCodeAt(j);
+    else if (v instanceof Uint8Array) out.set(v, p);
+    else v.forEach((x, j) => writeVal(p + j * SIZE[t.type]!, t.type, x, t.denominator ?? 1_000_000));
+  });
+  dv.setUint32(head, o.next ?? 0, le);
+  return out;
 }
 
 export function writeTiff(spec: TiffFileSpec): Uint8Array {
@@ -150,8 +222,7 @@ export function writeTiff(spec: TiffFileSpec): Uint8Array {
   const main = spec.images.map((img, i) => layoutImage(img, le, i === 0 ? spec.ifd0Tags ?? [] : []));
   const subs = (spec.subImages ?? []).map((img) => layoutImage(img, le, []));
   if (subs.length) {
-    main[0]!.entries.push({ tag: 330, type: spec.subIfdType ?? 4, count: subs.length, values: new Array<number>(subs.length).fill(0), fill: 'subifds' });
-    main[0]!.entries.sort((a, b) => a.tag - b.tag);
+    main[0]!.entries.push({ tag: 330, type: spec.subIfdType ?? 4, values: new Array<number>(subs.length).fill(0), fill: 'subifds' });
     main[0]!.sub = subs;
   }
   const all = [...main, ...subs];
@@ -161,11 +232,7 @@ export function writeTiff(spec: TiffFileSpec): Uint8Array {
   for (const L of all) {
     even();
     L.pos = pos;
-    pos += 2 + 12 * L.entries.length + 4;
-    for (const en of L.entries) {
-      const size = SIZE[en.type]! * en.count;
-      if (size > 4) { even(); en.pos = pos; pos += size; }
-    }
+    pos += ifdLength(L.entries);
     for (const b of L.blocks) { even(); L.blockPos.push(pos); pos += b.length; }
   }
   for (const L of all) for (const en of L.entries) {
@@ -176,69 +243,26 @@ export function writeTiff(spec: TiffFileSpec): Uint8Array {
   const dv = new DataView(out.buffer);
   out.set(le ? [0x49, 0x49, 42, 0] : [0x4d, 0x4d, 0, 42]);
   dv.setUint32(4, main[0]!.pos, le);
-  const writeVal = (p: number, type: number, v: number): void => {
-    switch (type) {
-      case 1: case 7: dv.setUint8(p, v); break;
-      case 6: dv.setInt8(p, v); break;
-      case 3: dv.setUint16(p, v, le); break;
-      case 8: dv.setInt16(p, v, le); break;
-      case 4: case 13: dv.setUint32(p, v, le); break;
-      case 9: dv.setInt32(p, v, le); break;
-      case 5: { const d = 1_000_000; dv.setUint32(p, Math.round(v * d), le); dv.setUint32(p + 4, d, le); break; }
-      case 10: { const d = 1_000_000; dv.setInt32(p, Math.round(v * d), le); dv.setInt32(p + 4, d, le); break; }
-      case 11: dv.setFloat32(p, v, le); break;
-      case 12: dv.setFloat64(p, v, le); break;
-    }
-  };
   all.forEach((L, i) => {
-    dv.setUint16(L.pos, L.entries.length, le);
-    L.entries.forEach((en, k) => {
-      const e = L.pos + 2 + 12 * k;
-      dv.setUint16(e, en.tag, le);
-      dv.setUint16(e + 2, en.type, le);
-      dv.setUint32(e + 4, en.count, le);
-      const at = en.pos ?? e + 8;
-      if (en.pos !== undefined) dv.setUint32(e + 8, en.pos, le);
-      if (typeof en.values === 'string') for (let j = 0; j < en.values.length; j++) out[at + j] = en.values.charCodeAt(j);
-      else en.values.forEach((v, j) => writeVal(at + j * SIZE[en.type]!, en.type, v));
-    });
     const next = i < main.length - 1 ? main[i + 1]!.pos : 0; // SubIFDs end their own chain
-    dv.setUint32(L.pos + 2 + 12 * L.entries.length, next, le);
+    out.set(encodeIfd(L.entries, L.pos, { littleEndian: le, next }), L.pos);
     L.blocks.forEach((b, j) => out.set(b, L.blockPos[j]!));
   });
   return out;
 }
 
 /**
- * An uncompressed little-endian 16-bit RGB TIFF in one strip, from interleaved codes. Byte-identical to
- * the mock engine's former writer (packages/engine-mock/src/tiff16.ts), so the checked-in M1 fixture
- * (fixtures/synthetic/m1-negative-96x64.tif) does not change.
+ * An uncompressed little-endian 16-bit RGB TIFF in one strip, from interleaved codes: writeTiff with the
+ * minimal baseline tags (shortFields). Byte-identical to the mock engine's original writer, so the checked-in
+ * M1 fixture (fixtures/synthetic/m1-negative-96x64.tif) does not change.
  */
 export function writeTiff16(width: number, height: number, rgb: Uint16Array): Uint8Array {
   if (rgb.length !== width * height * 3) throw new Error('writeTiff16: data length mismatch');
-  const entries: [number, number, number, number][] = []; // tag, type, count, value/offset
-  const nTags = 10;
-  const ifdOff = 8;
-  const ifdSize = 2 + nTags * 12 + 4;
-  const bpsOff = ifdOff + ifdSize;
-  const dataOff = bpsOff + 6;
-  const dataLen = rgb.length * 2;
-  entries.push([256, 3, 1, width], [257, 3, 1, height], [258, 3, 3, bpsOff], [259, 3, 1, 1], [262, 3, 1, 2], [273, 4, 1, dataOff], [277, 3, 1, 3], [278, 3, 1, height], [279, 4, 1, dataLen], [284, 3, 1, 1]);
-  const out = new Uint8Array(dataOff + dataLen);
-  const dv = new DataView(out.buffer);
-  out.set([0x49, 0x49, 42, 0]);
-  dv.setUint32(4, ifdOff, true);
-  dv.setUint16(ifdOff, nTags, true);
-  entries.forEach(([tag, type, count, val], i) => {
-    const e = ifdOff + 2 + i * 12;
-    dv.setUint16(e, tag, true);
-    dv.setUint16(e + 2, type, true);
-    dv.setUint32(e + 4, count, true);
-    if (type === 3 && count === 1) dv.setUint16(e + 8, val, true);
-    else dv.setUint32(e + 8, val, true);
+  const n = width * height;
+  const planes = [0, 1, 2].map((k) => {
+    const p = new Uint16Array(n);
+    for (let i = 0; i < n; i++) p[i] = rgb[i * 3 + k]!;
+    return p;
   });
-  dv.setUint32(ifdOff + 2 + nTags * 12, 0, true);
-  for (let i = 0; i < 3; i++) dv.setUint16(bpsOff + 2 * i, 16, true);
-  for (let i = 0; i < rgb.length; i++) dv.setUint16(dataOff + 2 * i, rgb[i]!, true);
-  return out;
+  return writeTiff({ images: [{ width, height, planes, bits: 16, shortFields: true }] });
 }
