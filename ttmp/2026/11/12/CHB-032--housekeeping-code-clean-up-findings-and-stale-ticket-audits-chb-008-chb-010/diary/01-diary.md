@@ -398,3 +398,88 @@ Chromogen CMFs as tests-only, documented.
 
 ### Technical details
 - New public names: `nodePacksData` (Node only), `chb001InterimData` (Node only), `interimFromJson` (unchanged).
+
+## Step 6: Split packages/gpu/src/engine-gpu.ts (task kiq4), and a checkpoint
+
+`engine-gpu.ts` (1031 lines) is now 652 lines plus six modules in `packages/gpu/src/engine/`: `defs.ts` (op sets,
+COMBINE modes, kernel sources, internal types, `cancelled`, `mulberry32`), `lower.ts` (`lowerChain`, `fillGrain`),
+`dag.ts` (`planGraph`, `planNode`: which nodes are materialised and how often each texture is read), `textures.ts`
+(`syntheticSource`, `uploadU16`, `readU16`, `combinePass`, `gaussianBlur`), `reduce.ts` (`reduceMeasure`) and
+`results.ts` (`addResult`). The class keeps the Engine surface, device-loss handling, sources, `renderGraph`'s
+execution loop and `execute()` (the per-op dispatcher, which touches most engine state). Each moved method body is
+the same text with `this.x` replaced by a parameter; the class methods delegate.
+
+The orchestrator asked for a checkpoint (the session may end). This step is that checkpoint: the split is
+typechecked, linted and its package's unit tests pass; the browser parity suite (conformance 320/320) is not yet
+run on it.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1. Mid-task messages relayed by the orchestrator: "commit at appropriate
+intervals and keep a detailed diary as you work (using the diary format from the skill)", and a request to
+checkpoint now with a resume list.
+**Assistant interpretation:** Task kiq4 (behaviour and parity unchanged), then checkpoint with an exact resume list.
+**Inferred user intent:** Smaller files with one concern each, no change in what the GPU computes; and work that
+survives the session ending.
+**Commit (code):** see the next commit, "CHB-032: split engine-gpu.ts into engine/{defs,lower,dag,textures,reduce,results}.ts".
+
+### What I did
+- Wrote the split as a script (`<scratchpad>/chb032/split-gpu.py`) that cuts each method out by its first line,
+  replaces `this.physics`/`this.graph.get`/`this.rt`/`this.blur`/`this.reducer`/`this.unpackLut`/`this.results` with
+  parameters, asserts no `this.` is left in a moved body, de-indents, and writes the module; then
+  `split-gpu-imports.py` rewrote the import block. `GPU_OPS`, `COMBINE_WGSL` and `U16Result` are re-exported from
+  engine-gpu.ts (index.ts imports `GPU_OPS` from there).
+- `pnpm typecheck` → 0 errors after three fixes (below); `pnpm lint` ok; `pnpm vitest run packages/gpu` → 5 files,
+  48 tests passed; `tsc --noUnusedLocals` reports nothing in the split files; full `pnpm test` running.
+
+### Why
+- Pure functions with explicit inputs for everything that does not need the engine's mutable state; `execute()` stays
+  in the class because it reads eight members and recurses through `renderGraph` (retouch windows) and `rebates`.
+
+### What worked
+- Typecheck and the gpu unit tests; line counts: engine-gpu.ts 652, defs 62, lower 110, dag 60, textures 135,
+  reduce 66, results 18.
+
+### What didn't work
+- `packages/gpu/src/engine/reduce.ts(67,1): error TS1128: Declaration or statement expected.` — my cut ended at the
+  class's closing `\n}\n`, so the function got the class brace as well; removed the last line.
+- `packages/gpu/src/engine-gpu.ts(291,28): error TS2304: Cannot find name 'Segment'.` — `lowerNode` still returns
+  `Segment[]`; added `import type { Segment } from './chain/program.ts'`.
+- `reduce.ts(48,71): error TS2532: Object is possibly 'undefined'.` — I typed the densities callback as
+  `{ D: number[] }`; it is now `ReturnType<typeof densitiesOf>` (a type-only import from core), as before.
+- A typecheck run was moved to the background by the harness while an orchestrator message arrived; waited for it.
+
+### What I learned
+- `noUnusedLocals` is off in the repo tsconfig; I checked the split files with an explicit
+  `tsc --noEmit --noUnusedLocals` run.
+
+### What was tricky to build
+- `mix` and `gaussian` depend on each other (`gaussian` with σ ≤ 0 is a COPY pass): `gaussianBlur` takes a `copy`
+  callback, and `combinePass` takes the 1×1 dummy texture as an argument so the lazily created texture stays owned by
+  the engine (it is dropped on device loss).
+
+### What warrants a second pair of eyes
+- `renderGraph` now calls `planGraph(this.graph, id, check, chainOf)`; order, materialisation and reference counts
+  are the moved code verbatim, but only the browser parity suite exercises them on a GPU.
+
+### What should be done in the future
+- Resume list (state at this commit):
+  - Done and committed: audits CHB-008 and CHB-010 (Step 2, b0f6fa0); 02r5 shim removal (d8f6336); i6gf one TIFF
+    encoder (c7e33a9); 0tc4 naming (1927c3f); kiq4 split (this commit, browser parity pending).
+  - Running in background: a sub-agent writing the two reference docs (m6qo undo/history, vrrs engines) into
+    `ttmp/2026/11/12/CHB-032--…/reference/` (untracked until reviewed and committed).
+  - Next: (1) `pnpm --filter @chromobench/gpu test:browser` with `GPU_PARITY_PORT=5424` (conformance must stay
+    320/320); (2) split `packages/dsl/src/host.ts` by vocabulary area (6qs1: print chain, edits, looks, errors);
+    (3) split `packages/studio-kit/kits/{looks,finish}/src/kit.ts` into state/commands/panels (j38l);
+    (4) e2e status-text waits (vuwz: multi-file opens in `e2e/studio-wording.spec.ts:26`, the `open()` helpers in
+    `e2e/studio.spec.ts:36`, `chat.spec.ts:14`, `m1-walking-skeleton.spec.ts:37`); (5) dead code/unused exports (z99j);
+    (6) review and commit the two docs; (7) `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423
+    GPU_PARITY_PORT=5424 CI=1 pnpm test:browser`.
+  - dgz9 (shell store/viewport split) stays open until CHB-031 merges.
+
+### Code review instructions
+- `packages/gpu/src/engine-gpu.ts` (head comment lists the modules), `packages/gpu/src/engine/*.ts`.
+- `pnpm typecheck && pnpm vitest run packages/gpu`; parity: `GPU_PARITY_PORT=5424 pnpm --filter @chromobench/gpu test:browser`.
+
+### Technical details
+- Delegating methods kept on the class (same names, same signatures): `lower`, `uploadU16`, `readU16`, `gaussian`,
+  `mix`, `cacheResult`, `reduce`; removed: `fillGrain` (now the module function), `planNode`.
