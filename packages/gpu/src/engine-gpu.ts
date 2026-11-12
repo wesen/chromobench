@@ -19,6 +19,7 @@ import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigm
 import combineCode from '../kernels/combine.wgsl?raw';
 import { Blur } from './spatial.ts';
 import { Retouch } from './retouch.ts';
+import { FILM_OPS, FilmGpu } from './film.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
@@ -33,10 +34,12 @@ export const GPU_OPS = [
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
   // CHB-010: multi-exposure printing, masks and density masks
   'print.combine', 'print.densityMask', 'mask.luminance', 'mask.gradient', 'mask.ellipse', 'mask.paint', 'mask.feather', 'mask.and', 'mask.or', 'mask.not',
+  // CHB-012: the forward film path (src/film.ts)
+  'source.xyz', 'capture.expose', 'film.couple', 'film.halation', 'film.develop',
 ] as const;
 
 /** Multi-input or spatial ops: always materialised, computed from materialised inputs (combine.wgsl, blur.wgsl). */
-const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or', 'retouch.heal']);
+const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or', 'retouch.heal', ...FILM_OPS]);
 /** Masks from coordinates (or strokes): their receiver's values are never read. */
 const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.gradient', 'mask.ellipse', 'mask.paint']);
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run several passes. */
@@ -110,6 +113,7 @@ export class GpuEngine implements Engine {
   private chain: ChainRunner;
   private reducer: Reducer;
   private blur: Blur;
+  private film: FilmGpu;
   private dummyTex: GPUTexture | null = null;
   private retouchK: { rt: GpuRuntime; k: Retouch } | null = null;
   private readonly opts: GpuEngineOptions;
@@ -138,6 +142,7 @@ export class GpuEngine implements Engine {
     this.chain = new ChainRunner(rt, this.tables);
     this.reducer = new Reducer(rt);
     this.blur = new Blur(rt);
+    this.film = new FilmGpu(rt, this.blur);
     rt.onLost(() => this.dropDeviceState());
   }
 
@@ -185,6 +190,7 @@ export class GpuEngine implements Engine {
       this.chain = new ChainRunner(rt, this.tables);
       this.reducer = new Reducer(rt);
       this.blur = new Blur(rt);
+      this.film = new FilmGpu(rt, this.blur);
       rt.onLost(() => this.dropDeviceState());
     })().finally(() => { this.recreating = null; });
     await this.recreating;
@@ -271,6 +277,7 @@ export class GpuEngine implements Engine {
     this.dummyTex?.destroy();
     for (const b of this.unpackLut.values()) b.destroy();
     this.unpackLut.clear();
+    this.film.drop();
     this.chain.destroy();
     if (this.ownsRuntime) this.rt.destroy();
   }
@@ -751,7 +758,12 @@ export class GpuEngine implements Engine {
         const win = async (box: Box): Promise<GPUTexture> => (await this.renderGraph(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box, umOut: t.umOut * scale })).tex;
         return this.retouchK.k.apply(recv, parseSpots(a['spots'] as string), { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
       }
-      default: return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
+      default: {
+        if (!FILM_OPS.has(n.op)) return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
+        // CHB-012 film ops (src/film.ts): bindings from core, on the output grid
+        const chain = this.chainOf(nid);
+        return this.film.run(n, recv, this.physics.ctx(chain, chain.length - 1), t, (sha) => this.graph.source(sha));
+      }
     }
   }
 

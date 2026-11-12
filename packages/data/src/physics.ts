@@ -24,6 +24,10 @@ export interface CoreStockData {
   logExposure: Float64Array;
   curves: Float64Array[];
   curveModel?: { centres: Mat3; amps: Mat3; sigmas: Mat3 };
+  /** Film only (CHB-012): spektrafilm's erf4 band-pass window (c_uv, σ_uv, c_ir, σ_ir) in nm. */
+  window?: [number, number, number, number];
+  /** Film only (CHB-012): sublayer dye curves, 256 × 3 × 3 flattened [logH][sublayer][channel]. */
+  sublayerCurves?: Float64Array;
   meta: { refIlluminant: string; viewIlluminant: string; antihalation?: string; use?: string; targetPrint?: string | null; densitometer?: string };
   license?: string;
 }
@@ -106,6 +110,8 @@ export function physicsData(stocks: Pack, scanners?: Pack, o: PhysicsDataOptions
         logExposure: Float64Array.from(r['log_exposure_logH']!.data),
         curves: [0, 1, 2].map((k) => column(r['dye_amount_curves']!, k)),
         ...(cm ? { curveModel: { centres: mat3(cm.centers), amps: mat3(cm.amplitudes), sigmas: mat3(cm.sigmas) } } : {}),
+        ...(s.hanatosWindow ? { window: [s.hanatosWindow.c_uv_nm, s.hanatosWindow.sigma_uv_nm, s.hanatosWindow.c_ir_nm, s.hanatosWindow.sigma_ir_nm] as [number, number, number, number] } : {}),
+        ...(s.sublayerCurves ? { sublayerCurves: s.sublayerCurves } : {}),
         meta,
         license: s.attribution,
       };

@@ -6,7 +6,7 @@
 // URL options: ?variant=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
-import { closest, type Engine, type LoggedMutation, type Mutation } from '@chromobench/contract';
+import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { Runtime } from '@chromobench/shell';
@@ -84,6 +84,14 @@ interface Host {
   rollPhysics?: unknown;
 }
 
+/** A photo's first recipe (CHB-012): the frame's id and source, shot on the default film (as-shot white balance when known). */
+function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
+  const { decode, ...src } = d.source;
+  const r = defaultRecipe('digital-raw', src, { frame: d.frame, decode: { ...decode, mode: 'photo' } });
+  if (asShot) r.capture!.whiteBalance.mode = 'as-shot';
+  return r;
+}
+
 async function startEngine(): Promise<Host> {
   const want = q.get('engine') ?? 'auto';
   if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null };
@@ -97,7 +105,9 @@ async function startEngine(): Promise<Host> {
     engine: se,
     label: se.label,
     // ?filtration=1: the first print's colour goes into the enlarger's filtration and time (CHB-010 bake), not the printer lights
-    initial: (d, g) => firstPrint(se, g, withMeasured(d, se.notes.get(d.source.sha256)), { integrate: h.integrate, ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) }),
+    initial: (d, g) => (se.notes.get(d.source.sha256)?.kind === 'digital-raw'
+      ? Promise.resolve(photoRecipe(d, se.notes.get(d.source.sha256)?.info.camera?.asShotNeutral !== undefined))
+      : firstPrint(se, g, withMeasured(d, se.notes.get(d.source.sha256)), { integrate: h.integrate, ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) })),
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,
@@ -294,6 +304,10 @@ async function main(): Promise<void> {
     const dust = el('input', { type: 'checkbox', id: 'dust' });
     dust.addEventListener('change', () => void (host.settings!.dust = dust.checked));
     kids.push(el('label', { for: 'dust', title: 'Detect and heal dust specks when a scan is opened (slow on big scans)' }, dust, ' dust'));
+    // CHB-012: open digital photos (camera RAW, TIFF, PNG) as scenes shot on film instead of as negatives
+    const photo = el('input', { type: 'checkbox', id: 'photo' });
+    photo.addEventListener('change', () => void (host.settings!.photo = photo.checked));
+    kids.push(el('label', { for: 'photo', title: 'Open files as photos: a digital RAW exposed onto the film stock, developed and printed (not a negative scan)' }, photo, ' photo'));
   }
   kids.push(el('span', { class: 'sp' }), offline, el('label', { for: 'variant', text: 'Layout' }), variantSel);
   barEl.append(...kids);

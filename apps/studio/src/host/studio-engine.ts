@@ -30,6 +30,8 @@ export interface Decoded {
   /** The holder's veil as scan.flare (percent per channel), and the base as scan.baseT (flare-corrected), from conditionScan (contract 0.3). */
   flare?: Vec3 | null;
   baseT?: Vec3 | null;
+  /** 'digital-raw': opened as a photo (CHB-012): shot on film by the forward path, no negative conditioning. */
+  kind?: 'negative-scan' | 'digital-raw';
 }
 
 /** What the host file (engines.ts) provides: everything that needs core, gpu or ingest. */

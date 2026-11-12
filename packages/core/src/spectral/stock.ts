@@ -28,6 +28,10 @@ export interface StockData {
   /** 3 characteristic curves on logExposure (dye amounts). */
   curves: Float64Array[];
   curveModel?: CurveModel;
+  /** Film only (CHB-012): spektrafilm's erf4 band-pass window (c_uv, σ_uv, c_ir, σ_ir) in nm. */
+  window?: [number, number, number, number];
+  /** Film only (CHB-012): sublayer dye curves, 256 × 3 × 3 flattened [logH][sublayer][channel]. */
+  sublayerCurves?: Float64Array;
   meta: { refIlluminant: string; viewIlluminant: string; antihalation?: string; use?: string; targetPrint?: string | null; densitometer?: string };
   license?: string;
 }

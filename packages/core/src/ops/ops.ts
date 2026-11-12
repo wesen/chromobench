@@ -1,7 +1,7 @@
 // Op adapters for the reference engine (guide §5.7): one per catalog op CHB-003 owns, applying core's
 // pure functions to f64 images. Upstream context (stock, paper, viewing light) is found by walking the
 // node's inputs (`ctx.up`), because a pointwise op's own args do not name it.
-import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type Point } from '@chromobench/contract';
+import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type Point, type SourceInfo } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { filtrationForLights } from '../print/balance.ts';
 import { makePrintChain, type Aim, type PrintChain } from '../print/chain.ts';
@@ -20,6 +20,9 @@ import { statusM } from '../spectral/channels.ts';
 import type { Conventions } from '../spectral/conventions.ts';
 import type { Vec3 } from '../spectral/linalg.ts';
 import { resolveStock, type Stock } from '../spectral/stock.ts';
+import { fallbackSpectra, makeFilmModel, midgrayFilmDensity, type FilmModel } from '../film/forward.ts';
+import type { SpectraTable } from '../film/upsample.ts';
+import { FILM_IMAGE_OPS } from './film.ts';
 
 export interface Img { w: number; h: number; c: number; data: Float64Array; warnings?: Diagnostic[] }
 export const newImg = (w: number, h: number, c: number): Img => ({ w, h, c, data: new Float64Array(w * h * c) });
@@ -33,6 +36,8 @@ export interface OpCtx {
   extra: Img[];
   info: ImageInfo | undefined;
   source(sha: string): Img;
+  /** The decoded source's facts (camera colour of RAW photos, CHB-012 source.xyz). */
+  sourceInfo?(sha: string): SourceInfo | undefined;
   /** Nearest upstream node (receiver chain, self excluded) with this op, or undefined. */
   up(op: string): UpNode | undefined;
   /** Evaluates an upstream node by id (full resolution). */
@@ -50,11 +55,22 @@ export class PhysicsEnv {
   /** 'tabulated': invert.dyes, print.expose and view.reflect read core's f64 tables (tables.ts) through look3. */
   readonly mode: 'exact' | 'tabulated';
   readonly N: number;
-  constructor(data: PhysicsData, conv: Conventions, o: { mode?: 'exact' | 'tabulated'; N?: number } = {}) {
+  /** Spectral upsampling table of the forward path (hanatos2025 when given; else core's sigmoid fit). */
+  private readonly spectraTable: SpectraTable | undefined;
+  constructor(data: PhysicsData, conv: Conventions, o: { mode?: 'exact' | 'tabulated'; N?: number; spectra?: SpectraTable } = {}) {
     this.data = data;
     this.conv = conv;
     this.mode = o.mode ?? 'exact';
     this.N = o.N ?? N3;
+    this.spectraTable = o.spectra;
+  }
+  /** The spectra the film tables are built from. */
+  spectra(): SpectraTable {
+    return this.spectraTable ?? fallbackSpectra(this.data);
+  }
+  /** A film bound for the forward path (CHB-012): table, reference white, curves. */
+  film(id: string): FilmModel {
+    return this.cached(`film:${id}`, () => makeFilmModel(this.data, this.stock(id), this.spectra()));
   }
   cached<T>(key: string, make: () => T): T {
     if (!this.memo.has(key)) this.memo.set(key, make());
@@ -75,6 +91,7 @@ export class PhysicsEnv {
     const k = o.mode === 'real' ? o : { ...o, time_s: null, fstop: null, magnification: null };
     return this.cached(`chain:${JSON.stringify(k)}`, () => makePrintChain({
       data: this.data, conv: this.conv, film: this.stock(o.film), paper: this.stock(o.paper), lamp: o.lamp, filtrationShift: o.filtration,
+      ...(o.capture ? { midgray: midgrayFilmDensity(this.film(o.film)) } : {}),
       mode: o.mode, ...(o.mode === 'real' ? { optics: { time_s: o.time_s, fstop: o.fstop, ...(o.magnification !== null ? { magnification: o.magnification } : {}) } } : {}),
       aim: o.aim, view: o.aimView,
     }));
@@ -102,6 +119,8 @@ export interface ExposeSettings {
   /** null: the calibration's reference magnification (the arg is optional in the contract). */
   magnification: number | null;
   aim: Aim; aimView: string;
+  /** A digital-raw frame (CHB-012): the print normalisation uses the capture path's mid-grey. */
+  capture?: true;
 }
 
 /** Contract defaults for nodes adopted from an older contract (args are filled by bindArgs otherwise). */
@@ -135,6 +154,8 @@ export interface ChainCtx {
 export const DEFAULT_FILM = 'kodak_portra_400';
 export const DEFAULT_PAPER = 'kodak_portra_endura';
 export const filmOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('invert.dyes')?.args['stock'] as string | undefined) ?? (ctx.up('capture.expose')?.args['stock'] as string | undefined) ?? DEFAULT_FILM;
+/** A forward (digital-raw) chain: capture.expose upstream. */
+export const isCapture = (ctx: Pick<ChainCtx, 'up'>): boolean => ctx.up('capture.expose') !== undefined;
 export const paperOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('print.develop')?.args['paper'] as string | undefined) ?? DEFAULT_PAPER;
 export const viewOf = (ctx: Pick<ChainCtx, 'up'>): string => (ctx.up('view.reflect')?.args['illuminant'] as string | undefined) ?? 'D50';
 
@@ -172,7 +193,7 @@ export function displaySetupAt(ctx: ChainCtx, args: Readonly<Record<string, unkn
 export function clearExposure(ctx: Pick<OpCtx, 'up' | 'env'>): Vec3 {
   const ex = ctx.up('print.expose');
   if (!ex) return [0, 0, 0];
-  const ch = ctx.env.chain(exposeSettings(ex.args, filmOf(ctx)));
+  const ch = ctx.env.chain(exposeSettings(ex.args, filmOf(ctx), isCapture(ctx)));
   return ch.aimLights.apply(ch.enlarger.clear());
 }
 
@@ -185,7 +206,7 @@ export function flashExposure(ctx: Pick<OpCtx, 'node' | 'up' | 'env'>, id: strin
   if (mode !== 'flash-base' && mode !== 'flash-open') return null;
   const n = ctx.node(id);
   if (!n || n.op !== 'print.expose') return null;
-  const ch = ctx.env.chain(exposeSettings(n.args, filmOf(ctx)));
+  const ch = ctx.env.chain(exposeSettings(n.args, filmOf(ctx), isCapture(ctx)));
   return mode === 'flash-open' ? ch.aimLights.apply(ch.enlarger.clear()) : ch.xOfDyes([0, 0, 0]);
 }
 
@@ -203,6 +224,7 @@ export function rebateBox(w: number, h: number, c: number, data: ArrayLike<numbe
 }
 
 export const IMAGE_OPS: Record<string, ImageOp> = {
+  ...FILM_IMAGE_OPS,
   'source.open': (ctx) => ctx.source(A(ctx, 'source') as string),
   'source.pattern': (ctx) => {
     const info = ctx.info!;
@@ -248,7 +270,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   },
   'invert.classes': (ctx) => classesOf(ctx),
   'print.expose': (ctx) => {
-    const es = exposeSettings(ctx.args, filmOf(ctx));
+    const es = exposeSettings(ctx.args, filmOf(ctx), isCapture(ctx));
     const ch = ctx.env.chain(es);
     if (ctx.env.mode === 'tabulated') {
       const T = ctx.env.pdTable(es);
@@ -389,8 +411,9 @@ function maskPair(ctx: OpCtx, f: (a: number, b: number) => number): Img {
 }
 
 /** print.expose arguments → chain settings (shared with the tabulated mode and packages/gpu). */
-export function exposeSettings(a: Readonly<Record<string, unknown>>, film: string): ExposeSettings {
+export function exposeSettings(a: Readonly<Record<string, unknown>>, film: string, capture = false): ExposeSettings {
   return {
+    ...(capture ? { capture: true as const } : {}),
     film, paper: a['paper'] as string, lamp: a['lamp'] as string, mode: a['mode'] as 'normalised' | 'real',
     filtration: a['filtration'] as Cmy, time_s: a['time_s'] as number, fstop: a['fstop'] as number,
     magnification: (a['magnification'] as number | undefined) ?? null,
@@ -405,7 +428,7 @@ export function exposeSettings(a: Readonly<Record<string, unknown>>, film: strin
  */
 export function gradePivot(ctx: ChainCtx): Vec3 {
   const ex = ctx.up('print.expose');
-  return ex ? ctx.env.chain(exposeSettings(ex.args, filmOf(ctx))).aimX : [0, 0, 0];
+  return ex ? ctx.env.chain(exposeSettings(ex.args, filmOf(ctx), isCapture(ctx))).aimX : [0, 0, 0];
 }
 
 /**
@@ -541,7 +564,7 @@ export const VALUE_OPS: Record<string, ValueOp> = {
     const es = exposeSettings({
       paper: a['paper'] ?? DEFAULT_PAPER, mode: a['mode'] ?? 'real', lamp: a['lamp'] ?? 'TH-KG3', filtration: a['filtration'] ?? { c: 0, m: 0, y: 0 },
       time_s: a['time_s'] ?? 10, fstop: a['fstop'] ?? 8, magnification: a['magnification'], aim: a['aim'], aimView: a['aimView'],
-    }, filmOf(ctx));
+    }, filmOf(ctx), isCapture(ctx));
     const fit = filtrationForLights({
       data: ctx.env.data, conv: ctx.env.conv, film: ctx.env.stock(es.film), paper: ctx.env.stock(es.paper), lamp: es.lamp, filtrationShift: es.filtration, mode: es.mode,
       optics: { time_s: es.time_s, fstop: es.fstop, ...(es.magnification !== null ? { magnification: es.magnification } : {}) }, aim: es.aim, view: es.aimView,

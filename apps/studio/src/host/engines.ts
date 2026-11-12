@@ -32,6 +32,11 @@ export interface HostOptions {
 export interface HostSettings {
   /** Detect dust specks in scanner density and heal them on open (ingest; off by default, slow on big scans). */
   dust: boolean;
+  /**
+   * Open files as photos, not negatives (CHB-012): camera RAWs through LibRaw's photo mode (demosaiced,
+   * camera colour, no white balance), every file as scene light shot on the recipe's film stock.
+   */
+  photo: boolean;
 }
 
 /** What the roll kit's physics needs (studio-kit's RollPhysics, structurally): ingest's film layout and roll base, core's integrate-to-grey. */
@@ -82,6 +87,24 @@ function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
   const healed = heal(D, w, h, spotsMask(found, w, h), { marginPx: 1, method: 'patch' }).planes;
   for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) rgb[i * 3 + k] = Treb[k]! * 10 ** -healed[k]![i]!;
   return found.length;
+}
+
+/** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
+async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, long: number): Promise<Decoded> {
+  const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'photo' }, raw: LAZY_LIBRAW });
+  const lin = linearise(raw, { sha256, ir: false });
+  const W = lin.width, H = lin.height;
+  const s = long > 0 ? Math.min(1, long / Math.max(W, H)) : 1;
+  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  const cam = raw.meta.camera;
+  const notes = [raw.meta.format === 'raw'
+    ? `photo: camera RAW${cam ? ` (${cam.make} ${cam.model})` : ''} via LibRaw, photo mode, ${W}×${H}${cam?.camToXyz ? `, camera matrix from ${cam.from ?? 'LibRaw'}` : ', no camera matrix (taken as linear sRGB)'}`
+    : `photo: ${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit, taken as linear sRGB scene light`];
+  if (s < 1) notes.push(`working image ${w}×${h}`);
+  const info0 = sourceInfo(sha256, raw, lin);
+  const info: SourceInfo = { ...info0, width: w, height: h, channels: 3, notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }] };
+  return { info, data, full: { width: W, height: H }, notes, rebate: null, kind: 'digital-raw' };
 }
 
 /** Decode → linear → area-averaged working image → conditioning. */
@@ -183,7 +206,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const say = o.onStatus ?? (() => undefined);
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
-  const settings: HostSettings = { dust: false };
+  const settings: HostSettings = { dust: false, photo: false };
   const roll = new Map<string, FrameBase>();
   let primary: Engine | null = null;
   let label = '';
@@ -212,7 +235,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     label = `reference · CPU f64${why ? ` (no WebGPU: ${why})` : ''}`;
   }
   const host: HostServices = {
-    decode: (bytes, sha, name) => decodeScan(bytes, sha, name, long, settings, roll),
+    decode: (bytes, sha, name) => (settings.photo ? decodePhoto(bytes, sha, name, long) : decodeScan(bytes, sha, name, long, settings, roll)),
     register: (e, info, px) => (e as GpuEngine | RefEngine).openDecoded(info, px),
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],
     defaultSigma: DEFAULT_SIGMA_D,

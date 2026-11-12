@@ -260,24 +260,30 @@ export const SPATIAL_TESTS: Record<string, T> = {
   },
 
   async 'grain:selwyn'() {
-    // engine-level: σ²·A constant across preview scales (textbook §2.5)
+    // engine-level: σ²·A constant across preview scales (textbook §2.5). CHB-012: film.grain is the
+    // Poisson sublayer model on the print grid, whose final 0.65 px blur also softens the image, so
+    // the field is uniform (a constant RAW through capture.expose and film.develop).
     const rt = await runtime();
     const eng = await GpuEngine.create({ runtime: rt, opfs: false });
     const g = new Graph();
-    const base = g.intern('source.pattern', [], { domain: 'film-dyes', width: 512, height: 512, seed: 3 }).node;
+    const W = 512, H = 512;
+    const data = new Float32Array(W * H * 3).fill(0.12);
+    const info = {
+      sha256: 'f'.repeat(64), format: 'raw' as const, width: W, height: H, channels: 3 as const, bits: 16, sample: 'float' as const,
+      encoding: { value: 'linear' as const, evidence: 'format' as const }, levels: { black: [0, 0, 0], white: [1, 1, 1], from: 'default' as const }, clippedFraction: 0, notes: [],
+    };
+    eng.openDecoded(info, data);
+    g.registerSource(info);
+    const src = g.intern('source.open', [], { source: info.sha256, encoding: 'linear' }).node;
+    const ex = g.intern('capture.expose', [g.intern('source.xyz', [src.id], {}).node.id], { stock: 'kodak_portra_400' }).node;
+    const base = g.intern('film.develop', [ex.id], {}).node;
     const gr = g.intern('film.grain', [base.id], { amount: 1, size_um: 12, seed: 5 }).node;
     eng.adopt(g.closure(gr.id));
     const out: { scale: number; variance: number; sigma2A: number }[] = [];
     for (const scale of [1, 0.5, 0.25]) {
       const a = await (await eng.evaluate(gr, { scale, precision: 'preview' })).read();
-      const b = await (await eng.evaluate(base, { scale, precision: 'preview' })).read();
       let s = 0, s2 = 0, n = 0;
-      for (let i = 0; i < a.length; i += 3) {
-        // channel 0, pixels where the max(…, 0) clamp cannot act
-        if (b[i]! < 0.5) continue;
-        const d = (a[i]! - b[i]!) / Math.sqrt(b[i]! + 0.05);
-        s += d; s2 += d * d; n++;
-      }
+      for (let i = 0; i < a.length; i += 3) { s += a[i]!; s2 += a[i]! * a[i]!; n++; }
       const v = s2 / n - (s / n) ** 2;
       out.push({ scale, variance: v, sigma2A: v / (scale * scale) });
     }

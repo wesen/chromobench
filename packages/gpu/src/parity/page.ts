@@ -15,6 +15,7 @@ import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { OUTPUT_TESTS } from './output-tests.ts';
 import { RETOUCH_TESTS } from './retouch-tests.ts';
+import { FILM_TESTS } from './film-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { loadDefaultPhysicsData } from '../physics/data.ts';
 // the conformance generator, imported by path: the package index also exports Vitest wrappers
@@ -197,6 +198,7 @@ const TESTS: Record<string, Test> = {
   ...SPATIAL_TESTS,
   ...OUTPUT_TESTS,
   ...RETOUCH_TESTS,
+  ...FILM_TESTS,
 
   /** CHB-002's generated conformance suite against GpuEngine (fresh engine per case, shared device). */
   async conformance(o) {
