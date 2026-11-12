@@ -16,6 +16,7 @@ import type { Ck, NodeData } from '@chromobench/shell';
 import { slot, type FormSpec } from '@chromobench/shell';
 import type { Cb, CatalogFrame } from '../../../src/cb.ts';
 import { frameRef } from '../../../src/handles.ts';
+import { stockName } from '../../../src/model/names.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { analyseRoll } from './engine/analyse.ts';
 import { buildBatch, plain, setWithExpect, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
@@ -285,7 +286,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
             const n = Object.keys(ctx.state.roll?.rolls ?? {}).length + 1;
             const id = `roll-${n}`;
             const fragment = fragmentOf(first);
-            const label = o.label ?? `${String(getPath(first, 'scan.stock') ?? 'Roll')} · ${frames.length} frames`;
+            const stock = getPath(first, 'scan.stock');
+            const label = o.label ?? `${typeof stock === 'string' ? stockName(stock) : 'Roll'} · ${frames.length} frames`;
             ctx.tx(`New roll "${label}"`, (t: any) => {
               t.$set(['roll', 'rolls', id], newRoll(id, label, frames, fragment));
               t.$set(['roll', 'order'], [...(t.roll.order ?? []), id]);

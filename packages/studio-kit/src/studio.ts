@@ -13,6 +13,7 @@ import { Frames, type FrameEntry, type InitialRecipe } from './bridge/frames.ts'
 import type { KV } from './bridge/kv.ts';
 import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
+import { explainError } from './kit/messages.ts';
 import type { CatalogFrame } from './cb.ts';
 
 export interface StudioOptions {
@@ -60,6 +61,8 @@ export class Studio {
   /** connect a started runtime: catalog entries for opened frames, CB-H401 for skipped undo steps */
   attach(rt: Runtime): this {
     this.rt = rt;
+    // errors toast in the photographer's words (CHB-027 F7); the diagnostics keep the codes
+    rt.explainError = explainError;
     this.stops.push(
       rt.history.on((kind, e) => {
         if (kind === 'skip') rt.diagnostics.info('CB-H401', `Undo skipped "${e.entry.label}": the frame's History already moved past it`, { runtime: true, facts: [`${e.parts.length} EditLog part(s) no longer the last unit in effect`] });
@@ -69,6 +72,7 @@ export class Studio {
     return this;
   }
   detach(): void {
+    if (this.rt?.explainError === explainError) this.rt.explainError = null;
     for (const f of this.stops) f();
     this.stops = [];
     this.rt = null;

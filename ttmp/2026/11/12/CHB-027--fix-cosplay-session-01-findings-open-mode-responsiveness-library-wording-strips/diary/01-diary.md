@@ -80,3 +80,109 @@ commits; subagents allowed.
 ### Technical details
 - Workstream branches: `task/chb-027-open-mode`, `task/chb-027-responsive`, `task/chb-027-wording`,
   `task/chb-027-strip-frames`.
+
+## Step 2: Three workstream agents launched; top bar folded into the menus (scope added to WS-A)
+
+I launched WS-A, WS-B and WS-C as background agents, each in its own git worktree, with a common brief
+(`scratchpad/chb027-brief-common.md`: plan as spec, lanes per the ownership table, checks green per commit,
+browser tests on per-agent ports, private photos read-only and skipped when absent, their own diary file, no MCP
+browser). The user then asked why the host top bar is separate from the menus. There is no technical reason, so
+folding it into the menus was added to WS-A's scope by message.
+
+### Prompt Context
+**User prompt (verbatim):** "should we address the issues before running the agents? or are you running implementation agents" and "also, couldn't we merge the top bar commands into the menus proper? why is it separate anyway?"
+**Assistant interpretation:** Clarify that these are implementation agents (cosplay testers come after the merge);
+fold the host bar into the shell's menus.
+**Inferred user intent:** Test only after fixing; one place for commands, like a real desktop application.
+
+### What I did
+- Agents: WS-A (`task/chb-027-open-mode`, ports 4711/4721–4724), WS-B (`task/chb-027-responsive`, 4811/4821–4824),
+  WS-C (`task/chb-027-wording`, 4911/4921–4924).
+- Checked where the menus live: the variants' menus and commands are declared in `packages/studio-kit/src/cb.ts`
+  (e.g. "Save the Print"); the host bar is plain DOM in `apps/studio/src/main.ts`.
+- Message to WS-A: the host registers Open Files… (Ctrl+O), Open Folder…, Reopen, Open as ▸ Auto/Photo/Negative,
+  Export… (Ctrl+E, format and space in an export dialog), Save Recipe and View ▸ Layout as runtime commands; the
+  menus reference them (hidden in hosts without them); the Undo/Redo buttons go; "offline ready" moves to the
+  status bar, "dust" becomes an option; the bar is removed.
+
+### Why
+- The bar exists because studio-kit may import only the contract and the shell (CHB-019 boundaries), so host
+  actions (decoder, export writer, layouts) were wired as host DOM instead of contributed commands.
+- WS-A already owns `main.ts`, the top bar and the File menu; a fourth agent there would conflict.
+
+### What worked
+- N/A (in progress).
+
+### What didn't work
+- N/A.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- e2e specs that click top-bar controls (`#file`, `#export`, `#variant`, `#photo`) must move with the bar.
+
+### What should be done in the future
+- Cosplay testers after the merge: a session-01 re-run, then S01, S05, S09.
+
+### Code review instructions
+- N/A.
+
+### Technical details
+- The CHB-027 tasks map: 9wcz, j9hg (WS-A), 6p1c (WS-B), ik6l (WS-C).
+
+## Step 3: WS-C merged
+
+WS-C (wording, forms, messages) reported done and I merged `task/chb-027-wording` into main. Its report: F7, F8,
+F9, F12 and F13 fixed, F11 partly (the host bar and the empty state are WS-A's), F14 not reproducible (only Ctrl+K
+opens "Commands", and the typed-value boxes swallow every key; likely the session tooling). On the way it fixed a
+real bug: shortcuts matched physical keys, so on a German QWERTZ layout Ctrl+Z arrived as Ctrl+Y.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1; and "how far are we?" (status question during the merge).
+**Assistant interpretation:** Merge finished workstreams and report progress.
+**Inferred user intent:** Know where the fixes stand.
+**Commit (code):** 444f153 — "Merge task/chb-027-wording (CHB-027 WS-C: wording, forms, messages)"
+
+### What I did
+- `git log main..task/chb-027-wording`: `a3e1b25` (code), `4136c70` (diary); 40 files, +1313/−67.
+- `git merge --no-ff task/chb-027-wording`; `pnpm typecheck` (ok), `pnpm lint` (boundaries 333 file checks;
+  check-colours 135 files ok), `pnpm test` twice.
+
+### Why
+- C finished first; merging it now means A and B rebase onto (or merge with) the same `main.ts` status-line
+  changes, instead of me resolving three-way at the end.
+
+### What worked
+- Second `pnpm test`: 89 files, 2661 passed, 7 skipped (the agent reported the same in its worktree; its browser
+  suite on ports 4921–4924: 88 passed).
+
+### What didn't work
+- First `pnpm test` after the merge: `Test Files 2 failed | 87 passed (89)`, `Tests 2 failed | 2659 passed`. A
+  re-run passed with no failures, so these were timing flakes under load (WS-A and WS-B run test suites on the same
+  machine). The failing test names were not captured (the second run's grep found nothing to show).
+
+### What I learned
+- New shell hook `Runtime.explainError` (studio-kit fills it in `Studio.attach`); new `ToastOpts.detail`;
+  `apps/studio/src/status-text.ts` builds the human summaries from the existing note strings.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- The layout-following shortcut change affects every shell app (`packages/shell/src/core/keys.ts`).
+
+### What should be done in the future
+- Re-run `CI=1 pnpm test:browser` on main after all merges, when the agents' load is gone.
+- WS-A: route open-file errors through `explainError`; name the frame in the Undo/Redo tooltips (if the buttons
+  survive the top-bar fold).
+
+### Code review instructions
+- `packages/studio-kit/src/messages.ts` (or the agent's equivalent), `apps/studio/src/status-text.ts`,
+  `packages/shell/src/core/keys.ts`; diary `04-diary-ws-c-wording-and-forms.md`.
+
+### Technical details
+- e2e specs now read `#engine[data-engine]` and `#notes[title]` for technical text.

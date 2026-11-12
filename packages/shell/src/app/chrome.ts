@@ -13,6 +13,8 @@ export interface ToastOpts {
   kind?: 'info' | 'ok' | 'why' | 'error' | 'warn' | string;
   title?: string;
   ms?: number;
+  /** the technical text behind a toast in plain words (an error code and message): the toast's tooltip */
+  detail?: string;
 }
 export interface DialogButton {
   label: string;
@@ -57,11 +59,11 @@ export interface Recorded {
 /** Keeps everything as data. */
 export class RecordingChrome implements ChromeApi {
   log: Recorded[] = [];
-  toasts: { text: string; kind: string; title: string }[] = [];
+  toasts: { text: string; kind: string; title: string; detail?: string }[] = [];
   dialogs: { spec: DialogSpec; close: (r?: unknown) => void; open: boolean }[] = [];
   toast(text: string, o: ToastOpts = {}): void {
     if (!text) return;
-    this.toasts.push({ text, kind: o.kind ?? 'info', title: o.title ?? '' });
+    this.toasts.push({ text, kind: o.kind ?? 'info', title: o.title ?? '', ...(o.detail ? { detail: o.detail } : {}) });
     this.log.push({ kind: 'toast', text, opts: o });
   }
   flash(_target: unknown, text: string, kind = 'info'): void {

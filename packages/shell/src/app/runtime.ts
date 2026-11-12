@@ -122,6 +122,13 @@ export interface Inspect {
   loops: number;
 }
 
+/** An error in words for the person at the screen; `detail` keeps the technical text (code and message). */
+export interface Explained {
+  text: string;
+  title?: string;
+  detail?: string;
+}
+
 const isEvent = (a: unknown): boolean => (typeof Event !== 'undefined' && a instanceof Event) || !!(a && typeof a === 'object' && 'key' in (a as object) && 'preventDefault' in (a as object));
 
 export class Runtime<S = any> {
@@ -143,6 +150,13 @@ export class Runtime<S = any> {
   readonly renders: RenderQueue;
   readonly scope: Scope;
   chrome: ChromeApi;
+  /**
+   * Turns an error into words for the person at the screen (CHB-027 F7; explain() is the app's self-description):
+   * a kit sets it (studio-kit maps E_ARG_RANGE on a recipe path to "Time must be between 0.1 s and 600 s"). Only
+   * the toast changes: the diagnostics keep the original message, and the toast keeps it as its detail (tooltip).
+   * null: the error's own message is shown.
+   */
+  explainError: ((err: unknown, o: { label?: string }) => Explained | null) | null = null;
   readonly viewports = new Map<string, ViewportApi>();
   readonly focus: { panel: string | null; canvas: string | null; dialog: boolean; text: boolean; button: boolean } = { panel: null, canvas: null, dialog: false, text: false, button: false };
   /** the spring held down (a tool id: 'hand', 'zoom', …) */
@@ -354,7 +368,19 @@ export class Runtime<S = any> {
     }
     if (err instanceof TxRefused) return this.refused(err);
     this.diagnostics.error('CK-L340', 'A handler threw', { at: owner?.at ?? null, runtime: true, facts: [String(e?.message ?? err)] });
-    this.chrome.toast(String(e?.message ?? err), { kind: 'error' });
+    this.toastError(err, String(e?.message ?? err));
+  }
+  /** an error toast in the kit's words (explainError), with the technical text as its detail */
+  toastError(err: unknown, raw: string, label?: string): void {
+    let x: Explained | null = null;
+    try {
+      x = this.explainError ? this.explainError(err, label !== undefined ? { label } : {}) : null;
+    } catch {
+      x = null;
+    }
+    if (!x) return this.chrome.toast(raw, { kind: 'error', ...(label ? { title: label } : {}) });
+    const title = x.title ?? label;
+    this.chrome.toast(x.text, { kind: 'error', ms: 5000, ...(title ? { title } : {}), detail: x.detail ?? raw });
   }
   private refused(e: TxRefused): void {
     const cause = e.cause2 as { code?: string; message?: string; diagnostic?: Diag };
@@ -363,7 +389,7 @@ export class Runtime<S = any> {
       facts: [`${e.route}: ${cause?.message ?? String(cause)}`, ...(cause?.code ? [`code ${cause.code}`] : [])],
       fix: 'The document is unchanged; the preview was dropped.',
     });
-    this.chrome.toast(cause?.message ?? String(cause), { kind: 'error', title: e.label });
+    this.toastError(cause, cause?.message ?? String(cause), e.label);
     this.emit('refused', e);
   }
   lambdaError(err: unknown, cell: { at: any; name?: string }): void {

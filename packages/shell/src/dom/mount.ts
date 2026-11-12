@@ -314,6 +314,8 @@ export function mountRuntime<S>(rt: Runtime<S>, root: HTMLElement, services: Dom
     s => !!(s.workspace?.hide && (s.workspace.hide.top || s.workspace.hide.all)),
     v => {
       strip.hidden = v || rt.modules.size < 2;
+      // the app's name once (CHB-027 F11): the plate shows it; the menu bar only while the plate is hidden
+      title.hidden = !strip.hidden;
     },
   );
   const work = h('main', { class: 'ck-main' });

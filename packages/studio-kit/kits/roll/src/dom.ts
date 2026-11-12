@@ -9,6 +9,7 @@ import { canonicalJSON, getPath, type Vec3 } from '@chromobench/contract';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import { makeNode, type NodeData } from '@chromobench/shell';
 import { frameRef } from '../../../src/handles.ts';
+import { stockName, valueName } from '../../../src/model/names.ts';
 import { previewOf } from './engine/batch.ts';
 import { SHARED_PATHS } from './engine/constants.ts';
 import { divergence, type Roll } from './engine/model.ts';
@@ -95,15 +96,15 @@ const setup = panelOf('cb-roll-setup', (s) => {
       const cur = String(r.fragment['scan.stock'] ?? '');
       const sel = h('select', { 'aria-label': 'Stock', id: 'roll-stock' }) as HTMLSelectElement;
       const names = [...new Set([cur, ...(a?.ranking ?? []).map((x) => x.stock)].filter(Boolean))];
-      for (const x of names) sel.append(h('option', { value: x, text: x, ...(x === cur ? { selected: true } : {}) }));
+      for (const x of names) sel.append(h('option', { value: x, text: stockName(x), ...(x === cur ? { selected: true } : {}) }));
       listen(m.scope, sel, 'change', () => void m.rt.runCommand('roll.setShared', null, 'scan.stock', sel.value));
       const rk = a?.ranking;
       const ev = rk && rk.length
-        ? `${rk[0]!.stock} fits the base to ${(a!.base.absD ? rk[0]!.maxDiffD : rk[0]!.shapeDiffD).toFixed(3)} D${rk[1] ? `; ${rk[1].stock} is ${((a!.base.absD ? rk[1].maxDiffD - rk[0]!.maxDiffD : rk[1].shapeDiffD - rk[0]!.shapeDiffD)).toFixed(3)} D further` : ''}${a!.base.absD ? '' : ' (weak: by shape only, no open gate)'}`
+        ? `${stockName(rk[0]!.stock)} fits the base to ${(a!.base.absD ? rk[0]!.maxDiffD : rk[0]!.shapeDiffD).toFixed(3)} D${rk[1] ? `; ${stockName(rk[1].stock)} is ${((a!.base.absD ? rk[1].maxDiffD - rk[0]!.maxDiffD : rk[1].shapeDiffD - rk[0]!.shapeDiffD)).toFixed(3)} D further` : ''}${a!.base.absD ? '' : ' (weak: by shape only, no open gate)'}`
         : 'no ranking (no stock data from the host)';
-      el.append(row('Stock', cur || '–', ev, over('scan.stock'), sel));
+      el.append(row('Stock', cur ? stockName(cur) : '–', ev, over('scan.stock'), sel));
     } else if (sec === 'scanner') {
-      el.append(row('Scanner', String(r.fragment['scan.scanner'] ?? '–'), 'estimated, not calibrated (CHB-013 measures the scanner)', over('scan.scanner')));
+      el.append(row('Scanner', r.fragment['scan.scanner'] ? valueName('scanners', String(r.fragment['scan.scanner'])) : '–', 'estimated, not calibrated (CHB-013 measures the scanner)', over('scan.scanner')));
     } else if (sec === 'base' && a) {
       const b = a.base;
       const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; written to every frame's scan.baseT` : 'no rebate found';
