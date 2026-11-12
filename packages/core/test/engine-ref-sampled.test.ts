@@ -115,6 +115,21 @@ describe('RefEngine sampled previews (CHB-027)', () => {
     expect(Array.from(await r.read())).toEqual(Array.from(await (await plain.evaluate(n, { scale: 0.5, precision: 'preview' })).read()));
   });
 
+  it('previews on many grids never push the full-resolution stages out of the cache', async () => {
+    const { mk, recipe, node } = setup('negative-scan', { sampled: true, cacheLimit: 8 });
+    const e = mk();
+    const n = node(recipe);
+    e.adopt(n.defs);
+    await e.evaluate(n, { scale: 0.5, precision: 'preview' });
+    const full = e.computed.full;
+    for (const scale of [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.55, 0.6, 0.65, 0.7]) {
+      const m = node(withTime(recipe, 10 + scale));
+      e.adopt(m.defs);
+      await e.evaluate(m, { scale, precision: 'preview' });
+    }
+    expect(e.computed.full).toBe(full);
+  });
+
   it('cacheBytes bounds the caches; evicted stages are recomputed to the same pixels', async () => {
     const { mk, recipe, node } = setup('negative-scan', { cacheBytes: 3 * W * H * 4 * 8 });
     const e = mk();

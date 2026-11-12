@@ -148,8 +148,10 @@ export class RefEngine implements Engine {
   private readonly env: PhysicsEnv;
   private readonly conv: Conventions;
   private readonly sources = new Map<string, Img>();
-  /** Node images: 'F:<id>' at full resolution, 'S:<id>@<grid>' on a sample grid (sampled previews). */
+  /** Node images at full resolution, by 'F:<id>'. */
   private readonly full: Lru<Img>;
+  /** Node images on a sample grid (sampled previews), by 'S:<id>@<grid>'. */
+  private readonly grid: Lru<Img>;
   private readonly results: Lru<{ data: Float64Array; width: number; height: number; region: Box; scale: number; warnings: Diagnostic[] }>;
   private disposed = false;
   private readonly sampled: boolean;
@@ -161,6 +163,8 @@ export class RefEngine implements Engine {
     const limit = Math.max(4, o.cacheLimit ?? Infinity);
     const bytes = o.cacheBytes ?? Infinity;
     this.full = new Lru(limit, bytes);
+    // sampled stages are small and many (one per grid): their own LRU, so they never push out a full-resolution stage
+    this.grid = new Lru(limit * 8, bytes / 4);
     this.results = new Lru(limit, bytes / 4);
     this.sampled = o.sampled ?? false;
     this.yieldFn = o.yield ?? (() => Promise.resolve());
@@ -226,6 +230,7 @@ export class RefEngine implements Engine {
   dispose(): void {
     this.disposed = true;
     this.full.clear();
+    this.grid.clear();
     this.results.clear();
   }
 
@@ -294,7 +299,7 @@ export class RefEngine implements Engine {
   /** Node id's image on grid g: sampled from its full-resolution image when that is cached, else computed pointwise on the grid. */
   private computeAt(id: string, g: Grid): Img {
     const sk = `S:${id}@${g.key}`;
-    const hit = this.full.recall(sk);
+    const hit = this.grid.recall(sk);
     if (hit) return hit;
     const whole = this.full.recall(`F:${id}`);
     const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
@@ -310,7 +315,7 @@ export class RefEngine implements Engine {
       this.computed.sampled++;
       this.computed.pixels += img.w * img.h;
     }
-    return this.full.remember(sk, img, imgBytes(img));
+    return this.grid.remember(sk, img, imgBytes(img));
   }
 
   /** The image nodes of id's closure, inputs first. */
@@ -335,7 +340,7 @@ export class RefEngine implements Engine {
    */
   private async staged(id: string, g: Grid | null, signal: AbortSignal | undefined): Promise<Img> {
     for (const nid of this.order(id)) {
-      if (this.full.peek(`F:${nid}`) || (g && this.full.peek(`S:${nid}@${g.key}`))) continue;
+      if (this.full.peek(`F:${nid}`) || (g && this.grid.peek(`S:${nid}@${g.key}`))) continue;
       if (g) this.computeAt(nid, g);
       else this.compute(nid);
       await this.yieldFn();
@@ -354,7 +359,7 @@ export class RefEngine implements Engine {
       visited.add(nid);
       const m = this.graph.get(nid);
       for (const i of m?.inputs ?? []) visit(i);
-      const img = this.full.peek(`F:${nid}`) ?? (grid ? this.full.peek(`S:${nid}@${grid.key}`) : undefined);
+      const img = this.full.peek(`F:${nid}`) ?? (grid ? this.grid.peek(`S:${nid}@${grid.key}`) : undefined);
       for (const w of img?.warnings ?? []) {
         const k = `${w.code}|${w.message}`;
         if (!seen.has(k)) { seen.add(k); out.push(w); }
