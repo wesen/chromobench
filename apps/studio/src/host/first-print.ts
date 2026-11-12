@@ -1,8 +1,9 @@
-// The automatic first print (CHB-023 stage 2): a fresh scan opens as a sensible print. The enlarger is
-// set to 'real' (time and f-number expose the paper), then the frame is integrated to grey: the paper
-// exposure x that print.lights hands print.develop is measured over the central 80 % of the frame, its
-// mean density goes into the enlarger time (on the slider's 1/6-stop grid) and the colour remainder
-// into the printer lights. Two passes, so a time model that is not exactly log-linear still lands.
+// The automatic first print (CHB-023 stage 2): a fresh scan opens as a sensible print. The frame is integrated
+// to grey: the paper exposure x that print.lights hands print.develop is measured over the central 80 % of the
+// frame. In real mode (the default; time and f-number expose the paper) its mean density goes into the enlarger
+// time (on the slider's 1/6-stop grid) and the colour remainder into the printer lights. In normalised mode (a
+// layout's choice, CHB-031) the time does nothing, so everything goes into the lights. Two passes, so a time
+// model that is not exactly log-linear still lands.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
 import { applyMutation, compile, type Box, type Engine, type FrameRecipe, type Graph, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
 
@@ -68,22 +69,26 @@ export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, 
   return integratedExposure(await res.read(), res.width * res.height, res.info.channels);
 }
 
-/** The first print of a frame: enlarger 'real', integrated to grey, the auto proposal recorded in print.lights.auto. */
+/**
+ * The first print of a frame in the recipe's enlarger mode (real by default since contract 0.4; CHB-031), integrated
+ * to grey, the auto proposal recorded in print.lights.auto. Since CHB-010 the aim is fitted once, at calibration,
+ * so in real mode time, f-number and the filtration shift move the print as at an enlarger.
+ */
 export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, o: FirstPrintOptions): Promise<FrameRecipe> {
   const alpha = o.alpha ?? 1;
   const N = o.analysisPixels ?? 200_000;
-  // 'real' (set explicitly: contract request C4 on the default is open). Since CHB-010 the aim is fitted
-  // once, at calibration, so time, f-number and the filtration shift move the print as at an enlarger.
-  let r: FrameRecipe = { ...recipe, print: { ...recipe.print, enlarger: { ...recipe.print.enlarger, mode: 'real' } } };
+  let r: FrameRecipe = recipe;
+  const real = r.print.enlarger.mode === 'real';
   let lights = [...r.print.lights.logH] as Vec3;
   let t = r.print.enlarger.time_s;
   for (let pass = 0; pass < (o.passes ?? 2); pass++) {
     const delta = await measureExposure(engine, g, r, N);
     const add = o.integrate(delta.map((v) => -v) as Vec3, alpha);
     const total = lights.map((l, k) => l + add[k]!) as Vec3;
-    // density (the mean) into the time, as at an enlarger; the colour remainder stays in the lights
+    // real: density (the mean) into the time, as at an enlarger; the colour remainder stays in the lights.
+    // normalised: the time does nothing; density and colour both stay in the lights
     const m = (total[0] + total[1] + total[2]) / 3;
-    const t2 = gridTime(t * 10 ** m);
+    const t2 = real ? gridTime(t * 10 ** m) : t;
     const moved = Math.log10(t2 / t); // log H moved into the time
     lights = total.map((l) => r6(l - moved)) as Vec3;
     t = t2;

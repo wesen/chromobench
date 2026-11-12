@@ -1,6 +1,6 @@
 # Contract decisions
 
-`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017) and contract 0.3 (`'0.3.0'`, CHB-024) are the last sections before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
+`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017), contract 0.3 (`'0.3.0'`, CHB-024) and contract 0.4 (`'0.4.0'`, CHB-031) are the last sections before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
 
 - **accepted**: in v0 as proposed;
 - **adapted**: in v0 in a different shape, with the reason given;
@@ -324,7 +324,7 @@ CHB-020 guide §7, CHB-022 guide §3.1/§6/§7.1, CHB-016 guide (Diagnostic.wher
 | CHB-020 #6 | `AutoBalance` for roll / match | noted | Doc only: for `'roll'` and `'match'`, `logH` is the applied result and `method` the provenance |
 | core C1 | `darkroom.lightsToFiltration` sees the print settings | accepted | Arguments with recipe paths (`logH`, `paper`, `mode`, `lamp`, `filtration`, `time_s`, `fstop`, `aim`, `aimView`) and the fields `filtration time_s stops lights residual`. `mode` defaults to `'normalised'` like `print.expose` (the request said `'real'`; a recipe-backed call takes the recipe's anyway). `logH`'s new path is "breaking" in `contract:check`: a DSL call without `logH` now uses the recipe's lights. Mock returns the new fields |
 | core C2, C3 | Grade and magnification docs | accepted | Doc only (grade as a gamma about the aim grey; magnification ∝ 1/(m+1)², reference 8×). Versioning the calibration in the data pack stays CHB-004's |
-| core C4 | Real enlarger mode as the default **(review)** | deferred (open) | The photographer has not decided. Default stays `'normalised'` in the catalog and `defaultRecipe`; the change is a one-line default plus `defaultRecipe` when decided (old recipes keep their mode: it is written into every frame) |
+| core C4 | Real enlarger mode as the default **(review)** | deferred (open); **decided in contract 0.4** (below) | The photographer has not decided. Default stays `'normalised'` in the catalog and `defaultRecipe`; the change is a one-line default plus `defaultRecipe` when decided (old recipes keep their mode: it is written into every frame) |
 | core C5 | Density masks reach the print **(review)** | adapted | Not as an `Image` input of `print.expose` (a second image input to a pointwise op, which the GPU chain cannot take without a barrier). Instead `print.densityMask` takes the **main `print.expose`'s paper log H** (`paper-logH` → `scalar-field` d_m), recovers PD = x_clear − x (x_clear: that exposure's clear-film x; 0 without one), and `print.combine.densityMasks: Image[]` multiplies every exposure through the negative by 10^−Σd_m (flashes not). Recipe `print.densityMasks: Record<id, DensityMask>` (`set print.densityMasks.<id> null` deletes; the same pattern as retouch spots, so no new mutation op). New arg `polarity: 'positive' \| 'same'`; `kind: 'contrast' \| 'unsharp'` is stored for the UI but not passed (same maths, the radius differs); highlight masks with a threshold are deferred to CHB-010. Core, GPU (combine.wgsl modes 6, 9, 10) and mock implement it; two conformance semantic cases |
 | core C6 | A flash goes through the film base | accepted | `print.combine.modes` gains `'flash-base'` and `'flash-open'`; compile maps a flash with `through: 'open'` to `'flash-open'`, otherwise `'flash-base'`. Engines evaluate the flash's `print.expose` uniformly: core's `flashExposure` (dye amounts 0, or the clear-film x); the GPU uses the same f64 values. Conformance law: an unmasked base flash adds the same H to every pixel. Existing recipes with flashes now print the flash uniformly (they printed it through the image, which was wrong) |
 | core C7, C8 | `print.combine` normalised weighting; mask argument docs | accepted | Doc only |
@@ -399,6 +399,28 @@ consumers: core (CAM16-UCS), gpu (W_PREVIEW_APPROX, oklch kernel), mock (ignores
 
 CC-016  RECIPE_VERSION 2; EditLogData.version 2; roll; Roll record; vocab; Diagnostic.where.file; ten W_ codes
 class:     additive (version bump with migrations)
+```
+
+## Contract 0.4 (CHB-031: the real enlarger by default)
+
+`CONTRACT_VERSION = '0.4.0'`; recipe and EditLog versions unchanged. The 0.3.0 catalog is kept as
+`baselines/catalog-0.3.0.json`. `pnpm contract:check`: 2 changes, both "breaking" by its rule (a recipe-backed
+default), allowed under 0.x; no migration is needed (see the note).
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| core C4, CHB-031 F17 | Real enlarger mode as the default | accepted | Owner decision 2026-11-12 (CHB-031 diary step 1), after the cosplay session 02 found Time and Aperture inert in the default `'normalised'` mode. `print.expose.mode`, `darkroom.lightsToFiltration.mode` and `defaultRecipe`'s `print.enlarger.mode` default to `'real'`. Normalised stays an option: a studio layout (simple, tiny) makes its new recipes normalised (`VariantDef.enlarger`, studio-kit), and there the UI hides time, aperture and magnification. At the calibration (neutral pack, 10 s, f/8, 8×) both modes print the same, so a default recipe prints exactly as before |
+
+```text
+CC-017  print.expose.mode, darkroom.lightsToFiltration.mode, defaultRecipe print.enlarger.mode: 'normalised' → 'real' (CHB-031)
+class:     breaking in contract:check (a recipe-backed default); no stored recipe changes
+changes:   ArgSpec default only; docs of print.expose.mode say what normalised ignores
+consumers: defaultRecipe users (studio new frames, DSL/agent fixtures, roll kit), DSL op defaults (generated), studio-kit
+           (layout option VariantDef.enlarger, normalised-mode UI)
+migration: none: every recipe and EditLog stores print.enlarger.mode explicitly, so saved work keeps its mode; a
+           default recipe prints identically in both modes (10 s, f/8, magnification null = the calibration optics)
+tests:     contract hashcons law (explicit default), core engine-ref 0.2 filtration case (explicit 'normalised'),
+           DSL representative trace (node id), apps/studio enlarger-mode, studio-kit enlarger-mode
 ```
 
 ## Change-note template

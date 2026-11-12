@@ -218,7 +218,7 @@ const TIPS: Record<string, string> = {
   'print.grade': 'Contrast: 2 is the paper as made, higher is harder, lower is softer. The mid-grey stays where it is.',
   'print.paper': 'The colour paper the print is made on.',
   'print.preflash': 'A weak, even pre-exposure of the paper that tames the highlights.',
-  'print.enlarger.mode': 'Normalised: the grey card prints at the aim with lights at 0. Real: a physical enlarger, with filtration and time doing all the work.',
+  'print.enlarger.mode': 'Real: a darkroom enlarger, where the time, the aperture and the filtration expose the paper. Normalised: the grey card prints at the aim whatever the time; make the print lighter or darker with the printer lights.',
   'scan.stock': 'The film the negative was shot on. It sets the orange mask and the film’s colour response.',
   'capture.stock': 'The film the photo is put on, as if it had been shot on it.',
   'capture.exposureEV': 'Exposure of the film, in stops from its rated speed.',

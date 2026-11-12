@@ -53,5 +53,10 @@ export function valueName(from: string | undefined, id: string): string {
   return id.replace(/_/g, ' ');
 }
 
+/** Names for enum values a person reads, by recipe path (CHB-031: the enlarger's two modes). */
+export const ENUM_NAMES: Record<string, Record<string, string>> = {
+  'print.enlarger.mode': { real: 'Real enlarger (time and aperture)', normalised: 'Normalised (grey card at the aim)' },
+};
+
 /** The recipe paths that hold a stock id (for code that has a path, not a control model). */
 export const STOCK_PATHS = new Set(['print.paper', 'scan.stock', 'capture.stock']);

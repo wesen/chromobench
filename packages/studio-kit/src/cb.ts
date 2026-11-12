@@ -534,7 +534,7 @@ export function createCb(ck: Ck) {
                 const band = el('g', { class: `cb-band${i === (vals.length - 1) / 2 ? ' is-current' : ''}`, 'data-value': v });
                 band.append(el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'cb-band-r' }));
                 const t = el('text', { x: (x0 + x1) / 2, y: y1 - 8, 'text-anchor': 'middle', class: 'cb-band-t' });
-                t.textContent = stripLabel(o.vary, v);
+                t.textContent = stripLabel(o.vary, v, r);
                 band.append(t);
                 g.append(band);
               });
@@ -743,8 +743,13 @@ export function createCb(ck: Ck) {
   const controls = (which: 'darkroom' | 'all' | Arrangement, o: { id?: string; title?: string } = {}): any => {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
-    return ck.panel(id, { title: o.title ?? a.name }, ...a.groups.map(g => ck.section(g.title, {}, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})))));
+    const sections = a.groups.map(g =>
+      ck.section(g.title, {}, ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, class: 'cb-group-note' })] : []), ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {}))),
+    );
+    return ck.panel(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
+  /** the children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
+  const ifFrame = (...kids: any[]): any => ck.when((s: any) => !!cb.recipe(s), ck.column({}, ...kids), ck.text(NO_FRAME, { dim: true, class: 'cb-empty' }));
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
     return ck.panel(pid ?? id, { title: t ?? title }, node(form, rest));
@@ -791,6 +796,8 @@ export function createCb(ck: Ck) {
       chat: panel('cb.chat', 'chat', 'Chat'),
       navigator: (o: { id?: string } = {}) => ck.panel(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => s.catalog?.frames?.[current(s) ?? '']?.name ?? 'No frame', { dim: true })),
     },
+    /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
+    ifFrame,
     /** approvals without a panel frame (simple: inline under the print) */
     approvals: (o: Record<string, unknown> = {}) => node('cb.approvals', o),
     hud: { readout: () => node('cb.readout', {}) },
@@ -817,6 +824,9 @@ export function createCb(ck: Ck) {
 }
 
 export type Cb = ReturnType<typeof createCb>;
+
+/** the empty state of the print controls (CHB-031 F19) */
+export const NO_FRAME = 'Select a photo to print it.';
 
 const VIEW_LABELS: Record<string, string> = { print: 'Print', negative: 'Negative', dyes: 'Dyes', classes: 'Base & gamut' };
 

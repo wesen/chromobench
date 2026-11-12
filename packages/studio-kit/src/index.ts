@@ -19,3 +19,4 @@ export * from './model/history.ts';
 export * from './model/arrangement.ts';
 export * from './model/tools.ts';
 export * from './model/recipes.ts';
+export * from './model/enlarger.ts';

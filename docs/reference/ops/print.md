@@ -60,7 +60,7 @@ Exposes paper through the negative: the per-stock table from dye amounts to pape
 | Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
 |---|---|---|---|---|---|---|---|
 | `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `mode` | enum real/normalised |  |  |  | `"normalised"` | print.enlarger.mode | normalised: the grey card prints at the aim at lights 0; real: a physical enlarger (CHB-010). |
+| `mode` | enum real/normalised |  |  |  | `"real"` | print.enlarger.mode | real: a physical enlarger, where time, aperture and magnification expose the paper (CHB-010; the default since contract 0.4, CHB-031); normalised: the grey card prints at the aim at lights 0 whatever the optics, so time, aperture and magnification do nothing. |
 | `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp and heat filter. |
 | `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0. |
 | `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | print.enlarger.time_s | Exposure time. |

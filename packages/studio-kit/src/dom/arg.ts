@@ -12,6 +12,7 @@ import type { NodeData } from '@chromobench/shell';
 import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
+import { exposureStep, isInert } from '../model/enlarger.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 
@@ -55,18 +56,34 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const read = (s: any) => {
     const f = frameOf(s);
     const r = f ? s.recipes?.[f] : undefined;
-    return { f, v: r ? getPath(r, model.path) : undefined };
+    // inert: time, aperture and magnification while the enlarger is normalised (CHB-031 F17); na: a path this
+    // frame's kind does not have (a scanner for a photo, F23)
+    const v = r ? getPath(r, model.path) : undefined;
+    return { f, v, inert: isInert(r, model.path), na: !!r && v === undefined };
   };
+  /** the frame's recipe as it is now (with a drag's preview) */
+  const recipeNow = (f: string): any => st.peek(['recipes', f]);
   const initialOf = (f: string): unknown => {
     const e = studioOf(m).frames.get(f);
     return e ? getPath(e.initial, model.path) : undefined;
   };
   const txOpts = () => m.txOpts();
+  // an inert control never writes (it is hidden; this also holds for a key or script reaching it)
   const commitSet = (f: string, v: unknown, lab = label) => {
+    if (now.inert) return;
     studioOf(m).route.endBurst();
     m.rctx().tx(lab, (t: any) => t.$set(pathOf(f), v));
   };
-  const burst = (f: string, v: unknown) => studioOf(m).route.step(st, rt.clock, pathOf(f), v, label, txOpts());
+  const burst = (f: string, v: unknown) => {
+    if (!now.inert) studioOf(m).route.step(st, rt.clock, pathOf(f), v, label, txOpts());
+  };
+  /** Lighter / Darker by stops (CHB-031): the time in real mode, the printer lights in normalised mode */
+  const exposeBy = (f: string, stops: number, o: { lightsPoints?: number } = {}) => {
+    const r = recipeNow(f);
+    if (!r) return;
+    const mu = exposureStep(r, stops, o);
+    studioOf(m).route.step(st, rt.clock, ['recipes', f, ...mu.path.split('.')], mu.value, mu.path === 'print.lights.logH' ? 'Printer lights' : 'Time', txOpts());
+  };
   const widget: string = p['widget'] ?? model.widget;
   const el = h('div', { class: ['cb-arg', `is-${widget}`, p['big'] && 'is-big'], 'data-path': p['path'] });
   const head = h('div', { class: 'cb-arg-h' });
@@ -75,7 +92,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const aside = h('span', { class: 'cb-arg-a' });
   head.append(lab, out, aside);
   el.append(head);
-  let now: { f: string | null; v: unknown } = { f: null, v: undefined };
+  let now: { f: string | null; v: unknown; inert: boolean; na: boolean } = { f: null, v: undefined, inert: false, na: false };
   const focus = () => m.rctx().set({ ui: { focusPath: model.path } });
   listen(m.scope, el, 'focusin', focus);
   listen(m.scope, lab, 'dblclick', () => {
@@ -187,6 +204,8 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     const axis = p['axis'] as string | undefined;
     const move = (dir: number) => {
       if (!now.f) return;
+      // a time nudge (simple's Lighter / Darker) is an exposure step: in normalised mode it moves the lights
+      if (model.path === 'print.enlarger.time_s') return exposeBy(now.f, dir * (step?.unit === 'st' ? step.value : 1 / 3));
       const base = st.peek(pathOf(now.f)) ?? now.v;
       let v: unknown;
       if (model.type === 'vec3' && axis) {
@@ -213,14 +232,13 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       tracks.push(t);
     }
     if (widget === 'pad' && a.component === null) {
-      // density: all three lights together (more light prints darker)
+      // density: Lighter / Darker. Real mode: the time by 1/3 stop, as at an enlarger (CHB-031); normalised mode:
+      // all three lights together by the pad's step in points (more light prints darker)
       const dens = h('div', { class: 'cb-arg-row' }, h('span', { class: 'cb-arg-c', text: 'D' }));
       for (const [txt, d] of [['Lighter', -1], ['Darker', 1]] as const) {
         const b = h('button', { type: 'button', class: 'ck-btn is-small', text: txt, 'aria-label': `${label} density ${txt.toLowerCase()}` });
         listen(m.scope, b, 'click', () => {
-          if (!now.f) return;
-          const base = (st.peek(pathOf(now.f)) ?? now.v) as number[];
-          burst(now.f, base.map(x => Number((x + d * (step?.value ?? 1) * PT).toFixed(6))));
+          if (now.f) exposeBy(now.f, d / 3, { lightsPoints: step?.value ?? 1 });
         });
         dens.append(b);
       }
@@ -254,6 +272,10 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     if (v.v !== undefined) for (const t of tracks) t.set(v.v, other);
     else if (other) for (const t of tracks) t.reset?.();
     el.classList.toggle('is-empty', v.v === undefined);
+    // nothing to set: no frame, a path this kind of frame does not have, or a control the enlarger mode ignores
+    // (a time nudge stays: it moves the printer lights in normalised mode)
+    el.hidden = !v.f || v.na || (v.inert && widget !== 'nudge');
+    el.classList.toggle('is-inert', v.inert);
   });
   return el;
 }

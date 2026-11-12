@@ -199,7 +199,8 @@ async function main(): Promise<void> {
     kv = memoryKV();
   }
   const device = q.has('canvas2d') ? null : await presentDevice();
-  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
+  // the layout's enlarger mode for new recipes (CHB-031: real by default, normalised in simple and tiny)
+  const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   const chat = createStudioChat(studio);
   const presenter = hostPresenter({
     device,
