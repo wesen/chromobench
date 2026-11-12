@@ -11,6 +11,8 @@ export { memoryKV, localStorageKV, KV_STORES, type KV, type KvStore } from './br
 export { kvPersistence } from './bridge/persistence.ts';
 export { argModel, argProblem, parseEntry, parseStep, stepValue, controlModels, controlPaths, STRIPPABLE, type ArgModel } from './kit/args.ts';
 export { CB_FORMS } from './kit/forms.ts';
+export { explainError, controlTip, rangeText, entryHint, entryPlaceholder, badEntryText, clampEntry, clampedText, relativeText, isRelativeEntry, type Clamped } from './kit/messages.ts';
+export { stockName, valueName, STOCK_PATHS } from './model/names.ts';
 export * as units from './model/units.ts';
 export * from './model/controls.ts';
 export * from './model/history.ts';

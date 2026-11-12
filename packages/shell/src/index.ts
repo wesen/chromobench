@@ -50,7 +50,7 @@ export type { UiIR, Kit, KitDef, Fragment, FragmentSpec, PassDef, PassCtx, IrSpe
 // app
 export { BuiltApp } from './app/built-app.ts';
 export { Runtime } from './app/runtime.ts';
-export type { Services, Ctx, Draft as DraftOf, ViewportApi, Inspect } from './app/runtime.ts';
+export type { Services, Ctx, Explained, Draft as DraftOf, ViewportApi, Inspect } from './app/runtime.ts';
 export { RecordingChrome, resolveMenu, menuBar, paletteEntries, searchPalette } from './app/chrome.ts';
 export type { ChromeApi, DialogSpec, ToastOpts, MenuRow, PaletteEntry } from './app/chrome.ts';
 export { Workspace, SIDES } from './app/workspace.ts';

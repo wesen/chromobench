@@ -46,7 +46,7 @@ describe('the roll flow through commands (guide §9)', () => {
       expect(log.committed.print.lights.auto.method).toBe('roll');
       expect(log.inEffect().every((e) => e.by === 'auto')).toBe(true);
     }
-    expect(rt.history.entries.map((e) => e.label)).toEqual(['New roll "kodak_portra_400 · 6 frames"', 'First print']);
+    expect(rt.history.entries.map((e) => e.label)).toEqual(['New roll "Kodak Portra 400 · 6 frames"', 'First print']);
     // one undo takes the first print off every frame; redo puts it back
     const printed = recipes(r);
     rt.run('edit.undo');

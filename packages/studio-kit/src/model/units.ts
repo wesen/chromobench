@@ -37,6 +37,18 @@ export function formatSeconds(t: number): string {
   return s.endsWith('0') ? s.slice(0, -1) : s;
 }
 
+/**
+ * A time as a printer sets it on the timer (CHB-027 F13): whole seconds from 10 s, tenths from 1 s, hundredths
+ * below. A slider drag lands on 20 s, not 20.16 s. Each rounding is under 10 % of the time, so ⅙-stop steps
+ * (12 %) never collapse onto the same value.
+ */
+export function printerSeconds(t: number): number {
+  if (!(t > 0)) return t;
+  if (t >= 10) return Math.round(t);
+  if (t >= 1) return Math.round(t * 10) / 10;
+  return Math.max(0.01, Math.round(t * 100) / 100);
+}
+
 const FRACTIONS = [1, 2, 3, 4, 6];
 /** Stops as a fraction where one fits: +1/3, −1/4, +1, +1 1/2; otherwise two decimals. */
 export function formatStops(s: number): string {

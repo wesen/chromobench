@@ -18,7 +18,7 @@ export class DomChrome implements ChromeApi {
   menus: HTMLElement[] = [];
   modal: HTMLElement | null = null;
   /** what was shown, for tests and the inspector */
-  log: { kind: string; text?: string }[] = [];
+  log: { kind: string; text?: string; detail?: string }[] = [];
   private offPointer: ((e: Event) => void) | null = null;
   private onCloseTop: (() => void) | null = null;
   private timers = new Set<ReturnType<typeof setTimeout>>();
@@ -225,10 +225,10 @@ export class DomChrome implements ChromeApi {
   }
 
   // ── toasts ──────────────────────────────────────────────────────────────
-  toast(text: string, { kind = 'info', title = '', ms = 2600 }: ToastOpts = {}): void {
+  toast(text: string, { kind = 'info', title = '', ms = 2600, detail }: ToastOpts = {}): void {
     if (!text) return;
-    this.log.push({ kind: 'toast', text });
-    const t = h('div', { class: ['ck-toast', 'is-' + kind] });
+    this.log.push(detail ? { kind: 'toast', text, detail } : { kind: 'toast', text });
+    const t = h('div', { class: ['ck-toast', 'is-' + kind], ...(detail ? { title: detail, 'data-detail': detail } : {}) });
     if (title) t.append(h('b', { text: title }));
     t.append(h('span', { text }));
     this.toasts.append(t);

@@ -32,7 +32,7 @@ for (const engine of ['gpu', 'reference'] as const) {
   test(`${engine}: first print, enlarger controls, views, probe, strip, ring-around, undo, export`, async ({ page }) => {
     test.setTimeout(240_000);
     await open(page, engine);
-    await expect(page.locator('#engine')).toContainText(engine === 'gpu' ? 'GPU' : 'reference');
+    await expect(page.locator('#engine')).toHaveAttribute('data-engine', engine === 'gpu' ? /GPU/ : /reference/);
     expect(await page.evaluate(() => window.chromobench.variant)).toBe('classic');
     // the first print: enlarger in 'real' mode, integrated to grey (recorded in print.lights.auto)
     const r0 = await page.evaluate(() => window.chromobench.log!.state.print);
@@ -152,11 +152,11 @@ test('offline: after one online visit the real engine starts without a network (
   await page.goto('/?canvas2d&engine=gpu&fresh');
   await expect(page.locator('#offline-state')).toHaveText('offline ready', { timeout: 60_000 });
   await page.reload(); // now controlled: modules and packs pass through the worker's caches
-  await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+  await expect(page.locator('#engine')).toHaveAttribute('data-engine', /GPU/, { timeout: 60_000 });
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await context.setOffline(true);
   await page.reload();
-  await expect(page.locator('#engine')).toContainText('GPU', { timeout: 60_000 });
+  await expect(page.locator('#engine')).toHaveAttribute('data-engine', /GPU/, { timeout: 60_000 });
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.setInputFiles('#file', FIXTURE);
   await expect(page.locator('#status')).toContainText('rendered', { timeout: 60_000 });
