@@ -80,7 +80,9 @@ photo ([shot](shots/08-negative-opened-as-photo-by-mistake.png)). Reload (the on
 **Dev:** the recipe saved in IndexedDB `logs` under the file's hash is resumed (`frames.ts`, `kv.get('logs', sha)`),
 and it says `kind: "digital-raw"`, `source.decode.mode: "photo"`, while this decode ran in scan mode. Decode
 mode and recipe kind are never reconciled. The same trap exists the other way round (photo first opened as a
-negative). A real user cannot clear it (only `?fresh` or clearing site data).
+negative). A real user cannot clear it (only `?fresh` or clearing site data). **The negative pipeline itself works:** opened
+with `?fresh` the same strip prints correctly (auto first print 2.23 s, lights R +2 / B −3 pt; first render 3.9 s)
+([shot](shots/12-negative-fresh-print.png)).
 
 ### F4 — the UI freezes while rendering (major, performance)
 Measured with the rAF stall probe ([scripts/01-install-probe.js](../scripts/01-install-probe.js)):
@@ -147,4 +149,5 @@ in Edit. The empty grid says "No frames yet: open a negative" although he has di
   knowingly. Possibly a key typed into a field reached the global shortcut handler. Needs a repro.
 - **F15** No hint when the content contradicts the chosen mode (orange mask in "photo" mode; no mask or rebate
   in "negative" mode, where the W_ notes show it, but only as jargon).
-- **F16** `raw010.dng` holds three frames; the app shows the strip as one image. Not explored further (S05).
+- **F16** `raw010.dng` holds three frames; the app shows and prints the strip as one image, rebate and gaps
+  included ([shot](shots/12-negative-fresh-print.png)). The auto time (2.23 s) sits at the slider's 2 s floor.

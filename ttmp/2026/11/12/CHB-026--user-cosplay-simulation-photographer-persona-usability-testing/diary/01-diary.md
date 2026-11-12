@@ -370,3 +370,53 @@ findings list and the experience report of this session.
 ### Technical details
 - Session state left behind: the preview server on port 4600 (background) and the MCP browser on `/` with
   raw010 open (persistent storage now holds per-hash logs for DSC_8559 and raw010).
+
+## Step 7: Does negative development work at all? Yes, on a clean slate
+
+The user asked whether I managed both negative and positive development. Positive (digital RAW → film → print)
+worked in Step 3. For the negative I had only seen orange strips, the second time because of F3, so I opened
+`raw010.dng` once more with `?fresh` (in-memory store, no poisoned recipe). It printed correctly: a plausible
+positive with an automatic first print. The negative path works; what breaks it is the mode bookkeeping around it.
+
+### Prompt Context
+**User prompt (verbatim):** "were you able to do both negative and positive development?"
+**Assistant interpretation:** Confirm both pipelines produce a correct print, separating pipeline problems from
+UX/bookkeeping problems.
+**Inferred user intent:** Know whether the core physics works for his father's two kinds of material.
+
+### What I did
+- `page.goto('/?fresh')`, `setInputFiles('#file', …/raw010.dng)` with "photo" unchecked; probe read; dumped the
+  committed recipe; screenshots `various/shots/12-negative-fresh-print.png`, `13-negative-fresh-negative-tab.png`.
+
+### Why
+- `?fresh` is out of character (he can't do it), but it isolates F3 from the negative pipeline itself.
+
+### What worked
+- `kind: "negative-scan"`, `decode: {mode: "scan", encoding: "linear"}`; auto first print `time_s 2.227`,
+  `lights.logH [0.041, 0.006, -0.063]` (shown as R +2 pt, G 0, B −3 pt); first render 3.9 s.
+- The print looks right: blue sky, yellow flowers, neutral greys; slightly flat.
+
+### What didn't work
+- One stall of 3825 ms during the open (DNG decode and conditioning on the main thread, F4).
+- The strip of three frames is printed as one image, rebate and frame gaps included (F16).
+- 2.23 s is at the bottom of the Time slider's 2–60 s range (the thumb sits at the left end).
+
+### What I learned
+- The negative→print path and the auto first print (CHB-023) work on real material; F3 is purely about
+  resumed recipes.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The auto first print's time lands near the slider's minimum; a short time on a small working image may mean
+  the slider range should follow the auto exposure.
+
+### What should be done in the future
+- F16: split strips into frames (CHB-013 `filmLayout`).
+
+### Code review instructions
+- N/A.
+
+### Technical details
+- Findings updated: F3 (the pipeline works on a clean slate), F16.
