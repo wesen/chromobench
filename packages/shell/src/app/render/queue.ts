@@ -35,7 +35,7 @@ interface Slot {
   shownGen: number;
   lane: Lane;
   waiting: Waiting | null;
-  inflight: { gen: number; key: string; ctl: AbortController; bridge: RenderBridge<any> } | null;
+  inflight: { gen: number; key: string; ctl: AbortController; bridge: RenderBridge<any>; job: Waiting } | null;
   shown: { r: Rendered; bridge: RenderBridge<any> } | null;
   /** when the slot last presented (or was made), on the queue's clock */
   shownAt: number;
@@ -68,6 +68,12 @@ export class RenderQueue {
    * aborted (right for a fast engine; a slow one would show nothing until the hand stops).
    */
   progressMs = 0;
+  /**
+   * Live requests abort background renders in flight, which run again when live work is done (CHB-027). Off by
+   * default: with an engine that computes on the main thread an abort saves nothing; with one in a worker (or on
+   * the GPU) the thumbnails no longer delay the main viewer.
+   */
+  preemptBackground = false;
   /** the clock (tests replace it) */
   now: () => number = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   private readonly opts: { idle?: (f: () => void, key: string) => void; onError?: (e: unknown) => void; thumbLimit?: number };
@@ -110,14 +116,25 @@ export class RenderQueue {
     const gen = ++s.gen;
     s.waiting = { gen, r, bridge, key, opts: { ...o, pass, lane } };
     // progress (CHB-027): with progressMs set, a slot that has shown nothing for that long lets its in-flight render
-    // finish, so a slow engine still shows something while the hand keeps moving (the newest request runs after it)
-    const starved = this.progressMs > 0 && s.inflight !== null && this.now() - s.shownAt >= this.progressMs;
+    // finish when the newer request is another draft, so a slow engine still shows something while the hand keeps
+    // moving (the newest request runs after it); a screen or refine pass (the hand stopped) aborts it at once
+    const starved = this.progressMs > 0 && pass === 'draft' && s.inflight !== null && this.now() - s.shownAt >= this.progressMs;
     if (s.inflight && s.inflight.key !== key && !starved) {
       s.inflight.ctl.abort();
       this.stats.aborted++;
     }
+    if (lane === 'live' && this.preemptBackground) this.preempt();
     this.pump(s);
     return gen;
+  }
+  /** Live work preempts background renders in flight (CHB-027): each is aborted and waits to run again. */
+  private preempt(): void {
+    for (const x of this.slots.values()) {
+      if (x.lane !== 'bg' || !x.inflight || x.inflight.ctl.signal.aborted) continue;
+      if (!x.waiting) x.waiting = x.inflight.job;
+      x.inflight.ctl.abort();
+      this.stats.aborted++;
+    }
   }
   private liveBusy(): boolean {
     for (const s of this.slots.values()) if (s.lane === 'live' && (s.inflight || s.waiting)) return true;
@@ -133,7 +150,7 @@ export class RenderQueue {
     }
     s.waiting = null;
     const ctl = new AbortController();
-    s.inflight = { gen: w.gen, key: w.key, ctl, bridge: w.bridge };
+    s.inflight = { gen: w.gen, key: w.key, ctl, bridge: w.bridge, job: w };
     this.stats.renders++;
     let p: Promise<Rendered>;
     try {

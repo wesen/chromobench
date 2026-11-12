@@ -5,7 +5,7 @@
 //
 // URL options: ?variant=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
-// reference engine's, default 1024); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
+// reference engine's, default 512); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
 import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
@@ -213,6 +213,7 @@ async function main(): Promise<void> {
   if (host.settings) {
     studio.bridge.draftTargetMs = 150;
     rt.renders.progressMs = 250;
+    rt.renders.preemptBackground = true;
   }
   // external agents: a bridge serving this page (or ?bridge=ws://127.0.0.1:7341/ws/page from the dev server)
   const bridgeEl = el('span', { id: 'bridge', class: 'pill', title: 'External agents (Claude Code, Claude Desktop) through chromobench serve' });

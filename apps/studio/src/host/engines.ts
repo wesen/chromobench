@@ -29,7 +29,8 @@ export interface HostOptions {
   /** Working image long side for the GPU engine (default 4000; 0 = the file's own size). */
   long?: number;
   /**
-   * Working image long side for the reference engine (default 1024, CHB-027 F10; 512 before). It computes in f64
+   * Working image long side for the reference engine (default 512; ?refLong=1024 is sharper, ≈ 3× slower to the final
+   * render, CHB-027 F10). It computes in f64
    * on the CPU, in the engine worker, and only the pixels a preview shows (sampled previews).
    */
   refLong?: number;
@@ -70,8 +71,8 @@ export interface HostEngine {
 }
 
 const DEFAULT_LONG = 4000;
-const DEFAULT_REF_LONG = 1024;
-/** The reference engine's cache: node images at the working size are 1024 × 683 × 4 × 8 bytes ≈ 22 MB each. */
+const DEFAULT_REF_LONG = 512;
+/** The reference engine's cache: node images at 1024 × 683 (?refLong=1024) are ≈ 22 MB each (4 channels, f64). */
 const REF_CACHE = { cacheLimit: 48, cacheBytes: 768 * 2 ** 20 };
 
 let rawDecoder: RawDecoder | null = null;

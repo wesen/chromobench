@@ -36,7 +36,7 @@ test('reference engine in the worker: no frozen window on open or drag; drafts c
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(probe);
-  await page.goto('/?nosw&canvas2d&fresh&engine=reference');
+  await page.goto('/?nosw&canvas2d&fresh&engine=reference&refLong=1024');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await expect(page.locator('#engine')).toHaveAttribute('data-engine', /reference · CPU f64 \(worker\) · 1024 px/);
   await page.evaluate(() => {
