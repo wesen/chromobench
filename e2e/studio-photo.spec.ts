@@ -3,6 +3,7 @@
 // on the GPU engine, printed through the same paper model as a negative scan.
 import { expect, test } from '@playwright/test';
 import { writeTiff } from '@chromobench/ingest';
+import { opened } from './support.ts';
 
 const W = 600, H = 400;
 
@@ -45,8 +46,7 @@ test('a camera RAW is guessed to be a photo, shot on film and printed on the GPU
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   // CHB-027: no "photo" checkbox any more; the studio guesses (no orange mask, no film edge: a photo)
   await page.setInputFiles('#file', { name: 'scene.dng', mimeType: 'image/x-adobe-dng', buffer: Buffer.from(bayerDng()) });
-  await expect(page.locator('#status')).toContainText('rendered', { timeout: 120_000 });
-  await page.evaluate(() => window.chromobench.idle());
+  await opened(page, 1, 120_000);
   await expect(page.locator('#notes')).toHaveAttribute('title', /photo: camera RAW \(Synth Camera\) via LibRaw, photo mode/);
   await expect(page.locator('#notes')).toContainText('Synth Camera photo');
   const s = await page.evaluate(() => ({ kind: window.chromobench.log!.state.kind, stock: window.chromobench.log!.state.capture?.stock, w: window.chromobench.size()!.width }));

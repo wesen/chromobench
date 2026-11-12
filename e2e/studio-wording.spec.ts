@@ -4,6 +4,7 @@
 // in the tooltip, Edit ▸ Undo names the frame it acts on, and a slider drag lands on a time a printer sets.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { opened } from './support.ts';
 
 const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.meta.url).pathname;
 const bytes = readFileSync(FIXTURE);
@@ -23,8 +24,7 @@ test('typed values, names, undo naming and round drags', async ({ page }) => {
   await expect(page.locator('#engine')).toHaveText('Preview only (no film physics)');
   await expect(page.locator('#engine')).toHaveAttribute('data-engine', /mock/);
   await page.setInputFiles('#file', [file('first.tif', 1), file('second.tif', 2)]);
-  await expect(page.locator('#status')).toContainText(/rendered|opened 2 files/);
-  await idle(page);
+  await opened(page, 2);
 
   const arg = page.locator('.cb-arg[data-path="print.enlarger.time_s"]').first();
   const field = arg.locator('.cb-num');

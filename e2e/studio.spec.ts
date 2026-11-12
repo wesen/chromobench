@@ -6,6 +6,7 @@
 // keyboard-driven probe on the canvas (the probe is the viewer's I tool).
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { opened } from './support.ts';
 
 /** Edit ▸ Undo / Redo from the studio's menu bar (CHB-027: the host's Undo/Redo buttons are gone) */
 async function menu(page: Page, title: string, command: string): Promise<void> {
@@ -33,8 +34,7 @@ async function boot(page: Page, extra = ''): Promise<void> {
 }
 async function open(page: Page, files: string | { name: string; mimeType: string; buffer: Buffer }[] = FIXTURE): Promise<void> {
   await page.setInputFiles('#file', files);
-  await expect(page.locator('#status')).toHaveText(/rendered|opened/); // the open has finished: its last render may come before or after "opened …" (renders run in the engine worker)
-  await idle(page);
+  await opened(page, Array.isArray(files) ? files.length : 1);
 }
 
 let pageErrors: string[] = [];
@@ -71,8 +71,7 @@ test('a reload keeps the recipe by hash; opening the file again re-attaches it',
 test('a folder of scans opens every scan in it, the first one selected', async ({ page }) => {
   await boot(page, '&fresh');
   await page.setInputFiles('#folder', FIXTURE_DIR);
-  await expect(page.locator('#status')).toContainText(/rendered|opened/);
-  await idle(page);
+  await opened(page);
   const n = await page.evaluate(() => window.chromobench.studio.frames.all().length);
   expect(n).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.chromobench.studio.current)).not.toBeNull();

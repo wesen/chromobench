@@ -629,3 +629,82 @@ style; commit them.
 - Doc 01 diagrams: slider drag/release/Mod+Z (sequence), agent proposal approved later (sequence), Mod+Z routing
   (flowchart). Doc 02 diagrams: components and threads (flowchart), one preview render in the reference
   configuration (sequence).
+
+## Step 9: e2e waits on status text (task vuwz)
+
+Every spec that opened files waited for `#status` to contain "rendered" or "opened", then called `idle()`. That
+signal is unreliable: renders run in the engine worker and write "rendered …" whenever one finishes, so in a
+multi-file open the first file's render satisfies the wait while the second file is still decoding, and `idle()`
+does not wait for the open flow (it waits for renders, log writes and queued frames, not for `openFiles` in
+`main.ts`). Two specs (open-mode, strip) already used the correct condition inline: the expected number of frames is
+open and the status no longer says "opening". That condition is now one helper, `opened(page, frames, timeout)` in
+`e2e/support.ts`, and the ten specs that opened files use it.
+
+The remaining `#status` waits look for a specific outcome of the action just taken ("was already open", "2 frames in
+the library", "exported", "not applied", the offline "rendered") and are not races; they stay.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7.
+**Assistant interpretation:** Task vuwz: find the e2e waits on status text that race and switch them to waits that
+end when the work has ended, with `window.chromobench.idle()` after.
+**Inferred user intent:** Browser tests that fail only when the machine is busy cost more than they find.
+**Commit (code):** see the next commit, "CHB-032: e2e opens wait for the open flow (frames open, no 'opening') then idle(); one helper".
+
+### What I did
+- Read the open flow (`apps/studio/src/main.ts:336-387`: "opening <name> (n of N)…" before each file, the outcome
+  after the last), the render status (`main.ts:239-242`), `idle()` (`main.ts:681-692`) and `FrameStore.all()/flush()`
+  (`packages/studio-kit/src/bridge/frames.ts:152,329`; `all()` lists open frames only).
+- `grep -n "#status\|toContainText" e2e/*.ts`, then each wait in context.
+- New `e2e/support.ts`: `idle(page)` and `opened(page, frames = 1, timeout = 30_000)`
+  (`frames.all().length >= frames && !/opening/.test(#status)`, then `idle()`).
+- Switched (script `<scratchpad>/chb032/e2e-waits.py`): `studio.spec.ts` `open()` helper (frames = number of files) and
+  the folder open; `chat.spec.ts` boot; `m1-walking-skeleton.spec.ts` `open()`; `studio-wording.spec.ts` (2 files);
+  `studio-responsive.spec.ts` (240 s); `studio-real.spec.ts` `open()` (60 s); `studio-photo.spec.ts` and
+  `studio-decoders.spec.ts` (120 s); `studio-open-mode.spec.ts` twice and `studio-strip.spec.ts` (their inline
+  condition, now the helper; `===` became `>=`, and both tests assert the exact frames right after).
+- `pnpm typecheck` 0, `pnpm lint` 0.
+- `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm exec playwright test
+  --project=chromium-webgpu <the ten specs>` → 26 passed, 1 failed (below); the failed spec alone with
+  `--repeat-each=3` → 9 passed.
+
+### Why
+- The frame count guards the start (before the first "opening" the count is still the old one) and the status guards
+  the end (it says "opening" until the loop has written its outcome), so the pair is true only after the open flow.
+- I could not add an "open finished" promise to the `window.chromobench` hook: the hook is in `main.ts`, which
+  CHB-031 is editing.
+
+### What worked
+- 26 of 27 tests in the first run, 9 of 9 in the repeat of the one that failed.
+
+### What didn't work
+- `pnpm exec playwright test --project chromium-webgpu e2e/studio.spec.ts …` → `Error: Project(s) "e2e/studio.spec.ts",
+  … not found`: `--project` takes several values; `--project=chromium-webgpu` works.
+- First run: `e2e/studio-open-mode.spec.ts:92` ("the library survives a reload") failed at line 111,
+  `expect.poll(… every thumb:<id> is a data:image/jpeg …, { timeout: 30_000 }).toBe(true)` → `Received: false`,
+  52.8 s with 10 specs in parallel. Alone, three times: 22.6–24.3 s, all passed. The thumbnails are captured by
+  `scheduleThumb` in `main.ts` (first try after 500 ms, then 3 s apart, 6 tries, each skipped while the frame still
+  renders), so under load six tries can run out before the 30 s poll ends. My edit of that test only replaced the
+  open wait with the equivalent helper, before the poll. Left as is (the scheduler is in `main.ts`); noted below.
+
+### What I learned
+- `idle()` does not cover the open flow; a test that opens files must wait for the flow first.
+
+### What was tricky to build
+- Re-opening a file that is already open does not grow the frame count, so `opened()` cannot detect it; those tests
+  wait for the "already open" text, and the helper's doc says so.
+
+### What warrants a second pair of eyes
+- The thumbnail test at `e2e/studio-open-mode.spec.ts:105-111` depends on `scheduleThumb`'s retry budget under load.
+  If it fails in the full browser run, check whether `main` fails the same way before blaming the waits.
+
+### What should be done in the future
+- After CHB-031 merges: an `opened()` promise on the `window.chromobench` hook (resolved at the end of `openFiles`)
+  would replace the frame-count condition; and a thumbnail retry that does not run out under load.
+
+### Code review instructions
+- `e2e/support.ts`; `git diff HEAD~1 -- e2e/`.
+- `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm exec playwright test --project=chromium-webgpu e2e/studio-wording.spec.ts e2e/studio.spec.ts`.
+
+### Technical details
+- Timeouts kept per spec: mock-engine specs 30 s (the `waitForFunction` default; they used `expect`'s 5 s before),
+  real-engine specs their previous 60/120/240 s.

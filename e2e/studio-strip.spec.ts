@@ -3,6 +3,7 @@
 // back. Synthetic strip only (ingest's plantedFrames: three 645 frames on 120 film, the first 0.5 D denser).
 import { expect, test, type Page } from '@playwright/test';
 import { plantedFrames, writeTiff16 } from '@chromobench/ingest';
+import { opened } from './support.ts';
 
 function stripTiff(): Buffer {
   const p = plantedFrames({ frames: 3, pxPerMm: 2.5, exposureD: [0.5, 0, 0] });
@@ -30,8 +31,7 @@ test('a strip opens as three frames, each cropped and printed on its own; remove
   await page.goto('/?nosw&canvas2d&fresh&engine=reference');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await page.setInputFiles('#file', STRIP);
-  await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 3 && !/opening/.test(document.querySelector('#status')?.textContent ?? ''), null, { timeout: 120_000 });
-  await idle(page);
+  await opened(page, 3, 120_000);
   const s = await state(page);
   expect(s.map((f: { name: string }) => f.name)).toEqual(['strip-07.tif · 1/3', 'strip-07.tif · 2/3', 'strip-07.tif · 3/3']);
   // one source: all three frames read the same file
