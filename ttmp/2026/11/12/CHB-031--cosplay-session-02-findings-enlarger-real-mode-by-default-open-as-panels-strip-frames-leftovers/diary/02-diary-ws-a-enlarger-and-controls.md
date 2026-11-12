@@ -327,7 +327,7 @@ Then finish WS-A: the remaining items of the resume list (F9 and F12 leftovers a
 The user's instruction (verbatim): \"commit at appropriate intervals and keep a detailed diary as you work (using the diary format from the skill)\". Continue the same diary file with the next step number: the investigation format from /home/manuel/.claude/skills/diary/references/investigation-entry.md, every section in every step; the first new step records the resume (what you found uncommitted and what you did with it) and quotes this prompt verbatim in its Prompt Context. Stage named paths only. Preview port 4711 if you run the app. The owner's Mac is closed: do NOT use the Mac/real-GPU path; record any GPU check as pending. Parallel agents are continuing CHB-031 WS-B (open flow, frames.ts, decode.ts) and CHB-032 (housekeeping) in their own worktrees; `cb.ts` is shared with WS-B — keep edits local."
 **Assistant interpretation:** Review the uncommitted F9 work and keep or revert it, then finish what is open (F9, F12, the e2e spec, the checks, the task check-offs) and report.
 **Inferred user intent:** No work lost across the restart. Each finding is either fixed or explained with evidence.
-**Commit (code):** this step's commit ("CHB-031 WS-A: F9 wording (tooltips, view tabs), wrapped group notes, darkroom empty state and mode select, e2e studio-enlarger spec; diary step 4")
+**Commit (code):** b90d7ef — "CHB-031 WS-A: F9 wording (tooltips, view tabs), wrapped group notes, darkroom empty state and mode select, e2e studio-enlarger spec; diary step 4"
 
 ### What I did
 - Read the brief, the plan (WS-A), the CHB-031 diary, this diary (Steps 1–3), `git diff` (8 files) and the
@@ -442,3 +442,72 @@ The user's instruction (verbatim): \"commit at appropriate intervals and keep a 
   graphics card to compute on]. Pictures are previewed smaller."; then `\nTechnical: <label>`.
 - `notesTip`: the summary, then ". Developed from the camera RAW with its own colour." for `photo: … via LibRaw`, or
   ". Read from the camera RAW without developing it, as a scan." for other LibRaw decodes, then `\nTechnical: <notes · joined>`.
+
+## Step 5: Full browser suite green; tasks checked; WS-A handed over
+
+Last step of the workstream: the full browser suite on this workstream's ports, then the plan tasks. All 98
+browser tests passed, the new `studio-enlarger` spec among them. I checked off the five tasks that are WS-A's
+alone (x86v, 0xav, 5ywv, 9i1n, 3z8z). I left l1ny open. Its F8, F9 and F12 parts are done (Step 3, Step 4, and
+F12 verified as already fixed). The same task also lists F10 on the CPU engine, which the plan gives to WS-B, so
+checking it here would mark F10 done without anyone having done it.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 4.
+**Assistant interpretation:** Run the last checks, check off the finished tasks and report.
+**Inferred user intent:** A branch the orchestrator can merge without re-running anything blind.
+**Commit (code):** this step's commit ("CHB-031 WS-A: tasks checked (x86v 0xav 5ywv 9i1n 3z8z); diary step 5")
+
+### What I did
+- `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 pnpm test:browser` (background;
+  output in `…/scratchpad/wsa/browser-step5.txt`).
+- `docmgr task check --ticket CHB-031 --id x86v` and the same for 0xav, 5ywv, 9i1n and 3z8z.
+- `git checkout --` on `ttmp/…/CHB-027--…/various/ws-d/01-synthetic-strip-frame2.png`: the browser suite rewrites
+  that screenshot (`e2e/studio-strip.spec.ts:51`), and the change is not this workstream's.
+
+### Why
+- l1ny stays open for the reason given above. The orchestrator can check it once WS-B's F10 is in.
+
+### What worked
+- Browser suite: `98 passed (3.8m)`, exit 0, with no failures and no flaky tests. That covers chromium-webgpu
+  (including `studio-enlarger` 5/5, `studio`, `studio-real` with the renamed tabs, `studio-wording` with F8),
+  gpu-parity, shell-demo and studio-kit (the darkroom, simple, lab and tiny variants mount and render).
+- Unit suite (Step 4): 97 files, 2749 passed, 7 skipped. `pnpm typecheck` and `pnpm lint` are clean.
+
+### What didn't work
+- No failures. The one side effect is the CHB-027 screenshot that `studio-strip.spec.ts` writes into `ttmp/` on
+  every run (restored, not committed).
+
+### What I learned
+- An e2e spec writes into a ticket's `various/` folder on every run. Any agent that stages broadly would commit it.
+
+### What was tricky to build
+- N/A for this step (checks and bookkeeping).
+
+### What warrants a second pair of eyes
+- The merge with WS-B: both change `packages/studio-kit/src/cb.ts` (no overlapping hunks: WS-A at the
+  `views`/`controls()`/`ifFrame`/`VIEW_LABELS` lines, WS-B elsewhere) and `test/__snapshots__/variants.test.ts.snap`
+  (regenerate with `npx vitest run packages/studio-kit/test/variants.test.ts -u` after the merge and read the diff).
+  Contract 0.4 regenerated docs (`pnpm gen`) may conflict with CHB-032's; regenerate rather than hand-merge.
+
+### What should be done in the future
+- Session 03 (task b50a): the darkroom flow in real mode (test strip in seconds, time, filtration), and the old
+  library's normalised frames, which keep their mode, show the mode select, and switch with one click.
+- Real-GPU check on the M1 Max: pending (Mac closed).
+- Not changed in this workstream: the looks kit's "density" look writes `print.enlarger.time_s`, which does nothing
+  on a normalised recipe. Agent proposals can also set Time on a normalised recipe, because the inert rule is enforced in
+  `cb.arg`, not in the EditLog. The DSL's `cb.testStrip(frame, {vary:'time'})` is not checked in normalised mode.
+- CHB-032: `e2e/studio-strip.spec.ts` should write its screenshot to `test-results/`, not into a ticket folder.
+
+### Code review instructions
+- `git log --oneline 9d10010..task/chb-031-enlarger`; review in commit order (67a4a57, 548abf9, b90d7ef, this one).
+- Re-run: `pnpm typecheck && pnpm lint && pnpm test`; `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 pnpm test:browser`.
+
+### Technical details
+- Findings status for WS-A: F17 fixed (real default via contract 0.4; normalised as the default of simple and tiny,
+  with Time, Aperture and magnification hidden and refused; pixel tests on the RefEngine, on the CPU worker in the
+  browser, and on SwiftShader WebGPU). F19 fixed (controls panels, darkroom, looks). F23 fixed (film and scanner by
+  kind; viewing light explained). F8 fixed (a change needs a sign and a unit). F9 fixed (tooltips and tab names).
+  F12 already fixed by CHB-027 (verified, no change).
+- Shared files touched: `apps/studio/src/main.ts` (Step 2: `createStudio({ enlarger })`; Step 4: two tooltip lines),
+  `packages/studio-kit/src/cb.ts` (local hunks), `packages/shell/src/dom/forms/basic.ts` (one line), and the
+  contract (0.4.0, CC-017).
