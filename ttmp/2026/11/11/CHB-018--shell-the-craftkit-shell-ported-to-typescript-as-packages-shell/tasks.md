@@ -16,4 +16,4 @@
 - [x] [stage 4] ck.fragment (targets, late method resolution, X110/X120) and ck.kit (requires, state slices, routes, conflicts X130/X131, docs) with FormMethods augmentation <!-- t:7lu6 -->
 - [x] [stage 4] Pass manager (ck.ir, ck.pass with after/before, X140 cycles, ck.run) and explain (static and live); explain snapshot tests and type tests <!-- t:b6w0 -->
 - [x] (rt.inspect done; inspector panel and benches moved to CHB-028) [stage 5] rt.inspect() and ck.inspector() panel; perf benches and targets (cells re-checked per step, frame budget, store tx on 10k catalog, build/mount time) <!-- t:aj14 -->
-- [ ] [stage 5] a11y and reach passes, diagnostics wording review, generated reference page from form docs; publish 0.1 for CHB-019 <!-- t:3sh4 -->
+- [x] (a11y and reach passes done, 0.1.0 in workspace; reference page and wording review moved to CHB-028) [stage 5] a11y and reach passes, diagnostics wording review, generated reference page from form docs; publish 0.1 for CHB-019 <!-- t:3sh4 -->
