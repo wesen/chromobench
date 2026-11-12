@@ -447,6 +447,12 @@ function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, expo
   const idle = async (): Promise<void> => {
     for (let i = 0; i < 3; i++) {
       await rt.settle();
+      // renders run in the engine worker (CHB-027): settle() can return while one is in flight; wait for it (≤ 5 min)
+      const until = performance.now() + 300_000;
+      while (rt.renders.busy() && performance.now() < until) {
+        await Promise.race([rt.renders.idle(), new Promise((r) => setTimeout(r, 100))]);
+        await rt.settle();
+      }
       await studio.flush();
       await new Promise((r) => setTimeout(r, 0));
     }
