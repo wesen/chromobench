@@ -853,3 +853,60 @@ generated files and snapshots instead of hand-merging them.
 
 ### Technical details
 - `.gitignore:3` is `test-results/`.
+
+## Step 12: Merge main (CHB-031 WS-A) and fix the one semantic conflict
+
+`main` had moved to e2af842 (CHB-031 WS-A: contract 0.4.0, real enlarger mode by default). It did not touch the
+kits I am about to split, but it added `e2e/studio-enlarger.spec.ts` and edited three specs I had changed, so I
+merged before the kit splits rather than at the end. Git merged without conflicts (d4fa507). One conflict was
+semantic: WS-A's new `apps/studio/test/enlarger-mode.test.ts` builds `new RefEngine()` without data, which Step 5
+made a compile error. It now passes `{ data: nodePacksData() }`, as the other eleven construction sites do.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 7; the orchestrator's merge instruction is quoted in Step 11.
+**Assistant interpretation:** `git merge main`; regenerate instead of hand-merging generated files and snapshots;
+keep the checks green.
+**Inferred user intent:** The housekeeping branch should land on top of CHB-031 without surprises.
+**Commit (code):** d4fa507 — "Merge main (CHB-031 WS-A) into task/chb-032-housekeeping"; then the next commit,
+"CHB-032: enlarger-mode test passes RefEngine its data (merge of main; RefEngine data is required since 1927c3f)".
+
+### What I did
+- Checked first what main changed since the branch point (9d10010): nothing under `packages/studio-kit/kits`,
+  `packages/dsl/src`, `packages/gpu`, `ingest`, `output`; under `e2e/` a new `studio-enlarger.spec.ts` and small
+  edits to `studio.spec.ts`, `studio-wording.spec.ts`, `studio-real.spec.ts`.
+- `git merge main` → merged cleanly; `pnpm install --offline`.
+- `pnpm typecheck` → `apps/studio/test/enlarger-mode.test.ts(38,13): error TS2554: Expected 1 arguments, but got 0.`;
+  `pnpm test` → 5 failures in that file. Fixed lines 5 and 38.
+- After the fix: `pnpm typecheck` 0, `pnpm lint` 0, `pnpm gen:check` → `gen:check ok (26 files)` (nothing to
+  regenerate), `pnpm test` → 97 files, 2749 passed, 7 skipped; no snapshot written or obsolete.
+- Read the new spec's open helper: it waits for `window.chromobench.log` (true once the opened frame is selected,
+  which happens right after `studio.openFile` returns, with nothing awaited before the outcome is written), then
+  `idle()`. Not a race for its single-file opens; left as WS-A wrote it.
+
+### Why
+- Merging before the kit splits keeps the splits' commits on the code that will land.
+
+### What worked
+- A clean merge; one test file to adapt.
+
+### What didn't work
+- The five `enlarger-mode.test.ts` failures above (all from the missing `data`), fixed.
+
+### What I learned
+- The new counts after the merge (97 files, 2749 tests) are the baseline for the remaining clean-ups.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- N/A.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `git show HEAD -- apps/studio/test/enlarger-mode.test.ts`; `pnpm vitest run apps/studio/test/enlarger-mode.test.ts`.
+
+### Technical details
+- Main's spec edits next to mine: the inspection view names (`'No mask', 'Clipping'`) in `studio.spec.ts` and
+  `studio-real.spec.ts`, the relative-entry wording in `studio-wording.spec.ts`; my `opened()` waits are intact.
