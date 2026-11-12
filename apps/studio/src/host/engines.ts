@@ -10,7 +10,7 @@
 // the decoded pixels back as a transferable. ?worker=0 (HostOptions.worker false) runs everything on this thread.
 import type { Engine, FrameRecipe, Mutation, Vec3, Box } from '@chromobench/contract';
 import {
-  bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, RefEngine, SCANNER_IDS, scannerForward, type PhysicsData,
+  bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, SCANNER_IDS, scannerForward, type PhysicsData,
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
@@ -18,6 +18,7 @@ import {
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import { decodeFile } from './decode.ts';
+import { referenceEngine, type RefLike } from './engine-serve.ts';
 import type { IntegrateToGrey } from './first-print.ts';
 import { StudioEngine, type HostServices } from './studio-engine.ts';
 import { WorkerClient, WorkerEngine } from './worker-engine.ts';
@@ -34,7 +35,11 @@ export interface HostOptions {
    * on the CPU, in the engine worker, and only the pixels a preview shows (sampled previews).
    */
   refLong?: number;
-  /** The reference engine's physics: 'exact' (every pixel through the physics) or 'tabulated' (core's tables, as the GPU engine). */
+  /**
+   * The reference engine's physics (CHB-031 F10): 'tabulated' (default) computes previews through core's tables, as
+   * the GPU engine's previews (2–5× faster on the CPU), and exports exact; 'exact' runs every pixel through the
+   * physics, previews too.
+   */
   refMode?: 'exact' | 'tabulated';
   /** Decode and run the reference engine in the engine worker (default true); false: on this thread (CHB-023's way). */
   worker?: boolean;
@@ -72,7 +77,7 @@ export interface HostEngine {
 
 const DEFAULT_LONG = 4000;
 const DEFAULT_REF_LONG = 512;
-const DEFAULT_REF_MODE: 'exact' | 'tabulated' = 'exact';
+const DEFAULT_REF_MODE: 'exact' | 'tabulated' = 'tabulated';
 /** The reference engine's cache: node images at 1024 × 683 (?refLong=1024) are ≈ 22 MB each (4 channels, f64). */
 const REF_CACHE = { cacheLimit: 48, cacheBytes: 768 * 2 ** 20 };
 
@@ -194,10 +199,10 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     }
   }
   const inWorker = client !== null;
-  if (!primary) primary = new RefEngine({ data, sampled: true, mode: refMode, ...REF_CACHE });
+  if (!primary) primary = referenceEngine({ data, sampled: true, mode: refMode, ...REF_CACHE });
   if (primary.id === 'reference') {
     long = o.refLong ?? DEFAULT_REF_LONG;
-    label = `reference · CPU f64${refMode === 'tabulated' ? ' tabulated' : ''}${inWorker ? ' (worker)' : ''}${why ? ` (no WebGPU: ${why})` : ''}`;
+    label = `reference · CPU f64${refMode === 'tabulated' ? ' (tabulated previews, exact export)' : ''}${inWorker ? ' (worker)' : ''}${why ? ` (no WebGPU: ${why})` : ''}`;
   }
   // the reference engine in the worker keeps the decoded pixels there ('register': none come back, the register
   // hook below makes the last decode the engine's); the GPU engine gets them back as a transferable ('return')
@@ -211,7 +216,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     forget: (e, sha) => (e as { forgetSource?: (s: string) => void }).forgetSource?.(sha),
     register: (e, info, px) => {
       if (e === inEngine) inEngine.register(info.sha256);
-      else if (px) (e as GpuEngine | RefEngine).openDecoded(info, px);
+      else if (px) (e as GpuEngine | RefLike).openDecoded(info, px);
       else throw new Error(`register ${info.sha256.slice(0, 12)}…: no pixels`);
     },
     classify: (D, sigma, res) => CLASS_CODE[classify(D, sigma, res).cls],

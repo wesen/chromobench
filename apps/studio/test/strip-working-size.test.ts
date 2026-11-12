@@ -1,14 +1,15 @@
 // CHB-031 WS-B (F20, F10): a strip's working image is sized for its frames, so each frame of a strip gets about the
 // working size a single picture gets (the reference engine's 512 px over a three-frame strip left ≈ 170–220 px a
-// frame: blocky). Synthetic strips only (ingest's plantedFrames).
+// frame: blocky), and a strip's base is read on the gaps between its frames when the film edge found lies on a frame
+// (raw010's thin first frame). Synthetic strips only (ingest's plantedFrames).
 import { describe, expect, it } from 'vitest';
 import { plantedFrames, writeTiff16, type RawDecoder } from '@chromobench/ingest';
-import { decodeScan, scaleBox, stripScale } from '../src/host/decode.ts';
+import { decodeScan, gapBase, scaleBox, stripScale } from '../src/host/decode.ts';
 
 const noRaw: RawDecoder = { name: 'none', decode: () => Promise.reject(new Error('no camera RAW here')) };
 
-function stripTiff(o: { frames?: number; pxPerMm?: number; film?: '135' | '120' } = {}): Uint8Array {
-  const p = plantedFrames({ frames: o.frames ?? 3, pxPerMm: o.pxPerMm ?? 8, ...(o.film === '135' ? { film: '135' as const } : {}) });
+function stripTiff(o: { frames?: number; pxPerMm?: number; film?: '135' | '120'; dark?: number[] } = {}): Uint8Array {
+  const p = plantedFrames({ frames: o.frames ?? 3, pxPerMm: o.pxPerMm ?? 8, ...(o.film === '135' ? { film: '135' as const } : {}), ...(o.dark ? { dark: o.dark } : {}) });
   const codes = new Uint16Array(p.rgb.length);
   for (let i = 0; i < p.rgb.length; i++) codes[i] = Math.round(65535 * Math.min(1, Math.max(0, p.rgb[i]!)));
   return writeTiff16(p.w, p.h, codes);
@@ -62,5 +63,41 @@ describe('decodeScan of a strip', () => {
     const full = await decodeScan(bytes, 'e'.repeat(64), 'strip.tif', { long: 4000, dust: false, roll: new Map(), raw: noRaw });
     expect(full.notes.some((n) => /strip working image/.test(n))).toBe(false);
     expect(full.frames).toHaveLength(3);
+  });
+});
+
+const D = (T: readonly number[], ref: readonly number[]): number => Math.max(...T.map((t, k) => Math.abs(Math.log10(t / ref[k]!))));
+
+describe('a strip\'s base (CHB-031 F20: frame 1 hazy)', () => {
+  it('gapBase reads the unexposed film between frames: the planted base, veil included', () => {
+    for (const axis of ['y', 'x'] as const) {
+      const p = plantedFrames({ frames: 3, pxPerMm: 3, axis, dark: [0] });
+      const boxes = p.truth.frames;
+      const g = gapBase(p.rgb, p.w, boxes, axis)!;
+      expect(g.pixels).toBeGreaterThan(100);
+      expect(D(g.Traw.map((t, k) => t - p.truth.veil[k]!), p.truth.baseT)).toBeLessThan(0.01);
+      // the box is a gap: on no frame
+      for (const b of boxes) expect(Math.max(0, Math.min(b.x + b.w, g.box.x + g.box.w) - Math.max(b.x, g.box.x)) * Math.max(0, Math.min(b.y + b.h, g.box.y + g.box.h) - Math.max(b.y, g.box.y))).toBe(0);
+    }
+    expect(gapBase(new Float32Array(30), 5, [{ x: 0, y: 0, w: 5, h: 2 }, { x: 0, y: 3, w: 5, h: 2 }], 'y')).toBeNull();
+  });
+
+  it('an underexposed first frame: the film edge found lies on it, so the base comes from the gaps (as the planted base)', async () => {
+    const p = plantedFrames({ frames: 3, pxPerMm: 3, dark: [0] });
+    const bytes = stripTiff({ pxPerMm: 3, dark: [0] });
+    const roll = new Map();
+    const d = await decodeScan(bytes, 'd'.repeat(64), 'strip.tif', { long: 4000, dust: false, roll, raw: noRaw });
+    expect(d.frames).toHaveLength(3);
+    // the base as scanned (scan.baseT): the planted base within 0.01 D; the film edge on frame 1 read 0.09 D denser
+    expect(D(d.baseT!, p.truth.baseT)).toBeLessThan(0.01);
+    expect(d.notes.some((n) => /from the gaps between frames .*: the film edge found lay on a frame/.test(n))).toBe(true);
+    // scan.rebate is a gap now, on no frame; the roll's base for this file too
+    const r = d.rebate!;
+    for (const b of d.frames!) expect(r.y + r.h <= b.y || r.y >= b.y + b.h || r.x + r.w <= b.x || r.x >= b.x + b.w).toBe(true);
+    expect(D(roll.get('d'.repeat(64)).T, p.truth.baseT)).toBeLessThan(0.01);
+    // a strip whose film edge is film: its base as before (the edge)
+    const ok = await decodeScan(stripTiff({ pxPerMm: 3 }), 'c'.repeat(64), 'strip.tif', { long: 4000, dust: false, roll: new Map(), raw: noRaw });
+    expect(ok.notes.some((n) => /from the gaps between frames/.test(n))).toBe(false);
+    expect(D(ok.baseT!, p.truth.baseT)).toBeLessThan(0.01);
   });
 });

@@ -1,0 +1,100 @@
+{
+ "base": "http://localhost:4811",
+ "query": "",
+ "modes": [
+  "exact",
+  "tabulated"
+ ],
+ "comparisons": [
+  {
+   "file": "nef",
+   "against": "exact vs tabulated",
+   "autoTime": [
+    10,
+    10
+   ],
+   "autoLights": [
+    [
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0
+    ]
+   ],
+   "samePrint": {
+    "comparable": true,
+    "size": "512×342",
+    "meanAbs8": 0.053,
+    "p99Abs8": 0.25,
+    "maxAbs8": 0.5,
+    "over2": 0
+   }
+  },
+  {
+   "file": "dng",
+   "against": "exact vs tabulated",
+   "autoTime": [
+    2.227,
+    2.227
+   ],
+   "autoLights": [
+    [
+     0.01046,
+     -0.0542,
+     -0.178534
+    ],
+    [
+     0.011311,
+     -0.053147,
+     -0.176693
+    ]
+   ],
+   "samePrint": {
+    "comparable": true,
+    "size": "349×511",
+    "meanAbs8": 0.854,
+    "p99Abs8": 3.67,
+    "maxAbs8": 4.17,
+    "over2": 0.2162
+   }
+  }
+ ],
+ "runs": [
+  {
+   "mode": "exact",
+   "label": "Compatibility mode: slower",
+   "files": {
+    "nef": {
+     "ms": 12588,
+     "size": "512×342",
+     "time_s": 10
+    },
+    "dng": {
+     "ms": 13926,
+     "size": "349×511",
+     "time_s": 2.227
+    }
+   }
+  },
+  {
+   "mode": "tabulated",
+   "label": "Compatibility mode: slower",
+   "files": {
+    "nef": {
+     "ms": 15740,
+     "size": "512×342",
+     "time_s": 10
+    },
+    "dng": {
+     "ms": 18354,
+     "size": "349×511",
+     "time_s": 2.227
+    }
+   }
+  }
+ ]
+}

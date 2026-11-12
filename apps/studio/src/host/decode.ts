@@ -88,6 +88,34 @@ export function stripScale(s: number, boxes: readonly Box[], long: number, W: nu
   return Math.max(s, Math.min(1, (s * long) / Math.max(1, frameLong), (4 * long) / Math.max(W, H)));
 }
 
+/** Pixels two boxes share. */
+const overlap = (a: Box, b: Box): number =>
+  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/**
+ * The film base read on a strip's gaps (CHB-031 F20): the unexposed film between neighbouring frames, across the
+ * frames' band, inset by a pixel along and a tenth across (no frame edge, no holder). Per channel the median of the
+ * gap pixels (scratches and dust do not move it), veil included as scanned; the box is the largest gap, for
+ * scan.rebate. Null when the strip has no gap of at least 2 × 2 px.
+ */
+export function gapBase(rgb: Float32Array, w: number, boxes: readonly Box[], axis: 'x' | 'y'): { Traw: Vec3; box: Box; pixels: number } | null {
+  const along = axis === 'y';
+  const a0 = Math.max(...boxes.map((b) => (along ? b.x : b.y))), a1 = Math.min(...boxes.map((b) => (along ? b.x + b.w : b.y + b.h)));
+  const inset = Math.floor((a1 - a0) / 10);
+  const gaps: Box[] = [];
+  for (let i = 1; i < boxes.length; i++) {
+    const p = boxes[i - 1]!, n = boxes[i]!;
+    const g0 = (along ? p.y + p.h : p.x + p.w) + 1, g1 = (along ? n.y : n.x) - 1;
+    if (g1 - g0 < 2 || a1 - a0 - 2 * inset < 2) continue;
+    gaps.push(along ? { x: a0 + inset, y: g0, w: a1 - a0 - 2 * inset, h: g1 - g0 } : { x: g0, y: a0 + inset, w: g1 - g0, h: a1 - a0 - 2 * inset });
+  }
+  if (!gaps.length) return null;
+  const ch: number[][] = [[], [], []];
+  for (const g of gaps) for (let y = g.y; y < g.y + g.h; y++) for (let x = g.x; x < g.x + g.w; x++) for (let k = 0; k < 3; k++) ch[k]!.push(rgb[(y * w + x) * 3 + k]!);
+  const median = (v: number[]): number => Float64Array.from(v).sort()[v.length >> 1]!;
+  return { Traw: ch.map(median) as Vec3, box: gaps.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a)), pixels: ch[0]!.length };
+}
+
 /** Decode → linear → area-averaged working image → conditioning. */
 export async function decodeScan(bytes: Uint8Array, sha256: string, name: string, o: DecodeOptions): Promise<Decoded> {
   const roll = o.roll;
@@ -130,7 +158,22 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   const strip = guess.kind === 'negative' || !guess.confident ? stripFrames(data, w, h, { layout: c.layout }) : null;
   let boxes = strip?.split ? strip.frames.map((f) => f.box) : null;
   let rebate = c.rebate;
+  let baseT = c.scanBaseT;
   if (strip?.split) notes.push(`strip of ${strip.frames.length} frames along ${strip.axis} (confidence ${strip.confidence.toFixed(2)})`);
+  // a strip's base where the rebate is not film outside the frames (F20: raw010's "rebate" lay on its thin first frame,
+  // a base 0.08 D too dense for all three): the gaps between its frames are unexposed film next to each of them
+  const rb0 = c.layout.rebate?.box;
+  if (strip?.split && boxes && (!rb0 || boxes.some((b) => overlap(b, rb0) > 0.25 * rb0.w * rb0.h))) {
+    const g = gapBase(data, w, boxes, strip.axis);
+    if (g) {
+      const veil = c.veil ?? [0, 0, 0];
+      const T = g.Traw.map((t, k) => Math.max(1e-6, t - veil[k]!)) as Vec3;
+      baseT = T.map((t, k) => t / (1 - Math.min(veil[k]!, 0.99))) as Vec3;
+      rebate = g.box;
+      if (roll.has(sha256)) roll.set(sha256, { ...c.frame, T });
+      notes.push(`base ${fmt3(baseT.map((t) => -Math.log10(t)))} D from the gaps between frames (${g.pixels} px)${rb0 ? `: the film edge found lay on a frame (base ${fmt3((c.scanBaseT ?? Treb).map((t) => -Math.log10(t)))} D there)` : ''}`);
+    }
+  }
   // a strip's working image sized for its frames (F20): the boxes and the rebate scale with it; base, veil and the
   // guess are averages and stay (measured on the smaller image, as for a single frame)
   const s2 = boxes ? stripScale(s, boxes, o.long, W, H) : s;
@@ -150,7 +193,7 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT: c.scanBaseT, kind: 'negative-scan', guess, frames: boxes };
+  return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT, kind: 'negative-scan', guess, frames: boxes };
 }
 
 /** Decodes a file in the given mode. */

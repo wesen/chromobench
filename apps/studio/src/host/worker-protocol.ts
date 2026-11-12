@@ -20,7 +20,10 @@ export interface InitJob {
   cacheBytes?: number;
   /** RefEngine computes previews on the sample grid (CHB-027). */
   sampled?: boolean;
-  /** RefEngine's physics: 'exact' per pixel, or 'tabulated' through core's tables as the GPU engine (CHB-031 F10). */
+  /**
+   * The reference engine's physics (CHB-031 F10): 'exact' (default) per pixel; 'tabulated': previews through core's
+   * tables as the GPU engine's previews, exports exact (engine-serve.ts TabulatedPreviews).
+   */
   mode?: 'exact' | 'tabulated';
 }
 
