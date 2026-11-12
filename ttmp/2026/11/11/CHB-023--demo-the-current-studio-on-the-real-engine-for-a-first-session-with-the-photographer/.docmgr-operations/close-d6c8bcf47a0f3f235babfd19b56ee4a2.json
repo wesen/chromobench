@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "digest": "f83de49fcad781fddcc065e4fa95bfb2bb8a60afc66ca6633cc36d34e95d5201",
+  "request": {
+    "ticket": "CHB-023",
+    "status": "complete",
+    "intent": "",
+    "entry": "Closed: demo on the real engine done; real-GPU check moved to CHB-027"
+  },
+  "receipt": {
+    "sequence": 1,
+    "operation_id": "close-d6c8bcf47a0f3f235babfd19b56ee4a2",
+    "state": "committed",
+    "created_at": "2026-11-12T19:44:41.50661915Z",
+    "changed_paths": [
+      "changelog.md",
+      "index.md"
+    ],
+    "before": {
+      "changelog.md": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "index.md": "b1eeb53f7a18023bc24c82c6d1d8e40b8817fc2f1dc82e99caff5429a3b3fce5"
+    },
+    "after": {
+      "changelog.md": "362d617bd3c58968c77975b0139c3a96067c7d8603e167853dec1f696cb3cdcb",
+      "index.md": "815b03b45fb77ea20ed0d3a90293013bfd21a8602a8b35883a0664b88a198e3b"
+    }
+  },
+  "changes": [
+    {
+      "path": "changelog.md",
+      "before": "821a22a09b5487e51a03d4f3d66da69f903f9d75c9e1f0822949dddd534fb2b6",
+      "after": "IyBDaGFuZ2Vsb2cKCiMjIDIwMjYtMTEtMTEKCi0gSW5pdGlhbCB3b3Jrc3BhY2UgY3JlYXRlZAoKIyMgMjAyNi0xMS0xMgoKQ2xvc2VkOiBkZW1vIG9uIHRoZSByZWFsIGVuZ2luZSBkb25lOyByZWFsLUdQVSBjaGVjayBtb3ZlZCB0byBDSEItMDI3Cg=="
+    },
+    {
+      "path": "index.md",
+      "before": "b1eeb53f7a18023bc24c82c6d1d8e40b8817fc2f1dc82e99caff5429a3b3fce5",
+      "after": "LS0tClRpdGxlOiAnRGVtbzogdGhlIGN1cnJlbnQgc3R1ZGlvIG9uIHRoZSByZWFsIGVuZ2luZSwgZm9yIGEgZmlyc3Qgc2Vzc2lvbiB3aXRoIHRoZSBwaG90b2dyYXBoZXInClRpY2tldDogQ0hCLTAyMwpTdGF0dXM6IGNvbXBsZXRlClRvcGljczoKICAgIC0gdWkKICAgIC0gcHJvZHVjdAogICAgLSBpbmdlc3QKRG9jVHlwZTogaW5kZXgKSW50ZW50OiBsb25nLXRlcm0KT3duZXJzOiBbXQpSZWxhdGVkRmlsZXM6IFtdCkV4dGVybmFsU291cmNlczogW10KU3VtbWFyeTogIiIKTGFzdFVwZGF0ZWQ6IDIwMjYtMTEtMTJUMTQ6NDQ6NDEuNTA2NDk3MTc5LTA1OjAwCldoYXRGb3I6ICIiCldoZW5Ub1VzZTogIiIKLS0tCgojIERlbW86IHRoZSBjdXJyZW50IHN0dWRpbyBvbiB0aGUgcmVhbCBlbmdpbmUsIGZvciBhIGZpcnN0IHNlc3Npb24gd2l0aCB0aGUgcGhvdG9ncmFwaGVyCgojIyBPdmVydmlldwoKPCEtLSBQcm92aWRlIGEgYnJpZWYgb3ZlcnZpZXcgb2YgdGhlIHRpY2tldCwgaXRzIGdvYWxzLCBhbmQgY3VycmVudCBzdGF0dXMgLS0+CgojIyBLZXkgTGlua3MKCi0gKipSZWxhdGVkIEZpbGVzKio6IFNlZSBmcm9udG1hdHRlciBSZWxhdGVkRmlsZXMgZmllbGQKLSAqKkV4dGVybmFsIFNvdXJjZXMqKjogU2VlIGZyb250bWF0dGVyIEV4dGVybmFsU291cmNlcyBmaWVsZAoKIyMgU3RhdHVzCgpDdXJyZW50IHN0YXR1czogKiphY3RpdmUqKgoKIyMgVG9waWNzCgotIHVpCi0gcHJvZHVjdAotIGluZ2VzdAoKIyMgVGFza3MKClNlZSBbdGFza3MubWRdKC4vdGFza3MubWQpIGZvciB0aGUgY3VycmVudCB0YXNrIGxpc3QuCgojIyBDaGFuZ2Vsb2cKClNlZSBbY2hhbmdlbG9nLm1kXSguL2NoYW5nZWxvZy5tZCkgZm9yIHJlY2VudCBjaGFuZ2VzIGFuZCBkZWNpc2lvbnMuCgojIyBTdHJ1Y3R1cmUKCi0gZGVzaWduLyAtIEFyY2hpdGVjdHVyZSBhbmQgZGVzaWduIGRvY3VtZW50cwotIHJlZmVyZW5jZS8gLSBQcm9tcHQgcGFja3MsIEFQSSBjb250cmFjdHMsIGNvbnRleHQgc3VtbWFyaWVzCi0gcGxheWJvb2tzLyAtIENvbW1hbmQgc2VxdWVuY2VzIGFuZCB0ZXN0IHByb2NlZHVyZXMKLSBzY3JpcHRzLyAtIFRlbXBvcmFyeSBjb2RlIGFuZCB0b29saW5nCi0gdmFyaW91cy8gLSBXb3JraW5nIG5vdGVzIGFuZCByZXNlYXJjaAotIGFyY2hpdmUvIC0gRGVwcmVjYXRlZCBvciByZWZlcmVuY2Utb25seSBhcnRpZmFjdHMK"
+    }
+  ]
+}

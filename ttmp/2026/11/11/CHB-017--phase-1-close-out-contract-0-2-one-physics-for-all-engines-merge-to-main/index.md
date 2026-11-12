@@ -1,7 +1,7 @@
 ---
 Title: 'Phase-1 close-out: contract 0.2, one physics for all engines, merge to main'
 Ticket: CHB-017
-Status: active
+Status: complete
 Topics:
     - architecture
     - testing
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T15:10:19.91858416-05:00
+LastUpdated: 2026-11-12T14:44:41.23045581-05:00
 WhatFor: ""
 WhenToUse: ""
 ---

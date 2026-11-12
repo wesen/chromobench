@@ -9,4 +9,4 @@
 - [x] [stage 3] Test strip and ring-around render with the real engine (not the mock's fixed 10 s) <!-- t:4tex -->
 - [x] [stage 4] Export: 8-bit sRGB/P3 PNG now; switch to CHB-011's 16-bit TIFF/PNG encoder when it lands <!-- t:ar6l -->
 - [x] [stage 4] Static build that runs offline: pnpm --filter @chromobench/studio build + a one-page 'how to run it' note (Chrome/Edge, open a folder of scans); smoke e2e on the real engine with the M1 fixture <!-- t:z86l -->
-- [ ] [stage 5] Try on a real GPU in a normal Chromium (WebGPU presentation untested on hardware); record frame times for a 24 MP scan <!-- t:4h85 -->
+- [x] (moved to CHB-027) [stage 5] Try on a real GPU in a normal Chromium (WebGPU presentation untested on hardware); record frame times for a 24 MP scan <!-- t:4h85 -->

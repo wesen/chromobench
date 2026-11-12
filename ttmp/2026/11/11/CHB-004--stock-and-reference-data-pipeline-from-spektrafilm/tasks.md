@@ -18,3 +18,4 @@
 - [x] [stage 6] Add licence files, CHANGELOG, attribution strings and About-screen data; script-check that no artefact mixes BY-SA and BY-NC-SA sources <!-- t:wlvi -->
 - [ ] [stage 6] Send the owner the decision list of Section 12.4 <!-- t:w6wv -->
 - [x] Check the shipped irradiance_xy_tc.npy size at export: textbook/LFP say 192x192x81, spektrafilm code defaults to lut_size=128 <!-- t:o0m6 -->
+- [ ] [from CHB-012 18c5] Export Portra 800 push 1 and push 2 profiles and verify the exposure-index convention against Kodak's Portra 800 datasheet <!-- t:6qfb -->

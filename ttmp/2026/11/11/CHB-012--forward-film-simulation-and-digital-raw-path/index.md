@@ -1,7 +1,7 @@
 ---
 Title: Forward film simulation and digital RAW path
 Ticket: CHB-012
-Status: active
+Status: complete
 Topics:
     - film-emulation
     - color-science
@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-11T10:38:25.170086082-05:00
+LastUpdated: 2026-11-12T14:44:40.825389128-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
