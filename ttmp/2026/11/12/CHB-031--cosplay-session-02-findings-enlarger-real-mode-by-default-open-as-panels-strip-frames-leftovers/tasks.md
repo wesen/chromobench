@@ -15,7 +15,7 @@
 - [x] From WS-A: enforce 'no inert control' in the edit log too — the looks kit's density look, agent proposals and the DSL's time test strip can still set or vary Time on a normalised recipe <!-- t:srvr -->
 - [x] From WS-A: darkroom layout with no frame shows the empty-state text twice (Enlarger, Paper) and an empty Exposures panel <!-- t:8iv8 -->
 - [x] From WS-B: the decode note still says 'film edge found' for a strip whose base now comes from the gaps between frames (apps/studio/src/status-text.ts / decode notes): say where the base was read <!-- t:ko8e -->
-- [ ] From WS-B: F10 has no true 1:1 focus check at full resolution on the CPU engine (previews at 640 px, tabulated); decide with the session-03 result whether a refine pass for the visible region is needed <!-- t:qi3r -->
+- [x] From WS-B: F10 has no true 1:1 focus check at full resolution on the CPU engine (previews at 640 px, tabulated); decide with the session-03 result whether a refine pass for the visible region is needed <!-- t:qi3r -->
 - [x] Round 2 WS-C: F31 photos get an automatic first print (time from density, as-shot colour) <!-- t:nj2u -->
 - [x] Round 2 WS-C: F30 colour share (alpha) as one setting; NLP comparison script and numbers for the owner (default unchanged) <!-- t:bey6 -->
 - [x] Round 2 WS-C: F28 Epson strip frames upright by default <!-- t:s7hd -->

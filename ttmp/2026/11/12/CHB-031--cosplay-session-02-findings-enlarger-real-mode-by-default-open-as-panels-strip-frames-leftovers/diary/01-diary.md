@@ -587,3 +587,74 @@ and of the first impression of five photos and five strips. The F30 colour aim w
 
 ### Technical details
 - Browser log: scratchpad `browser-main-aaefe45.log`.
+
+## Step 10: Session 04 result; two major findings fixed by the orchestrator; a --host preview for the owner
+
+Session 04, a short Sonnet check of round 2 and of the first impression of five photos and five strips, confirmed
+round 2. Fixed: F24, F25, F26, F32, F33, F35, F36, and F31 for brightness. Partly: F28 (portrait frames on a strip)
+and F34 (1:1 on the CPU engine). It found two major problems, both of which I measured, traced and fixed myself
+because they were small and well-localised. One was a regression from WS-B's binned decode: portraits opened
+sideways on the CPU engine (F38). The other was older: a NEF's as-shot white balance was never read, so every NEF
+printed with daylight white balance (F39). The user then asked for a server reachable over Tailscale to test
+themselves.
+
+### Prompt Context
+**User prompt (verbatim):** "is it running?" then "no run the server so i can test it, with --host, i'm remote over tailscale"
+**Assistant interpretation:** Report the browser suite's progress; then serve the current build on all interfaces.
+**Inferred user intent:** The owner tries today's build from another machine.
+**Commit (code):** ab95e31 — "CHB-031: a binned photo is turned by its EXIF orientation, as LibRaw's demosaic is (…)"; 50c46a2 — "ingest: a camera RAW's as-shot neutral from LibRaw's as-shot multipliers when it has no DNG AsShotNeutral (…)"
+
+### What I did
+- Committed session 04 (42ea4a3), adding the verbatim brief as `brief.md` because the tester's step 1 quotes it in
+  abridged form. Its diary has eight steps, each with all eleven sections.
+- F38: `apps/studio/src/host/decode.ts` reads photos binned through LibRaw scan mode (`bin: 'cfa-half'`) for
+  working sizes ≤ 1024 px. Scan mode is in sensor orientation, while photo mode's `dcrawMakeMemImage` applies
+  LibRaw's flip. `orch-01-binned-orientation.ts` measured DSC_8687 as 640×428 binned vs 1337×2000 demosaiced, both
+  with orientationTag 6. Fix: turn the binned working image with `orientPixels` (EXIF 3/6/8 → rot180/cw90/ccw90)
+  and swap the full size; after the fix it is 428×640, full 4032×6032. The new test in
+  `apps/studio/test/photo-binned.test.ts` (synthetic DNG tagged 6 and 8) failed without the fix ("expected 64 to
+  be 96") and passes with it.
+- F39: `adapter.ts` set `asShotNeutral` only from a DNG's tag, while LibRaw's `cam_mul` (read as `info.camMul`) went
+  unused, so `photoRecipe` never chose 'as-shot' for a NEF. Added `neutralFromCamMul` (neutral ∝ 1/multiplier,
+  G = 1) as the fallback, with a unit test. Measured the app's first print before and after on a rebuilt :4650
+  (`orch-03-photo-first-print-colour.mjs`, 40 × 40 grid of `window.chromobench.pixel`). B/R 0.63 → 0.80 (camera
+  JPEG 0.88), 0.25 → 0.38 (0.47), 0.51 → 0.85 (0.855), 0.43 → 0.64 (0.55).
+- Checks with both fixes: typecheck, lint, gen:check; `pnpm test` 104 files, 2803 passed, 7 skipped; browser suite
+  (ports 5521–5524) 106 passed, conformance 320/320.
+- Wrote the CHB-026 findings section "Session 04" (F38–F44). Filed the leftovers: CHB-028 gets F37, F41, F42, F43,
+  F44 and the F30 owner decision (with unifying the Roll module's ALPHA); CHB-029 gets F40, next to the CPU 1:1
+  refine task. Checked 92iq and qi3r (moved to CHB-029).
+- On the user's request: restarted :4650 with `--host` (`vite preview --outDir dist-current --port 4650
+  --strictPort --host`). Checked `http://100.72.131.20:4650/` returns 200 (MagicDNS `f.tail879302.ts.net`).
+
+### Why
+- Both fixes were a few lines each with a clear cause and a measurable result, faster to do than to brief an agent.
+
+### What worked
+- Reproducing the tester's numbers before the fix (B/R 0.63/0.25/0.51/0.43, the same as theirs) made the after
+  numbers trustworthy.
+
+### What didn't work
+- Reading the enlarger time from `.cb-arg[data-path="print.enlarger.time_s"] input` gave values like "2.5", which
+  is not the enlarger time; I ignored that column. The tester's report has the times (4.45–5.61 s).
+
+### What I learned
+- WS-C's photo first print "keeps the camera's as-shot white balance", but that held only for DNGs. The tester's
+  comparison with the embedded camera JPEG is what exposed it.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- Plain http over Tailscale is not a secure context, so WebGPU, the File System Access API and the service worker
+  are unavailable there. The owner sees the CPU engine and relinks after a reload. `tailscale serve` would give
+  HTTPS.
+
+### What should be done in the future
+- The owner's test feedback and the F30 decision; then close CHB-031 and start CHB-029.
+
+### Code review instructions
+- `git show ab95e31 50c46a2`; tests `apps/studio/test/photo-binned.test.ts`, `packages/ingest/test/as-shot-neutral.test.ts`.
+
+### Technical details
+- Logs: scratchpad `browser-as-shot.log`.
