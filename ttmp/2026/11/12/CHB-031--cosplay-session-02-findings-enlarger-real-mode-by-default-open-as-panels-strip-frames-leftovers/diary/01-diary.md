@@ -520,3 +520,70 @@ CHB-031 as two workstreams.
 ### Technical details
 - ROMM decode: x < 16/512 → x/16, else x^1.8; then ProPhoto→XYZ(D50), Bradford to D65, XYZ→linear sRGB, sRGB
   encode (script inline in this session; numbers above).
+
+## Step 9: Round 2 merged (WS-C, WS-D); checks green on main; session 04 launched
+
+Both round-2 workstreams finished. I reviewed and merged them in plan order: WS-C (the picture) as `94fb78c`,
+then WS-D (the interface) as `aaefe45`. The combined code matches neither tested branch, so I ran every check on
+main myself, and all passed. I rebuilt the :4650 preview and launched session 04, a short Sonnet check of round 2
+and of the first impression of five photos and five strips. The F30 colour aim waits for the owner.
+
+### Prompt Context
+**User prompt (verbatim):** none new (see step 4).
+**Assistant interpretation:** Finish CHB-031's round 2 and verify it before CHB-029.
+**Inferred user intent:** The photographer's first impression of a photo and a scan, and the basic flows, hold up.
+**Commit (code):** 94fb78c — "Merge task/chb-031-picture (…)"; aaefe45 — "Merge task/chb-031-interface (…)"
+
+### What I did
+- WS-C diary steps 1–9 and WS-D diary steps 1–3: all eleven sections each.
+- WS-D review: `History.adopt()` hands the undo history to the new runtime. `DomChrome` removes its root listeners
+  at dispose (AbortController), and `main.ts` re-runs every per-runtime wiring through `eachMount`. The
+  "click within half a second taken for a right-click" fix is `rightAt = -Infinity` (it was 0, and
+  `performance.now()` starts at 0).
+- WS-C review: its two judgement calls are documented. Photos keep as-shot colour and move half way to an
+  integrated grey in density (full integration washed out 6 of 7 NEFs). Strip frames now default to `flipV`, which
+  was right on 5 of 9 frames against 1 of 9 for `transpose`; raw010's portrait shots now open sideways. File sizes
+  (about 1650 × 1200 px per frame) suggest 6×4.5 frames lying across the film, which fits `flipV`.
+- Merged C then D. One conflict, `tasks.md` (both branches checked their own tasks): took main's side and
+  re-checked WS-D's seven tasks with `docmgr task check`.
+- Checks on main `aaefe45`: `pnpm typecheck` 0; `pnpm lint` (406 file checks; colours 167 files); `pnpm gen:check`
+  (26 files); `pnpm test` 103 files, 2800 passed, 7 skipped; `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522
+  SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 pnpm test:browser` 106 passed (2.6 min), GPU conformance 320/320.
+- Stopped both agents, unlocked and removed their worktrees (the harness lock remained after TaskStop), and deleted
+  the four merged branches.
+- Rebuilt `dist-current` from aaefe45, served it at :4650 (bundle has "Actual Pixels" and the first-print aim), and
+  launched session 04 (`sessions/04-sonnet-check-round-2/`).
+
+### Why
+- Verifying once on the combined code catches interactions between C and D (both touch `main.ts`, the enlarger
+  rows and History wording).
+
+### What worked
+- `git merge-tree` showed no code conflicts between C and D before either merged.
+
+### What didn't work
+- `git worktree remove` refused: `cannot remove a locked working tree, lock reason: claude agent agent-a24fe29c357da43a8`.
+  `git worktree unlock` first, after checking that each worktree was clean and its branch merged.
+
+### What I learned
+- The F30 lever is the aim, not the colour share. In WS-C's table (diary 04, step 3), α 1→0 keeps raw000 f2 at
+  B/R 1.16–1.19 against NLP's 0.57, while a warm aim of 0.05–0.10 log H brings all four frames into NLP's range
+  (mean 0.89 / 0.72 vs NLP 0.69). NLP's extra contrast (luma std 51–67 vs 33–49) is a separate question, likely
+  paper grade.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The studio's first print (α 1) and the Roll module's (`ALPHA = 0.75`, `kits/roll/src/engine/constants.ts`)
+  differ; they should read one value after the owner's decision.
+
+### What should be done in the future
+- Session 04 report, then fold its verdicts into CHB-026. Put F30 (aim) and F37 (filtration step) to the user.
+  Close CHB-031 with qi3r moved to CHB-029, then start CHB-029.
+
+### Code review instructions
+- `git show 94fb78c --stat`, `git show aaefe45 --stat`; diaries 04 and 05.
+
+### Technical details
+- Browser log: scratchpad `browser-main-aaefe45.log`.
