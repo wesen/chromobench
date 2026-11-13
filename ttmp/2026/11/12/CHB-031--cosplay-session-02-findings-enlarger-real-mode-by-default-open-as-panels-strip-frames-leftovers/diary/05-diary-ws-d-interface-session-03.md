@@ -274,3 +274,76 @@ Undo shows its frame, History in words, Actual Pixels and zoom readout, darkroom
 - Status line after a render: "rendered 2 · done, full detail" (tooltip "Technical: refine pass").
 - Screenshots: `various/ws-d/01…04` (F24), `05…06` (F26), `07` (F36), `08…09` (F33/F32), `10…11` (F34),
   `12…13` (8iv8).
+
+## Step 3: The full browser suite; the last raw ids and codes; merge main; tasks checked
+
+The first full browser run (`CI=1 pnpm test:browser` on my ports) had 5 failures out of 106: three specs pinned
+the old History wording or the darkroom's old empty state, and two GPU decoder specs lost their page to a Vite
+reload because I edited sources while the suite ran. I updated the pins, and while reading the remaining places
+where a raw id or code could reach him, changed two more: an approved or automatic agent step was named by its
+transaction id in the Edit menu and the undo toast ("Undo Approve a1-eval-4"), and a render error on the picture
+showed its code. I also made the layout switch fall back to the old reload if the new layout cannot mount.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Green checks with my ports, the brief's merge-main rule, the plan tasks checked off.
+**Inferred user intent:** A branch the orchestrator can merge after WS-C without surprises.
+**Commit (code):** ceb4d3c — "CHB-031 WS-D: agent steps named by their reason (no tx ids), render errors on the
+picture without codes, a reload if the new layout cannot mount; e2e pins of the History words"; 3878d28 — merge of
+main (bfe13e8, the orchestrator's diary step 8; WS-C's `task/chb-031-picture` had not landed).
+
+### What I did
+- `STUDIO_PORT=5321 STUDIO_KIT_PORT=5322 SHELL_DEMO_PORT=5323 GPU_PARITY_PORT=5324 CI=1 pnpm test:browser`.
+- `e2e/studio.spec.ts`: the History pins "(0, 0, +3) CC" → "Filtration Y 0 → +3 CC", "(+2, −4, +2) pt" →
+  "Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt". `e2e/studio-enlarger.spec.ts` (darkroom, F17/F19): with no
+  photo the Enlarger panel says "No photos yet" and the Paper panel is hidden; with a frame both show.
+- `packages/studio-kit/src/bridge/editlog-route.ts` `labelOf`: "Approve Agent Change (warmer)" / "Agent Change"
+  (the proposal's `why`) instead of "Approve eval-k2" / "Agent eval-a"; the three label pins in `bridge.test.ts`.
+- `packages/shell/src/dom/viewport/render.ts`: a render error on the picture reads the app's `explainError` text,
+  else its message without the leading code; the full message is the tooltip ("Technical: …").
+- `apps/studio/src/main.ts` `switchLayout`: if `mountStudio` throws after the old interface is disposed, go to the
+  layout's URL (the old behaviour) instead of leaving an empty page.
+- `git merge main` (clean). `git merge-tree --write-tree --name-only HEAD task/chb-031-picture` printed only a tree
+  id: no conflicts with WS-C's branch as it stands (625ba21).
+- `docmgr task check --ticket CHB-031 --id` 6o2t, 58p8, oc2f, oyf6, bjc2, kwlw, 8iv8.
+
+### Why
+- The Edit menu and the undo toast are the other place History labels are read; a transaction id there is the
+  "op id" the finding names.
+
+### What worked
+- The five specs that failed, rerun with the rest of their files (`studio-decoders`, `studio-enlarger`,
+  `studio`, `studio-interface`): 20 passed (1.1 min).
+- `pnpm test` after the merge: 102 files, 2786 passed, 7 skipped; `pnpm typecheck` and `pnpm lint` clean.
+- The final full browser run on the merged branch (3878d28), no edits while it ran,
+  `STUDIO_PORT=5321 STUDIO_KIT_PORT=5322 SHELL_DEMO_PORT=5323 GPU_PARITY_PORT=5324 CI=1 pnpm test:browser`:
+  "106 passed (4.6m)".
+
+### What didn't work
+- First full run: "5 failed, 101 passed (2.8m)". `studio-decoders.spec.ts` tiff/dng: "page.waitForFunction:
+  TypeError: Cannot read properties of undefined (reading 'studio')" and "page.evaluate: Execution context was
+  destroyed, most likely because of a navigation" — the dev server reloaded the page after my edits to
+  `render.ts` and `editlog-route.ts` during the run; both pass on a rerun. `studio-enlarger.spec.ts:205`
+  'Expected substring: "Select a photo to print it." Received string: "EnlargerNo photos yet: File ▸ Open Files…
+  (Ctrl+O), or drop them here."'; `studio.spec.ts:49` 'Expected substring: "(0, 0, +3) CC" Received string: "Auto
+  Frame addedYou Filtration Y 0 → +3 CC"'; `studio.spec.ts:166` 'Expected substring: "(+2, −4, +2) pt"'.
+- `docmgr task check … ; git status` in one shell line was refused by the harness (git in a compound command); ran
+  them separately.
+
+### What I learned
+- Don't edit sources while the browser suite runs in the same worktree: its dev servers hot-reload the pages.
+
+### What was tricky to build
+- Nothing new; the label change had to keep "Approve" first so the Edit menu still reads "Undo Approve …".
+
+### What warrants a second pair of eyes
+- `labelOf` uses the first entry's `why`; a proposal without one reads "Approve Agent Change".
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `git diff b61fb39..ceb4d3c`; rerun `pnpm test` and the four browser spec files above.
+
+### Technical details
+- Tasks checked: 6o2t (F24), 58p8 (F26), oc2f (F32/F35), oyf6 (F33), bjc2 (F34 part), kwlw (F36), 8iv8.
