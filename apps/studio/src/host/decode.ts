@@ -3,13 +3,13 @@
 // area-averages to the working size; a negative scan is then conditioned (film layout, rebate, veil, dust).
 // A host file (tools/scripts/check-boundaries.ts names it): it imports core and ingest. Runs in the engine
 // worker (host/engine-worker.ts) and, with ?worker=0, on the main thread (host/engines.ts).
-import type { Box, SourceInfo, Vec3 } from '@chromobench/contract';
+import type { Box, Orientation, SourceInfo, Vec3 } from '@chromobench/contract';
 import { DEFAULT_SIGMA_D, rebateBox } from '@chromobench/core';
 import {
   conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask, stripFrames,
   type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
-import type { Decoded as DecodedMeta, OpenGuess } from './studio-engine.ts';
+import { orientPixels, type Decoded as DecodedMeta, type OpenGuess } from './studio-engine.ts';
 import type { DecodeMode } from './worker-protocol.ts';
 
 export type { DecodeMode };
@@ -61,6 +61,9 @@ export function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): n
  */
 export const BINNED_PHOTO_MAX_LONG = 1024;
 
+/** EXIF orientation tag → the turn that shows the picture upright (mirrored tags do not occur in camera RAW). */
+const EXIF_TURN: Partial<Record<number, Orientation>> = { 3: 'rot180', 6: 'cw90', 8: 'ccw90' };
+
 /** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
 export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw'>): Promise<Decoded> {
   const binned = o.long > 0 && o.long <= BINNED_PHOTO_MAX_LONG;
@@ -77,8 +80,17 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
   const lin = linearise(raw, { sha256, ir: false });
   const W = lin.width, H = lin.height;
   const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
-  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
-  const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  let w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  let data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  // LibRaw's demosaic (dcraw_make_mem_image) comes out turned by the camera's orientation tag; the binned read is in
+  // sensor orientation, so a portrait opened sideways on the CPU engine (CHB-031 session 04, S04-N1): turn it the same way
+  const turn = read ? EXIF_TURN[raw.meta.orientationTag ?? 1] : undefined;
+  if (turn) {
+    const o = orientPixels(turn, data, w, h, 3);
+    data = o.data as Float32Array;
+    [w, h] = [o.width, o.height];
+    if (turn !== 'rot180') [fullW, fullH] = [fullH, fullW];
+  }
   const cam = raw.meta.camera;
   const notes = [raw.meta.format === 'raw'
     ? `photo: camera RAW${cam ? ` (${cam.make} ${cam.model})` : ''} via LibRaw, photo mode, ${fullW}×${fullH}${read}${cam?.camToXyz ? `, camera matrix from ${cam.from ?? 'LibRaw'}` : ', no camera matrix (taken as linear sRGB)'}`

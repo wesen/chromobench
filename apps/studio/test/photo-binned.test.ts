@@ -7,7 +7,7 @@ import { BINNED_PHOTO_MAX_LONG, decodePhoto } from '../src/host/decode.ts';
 
 const W = 240, H = 160;
 /** A camera DNG of a daylight scene (grey ramp, a red patch), RGGB, 2W × 2H photosites. */
-function photoDng(): Uint8Array {
+function photoDng(orientation?: number): Uint8Array {
   const w = 2 * W, h = 2 * H;
   const raw = new Uint16Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -22,7 +22,7 @@ function photoDng(): Uint8Array {
       { tag: 33421, type: 3, values: [2, 2] }, { tag: 33422, type: 1, values: [0, 1, 1, 2] }, { tag: 50710, type: 1, values: [0, 1, 2] },
       { tag: 50714, type: 3, values: [512] }, { tag: 50717, type: 3, values: [15000] }] }],
     ifd0Tags: [{ tag: 50706, type: 1, values: [1, 4, 0, 0] }, { tag: 271, type: 2, values: 'Synth' }, { tag: 272, type: 2, values: 'Camera' }, { tag: 50708, type: 2, values: 'Synth Camera' },
-      { tag: 50721, type: 10, values: [0.8, -0.2, -0.05, -0.4, 1.2, 0.2, -0.05, 0.15, 0.6] }, { tag: 50778, type: 3, values: [21] }],
+      { tag: 50721, type: 10, values: [0.8, -0.2, -0.05, -0.4, 1.2, 0.2, -0.05, 0.15, 0.6] }, { tag: 50778, type: 3, values: [21] }, ...(orientation ? [{ tag: 274, type: 3, values: [orientation] }] : [])],
   });
 }
 
@@ -61,5 +61,23 @@ describe('decodePhoto: binned for small working images (CHB-031 F22)', () => {
     const full = await decodePhoto(bytes, sha, 'DSC_0001.dng', { long: 0, raw });
     expect(full.notes[0]).not.toMatch(/binned/);
     expect(full.full).toEqual({ width: 2 * W, height: 2 * H });
+  });
+
+  it('a portrait (EXIF orientation 6 or 8) is turned upright as the demosaic is (CHB-031 session 04, S04-N1)', async () => {
+    for (const tag of [6, 8]) {
+      const bytes = photoDng(tag);
+      const d = await decodePhoto(bytes, sha, 'DSC_0002.dng', { long: 96, raw });
+      expect(d.notes[0]).toMatch(/binned/);
+      expect(d.info.height).toBe(96); // portrait: the long side is the height
+      expect(d.full).toEqual({ width: 2 * H, height: 2 * W });
+      // LibRaw's demosaic of the same file is turned by the tag: the binned working image matches it pixel for pixel
+      const ahd = await decodeAsync(bytes, { fileName: 'DSC_0002.dng', options: { mode: 'photo' }, raw });
+      expect([ahd.width, ahd.height]).toEqual([2 * H, 2 * W]);
+      const lin = linearise(ahd, { sha256: sha, ir: false });
+      const ref: Float32Array = region(lin, { x: 0, y: 0, w: lin.width, h: lin.height }, d.info.width, d.info.height, { channels: 3 });
+      let sum = 0;
+      for (let i = 0; i < ref.length; i++) sum += Math.abs(d.data[i]! - ref[i]!) / Math.max(ref[i]!, 0.02);
+      expect(sum / ref.length).toBeLessThan(0.03);
+    }
   });
 });
