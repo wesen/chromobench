@@ -393,3 +393,61 @@ re-run. I then rebuilt the :4650 preview from main and launched the session-03 t
 
 ### Technical details
 - Remaining CHB-031 tasks: b50a (session 03), srvr and 8iv8 (WS-A edges), two WS-B leftovers.
+
+## Step 7: dgz9 merged; CHB-032 closed
+
+The dgz9 agent split the shell's `store.ts` (775 → 325 lines plus `core/store/`) and `viewport.ts` (723 → 108 lines
+plus `dom/viewport/`). It moved every body verbatim, merged main twice, and passed every check (unit 2770 passed,
+no snapshot changed; browser 101 passed; GPU conformance 320/320). I verified it and merged it as `d56c653`. All
+CHB-032 tasks are done, so I closed CHB-032. The only open work now is session 03 and the CHB-031 leftovers.
+
+### Prompt Context
+**User prompt (verbatim):** none new (see step 4).
+**Assistant interpretation:** Finish CHB-032 before CHB-029.
+**Inferred user intent:** "and code cleanup" done before the UI DSL work.
+**Commit (code):** d56c653 — "Merge task/chb-032-store-viewport (CHB-032 dgz9: shell store.ts and viewport.ts split into core/store/ and dom/viewport/ modules)"; 918b3e5 — "Close CHB-032 (housekeeping): all tasks done, merged as 02fd314 and d56c653"
+
+### What I did
+- Diary steps 16–19 of CHB-032 each have all eleven sections.
+- Ran the agent's check `python3 -I …/CHB-032--…/scripts/dgz9-verify-split.py 6a42b9b` in its worktree:
+  "failures: 0" (47 of 47 segments verbatim, per its report).
+- Read the two hand-changed lines: `setZoom: (z, at) => setZoom(z, at)` and `zoomBy: (dir, at) => zoomBy(dir, at)`
+  in `packages/shell/src/dom/viewport.ts:77-78`. The functions take `(z: Zoom, at?)` and `(dir: number, at?)`
+  (`dom/viewport/geometry.ts:45,57`), so the arrows pass every argument through.
+- Merged with `--no-ff`; `git diff --quiet b1b8b9c HEAD -- . ':!ttmp'` → main's code identical to the tested head.
+- Removed the worktree and deleted `task/chb-032-store-viewport`, then the harness's `worktree-agent-*` branches
+  (four, each an ancestor of main: `git merge-base --is-ancestor`). Only `main` is left.
+- `docmgr ticket close --ticket CHB-032` (status complete, changelog entry) and committed.
+
+### Why
+- Closing CHB-032 now leaves CHB-029 a clean base: the shell's package exports did not change, and `cb.ts` is
+  untouched by the clean-up.
+
+### What worked
+- Verbatim-move scripts made the splits reviewable without rereading 1,500 lines.
+
+### What didn't work
+- My first run of the verify script used a path relative to the main checkout after `cd` into the worktree:
+  `can't open file '…/agent-a22f39a108e54cbd7/.claude/worktrees/agent-a22f39a108e54cbd7/ttmp/…'`. It ran with an
+  absolute path. That `cd` also moved the session's working directory into the worktree; `cd` back to the main
+  checkout restored it before the removal.
+
+### What I learned
+- `cd` into an agent worktree makes the harness treat it as the session's working directory. Use `git -C` and
+  absolute paths instead.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- The viewport entry builds its parts in the original order, because cells take ids in creation order. A future
+  edit that reorders the `view*()` calls in `viewport.ts` would change cell ids. The order is commented there.
+
+### What should be done in the future
+- Session 03 report → findings → one fix round (with srvr, 8iv8 and WS-B's two leftovers) → close CHB-031 → CHB-029.
+
+### Code review instructions
+- `git show d56c653 --stat`; CHB-032 diary steps 16–19.
+
+### Technical details
+- Lint file checks rose from 368 to 406 with the 15 new modules.
