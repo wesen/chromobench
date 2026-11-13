@@ -79,6 +79,18 @@ function infoOf(lr: LibRawInstance, version: string): RawInfo {
   return info;
 }
 
+/**
+ * The as-shot neutral in camera RGB from LibRaw's as-shot multipliers (cam_mul: R, G, B, G2): white balance multiplies
+ * each channel so the neutral comes out equal, so the neutral is ∝ 1 / multiplier (G = 1). Undefined when the camera
+ * recorded none (a zero or missing multiplier).
+ */
+export function neutralFromCamMul(m: readonly number[] | undefined): [number, number, number] | undefined {
+  if (!m) return undefined;
+  const r = m[0]!, g = m[1]!, b = m[2]!;
+  if (!(r > 0 && g > 0 && b > 0) || ![r, g, b].every(Number.isFinite)) return undefined;
+  return [g / r, 1, g / b];
+}
+
 /** LibRaw decoder in the current thread. Scan mode by default; photo mode with options.mode 'photo'. */
 export class LibRawDecoder implements RawDecoder {
   readonly name = 'libraw';
@@ -124,7 +136,10 @@ export class LibRawDecoder implements RawDecoder {
           img.meta.camera.camToXyz = c.camToXyz;
           img.meta.camera.from = c.from;
         }
-        if (dng?.asShotNeutral) img.meta.camera.asShotNeutral = [dng.asShotNeutral[0]!, dng.asShotNeutral[1]!, dng.asShotNeutral[2]!];
+        // the as-shot neutral: a DNG's AsShotNeutral, else the camera's as-shot multipliers (a NEF, CR2, …: LibRaw
+        // cam_mul), so a camera RAW's "as shot" white balance is the camera's, not daylight (CHB-031 session 04, S04-N2)
+        const shot = dng?.asShotNeutral ? [dng.asShotNeutral[0]!, dng.asShotNeutral[1]!, dng.asShotNeutral[2]!] : neutralFromCamMul(info.camMul);
+        if (shot) img.meta.camera.asShotNeutral = shot as [number, number, number];
       } catch {
         img.meta.notes.push({ code: 'W_DECODE_NOTE', message: 'The camera colour matrix is singular; no camera → XYZ mapping.' });
       }
