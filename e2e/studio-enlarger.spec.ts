@@ -135,6 +135,11 @@ test('classic: a photo prints in real mode and shows the film it is shot on, wit
   await page.keyboard.press('d');
   expect(await page.evaluate(() => window.chromobench.log!.committed.kind)).toBe('digital-raw');
   expect((await enlarger(page)).mode).toBe('real');
+  // F31: an automatic first print, density only (alpha 0): the three lights stay together, the colour is the camera's
+  const auto = await page.evaluate(() => window.chromobench.log!.committed.print.lights.auto);
+  expect(auto).toMatchObject({ method: 'integrate', alpha: 0, applied: true });
+  const l = (await enlarger(page)).lights;
+  expect(Math.max(...l) - Math.min(...l)).toBeLessThan(1e-5);
   await expect(arg(page, 'capture.stock')).toBeVisible();
   await expect(arg(page, 'scan.scanner')).toBeHidden();
   await expect(arg(page, 'scan.stock')).toBeHidden();
