@@ -174,3 +174,37 @@ session: 517 ms (typing `1000`); no stall over 100 ms during drags (session 01: 
 **Correction to session 01.** Session 01's experience report says that after dragging Time "the picture is lighter".
 That was not verified (no pixel measurement), and F17 shows it was not true in the default mode: the drag changed the
 recipe and triggered renders, not the picture. The report is left as written; this note supersedes that sentence.
+
+## Session 03 (re-run of session 02 after CHB-031, plus the darkroom flow; main 15bd6df, CPU engine, Sonnet tester)
+
+[Report](../sessions/03-sonnet-rerun-session-02/experience-report.md) (before/after table),
+[diary](../sessions/03-sonnet-rerun-session-02/diary.md). Verdicts: **fixed** F8, F12, F17, F18, F19, F21, F22, F23;
+**partly** F9 (`E_EVAL`, `W_NO_*`, `scan.flare` in "Technical:" lines; raw History entries; a tooltip typo), F10
+(640 px working image, soft at zoom, about 10 s of "refine" per zoom step, no 1:1 command), F20 (raw010 upright and
+smoother, but the Epson strip's frames come out sideways); F1–F7, F11, F13, F15, F16 **still fixed**. The darkroom
+flow works: the test-strip bands equal the plain print at each band's time; Time 6.3/10/12.6/15.87/30 s gives luma
+97.6/56.8/42.2/31.9/18.3 (session 02: 56.68 at every time). Lighter is ⅓ stop of time, and filtration moves the
+colour the way a darkroom printer expects. Cold NEF open: median 6.2 s (session 02: 29 s). Worst stall 367 ms.
+
+| ID | Sev | Summary | Seen in |
+|---|---|---|---|
+| F24 (S03-N1) | minor | View ▸ Layout switch closes the open frames ("select one to open its file again") | S03 |
+| F25 (S03-N2) | minor | Simple (normalised) shows a read-only "Time 10.0 s" that never moves while Lighter works; two rows titled "Printer lights" | S03 |
+| F26 (S03-N3) | minor | "Where is …?" stays modal when the file is opened through File ▸ Open instead; it blocks clicks until "Not now" | S03 |
+| F27 (S03-N4) | note | "Locate …" gives no file chooser in headless Chromium (test-harness limit; untested with real handles) | S03 |
+| F28 (S03-N5) | minor | The Epson strip's frames (`2025-08-09_raw000.dng`) open sideways, while raw010's are upright; old frames keep their old orientation | S03 |
+| F29 (S03-N6) | note | A warm-profile NEF open varied from 5.5 to 20 s once (load about 1); not reproduced | S03 |
+| F30 (S03-N7) | **major** | First print of a real Epson scan is cool and flat next to Negative Lab Pro's: B/R 1.21 vs 0.62, saturation 0.21 vs 0.46 (NLP colour-managed). The first print integrates the whole frame to grey (alpha 1), which over-corrects a warm sunny scene. **Owner decision:** the first print's colour aim | S03 |
+| F31 (S03-N8) | **major** | A digital photo gets no automatic first print: every photo opens at 10.0 s f/8 (`photoRecipe`, `apps/studio/src/main.ts:129,155`), so the daylight truck opens dark (luma 57/255) | S03 |
+| F32 (S03-N9) | minor | History entries raw and inconsistent: "+0.33 st" vs "+1/3 st", "Orientation transpose → flipH", "Auto view.frame.crop {…}" | S03 |
+| F33 (S03-N10) | minor | History panel rows overlap after about 20 entries | S03 |
+| F34 (S03-N11) | minor | No 1:1 command or zoom readout; on the CPU each zoom step waits about 10 s for "refine" and stays soft | S03 |
+| F35 (S03-N12) | note | Tooltip typo "The picture no orange mask and no film edge."; status words "refine", "draft" | S03 |
+| F36 (S03-N13) | note | Undo of another frame changes a picture that is not on screen (the label names the frame) | S03 |
+| F37 (S03-N14) | note | A 20 CC filtration step flips a warm photo to blue (correct physically, 0.20 D, but coarse as a first move). **Owner decision** with F30 | S03 |
+
+**Orchestrator checks.** F31 is confirmed in code: photos take `photoRecipe` (default recipe, as-shot white
+balance) and never `firstPrint`. For F30, the tester's comparison used the NLP TIFF without colour management
+(B/R 0.70). Converting it properly from ProPhoto RGB (its embedded profile) to sRGB makes it warmer still (B/R 0.62,
+saturation 0.46); see `shots/62b-side-by-side-chromobench-left-NLP-colour-managed-right.png`. So the gap is real,
+and it is a question of aim (neutral grey vs a lab's warm look), not a rendering error.
