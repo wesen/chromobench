@@ -64,6 +64,8 @@ export interface ViewportParts {
   lab: HTMLElement;
   busy: HTMLElement;
   msg: HTMLElement;
+  /** the zoom readout, or null where the viewport shows none (small, zoomReadout: false) */
+  zoom: HTMLElement | null;
   presenter: Presenter;
   colours: Colours;
   fixedStage: [number, number, number] | null;

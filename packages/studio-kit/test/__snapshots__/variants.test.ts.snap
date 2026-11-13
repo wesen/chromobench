@@ -314,7 +314,7 @@ exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] =
 module main "Chromobench"
   left   dockcol  width 200
            listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
-           panel history "History"
+           panel history "History"  hidden τ
              cb.history
   center column  class "cb-viewer"  grow 1
            cb.ribbon
@@ -367,7 +367,7 @@ module main "Chromobench"
            panel enlarger "Enlarger"
              when  cond τ
                else:
-                 text "Select a photo to print it."  dim  wrap
+                 text τ  dim  wrap
                then:
                  column
                    cb.arg  path "print.enlarger.mode"  segmented
@@ -375,7 +375,7 @@ module main "Chromobench"
                    cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
                    cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
                    cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-           panel paper "Paper"
+           panel paper "Paper"  hidden τ
              when  cond τ
                else:
                  text "Select a photo to print it."  dim  wrap
@@ -383,9 +383,9 @@ module main "Chromobench"
                  column
                    cb.arg  path "print.paper"  select
                    cb.arg  path "print.grade"  slider  step 0.5 none
-           panel exposures "Exposures"
+           panel exposures "Exposures"  hidden τ
              cb.exposures
-           panel approvals "Agent proposals"
+           panel approvals "Agent proposals"  hidden τ
              cb.approvals
 commands
   frame.pick "Flag as Pick" (Frame) ← cb.core

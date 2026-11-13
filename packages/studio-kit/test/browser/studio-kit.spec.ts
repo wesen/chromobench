@@ -45,7 +45,7 @@ test('classic print: a keyboard burst is one unit, Mod+Z undoes it, typed +1/3 s
   await time.locator('.cb-num').fill('+1/3 st');
   await time.locator('.cb-num').press('Enter');
   expect(await hook<number>(page, 'cb.log().committed.print.enlarger.time_s')).toBeCloseTo(12.599, 3);
-  await expect(page.locator('.cb-hist-i.is-cursor')).toContainText('Time 10.0 → 12.6 s (+1/3 st)');
+  await expect(page.locator('.cb-hist-i.is-cursor')).toContainText('Time 10.0 → 12.6 s (+⅓ stop)');
 });
 
 test('classic print: an agent proposal is shown, refused as stale, applied anyway', async ({ page }) => {

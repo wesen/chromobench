@@ -240,12 +240,22 @@ describe('viewport', () => {
     const v = presenter.draws.at(-1)!;
     expect(v.docW).toBe(600);
     expect(v.cx).toBeCloseTo(300, 5);
+    // the zoom readout (CHB-031 F34): fit shows its percentage; Actual Pixels is 100 %; a click on it fits again
+    const zoom = vp.querySelector<HTMLElement>('.ck-vp-zoom')!;
+    expect(zoom.hidden).toBe(false);
+    expect(zoom.textContent).toMatch(/^Fit · \d+ %$/);
+    expect(rt.commands.get('view.actual')?.label).toBe('Actual Pixels (1:1)');
     rt.run('view.actual');
     rt.flush();
     await rt.settle();
     expect((rt.store.peek(['view', 'vp', 'main']) as { zoom: unknown }).zoom).toBe(1);
     expect(presenter.draws.at(-1)!.zoom).toBe(1);
     expect(vpCalls().at(-1)!.t.pass).toBe('refine');
+    expect(zoom.textContent).toBe('100 %');
+    zoom.click();
+    rt.flush();
+    expect((rt.store.peek(['view', 'vp', 'main']) as { zoom: unknown }).zoom).toBe('fit');
+    expect(zoom.textContent).toMatch(/^Fit · /);
   });
 
   it('a slider drag asks for a draft, then a screen render when it ends', async () => {

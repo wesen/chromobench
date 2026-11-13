@@ -272,4 +272,19 @@ export class History {
     this.redoStack = [];
     this.emit('clear');
   }
+  /**
+   * Takes over another History's steps, redo stack and channels: a host that replaces its app in place keeps one
+   * undo history (CHB-031 F24, View ▸ Layout). The steps' patches are written into this History's store; their
+   * parts (EditLog units) do not depend on the store they were recorded in.
+   */
+  adopt(from: History): void {
+    if (from === this) return;
+    this.entries = from.entries;
+    this.redoStack = from.redoStack;
+    this.channels = from.channels;
+    this.seq = Math.max(this.seq, from.seq);
+    from.entries = [];
+    from.redoStack = [];
+    from.channels = new Map();
+  }
 }

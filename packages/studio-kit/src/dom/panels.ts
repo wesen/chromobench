@@ -6,7 +6,7 @@
 import { canonicalJSON } from '@chromobench/contract';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
-import { historyGroups, whyRows, WHO } from '../model/history.ts';
+import { describe, historyGroups, whyRows, WHO } from '../model/history.ts';
 import { exposureRows, printingScript } from '../model/tools.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
@@ -42,18 +42,30 @@ const history = list(
   (el, v, m) => {
     const e = v.f ? studioOf(m).frames.get(v.f) : undefined;
     if (!e) return void el.append(h('p', { class: 'cb-empty', text: 'No frame' }));
-    const groups = historyGroups(e.log, studioOf(m).route.lookup);
+    const lookup = studioOf(m).route.lookup;
+    const groups = historyGroups(e.log, lookup);
     const ol = h('ol', { class: 'cb-hist', id: 'history' });
     const start = h('li', { class: ['cb-hist-i', e.log.cursor === 0 && 'is-cursor'], 'data-index': '0' }, h('span', { class: 'cb-who', text: WHO[e.log.toJSON().initialBy] }), ' Frame added');
     listen(m.scope, start, 'click', () => m.rt.runCommand('history.jump', null, v.f, 0));
     ol.append(start);
+    let cursor: HTMLElement = start;
     for (const g of groups) {
-      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g.index + 1 === e.log.cursor && 'is-cursor'], 'data-tx': g.tx }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', g.changes.map(c => c.text).join('; '));
+      const text = g.changes.map(c => c.text).join('; ');
+      // the whole step in the tooltip, one change a line (a long row is cut with an ellipsis)
+      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g.index + 1 === e.log.cursor && 'is-cursor'], 'data-tx': g.tx, title: g.changes.map(c => c.text).join('\n') }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', text);
       listen(m.scope, li, 'click', () => m.rt.runCommand('history.jump', null, v.f, g.index + 1));
       ol.append(li);
+      if (g.index + 1 === e.log.cursor) cursor = li;
     }
-    for (const r of e.log.entries.filter(x => x.status === 'rejected')) ol.append(h('li', { class: 'cb-hist-i is-rejected', text: `Agent · rejected ${r.tx ?? ''} #${r.seq}` }));
+    // a rejected proposal in words (CHB-031 F32: not its transaction id and sequence number)
+    for (const r of e.log.entries.filter(x => x.status === 'rejected')) ol.append(h('li', { class: 'cb-hist-i is-rejected', text: `Agent · rejected: ${describe(r.m, e.log.committed, lookup)}` }));
     el.append(ol);
+    // the list is drawn anew on every change: keep the current step in view (F33: 30+ steps scroll)
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => {
+      if (!cursor.isConnected) return;
+      const top = cursor.offsetTop;
+      if (top < ol.scrollTop || top + cursor.offsetHeight > ol.scrollTop + ol.clientHeight) ol.scrollTop = Math.max(0, top + cursor.offsetHeight - ol.clientHeight);
+    });
   },
   same,
 );

@@ -31,6 +31,37 @@ export function notesTip(notes: readonly string[]): string {
   return `${sum}${how ? `. ${how}` : ''}\nTechnical: ${notes.join(' · ')}`;
 }
 
+/**
+ * The render passes in plain words (CHB-031 F35): a draft is the quick preview while a control moves, a screen pass
+ * the finished picture at the window's size, a refine pass the finished picture at full detail where it is zoomed.
+ */
+const PASS_WORDS: Record<string, string> = { draft: 'quick preview', screen: 'done', refine: 'done, full detail' };
+export const passWords = (pass: string): string => PASS_WORDS[pass] ?? pass;
+
+/**
+ * An error's text without its codes (E_EVAL, W_NO_SURROUND, CB-H401, CK-T440): the plain line of the status bar.
+ * The codes stay in the "Technical:" line of the tooltip (CHB-031 F35).
+ */
+export function plainError(text: string): string {
+  const s = text
+    .replace(/\b[EW]_[A-Z0-9_]+\b:?\s*/g, '')
+    .replace(/\b[A-Z]{2}-[A-Z]\d{3}\b:?\s*/g, '')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return s || 'something went wrong';
+}
+
+/**
+ * The open-mode guess's reason (ingest's noun phrase: "no orange mask and no film edge") as a sentence (CHB-031 F35:
+ * the tooltip read "The picture no orange mask and no film edge.").
+ */
+export function guessWhy(why: string, capital = true): string {
+  const w = why.replace(/^film edge\b/, 'a film edge');
+  const s = /^too dark\b/.test(w) ? `the picture is ${w}.` : `the picture shows ${w}.`;
+  return capital ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 const mp = (w: number, h: number): string => {
   const m = (w * h) / 1e6;
   if (m < 0.1) return `${w}×${h} px`;

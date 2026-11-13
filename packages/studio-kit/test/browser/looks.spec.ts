@@ -42,7 +42,7 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await expect.poll(() => hook<number>(page, 'cb.log().units.length')).toBe(1);
   expect(await hook<string>(page, 'cb.log().units[0].label')).toBe('Look: warm print at 60 %');
   expect(await hook<number>(page, 'cb.log().committed.print.lights.logH[2]')).toBeCloseTo(0.03, 6);
-  await expect(page.locator('.cb-hist-i.is-cursor').first()).toContainText('Printer lights (0, 0, 0) → (−1, 0, +1) pt');
+  await expect(page.locator('.cb-hist-i.is-cursor').first()).toContainText('Printer lights R 0 → −1, B 0 → +1 pt');
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('Control+z');
   await expect.poll(() => hook<number>(page, 'cb.log().cursor')).toBe(0);

@@ -5,7 +5,23 @@
 import { clamp } from '../../core/util.ts';
 import { ZOOMS, type Zoom, type ViewportParts } from './state.ts';
 
-export function viewGeometry({ el, cv, ov, V, st, viewPath, api }: ViewportParts) {
+/** a zoom factor as a percentage: "23 %", "100 %", "6.3 %" */
+export function zoomPercent(s: number): string {
+  const p = s * 100;
+  return `${p < 10 ? Number(p.toFixed(1)) : Math.round(p)} %`;
+}
+
+export function viewGeometry({ el, cv, ov, V, st, viewPath, api, zoom }: ViewportParts) {
+  // the readout: what the picture is shown at now (CHB-031 F34)
+  function showZoom(): void {
+    if (!zoom) return;
+    zoom.hidden = !V.nw;
+    if (!V.nw) return;
+    const pct = zoomPercent(V.s);
+    zoom.textContent = V.zoom === 'fit' ? `Fit · ${pct}` : pct;
+    zoom.dataset['zoom'] = String(V.zoom);
+    zoom.title = V.zoom === 'fit' ? `The whole picture at ${pct}. Click for actual pixels (1:1).` : `Shown at ${pct}. Click to fit the window.`;
+  }
   // ── layout & transform ──
   function layout(): void {
     const r = el.getBoundingClientRect();
@@ -28,6 +44,7 @@ export function viewGeometry({ el, cv, ov, V, st, viewPath, api }: ViewportParts
   function transform(): void {
     if (!V.nw) {
       V.s = 1;
+      showZoom();
       return;
     }
     V.s = V.zoom === 'fit' ? fitScale() : V.zoom === 'fill' ? Math.max(V.W / V.nw, V.H / V.nh) : +V.zoom;
@@ -38,6 +55,7 @@ export function viewGeometry({ el, cv, ov, V, st, viewPath, api }: ViewportParts
     V.cy = ih <= V.H ? 0.5 : clamp(V.cy, V.H / 2 / ih, 1 - V.H / 2 / ih);
     V.ox = V.W / 2 - V.cx * iw;
     V.oy = V.H / 2 - V.cy * ih;
+    showZoom();
   }
   function setView(patch: Record<string, unknown>): void {
     st.set(viewPath, Object.assign({}, st.peek(viewPath) || {}, patch));

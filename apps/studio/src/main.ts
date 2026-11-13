@@ -27,7 +27,7 @@ import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
 import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
-import { engineSummary, engineTip, notesSummary, notesTip } from './status-text.ts';
+import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
 import { firstPrint, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
@@ -83,6 +83,8 @@ const msgOf = (e: unknown): string => {
   const d = e as { code?: string; diag?: { message?: string }; message?: string };
   return d?.code ? `${d.code}: ${d.diag?.message ?? d.message ?? ''}` : e instanceof Error ? e.message : String(e);
 };
+/** an error's message without its code: the code goes to the "Technical:" line of the tooltip (CHB-031 F35) */
+const plainMsg = (e: unknown): string => plainError(msgOf(e));
 
 // ── the status line (exists before anything else, so the boot can talk) ──
 const engineEl = el('span', { id: 'engine', class: 'pill', title: 'The engine that computes the prints' });
@@ -176,7 +178,7 @@ async function main(): Promise<void> {
   try {
     host = await startEngine();
   } catch (e) {
-    status(`the engine did not start: ${msgOf(e)}`, { error: true });
+    status(`the engine did not start: ${plainMsg(e)}`, { error: true, detail: `Technical: ${msgOf(e)}` });
     report('The engine did not start', [msgOf(e)], '<p>Try <a href="?engine=reference">the reference engine</a> or <a href="?engine=mock">the mock engine</a>.</p>');
     throw e;
   }
@@ -185,9 +187,10 @@ async function main(): Promise<void> {
   engineEl.title = engineTip(host.label);
   engineEl.dataset['engine'] = host.label;
 
-  // the variant is built after setKnownValues, so the paper and stock menus list the data packs' stocks
-  const def = (await load()).default;
-  const built = buildVariant(def, { env: { params: Object.fromEntries(q), dev: q.has('dev') } });
+  // the variant is built after setKnownValues, so the paper and stock menus list the data packs' stocks; View ▸
+  // Layout builds another one in place (CHB-031 F24)
+  let def = (await load()).default;
+  let built = buildVariant(def, { env: { params: Object.fromEntries(q), dev: q.has('dev') } });
   const errors = built.app.diagnostics.list.filter((d) => d.level === 'error');
   if (errors.length) {
     report(`Build Report: ${def.label}`, errors.map((d) => `${d.code} ${d.message}${d.at ? `  ${d.at.file}:${d.at.line}` : ''}${d.fix ? `\n  fix: ${d.fix}` : ''}`));
@@ -216,16 +219,27 @@ async function main(): Promise<void> {
 
   root.innerHTML = '';
   bootTheme.dispose();
-  const { rt } = await mountStudio(built.app, root, studio, { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) });
-  mirrorTheme(rt);
-  chat.attach(rt);
-  // CHB-027 (F4): on a real engine, drags show drafts sized to ≈150 ms, and a slow engine still shows one
-  // render per 250 ms while the hand moves (else every move would abort the render in flight)
-  if (host.settings) {
-    studio.bridge.draftTargetMs = 150;
-    rt.renders.progressMs = 250;
-    rt.renders.preemptBackground = true;
-  }
+  const mountOpts = { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) };
+  let mounted = await mountStudio(built.app, root, studio, mountOpts);
+  // the runtime of the layout on screen: View ▸ Layout replaces it (switchLayout), and everything below that is
+  // wired to a runtime is registered with eachMount, which runs it now and again for the next runtime (F24)
+  let rt = mounted.rt;
+  const perMount: (() => void)[] = [];
+  const eachMount = (f: () => void): void => {
+    perMount.push(f);
+    f();
+  };
+  if (host.settings) studio.bridge.draftTargetMs = 150;
+  eachMount(() => {
+    mirrorTheme(rt);
+    chat.attach(rt);
+    // CHB-027 (F4): on a real engine, drags show drafts sized to ≈150 ms, and a slow engine still shows one
+    // render per 250 ms while the hand moves (else every move would abort the render in flight)
+    if (host.settings) {
+      rt.renders.progressMs = 250;
+      rt.renders.preemptBackground = true;
+    }
+  });
   // external agents: a bridge serving this page (or ?bridge=ws://127.0.0.1:7341/ws/page from the dev server)
   const bridgeEl = el('span', { id: 'bridge', class: 'pill', title: 'External agents (Claude Code, Claude Desktop) through chromobench serve' });
   bridgeEl.hidden = true;
@@ -235,21 +249,31 @@ async function main(): Promise<void> {
     bridgeEl.textContent = `agents: ${s}`;
   });
   // the presenters exist now: the display space follows the main viewer's canvas
-  const vp0 = viewports(rt)[0];
-  if (vp0) studio.bridge.displaySpace = vp0.presenter.colorSpace;
+  eachMount(() => {
+    const vp0 = viewports(rt)[0];
+    if (vp0) studio.bridge.displaySpace = vp0.presenter.colorSpace;
+  });
 
   // ── status from the runtime ──
   let rendered = 0;
-  rt.on('rendered', (e: { pass: string; viewport: string }) => {
-    rendered++;
-    status(`rendered ${rendered} · ${e.pass}`);
+  eachMount(() => {
+    rt.on('rendered', (e: { pass: string; viewport: string }) => {
+      rendered++;
+      // the pass in plain words (CHB-031 F35), its name in the tooltip
+      status(`rendered ${rendered} · ${passWords(e.pass)}`, { detail: `Technical: ${e.pass} pass` });
+    });
+    rt.on('renderError', (e: { error: unknown }) => status(explainError(e.error)?.text ?? plainMsg(e.error), { error: true, detail: `Technical: ${msgOf(e.error)}` }));
   });
-  rt.on('renderError', (e: { error: unknown }) => status(explainError(e.error)?.text ?? msgOf(e.error), { error: true, detail: msgOf(e.error) }));
   let lastFrame: string | null = null;
   let lastEntry: FrameEntry | undefined;
   let lastMode = studio.frames.mode;
   let lastLog: unknown = null;
-  rt.store.on(() => {
+  eachMount(() => {
+    lastFrame = null;
+    lastEntry = undefined;
+    rt.store.on(onStore);
+  });
+  function onStore(): void {
     const f = studio.current;
     const e = f ? studio.frames.get(f) : undefined;
     if (bridge && (f !== lastFrame || studio.frames.mode !== lastMode)) {
@@ -268,10 +292,10 @@ async function main(): Promise<void> {
     const a = rt.store.peek(['ui', 'approvals']) as Record<string, { stale?: { code: string; message: string }[] }> | undefined;
     const stale = Object.values(a ?? {}).flatMap((x) => x.stale ?? []);
     const recipe = f ? rt.store.peek(['recipes', f]) : null;
-    if (stale.length && !sticky) status(explainError({ diag: stale[0] })?.text ?? stale[0]!.message, { sticky: true, error: true, detail: stale.map((d) => `${d.code}: ${d.message}`).join('; ') });
+    if (stale.length && !sticky) status(explainError({ diag: stale[0] })?.text ?? stale[0]!.message, { sticky: true, error: true, detail: `Technical: ${stale.map((d) => `${d.code}: ${d.message}`).join('; ')}` });
     else if (sticky && recipe !== lastLog) sticky = false;
     lastLog = recipe;
-  });
+  }
 
   // ── the frame's mode in the status line (CHB-027): Photo / Negative, a click re-opens it the other way (F3, F6);
   //    a hint when the pixels say otherwise (F15) ──
@@ -295,7 +319,7 @@ async function main(): Promise<void> {
     if (g && g.kind !== now) {
       hintEl.hidden = false;
       hintEl.textContent = `Looks like a ${g.kind}: re-open as ${g.kind}?`;
-      hintEl.title = `The picture ${g.why}. Click to re-open ${e.name} as a ${g.kind}.`;
+      hintEl.title = `${guessWhy(g.why)} Click to re-open ${e.name} as a ${g.kind}.`;
       hintEl.dataset['mode'] = g.kind;
     }
   }
@@ -321,13 +345,16 @@ async function main(): Promise<void> {
     openAsEl.textContent = a === 'photo' ? 'Opening as photos' : 'Opening as negatives';
     openAsEl.title = `File ▸ Open As: files you open now open as ${a === 'photo' ? 'photos' : 'negatives'}, not guessed. Click to let the studio guess again.`;
   };
-  rt.store.on(showOpenAs);
+  eachMount(() => {
+    shownAs = '';
+    rt.store.on(showOpenAs);
+  });
   openAsEl.addEventListener('click', () => void rt.runCommand('file.openAs.auto', null));
 
   /** One question per open batch when a guess is unsure (F1): photos from a camera, or scans of negatives? */
   async function askMode(g: OpenGuess, name: string, count: number): Promise<'photo' | 'negative'> {
     const body = el('div', {},
-      el('p', { text: `${count > 1 ? `${name} and the other files` : name}: the picture ${g.why}.` }),
+      el('p', { text: `${count > 1 ? `${name} and the other files` : name}: ${guessWhy(g.why, false)}` }),
       el('p', { text: 'Are these photos from a camera, or scans of negatives?' }));
     const r = await rt.chrome.dialog({
       title: count > 1 ? 'Photos or negatives?' : 'Photo or negative?',
@@ -349,6 +376,10 @@ async function main(): Promise<void> {
     }).result;
     return r === 'reopen';
   }
+  /** the library frame whose file "Where is …?" asked for last: an open of that file selects it (F26) */
+  let asking: string | null = null;
+  /** the open "Where is …?" dialog (a layout switch closes it) */
+  let whereIs: { close(): void } | null = null;
   /**
    * Opens files as File ▸ Open As says (Auto guesses each file; one question per batch when unsure). The status line
    * always ends with what happened (F2): opened, already open, or the error.
@@ -394,12 +425,15 @@ async function main(): Promise<void> {
           if (o.expect && o.expect.sha256 !== r.entry.sha) rt.chrome.toast(`${pf.name} is not the file ${o.expect.name} was made from: it opened as a frame of its own`, { kind: 'warn' });
           if (first) {
             first = false;
-            rt.runCommand('frame.select', null, r.entry.id);
+            // the frame he asked for when it is on this file ("Where is raw010.dng?" for its frame 2), else the first
+            const asked = asking && r.entries.some((x) => x.id === asking) ? asking : null;
+            if (asked) asking = null;
+            rt.runCommand('frame.select', null, asked ?? r.entry.id);
             if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
           }
         } catch (err) {
           // in his words (WS-C's explainError), the technical text in the tooltip
-          failed.push(`${pf.name}: ${rt.explainError?.(err, {})?.text ?? msgOf(err)}`);
+          failed.push(`${pf.name}: ${rt.explainError?.(err, {})?.text ?? plainMsg(err)}`);
           details.push(`${pf.name}: ${msgOf(err)}`);
           console.error(err);
         }
@@ -411,7 +445,7 @@ async function main(): Promise<void> {
     if (opened.length) parts.push(opened.length === 1 ? `opened ${opened[0]}` : `opened ${opened.length} files`);
     if (already.length) parts.push(already.length === 1 ? `${already[0]} was already open` : `${already.length} were already open`);
     if (failed.length) parts.push(failed.length === 1 ? failed[0]! : `${failed.length} could not be opened (${failed[0]})`);
-    status(parts.join(' · ') || 'nothing opened', { error: failed.length > 0 && !opened.length && !already.length, ...(details.length ? { detail: details.join('\n') } : {}) });
+    status(parts.join(' · ') || 'nothing opened', { error: failed.length > 0 && !opened.length && !already.length, ...(details.length ? { detail: `Technical: ${details.join('\n')}` } : {}) });
   }
 
   // ── the library across reloads (F5): a thumbnail of each frame's print is kept in its catalog entry; a frame not
@@ -437,13 +471,14 @@ async function main(): Promise<void> {
       if (url) void kv.put('frames', `thumb:${id}`, url).catch(() => undefined);
     }, ms));
   }
-  // the thumbnails saved last session, into the catalog before anything renders
-  {
+  // the thumbnails saved last session, into the catalog before anything renders (and after a layout switch)
+  async function savedThumbs(): Promise<void> {
     const ids = (rt.store.peek(['catalog', 'order']) as string[] | undefined) ?? [];
     const got = await Promise.all(ids.map((id) => kv.get<string>('frames', `thumb:${id}`).catch(() => undefined)));
     const writes = ids.flatMap((id, i) => (got[i] && (rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined)?.thumb !== got[i] ? [{ path: ['catalog', 'frames', id, 'thumb'], value: got[i] }] : []));
     if (writes.length) rt.store.writeDoc(writes, { tier: 'document' });
   }
+  await savedThumbs();
   studio.frames.onAdded((e) => {
     scheduleThumb(e.id, 500);
     e.log.on((ev) => {
@@ -461,18 +496,38 @@ async function main(): Promise<void> {
       const h = await kv.get<FileSystemFileHandle>('handles', `file:${c.sha256}`).catch(() => undefined);
       if (h) {
         status(`opening ${c.name} again…`);
-        if (await reconnect(h).catch(() => false)) return await openFiles(await fromHandles([h]), { as, expect: c });
+        if (await reconnect(h).catch(() => false)) {
+          asking = id;
+          await openFiles(await fromHandles([h]), { as, expect: c });
+          if (asking === id) asking = null;
+          return;
+        }
       }
       const file = c.file ?? c.name;
-      const r = await rt.chrome.dialog({
+      const d = rt.chrome.dialog({
         title: `Where is ${file}?`,
         body: el('p', { text: `The library keeps ${c.name} and its recipe, but the browser needs the file again to show it.` }),
         buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${file}…`, value: 'locate', primary: true }],
-      }).result;
+      });
+      // answered another way (F26): the file opened through File ▸ Open or a drop while the dialog was up. The
+      // dialog closes as soon as the frame is open, and that open selects it (asking).
+      asking = id;
+      whereIs = d;
+      const off = studio.frames.onAdded((e) => void (e.id === id && d.close()));
+      let r: unknown;
+      try {
+        r = await d.result;
+      } finally {
+        off();
+        if (whereIs === d) whereIs = null;
+      }
+      if (studio.frames.get(id)) return;
+      if (r !== 'locate' && asking === id) asking = null;
       if (r === 'remove') studio.remove([id]);
       else if (r === 'locate') {
         const files = await chooseFiles(false);
         if (files.length) await openFiles(files, { as, expect: c });
+        if (asking === id) asking = null;
       } else status(`${c.name} is not open: select it again to open its file`);
     } finally {
       relinking.delete(id);
@@ -484,7 +539,7 @@ async function main(): Promise<void> {
       try {
         return await pickFiles(multiple);
       } catch (e) {
-        if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
+        if ((e as Error)?.name !== 'AbortError') status(plainMsg(e), { error: true, detail: `Technical: ${msgOf(e)}` });
         return [];
       }
     }
@@ -499,13 +554,18 @@ async function main(): Promise<void> {
   // (a right-click selects too, for the context menu: that one does not ask for the file)
   let armed = false;
   let lastSel: string | null = studio.current;
-  let rightAt = 0;
+  // no right-click yet: -Infinity, not 0 (performance.now() starts at 0 with the page, so a click in its first half
+  // second counted as a right-click and asked for nothing)
+  let rightAt = -Infinity;
   document.addEventListener('pointerdown', (e) => void (e.button === 2 && (rightAt = performance.now())), true);
-  rt.store.on(() => {
-    const f = studio.current;
-    if (f === lastSel) return;
-    lastSel = f;
-    if (armed && f && isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
+  eachMount(() => {
+    lastSel = studio.current;
+    rt.store.on(() => {
+      const f = studio.current;
+      if (f === lastSel) return;
+      lastSel = f;
+      if (armed && f && isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
+    });
   });
   // drop files anywhere on the window ("or drop them here"); Chrome hands file handles too
   document.addEventListener('dragover', (e) => {
@@ -539,7 +599,7 @@ async function main(): Promise<void> {
   document.body.append(fileInput, folderInput);
   let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
   if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
-  const layouts = Object.keys(VARIANTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
+  const layouts = (): { id: string; label: string }[] => Object.keys(VARIANTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
   const hostActions: StudioHost = {
     openFiles: async () => {
       if (!hasFilePicker()) return fileInput.click();
@@ -555,7 +615,7 @@ async function main(): Promise<void> {
         studio.setHost({ ...hostActions, folder: dir.name });
         await openFiles(await listScans(dir));
       } catch (e) {
-        if ((e as Error)?.name !== 'AbortError') status(msgOf(e), { error: true });
+        if ((e as Error)?.name !== 'AbortError') status(plainMsg(e), { error: true, detail: `Technical: ${msgOf(e)}` });
       }
     },
     // the last folder (Chrome keeps the handle; reading it again needs a click)
@@ -571,15 +631,63 @@ async function main(): Promise<void> {
       if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
     },
     ...(host.settings ? { dust: (on: boolean) => void (host.settings!.dust = on) } : {}),
-    layouts,
+    layouts: layouts(),
     layout: def.id,
-    setLayout: (v: string) => {
-      const u = new URL(location.href);
-      u.searchParams.set('variant', v);
-      location.href = u.toString();
-    },
+    // in place (F24): the open frames stay open; after the command that asked has returned
+    setLayout: (v: string) => void setTimeout(() => void switchLayout(v), 0),
   };
   studio.setHost(hostActions);
+
+  /**
+   * View ▸ Layout (CHB-031 F24): builds the other layout and mounts it in place of this one. The engine, its decoded
+   * sources and the frames' EditLogs stay; the new runtime restores the library, the selection and the workspace
+   * from what this one saved, and the frames are published into it again (Frames.onAdded replays them). A reload
+   * lost every frame whose file the browser could not read again without asking.
+   */
+  let switching = false;
+  async function switchLayout(v: string): Promise<void> {
+    const load2 = VARIANTS[v as VariantId];
+    if (switching || !load2 || v === def.id) return;
+    switching = true;
+    try {
+      const def2 = (await load2()).default;
+      const built2 = buildVariant(def2, { env: { params: { ...Object.fromEntries(q), variant: v }, dev: q.has('dev') } });
+      const errs = built2.app.diagnostics.list.filter((d) => d.level === 'error');
+      if (errs.length) {
+        rt.chrome.toast(`The layout ${def2.label} could not be built`, { kind: 'error', detail: `Technical: ${errs.map((d) => `${d.code} ${d.message}`).join('\n')}` });
+        return;
+      }
+      status(`switching to ${def2.label}…`);
+      whereIs?.close();
+      studio.route.endBurst();
+      await studio.flush();
+      await rt.save();
+      const past = rt.history;
+      mounted.dispose();
+      studio.detach();
+      def = def2;
+      built = built2;
+      studio.setEnlarger(def.enlarger ?? 'real');
+      hostActions.layout = def.id;
+      hostActions.layouts = layouts();
+      mounted = await mountStudio(built.app, root, studio, mountOpts);
+      rt = mounted.rt;
+      // one undo history across layouts: Mod+Z after the switch undoes the step made before it
+      rt.history.adopt(past);
+      for (const f of perMount) f();
+      await savedThumbs();
+      dropOfflineSelection();
+      const u = new URL(location.href);
+      u.searchParams.set('variant', def.id);
+      history.replaceState(history.state, '', u.toString());
+      document.body.dataset['variant'] = def.id;
+      for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
+      const open = studio.frames.all().length;
+      status(`layout: ${def.label}${open ? ` · ${open} frame${open > 1 ? 's' : ''} open` : ''}`);
+    } finally {
+      switching = false;
+    }
+  }
 
   /** File ▸ Export…: format and colour space, then where to (the picker) */
   async function exportDialog(): Promise<void> {
@@ -625,7 +733,7 @@ async function main(): Promise<void> {
       return x;
     } catch (err) {
       const cancelled = (err as Error)?.name === 'AbortError' || /E_CANCELLED/.test(msgOf(err));
-      status(cancelled ? 'export cancelled' : `export failed: ${msgOf(err)}`, { error: !cancelled, sticky: true });
+      status(cancelled ? 'export cancelled' : `export failed: ${plainMsg(err)}`, { error: !cancelled, sticky: true, ...(cancelled ? {} : { detail: `Technical: ${msgOf(err)}` }) });
       return null;
     }
   }
@@ -649,12 +757,15 @@ async function main(): Promise<void> {
   // F18: Open as Photos / Negatives lasts until a restart, then Guess again, unless he kept it (File ▸ Open As)
   if (openAsPref() !== 'auto' && !rt.store.peek(['prefs', 'openAsKeep'])) void rt.runCommand('file.openAs.auto', null);
   showOpenAs();
-  hook(rt, studio, def.id, host, exportFrame, chat);
+  eachMount(() => hook(rt, studio, def.id, host, exportFrame, chat));
   // a selection restored from last time that is not open: cleared, so the first click on it opens its file
-  if (studio.current && isOffline(rt.state, studio.current)) {
-    rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
-    lastSel = null;
+  function dropOfflineSelection(): void {
+    if (studio.current && isOffline(rt.state, studio.current)) {
+      rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
+      lastSel = null;
+    }
   }
+  dropOfflineSelection();
   armed = true;
   const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => isOffline(rt.state, x)).length ?? 0;
   status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');

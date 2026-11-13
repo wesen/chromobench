@@ -127,6 +127,29 @@ describe('one global undo (§6.3)', () => {
     expect(log.stateHash).toBe(sha256Hex(canonicalJSON(studio.frames.get(f)!.initial)));
   });
 
+  it('CHB-031 F36: Undo and Redo of a change on another frame select that frame, after the toast named it', async () => {
+    const { rt, studio, f } = await started();
+    const g = (await studio.open(makeM1Tiff().map((b, i) => (i === 300 ? b ^ 1 : b)), 'm1b.tif')).id;
+    rt.run('frame.select', f);
+    rt.store.preview(recipePath(f, TIME), 12.6);
+    rt.store.commit('Time');
+    rt.run('frame.select', g);
+    const toasts = () => (rt.chrome as unknown as { log: { kind: string; text?: string }[] }).log.filter(x => x.kind === 'toast').map(x => x.text);
+    rt.run('edit.undo');
+    expect(toasts().at(-1)).toBe('Undo Time (on m1.tif)');
+    await Promise.resolve();
+    expect(studio.current).toBe(f);
+    expect((rt.state as any).recipes[f].print.enlarger.time_s).toBe(10);
+    rt.run('frame.select', g);
+    rt.run('edit.redo');
+    await Promise.resolve();
+    expect(studio.current).toBe(f);
+    // a step on the frame on screen changes nothing in the selection
+    rt.run('edit.undo');
+    await Promise.resolve();
+    expect(studio.current).toBe(f);
+  });
+
   it('CB-H401: after a History-panel jump the stale part is skipped, with no log.undo, and the next step is undone', async () => {
     const { rt, studio, f } = await started();
     const log = studio.frames.get(f)!.log;
@@ -156,7 +179,7 @@ describe('agent proposals as previews (§6.4, §11)', () => {
     expect(p[0].tx).toBe('eval-k2');
     expect(p[0].why).toBe('warmer');
     expect(p[0].recipe.print.lights.logH).toEqual([0.1, 0, 0]);
-    expect(p[0].changes[0].text).toMatch(/Printer lights .* → \(\+4, 0, 0\) pt/);
+    expect(p[0].changes[0].text).toBe("Printer lights R 0 → +4 pt");
     expect((rt.state as any).recipes[f].print.lights.logH).toEqual([0, 0, 0]);
     // a drag during a shown proposal still works: the proposal never uses the preview slot
     rt.run('proposal.show', 'eval-k2');

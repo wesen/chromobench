@@ -15,7 +15,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NodeData } from '../ir/node.ts';
 import type { Colours, Presenter } from '../app/render/types.ts';
-import { h, svgEl } from './h.ts';
+import { h, listen, svgEl } from './h.ts';
 import { defineRenderer, type MountCtx } from './mount.ts';
 import { Canvas2DPresenter } from './presenter-2d.ts';
 import { viewState, type DomViewport, type ViewportParts } from './viewport/state.ts';
@@ -42,7 +42,11 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
   busy.hidden = true;
   const msg = h('div', { class: 'ck-vp-msg' });
   msg.hidden = true;
-  el.append(cv, ov, lab, hud, busy, msg);
+  // the zoom readout ("Fit · 23 %", "100 %"; CHB-031 F34); a click toggles Fit and Actual Pixels. Not on a small
+  // viewport or where the program turns it off (zoomReadout: false); geometry's transform() writes it.
+  const zoomEl = h('button', { type: 'button', class: 'ck-vp-zoom', 'aria-label': 'Zoom' });
+  zoomEl.hidden = true;
+  el.append(cv, ov, lab, hud, busy, msg, zoomEl);
   if (p['hud']) {
     const x = m.mount(p['hud']);
     if (x) hud.append(x);
@@ -91,9 +95,18 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
     rt.renders.cancel('vp:' + vid + ':before');
   });
 
-  const vp: ViewportParts = { n, m, p, rt, st, vid, el, cv, ov, lab, busy, msg, presenter, colours, fixedStage, themeStage, viewPath, V, api };
+  const readout = !p['small'] && p['zoomReadout'] !== false ? zoomEl : null;
+  const vp: ViewportParts = { n, m, p, rt, st, vid, el, cv, ov, lab, busy, msg, zoom: readout, presenter, colours, fixedStage, themeStage, viewPath, V, api };
   const geometry = viewGeometry(vp);
   const { setView, setZoom, zoomBy } = geometry;
+  if (readout) {
+    // not a gesture on the picture: the viewport's pointer handler never sees the press
+    listen(m.scope, readout, 'pointerdown', (e: PointerEvent) => e.stopPropagation());
+    listen(m.scope, readout, 'click', (e: MouseEvent) => {
+      e.stopPropagation();
+      setZoom(V.zoom === 'fit' ? 1 : 'fit');
+    });
+  }
   // the tool and pointer functions first (no cells): the overlays paint the tool, the renders set the cursor
   const pointer = viewPointer(vp, geometry);
   const paints = viewPaint(vp, pointer);
