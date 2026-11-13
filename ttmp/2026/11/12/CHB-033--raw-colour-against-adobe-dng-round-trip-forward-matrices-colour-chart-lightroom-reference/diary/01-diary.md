@@ -419,3 +419,125 @@ saturation surplus and local hue twists from Adobe's tables, not a decoding erro
   literals (1025 values; first 0.0, 0.00078, 0.0016; last 0.99974, 0.99987, 1.0).
 - The comparison mask is Y(S5) in (0.01, 0.95), in Adobe's rendered (tone-mapped) space, so it differs from step
   2's mask.
+
+## Step 5: Adobe's reference renderer (dng_validate) built on the Mac; the port matches it to ΔE2000 ≤ 0.13
+
+The port of step 4 needed checking against Adobe's own code. I built the DNG SDK's `dng_validate` on the Mac, after
+the user repaired Xcode (`sudo xcodebuild -runFirstLaunch`) and with a one-line fix to the bundled zlib.
+`dng_validate` wrote two images per DNG: Adobe's stage-3 image (its demosaiced, linear camera RGB, the input to
+rendering) and its final render in ProPhoto RGB at 16 bits. I fed the stage-3 pixels into my port and compared its
+output with Adobe's render on the same pixels. They agree to median ΔE2000 0.015–0.04 and at most 0.13 over
+260,000–370,000 pixels per photo, so the port is Adobe's pipeline.
+
+With Adobe's own full-resolution demosaic as the common input, our colour (the colour-matrix path chromobench uses)
+stands at median ΔE2000 0.8–1.9 from Adobe Standard's final colour (p90 2.1–4.9). Adobe's forward matrix without the
+profile tables is at 2.2–6.0. This confirms step 4's numbers, which used LibRaw's demosaic at 384 px.
+
+### Prompt Context
+**User prompt (verbatim):** "i can help if you want"; "done" (after running `sudo xcodebuild -runFirstLaunch` on the Mac). See step 2 for the request this serves.
+**Assistant interpretation:** Validate the ported pipeline against Adobe's reference renderer.
+**Inferred user intent:** Results the report can rest on, not a port that might be subtly wrong.
+**Commit (code):** see the commit that adds this step
+
+### What I did
+- Copied the SDK zip to the Mac (`~/chromobench-tools/dngsdk/`). `xcodebuild -list` first failed: `xcodebuild failed to load a required plug-in. Ensure your system frameworks are up-to-date by running 'xcodebuild -runFirstLaunch'`
+  (`Symbol not found: _$s12DVTDownloads19DownloadsGlobalInfoV…` in IDESimulatorFoundation). This needs an admin
+  password, and the user ran it.
+- `xcodebuild -project dng_validate.xcodeproj -scheme "dng_validate release" -configuration Release -derivedDataPath ~/chromobench-tools/dngsdk/dd build`.
+  First build: `BUILD FAILED`, `_stdio.h:322:7: error: expected identifier or '('` in the XMP toolkit's bundled
+  zlib. Its `zutil.h:133` has `#if defined(MACOS) || defined(TARGET_OS_MAC)` and defines `fdopen(fd,mode)` as
+  `NULL`, which clashes with the macOS 26.2 SDK's `fdopen` declaration. I changed it to `#if defined(MACOS)` (the
+  fix newer zlib releases made); the original is kept as `zutil.h.orig`. Second build: `** BUILD SUCCEEDED **`.
+  Binary: `dng_sdk/targets/mac/release64/dng_validate`, Mach-O arm64, "dng_validate, version 1.7.1".
+- Rendered each DNG:
+  `dng_validate -3 <out>/<name>-stage3 -cs3 -16 -tif <out>/<name>-adobe-prophoto16 <name>.dng`, about 2 s each.
+  Stage 3 is 6032 × 4032 × 3 uint16 with no ICC profile. The final image is 6016 × 4016 × 3 uint16 with an ICC
+  profile, cropped at DefaultCropOrigin (8, 8), DefaultCropSize 6016 × 4016. Copied the eight TIFFs (1.16 GB) with
+  `scp` to the git-ignored `.playwright-mcp/dngv/`.
+- `scripts/04a-sample-dng-validate.py` (numpy + tifffile, no colour math): every 8th pixel of the final image and
+  the stage-3 pixel at the same place, shifted by the crop origin. That gives 377,504 samples per photo as float32
+  records (stage-3 RGB, final RGB) in `<name>-samples.f32`.
+- Moved the port's functions from script 03 into `scripts/lib-adobe.ts`, so scripts 03 and 04 run identical code.
+  Script 03 gives the same numbers after the move (DSC_8559: 0.93 / 1.99 / 5.05).
+- Read two more details in the SDK:
+  - `RefBaselineABCtoRGB` (`dng_reference.cpp:1389`) caps each camera channel at the camera white before the
+    matrix.
+  - The camera white is `colorMatrix · XYZ(white)` scaled to a maximum entry of 1 (`dng_color_spec.cpp:548–550`).
+    The forward-matrix path then divides by that white (`:591–595`).
+
+  In the port, the cap is the neutral divided by its maximum.
+- `scripts/04-validate-port.ts`:
+  - Caps and renders each stage-3 sample through the port.
+  - Compares with Adobe's value as 16-bit code differences (the port's output encoded as x^(1/1.8)) over all
+    samples.
+  - Computes ΔE2000 in Lab(D50) over samples where Adobe's encoded output is between 0.0193 and 0.999. That skips
+    the SDK's spline toe, below 0.0193 encoded, and clipped values.
+  - Puts our colour-matrix colour and Adobe's forward matrix without tables, both through Adobe's exposure and
+    tone, against the same Adobe render.
+
+### Why
+- Feeding Adobe's stage 3 into the port removes every difference except the rendering itself: same demosaic,
+  same pixels, same crop.
+
+### What worked
+- Port vs `dng_validate` (median / p90 / p99 / max):
+
+  | Photo | Compared | ΔE2000 port vs Adobe | Samples > 3 | 16-bit code \|Δ\| (all samples) |
+  |---|---|---|---|---|
+  | DSC_8559 | 366,072 | 0.040 / 0.060 / 0.070 / 0.13 | 0 | 5.6 / 7.3 / 178.9 / 200.9 |
+  | DSC_8541 | 369,216 | 0.023 / 0.032 / 0.039 / 0.09 | 0 | 4.3 / 7.5 / 84.9 / 201.1 |
+  | DSC_8536 | 293,083 | 0.015 / 0.027 / 0.040 / 0.07 | 0 | 3.2 / 164.4 / 199.8 / 201.1 |
+  | DSC_8655 | 259,738 | 0.016 / 0.031 / 0.048 / 0.11 | 0 | 3.5 / 173.9 / 199.8 / 201.3 |
+
+  The large code differences sit only in the deepest shadows, where the port encodes with a pure power and the SDK
+  with its spline toe (`dng_function_GammaEncode_1_8`, x ≤ 8.2·10⁻⁴). That is why the dark evening and night
+  frames have p90 values above 160 while their ΔE over the compared range stays below 0.05.
+- Against Adobe's render, with Adobe's demosaic for all (ΔE2000 median / p90 / p99 / max):
+
+  | Photo | Our colour + Adobe exposure/tone | Adobe FM without tables |
+  |---|---|---|
+  | DSC_8559 daylight | 0.785 / 2.106 / 5.164 / 15.95 | 2.227 / 5.590 / 10.386 / 16.52 |
+  | DSC_8541 tungsten | 1.863 / 4.916 / 6.757 / 15.20 | 5.981 / 7.842 / 9.368 / 15.68 |
+  | DSC_8536 evening | 1.484 / 3.046 / 5.789 / 13.81 | 4.101 / 6.272 / 10.817 / 14.84 |
+  | DSC_8655 night | 1.599 / 2.640 / 11.083 / 19.75 | 4.502 / 6.021 / 9.642 / 20.73 |
+
+### What didn't work
+- `xcodebuild` before the user's `-runFirstLaunch` (above). The first build failed in zlib (above).
+- `find … -perm +111` found the built binary in `dng_sdk/targets/mac/release64/`, not in the derived-data folder,
+  and my first attempt to run it used an empty variable: `zsh:1: permission denied:`. The second `find` located it.
+- The repository root's `python3` (pyenv shim) has no `tifffile` (`ModuleNotFoundError: No module named 'tifffile'`).
+  The sampler runs with `~/.pyenv/versions/3.11.3/bin/python3` (`pyenv which python3` from the scratchpad), called
+  from outside the repository.
+
+### What I learned
+- The port reproduces Adobe's renderer to ΔE2000 0.13 at worst, despite McCamy instead of Robertson for the white's
+  temperature (g differs too little to show).
+- Steps 4 and 5 agree on our distance from Adobe Standard (median 0.8–2.1 either way). So LibRaw's demosaic and
+  the working-image size do not change the conclusion.
+
+### What was tricky to build
+- Aligning the two images: the final render is cropped (DefaultCropOrigin 8, 8), stage 3 is not. Without the
+  offset, every sample compares neighbouring pixels and texture inflates every difference.
+- The comparison range: values encoded below 0.0193 use the SDK's spline. Including them with a pure-power decode
+  would blame the port for an encoding detail, so they are excluded from ΔE (but kept in the code-difference column).
+
+### What warrants a second pair of eyes
+- The zlib patch is applied only to the SDK copy on the Mac (not committed anywhere); it is needed to rebuild there.
+- Adobe Standard is the profile in the DNG. Lightroom's default for new photos is Adobe Color (found on the Mac at
+  `/Library/Application Support/Adobe/CameraRaw/Settings/Adobe/Profiles/Adobe Raw/Adobe Color.xmp`), not compared yet.
+
+### What should be done in the future
+- Adobe Color as a second reference: render with `dng_validate -profile` if the profile can be embedded, or port
+  its look table from the XMP.
+- A ColorChecker for ground truth (which of the colours is accurate).
+- The report.
+
+### Code review instructions
+- `python3 04a-sample-dng-validate.py .playwright-mcp/dngv <name> 8` (with a python that has tifffile and numpy),
+  then `node ttmp/2026/11/12/CHB-033--…/scripts/04-validate-port.ts`.
+- On the Mac: `~/chromobench-tools/dngsdk/dng_sdk_1_7_1/dng_sdk/targets/mac/release64/dng_validate -3 <stage3> -cs3 -16 -tif <out> <file>.dng`.
+
+### Technical details
+- `dng_validate` options used: `-3 <file>` (stage-3 image to "<file>.tif"), `-cs3` (ProPhoto RGB), `-16`
+  (16 bits per channel), `-tif <file>`.
+- Encoded threshold 0.0193 = y1 of `dng_function_GammaEncode_1_8` (x1 = 8.2118790552e-4, y1 = 0.019310851).
