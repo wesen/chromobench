@@ -20,9 +20,24 @@ describe('notesSummary', () => {
     expect(notesSummary([
       'camera RAW (Nikon D850) via LibRaw, scan mode, CFA-binned to 4128×2752', 'working image 512×341',
       'base 0.12 0.41 0.71 D (rebate 18×150 at 196,22, edge)', 'scan.flare 0.13 0.06 0.04 % from the veil 1.0e-3 (holder), removed by the engine', 'W_NO_OPEN_GATE: no open gate',
-    ])).toBe('Colour negative (Nikon D850 RAW), 11 MP, film edge found');
+    ])).toBe('Colour negative (Nikon D850 RAW), 11 MP, film base read on the film edge');
     expect(notesSummary(['TIFF 96×64, 16-bit', 'no rebate found: the base is the brightest 5 % of columns (scan.density default)', 'no veil measured: scan.flare 0', 'dust: 3 specks healed']))
       .toBe('Colour negative (TIFF), 96×64 px, no film edge found, 3 dust specks healed');
+  });
+  it('a strip whose base came from the gaps between its frames says so, not "film edge found" (CHB-031 ko8e)', () => {
+    // the notes of his Epson strip 2025-08-09_raw000.dng (CHB-031 diary 04), its edge found on frame 1
+    const notes = [
+      'DNG 1608×3638, 16-bit', 'working image 283×640', 'base 0.08 0.37 0.69 D (rebate 98×31 at 15,22, edge)',
+      'scan.flare 0.82 0.36 0.15 % from the veil 8.1e-3 3.5e-3 1.5e-3 (frame), removed by the engine', 'W_NO_OPEN_GATE: No open gate in view',
+      'strip of 3 frames along y (confidence 1.00)',
+      'base 0.04 0.33 0.63 D from the gaps between frames (10105 px): the film edge found lay on a frame (base 0.07 0.37 0.69 D there)',
+      'strip working image 678×1534 (≈ 639 px a frame)',
+    ];
+    expect(notesSummary(notes)).toBe('Colour negative (DNG), 5.8 MP, strip of 3 frames, film base read between the frames');
+    expect(notesTip(notes)).toContain('Technical: DNG 1608×3638');
+    // no edge found at all, the base from the gaps: not "it may be a photo"
+    expect(notesSummary(['TIFF 96×64, 16-bit', 'no rebate found: the base is the brightest 5 % of columns (scan.density default)', 'W_NO_OPEN_GATE: a', 'W_NO_SURROUND: b',
+      'strip of 3 frames along y (confidence 0.90)', 'base 0.10 0.40 0.70 D from the gaps between frames (300 px)'])).toBe('Colour negative (TIFF), 96×64 px, strip of 3 frames, film base read between the frames');
   });
   it('a photo opened as a negative says so', () => {
     const s = notesSummary([

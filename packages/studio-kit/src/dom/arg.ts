@@ -17,6 +17,10 @@ import { printerSeconds, PT } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
+/** The title of a printer-lights nudge along one colour axis (CHB-031 F25: two rows called "Printer lights" read alike). */
+const AXIS_LABEL: Record<string, string> = { 'yellow-blue': 'Warmth', 'magenta-green': 'Tint' };
+/** A time nudge in normalised mode moves the three lights together: its row is about brightness, not seconds (F25). */
+const NORMALISED_TIME = { label: 'Brightness', tip: 'Lighter and Darker move the three printer lights together: the enlarger is normalised, so the time does not change the print.' };
 const cur = (s: any): string | null => s?.ui?.selection?.primary ?? null;
 
 /**
@@ -47,7 +51,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const a = argModel(String(p['path']));
   if (!a) return h('div', { class: 'cb-arg is-bad', text: `cb.arg('${p['path']}'): no such control` });
   const model = a.model;
-  const label: string = p['label'] ?? model.label;
+  const label: string = p['label'] ?? (p['widget'] === 'nudge' ? AXIS_LABEL[String(p['axis'])] : undefined) ?? model.label;
   const step = parseStep(p['step']);
   const rt = m.rt;
   const st = rt.store;
@@ -273,8 +277,13 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     else if (other) for (const t of tracks) t.reset?.();
     el.classList.toggle('is-empty', v.v === undefined);
     // nothing to set: no frame, a path this kind of frame does not have, or a control the enlarger mode ignores
-    // (a time nudge stays: it moves the printer lights in normalised mode)
+    // (a time nudge stays: it moves the printer lights in normalised mode, under a brightness title with no seconds)
     el.hidden = !v.f || v.na || (v.inert && widget !== 'nudge');
+    if (widget === 'nudge' && model.path === 'print.enlarger.time_s') {
+      lab.textContent = v.inert ? NORMALISED_TIME.label : label;
+      lab.title = v.inert ? NORMALISED_TIME.tip : controlTip(model);
+      if (v.inert) out.textContent = aside.textContent = '';
+    }
     el.classList.toggle('is-inert', v.inert);
   });
   return el;

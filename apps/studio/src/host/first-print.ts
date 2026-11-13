@@ -4,7 +4,8 @@
 // time (on the slider's 1/6-stop grid) and the colour remainder into the printer lights. In normalised mode (a
 // layout's choice, CHB-031) the time does nothing, so everything goes into the lights. Two passes, so a time
 // model that is not exactly log-linear still lands.
-// A photo (CHB-031 F31) is first-printed too, for its density only: its colour is the camera's as-shot white balance.
+// A photo (CHB-031 F31) is first-printed too, for its density only (half way from the camera's exposure to the
+// integrated grey): its colour is the camera's as-shot white balance. FIRST_PRINT_AIM holds both kinds' aims.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
 import { applyMutation, compile, defaultRecipe, type Box, type Engine, type FrameRecipe, type Graph, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
 
@@ -202,7 +203,7 @@ export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, 
 
 /**
  * The first print of a frame in the recipe's enlarger mode (real by default since contract 0.4; CHB-031), integrated
- * to grey with the aim of its kind (FIRST_PRINT_AIM: a negative's colour to grey, a photo's density only), the auto
+ * to grey with the aim of its kind (FIRST_PRINT_AIM: a negative to grey, a photo half way in density, its colour as shot), the auto
  * proposal recorded in print.lights.auto. Since CHB-010 the aim is fitted once, at calibration, so in real mode
  * time, f-number and the filtration shift move the print as at an enlarger.
  */

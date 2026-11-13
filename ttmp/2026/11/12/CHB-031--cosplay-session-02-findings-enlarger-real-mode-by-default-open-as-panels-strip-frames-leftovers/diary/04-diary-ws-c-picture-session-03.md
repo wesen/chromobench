@@ -8,7 +8,19 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://apps/studio/src/host/first-print.ts
+      Note: FIRST_PRINT_AIM, photo first print, subject-failure rule (F31, F30)
+    - Path: repo://apps/studio/src/status-text.ts
+      Note: where the film base was read (ko8e)
+    - Path: repo://packages/studio-kit/src/dom/arg.ts
+      Note: Brightness, Warmth, Tint nudge titles (F25)
+    - Path: repo://packages/studio-kit/src/model/enlarger.ts
+      Note: withoutInert and StudioLog (srvr)
+    - Path: repo://packages/studio-kit/src/model/orient.ts
+      Note: strip frames flipV by default (F28)
+    - Path: repo://ttmp/2026/11/12/CHB-031--cosplay-session-02-findings-enlarger-real-mode-by-default-open-as-panels-strip-frames-leftovers/scripts/wsc-01-compare-nlp.ts
+      Note: first print vs colour-managed NLP positive (F30 numbers)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-12T19:33:33.691724465-05:00
@@ -371,3 +383,298 @@ changing frames already in a library.
 - Boxes at 640 px (working strip): raw000 639×440/442/440, raw004 639×441/438/441, raw007 638×434 ×2, raw013 640×446
   ×3, raw010 639×432/437/437; all three frames along y. NLP positives: raw000 1466×1041, raw004 1477×1071, raw007
   1061×1488, raw010 1483×1073, raw013 1058×1476.
+
+## Step 5: F25 — Simple's time row says "Brightness" in normalised mode; the lights rows are "Warmth" and "Tint"
+
+Steps 2–4 were committed as `625ba21` with typecheck, lint and the unit suite green. In Simple, the Lighter/Darker
+nudge is a `cb.nudge('print.enlarger.time_s')`. WS-A kept it visible in normalised mode because its buttons move
+the three lights there, but its head still read "Time 10.0 s, 0 st", a value that never moves. The two colour nudges
+took the ArgSpec label "Printer lights". Now, in normalised mode, the time nudge's title is "Brightness" with no
+seconds and no stops, and its tooltip says why. In real mode (a frame printed in Classic) it stays "Time" with its
+value. A lights nudge along an axis takes its title from the axis: "Warmth" (yellow–blue) and "Tint"
+(magenta–green). The fix is generic in `dom/arg.ts`, so `simple.js` and the variant snapshots are untouched.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Hide the inert time row in Simple's normalised mode; distinct titles for the two rows.
+**Inferred user intent:** No control on screen that looks alive and never moves; rows that say what they do.
+**Commit (code):** in the commit of Steps 5–8 (hash in Step 9).
+
+### What I did
+- `packages/studio-kit/src/dom/arg.ts`: `AXIS_LABEL` ({yellow-blue: Warmth, magenta-green: Tint}) as the default
+  label of an axis nudge; `NORMALISED_TIME` (title "Brightness" and a tooltip); in the `m.cell` effect a time nudge
+  shows that title and clears its readout and aside while the recipe is normalised.
+- `e2e/studio-enlarger.spec.ts` (simple test): the time row's title is "Brightness", its readout empty, no " s" in
+  the row; the lights rows read ["Warmth", "Tint"]; a screenshot to `test-results/`.
+
+### Why
+- Hiding the whole nudge would also hide Lighter/Darker, the one exposure control in Simple; the row's head is what
+  was wrong.
+
+### What worked
+- In the built app (Step 8, B): titles `["Brightness","Warmth","Tint","Grade"]`, the row's text "Brightness◀ Lighter
+  Darker ▶"; Lighter moved the three lights by 0.100 log H (−0.118 → −0.219), time 10 s.
+
+### What didn't work
+- My first label expression `p['label'] ?? (cond && AXIS_LABEL[…]) ?? model.label` would have given `false` for
+  every control that is not a nudge (`??` keeps `false`); caught on reading it back, before any run.
+
+### What I learned
+- Only `simple.js` uses `cb.nudge`; no other variant changes.
+
+### What was tricky to build
+- The title must follow the frame: a real-mode frame opened in Simple keeps "Time" and its seconds, so the label is
+  set in the cell effect on every recipe change, not at mount.
+
+### What warrants a second pair of eyes
+- WS-D works on wording; "Brightness", "Warmth" and "Tint" are new visible words.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `packages/studio-kit/src/dom/arg.ts` (`AXIS_LABEL`, `NORMALISED_TIME`, the end of `renderArg`).
+- `e2e/studio-enlarger.spec.ts` test "simple: normalised by default…".
+
+### Technical details
+- Screenshot: `various/ws-c/wsc-02-simple-print-brightness-warmth-tint.png` (synthetic negative).
+
+## Step 6: srvr — no inert control enters the edit log, whoever writes
+
+WS-A hid the inert controls (time, aperture, magnification in normalised mode) and made `cb.arg` refuse to write
+them. Other writers could still record them: the looks kit's "print density" and "warm print" looks set
+`print.enlarger.time_s`, agent proposals can set any path, and so can a script. Each frame's log is now a
+`StudioLog`, a subclass of the contract's EditLog in `model/enlarger.ts`. Its `apply`, `propose` and `preview`
+pass the mutations through `withoutInert`: on a normalised recipe a write to time, f-stop or magnification becomes
+the same exposure on the three printer lights (core's optics law, as Lighter/Darker do), and the optics keep their
+value. The looks kit's `planFrame` runs the same function, so its tiles, its confirm card and the batch it applies
+agree. The DSL's time test strip already moved the lights in normalised mode (`stripRecipe`, WS-A), so it needed
+nothing.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Enforce "no inert control in the edit log" beyond the controls: looks, agent proposals,
+the DSL's time strip.
+**Inferred user intent:** The History never shows a Time change that did nothing; a look or a proposal that means
+"darker" still makes the print darker in normalised mode.
+**Commit (code):** in the commit of Steps 5–8 (hash in Step 9).
+
+### What I did
+- `packages/studio-kit/src/model/enlarger.ts`: `opticsShift(r, path, value)` (log t − 2 log N − 2 log (m + 1)
+  against the recipe's own; a null magnification is the reference 8×), `withoutInert(r, ms)` (in order, with a
+  running recipe, so a mode change earlier in the list counts; an `expect` on the time becomes one on the lights;
+  a zero shift or a non-number writes nothing), `StudioLog` (`make` = EditLog.create's record as a StudioLog;
+  overrides `apply`, `propose`, `preview`).
+- `packages/studio-kit/src/bridge/frames.ts` (`build`): `new StudioLog(saved, opts)` / `StudioLog.make(…)`.
+- `packages/studio-kit/kits/looks/src/engine/plan.ts` (`planFrame`): `withoutInert(recipe, res.mutations)` before the
+  preview recipe and the diff.
+- `packages/studio-kit/test/enlarger-mode.test.ts`: three tests (withoutInert cases; StudioLog apply/propose/preview
+  on normalised and real; a studio frame's log is a StudioLog and "print density" on a normalised frame plans and
+  applies lights, the time stays 10 s).
+
+### Why
+- One funnel instead of four call sites (route.apply, applyMutations, applyBatch, studio.propose, the agent's replay
+  in `packages/agent/src/worker/client.ts` all end in the frame's log). The contract's EditLog stays untouched; the
+  agent's worker already subclasses it the same way.
+- Translating rather than refusing: "a stop darker" from a look or the agent keeps its meaning.
+
+### What worked
+- `npx vitest run packages/studio-kit/test/enlarger-mode.test.ts packages/studio-kit/test/looks`: 47 passed.
+
+### What didn't work
+- `pnpm typecheck`: `packages/studio-kit/src/model/enlarger.ts(68,86): error TS18047: 'e.magnification' is possibly
+  'null'` (the contract's magnification is `number | null`, null = the calibration's reference); fixed with the
+  reference 8×.
+- My test expected the preview's lights at 2 log 2; they were 3 log 2 (`expected 0.90309 to be close to 0.602…`):
+  the preview adds two stops on top of the stop already applied. The test was wrong, not the code.
+
+### What I learned
+- `EditLog.create` constructs `new EditLog` (not `new this`), hence `StudioLog.make`.
+
+### What was tricky to build
+- Order matters inside one list: `[mode → real, time 20]` must keep the time; `[time 20, mode → real]` moves the
+  time's exposure onto the lights, which prints the same in real mode afterwards (time unchanged, lights shifted).
+
+### What warrants a second pair of eyes
+- Approving an agent proposal made before this change (pending entries in a saved log) applies it as logged.
+- The warm-print look's density parameter now shows as a lights change on normalised frames (its caption comes from
+  the diff, which follows).
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `packages/studio-kit/src/model/enlarger.ts` (`opticsShift`, `withoutInert`, `StudioLog`); `frames.ts` `build`;
+  `kits/looks/src/engine/plan.ts` `planFrame`.
+
+### Technical details
+- Normalised, time 10 → 20 s then f/8 → f/11: lights + log 2 − 2 log(11/8) = +0.025 log H each.
+
+## Step 7: ko8e — the decode note says where the film base was read
+
+The status line's decode summary said "film edge found" whenever a `base … D (rebate …)` note was present. That
+includes a strip whose base WS-B now reads on the film between the frames, because the edge found lay on a frame
+(raw000 and raw010 both). The summary now names the strip and where the base came from: "strip of 3 frames, film
+base read between the frames", or "film base read on the film edge", or "no film edge found". The technical notes
+in the tooltip are unchanged.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Fix the summary wording for a strip's gap base (status-text.ts).
+**Inferred user intent:** The words match what the program did.
+**Commit (code):** in the commit of Steps 5–8 (hash in Step 9).
+
+### What I did
+- `apps/studio/src/status-text.ts` `notesSummary`: "strip of N frames" from the `strip of N frames along …` note;
+  "film base read between the frames" from `base … D from the gaps between frames`, else "film base read on the film
+  edge" from `base … D (rebate …)`, else "no film edge found"; the "it may be a photo" hint not with a gap base.
+- `apps/studio/test/status-text.test.ts`: the edge case's new wording; a new test with raw000's actual notes (as
+  printed by decodeScan in Step 4) and a strip with no edge found.
+- `e2e/studio-open-strips.spec.ts`: `#notes` contains "strip of 3 frames, film base read between the frames".
+
+### Why
+- "found" said nothing about where the base was read, which is what the photographer needs when a frame's colour
+  looks off.
+
+### What worked
+- In the app (Step 8): "Colour negative (DNG), 5.8 MP, strip of 3 frames, film base read between the frames" for
+  raw000; the synthetic negative "…, film base read on the film edge".
+
+### What didn't work
+- My test expected "5.9 MP" for 1608×3638; the summary gives 5.8 (5.85 rounds down in toFixed). Test corrected.
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- WS-D's F9/F35 wording work may touch the same status line; this change is inside `notesSummary` only.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `apps/studio/src/status-text.ts` `notesSummary`; `npx vitest run apps/studio/test/status-text.test.ts`.
+
+### Technical details
+- N/A
+
+## Step 8: The built app, driven like a user
+
+`scripts/wsc-02-app-check.ts` drives the built app (preview on 4711, headless Chromium, CPU engine, a fresh library)
+through `#file` and the visible controls. It covers three synthetic cases (screenshots in `various/ws-c/`) and,
+with `--private`, his NEF and Epson strip (numbers only, screenshots into the scratchpad). Everything matched the
+unit-level numbers: the truck opens at 5.612 s, luma 105.7 (Node: 105.1), and raw000's frames open `flipV` with the
+new note. Frame 2 reads upright and matches NLP; frame 1 is upright too; frame 3, a portrait, opens sideways.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** Run the app and check the changes the way the photographer meets them.
+**Inferred user intent:** Working behaviour in the app, not only in tests.
+**Commit (code):** in the commit of Steps 5–8 (hash in Step 9).
+
+### What I did
+- `pnpm --filter @chromobench/studio build`; `pnpm --filter @chromobench/studio preview --port 4711 --strictPort`
+  (background, stopped afterwards).
+- `node ttmp/…/scripts/wsc-02-app-check.ts --private <scratchpad>/wsc/priv`.
+- Looked at `various/ws-c/wsc-02-…png`, `wsc-03-…png` and, privately, `app-raw000-f2.png`.
+
+### Why
+- The first print runs in the engine worker in the app; the Node tests call it directly.
+
+### What worked
+- A (classic, synthetic camera RAW): `{"openMs":14374,"kind":"digital-raw","mode":"real","time_s":8.909,
+  "lights":[0.001949,0.001949,0.001949],"auto":{"method":"integrate","alpha":0},"luma":123.1}`.
+- B (simple, synthetic negative): titles Brightness, Warmth, Tint, Grade; Lighter: lights −0.118 → −0.219, time 10.
+- C (classic, synthetic strip): three frames `flipV`; note "Colour negative (TIFF), 0.6 MP, strip of 3 frames, film
+  base read between the frames".
+- D (private): DSC_8559.NEF `time_s 5.612, lights 0.022799 ×3, auto integrate α 0, luma 105.7`, open 7.0 s;
+  2025-08-09_raw000.dng frames `["flipV","flipV","flipV"]`, frame 2 time 5 s, lights −0.029/0.002/−0.022, luma 144.2,
+  open 10.0 s.
+
+### What didn't work
+- No failures.
+
+### What I learned
+- The app's numbers equal the Node renders (Steps 2, 3) to within the pixel sampling.
+
+### What was tricky to build
+- The script is TypeScript run by Node's type stripping (like wsc-01), importing ingest's TIFF writers for the
+  synthetic files.
+
+### What warrants a second pair of eyes
+- N/A
+
+### What should be done in the future
+- Session 04 (task 92iq): the photo first print on several of his photos, the Epson strips' orientation, Simple.
+
+### Code review instructions
+- `node ttmp/2026/11/12/CHB-031--*/scripts/wsc-02-app-check.ts [--base …] [--private <scratchpad dir>]`.
+
+### Technical details
+- Screenshots (synthetic): `various/ws-c/wsc-01-classic-synthetic-photo-first-print.png`,
+  `wsc-02-simple-print-brightness-warmth-tint.png`, `wsc-03-classic-synthetic-strip-flipV-note.png`.
+
+## Step 9: The browser suite, the commit of Steps 5–8, the tasks
+
+The first full browser run on my ports gave 98 passed and 3 failed. One failure was my new F25 assertion:
+Playwright trims the expected substring, so `not.toContainText(' s')` became "not s", and "Brightness" contains
+an "s". The other two (a PNG decode on the GPU project, and the library surviving a reload) failed with a destroyed
+execution context and `window.chromobench` undefined after a reload. Rerun alone, all 11 tests of those three files
+passed, so those two were flakes under load (two workstreams' suites ran at once), not regressions. A second full
+run covers the final code (result below).
+
+### Prompt Context
+**User prompt (verbatim):** see Step 1.
+**Assistant interpretation:** The brief's checks before the final commit; check off the tasks.
+**Inferred user intent:** A mergeable branch with green checks.
+**Commit (code):** "CHB-031 WS-C: F25 Simple's Brightness/Warmth/Tint rows, srvr StudioLog (no inert control in the
+edit log), ko8e decode note, app check" (hash in the final reply).
+
+### What I did
+- `STUDIO_PORT=5221 STUDIO_KIT_PORT=5222 SHELL_DEMO_PORT=5223 GPU_PARITY_PORT=5224 CI=1 pnpm test:browser`
+  (twice), and `npx playwright test e2e/studio-decoders.spec.ts e2e/studio-open-mode.spec.ts
+  e2e/studio-enlarger.spec.ts` with the same ports.
+- `e2e/studio-enlarger.spec.ts`: `not.toContainText(/\d\s*s\b|\bst\b/)` (no seconds, no stops in the row).
+- `pnpm typecheck`, `pnpm lint`, `pnpm test`: green (102 files, 2784 passed, 7 skipped).
+- `docmgr task check --ticket CHB-031 --id nj2u,bey6,s7hd,88jx,srvr,ko8e`.
+
+### Why
+- The brief asks for the browser suite before the final commit.
+
+### What worked
+- Rerun of the three files: `11 passed (50.6s)`.
+- Second full run on the final code: `101 passed (2.6m)`.
+
+### What didn't work
+- First full run: `3 failed … 98 passed (4.5m)`:
+  `e2e/studio-enlarger.spec.ts:185` `Expected substring: not " s" Received string: "Brightness◀ LighterDarker ▶"`;
+  `e2e/studio-decoders.spec.ts:64` `page.evaluate: Execution context was destroyed, most likely because of a
+  navigation.`; `e2e/studio-open-mode.spec.ts:92` `page.evaluate: TypeError: Cannot read properties of undefined
+  (reading 'studio')`.
+
+### What I learned
+- Playwright normalises the whitespace of a `toContainText` string, trimming it; use a regex for a substring with a
+  leading space.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- The two load flakes (decoders PNG on the GPU project, open-mode reload) if they recur on main.
+
+### What should be done in the future
+- **Owner decisions:** F30's colour aim (Step 3's table; one line in `FIRST_PRINT_AIM`), and the photo density share
+  0.5 (Step 2). The Roll module's own roll first print uses `ALPHA = 0.75`
+  (`packages/studio-kit/kits/roll/src/engine/constants.ts`) while the studio's first print uses α 1. I left both
+  defaults as they are; once the owner decides, both should read the same value.
+- Session 04 (92iq): photo first print on more of his photos; Epson strips (`flipV`; portraits need one Rotate);
+  Simple's rows; the "print density" look in Simple.
+
+### Code review instructions
+- `git log --oneline main..task/chb-031-picture`; the two commits in order.
+
+### Technical details
+- Ports: preview 4711; browser 5221–5224.

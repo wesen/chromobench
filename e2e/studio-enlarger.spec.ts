@@ -190,6 +190,14 @@ test('simple: normalised by default; its Lighter / Darker move the three printer
   await idle(page);
   const e0 = await enlarger(page);
   expect(e0.mode).toBe('normalised');
+  // F25: no time row that never moves (the time nudge reads "Brightness", no seconds), and the two lights rows
+  // have their own titles
+  const timeRow = page.locator('.cb-arg.is-nudge[data-path="print.enlarger.time_s"]').first();
+  await expect(timeRow.locator('.cb-arg-l')).toHaveText('Brightness');
+  await expect(timeRow.locator('.cb-arg-v')).toHaveText('');
+  await expect(timeRow).not.toContainText(/\d\s*s\b|\bst\b/);
+  await expect(page.locator('.cb-arg.is-nudge[data-path="print.lights.logH"] .cb-arg-l')).toHaveText(['Warmth', 'Tint']);
+  await page.screenshot({ path: test.info().outputPath('f25-simple-normalised.png') });
   const m0 = await mean(page);
   const third = Math.log10(2) / 3;
   await page.getByRole('button', { name: 'Lighter', exact: true }).first().click();

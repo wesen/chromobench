@@ -134,6 +134,8 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   expect(notes).toMatch(/from the gaps between frames/);
   await page.getByText('strip-31.tif · 2/3', { exact: true }).first().click();
   await idle(page);
+  // the decode note says where the base was read (ko8e), not "film edge found"
+  await expect(page.locator('#notes')).toContainText('strip of 3 frames, film base read between the frames');
   await page.screenshot({ path: test.info().outputPath('01-synthetic-strip-frame2-upright.png') });
   // Frame ▸ Rotate Right, then Rotate Left: back as it was
   const orientation = () => page.evaluate(() => (window.chromobench.state() as any).recipes[window.chromobench.studio.current!].view.frame.orientation);

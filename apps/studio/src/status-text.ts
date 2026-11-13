@@ -43,7 +43,8 @@ const size = (s: string): { w: number; h: number } | null => {
 
 /**
  * One line for a frame's decode notes (the host's strings, in order): "Nikon D750 photo, 24 MP",
- * "Colour negative (Nikon D750 RAW), 6 MP, film edge found", "Colour negative (TIFF), 6 MP, no film edge found".
+ * "Colour negative (Nikon D750 RAW), 6 MP, film base read on the film edge", "Colour negative (DNG), 6 MP, strip of
+ * 3 frames, film base read between the frames", "Colour negative (TIFF), 6 MP, no film edge found".
  * An empty list gives ''.
  */
 export function notesSummary(notes: readonly string[]): string {
@@ -55,12 +56,18 @@ export function notesSummary(notes: readonly string[]): string {
   const fmt = /^(?:photo: )?([A-Z]{3,4}) \d+×\d+/.exec(first)?.[1];
   if (/^photo:/.test(first)) return `${cam ?? fmt ?? 'Digital'} photo${px}`;
   const parts = [`Colour negative (${cam ? `${cam} RAW` : fmt ?? 'scan'})${px}`];
-  if (notes.some((n) => /^base .* D \(rebate/.test(n))) parts.push('film edge found');
+  // where the film base was read (CHB-031 ko8e): a strip's base comes from the film between its frames when the edge
+  // found lay on a frame, or no edge was found
+  const strip = /^strip of (\d+) frames/.exec(notes.find((n) => /^strip of \d+ frames/.test(n)) ?? '')?.[1];
+  const gaps = notes.some((n) => /^base .* D from the gaps between frames/.test(n));
+  if (strip) parts.push(`strip of ${strip} frames`);
+  if (gaps) parts.push('film base read between the frames');
+  else if (notes.some((n) => /^base .* D \(rebate/.test(n))) parts.push('film base read on the film edge');
   else if (notes.some((n) => /^no rebate found/.test(n))) parts.push('no film edge found');
   const dust = notes.map((n) => /^dust: (\d+) specks/.exec(n)?.[1]).find((x) => x !== undefined);
   if (dust && dust !== '0') parts.push(`${dust} dust specks healed`);
   // no film edge, no open gate and no surround: what a photo opened as a negative looks like
   const missing = ['W_NO_OPEN_GATE', 'W_NO_SURROUND', 'W_REBATE_BLANK'].filter((c) => notes.some((n) => n.startsWith(`${c}:`))).length;
-  if (missing >= 2 && notes.some((n) => /^no rebate found/.test(n))) parts.push('it may be a photo, not a negative');
+  if (missing >= 2 && !gaps && notes.some((n) => /^no rebate found/.test(n))) parts.push('it may be a photo, not a negative');
   return parts.join(', ');
 }
