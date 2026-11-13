@@ -26,4 +26,4 @@
 - [x] Round 2 WS-D: F33 History rows do not overlap <!-- t:oyf6 -->
 - [x] Round 2 WS-D: F34 View ▸ Actual Pixels (1:1) and a zoom readout <!-- t:bjc2 -->
 - [x] Round 2 WS-D: F36 Undo of another frame shows that frame <!-- t:kwlw -->
-- [ ] Round 2: cosplay check of round 2 (session 04, short: F24–F36 and the photo first print) <!-- t:92iq -->
+- [x] Round 2: cosplay check of round 2 (session 04, short: F24–F36 and the photo first print) <!-- t:92iq -->

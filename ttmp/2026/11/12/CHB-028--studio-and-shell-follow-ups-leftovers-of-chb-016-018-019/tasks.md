@@ -15,3 +15,9 @@
 - [ ] [from CHB-016 no98] Help topic 'Writing a variant' from the declarations and examples <!-- t:v4fu -->
 - [ ] [from CHB-019 xupn] Dev hot reload of layouts (import.meta.hot); Load Variant moved to CHB-030 <!-- t:0x4k -->
 - [ ] Exports at the file's own size on both engines: an export is the working image's size (apps/studio/src/host/export.ts), so the CPU engine exports 640 px (512 before CHB-031) and the GPU its 4000 px default; decode at full size for an export (tiled), keep previews at the working size <!-- t:qfae -->
+- [ ] From CHB-026 session 04 F41: with 'Where is …?' open the File menu does not react and Ctrl+O gives no file chooser (modal dialog); let the dialog offer 'Open another file…' or let File ▸ Open through <!-- t:5vfk -->
+- [ ] From CHB-026 session 04 F43: History details — '+0.4 stop' next to ⅓ units, 'You' on every row, a merged Time row ordered after later rotate rows, a truncated long row <!-- t:6lah -->
+- [ ] From CHB-026 session 04 F44: switching a photo from Real to Normalised darkens it (luma 105 → 52): carry the time's density into the lights on a mode switch (and back) <!-- t:8nfh -->
+- [ ] From CHB-026 session 03 F37: the first filtration step (20 CC) flips a warm photo to blue; consider 5/10 CC steps for the first moves <!-- t:czh4 -->
+- [ ] From CHB-026 session 04 F42: portrait frames on a strip open sideways (flipV default fits landscape frames); a per-roll orientation or 'rotate all portrait frames' command <!-- t:itds -->
+- [ ] Owner decision (CHB-026 F30): the first print's colour aim for scans — neutral (now) or warm about 0.05–0.10 log H (CHB-031 WS-C diary 04 step 3 table); then one value for the studio's first print and the Roll module's ALPHA 0.75 <!-- t:cpv9 -->

@@ -12,3 +12,4 @@
 - [ ] 9. Rename variant → layout across API, folders, prefs, tests, docs (?variant= stays as alias); glossary from CHB-028 <!-- t:ydsk -->
 - [ ] Cosplay session on the CPU engine to confirm the progress display <!-- t:vde3 -->
 - [ ] Item 6 companion (from CHB-031 qi3r, session 03 F34): on the CPU engine a refine pass at the file's resolution for the visible region at 1:1, shown with the progress display (each zoom step waits ~10 s for 'refine' at 640 px today) <!-- t:kzxz -->
+- [ ] From CHB-026 session 04 F40: on the CPU engine Actual Pixels (1:1) shows the 640 px working image at '100 %' as a small stamp; solve with the CPU 1:1 refine task (qi3r) or label it honestly <!-- t:rir6 -->
