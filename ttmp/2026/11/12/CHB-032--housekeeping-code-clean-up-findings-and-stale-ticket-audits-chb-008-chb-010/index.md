@@ -1,7 +1,7 @@
 ---
 Title: 'Housekeeping: code clean-up findings and stale ticket audits (CHB-008, CHB-010)'
 Ticket: CHB-032
-Status: active
+Status: complete
 Topics:
     - architecture
     - product
@@ -11,7 +11,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-12T17:10:49.659869677-05:00
+LastUpdated: 2026-11-12T19:07:37.322131743-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
