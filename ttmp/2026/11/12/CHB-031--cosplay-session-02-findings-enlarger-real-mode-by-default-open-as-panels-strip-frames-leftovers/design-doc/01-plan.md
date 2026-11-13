@@ -94,3 +94,51 @@ and docs only.
 
 F17–F23 and the leftovers fixed or deliberately downgraded with a reason; checks green; then a cosplay re-run
 (session 03) of session 02's steps plus the darkroom flow (test strip in seconds, time, filtration) in real mode.
+
+## Round 2: session 03 findings (2026-11-12)
+
+Session 03 (CHB-026 `sessions/03-sonnet-rerun-session-02/`, findings F24–F37 in `various/02-findings.md`, section
+"Session 03") confirmed F17–F23 fixed except F20 (partly). It found two major problems (F30, F31) and a set of
+minor ones. Round 2 fixes them in two parallel workstreams. Progress display on the CPU engine (the "refine" waits
+of F34) stays in CHB-029 item 6.
+
+### WS-C: the picture (branch `task/chb-031-picture`, diary 04)
+
+- **F31 (major):** a digital photo gets no automatic first print. `apps/studio/src/main.ts` sends `digital-raw`
+  frames to `photoRecipe` (10 s f/8, as-shot white balance) instead of `firstPrint`. Give photos a first print
+  in their enlarger mode. The density goes into the time in real mode (lights in normalised mode), and the colour
+  keeps the camera's as-shot white balance (no integrate-to-grey colour on a photo). Pixel test: the daylight NEF
+  class of picture opens near the aim grey, not at luma 57/255.
+- **F30 (major, owner decision pending):** the first print of a negative integrates the whole frame to grey
+  (alpha 1), cooler and flatter than Negative Lab Pro's. Do not change the default aim. Make the colour share
+  (alpha) and any subject-failure rule one named setting in one place. Add a script that renders a frame the way
+  the app does and compares it with a colour-managed reference (the NLP positives in `.playwright-mcp/scans/`,
+  ProPhoto RGB → sRGB), printing B/R, saturation and luma statistics for a few alphas. Report the numbers in the
+  diary for the owner's decision.
+- **F28:** the Epson strip `2025-08-09_raw000.dng` opens with its frames sideways, while raw010's are upright. Find
+  why CHB-031 WS-B's default (transpose landscape frames on a vertical strip) does not apply. Frames already in a
+  library keep their stored orientation (no silent change).
+- **F25:** in Simple (normalised) a read-only "Time 10.0 s" row stays visible and never moves; two rows are titled
+  "Printer lights". Hide the time row while normalised and give the rows distinct titles.
+- **Leftovers:** srvr (no inert control in the edit log: the looks kit's density look, agent proposals and the
+  DSL time strip on a normalised recipe); the decode note "film edge found" when a strip's base comes from the
+  gaps (say where the base was read).
+
+### WS-D: the interface (branch `task/chb-031-interface`, diary 05)
+
+- **F24:** View ▸ Layout switch closes the open frames. Switching layout keeps the open files and their frames
+  open (the sources stay in the engine; only the interface is rebuilt).
+- **F26:** "Where is …?" stays modal when the frame's file is opened another way (File ▸ Open). Close the dialog
+  as answered when its frame becomes open.
+- **F32, F35 (F9 leftovers):** History entries in words with consistent units ("+⅓ stop", "Rotated left",
+  "Frame crop set"), no raw JSON; the tooltip typo; `E_EVAL` / `W_NO_*` codes only in the "Technical:" line;
+  status words "refine"/"draft" in plain words.
+- **F33:** History rows overlap after about 20 entries: fix the panel's layout (scrolls, rows keep their height).
+- **F34 (part):** a View ▸ Actual Pixels (1:1) command and a zoom readout (the CPU progress display stays in CHB-029).
+- **F36:** Undo of another frame selects (shows) the frame it changed.
+- **8iv8:** darkroom layout with no frame: one empty-state text, no empty Exposures panel.
+
+### Shared files
+
+Both touch `apps/studio/src/main.ts` (C: the `initial` hook; D: dialogs and the layout switch) and
+`packages/studio-kit/src/cb.ts`: keep edits local. The orchestrator merges C then D.
