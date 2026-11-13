@@ -1,0 +1,22 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile, uptime } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh'); await goto(page);
+console.log('uptime', uptime());
+const lay = async (name) => { await page.getByText('View', { exact: true }).first().click(); await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(500); await page.getByRole('dialog').getByRole('button', { name, exact: true }).click(); await page.waitForTimeout(2500); if (await page.getByRole('dialog').count()) await page.keyboard.press('Escape'); await page.waitForTimeout(800); };
+await lay('Darkroom'); await page.waitForTimeout(1500);
+await shot(page, '71-darkroom-no-frame');
+const txt = (await bodyText(page)).split('\n').filter(l => !/not open/.test(l)).filter(Boolean);
+console.log('darkroom, no frame, text:', txt.join(' | '));
+console.log('empty-state count:', txt.filter(l => /select|No frame|open a frame|Pick a frame/i.test(l)).length, txt.filter(l => /select|No frame|open a frame|Pick a frame/i.test(l)));
+await lay('Classic');
+await openFile(page, PHOTOS + '/DSC_8559.NEF'); await page.waitForTimeout(3000);
+await page.getByText('View', { exact: true }).first().click(); await page.waitForTimeout(300);
+console.log('View menu:', await page.evaluate(() => [...document.querySelectorAll('[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox]')].map(e => e.innerText.replace(/\s+/g, ' ')).join(' || ')));
+await shot(page, '72-view-menu');
+const zoomTxt = () => page.evaluate(() => (document.body.innerText.match(/(Fit|\d+ ?%|1:1)[^\n]*%[^\n]*/g) || []).join(' ## '));
+console.log('zoom readout before:', await zoomTxt());
+const t0 = Date.now();
+await page.getByText(/Actual Pixels/).first().click(); 
+let last = '';
+for (let i = 0; i < 160; i++) { await page.waitForTimeout(250); const z = await zoomTxt(); const st = (await bodyText(page)).split('\n').slice(-1)[0]; const l = z + ' | ' + st; if (l !== last) { console.log(((Date.now() - t0) / 1000).toFixed(1) + 's', l); last = l; } }
+await shot(page, '73-actual-pixels');
+await ctx.close();
