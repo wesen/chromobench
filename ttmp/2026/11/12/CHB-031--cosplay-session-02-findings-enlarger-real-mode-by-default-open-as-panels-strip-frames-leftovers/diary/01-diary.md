@@ -451,3 +451,72 @@ CHB-032 tasks are done, so I closed CHB-032. The only open work now is session 0
 
 ### Technical details
 - Lint file checks rose from 368 to 406 with the 15 new modules.
+
+## Step 8: Session 03 result; two claims checked; round 2 launched
+
+The session-03 tester (Sonnet, CHB-026 protocol, option B) finished. The verdicts on the 11 tracked findings: 8
+fixed (F8, F12, F17, F18, F19, F21, F22, F23), 3 partly (F9, F10, F20), and F1–F7, F11, F13, F15, F16 still fixed.
+The darkroom flow now behaves like an enlarger. The tester found 14 new problems (F24–F37), two of them major: a
+digital photo gets no automatic first print (F31), and a real scan's first print is cool and flat next to Negative
+Lab Pro's (F30). I checked both before acting on them, recorded everything in CHB-026, and launched round 2 of
+CHB-031 as two workstreams.
+
+### Prompt Context
+**User prompt (verbatim):** none new (see step 4; CHB-031's plan has "then a cosplay re-run (session 03)" in its done-when).
+**Assistant interpretation:** CHB-031 is done when the session-03 findings are fixed or deliberately moved; fix them before CHB-029.
+**Inferred user intent:** The photographer gets an app whose first impression (the first print) and basic flows hold up.
+**Commit (code):** 1d03d7e (session 03), f8b5949 (findings F24–F37), 2755b03 (round 2 plan and tasks)
+
+### What I did
+- Checked the tester's diary: steps 1–10, each with all eleven sections. Committed the session by named paths:
+  diary, report, 38 scripts and 85 screenshots, but not `profile/` (git-ignored) or `__pycache__` (deleted).
+- F31: read `apps/studio/src/main.ts:129-157`. `initial` sends `digital-raw` frames to `photoRecipe` (the default
+  recipe: 10 s f/8, as-shot white balance) and only scans to `firstPrint`, so the tester's "every photo 10.0 s" is
+  by construction.
+- F30: the tester converted the NLP TIFF without colour management (Pillow, B/R 0.70). I converted it with its
+  embedded profile (ICC "ProPhoto RGB": ROMM decode, Bradford D50→D65, sRGB encode) and got B/R 0.62, saturation
+  0.46, luma 153 ± 52. That is warmer and more saturated than the tester's view, against chromobench's B/R 1.21 and
+  saturation 0.21. Saved the colour-managed side-by-side as `shots/62b-…` in the session folder. Looking at it:
+  NLP is a warm "Kodak" look with orange brick, while chromobench is neutral to cool with greyish brick. The first
+  print integrates the whole frame to grey (alpha 1), and a sunny brick-and-dry-grass frame averages warm, so the
+  print goes cool. This is a question of aim for the owner, not a rendering bug.
+- Wrote the CHB-026 findings section "Session 03" (verdicts, F24–F37 from S03-N1..N14, the two checks).
+- Planned round 2 in the CHB-031 plan. WS-C, the picture: F31, F30 preparation without changing the default, F28,
+  F25, srvr, ko8e. WS-D, the interface: F24, F26, F32/F35, F33, F34 (1:1 command and readout), F36, 8iv8. Added 11
+  tasks, created diaries 04 and 05, and moved the CPU 1:1 refine pass (qi3r) to CHB-029 next to item 6.
+- Launched both agents in new worktrees (C: ports 4711, 5221–5224; D: 4811, 5321–5324).
+
+### Why
+- F31 and F30 are what the photographer sees first: a photo opens dark, and a scan opens cooler than he is used to.
+  F31 is a plain gap; F30 needs his taste, so WS-C prepares the numbers and leaves the default alone.
+
+### What worked
+- The old-library profile gave a real update path: frames from the old build opened in the new build without a
+  reload, and the Darkroom panel explained why Time was hidden.
+
+### What didn't work
+- The tester could not use "Locate …" (no `filechooser` in headless Chromium within 15 s), so a true relink with
+  stored handles is untested. That needs a headed browser or the Mac.
+
+### What I learned
+- A cosplay comparison against a reference must colour-manage the reference. Here the unmanaged view understated
+  the gap; in another case it could invent one.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- F30's direction. A lab-style partial correction (alpha below 1, or excluding saturated pixels from the average)
+  is the usual answer, but the photographer's NLP preset ("WB: Kodak", "Tone Profile: LAB - Soft") may be a
+  deliberate warm look rather than a target for neutral prints.
+
+### What should be done in the future
+- On WS-C/WS-D reports: review, merge C then D, then a short session 04 (task 92iq) and the F30 decision with the
+  user; then close CHB-031 and start CHB-029.
+
+### Code review instructions
+- The findings table and checks: CHB-026 `various/02-findings.md`, section "Session 03".
+
+### Technical details
+- ROMM decode: x < 16/512 → x/16, else x^1.8; then ProPhoto→XYZ(D50), Bradford to D65, XYZ→linear sRGB, sRGB
+  encode (script inline in this session; numbers above).
