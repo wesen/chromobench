@@ -670,15 +670,22 @@ async function main(): Promise<void> {
       studio.setEnlarger(def.enlarger ?? 'real');
       hostActions.layout = def.id;
       hostActions.layouts = layouts();
-      mounted = await mountStudio(built.app, root, studio, mountOpts);
+      const u = new URL(location.href);
+      u.searchParams.set('variant', def.id);
+      try {
+        mounted = await mountStudio(built.app, root, studio, mountOpts);
+      } catch (e) {
+        // the old interface is gone: start the new layout the old way (a reload; frames without a file handle close)
+        console.error(e);
+        location.href = u.toString();
+        return;
+      }
       rt = mounted.rt;
       // one undo history across layouts: Mod+Z after the switch undoes the step made before it
       rt.history.adopt(past);
       for (const f of perMount) f();
       await savedThumbs();
       dropOfflineSelection();
-      const u = new URL(location.href);
-      u.searchParams.set('variant', def.id);
       history.replaceState(history.state, '', u.toString());
       document.body.dataset['variant'] = def.id;
       for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);

@@ -114,7 +114,7 @@ describe('one global undo (§6.3)', () => {
     rt.run('proposal.approve', f, 'eval-k2');
     const s = () => rt.state as any;
     expect(log.units.map(u => u.tx)).toEqual([log.units[0]!.tx, 'eval-k2']);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Flag as Pick', 'Time', 'Add Keyword "beach"', 'Approve eval-k2']);
+    expect(rt.history.entries.map(e => e.label)).toEqual(['Flag as Pick', 'Time', 'Add Keyword "beach"', 'Approve Agent Change (warmer)']);
     rt.run('edit.undo');
     expect(s().recipes[f].print.lights.logH).toEqual([0, 0, 0]);
     expect(log.cursor).toBe(1);
@@ -225,7 +225,7 @@ describe('agent proposals as previews (§6.4, §11)', () => {
     expect(rt.diagnostics.list.some(d => d.code === 'CB-H410')).toBe(true);
     rt.run('proposal.approve', f, 'eval-k2', true);
     expect(log.committed.print.lights.logH).toEqual([0.1, 0, 0]);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Time', 'Lights G', 'Approve eval-k2']);
+    expect(rt.history.entries.map(e => e.label)).toEqual(['Time', 'Lights G', 'Approve Agent Change (warmer)']);
     const bridge = studio.bridge;
     const h0 = { $: 'cb.image', frame: f, recipe: studio.frames.get(f)!.initial, what: 'print', args: {}, expr: 'frame.print()' } as const;
     const start = bridge.key(h0);
@@ -240,7 +240,7 @@ describe('agent proposals as previews (§6.4, §11)', () => {
     const { rt, studio, f } = await started({ mode: 'auto' });
     studio.propose([{ op: 'set', path: 'print.grade', value: 4 }], { tx: 'eval-a' });
     expect((rt.state as any).recipes[f].print.grade).toBe(4);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Agent eval-a']);
+    expect(rt.history.entries.map(e => e.label)).toEqual(['Agent Change']);
     rt.run('edit.undo');
     expect((rt.state as any).recipes[f].print.grade).toBe(2);
   });

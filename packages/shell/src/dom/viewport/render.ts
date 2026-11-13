@@ -74,7 +74,10 @@ export function viewRender(
         },
         onError: (e: unknown) => {
           busy.hidden = true;
-          msg.textContent = String((e as Error)?.message ?? e);
+          // in words (the app's explainError, else the message without its leading code); the code in the tooltip
+          const raw = String((e as Error)?.message ?? e);
+          msg.textContent = rt.explainError?.(e, {})?.text ?? raw.replace(/^[A-Z][A-Z0-9]*[_-][A-Z0-9_-]*:\s*/, '');
+          msg.title = `Technical: ${raw}`;
           msg.hidden = false;
           rt.emit('renderError', { viewport: vid, error: e });
         },

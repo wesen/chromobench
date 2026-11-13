@@ -374,9 +374,11 @@ export class EditLogRoute implements RouteAdapter {
   }
 }
 
+/** the step's name in the Edit menu and the undo toast: the agent's reason, not its transaction id (CHB-031 F32) */
 function labelOf(e: FrameEntry, u: UndoUnit): string {
   const first = e.log.entries[u.seqs[0]! - 1];
-  if (first?.approvedBy) return `Approve ${u.tx}`;
-  if (first?.by === 'agent') return `Agent ${u.tx}`;
+  const why = first?.why ? ` (${first.why})` : '';
+  if (first?.approvedBy) return `Approve Agent Change${why}`;
+  if (first?.by === 'agent') return `Agent Change${why}`;
   return u.label;
 }
