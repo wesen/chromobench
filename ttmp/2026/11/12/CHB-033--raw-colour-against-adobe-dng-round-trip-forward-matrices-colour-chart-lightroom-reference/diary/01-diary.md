@@ -294,3 +294,128 @@ math of the rendering stages; step 4 ports them.
 - `dng_reference.cpp`: `RefBaselineABCtoRGB` (line 1389), `RefBaselineHueSatMap` (1508), `RefBaselineRGBtoRGB`
   (1796), `RefBaselineRGBTone` (1868). `dng_render.cpp`: `dng_tone_curve_acr3_default::Evaluate` (161, table at
   164), `EvaluateInverse` (441), default tone curve in `dng_render` (2111).
+
+## Step 4: Adobe's render ported from the DNG SDK: the profile tables give the saturation back, and our colour lands within ΔE2000 ≈ 1–2 of Adobe Standard
+
+I ported the DNG SDK's rendering stages into `scripts/03-adobe-render-port.ts` and ran them on the four DNGs.
+After each stage I measured mean chroma; at the end I compared Adobe's full render with two references that skip
+the profile tables but share Adobe's exposure and tone curve. Reference one is our colour (the colour-matrix path,
+which equals our NEF path to ΔE < 1.3, step 1). Reference two is Adobe's forward matrix alone.
+
+Step 2's hypothesis holds. Adobe's forward matrix gives about half the chroma, and the HueSatMap multiplies it by
+about 1.8. The LookTable takes back about 10 %, and the RGB tone curve adds saturation where it adds contrast.
+Adobe's final colour is close to ours: median ΔE2000 0.9 (daylight) to 2.1 (tungsten), p90 2.0–4.9. Our colour is
+15–20 % more saturated than Adobe Standard. Adobe's forward matrix without the tables is much further away (median
+2.3–6.3). So for **Lightroom's colour**, our NEF decode is close already. The remaining difference is a moderate
+saturation surplus and local hue twists from Adobe's tables, not a decoding error.
+
+### Prompt Context
+**User prompt (verbatim):** see step 2.
+**Assistant interpretation:** Find out what Adobe's final colour is, stage by stage, and how far ours is from it.
+**Inferred user intent:** A followable account of where chromobench's colour stands relative to Lightroom's.
+**Commit (code):** see the commit that adds this step
+
+### What I did
+- Read the stage code in `dng_sdk/source`:
+  - `RefBaselineHueSatMap` (`dng_reference.cpp:1508`): HSV with h in [0,6), table index
+    v·(H·S) + h·S + s, bilinear in hue and saturation (trilinear with value for 3-D tables); hue wraps.
+    `h += hueShift·6/360`, `s = min(s·satScale, 1)`, `v = pin(v·valScale)`.
+  - `RefBaselineRGBTone` (`:1868`): the curve applied to the largest and smallest channel, the middle one keeping
+    its relative position, so hue is kept and contrast adds saturation.
+  - `DNG_RGBtoHSV` / `DNG_HSVtoRGB` (`dng_utils.h:834`, `:904`).
+  - `dng_function_exposure_ramp` and `dng_function_exposure_tone` (`dng_render.cpp`).
+  - `dng_render` defaults (`:2104`): Exposure 0, Shadows 5, the ACR3 tone curve.
+  - `dng_render_task::Start`: white = 1/2^max(0, exposure); black = Shadows · ShadowScale · Stage3Gain · 0.001,
+    capped at 0.99·white.
+  - `HueSatMapForWhite` (`dng_camera_profile.cpp`): weight (1/T − 1/T2)/(1/T1 − 1/T2).
+  - ProPhoto MatrixToPCS (`dng_color_space.cpp:996`): (0.7977, 0.1352, 0.0313 / 0.2880, 0.7119, 0.0001 /
+    0, 0, 0.8249).
+  - ACR3 `Evaluate` (`dng_render.cpp:164`–`:431`): 1025 entries, linear interpolation over 1024 intervals.
+- Extracted the ACR3 table from the source into `.playwright-mcp/dng/acr3-tone.json` (1025 values, 0 → 1.0). It is
+  Adobe's data, so it stays out of the repository. Read the DNGs' tables with `exiftool -m -b`:
+  ProfileHueSatMapData1/2 (8,100 values each = 90 hue × 30 sat × 1 value × 3) and ProfileLookTableData (13,824 =
+  36 × 8 × 16 × 3). No ProfileHueSatMapEncoding or ProfileLookTableEncoding tag (linear), no
+  BaselineExposureOffset, no DefaultBlackRender.
+- The port, per pixel of `decodePhoto(DNG, { long: 384 })`:
+  1. S1 = ProPhoto ← PCS · FM(g) · diag(1/neutral) · camera RGB, clipped at 0.
+  2. S2 = HueSatMap(g·map1 + (1−g)·map2).
+  3. S3 = exposure ramp, with BaselineExposure 0.1: white 0.933, black 0.005.
+  4. S4 = LookTable.
+  5. S5 = RGBTone(ACR3).
+  6. Display: PCS → sRGB (D50-adapted) and the sRGB curve.
+
+  The two references use Adobe's exposure ramp and RGBTone(ACR3) but no tables: our colour-matrix colour, as
+  ProPhoto ← PCS · Bradford(white → D50) · inverse(CM(g)), and Adobe's FM colour (S1).
+- Measured mean C*ab in Lab(D50) after each stage, and ΔE2000 between each reference and S5 over pixels with
+  0.01 < Y(S5) < 0.95. Renders: `various/shots/03-<name>-adobe-ours-de.png` (Adobe's full render | our colour with
+  Adobe's tone | ΔE map, 0 black and ≥ 10 white, excluded pixels dark blue).
+- Moved `de2000` into `scripts/lib-colour.ts` and checked it against Sharma et al.'s test pair 1: (50, 2.6772,
+  −79.7751) vs (50, 0, −82.7485) → 2.0425, as published.
+
+### Why
+- Porting from Adobe's reference source is the closest reproducible stand-in for Camera Raw without Photoshop. Every
+  stage can be checked line by line against the SDK.
+
+### What worked
+- Mean C*ab after each stage, and ΔE2000 against Adobe's full render (median / p90 / p99):
+
+  | Photo | S1 FM | S2 +HueSatMap | S4 +LookTable | S5 +tone (Adobe) | Ours + Adobe tone | FM + Adobe tone | ΔE ours vs Adobe | ΔE FM-only vs Adobe | n |
+  |---|---|---|---|---|---|---|---|---|---|
+  | DSC_8559 daylight | 5.04 | 8.95 | 7.99 | 11.22 | 13.00 | 7.11 | 0.93 / 1.99 / 5.05 | 2.32 / 5.32 / 10.20 | 91,445 |
+  | DSC_8541 tungsten | 13.08 | 24.34 | 21.86 | 31.09 | 36.48 | 18.82 | 2.11 / 4.88 / 6.45 | 6.29 / 7.89 / 9.35 | 88,474 |
+  | DSC_8536 evening | 10.95 | 20.39 | 18.13 | 24.24 | 28.42 | 14.84 | 2.01 / 4.21 / 8.59 | 4.34 / 7.69 / 12.16 | 36,177 |
+  | DSC_8655 night | 11.38 | 19.08 | 17.22 | 22.57 | 27.02 | 15.08 | 1.71 / 3.01 / 11.59 | 4.40 / 6.14 / 10.31 | 51,206 |
+
+  Chroma ratio, ours to Adobe: 1.16, 1.17, 1.17, 1.20.
+- `03-DSC_8541-adobe-ours-de.png`: the two renders look nearly the same; ours makes the brick slightly more orange,
+  and the ΔE map is mid-grey (about 2–5) on the brick and dark elsewhere.
+
+### What didn't work
+- The first version imported `de2000` from script 02, which also ran script 02's measurement loop as a side effect
+  (its output appeared above script 03's). Fixed with `lib-colour.ts`; the re-run gives the same 12 lines of
+  results, without the repeat.
+
+### What I learned
+- Adobe Standard splits colour between a low-saturation forward matrix and the HueSatMap/LookTable. Comparing
+  matrices alone (steps 1–2) is misleading; the full chain is what Lightroom shows.
+- Our colour-matrix colour is within about ΔE2000 1–2 (median) of Adobe Standard's final colour and 16–20 % more
+  saturated.
+- The night and evening frames have far fewer comparable pixels (36k and 51k of 98k), because the comparison skips
+  very dark and very bright pixels.
+
+### What was tricky to build
+- Two details decided whether the port was right:
+  - Adobe's table index order is value-major, then hue, then saturation, with three floats per entry. Hue wraps
+    from the last division to 0.
+  - The exposure ramp's soft knee: black is 0.005 (Shadows 5 · 0.001), and the knee's radius is min(0.5 · black,
+    (1/16)/slope).
+
+  Getting either wrong shifts every pixel's colour or the shadows. Both follow the source verbatim. The middle
+  channel in RGBTone is (H − L)·(mid − lo)/(hi − lo) + L, using the curve values of the high and low channels.
+
+### What warrants a second pair of eyes
+- The port is unvalidated against Adobe's binary (no `dng_validate` built, no Camera Raw). The steps that could
+  hide an error are the table lookup and the white's temperature: McCamy here, Robertson (`dng_temperature`) in
+  the SDK. A Camera Raw render once the licence is renewed, or a `dng_validate` build, would close this. Neutral
+  greys stay neutral through the port: the HueSatMap's s = 0 entries leave greys unchanged, and RGBTone keeps
+  r = g = b.
+- "Adobe Standard" is Camera Raw's colorimetric profile. Lightroom's default for new photos since 2018 is "Adobe
+  Color", which has its own look table and tone curve. That profile is not in the DNG, so this comparison is to
+  Adobe Standard.
+
+### What should be done in the future
+- Decide what to match: our scene colour is already close to Adobe Standard. Any remaining difference belongs to
+  look (the film model's job), not to decoding.
+- The ColorChecker test (ground truth for which colour is accurate) and, if wanted, Adobe Color's tables (from
+  Lightroom's profile folder on the Mac) as a second reference.
+
+### Code review instructions
+- `node ttmp/2026/11/12/CHB-033--…/scripts/03-adobe-render-port.ts [names]` (needs the DNGs and `acr3-tone.json` in
+  `.playwright-mcp/dng/`; regenerate the JSON with the parser in Technical details).
+- Compare `hueSat`, `rgbTone`, `ramp`, `rgb2hsv` and `hsv2rgb` with the cited SDK functions.
+
+### Technical details
+- ACR3 table parser: Python over `dng_render.cpp` lines 164 to the closing `};` of `Evaluate`, taking all float
+  literals (1025 values; first 0.0, 0.00078, 0.0016; last 0.99974, 0.99987, 1.0).
+- The comparison mask is Y(S5) in (0.01, 0.95), in Adobe's rendered (tone-mapped) space, so it differs from step
+  2's mask.
