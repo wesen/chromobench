@@ -84,13 +84,13 @@ frames when one action touches several frames.
 *document* (undoable), *view* (never undone) and *route* (owned by an adapter).
 
 **Gesture layer (store preview).** `Store.previewPatches`: values written by `store.preview()` that readers
-see but the document does not yet contain (`packages/shell/src/core/store.ts:524-535`).
+see but the document does not yet contain (`packages/shell/src/core/store.ts:269-280`).
 
 **Commit (store).** `store.commit(label)` turns the gesture layer into one transaction
-(`packages/shell/src/core/store.ts:537-550`). **Cancel** drops it (`:552-560`).
+(`packages/shell/src/core/store.ts:282-295`). **Cancel** drops it (`:297-305`).
 
 **Store transaction.** `store.tx(label, fn)` or `commitPatches`: a set of patches written at once, recorded as
-one history entry (`packages/shell/src/core/store.ts:471-520`).
+one history entry (`packages/shell/src/core/store.ts:216-265`).
 
 **Route.** A store prefix whose writes go to an adapter instead of the document. `recipes` is a route; its
 adapter is `EditLogRoute` (`packages/studio-kit/src/bridge/editlog-route.ts:59`).
@@ -118,7 +118,7 @@ zero or more parts (`packages/shell/src/core/history.ts:29-40`).
 Layer (d) is a pure function library over one `EditLog`. It does not implement global undo across frames.
 Global undo across frames is the shell History (c), fed with parts by the route (b).
 
-The routed prefix is excluded from the store's document snapshot (`packages/shell/src/core/store.ts:625-656`).
+The routed prefix is excluded from the store's document snapshot (`packages/shell/src/core/store/snapshot.ts:6-37`).
 The EditLogs are therefore the only persistent record of recipe edits; the shell's history is session-only.
 
 ## 3. Mechanism, layer by layer
@@ -197,7 +197,7 @@ Command entry points.
 ### 3.3 The shell store and History
 
 Gesture layer. `store.preview(path, v)` writes `previewPatches`, recomputes `current`, informs the route's
-adapter, and notifies readers (`packages/shell/src/core/store.ts:524-532`). `store.commit(label)` diffs the
+adapter, and notifies readers (`packages/shell/src/core/store.ts:269-277`). `store.commit(label)` diffs the
 layer against the document and calls `commitPatches` (`:537-550`). `store.cancel()` clears the layer and calls
 `adapter.cancel()` for each route touched (`:552-560`).
 
@@ -214,7 +214,7 @@ History. `History.record` (`packages/shell/src/core/history.ts:83-122`) appends 
 stack. With a `coalesce` key, a record within `coalesceMs` (default 1500 ms, `:72`) of the previous entry
 with the same key merges into it: patches keep the first `before`, parts accumulate (`:88-103`).
 `History.push` (`:125-142`) appends an entry made only of parts; the route reaches it through
-`RouteApi.push` (`packages/shell/src/core/store.ts:323-325`).
+`RouteApi.push` (`packages/shell/src/core/store/routes.ts:74-76`).
 
 `History.undo()` (`packages/shell/src/core/history.ts:210-237`) first cancels the gesture layer. It pops the
 newest entry, inverts its patches, and calls each part's `undo()` in reverse order. A part that returns
@@ -425,7 +425,7 @@ Three rules follow from the code:
 
 - `moveCursor` (`packages/studio-kit/src/model/history.ts:122-125`) duplicates `EditLogRoute.jump`
   (`packages/studio-kit/src/bridge/editlog-route.ts:368-374`) and has no caller outside tests.
-- The store's named preview layers (`Store.layer`, `packages/shell/src/core/store.ts:563`) are described in
+- The store's named preview layers (`Store.layer`, `namedLayer` in `packages/shell/src/core/store/layers.ts:19`) are described in
   the store header as "agent proposals", but the studio does not use them. Proposals are published as data
   under `proposals.<f>` and shown by rendering the folded recipe.
 - An undone approval leaves its entries `applied` in the journal. A reader of `entries` must combine

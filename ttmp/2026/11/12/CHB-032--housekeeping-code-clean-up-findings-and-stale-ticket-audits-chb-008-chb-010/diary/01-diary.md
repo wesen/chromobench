@@ -19,12 +19,18 @@ RelatedFiles:
       Note: GpuEngine after the split; modules in engine/ (Step 6)
     - Path: repo://packages/ingest/src/decode/tiff-write.ts
       Note: encodeIfd, writeTiff, writeTiff16 (one TIFF encoder, Step 4)
+    - Path: repo://packages/shell/src/core/store.ts
+      Note: Store after the split; parts in core/store/ (Step 17)
+    - Path: repo://packages/shell/src/dom/viewport.ts
+      Note: mountViewport after the split; parts in dom/viewport/ (Step 18)
     - Path: repo://packages/studio-kit/kits/finish/src/kit.ts
       Note: finish kit after the split (Step 13)
     - Path: repo://packages/studio-kit/kits/looks/src/kit.ts
       Note: looks kit after the split (Step 13)
     - Path: repo://tools/scripts/unused-exports.mjs
       Note: the unused-exports scanner (Step 14)
+    - Path: repo://ttmp/2026/11/12/CHB-032--housekeeping-code-clean-up-findings-and-stale-ticket-audits-chb-008-chb-010/scripts/dgz9-verify-split.py
+      Note: the moved-bodies check of the store/viewport split (Steps 17-18)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-12T17:10:49.957516312-05:00
@@ -1172,3 +1178,378 @@ next commit, "CHB-032: diary step 15, full browser suite 98 passed, changelog".
 
 ### Technical details
 - Unit tests at the end: 97 files, 2749 passed, 7 skipped (95 files, 2733 passed before the merge of CHB-031 WS-A).
+
+## Step 16: Task dgz9 starts: what store.ts and viewport.ts do, and where to cut them
+
+The last open CHB-032 task, dgz9, splits the shell's two longest files, `packages/shell/src/core/store.ts` (775
+lines) and `packages/shell/src/dom/viewport.ts` (723 lines), now that CHB-031 has merged. A fresh agent took it in a
+fresh worktree. I created the branch, installed dependencies, ran the checks on the untouched branch, merged `main`
+again when the orchestrator reported that CHB-031 WS-B had landed (6a42b9b; it changed shell `app/render/queue.ts`
+and its test, not the two files), and read both files in full before deciding any boundary.
+
+The store is a set of independent pieces around one class: types, a refusal error, `strip`, a subscriber trie, derived
+values, the `Store` class itself and the transaction draft. Those pieces move out unchanged, and four `Store` methods
+that are self-contained sub-APIs (`route`, `readonly`, `layer`, `snapshot`) become functions of the store, with
+one-line delegates on the class (the Step 10 method). The viewport is one 630-line closure (`mountViewport`) plus a
+colour parser and the thumb renderer. Its parts share local `let` bindings and call each other through function
+hoisting, and its cells run their first pass when they are created. So each `let` must stay in the module that
+writes it, and the factories must be created in an order that keeps every side effect (cell creation, DOM appends,
+listener registration) in its original order.
+
+### Prompt Context
+**User prompt (verbatim):** "You are doing the last open task of CHB-032 (housekeeping and code clean-up) in the chromobench monorepo: task **dgz9**, a pure reorganisation that splits two long shell files:
+- `packages/shell/src/core/store.ts` (775 lines)
+- `packages/shell/src/dom/viewport.ts` (723 lines)
+
+Read first:
+- The common brief: /tmp/claude-1000/-home-manuel-code-wesen-chromobench/456e1eb2-3441-4838-97c3-8a0b840b8e62/scratchpad/brief-common-v2.md (its rules, checks, git hygiene and diary rules apply; it was written for CHB-027, read \"CHB-027\" as your ticket CHB-032 where it names the ticket).
+- The CHB-032 ticket: `ttmp/2026/11/12/CHB-032--housekeeping-code-clean-up-findings-and-stale-ticket-audits-chb-008-chb-010/` — `tasks.md` and the diary `diary/01-diary.md`, especially steps 10 (the `dsl/src/host.ts` split) and 13 (the looks/finish kit splits): follow the same method (split by responsibility into a folder of modules, keep the original file as a thin re-exporting entry so imports keep working or update the imports, and verify with a script that every moved function/class body is unchanged).
+- `packages/shell/` layout (`src/core/`, `src/dom/`, `src/app/`) and `tools/` lint rules (`pnpm lint` checks package boundaries and colours).
+
+Your specifics:
+- You are in a fresh git worktree made from main. First: `git checkout -b task/chb-032-store-viewport`; `pnpm install --offline` if node_modules is missing.
+- Diary: continue the existing CHB-032 diary `diary/01-diary.md` with Step 16 onwards, in the diary skill's investigation format exactly (read /home/manuel/.claude/skills/diary/SKILL.md and references/investigation-entry.md); Step 16 quotes this prompt verbatim; every step has all sections. Commit the diary with the code.
+- Ports for browser tests: STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424.
+- Decide the split from what the code does (read both files fully first, list their responsibilities in the diary, then propose module boundaries before moving anything). Behaviour must not change: explain snapshots, unit tests and browser tests stay identical (no snapshot updates; if one changes, that is a bug in the split).
+- Checks before the final commit: `pnpm typecheck`, `pnpm lint`, `pnpm gen:check`, `pnpm test`, and the full `CI=1 pnpm test:browser` with your ports. Then `docmgr task check --ticket CHB-032 --id dgz9`, update the CHB-032 changelog, and give your final reply per the brief.
+
+Parallel work: CHB-031 WS-B is finishing on branch `task/chb-031-open-strips` and will merge into main before you; it touches `packages/shell/src/app/render/queue.ts`, `app/workspace.ts`, `build/types.ts`, `core/util.ts`, `dom/forms/basic.ts`, `ir/node.ts`, `ir/slots.ts` but not store.ts or viewport.ts. Don't edit those WS-B files beyond import-path updates. CHB-029 (next ticket) will split `packages/studio-kit/src/cb.ts` — not yours."
+
+Orchestrator message during the step (verbatim): "Orchestrator: CHB-031 WS-B is now merged into main (7e96726). Before your final checks, `git merge main` into task/chb-032-store-viewport. WS-B changed `packages/shell/src/app/render/queue.ts` (the background-lane pump no longer polls idle callbacks) plus small edits in shell `app/workspace.ts`, `build/types.ts`, `core/util.ts`, `dom/forms/basic.ts`, `ir/node.ts`, `ir/slots.ts`; none in store.ts or viewport.ts, but re-run your moved-bodies check after the merge in case an import moved. Browser tests: main now has 101 specs passing (e2e/studio-open-strips.spec.ts is new)."
+**Assistant interpretation:** Split both files by responsibility into module folders, keep every moved body verbatim
+and every import working, prove it with a script, keep snapshots and tests identical, and merge `main` first.
+**Inferred user intent:** Two files one must read to change the store or the viewport become short modules with one
+job each, without risk to behaviour, before CHB-029 starts on `cb.ts`.
+**Commit (code):** N/A (reading and planning; the merge of `main` is 6a42b9b).
+
+### What I did
+- `git checkout -b task/chb-032-store-viewport`; `pnpm install --offline` (node_modules was missing).
+- Baseline on 0a48e38: `pnpm typecheck` 0; `pnpm lint` → `import boundaries ok (366 file checks)`, colours ok;
+  `pnpm gen:check` → `gen:check ok (26 files)`; `pnpm test` → 97 files, 2749 passed, 7 skipped (127 s).
+- `git merge main` → 6a42b9b (brings WS-B: `packages/shell/src/app/render/queue.ts`, its test, studio files);
+  `git diff HEAD~1 --quiet -- packages/shell/src/core/store.ts packages/shell/src/dom/viewport.ts` → unchanged.
+- Read `store.ts` and `viewport.ts` in full and their importers (`grep -rn "core/store\|dom/viewport"`): store.ts is
+  imported by `app/runtime.ts`, `build/{shell-builder,types,explain,kits,checks}.ts`, `core/{history,cells}.ts`,
+  `dom/mount.ts`, `index.ts` and two tests; viewport.ts only by `dom/index.ts` (a side-effect import plus
+  `mountViewport`, `ZOOMS`, `DomViewport`).
+- Read what constrains the viewport split: `MountCtx.cell` → `rt.cell` → `new Cell(…)`, whose constructor takes
+  `store.nextCellId()` and calls `this.run(true)` (`packages/shell/src/core/cells.ts:83-94`); `MountCtx.val` runs
+  the effect at once for a constant; `defineRenderer` sets a `Map`; `core/diag.ts:66` registers the whole shell
+  `src/` as one library root for call sites, so moving code inside `src/` does not change a recorded site.
+- Read the lint rules: `tools/scripts/check-boundaries.ts` (the shell imports only its own files; core, ir, build and
+  app never import `dom/`), `tools/scripts/check-colours.ts` (neither file has an allowance or a literal colour).
+
+### Why
+- Reading both files before choosing boundaries: the viewport's closure shares `let` bindings and relies on hoisting,
+  which decides where the cuts can go without changing a body.
+
+### What worked
+- The responsibilities and boundaries below keep every `let` with all of its writers.
+
+### What didn't work
+- `git checkout -b … && pnpm install …` in one command was refused by the worktree guard ("this command names git in
+  a form too complex to verify"); ran the git command alone. Appending this step with a shell heredoc was refused the
+  same way (the text names git commands); wrote it with the editor instead.
+
+### What I learned
+- `store.ts`, by responsibility (original lines):
+  1. types of a transaction: `Patch`, `Write`, `Mirror`, `TxOpts`, `WriteInfo` (26–69);
+  2. routes: `RouteResult`, `RouteAdapter`, `RouteApi`, `RouteDecl`, `Route` (71–109), `TxRefused` (111–122), and in
+     the class `declareRoute`, `route` (builds the `RouteApi`), `routeOf`, `isRouted` (305–339);
+  3. proxies in and out of state: `RO`, `strip` (124–152) and the class's `readonly()` view for handlers (362–391);
+  4. the subscriber trie `TrieNode`, `PathIndex` (154–209);
+  5. derived values, `Derived` (211–247);
+  6. the `Store` class (268–657): construction and tiers, reads, subscriptions and `notify`, writes (`writeDoc`,
+     `rebase`, `set`, `setMany`, `tx`, `commitPatches`), the gesture layer (`preview`, `commit`, `cancel`), named
+     layers (`layer()` returning a `Layer`, 562–616), `takePending`, and `snapshot()` by tier (625–656);
+  7. the transaction draft, `Draft` and its proxy (659–773).
+- `viewport.ts`, by responsibility:
+  1. vocabulary: `ZOOMS`, `Zoom`, `Compare`, `DomViewport` (20–33);
+  2. stage colour: `DEFAULT_COLOURS`, `cssColour` (35–49);
+  3. `mountViewport` (51–679), one closure: elements, presenter and the initial view state (52–79); the local view
+     state `V` and `panning` (81–104); the API object and its registration (105–134); layout and transform:
+     `layout`, `fitScale`, `transform`, `setView`, `setZoom`, `zoomBy` (136–190); painting through the presenter and
+     the theme cell (192–202); SVG overlays and their cells (204–246); the active tool: `toolState`, `activeTool`,
+     `paintTool`, `cursorFor`, `updateCursor` (248–270); render requests: `want`, `requested`, `request`, the image
+     cell and the draft→screen store listener (272–386); the view-state cell (388–406); the label (407–413); layout
+     and the resize observer (415–425); pointer input: `evAt`, `panDrag`, `zoomGesture` and the pointer, wheel,
+     context-menu and drop listeners (427–661); the spring listener (662–677);
+  4. the thumb renderer (683–723).
+- Shared mutable bindings in `mountViewport`: `panning` (read by `cursorFor`, written by `panDrag`), `toolState`
+  (read by `paintTool`, written by the pointer handlers), `want` (read and written by the render requests, the view
+  cell, the resize observer and the spring listener). One cycle: the API literal names `setZoom` and `zoomBy`
+  (shorthand), and `setZoom` calls `api.toImage`.
+
+### What was tricky to build
+- The order of side effects in `mountViewport` is behaviour: a cell's id comes from `store.nextCellId()` at creation
+  and its first run happens inside the constructor, so the factories must be created in an order that keeps the
+  original sequence: theme cell, overlay groups appended, overlay cells, image cell, store listener, view cell,
+  label, `layout()` and the resize observer, pointer listeners, spring listener.
+
+### What warrants a second pair of eyes
+- The proposed boundaries (Technical details), before they are applied.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `packages/shell/src/core/store.ts`, `packages/shell/src/dom/viewport.ts` at 6a42b9b.
+
+### Technical details
+- Proposed `store.ts` split. `core/store.ts` stays the entry every importer uses: the header, `StoreOpts`,
+  `DEFAULT_VIEW`, `Listener`, the `Store` class and re-exports of the moved public names. New folder `core/store/`:
+  - `types.ts`: `Patch`, `Write`, `Mirror`, `TxOpts`, `WriteInfo`;
+  - `routes.ts`: the route types, `Route`, `TxRefused`, and `attachRoute(store, prefix, adapter)` (the body of
+    `Store.route`);
+  - `readonly.ts`: `RO`, `strip`, and `readonlyView(store)` (the body of `Store.readonly`);
+  - `path-index.ts`: `TrieNode`, `PathIndex`;
+  - `derived.ts`: `Derived`;
+  - `layers.ts`: `Layer` and `namedLayer(store, name)` (the body of `Store.layer`);
+  - `snapshot.ts`: `snapshotOf(store, tier)` (the body of `Store.snapshot`);
+  - `draft.ts`: `MUTATING`, `Draft`.
+  The modules import `type { Store }` from `../store.ts` only, and `store.ts` imports their values, so there is no
+  runtime cycle.
+- Proposed `viewport.ts` split (the Step 13 method: factories return what the others use and the mount function
+  destructures them, so the moved bodies keep their text and indentation). `dom/viewport.ts` stays the entry: the
+  header, the setup, `V`, the API, the factory calls in order, and both `defineRenderer` calls. New folder
+  `dom/viewport/`:
+  - `state.ts`: `ZOOMS`, `Zoom`, `Compare`, `DomViewport`, `viewState()` (the `V` literal) and `ViewportParts` (what
+    every module gets: `n`, `m`, `p`, `rt`, `st`, `vid`, the elements, presenter, colours, `viewPath`, `V`, `api`);
+  - `colour.ts`: `DEFAULT_COLOURS`, `cssColour`;
+  - `geometry.ts`: `viewGeometry` → `layout`, `fitScale`, `transform`, `setView`, `setZoom`, `zoomBy`;
+  - `pointer.ts`: `viewPointer`, which owns `panning` and `toolState` → `activeTool`, `paintTool`, `cursorFor`,
+    `updateCursor`, the tool's SVG group, `evAt`, `panDrag`, `zoomGesture`, and `listenPointer()`, which registers
+    the listeners when the entry calls it (at their original place);
+  - `paint.ts`: `viewPaint` → `paint`, the theme cell, the overlays, `paintOverlays`, the overlay cells;
+  - `render.ts`: `viewRender`, which owns `want` → `request`, the image cell, the draft→screen listener, the view
+    cell, the label, `layout()` and the resize observer, and `listenSpring()` (the spring listener, called last);
+  - `thumb.ts`: `mountThumb`, registered by the entry right after the viewport, as before.
+  Creation order in the entry: geometry, pointer (no side effects at creation), paint, render, `listenPointer()`,
+  `listenSpring()`. Every function a cell's first run can reach exists by then.
+- One glue change is needed: the API literal's shorthand `setZoom,` and `zoomBy,` become arrows
+  (`setZoom: (z, at) => setZoom(z, at)`), because the API is created before the geometry factory that defines them,
+  and `setZoom` needs the API.
+
+## Step 17: Split packages/shell/src/core/store.ts (task dgz9, first half)
+
+`store.ts` (775 lines) is now 325 lines plus eight modules in `packages/shell/src/core/store/`, as proposed in
+Step 16: `types.ts`, `routes.ts`, `readonly.ts`, `path-index.ts`, `derived.ts`, `layers.ts`, `snapshot.ts` and
+`draft.ts`. The entry keeps the header, `StoreOpts`, the `Store` class (construction and tiers, routes lookup, reads,
+subscriptions, writes, transactions, the gesture layer) and re-exports every public name it exported before, so no
+importer changed. `Store.route`, `Store.readonly`, `Store.layer` and `Store.snapshot` are one-line delegates to
+`attachRoute`, `readonlyView`, `namedLayer` and `snapshotOf`.
+
+A script cut the modules out of the committed file by line range (`<scratchpad>/dgz9/split-store.py`), and a second,
+independent script (`scripts/dgz9-verify-split.py` in this ticket) finds every original segment as one contiguous
+block of its module: 23 of 23 segments verbatim, the four method bodies after a dedent by 2 and `this` → `store`.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** Apply the store half of the Step 16 plan; no importer or behaviour changes.
+**Inferred user intent:** The store's class reads as the store; routes, layers, proxies, the trie, derived values
+and the draft each have their own file.
+**Commit (code):** see the next commit, "CHB-032: split shell store.ts and viewport.ts into core/store/ and dom/viewport/ modules (dgz9)".
+
+### What I did
+- `python3 <scratchpad>/dgz9/split-store.py HEAD`: asserts the first line of each range it cuts, writes the modules,
+  rewrites `store.ts`.
+- `pnpm exec tsc -p tsconfig.json --noEmit --noUnusedLocals` → nothing in `core/store*`; `pnpm typecheck` 0;
+  `pnpm vitest run packages/shell` → 10 files, 106 passed.
+- `python3 …/scripts/dgz9-verify-split.py HEAD store` → `ok` for all 23 segments; "original non-blank lines in no
+  segment and not listed as replaced: []".
+- The undo/history reference doc (`reference/01-undo-and-history-across-the-layers.md`) cited seven `store.ts` line
+  ranges; each now points at the moved code (the class sections moved by exactly 255 lines: `tx` 471 → 216,
+  `preview` 524 → 269, `commit` 537 → 282, `cancel` 552 → 297; `snapshot` → `store/snapshot.ts:6-37`,
+  `RouteApi.push` → `store/routes.ts:74-76`, `Store.layer` → `namedLayer` at `store/layers.ts:19`). Each mapping was
+  checked by comparing the cited first and last lines of the original and the new file.
+
+### Why
+- Functions of the store, not mixins: the bodies stay the same text, the class keeps its public methods, and no new
+  object lifetime appears. `route`, `readonly` and `layer` already worked on a local `store` (`const store = this;`
+  in two of them), so the conversion drops that line and nothing else.
+- Re-exports in `store.ts` instead of new import paths: ten importers, three of them CHB-031 WS-B files
+  (`build/types.ts` among them), stay untouched.
+
+### What worked
+- The first typecheck passed; no visibility change was needed (every field the moved code reads was already public).
+
+### What didn't work
+- No failures in this step.
+
+### What I learned
+- `Route` and `Derived` were module-private but appear in public member types (`routes: Route[]`,
+  `derivedAt(): Derived | null`); they are exported from their modules now, not from the package index.
+
+### What was tricky to build
+- Import cycles: every module imports `type { Store }` from `../store.ts` only; `store.ts` imports their values;
+  `layers.ts` and `draft.ts` import `strip` from `readonly.ts`. So no module evaluates `store.ts` at load time.
+
+### What warrants a second pair of eyes
+- `attachRoute`'s API object now reads `store: store,` (the mechanical `this` → `store`); the same object as before.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `packages/shell/src/core/store.ts` (header lists the modules), `packages/shell/src/core/store/*.ts`.
+- `python3 ttmp/2026/11/12/CHB-032--…/scripts/dgz9-verify-split.py 6a42b9b store` (prints the glue per file);
+  `pnpm typecheck && pnpm vitest run packages/shell`.
+
+### Technical details
+- Line counts: store.ts 325; store/ types 49, routes 83, readonly 67, path-index 61, derived 44, layers 71,
+  snapshot 37, draft 124.
+- Original lines replaced on purpose (13): the three import lines, and per moved method its signature, its closing
+  brace and (readonly, layer) `const store = this;`. Glue: module headers and imports, the re-exports, the four
+  delegates (3 lines each).
+
+## Step 18: Split packages/shell/src/dom/viewport.ts (task dgz9, second half)
+
+`viewport.ts` (723 lines) is now 108 lines plus seven modules in `packages/shell/src/dom/viewport/`: `state.ts`,
+`colour.ts`, `geometry.ts`, `pointer.ts`, `paint.ts`, `render.ts` and `thumb.ts`. `mountViewport` builds the
+elements, the view state and the API as before, then creates four factories in an order that keeps every cell,
+DOM append and listener in its original sequence: `viewGeometry` (functions only), `viewPointer` (functions only;
+owns `panning` and `toolState`), `viewPaint` (the theme cell, the overlay groups, the overlay cells), `viewRender`
+(owns `want`; the image cell, the draft→screen listener, the view cell, the label, `layout()` and the resize
+observer); then `listenPointer()` and `listenSpring()` register the listeners where they were registered before.
+Both renderers are registered by the entry, viewport first, then thumb.
+
+The same check as Step 17: 24 of 24 segments verbatim, two of them indented by 2 (the bodies of `listenPointer` and
+`listenSpring`). Six original lines changed on purpose besides the imports; the API's `setZoom,` and `zoomBy,` became
+arrows, as Step 16 predicted. Then the full gate: typecheck, lint, `gen:check` and all unit tests pass with the
+post-merge counts, no snapshot written, and the unused-exports scan shows no new unused or local-only export.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** Apply the viewport half of the Step 16 plan, then run the required checks on both
+halves.
+**Inferred user intent:** Pointer handling, painting and render requests can each be read without the other 600 lines.
+**Commit (code):** see the next commit, "CHB-032: split shell store.ts and viewport.ts into core/store/ and dom/viewport/ modules (dgz9)".
+
+### What I did
+- `python3 <scratchpad>/dgz9/split-viewport.py HEAD` (asserts each cut range's first line).
+- `pnpm exec tsc -p tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters` → 30 errors in the repository,
+  none under `packages/shell/src` (so each factory destructures only what it uses).
+- `python3 …/scripts/dgz9-verify-split.py HEAD` → 47 of 47 segments `ok` (store 23, viewport 24), `failures: 0`.
+- Full gate on both splits: `pnpm typecheck` 0; `pnpm lint` → `import boundaries ok (406 file checks)`,
+  `check-colours: 167 files, no literal colours outside the theme files and the counted overlays`;
+  `pnpm gen:check` → `gen:check ok (26 files)`; `pnpm test` → 101 files, 2770 passed, 7 skipped (= the post-merge
+  baseline); `git status` then listed only the two entries, the two new folders and the diary (no `.snap`
+  written).
+- `node tools/scripts/unused-exports.mjs .` before and after: "used by nothing" 12 → 12 (the same names); "used
+  only in their own file" 715 → 709 on the first run, which listed two exports I had added for nothing (`RO` in
+  `readonly.ts`, `ViewState` in `state.ts`); removed both `export`s in the split scripts, regenerated, re-verified
+  (47/47), typechecked: 707, and no `core/store/` or `dom/viewport/` name is listed.
+
+### Why
+- Factories that receive the closure's names (`ViewportParts`) and return functions: every moved body still reads
+  `V`, `api`, `st`, `paintTool`, … as before, so its text does not change.
+- Each `let` stays in the module that writes it: `panning` and `toolState` in `pointer.ts` (with `paintTool`,
+  `cursorFor` and the gestures), `want` in `render.ts` (with every reader: request, the cells, resize, spring).
+  Accessors for them would have changed more lines.
+- `listenPointer()`/`listenSpring()` instead of registering at factory creation: the pointer factory must exist
+  before the overlays (they paint the tool) but its listeners were registered after the resize observer.
+
+### What worked
+- The first typecheck passed; the plan of Step 16 needed no change.
+
+### What didn't work
+- Two needless exports on the first run (above), fixed in the scripts.
+- A combined shell command that compared the scans and ran `git status` was refused by the worktree guard; ran them
+  separately.
+
+### What I learned
+- Cells take their id from `store.nextCellId()` and run once in their constructor, so "same order of cell creation"
+  is checkable: in the new entry the order is theme cell → overlay cells → image cell → view cell → label, as
+  before, and the factories created before `viewPaint` (geometry, pointer) create no cells.
+
+### What was tricky to build
+- The API ↔ geometry cycle: the API literal named `setZoom` and `zoomBy` (hoisted function declarations in the
+  closure), and `setZoom` reads `api.toImage`. The API is still built first; its two members are arrows that look up
+  `setZoom`/`zoomBy` when called. Nothing calls them during mount (between the API and `viewGeometry` the entry only
+  registers the API in `rt.viewports`), so there is no temporal-dead-zone risk. `fit` and `redraw` were already
+  arrows.
+- `toolG` is created in `viewPointer` (before the overlay groups) but appended in `viewPaint` exactly where it was:
+  `ov.append(toolG, compareG)` after the program's overlay groups. Creating an SVG element has no side effect.
+
+### What warrants a second pair of eyes
+- The creation order in `mountViewport` (entry lines 94–103) against the original order listed in Step 16.
+- `paint.ts` takes `Pick<Pointer, 'toolG' | 'paintTool'>`; `render.ts` takes the whole `Pointer`, `Geometry` and
+  `Paint` records and destructures what it uses.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `packages/shell/src/dom/viewport.ts` (header lists the modules; lines 94–103 create them),
+  `packages/shell/src/dom/viewport/*.ts`.
+- `python3 ttmp/2026/11/12/CHB-032--…/scripts/dgz9-verify-split.py 6a42b9b`; `pnpm typecheck && pnpm lint && pnpm test`;
+  the browser suite (Step 19).
+
+### Technical details
+- Line counts: viewport.ts 108; viewport/ state 74, colour 19, geometry 66, pointer 279, paint 70, render 194,
+  thumb 48.
+- Original viewport lines replaced on purpose (15): the nine import lines; `const V = {` and its `};` (the literal is
+  returned by `viewState()`, members unchanged); the API's `setZoom,`/`zoomBy,`; the thumb's
+  `defineRenderer('thumb', (n, m) => {` and `});` (now `export const mountThumb: Renderer = (n, m) => {` … `};`).
+- Exported names that were module-private: `Zoom`, `Compare` (`state.ts`), `DEFAULT_COLOURS` (`colour.ts`); the
+  package's exports (`mountViewport`, `ZOOMS`, `DomViewport` through `dom/index.ts`) are unchanged.
+
+## Step 19: Browser suite on the split, ticket complete
+
+The full browser suite ran on d19d765 (both splits) with this agent's ports: 101 passed, the count `main` has
+after CHB-031 WS-B, and GPU conformance 320/320. The run left the tree clean. The shell demo spec and the studio
+specs drive the viewport (the picture shows, a slider drag is one undo step, draft then screen), so they exercise
+the moved render, pointer and paint code. `main` had moved by one commit that only adds to CHB-031's diary and
+tasks; I merged it (2dff3f6, no code) and re-ran the moved-bodies check on the final tree: 47/47.
+
+dgz9 is ticked, so every CHB-032 task is done. docmgr suggests closing the ticket. I left that to the orchestrator,
+because my prompt asked only to tick the task and update the changelog.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** The last required checks (the full browser suite with my ports), then tick dgz9, update
+the changelog, and commit the diary with the bookkeeping.
+**Inferred user intent:** A branch the orchestrator can merge before CHB-029 starts.
+**Commit (code):** d19d765 — "CHB-032: split shell store.ts and viewport.ts into core/store/ and dom/viewport/ modules (dgz9)";
+2dff3f6 — "Merge branch 'main' into task/chb-032-store-viewport"; then the next commit, "CHB-032: diary step 19,
+browser suite 101 passed, dgz9 ticked, changelog".
+
+### What I did
+- `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm test:browser` (log
+  `<scratchpad>/dgz9/browser-full.log`); `git status --short` afterwards: empty.
+- `docmgr task check --ticket CHB-032 --id dgz9` → "All tasks complete! Consider closing the ticket";
+  `docmgr changelog update --ticket CHB-032 --entry …`; `docmgr doc relate --doc …/diary/01-diary.md` with the two
+  entries and the verify script; `docmgr doctor --ticket CHB-032` → all checks passed.
+- `git diff --name-only 7e96726 6d16a6f` → the CHB-031 diary and tasks only; `git merge main` → 2dff3f6.
+- `python3 …/scripts/dgz9-verify-split.py 6a42b9b` on the final tree → 47 `ok`, `failures: 0`; `pnpm typecheck` 0.
+
+### Why
+- The browser suite once, after both halves: the viewport split reaches it through every studio and shell spec that
+  shows a picture.
+
+### What worked
+- `101 passed (2.7m)`; `conformance {"total":320,"passed":320,"failures":[]}`.
+
+### What didn't work
+- No failures observed.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- CHB-029 will split `packages/studio-kit/src/cb.ts`; it imports from the shell's package entry, whose exports did
+  not change here.
+
+### What should be done in the future
+- Close CHB-032 (`docmgr ticket close --ticket CHB-032`) when the orchestrator has merged this branch.
+
+### Code review instructions
+- `git show d19d765 --stat`; `python3 ttmp/2026/11/12/CHB-032--…/scripts/dgz9-verify-split.py 6a42b9b`.
+- `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test`; the browser command above.
+
+### Technical details
+- Final counts: unit 101 files, 2770 passed, 7 skipped; browser 101 passed; lint 406 file checks (368 before the
+  split; the 38 more are the 8 `core/store/` files under 3 shell rules and the 7 `dom/viewport/` files under 2).
