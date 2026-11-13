@@ -208,3 +208,31 @@ balance) and never `firstPrint`. For F30, the tester's comparison used the NLP T
 (B/R 0.70). Converting it properly from ProPhoto RGB (its embedded profile) to sRGB makes it warmer still (B/R 0.62,
 saturation 0.46); see `shots/62b-side-by-side-chromobench-left-NLP-colour-managed-right.png`. So the gap is real,
 and it is a question of aim (neutral grey vs a lab's warm look), not a rendering error.
+
+## Session 04 (short check of CHB-031 round 2 and first impressions; main aaefe45, CPU engine, Sonnet tester)
+
+[Report](../sessions/04-sonnet-check-round-2/experience-report.md), [diary](../sessions/04-sonnet-check-round-2/diary.md),
+[brief](../sessions/04-sonnet-check-round-2/brief.md). Verdicts: **fixed** F24, F25, F26, F32, F33, F35, F36, F31
+(brightness: the time follows the photo, 4.45–5.61 s; night stays night); **partly** F28 (landscape frames upright,
+portrait frames sideways: 5 of 11 upright over four strips), F34 (1:1 command and readout exist, but on the CPU
+engine "100 %" is the 640 px working image); F17 still fixed (Time 6.3/10/20 s → luma 100.0/55.6/22.8); F30
+unchanged, as planned (owner decision).
+
+| ID | Sev | Summary | Seen in |
+|---|---|---|---|
+| F38 (S04-N1) | **major** | DSC_8687 (EXIF orientation 6) opens sideways on the CPU engine. **Regression from CHB-031 WS-B:** the binned photo read (working sizes ≤ 1024 px) is in sensor orientation, while LibRaw's demosaic is turned by the tag. **Fixed** in `apps/studio/src/host/decode.ts` (CHB-031 orchestrator, ab95e31) | S04 |
+| F39 (S04-N2) | **major** | Photos print 25–48 % warmer (B/R) than the camera's embedded JPEG. **Cause:** a NEF's as-shot white balance was never read (only a DNG's AsShotNeutral), so every NEF printed with daylight white balance. **Fixed:** the as-shot neutral from LibRaw's as-shot multipliers (`neutralFromCamMul`, `packages/ingest/src/libraw/adapter.ts`, CHB-031 orchestrator, 50c46a2) | S04 |
+| F40 (S04-N3) | minor | On the CPU engine, Actual Pixels (1:1) shows the 640 px working image at "100 %" as a small stamp (with CHB-029's CPU 1:1 refine task) | S04 |
+| F41 (S04-N4) | minor | With "Where is …?" open, the File menu does not react and Ctrl+O gives no file chooser (the dialog is modal) | S04 |
+| F42 (S04-N5) | minor | Portrait frames on a strip open sideways (the strip's shape cannot tell how the camera was held; WS-C's `flipV` default fits landscape frames) | S04 |
+| F43 (S04-N6) | minor | History details: "+0.4 stop" next to ⅓ units, "You" on every row, a merged Time row ordered after later rotate rows, a truncated long row | S04 |
+| F44 (S04-N7) | note | Switching a photo from Real to Normalised darkens it (luma 105 → 52): the time's density is not carried into the lights | S04 |
+
+**Orchestrator checks.** F38 was measured with `CHB-031 …/scripts/orch-01-binned-orientation.ts`: DSC_8687 decoded
+binned at 640 px was 640×428 (sideways), demosaiced at 2000 px 1337×2000; after the fix 428×640, the full size
+4032×6032 as the demosaic. A unit test with a synthetic DNG tagged 6 and 8 failed without the fix ("expected 64 to
+be 96") and passes with it. F39 was measured with `…/scripts/orch-03-photo-first-print-colour.mjs` (the app's
+first print, mean display RGB over a 40 × 40 grid). B/R before → after the fix, against the camera JPEG's:
+DSC_8559 0.63 → 0.80 (0.88), DSC_8541 0.25 → 0.38 (0.47), DSC_8536 0.51 → 0.85 (0.855), DSC_8655 0.43 → 0.64
+(0.55). The derived as-shot neutrals (`…/scripts/orch-02-as-shot-neutral.ts`): B/R 1.42 (daylight truck), 0.92
+(tungsten), 1.00 and 1.09 (night).
