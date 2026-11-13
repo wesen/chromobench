@@ -10,7 +10,9 @@
 - [x] F21: 'Where is …?' must not open by itself after Remove (relink only on an explicit selection by the user) <!-- t:jb0i -->
 - [x] F22: cold first open ~29 s with only 'opening…' — profile the cold path (WASM, tables, packs); progress display is CHB-029 item 6 <!-- t:9t2y -->
 - [x] F23: hide negative-only controls (film stock for scans, scanner, viewing light) for digital photos, or explain them <!-- t:3z8z -->
-- [ ] Leftovers from session 02: F8 (relative '-5': consider unsigned = absolute only, signed with unit), F9 (engine tooltip, decode note, Dyes / Base & gamut tabs), F12 (Edit menu names the frame); F10 on the CPU engine (sharper preview vs speed) <!-- t:l1ny -->
+- [x] Leftovers from session 02: F8 (relative '-5': consider unsigned = absolute only, signed with unit), F9 (engine tooltip, decode note, Dyes / Base & gamut tabs), F12 (Edit menu names the frame); F10 on the CPU engine (sharper preview vs speed) <!-- t:l1ny -->
 - [ ] Cosplay re-run (session 03) of the session-02 steps plus the darkroom flow (test strip, time, filtration in real mode); before/after table <!-- t:b50a -->
 - [ ] From WS-A: enforce 'no inert control' in the edit log too — the looks kit's density look, agent proposals and the DSL's time test strip can still set or vary Time on a normalised recipe <!-- t:srvr -->
 - [ ] From WS-A: darkroom layout with no frame shows the empty-state text twice (Enlarger, Paper) and an empty Exposures panel <!-- t:8iv8 -->
+- [ ] From WS-B: the decode note still says 'film edge found' for a strip whose base now comes from the gaps between frames (apps/studio/src/status-text.ts / decode notes): say where the base was read <!-- t:ko8e -->
+- [ ] From WS-B: F10 has no true 1:1 focus check at full resolution on the CPU engine (previews at 640 px, tabulated); decide with the session-03 result whether a refine pass for the visible region is needed <!-- t:qi3r -->
