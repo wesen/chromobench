@@ -19,12 +19,18 @@ RelatedFiles:
       Note: GpuEngine after the split; modules in engine/ (Step 6)
     - Path: repo://packages/ingest/src/decode/tiff-write.ts
       Note: encodeIfd, writeTiff, writeTiff16 (one TIFF encoder, Step 4)
+    - Path: repo://packages/shell/src/core/store.ts
+      Note: Store after the split; parts in core/store/ (Step 17)
+    - Path: repo://packages/shell/src/dom/viewport.ts
+      Note: mountViewport after the split; parts in dom/viewport/ (Step 18)
     - Path: repo://packages/studio-kit/kits/finish/src/kit.ts
       Note: finish kit after the split (Step 13)
     - Path: repo://packages/studio-kit/kits/looks/src/kit.ts
       Note: looks kit after the split (Step 13)
     - Path: repo://tools/scripts/unused-exports.mjs
       Note: the unused-exports scanner (Step 14)
+    - Path: repo://ttmp/2026/11/12/CHB-032--housekeeping-code-clean-up-findings-and-stale-ticket-audits-chb-008-chb-010/scripts/dgz9-verify-split.py
+      Note: the moved-bodies check of the store/viewport split (Steps 17-18)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-12T17:10:49.957516312-05:00
@@ -1487,3 +1493,63 @@ halves.
   `defineRenderer('thumb', (n, m) => {` and `});` (now `export const mountThumb: Renderer = (n, m) => {` … `};`).
 - Exported names that were module-private: `Zoom`, `Compare` (`state.ts`), `DEFAULT_COLOURS` (`colour.ts`); the
   package's exports (`mountViewport`, `ZOOMS`, `DomViewport` through `dom/index.ts`) are unchanged.
+
+## Step 19: Browser suite on the split, ticket complete
+
+The full browser suite ran on d19d765 (both splits) with this agent's ports: 101 passed, the count `main` has
+after CHB-031 WS-B, and GPU conformance 320/320. The run left the tree clean. The shell demo spec and the studio
+specs drive the viewport (the picture shows, a slider drag is one undo step, draft then screen), so they exercise
+the moved render, pointer and paint code. `main` had moved by one commit that only adds to CHB-031's diary and
+tasks; I merged it (2dff3f6, no code) and re-ran the moved-bodies check on the final tree: 47/47.
+
+dgz9 is ticked, so every CHB-032 task is done. docmgr suggests closing the ticket. I left that to the orchestrator,
+because my prompt asked only to tick the task and update the changelog.
+
+### Prompt Context
+**User prompt (verbatim):** see Step 16.
+**Assistant interpretation:** The last required checks (the full browser suite with my ports), then tick dgz9, update
+the changelog, and commit the diary with the bookkeeping.
+**Inferred user intent:** A branch the orchestrator can merge before CHB-029 starts.
+**Commit (code):** d19d765 — "CHB-032: split shell store.ts and viewport.ts into core/store/ and dom/viewport/ modules (dgz9)";
+2dff3f6 — "Merge branch 'main' into task/chb-032-store-viewport"; then the next commit, "CHB-032: diary step 19,
+browser suite 101 passed, dgz9 ticked, changelog".
+
+### What I did
+- `STUDIO_PORT=5421 STUDIO_KIT_PORT=5422 SHELL_DEMO_PORT=5423 GPU_PARITY_PORT=5424 CI=1 pnpm test:browser` (log
+  `<scratchpad>/dgz9/browser-full.log`); `git status --short` afterwards: empty.
+- `docmgr task check --ticket CHB-032 --id dgz9` → "All tasks complete! Consider closing the ticket";
+  `docmgr changelog update --ticket CHB-032 --entry …`; `docmgr doc relate --doc …/diary/01-diary.md` with the two
+  entries and the verify script; `docmgr doctor --ticket CHB-032` → all checks passed.
+- `git diff --name-only 7e96726 6d16a6f` → the CHB-031 diary and tasks only; `git merge main` → 2dff3f6.
+- `python3 …/scripts/dgz9-verify-split.py 6a42b9b` on the final tree → 47 `ok`, `failures: 0`; `pnpm typecheck` 0.
+
+### Why
+- The browser suite once, after both halves: the viewport split reaches it through every studio and shell spec that
+  shows a picture.
+
+### What worked
+- `101 passed (2.7m)`; `conformance {"total":320,"passed":320,"failures":[]}`.
+
+### What didn't work
+- No failures observed.
+
+### What I learned
+- N/A.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- CHB-029 will split `packages/studio-kit/src/cb.ts`; it imports from the shell's package entry, whose exports did
+  not change here.
+
+### What should be done in the future
+- Close CHB-032 (`docmgr ticket close --ticket CHB-032`) when the orchestrator has merged this branch.
+
+### Code review instructions
+- `git show d19d765 --stat`; `python3 ttmp/2026/11/12/CHB-032--…/scripts/dgz9-verify-split.py 6a42b9b`.
+- `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test`; the browser command above.
+
+### Technical details
+- Final counts: unit 101 files, 2770 passed, 7 skipped; browser 101 passed; lint 406 file checks (368 before the
+  split; the 38 more are the 8 `core/store/` files under 3 shell rules and the 7 `dom/viewport/` files under 2).
