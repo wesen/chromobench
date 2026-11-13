@@ -5,7 +5,7 @@ import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo } from
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { stripRecipe, stripValues } from '@chromobench/studio-kit';
 import { describe, expect, it } from 'vitest';
-import { firstPrint, measureExposure } from '../src/host/first-print.ts';
+import { FIRST_PRINT_AIM, firstPrint, measureExposure } from '../src/host/first-print.ts';
 
 const W = 60, H = 40;
 type Kind = 'negative-scan' | 'digital-raw';
@@ -93,9 +93,14 @@ describe('enlarger mode and time (CHB-031 F17)', () => {
     });
   }
 
-  it('the automatic first print: real mode puts the density into the time, normalised mode into the lights; both print the frame at grey', async () => {
+  it('the automatic first print: real mode puts the density into the time, normalised mode into the lights; both print the frame at the aim', async () => {
     for (const kind of ['negative-scan', 'digital-raw'] as const) {
       const { e, g, r0 } = setup(kind);
+      // a negative integrates to grey; a photo (F31) keeps its colour and half its departure in density (FIRST_PRINT_AIM)
+      const x0 = await measureExposure(e, g, r0);
+      const m0 = (x0[0] + x0[1] + x0[2]) / 3;
+      const { density, alpha } = FIRST_PRINT_AIM[kind];
+      const colour0 = x0.map((v) => v - density * m0 - alpha * (v - m0));
       expect(r0.print.enlarger.mode).toBe('real'); // the contract's default since 0.4
       const real = await firstPrint(e, g, r0, { integrate });
       expect(real.print.enlarger.mode).toBe('real');
@@ -106,7 +111,7 @@ describe('enlarger mode and time (CHB-031 F17)', () => {
       expect(norm.print.enlarger.time_s).toBe(10);
       // the density the real print put in its time (log10 t/10) is in the normalised print's lights
       expect(lightsMean(norm)).toBeCloseTo(lightsMean(real) + Math.log10(real.print.enlarger.time_s / 10), 2);
-      for (const r of [real, norm]) for (const v of await measureExposure(e, g, r)) expect(Math.abs(v)).toBeLessThan(0.01);
+      for (const r of [real, norm]) (await measureExposure(e, g, r)).forEach((v, k) => expect(Math.abs(v - colour0[k]!)).toBeLessThan(0.01));
     }
   });
 });

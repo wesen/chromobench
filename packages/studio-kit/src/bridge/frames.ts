@@ -13,6 +13,7 @@ import {
   EditLog, fail, Graph, sha256Hex,
   type AgentMode, type Box, type EditLogData, type Engine, type FrameRecipe, type Mutation, type Orientation, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
+import { StudioLog } from '../model/enlarger.ts';
 import { stripOrientation } from '../model/orient.ts';
 import { defaultFor } from '../model/recipes.ts';
 import type { KV } from './kv.ts';
@@ -303,7 +304,8 @@ export class Frames {
       if (p.box) defaults = stripFrameRecipe(defaults, p.id!, p.box, turn);
       let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && initial.kind === d.kind ? initial : null;
       if (first && p.box) first = stripFrameRecipe(first, p.id!, p.box, turn);
-      const log = saved ? new EditLog(saved, opts) : EditLog.create(first ?? defaults, { ...opts, by: 'auto' });
+      // a StudioLog: no inert control enters it, whoever writes (CHB-031 srvr)
+      const log = saved ? new StudioLog(saved, opts) : StudioLog.make(first ?? defaults, { ...opts, by: 'auto' });
       if (saved) resumed++;
       if (saved && p.box) rescaleStripLog(log, p.box, d.info.width, d.info.height);
       const strip = p.box && d.boxes ? { index: p.index, of: d.boxes.length, box: { ...p.box } } : undefined;

@@ -19,7 +19,7 @@ function otherTiff(k = 1): Uint8Array {
 const offline = (id: string, kind: 'photo' | 'negative' = 'photo', sha = 'ab'.repeat(32)) => ({ id, sha256: sha, name: `${id}.NEF`, flag: null, stars: 0, label: null, keywords: [], kind });
 
 /** a studio on the classic layout whose opener records how it was asked; `strip`: boxes for a negative */
-async function studioWith(o: { guess?: 'photo' | 'negative'; strip?: (w: number, h: number) => Box[] } = {}) {
+async function studioWith(o: { guess?: 'photo' | 'negative'; strip?: (w: number, h: number) => Box[]; kv?: ReturnType<typeof memoryKV> } = {}) {
   const engine = new MockEngine();
   const clock = manualClock(1_000);
   const calls: OpenAs[] = [];
@@ -29,14 +29,14 @@ async function studioWith(o: { guess?: 'photo' | 'negative'; strip?: (w: number,
     const kind = as === 'photo' || (as === 'auto' && o.guess === 'photo') ? ('digital-raw' as const) : ('negative-scan' as const);
     return { info, kind, frames: kind === 'negative-scan' && o.strip ? o.strip(info.width, info.height) : null };
   };
-  const studio = createStudio({ engine, kv: memoryKV(), opener, now: () => clock.now() });
+  const studio = createStudio({ engine, kv: o.kv ?? memoryKV(), opener, now: () => clock.now() });
   const { app } = buildVariant((await VARIANTS.classic()).default);
   const rt = await app.boot(studio.services({ clock }));
   studio.attach(rt);
   return { studio, rt, calls };
 }
 
-/** three frames down a vertical strip, each wider than tall (the photographer's raw010.dng, F20) */
+/** three frames down a vertical strip, each wider than tall (the photographer's Epson strips, raw010.dng and others; F20, F28) */
 const vertical = (w: number, h: number): Box[] => {
   const fh = Math.floor(h / 3);
   const bw = w - 2, bh = Math.min(fh - 2, Math.floor((w - 2) / 1.4));
@@ -126,35 +126,52 @@ describe('a file the library knows opens the way it had it (F18)', () => {
   });
 });
 
-describe('strip frames: orientation (F20)', () => {
-  it('stripOrientation: wide frames down a vertical strip are turned and mirrored; other strips stay', () => {
-    expect(stripOrientation(vertical(232, 512))).toBe('transpose');
+describe('strip frames: orientation (F20, F28)', () => {
+  it('stripOrientation: wide frames down a vertical strip are mirrored top to bottom (scanned through the base, upside down); other strips stay', () => {
+    expect(stripOrientation(vertical(232, 512))).toBe('flipV');
     // a horizontal strip of wide frames, and tall frames down a vertical strip
     expect(stripOrientation([0, 1, 2].map((i) => ({ x: i * 170, y: 0, w: 160, h: 110 })))).toBe('none');
     expect(stripOrientation([0, 1, 2].map((i) => ({ x: 0, y: i * 170, w: 110, h: 160 })))).toBe('none');
     expect(stripOrientation([{ x: 0, y: 0, w: 200, h: 100 }])).toBe('none');
   });
 
-  it('frames cut from a vertical strip open turned upright; Frame ▸ Rotate and Flip change one frame, and undo', async () => {
+  it('frames cut from a vertical strip open upright; Frame ▸ Rotate and Flip change one frame, and undo', async () => {
     const { studio, rt } = await studioWith({ strip: vertical });
-    const r = await studio.openFile(makeM1Tiff(), 'raw010.dng');
+    const r = await studio.openFile(makeM1Tiff(), 'raw000.dng');
     expect(r.entries).toHaveLength(3);
-    for (const e of r.entries) expect(e.log.committed.view.frame.orientation).toBe('transpose');
+    for (const e of r.entries) expect(e.log.committed.view.frame.orientation).toBe('flipV');
     const [f1, f2] = r.entries.map((e) => e.id) as [string, string];
     rt.run('frame.select', f2);
     rt.run('frame.rotateRight');
     const o = (id: string): string => (rt.state as any).recipes[id].view.frame.orientation;
-    // transpose, then a quarter turn clockwise as shown = the scan mirrored left to right
-    expect(o(f2)).toBe('flipH');
-    expect(o(f1)).toBe('transpose');
+    // flipV, then a quarter turn clockwise as shown = the scan turned and mirrored (a portrait, as raw010's frames)
+    expect(o(f2)).toBe('transpose');
+    expect(o(f1)).toBe('flipV');
     expect((rt.state as any).recipes[f2].view.frame.crop).toEqual(r.entries[1]!.strip!.box);
     rt.run('frame.rotateLeft');
-    expect(o(f2)).toBe('transpose');
+    expect(o(f2)).toBe('flipV');
+    rt.run('frame.rotateLeft');
+    expect(o(f2)).toBe('transverse');
+    rt.run('frame.rotateRight');
     rt.run('frame.flip');
-    expect(o(f2)).toBe('cw90');
+    expect(o(f2)).toBe('rot180');
     rt.run('edit.undo');
-    expect(o(f2)).toBe('transpose');
+    expect(o(f2)).toBe('flipV');
     expect(rt.commands.label('frame.rotateRight', rt.state)).toBe('Rotate Right');
+  });
+
+  it('a strip frame already in the library keeps its stored orientation (F28: no silent change of the default)', async () => {
+    const kv = memoryKV();
+    const a = await studioWith({ strip: vertical, kv });
+    const r1 = await a.studio.openFile(makeM1Tiff(), 'raw010.dng');
+    // saved before CHB-031 round 2, with the old default (transpose), and one frame turned by hand
+    r1.entries[0]!.log.apply([{ op: 'set', path: 'view.frame.orientation', value: 'transpose' }], 'user', 'Rotate');
+    r1.entries[2]!.log.apply([{ op: 'set', path: 'view.frame.orientation', value: 'cw90' }], 'user', 'Rotate');
+    await a.studio.flush();
+    const b = await studioWith({ strip: vertical, kv });
+    const r2 = await b.studio.openFile(makeM1Tiff(), 'raw010.dng');
+    expect(r2.outcome).toBe('resumed');
+    expect(r2.entries.map((e) => e.log.committed.view.frame.orientation)).toEqual(['transpose', 'flipV', 'cw90']);
   });
 
   it('a plain photo has orientation none and the rotate commands need an open frame', async () => {

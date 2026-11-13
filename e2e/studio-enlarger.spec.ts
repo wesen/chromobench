@@ -135,6 +135,11 @@ test('classic: a photo prints in real mode and shows the film it is shot on, wit
   await page.keyboard.press('d');
   expect(await page.evaluate(() => window.chromobench.log!.committed.kind)).toBe('digital-raw');
   expect((await enlarger(page)).mode).toBe('real');
+  // F31: an automatic first print, density only (alpha 0): the three lights stay together, the colour is the camera's
+  const auto = await page.evaluate(() => window.chromobench.log!.committed.print.lights.auto);
+  expect(auto).toMatchObject({ method: 'integrate', alpha: 0, applied: true });
+  const l = (await enlarger(page)).lights;
+  expect(Math.max(...l) - Math.min(...l)).toBeLessThan(1e-5);
   await expect(arg(page, 'capture.stock')).toBeVisible();
   await expect(arg(page, 'scan.scanner')).toBeHidden();
   await expect(arg(page, 'scan.stock')).toBeHidden();
@@ -185,6 +190,14 @@ test('simple: normalised by default; its Lighter / Darker move the three printer
   await idle(page);
   const e0 = await enlarger(page);
   expect(e0.mode).toBe('normalised');
+  // F25: no time row that never moves (the time nudge reads "Brightness", no seconds), and the two lights rows
+  // have their own titles
+  const timeRow = page.locator('.cb-arg.is-nudge[data-path="print.enlarger.time_s"]').first();
+  await expect(timeRow.locator('.cb-arg-l')).toHaveText('Brightness');
+  await expect(timeRow.locator('.cb-arg-v')).toHaveText('');
+  await expect(timeRow).not.toContainText(/\d\s*s\b|\bst\b/);
+  await expect(page.locator('.cb-arg.is-nudge[data-path="print.lights.logH"] .cb-arg-l')).toHaveText(['Warmth', 'Tint']);
+  await page.screenshot({ path: test.info().outputPath('f25-simple-normalised.png') });
   const m0 = await mean(page);
   const third = Math.log10(2) / 3;
   await page.getByRole('button', { name: 'Lighter', exact: true }).first().click();

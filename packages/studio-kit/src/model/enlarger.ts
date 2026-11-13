@@ -3,7 +3,7 @@
 // the aim whatever the optics (core print/enlarger.ts: "Normalised mode ignores them"), so those controls would
 // do nothing: they are hidden, never changed, never recorded. A layout picks the mode new recipes get (simple and
 // tiny: normalised); a saved recipe keeps the mode it stores.
-import type { FrameRecipe, Graph, Mutation, Vec3 } from '@chromobench/contract';
+import { applyMutation, EditLog, type EditLogOptions, type FrameRecipe, type Graph, type Mutation, type Vec3 } from '@chromobench/contract';
 import { STOP, PT } from './units.ts';
 
 export type EnlargerMode = 'real' | 'normalised';
@@ -55,3 +55,66 @@ export function exposureStep(r: FrameRecipe, stops: number, o: { lightsPoints?: 
 
 /** the three printer lights moved together by d log H, held to the contract's ±1.5 log H */
 export const shiftLights = (l: readonly number[], d: number): Vec3 => l.map((x) => Number(Math.min(1.5, Math.max(-1.5, x + d)).toFixed(6))) as Vec3;
+
+/**
+ * The log H an optics setting moves the paper's exposure by from the recipe's own (core's optics law in real mode,
+ * print/enlarger.ts opticsLogH: log t − 2 log N − 2 log (m + 1)); null for another path or a value that is no number.
+ */
+export function opticsShift(r: FrameRecipe, path: string, value: unknown): number | null {
+  if (typeof value !== 'number' || !(value > 0)) return null;
+  const e = r.print.enlarger;
+  if (path === 'print.enlarger.time_s') return Math.log10(value / e.time_s);
+  if (path === 'print.enlarger.fstop') return -2 * Math.log10(value / e.fstop);
+  if (path === 'print.enlarger.magnification') return -2 * Math.log10((value + 1) / ((e.magnification ?? REFERENCE_MAGNIFICATION) + 1));
+  return null;
+}
+/** A null magnification is the calibration's reference: core's REFERENCE_OPTICS (10 s, f/8, 8×). */
+const REFERENCE_MAGNIFICATION = 8;
+
+/**
+ * The mutations with no inert control in them (CHB-031 srvr): on a normalised recipe time, aperture and
+ * magnification do nothing, so a write to one becomes the same exposure on the three printer lights (as Lighter /
+ * Darker and the test strip do), and the optics keep their value. Taken in order: a mode change earlier in the same
+ * list counts for the writes after it. On a real recipe the list is returned as it is.
+ */
+export function withoutInert(r: FrameRecipe, ms: readonly Mutation[]): Mutation[] {
+  let cur = r;
+  const out: Mutation[] = [];
+  for (const m of ms) {
+    const d = m.op === 'set' && isInert(cur, m.path) ? opticsShift(cur, m.path, m.value) : null;
+    let w: Mutation | null = m;
+    if (d !== null) {
+      const now = cur.print.lights.logH;
+      w = Math.abs(d) < 1e-9 ? null : { op: 'set', path: 'print.lights.logH', value: shiftLights(now, d), ...('expect' in m && m.expect !== undefined ? { expect: [...now] } : {}) };
+    } else if (m.op === 'set' && isInert(cur, m.path)) w = null; // an optics value that is no exposure: nothing to write
+    if (!w) continue;
+    out.push(w);
+    try {
+      cur = applyMutation(cur, w).recipe;
+    } catch {
+      // an invalid mutation: the log refuses it with its own diagnostic
+    }
+  }
+  return out;
+}
+
+/**
+ * The studio's EditLog (CHB-031 srvr): no inert control enters the log, whoever writes — the controls, the looks
+ * kit, a script, the agent's proposals replayed on the page. apply, propose and preview pass through withoutInert.
+ */
+export class StudioLog extends EditLog {
+  /** A new log for a frame (EditLog.create's record, as a StudioLog). */
+  static make(initial: FrameRecipe, opts: EditLogOptions & { by?: 'user' | 'agent' | 'auto' } = {}): StudioLog {
+    return new StudioLog(EditLog.create(initial, opts).toJSON(), opts);
+  }
+  override apply(...[ms, ...rest]: Parameters<EditLog['apply']>): ReturnType<EditLog['apply']> {
+    return super.apply(withoutInert(this.committed, ms), ...rest);
+  }
+  override propose(...[ms, meta]: Parameters<EditLog['propose']>): ReturnType<EditLog['propose']> {
+    return super.propose(withoutInert(this.committed, ms), meta);
+  }
+  override preview(m: Parameters<EditLog['preview']>[0]): void {
+    if (m === null) return super.preview(null);
+    super.preview(withoutInert(this.committed, Array.isArray(m) ? (m as readonly Mutation[]) : [m as Mutation]));
+  }
+}

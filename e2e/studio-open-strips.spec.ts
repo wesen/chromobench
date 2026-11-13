@@ -124,8 +124,8 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
     return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.recipes[id].view.frame.crop, orientation: s.recipes[id].view.frame.orientation }));
   });
   expect(frames.map((f: { name: string }) => f.name)).toEqual(['strip-31.tif · 1/3', 'strip-31.tif · 2/3', 'strip-31.tif · 3/3']);
-  // landscape frames on a vertical strip read turned (as scanned through the base): upright by default
-  for (const f of frames) expect(f.orientation).toBe('transpose');
+  // wide frames on a vertical strip, scanned through the base and upside down: mirrored top to bottom by default (F28)
+  for (const f of frames) expect(f.orientation).toBe('flipV');
   // each frame at about a picture's working size (the strip is 1108 px long: its frames get their own pixels, not
   // a third of 640 px)
   for (const f of frames) expect(Math.max(f.crop.w, f.crop.h)).toBeGreaterThan(400);
@@ -134,14 +134,16 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   expect(notes).toMatch(/from the gaps between frames/);
   await page.getByText('strip-31.tif · 2/3', { exact: true }).first().click();
   await idle(page);
+  // the decode note says where the base was read (ko8e), not "film edge found"
+  await expect(page.locator('#notes')).toContainText('strip of 3 frames, film base read between the frames');
   await page.screenshot({ path: test.info().outputPath('01-synthetic-strip-frame2-upright.png') });
   // Frame ▸ Rotate Right, then Rotate Left: back as it was
   const orientation = () => page.evaluate(() => (window.chromobench.state() as any).recipes[window.chromobench.studio.current!].view.frame.orientation);
   await menu(page, 'Frame', 'frame.rotateRight');
   await idle(page);
-  expect(await orientation()).toBe('flipH');
+  expect(await orientation()).toBe('transpose');
   await page.screenshot({ path: test.info().outputPath('03-synthetic-strip-frame2-rotated.png') });
   await menu(page, 'Frame', 'frame.rotateLeft');
   await idle(page);
-  expect(await orientation()).toBe('transpose');
+  expect(await orientation()).toBe('flipV');
 });

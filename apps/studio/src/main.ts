@@ -7,7 +7,7 @@
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
 // reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
-import { closest, defaultRecipe, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
+import { closest, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
@@ -29,7 +29,7 @@ import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
 import { engineSummary, engineTip, notesSummary, notesTip } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
-import { firstPrint, withMeasured } from './host/first-print.ts';
+import { firstPrint, firstPrintAim, photoRecipe, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -125,14 +125,6 @@ interface Host {
 /** Asks the photographer when a guess is unsure; set for the length of one open batch (one question per batch). */
 let askOpen: AskOpenMode | undefined;
 
-/** A photo's first recipe (CHB-012): the frame's id and source, shot on the default film (as-shot white balance when known). */
-function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
-  const { decode, ...src } = d.source;
-  const r = defaultRecipe('digital-raw', src, { frame: d.frame, decode: { ...decode, mode: 'photo' } });
-  if (asShot) r.capture!.whiteBalance.mode = 'as-shot';
-  return r;
-}
-
 async function startEngine(): Promise<Host> {
   const want = q.get('engine') ?? 'auto';
   if (want === 'mock') return { engine: new MockEngine(), label: 'mock engine (no physics)', notes: () => [], settings: null, guess: () => null };
@@ -151,10 +143,14 @@ async function startEngine(): Promise<Host> {
   return {
     engine: se,
     label: se.label,
-    // ?filtration=1: the first print's colour goes into the enlarger's filtration and time (CHB-010 bake), not the printer lights
-    initial: (d, g) => (se.notes.get(d.source.sha256)?.kind === 'digital-raw'
-      ? Promise.resolve(photoRecipe(d, se.notes.get(d.source.sha256)?.info.camera?.asShotNeutral !== undefined))
-      : firstPrint(se, g, withMeasured(d, se.notes.get(d.source.sha256)), { integrate: h.integrate, ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) })),
+    // the first print of a negative and (F31) of a photo, its colour from the camera's white balance (FIRST_PRINT_AIM;
+    // ?alpha, ?subjectFailure try another aim for negatives, ?photoDensity for photos). ?filtration=1: the colour goes
+    // into the enlarger's filtration and time (CHB-010 bake), not the printer lights
+    initial: (d, g) => {
+      const n = se.notes.get(d.source.sha256);
+      const r = n?.kind === 'digital-raw' ? photoRecipe(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
+      return firstPrint(se, g, r, { integrate: h.integrate, aim: firstPrintAim(r.kind, (k) => q.get(k)), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
+    },
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,

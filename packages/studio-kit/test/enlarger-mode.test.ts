@@ -6,9 +6,10 @@ import { defaultRecipe, EditLog, sha256Hex, type FrameRecipe } from '@chromobenc
 import { describe, expect, it } from 'vitest';
 import {
   createStudio, defaultFor, DARKROOM, ENLARGER_MODES, exposureStep, initialInMode, isInert, isNormalised, logKey, memoryKV, NORMALISED_NOTE,
-  stripLabel, stripMutation, stripRecipe, stripValues, withEnlargerMode,
+  stripLabel, stripMutation, stripRecipe, stripValues, StudioLog, withEnlargerMode, withoutInert,
 } from '../src/index.ts';
 import { VARIANTS } from '../variants/index.js';
+import { planFrame, printDensity } from '../kits/looks/src/index.ts';
 
 const r0 = (): FrameRecipe => defaultRecipe('negative-scan', { sha256: '0'.repeat(64), name: 'x' });
 const norm = (): FrameRecipe => withEnlargerMode(r0(), 'normalised');
@@ -105,5 +106,60 @@ describe('a layout\'s enlarger mode for new recipes (CHB-031)', () => {
     const modes: Record<string, string | undefined> = {};
     for (const [id, load] of Object.entries(VARIANTS)) modes[id] = (await load()).default.enlarger;
     expect(modes).toEqual({ classic: undefined, darkroom: undefined, simple: 'normalised', lab: undefined, tiny: 'normalised', roll: undefined, finish: undefined, looks: undefined });
+  });
+});
+
+describe('no inert control in the edit log (CHB-031 srvr)', () => {
+  const lights = (r: FrameRecipe) => r.print.lights.logH;
+  const set = (path: string, value: unknown) => ({ op: 'set' as const, path, value });
+
+  it('withoutInert: real mode passes everything; normalised moves time, aperture and magnification onto the three lights', () => {
+    const ms = [set('print.enlarger.time_s', 20), set('print.enlarger.fstop', 11)];
+    expect(withoutInert(r0(), ms)).toEqual(ms);
+    const out = withoutInert(norm(), ms);
+    expect(out.map((m) => (m as { path: string }).path)).toEqual(['print.lights.logH', 'print.lights.logH']);
+    // one stop more time, then f/8 → f/11 (−2 log10 11/8): cumulative on each light, as at a real enlarger
+    const want = LOG2 - 2 * Math.log10(11 / 8);
+    for (const v of (out[1] as { value: number[] }).value) expect(v).toBeCloseTo(want, 5);
+    const at8 = withEnlargerMode({ ...r0(), print: { ...r0().print, enlarger: { ...r0().print.enlarger, magnification: 8 } } }, 'normalised');
+    for (const v of (withoutInert(at8, [set('print.enlarger.magnification', 17)])[0] as { value: number[] }).value) expect(v).toBeCloseTo(-2 * Math.log10(18 / 9), 5);
+    // no change of exposure: nothing written; an optics value that is no exposure (null): nothing written
+    expect(withoutInert(norm(), [set('print.enlarger.time_s', 10)])).toEqual([]);
+    expect(withoutInert(norm(), [set('print.enlarger.magnification', null)])).toEqual([]);
+    // a mode change earlier in the list counts for the writes after it
+    const toReal = [set('print.enlarger.mode', 'real'), set('print.enlarger.time_s', 20)];
+    expect(withoutInert(norm(), toReal)).toEqual(toReal);
+    // an expect on the time becomes an expect on the lights
+    expect(withoutInert(norm(), [{ ...set('print.enlarger.time_s', 20), expect: 10 }])[0]).toMatchObject({ path: 'print.lights.logH', expect: [0, 0, 0] });
+  });
+
+  it('StudioLog: apply, propose and preview record no time on a normalised recipe; a real recipe keeps its time', () => {
+    const log = StudioLog.make(norm());
+    log.apply([set('print.enlarger.time_s', 20)], 'user', 'Time');
+    expect(log.committed.print.enlarger.time_s).toBe(10);
+    lights(log.committed).forEach((v) => expect(v).toBeCloseTo(LOG2, 5));
+    expect(log.entries.map((e) => (e.m as { path?: string }).path)).toEqual(['print.lights.logH']);
+    log.propose([set('print.enlarger.fstop', 5.6)], { tx: 'agent-1', why: 'a stop more light' });
+    expect(log.pending().map((e) => (e.m as { path?: string }).path)).toEqual(['print.lights.logH']);
+    // 40 s against the time's 10 s: two stops more, on top of the stop already applied
+    log.preview(set('print.enlarger.time_s', 40));
+    expect(log.state.print.enlarger.time_s).toBe(10);
+    lights(log.state).forEach((v) => expect(v).toBeCloseTo(3 * LOG2, 5));
+    log.preview(null);
+    const real = StudioLog.make(r0());
+    real.apply([set('print.enlarger.time_s', 20)], 'user', 'Time');
+    expect(real.committed.print.enlarger.time_s).toBe(20);
+    expect(real).toBeInstanceOf(EditLog);
+  });
+
+  it('a studio frame\'s log is a StudioLog: the looks kit\'s "print density" on a normalised frame moves the lights, not the time', async () => {
+    const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), enlarger: 'normalised' });
+    const e = await studio.open(makeM1Tiff(), 'neg.tif');
+    expect(e.log).toBeInstanceOf(StudioLog);
+    const plan = planFrame(printDensity, { stops: 1 }, e.id, e.log.committed);
+    expect(plan.mutations.map((m) => (m as { path?: string }).path)).toEqual(['print.lights.logH']);
+    e.log.apply(plan.mutations, 'user', 'Look: print density');
+    expect(e.log.committed.print.enlarger.time_s).toBe(10);
+    lights(e.log.committed).forEach((v, k) => expect(v - lights(e.initial)[k]!).toBeCloseTo(LOG2, 4));
   });
 });

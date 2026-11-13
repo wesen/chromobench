@@ -6,6 +6,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { applyMutation, toDiagnostic, type Diagnostic, type EditLog, type FrameRecipe, type Mutation } from '@chromobench/contract';
+import { withoutInert } from '../../../../src/model/enlarger.ts';
 import { amountPass, type AmountOptions } from './amount.ts';
 import { aggregate, diffRecipes, type AggregateEntry, type DiffEntry } from './diff.ts';
 import { inGroups, SYNC_GROUPS, type SyncGroups } from './groups.ts';
@@ -75,9 +76,11 @@ export function planFrame(l: Look, params: Record<string, unknown>, frame: strin
         if ('set' in e && BALANCE_PATHS.includes(e.path))
           warnings.push(kitDiag('CB-L120', `${l.name} sets ${e.path} absolutely on a balanced roll`, { path: e.path, hint: 'apply as offsets (add entries) to keep the roll balance', fix: `{ path: '${e.path}', add: … }` }));
     }
-    if (o.noDiff) return { frame, mutations: res.mutations, diff: [], warnings };
-    const after = previewRecipe(recipe, res.mutations);
-    return { frame, mutations: res.mutations, diff: diffRecipes(recipe, after, o.syncGroups ? { groups: o.syncGroups } : {}), warnings };
+    // a normalised recipe takes no time or aperture: their exposure goes on the printer lights (CHB-031 srvr)
+    const mutations = withoutInert(recipe, res.mutations);
+    if (o.noDiff) return { frame, mutations, diff: [], warnings };
+    const after = previewRecipe(recipe, mutations);
+    return { frame, mutations, diff: diffRecipes(recipe, after, o.syncGroups ? { groups: o.syncGroups } : {}), warnings };
   } catch (err) {
     return { frame, mutations: [], diff: [], warnings: [], skipped: toDiagnostic(err) };
   }
