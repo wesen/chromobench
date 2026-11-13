@@ -71,6 +71,35 @@ function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
 }
 
+const GLYPHS: Record<string, string> = { '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾', '1/6': '⅙', '5/6': '⅚' };
+/** Within this many stops a change reads as a fraction: the printer's rounded seconds and the nominal f-numbers. */
+export const STOP_TOLERANCE = 0.02;
+
+/**
+ * A change in stops as History writes it (CHB-031 F32): "+⅓ stop", "−1 stop", "+1⅔ stops", "+0.6 stop". The timer's
+ * rounded seconds (7.94 → 10.0 s is 0.333 stop) and nominal f-numbers (f/8 → f/7.1) are thirds of a stop, so a
+ * change within 0.02 stop of a half, third, quarter or sixth reads as that fraction; others with one decimal.
+ */
+export function stopWords(s: number): string {
+  if (!Number.isFinite(s)) return '';
+  const a = Math.abs(s);
+  if (a < 0.005) return '0 stops';
+  const sign = s > 0 ? '+' : MINUS;
+  for (const d of FRACTIONS) {
+    const n = Math.round(a * d);
+    if (n > 0 && Math.abs(a - n / d) < STOP_TOLERANCE) {
+      const whole = Math.floor(n / d);
+      const rest = n % d;
+      const g = gcd(rest, d);
+      const frac = rest ? GLYPHS[`${rest / g}/${d / g}`] ?? `${rest / g}/${d / g}` : '';
+      const many = whole > 1 || (whole === 1 && rest > 0);
+      return `${sign}${whole || !frac ? whole : ''}${frac} stop${many ? 's' : ''}`;
+    }
+  }
+  const t = a < 0.1 ? a.toFixed(2) : a.toFixed(1);
+  return `${sign}${t} stop${a > 1 && t !== '1.0' ? 's' : ''}`;
+}
+
 // ---- aperture ------------------------------------------------------------------------------
 
 /** Nominal third-stop f-numbers; the true value of index k (from f/1) is 2^(k/6). */
@@ -88,6 +117,16 @@ export function fstopIndex(n: number): number {
 /** Exposure change in log H when the lens goes from n1 to n2 (light ∝ 1/N²). */
 export const fstopLogH = (n1: number, n2: number): number => 2 * Math.log10(n1 / n2);
 export const fstopStops = (n1: number, n2: number): number => fstopLogH(n1, n2) / STOP;
+/**
+ * The change of light from n1 to n2 in stops, counting the lens's third-stop marks when both are marked f-numbers
+ * (f/8 → f/11 is −1 stop, though 8/11 is −0.92: f/11 is 2^3.5 = 11.3 rounded). Other values as fstopStops.
+ */
+export function fstopMarkStops(n1: number, n2: number): number {
+  const i1 = fstopIndex(n1);
+  const i2 = fstopIndex(n2);
+  const marked = (n: number, i: number): boolean => Math.abs(FSTOPS_THIRD[i]! - n) < 1e-6;
+  return marked(n1, i1) && marked(n2, i2) ? (i1 - i2) / 3 : fstopStops(n1, n2);
+}
 export const formatFstop = (n: number): string => `f/${Number(n.toFixed(1))}`;
 
 // ---- printer lights and filtration ---------------------------------------------------------

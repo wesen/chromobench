@@ -60,7 +60,7 @@ describe('history and approvals', () => {
     set(log, 'print.lights.logH', [0.05, -0.1, 0.05], 'ring-around +G (−M)', 'ring-1');
     const lookup = lookupFor(models);
     const groups = historyGroups(log, lookup);
-    expect(groups.map(x => x.changes[0]!.text)).toEqual(['Time 10.0 → 15.12 s (+0.60 st)', 'Printer lights (0, 0, 0) → (+2, −4, +2) pt']);
+    expect(groups.map(x => x.changes[0]!.text)).toEqual(['Time 10.0 → 15.12 s (+0.6 stop)', 'Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt']);
     expect(groups[1]!.tx).toBe('ring-1');
     moveCursor(log, 0);
     expect(log.stateHash).toBe(h0);
@@ -72,7 +72,7 @@ describe('history and approvals', () => {
     const h0 = log.stateHash;
     const [e] = log.propose([{ op: 'set', path: 'print.enlarger.time_s', value: 15.12 }], { tx: 'eval-1', why: 'a third of a stop more' });
     expect(log.stateHash).toBe(h0);
-    expect(pendingGroups(log, lookupFor(models))[0]!.changes[0]!.text).toBe('Time 10.0 → 15.12 s (+0.60 st)');
+    expect(pendingGroups(log, lookupFor(models))[0]!.changes[0]!.text).toBe('Time 10.0 → 15.12 s (+0.6 stop)');
     set(log, 'print.enlarger.time_s', 11, 'Time');
     const r = log.approve([e!.seq]);
     expect(Array.isArray(r) && r[0]!.code).toBe('E_STALE');

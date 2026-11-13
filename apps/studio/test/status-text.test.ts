@@ -1,6 +1,35 @@
 // CHB-027 F9: the status line's engine label and decode notes, in the photographer's words.
 import { describe, expect, it } from 'vitest';
-import { engineSummary, engineTip, notesSummary, notesTip } from '../src/status-text.ts';
+import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from '../src/status-text.ts';
+
+// CHB-031 F35: plain words for the render passes, no error codes on the plain line, and the guess's reason as a sentence
+describe('passWords', () => {
+  it('draft, screen and refine in plain words', () => {
+    expect(passWords('draft')).toBe('quick preview');
+    expect(passWords('screen')).toBe('done');
+    expect(passWords('refine')).toBe('done, full detail');
+    expect(passWords('other')).toBe('other');
+  });
+});
+
+describe('plainError', () => {
+  it('drops the codes; the words stay', () => {
+    expect(plainError('E_EVAL: no GPU adapter')).toBe('no GPU adapter');
+    expect(plainError('W_NO_SURROUND: no film holder around the frame')).toBe('no film holder around the frame');
+    expect(plainError('reference · CPU f64 (no WebGPU: E_EVAL: no GPU adapter)')).toBe('reference · CPU f64 (no WebGPU: no GPU adapter)');
+    expect(plainError('CB-H401 Undo skipped "Time"')).toBe('Undo skipped "Time"');
+    expect(plainError('E_CANCELLED')).toBe('something went wrong');
+  });
+});
+
+describe('guessWhy', () => {
+  it('a sentence, not "The picture no orange mask and no film edge."', () => {
+    expect(guessWhy('no orange mask and no film edge')).toBe('The picture shows no orange mask and no film edge.');
+    expect(guessWhy('film edge and an orange mask')).toBe('The picture shows a film edge and an orange mask.');
+    expect(guessWhy('too dark to tell')).toBe('The picture is too dark to tell.');
+    expect(guessWhy('an orange mask over the whole image', false)).toBe('the picture shows an orange mask over the whole image.');
+  });
+});
 
 describe('engineSummary', () => {
   it('says fast or compatibility mode; the technical label goes to the tooltip', () => {

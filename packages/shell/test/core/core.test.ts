@@ -81,6 +81,29 @@ describe('core (CraftKit core.test.mjs)', () => {
     expect(s.doc.develop.light.exposure).toBe(0.3);
   });
 
+  it('adopt: a new store and History take over the steps (a host that swaps its app in place, CHB-031 F24)', () => {
+    const s1 = new Store(init());
+    const h1 = new History(s1);
+    s1.commitPatches('Exposure', [{ path: ['develop', 'light', 'exposure'], before: 0, after: 0.5 }]);
+    s1.commitPatches('Contrast', [{ path: ['develop', 'light', 'contrast'], before: 0, after: 1 }]);
+    h1.undo();
+    // the next app: its store restored the document as saved (exposure 0.5), its History empty
+    const s2 = new Store(init());
+    s2.writeDoc([{ path: ['develop', 'light', 'exposure'], value: 0.5 }], { tier: 'document' });
+    const h2 = new History(s2);
+    h2.adopt(h1);
+    expect(h1.entries.length + h1.redoStack.length).toBe(0);
+    expect(h2.canUndo && h2.canRedo).toBe(true);
+    h2.redo();
+    expect(s2.doc.develop.light.contrast).toBe(1);
+    h2.undo();
+    h2.undo();
+    expect(s2.doc.develop.light.exposure).toBe(0);
+    // ids keep counting: a new step does not reuse an adopted one's id
+    s2.commitPatches('Vibrance', [{ path: ['develop', 'color', 'vibrance'], before: 0, after: 2 }]);
+    expect(new Set([...h2.entries, ...h2.redoStack].map(e => e.id)).size).toBe(h2.entries.length + h2.redoStack.length);
+  });
+
   it('view tier is not undoable', () => {
     const s = new Store(init());
     const h = new History(s);

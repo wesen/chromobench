@@ -219,11 +219,14 @@ test('darkroom: real by default with its mode shown; a frame saved in normalised
   test.setTimeout(180_000);
   const errors = await boot(page, 'darkroom');
   const panel = page.locator('.ck-panel[data-panel="enlarger"]').first();
-  await expect(panel).toContainText(NO_FRAME);
-  await expect(page.locator('.ck-panel[data-panel="paper"]').first()).toContainText(NO_FRAME);
+  // no photo yet: one empty-state text, which says how to open one; the Paper panel is not drawn (CHB-031 8iv8)
+  await expect(panel).toContainText('No photos yet');
+  await expect(page.locator('.ck-panel[data-panel="paper"]').first()).toBeHidden();
   await open(page, NEG);
   expect((await enlarger(page)).mode).toBe('real');
+  await expect(panel).not.toContainText('No photos yet');
   await expect(panel).not.toContainText(NO_FRAME);
+  await expect(page.locator('.ck-panel[data-panel="paper"]').first()).toBeVisible();
   await expect(arg(page, 'print.enlarger.mode')).toBeVisible();
   await expect(arg(page, 'print.enlarger.time_s')).toBeVisible();
 

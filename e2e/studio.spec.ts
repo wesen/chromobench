@@ -57,7 +57,7 @@ test('a reload keeps the recipe by hash; opening the file again re-attaches it',
   expect(await units(page)).toBe(0);
   await expect.poll(() => units(page)).toBe(1);
   await expect(y).toHaveAttribute('aria-valuetext', /Y 3 CC/);
-  await expect(page.locator('#history')).toContainText('(0, 0, +3) CC');
+  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +3 CC');
   const h1 = await hash(page);
   await page.evaluate(() => window.chromobench.studio.flush());
 
@@ -65,7 +65,7 @@ test('a reload keeps the recipe by hash; opening the file again re-attaches it',
   await expect(page.locator('#status')).toContainText('ready');
   await open(page);
   expect(await hash(page)).toBe(h1);
-  await expect(page.locator('#history')).toContainText('(0, 0, +3) CC');
+  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +3 CC');
 });
 
 test('a folder of scans opens every scan in it, the first one selected', async ({ page }) => {
@@ -186,7 +186,7 @@ test('tools: test strip band, ring-around tile, masks and exposures, apply to se
   await page.locator('.cb-ring-tile').filter({ hasText: '+G' }).getByRole('button').click();
   const lights = await page.evaluate(() => window.chromobench.log!.committed.print.lights.logH);
   [0.05, -0.1, 0.05].forEach((v, i) => expect(lights[i]).toBeCloseTo(v, 9));
-  await expect(page.locator('#history')).toContainText('(+2, −4, +2) pt');
+  await expect(page.locator('#history')).toContainText('Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt');
 
   // masks: drag an ellipse → mask.set plus a burn through it; a dodge from the exposure list
   await page.evaluate(() => window.chromobench.tool('mask-ellipse'));

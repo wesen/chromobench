@@ -22,6 +22,8 @@ export class DomChrome implements ChromeApi {
   private offPointer: ((e: Event) => void) | null = null;
   private onCloseTop: (() => void) | null = null;
   private timers = new Set<ReturnType<typeof setTimeout>>();
+  /** aborted at dispose: the listeners this chrome put on the root */
+  private readonly off = new AbortController();
   constructor(dom: DomApp) {
     this.dom = dom;
     this.layer = h('div', { class: 'ck-layer' });
@@ -47,6 +49,7 @@ export class DomChrome implements ChromeApi {
     this.closeMenus();
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
+    this.off.abort();
   }
 
   // ── popup menus ─────────────────────────────────────────────────────────
@@ -473,14 +476,20 @@ export class DomChrome implements ChromeApi {
       this.tip.style.left = Math.max(4, Math.min(x, window.innerWidth - t.width - 4)) + 'px';
       this.tip.style.top = y + 'px';
     };
-    root.addEventListener('pointerover', e => {
-      const el = (e.target as HTMLElement).closest?.('[data-tip],[data-why]') as HTMLElement | null;
-      if (el === target) return;
-      target = el;
-      if (timer) clearTimeout(timer);
-      this.tip.hidden = true;
-      if (el) timer = setTimeout(() => show(el), 550);
-    });
+    // removed at dispose: a host that mounts another app on the same root (CHB-031 F24) gets one set of listeners
+    const signal = this.off.signal;
+    root.addEventListener(
+      'pointerover',
+      e => {
+        const el = (e.target as HTMLElement).closest?.('[data-tip],[data-why]') as HTMLElement | null;
+        if (el === target) return;
+        target = el;
+        if (timer) clearTimeout(timer);
+        this.tip.hidden = true;
+        if (el) timer = setTimeout(() => show(el), 550);
+      },
+      { signal },
+    );
     root.addEventListener(
       'pointerdown',
       () => {
@@ -488,7 +497,8 @@ export class DomChrome implements ChromeApi {
         this.tip.hidden = true;
         target = null;
       },
-      true,
+      { capture: true, signal },
     );
+    signal.addEventListener('abort', () => void (timer && clearTimeout(timer)));
   }
 }

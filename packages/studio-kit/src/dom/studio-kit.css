@@ -57,8 +57,9 @@
 .cb-warn { color: var(--warn); }
 .cb-err { color: var(--err); }
 /* the history panel: CraftKit's develop history rows */
-.cb-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
-.cb-hist-i { padding: 3px 6px; border-radius: var(--radius, 2px); cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a row keeps its height and the list scrolls (CHB-031 F33: rows shrank past the max height and overlapped) */
+.cb-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; position: relative; }
+.cb-hist-i { flex: none; padding: 3px 6px; border-radius: var(--radius, 2px); cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-hist-i:hover { background: var(--hover); }
 .cb-hist-i.is-cursor { background: var(--sel); color: var(--strong); box-shadow: inset 2px 0 0 var(--selline); }
 .cb-hist-i.is-undone { color: var(--text3); }

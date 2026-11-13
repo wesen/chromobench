@@ -78,16 +78,20 @@ export class Studio {
   readonly frames: Frames;
   readonly route: EditLogRoute;
   readonly bridge: FrameRenderBridge;
-  readonly initial: InitialRecipe | undefined;
+  /** the first recipe of a new frame, in the layout's enlarger mode (setEnlarger) */
+  initial: InitialRecipe | undefined;
   rt: Runtime | null = null;
   /** the host page's actions (menus); set with setHost */
   host: StudioHost | null = null;
   private proposeSeq = 0;
   private stops: (() => void)[] = [];
+  /** the host's first recipe, before the layout's enlarger mode is applied */
+  private readonly hostInitial: InitialRecipe | undefined;
 
   constructor(o: StudioOptions) {
     this.engine = o.engine;
     this.kv = o.kv ?? null;
+    this.hostInitial = o.initial;
     this.initial = o.enlarger ? initialInMode(o.initial, o.enlarger) : o.initial;
     this.frames = new Frames(o.engine, { kv: this.kv, ...(o.mode ? { mode: o.mode } : {}), ...(o.now ? { now: o.now } : {}), ...(o.opener ? { opener: o.opener } : {}), known: sha => this.libraryKind(sha) });
     this.route = new EditLogRoute(this.frames);
@@ -114,12 +118,21 @@ export class Studio {
     this.stops.push(
       rt.history.on((kind, e) => {
         if (kind === 'skip') rt.diagnostics.info('CB-H401', `Undo skipped "${e.entry.label}": the frame's History already moved past it`, { runtime: true, facts: [`${e.parts.length} EditLog part(s) no longer the last unit in effect`] });
+        if (kind === 'undo' || kind === 'redo') this.showChanged(rt, e?.channel ?? null);
       }),
       this.frames.onAdded(f => this.catalogue(f)),
       this.frames.onRemoved(f => this.uncatalogue(f.id)),
     );
     if (this.host) this.publishHost();
     return this;
+  }
+
+  /**
+   * The enlarger mode of new recipes, after a layout switch in place (CHB-031 F24: the frames stay open, the next
+   * new frame takes the new layout's mode; frames already open keep the mode their recipe stores).
+   */
+  setEnlarger(mode: EnlargerMode): void {
+    this.initial = initialInMode(this.hostInitial, mode);
   }
 
   /** the host page's actions: commands in File and View (hidden while absent) */
@@ -143,6 +156,19 @@ export class Studio {
     for (const f of this.stops) f();
     this.stops = [];
     this.rt = null;
+  }
+
+  /**
+   * Undo or Redo changed a frame that is not on screen: select it, so the photographer sees what changed (CHB-031
+   * F36). After the runtime's toast, which still names the frame ("Undo Time (on DSC_8559.NEF)"); only an open
+   * frame (a library entry whose file is not open would ask for its file).
+   */
+  private showChanged(rt: Runtime, frame: string | null): void {
+    if (!frame || !this.frames.get(frame) || this.current === frame) return;
+    queueMicrotask(() => {
+      if (this.rt !== rt || !this.frames.get(frame) || this.current === frame) return;
+      rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [frame], primary: frame, anchor: frame } }], { tier: 'view' });
+    });
   }
 
   private catalogue(f: FrameEntry): void {

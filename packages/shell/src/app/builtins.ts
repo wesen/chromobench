@@ -75,7 +75,7 @@ export function builtinCommands(get: () => Runtime<any> | null, themes: Iterable
     'view.zoomIn': { label: 'Zoom In', menu: 'View', run: () => rt().viewport()?.zoomBy(1), ...noVp },
     'view.zoomOut': { label: 'Zoom Out', menu: 'View', run: () => rt().viewport()?.zoomBy(-1), ...noVp },
     'view.fit': { label: 'Fit in Window', menu: 'View', run: () => rt().viewport()?.setZoom('fit'), ...noVp },
-    'view.actual': { label: '100% (1:1)', menu: 'View', run: () => rt().viewport()?.setZoom(1), ...noVp },
+    'view.actual': { label: 'Actual Pixels (1:1)', menu: 'View', run: () => rt().viewport()?.setZoom(1), ...noVp },
     'view.toggle-1:1': {
       label: 'Toggle Zoom View',
       menu: 'View',
