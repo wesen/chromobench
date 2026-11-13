@@ -194,3 +194,103 @@ much of its saturation into the HueSatMap and LookTable that follow the forward 
   CameraToXYZ = Inverse(AB · CC · CM), then CA (linear Bradford) from the white to D50.
 - PPM → PNG: `cd various/shots && python3 -I -c "from PIL import Image; import glob,os
   [ (Image.open(f).save(f[:-4]+'.png'), os.remove(f)) for f in glob.glob('02-*.ppm') ]"`.
+
+## Step 3: Adobe's own rendering through Photoshop's Camera Raw: blocked (Photoshop refuses scripting); the DNG SDK instead
+
+To find which of the two colour paths Adobe's final colour corresponds to, I tried to have Adobe's engine render
+the photos with every adjustment zeroed. The route was Photoshop 2025 on the Mac, opening each NEF through Camera
+Raw with an XMP sidecar: Adobe Standard, as shot, sliders at 0, linear point curve, no sharpening, noise
+reduction or lens corrections. Photoshop launched, but every scripting call failed with error 8800 ("This
+functionality may not be available in this version of Photoshop"), even `app.version`. The user suspects an
+expired licence, which fits: a Photoshop in limited mode refuses scripting.
+
+The replacement is Adobe's DNG SDK 1.7.1, the open-source reference implementation of DNG rendering that Camera Raw
+and Lightroom follow. It downloads freely and needs no licence or Mac. From its source I took the exact order and
+math of the rendering stages; step 4 ports them.
+
+### Prompt Context
+**User prompt (verbatim):** "ok try again"; "closed the modal, try again?"; "i think it's maybe because the license has expired?" (see step 2 for the request this serves)
+**Assistant interpretation:** Get Adobe's actual rendering of the same photos as the reference.
+**Inferred user intent:** Know how chromobench's colour relates to what Lightroom/Camera Raw would show.
+**Commit (code):** see the commit that adds this step (scripts/acr/)
+
+### What I did
+- `scripts/acr/zeroed.xmp`: a Camera Raw sidecar (crs: ProcessVersion 15.4, WhiteBalance "As Shot", CameraProfile
+  "Adobe Standard", Exposure2012…Blacks2012, Texture, Clarity2012, Dehaze, Vibrance, Saturation, Parametric* all
+  0, Sharpness 0, LuminanceSmoothing 0, ColorNoiseReduction 0, LensProfileEnable 0, AutoLateralCA 0, vignettes 0,
+  ToneCurveName2012 "Linear" with linear PV2012 curves for RGB, R, G and B).
+- On the Mac: copied DSC_8559, 8541, 8536 and 8655 `.NEF` from Dropbox to `~/chromobench-tools/acr/`, each with
+  `zeroed.xmp` copied as `<name>.xmp`.
+- `scripts/acr/render.jsx`: open each NEF, save a TIFF with an embedded profile, log size, depth and profile.
+- Attempt 1:
+  `osascript -e "with timeout of 840 seconds" -e "tell application \"Adobe Photoshop 2025\" to do javascript file (POSIX file \"…/render.jsx\")" -e "end timeout"`.
+  Photoshop launched (pid 65235) and no TIFF appeared. Result after 14 min:
+  `71:151: execution error: Adobe Photoshop 2025 got an error: AppleEvent timed out. (-1712)`. The user then
+  closed a dialog on the Mac's screen.
+- Attempt 2, the same call: `71:151: execution error: Adobe Photoshop 2025 got an error: General Photoshop error occurred. This functionality may not be available in this version of Photoshop. (8800)`.
+- Attempt 3, without `CameraRAWOpenOptions` (plain `app.open`, in case the deprecated options were the problem):
+  the same 8800.
+- Probe: `osascript -e "tell application \"Adobe Photoshop 2025\" to do javascript \"app.version\""` →
+  `43:70: execution error: … (8800)`, after the user had closed the modal ("closed the modal, try again?").
+- Attempt 4: `open -a "Adobe Photoshop 2025" ~/chromobench-tools/acr/render.jsx`, with the script writing
+  `render.log`. After 500 s of polling there was no `render.log` and no TIFF.
+- DNG SDK: `curl -L https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip` (80,367,206 bytes; 1.7 and 1.6 are
+  also served), unpacked in the session scratchpad. It contains `dng_sdk/source`, the XMP toolkit, libjpeg and
+  libjxl, with Xcode and Visual Studio projects only.
+- Read the render pipeline in `dng_sdk/source/dng_render.cpp`. `dng_render_task::ProcessArea` (line 1504) applies,
+  in this order:
+  1. `DoBaselineABCtoRGB(…, fCameraWhite, fCameraToRGB)`: camera RGB → linear ProPhoto, clipped at the camera white.
+  2. `DoBaselineHueSatMap(…, fHueSatMap, encode, decode)`: the profile's HueSatMap, interpolated for the white.
+  3. (`DoBaselineProfileGainTableMap`, when present.)
+  4. `DoBaseline1DFunction(…, fExposureRamp)` on R, G and B.
+  5. `DoBaselineHueSatMap(…, fLookTable, …)`.
+  6. `DoBaselineRGBTone(…, fToneCurve)` (or `…Overrange` with a slope extension).
+  7. `DoBaselineRGBtoRGB` to the output space, then `fEncodeGamma`.
+- From `dng_render_task::Start` (line 845):
+  - `fCameraToRGB = ProPhoto.MatrixFromPCS() * spec->CameraToPCS()`.
+  - `fHueSatMap = profile.HueSatMapForWhite(spec->WhiteXY())`, plus a LookTable when present, each with an
+    encoding table when its encoding is not linear.
+  - `exposure = params.Exposure() + TotalBaselineExposure(profile)`, with
+    `white = 1 / 2^max(0, exposure)` and `black = Shadows * ShadowScale * …`.
+  - `fToneCurve = exposure tone ∘ params.ToneCurve()`, which defaults to `dng_tone_curve_acr3_default`, a
+    1025-entry table at line 164.
+
+### Why
+- With Photoshop unavailable, the SDK is the most authoritative reference that can be run and read. It defines the
+  colour model; Camera Raw adds process-version features (local adjustments and the like) that are zeroed here
+  anyway.
+
+### What worked
+- The SDK source gives every stage's order and arithmetic with file and line references.
+
+### What didn't work
+- Photoshop scripting, all four attempts, with the exact errors above. Not retried; the cause is most likely the
+  licence (the user's observation), not the script.
+
+### What I learned
+- In this SDK version the profile's HueSatMap runs **before** exposure and the LookTable **after** it, and the
+  default tone curve is ACR3's. A comparison of "forward matrix only" (step 2) leaves out three stages that change
+  saturation: the HueSatMap, the LookTable, and the RGB tone curve, which also raises saturation where it adds
+  contrast.
+
+### What was tricky to build
+- Photoshop and Camera Raw scripting depend on the app's state (modal dialogs, licence), invisible over SSH. A
+  script that only writes a log gives no signal when it never runs; a timeout must be the stopping rule.
+
+### What warrants a second pair of eyes
+- If the licence is renewed, a real Camera Raw render (`scripts/acr/`, attempt 4's command) should cross-check the
+  ported pipeline of step 4.
+
+### What should be done in the future
+- Step 4: port ABCtoRGB (FM path), HueSatMap (with HueSatMapForWhite), exposure ramp, LookTable and RGBTone with
+  the ACR3 table into a script, and measure each stage's chroma against our colour-matrix path.
+
+### Code review instructions
+- `scripts/acr/zeroed.xmp`, `scripts/acr/render.jsx`; the SDK at
+  `https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip` (`dng_sdk/source/dng_render.cpp`,
+  `dng_reference.cpp`, `dng_hue_sat_map.cpp`, `dng_color_spec.cpp`).
+
+### Technical details
+- `dng_reference.cpp`: `RefBaselineABCtoRGB` (line 1389), `RefBaselineHueSatMap` (1508), `RefBaselineRGBtoRGB`
+  (1796), `RefBaselineRGBTone` (1868). `dng_render.cpp`: `dng_tone_curve_acr3_default::Evaluate` (161, table at
+  164), `EvaluateInverse` (441), default tone curve in `dng_render` (2111).
