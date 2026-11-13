@@ -1,0 +1,12 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile, uptime } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page);
+console.log('open', await openFile(page, PHOTOS + '/DSC_8559.NEF'), uptime());
+await page.waitForTimeout(2000);
+await readProbe(page);
+await page.getByRole('button', { name: 'Test strip' }).click();
+await page.waitForTimeout(1500);
+await shot(page, '04-test-strip-click');
+console.log(await bodyText(page));
+console.log(JSON.stringify(await readProbe(page)));
+await ctx.close();

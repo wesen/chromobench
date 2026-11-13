@@ -1,0 +1,10 @@
+import { launch, goto, shot, bodyText } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page); await page.waitForTimeout(1000);
+const openAs = async () => { await page.getByText('File', { exact: true }).first().click(); await page.getByText('Open As', { exact: true }).first().hover(); await page.waitForTimeout(300); };
+await openAs(); await page.getByText('Photo or Negative: Guess', { exact: true }).click(); await page.waitForTimeout(500);
+await openAs(); await shot(page, '37-open-as-menu-after-guess');
+await page.getByText('Keep This Choice After Restart', { exact: true }).click(); await page.waitForTimeout(500);
+await openAs(); await shot(page, '38-open-as-menu-after-keep-toggle'); await page.keyboard.press('Escape');
+console.log((await bodyText(page)).split('\n').slice(-3).join(' | '));
+await ctx.close();

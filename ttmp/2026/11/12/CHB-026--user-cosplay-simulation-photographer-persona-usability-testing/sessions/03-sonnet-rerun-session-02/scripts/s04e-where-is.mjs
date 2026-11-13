@@ -1,0 +1,18 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+page.on('filechooser', () => console.log('FILECHOOSER event'));
+await goto(page);
+await page.getByText('DSC_8559.NEF', { exact: true }).first().click();
+await page.waitForTimeout(1500);
+const btn = page.getByRole('button', { name: /Locate DSC/ });
+console.log('count', await btn.count());
+const p = page.waitForEvent('filechooser', { timeout: 15000 }).catch(e => null);
+await btn.click();
+const fc = await p;
+console.log('chooser?', !!fc);
+if (fc) await fc.setFiles(PHOTOS + '/DSC_8559.NEF');
+await page.waitForTimeout(6000);
+console.log((await bodyText(page)).split('\n').slice(-6).join(' | '));
+console.log(JSON.stringify((await readProbe(page)).ui));
+await shot(page, '18b-after-locate');
+await ctx.close();

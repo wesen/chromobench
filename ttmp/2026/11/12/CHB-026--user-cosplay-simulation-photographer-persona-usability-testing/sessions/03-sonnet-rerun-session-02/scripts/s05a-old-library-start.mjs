@@ -1,0 +1,13 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS } from './lib.mjs';
+const { ctx, page } = await launch(false, 'old-library');
+await page.goto('http://localhost:4650/'); await page.waitForTimeout(3000);
+const snap = async (l) => { const b = await bodyText(page); console.log(l, 'tabs/words:', JSON.stringify(['Dyes', 'Base & gamut', 'Print', 'Negative', 'No mask', 'Clipping', 'Photo'].filter(w => b.includes(w))), '| frames:', (b.match(/\.NEF|raw010\.dng[^\n]*/g) || []).length, '| status', b.split('\n').slice(-3).join(' | ')); };
+await snap('load 1');
+await shot(page, '22-old-library-first-load');
+console.log('SW', await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map(r => r.active?.scriptURL + ' ' + r.active?.state)));
+await page.reload(); await page.waitForTimeout(3500);
+await snap('after reload');
+await shot(page, '23-old-library-after-reload');
+console.log(JSON.stringify(await readProbe(page)));
+console.log((await bodyText(page)).split('\n').join(' | ').slice(0, 1500));
+await ctx.close();

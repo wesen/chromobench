@@ -1,0 +1,20 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile, uptime, rn, settle } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page);
+await openFile(page, PHOTOS + '/DSC_8559.NEF');
+await page.waitForTimeout(2000);
+const box = page.getByLabel('Time value');
+await box.click(); await box.press('Control+a'); await box.type('15'); await box.press('Enter'); await page.waitForTimeout(3000);
+await box.click(); await box.press('Control+a'); await box.type('-5 s'); await box.press('Enter'); await page.waitForTimeout(3000);
+console.log('15 then -5 s ->', await box.inputValue());
+// open second photo
+console.log('open 2nd', await openFile(page, PHOTOS + '/DSC_8536.NEF'));
+await page.waitForTimeout(2000);
+await page.getByText('View', { exact: true }).first().click(); await page.waitForTimeout(300);
+await shot(page, '13-view-menu');
+const items = async () => page.evaluate(() => [...document.querySelectorAll('[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox]')].map(e => e.innerText.replace(/\s+/g, ' ') + (e.getAttribute('aria-checked') ? ` [${e.getAttribute('aria-checked')}]` : '')));
+console.log('view', JSON.stringify(await items()));
+await page.getByText('Layout', { exact: true }).first().hover(); await page.waitForTimeout(400);
+await shot(page, '14-layout-submenu');
+console.log('layout', JSON.stringify(await items()));
+await ctx.close();

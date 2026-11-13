@@ -1,0 +1,10 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page);
+await openFile(page, PHOTOS + '/DSC_8559.NEF');
+await page.waitForTimeout(2000);
+await page.getByText('View', { exact: true }).first().click(); await page.waitForTimeout(300);
+await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(800);
+await shot(page, '14-layout-dialog');
+console.log(await page.evaluate(() => [...document.querySelectorAll('[role=dialog],dialog,.ck-dialog,.ck-modal')].map(e => e.innerText).join('\n---\n')));
+await ctx.close();

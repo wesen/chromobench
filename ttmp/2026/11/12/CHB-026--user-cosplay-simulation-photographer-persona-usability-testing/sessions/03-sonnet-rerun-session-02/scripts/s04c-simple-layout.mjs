@@ -1,0 +1,26 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile, meanRGB, MAIN, luma, rn, settle, panelVals } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page);
+await openFile(page, PHOTOS + '/DSC_8559.NEF');
+await page.waitForTimeout(2500); await readProbe(page);
+const modeSel = () => page.evaluate(() => document.querySelector('select[aria-label="Enlarger mode"]')?.value ?? null);
+const lay = async (name) => { await page.getByText('View', { exact: true }).first().click(); await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(500); await page.getByRole('button', { name, exact: true }).click(); await page.waitForTimeout(1200); await page.keyboard.press('Escape'); await page.waitForTimeout(500); };
+const L = async (n) => { const m = await meanRGB(page, { x: 100, y: 100, width: 900, height: 600 }, '_m'); return luma(m); };
+console.log('classic before: mode', await modeSel(), 'time', (await panelVals(page)).Time);
+await page.getByText('View', { exact: true }).first().click(); await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(500);
+await page.getByRole('button', { name: 'Simple', exact: true }).click(); await page.waitForTimeout(3000);
+await shot(page, '15-simple-layout');
+const body = await bodyText(page); console.log('--- SIMPLE BODY ---\n' + body.split('\n').join(' | '));
+console.log('has Time?', /\bTime\b/.test(body), 'has Aperture?', /Aperture/.test(body), 'mode select', await modeSel());
+console.log('ui', JSON.stringify((await readProbe(page)).ui));
+for (let i = 0; i < 2; i++) { const n0 = (await rn(page))[0]; const b = page.getByRole('button', { name: /Lighter/ }).first(); await b.click(); console.log('lighter settle', await settle(page, n0, 20)); await shot(page, `16-simple-lighter-${i+1}`); }
+console.log('hist', (await bodyText(page)).split('\n').filter(l => /→|Lighter|lighter/.test(l)).slice(-4).join(' | '));
+console.log('ui', JSON.stringify((await readProbe(page)).ui));
+await page.getByText('View', { exact: true }).first().click(); await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(500);
+await page.getByRole('button', { name: 'Classic', exact: true }).click(); await page.waitForTimeout(3500);
+await shot(page, '17-back-to-classic');
+const b2 = await bodyText(page);
+console.log('classic after: mode', await modeSel(), JSON.stringify(await panelVals(page)));
+console.log('darkroom text', b2.split('Darkroom')[1]?.split('Paper')[0].split('\n').join(' | '));
+console.log('ui', JSON.stringify((await readProbe(page)).ui));
+await ctx.close();

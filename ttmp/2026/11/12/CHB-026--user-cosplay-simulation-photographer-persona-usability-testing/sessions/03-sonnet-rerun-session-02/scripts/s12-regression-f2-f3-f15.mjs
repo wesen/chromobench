@@ -1,0 +1,12 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh'); await goto(page);
+const wait = async (re, maxS = 40) => { for (let i = 0; i < maxS * 4; i++) { await page.waitForTimeout(250); const l = (await bodyText(page)).split('\n').slice(-3).join(' | '); if (re.test(l)) return l; } return 'TIMEOUT ' + (await bodyText(page)).split('\n').slice(-3).join(' | '); };
+await page.setInputFiles('#file', PHOTOS + '/DSC_8559.NEF'); console.log('open:', await wait(/rendered \d/, 60)); await page.waitForTimeout(2000);
+await readProbe(page);
+await page.setInputFiles('#file', PHOTOS + '/DSC_8559.NEF'); await page.waitForTimeout(2500);
+console.log('F2 same file again: ui', JSON.stringify((await readProbe(page)).ui.filter(u => u.kind !== 'menu')), '| status', (await bodyText(page)).split('\n').slice(-1)[0]);
+await page.getByText('Frame', { exact: true }).first().click(); await page.getByText('Re-open as Negative', { exact: true }).click(); await page.waitForTimeout(1500);
+console.log('F3 re-open as negative dialog:', await page.evaluate(() => [...document.querySelectorAll('.ck-modal,[role=dialog]')].map(e => e.innerText.replace(/\n+/g, ' / ')).join('')));
+await shot(page, '85-reopen-as-negative-dialog');
+const btn = page.getByRole('button', { name: /Re-open|Yes|OK|Open as negative/i }).last(); console.log('dialog buttons:', await page.evaluate(() => [...document.querySelectorAll('.ck-modal button, .ck-layer button')].map(b => b.innerText).join(' / ')));
+await ctx.close();

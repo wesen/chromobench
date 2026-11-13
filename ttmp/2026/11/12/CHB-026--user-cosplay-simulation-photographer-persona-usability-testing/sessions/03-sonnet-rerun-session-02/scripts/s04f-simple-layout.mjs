@@ -1,0 +1,24 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS, openFile, meanRGB, luma, rn, settle, panelVals } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh');
+await goto(page);
+const modeSel = () => page.evaluate(() => document.querySelector('select[aria-label="Enlarger mode"]')?.value ?? null);
+const lay = async (name) => { await page.getByText('View', { exact: true }).first().click(); await page.getByText('Layout…', { exact: true }).click(); await page.waitForTimeout(500); await page.getByRole('button', { name, exact: true }).click(); await page.waitForTimeout(2500); };
+console.log('open', await openFile(page, PHOTOS + '/DSC_8559.NEF'));
+await page.waitForTimeout(2500);
+console.log('classic: mode', await modeSel(), JSON.stringify(await panelVals(page)));
+const m0 = await meanRGB(page, { x: 250, y: 140, width: 880, height: 580 }); console.log('classic picture', JSON.stringify(m0), luma(m0));
+await readProbe(page);
+await lay('Simple');
+await page.waitForTimeout(1500);
+console.log('after switch:', (await bodyText(page)).split('\n').slice(0, 30).join(' | '));
+console.log('ui', JSON.stringify((await readProbe(page)).ui));
+console.log('reopen', await openFile(page, PHOTOS + '/DSC_8559.NEF'));
+await page.waitForTimeout(2000);
+await shot(page, '15c-simple-opened');
+console.log('--- SIMPLE after open ---\n' + (await bodyText(page)).split('\n').join(' | '));
+// go to Print step
+await page.getByRole('button', { name: /Print/ }).first().click(); await page.waitForTimeout(3500);
+await shot(page, '15d-simple-print-step');
+console.log('--- SIMPLE print step ---\n' + (await bodyText(page)).split('\n').join(' | '));
+console.log('ui', JSON.stringify((await readProbe(page)).ui));
+await ctx.close();

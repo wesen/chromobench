@@ -1,0 +1,14 @@
+import { launch, goto, shot, bodyText, readProbe, PHOTOS } from './lib.mjs';
+const { ctx, page } = await launch(false, 'fresh'); await goto(page);
+const wait = async (re, maxS = 40) => { for (let i = 0; i < maxS * 4; i++) { await page.waitForTimeout(250); const l = (await bodyText(page)).split('\n').slice(-4).join(' | '); if (re.test(l)) return l; } return 'TIMEOUT ' + (await bodyText(page)).split('\n').slice(-4).join(' | '); };
+await page.setInputFiles('#file', PHOTOS + '/DSC_8559.NEF'); await wait(/rendered \d/, 60); await page.waitForTimeout(2000); await readProbe(page);
+await page.getByText('Frame', { exact: true }).first().click(); await page.getByText('Re-open as Negative', { exact: true }).click();
+await page.waitForTimeout(12000);
+console.log('as negative:', (await bodyText(page)).split('\n').slice(-5).join(' | '));
+console.log('ui', JSON.stringify((await readProbe(page)).ui.filter(u => u.kind !== 'menu')));
+await shot(page, '86-as-negative-pill');
+console.log('pill titles:', await page.evaluate(() => [...document.querySelectorAll('[title]')].filter(e => /photo|negative/i.test(e.title)).map(e => e.innerText + ' => ' + e.title).join(' ## ')));
+await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /Looks like a photo/i.test(x.innerText)); b?.click(); });
+await page.waitForTimeout(12000);
+console.log('after pill:', (await bodyText(page)).split('\n').slice(-4).join(' | '), JSON.stringify((await readProbe(page)).ui.filter(u => u.kind !== 'menu')));
+await ctx.close();
