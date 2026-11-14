@@ -44,7 +44,7 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   expect(await hook<number>(page, 'cb.log().committed.print.lights.logH[2]')).toBeCloseTo(0.03, 6);
   await expect(page.locator('.cb-hist-i.is-cursor').first()).toContainText('Printer lights R 0 → −1, B 0 → +1 pt');
   await page.locator('.ck-vp').first().click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => hook<number>(page, 'cb.log().cursor')).toBe(0);
 
   // survey (N): tiles of the chosen looks, then the ring-around sweep (nine prints)
@@ -68,7 +68,7 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await expect(card).toHaveCount(0);
   expect(await hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => e.log.committed.print.grade)')).toEqual([3, 3, 3]);
   await page.locator('.ck-vp').first().click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => e.log.committed.print.grade)')).toEqual([2, 2, 2]);
 });
 
@@ -94,6 +94,6 @@ test('looks: apply to the roll’s unedited frames on one card, untick a frame, 
   const grades = () => hook<number[]>(page, `cb.state().roll.rolls['roll-1'].frames.map((f) => cb.studio.frames.get(f).log.committed.print.grade)`);
   expect(await grades()).toEqual([4, 3, 4, 4, 4, 2]);
   await page.locator('.ck-vp').first().click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(grades).toEqual([2, 3, 2, 2, 2, 2]);
 });

@@ -45,6 +45,10 @@ function adaptedPrint(): SpectralInputs {
   return { ...s.print, M: bradfordMatrix(currentOracle().spectral(s.print, [0, 0, 0]), D65) };
 }
 
+// The solve table against f64 (CHB-034): 2.38e-6 on Metal (M1 Max), 2.62e-6 on SwiftShader on that Mac, below 2.5e-6
+// under SwiftShader on Linux; the broken variant (gtol 1e-5) measures 1.38e-5 to 1.45e-5, so it still fails by 4.6x.
+const SOLVE_TOL = 3e-6;
+
 type Test = (opts: Record<string, unknown>) => Promise<unknown>;
 
 const TESTS: Record<string, Test> = {
@@ -94,8 +98,8 @@ const TESTS: Record<string, Test> = {
     return { first, after, recreated: rt2 !== rt, rebuilt: t.data.length };
   },
 
-  'table:solve': () => tableParity('solve', {}, 2.5e-6, 'solve'),
-  'table:solve:gtol1e-5': () => tableParity('solve', { gtol: 1e-5 }, 2.5e-6, 'solve gtol 1e-5'),
+  'table:solve': () => tableParity('solve', {}, SOLVE_TOL, 'solve'),
+  'table:solve:gtol1e-5': () => tableParity('solve', { gtol: 1e-5 }, SOLVE_TOL, 'solve gtol 1e-5'),
   'table:pd': () => tableParity('pd', {}, 7.2e-7, 'pd'),
   'table:pd:log2-10-rounded': () => tableParity('pd', { codeTransform: (c) => c.replace('LOG2_10: f32 = 3.321928094887362', 'LOG2_10: f32 = 3.32') }, 7.2e-7, 'pd LOG2_10 = 3.32'),
   'table:print': () => tableParity('print', {}, 4.2e-7, 'print'),

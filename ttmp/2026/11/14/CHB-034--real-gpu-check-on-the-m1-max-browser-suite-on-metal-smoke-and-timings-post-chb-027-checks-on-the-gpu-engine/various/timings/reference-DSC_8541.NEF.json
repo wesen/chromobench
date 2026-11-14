@@ -1,0 +1,19 @@
+{
+ "url": "http://localhost:4811/?engine=reference&fresh",
+ "file": ".playwright-mcp/photos/DSC_8541.NEF",
+ "where": "M1 Max Chrome (Metal), local",
+ "engine": "reference · CPU f64 (tabulated previews, exact export) (worker) · 640 px",
+ "open": {
+  "resultMs": 5863,
+  "stalls": [],
+  "wallMs": 8545,
+  "worstStallMs": 0
+ },
+ "drag": {
+  "dragWallMs": 824,
+  "resultMs": 1223,
+  "renders": 3,
+  "stalls": [],
+  "worstStallMs": 0
+ }
+}

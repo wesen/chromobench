@@ -64,6 +64,6 @@ test('roll: new roll, first print, cull, reference, match, approve, undo', async
 
   // one undo takes the match off every frame
   await page.locator('#roll-reference').click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => methods(page)).toEqual(Array(6).fill('roll'));
 });

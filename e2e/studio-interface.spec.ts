@@ -83,7 +83,7 @@ test('F24: View ▸ Layout keeps the open frames open, their edits and one undo 
   expect(await frames(page)).toBe(2);
   // one undo history: Ctrl+Z takes back the Time set before the switches
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await idle(page);
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(t0);
 
@@ -139,13 +139,13 @@ test('F36: Undo and Redo of a change on another frame show that frame; F32/F33: 
   await page.locator('.cb-cell:visible').filter({ hasText: B.name }).first().click();
   await expect.poll(() => page.evaluate(() => window.chromobench.studio.current)).toBe(b);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect(page.locator('.ck-toast').last()).toContainText(`Undo Time (on ${A.name})`);
   await expect.poll(() => page.evaluate(() => window.chromobench.studio.current)).toBe(a);
   await page.locator('.cb-cell:visible').filter({ hasText: B.name }).first().click();
   await expect.poll(() => page.evaluate(() => window.chromobench.studio.current)).toBe(b);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect.poll(() => page.evaluate(() => window.chromobench.studio.current)).toBe(a);
   await idle(page);
 
@@ -185,7 +185,7 @@ test('F34: View ▸ Actual Pixels (1:1), Ctrl+Alt+0, and the zoom readout', asyn
   await zoom.click();
   await expect(zoom).toHaveText(/^Fit · /);
   await page.locator('.ck-vp:visible').first().click();
-  await page.keyboard.press('Control+Alt+0');
+  await page.keyboard.press('ControlOrMeta+Alt+0');
   await expect(zoom).toHaveText('100 %');
 });
 

@@ -1,0 +1,28 @@
+{
+ "url": "http://localhost:4811/?engine=gpu&fresh",
+ "file": ".playwright-mcp/scans/2025-10-07_roll-102_raw000.dng",
+ "where": "M1 Max Chrome (Metal), local",
+ "engine": "GPU · apple metal-3 · 4000 px",
+ "open": {
+  "resultMs": 2250,
+  "stalls": [
+   [
+    1455,
+    200
+   ],
+   [
+    1880,
+    108
+   ]
+  ],
+  "wallMs": 4941,
+  "worstStallMs": 200
+ },
+ "drag": {
+  "dragWallMs": 919,
+  "resultMs": 205,
+  "renders": 7,
+  "stalls": [],
+  "worstStallMs": 0
+ }
+}

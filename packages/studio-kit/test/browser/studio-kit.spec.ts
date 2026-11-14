@@ -40,7 +40,7 @@ test('classic print: a keyboard burst is one unit, Mod+Z undoes it, typed +1/3 s
   expect(await hook<number>(page, 'cb.log().units.length')).toBe(1);
   expect(await hook<number>(page, 'cb.log().committed.print.enlarger.time_s')).toBeCloseTo(14.142, 2);
   await page.locator('.cb-hist').click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   expect(await hook<number>(page, 'cb.log().cursor')).toBe(0);
   await time.locator('.cb-num').fill('+1/3 st');
   await time.locator('.cb-num').press('Enter');

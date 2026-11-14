@@ -48,10 +48,10 @@ test('stage 1: device loss rejects in-flight work with E_DEVICE_LOST; the next c
   expect(r.rebuilt).toBe(33 ** 3 * 4);
 });
 
-test('stage 3: GPU solve table within 2.5e-6 of f64 on reachable nodes, 0 flips', async ({ page }) => {
+test('stage 3: GPU solve table within 3e-6 of f64 on reachable nodes, 0 flips', async ({ page }) => {
   const r = await run(page, 'table:solve');
   expect(r.extra.nodes).toBe(35937);
-  expect(r.maxDiff).toBeLessThanOrEqual(2.5e-6);
+  expect(r.maxDiff).toBeLessThanOrEqual(3e-6);
   expect(r.flips).toBe(0);
   expect(r.pass).toBe(true);
 });
@@ -59,7 +59,7 @@ test('stage 3: GPU solve table within 2.5e-6 of f64 on reachable nodes, 0 flips'
 test('stage 3 broken variant: gtol = 1e-5 exceeds the solve tolerance', async ({ page }) => {
   const r = await run(page, 'table:solve:gtol1e-5');
   expect(r.pass).toBe(false);
-  expect(r.maxDiff).toBeGreaterThan(2.5e-6);
+  expect(r.maxDiff).toBeGreaterThan(3e-6);
 });
 
 test('stage 3: GPU printing-density table within 7.2e-7; LOG2_10 = 3.32 fails', async ({ page }) => {
