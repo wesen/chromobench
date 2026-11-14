@@ -386,3 +386,59 @@ assert it; then add the probe and this step to the ticket and commit the branch.
 
 ### Technical details
 - The probe requests `float32-filterable` when the adapter has it, to test `rgba32float` as well.
+
+## Step 7: The two remaining failures fixed; the default suite green on the Mac
+
+The project merges only when every check passes. After Steps 1–6 the default browser suite still failed 2 of 106 on
+the Mac, both present on `main` as well: the typed-entry race of Step 2, and the stage-3 solve table at 2.62e-6
+against a bound of 2.5e-6 under SwiftShader. Both are fixed; the default suite passes 106 of 106 on the Mac, and with
+`REAL_GPU=1` exactly the six failures of Step 3 remain (task `vcma`, a decision).
+
+### Prompt Context
+**User prompt (verbatim):** "PR? what's needed to get this into main?" then "that's fine." (to: fix both, then push and open a PR)
+**Assistant interpretation:** Make the branch pass the merge rule, then open a pull request.
+**Inferred user intent:** Get CHB-034 into `main` cleanly.
+**Commit (code):** the second commit of this branch.
+
+### What I did
+- `packages/studio-kit/src/dom/arg.ts`: the field's Enter handler parses against `st.peek(pathOf(now.f)) ?? now.v`,
+  the store's current value, as the range keys and the stepper already do, instead of the cell's `now.v`.
+- Measured the solve table's `maxDiff` with the assertions replaced by logs (restored afterwards), two runs each:
+  SwiftShader on the Mac 2.62e-6 (correct) and 1.45e-5 (broken variant, gtol 1e-5); Metal 2.38e-6 and 1.38e-5.
+- `packages/gpu/src/parity/page.ts`: one constant `SOLVE_TOL = 3e-6` for both solve checks, with the measurements in
+  its comment; `tables.spec.ts` bounds and title follow.
+- typecheck, lint, gen:check, `pnpm test` (2791 passed, 19 skipped), `CI=1 pnpm test:browser` 106/106 (4.0 min),
+  `REAL_GPU=1 CI=1 pnpm test:browser` 100/106 (the six of Step 3).
+
+### Why
+- The race is a real defect (a pasted value or an agent can hit it); the tolerance was set on one machine's
+  SwiftShader and is f32 noise on another's.
+
+### What worked
+- The two race-affected specs: 16 of 16 passes after the fix (were 3 of 3 failures for the wording spec).
+
+### What didn't work
+- One run of ten timed out at 60 s right after the source edit; not reproduced in 16 later runs. Most likely the dev
+  server's first compile after the change landing in the first test.
+
+### What I learned
+- The solve table's error is deterministic per adapter (identical in repeated runs), so the margin to the broken
+  variant (4.6×) is a fixed quantity, not a statistical one.
+
+### What was tricky to build
+- Loosening a bound that a negative control also uses: the broken variant must stay above the new bound, so both
+  had to be measured before choosing 3e-6.
+
+### What warrants a second pair of eyes
+- The typed-entry fix relies on `st.peek` returning the committed value synchronously after `tx` for routed recipe
+  paths; the passing specs show it does, but the store's routing is not documented on this point.
+
+### What should be done in the future
+- No dedicated unit test for the race: studio-kit's unit tests have no DOM. `e2e/studio-wording.spec.ts` types two
+  entries back to back and is the regression test.
+
+### Code review instructions
+- `git show HEAD -- packages/studio-kit/src/dom/arg.ts packages/gpu/src/parity/page.ts packages/gpu/test/browser/tables.spec.ts`.
+
+### Technical details
+- N/A

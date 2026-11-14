@@ -147,7 +147,9 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       if (e.key === 'Enter' && now.f) {
         const text = field.value;
         const kk = { ...a, component: k };
-        const parsed = parseEntry(kk, text, now.v);
+        // the store's value, not the cell's now.v: a typed entry right after a commit must not see the value from
+        // before it (a relative "−5 s" applied to a stale base, CHB-034); the range keys read it the same way
+        const parsed = parseEntry(kk, text, st.peek(pathOf(now.f)) ?? now.v);
         if (parsed === null) {
           field.classList.add('is-bad');
           rt.chrome.toast(badEntryText(model, text), { kind: 'warn', ms: 4000 });
