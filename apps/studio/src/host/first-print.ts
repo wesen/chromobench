@@ -7,7 +7,10 @@
 // A photo (CHB-031 F31) is first-printed too, for its density only (half way from the camera's exposure to the
 // integrated grey): its colour is the camera's as-shot white balance. FIRST_PRINT_AIM holds both kinds' aims.
 // Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
-import { applyMutation, compile, defaultRecipe, type Box, type Engine, type FrameRecipe, type Graph, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
+// CHB-034 fusz: the frame is metered on its analysis image (studio-engine.ts ANALYSIS_LONG) when the engine's working
+// image is larger, so the GPU engine (4000 px) and the CPU engine (640 px) meter the same picture and propose the same Time.
+import { applyMutation, compile, defaultRecipe, Graph, type Box, type Engine, type FrameRecipe, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
+import type { AnalysisImage } from './studio-engine.ts';
 
 /** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
 export type IntegrateToGrey = (frameLatd: Vec3, alpha: number) => Vec3;
@@ -114,6 +117,11 @@ export interface FirstPrintOptions {
    * cannot carry. Off by default: a roll's analysis and batches work in lights, with the pack as a roll setting.
    */
   bake?: (r: FrameRecipe) => Mutation[];
+  /**
+   * The image to meter (CHB-034 fusz; StudioEngine.analysisOf): the source's analysis image, registered with the
+   * engine; null or absent: the recipe's own source (the working image is the analysis image).
+   */
+  analysis?: AnalysisImage | null;
 }
 
 const r6 = (x: number): number => Number(x.toFixed(6));
@@ -188,6 +196,34 @@ function lightsNode(r: FrameRecipe, g: Graph): Node {
   return g.adopt([def])[0]!;
 }
 
+/** A box in working-image px → analysis-image px (kx, ky ≤ 1), kept inside its old edges (as decode.ts scaleBox). */
+function scaleBox(b: Box, kx: number, ky: number): Box {
+  const x = Math.ceil(b.x * kx), y = Math.ceil(b.y * ky);
+  return { x, y, w: Math.max(1, Math.floor((b.x + b.w) * kx) - x), h: Math.max(1, Math.floor((b.y + b.h) * ky) - y) };
+}
+
+/**
+ * The recipe on the analysis image (CHB-034 fusz): its source, and the boxes a recipe has when it is first printed
+ * (a strip frame's crop, the measured rebate, an open-gate box) in the analysis image's px. A strip frame's crop is
+ * its frame as found on the analysis image (as the decode at that size finds it), else the crop scaled. Retouch
+ * spots, masks and probes come later (a first print never has them) and are left as they are.
+ */
+export function onAnalysis(r: FrameRecipe, a: AnalysisImage): FrameRecipe {
+  const box = (b: Box): Box => scaleBox(b, a.kx, a.ky);
+  const same = (p: Box, q: Box): boolean => p.x === q.x && p.y === q.y && p.w === q.w && p.h === q.h;
+  const crop = r.view.frame.crop;
+  const out: FrameRecipe = { ...r, source: { ...r.source, sha256: a.info.sha256 } };
+  if (crop) {
+    const i = a.frames ? a.frames.working.findIndex((b) => same(b, crop)) : -1;
+    out.view = { ...r.view, frame: { ...r.view.frame, crop: i >= 0 ? { ...a.frames!.analysis[i]! } : box(crop) } };
+  }
+  if (r.scan) {
+    const { rebate, openGate } = r.scan;
+    out.scan = { ...r.scan, rebate: rebate ? box(rebate) : rebate, openGate: openGate && openGate !== 'flat' ? box(openGate) : openGate };
+  }
+  return out;
+}
+
 /** Measures the frame's integrated exposure (relative to the aim) under recipe r, over the pixels `sf` keeps. */
 export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, analysisPixels = 200_000, sf?: SubjectFailure | null): Promise<Vec3> {
   const n = lightsNode(r, g);
@@ -217,8 +253,11 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
   const t0 = r.print.enlarger.time_s;
   let lights = lights0;
   let t = t0;
+  // the analysis image (CHB-034 fusz): its own graph, the recipe moved onto it for each measurement
+  const ag = o.analysis ? new Graph() : g;
+  if (o.analysis) ag.registerSource(o.analysis.info);
   for (let pass = 0; pass < (o.passes ?? (aim.subjectFailure ? 3 : 2)); pass++) {
-    const delta = await measureExposure(engine, g, r, N, aim.subjectFailure);
+    const delta = await measureExposure(engine, ag, o.analysis ? onAnalysis(r, o.analysis) : r, N, aim.subjectFailure);
     // the exposure moved so far (lights and time) and the frame's own departure from the aim at the start: each pass
     // re-aims from the start, so alpha is the colour share however many passes refine it (not 1 − (1 − α)^passes)
     const off = lights.map((l, k) => l - lights0[k]! + Math.log10(t / t0)) as Vec3;

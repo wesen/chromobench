@@ -40,6 +40,32 @@ export interface Decoded {
   guess?: OpenGuess;
   /** A strip of several frames (CHB-027 WS-D, ingest's stripFrames): one box per frame, working-image px; null for one frame. */
   frames?: Box[] | null;
+  /**
+   * The first print's analysis image (CHB-034 fusz) when it differs from the working image: the working image
+   * area-averaged to the analysis size (ANALYSIS_LONG), registered as its own source (analysisSha). Absent when the
+   * working image is the analysis image (the CPU engine's 640 px). `data` as for `data` above.
+   */
+  analysis?: { info: SourceInfo; data?: Float32Array; frames?: Box[] | null };
+}
+
+/**
+ * The long side of the image the first print meters (CHB-034 fusz): the CPU engine's working size. The metered
+ * exposure depends on the image's resolution (detail and grain through a nonlinear chain: DSC_8559 meters 0.0084
+ * log H apart at 640 and 4000 px), so every engine meters an image of this size, area-averaged from its own working
+ * image, and proposes the same Time.
+ */
+export const ANALYSIS_LONG = 640;
+
+/** The source id of a file's analysis image (a SHA-256 like every source id, derived from the file's). */
+export const analysisSha = (sha256: string): string => sha256Hex(`first-print analysis image of ${sha256}`);
+
+/** A file's analysis image: its source info and the scale from the working image's px to its px. */
+export interface AnalysisImage {
+  info: SourceInfo;
+  kx: number;
+  ky: number;
+  /** A strip's frame boxes on the working image and on the analysis image (found there), when both found as many. */
+  frames?: { working: Box[]; analysis: Box[] } | null;
 }
 
 /** Photo or negative, guessed from the pixels (ingest's OpenModeGuess, structurally). */
@@ -246,23 +272,43 @@ export class StudioEngine implements Engine {
     if (before && (before.kind ?? 'negative-scan') !== kind) this.forget(sha);
     this.host.register(this.primary, d.info, d.data);
     this.graph.registerSource(d.info);
+    if (d.analysis) {
+      // without pixels here the engine worker registered it with the source ('register' keeps both there)
+      if (d.analysis.data) this.host.register(this.primary, d.analysis.info, d.analysis.data);
+      this.graph.registerSource(d.analysis.info);
+    }
     // the pixels are the engine's once registered
-    const { data: _pixels, ...kept } = d;
-    this.notes.set(sha, { ...kept, kind });
+    const { data: _pixels, analysis, ...kept } = d;
+    this.notes.set(sha, { ...kept, kind, ...(analysis ? { analysis: { info: analysis.info, frames: analysis.frames ?? null } } : {}) });
     return { info: d.info, kind, guess: d.guess ?? null, frames: d.frames ?? null };
   }
 
   /** The file is decoded another way now: drop what the engines computed from the old decode. */
   private forget(sha: string): void {
     this.host.forget?.(this.primary, sha);
+    if (this.notes.get(sha)?.analysis) this.host.forget?.(this.primary, analysisSha(sha));
     const old = this.graph;
     this.graph = new Graph();
-    for (const k of this.notes.keys()) {
-      const info = k === sha ? undefined : old.source(k);
+    for (const [k, n] of this.notes) {
+      if (k === sha) continue;
+      const info = old.source(k);
       if (info) this.graph.registerSource(info);
+      if (n.analysis) this.graph.registerSource(n.analysis.info);
     }
     this.supported.clear();
     this.notes.delete(sha);
+  }
+
+  /**
+   * The image the first print meters for a source (CHB-034 fusz): its analysis image and the scale to it, or null
+   * when the working image is the analysis image.
+   */
+  analysisOf(sha256: string): AnalysisImage | null {
+    const d = this.notes.get(sha256);
+    if (!d?.analysis) return null;
+    const a = d.analysis.info;
+    const fw = d.frames, fa = d.analysis.frames;
+    return { info: a, kx: a.width / d.info.width, ky: a.height / d.info.height, frames: fw && fa && fw.length === fa.length ? { working: fw, analysis: fa } : null };
   }
 
   adopt(defs: readonly NodeDef[]): void {

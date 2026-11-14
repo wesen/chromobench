@@ -133,14 +133,15 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
       case 'decode': {
         const t0 = performance.now();
         if (!raw) throw new Error('the engine worker is not initialised');
-        const d = await decodeFile(new Uint8Array(job.bytes), job.sha256, job.name, job.mode, { long: job.long, dust: job.dust, roll, raw });
+        const d = await decodeFile(new Uint8Array(job.bytes), job.sha256, job.name, job.mode, { long: job.long, dust: job.dust, roll, raw, ...(job.analysisLong ? { analysisLong: job.analysisLong } : {}) });
         if (job.keep === 'register') {
           need();
           decoded.set(job.sha256, d);
-          const { data: _kept, ...rest } = d;
-          return { value: { ...rest, ms: performance.now() - t0 } satisfies WireDecoded };
+          const { data: _kept, analysis, ...rest } = d;
+          return { value: { ...rest, ...(analysis ? { analysis: { info: analysis.info, frames: analysis.frames ?? null } } : {}), ms: performance.now() - t0 } satisfies WireDecoded };
         }
-        return { value: { ...d, ms: performance.now() - t0 } satisfies WireDecoded, transfer: [d.data.buffer] };
+        const transfer = [d.data.buffer, ...(d.analysis?.data ? [d.analysis.data.buffer] : [])];
+        return { value: { ...d, ms: performance.now() - t0 } satisfies WireDecoded, transfer };
       }
       case 'evaluate': {
         const ctl = new AbortController();
@@ -205,8 +206,11 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
       case 'register': {
         const d = decoded.get(m.sha256);
         decoded.delete(m.sha256);
-        if (d) need().openDecoded(d.info, d.data);
-        else console.warn(`engine worker: no decode of ${m.sha256.slice(0, 12)}… to register`);
+        if (d) {
+          need().openDecoded(d.info, d.data);
+          // the first print's analysis image (CHB-034 fusz) goes with it
+          if (d.analysis?.data) need().openDecoded(d.analysis.info, d.analysis.data);
+        } else console.warn(`engine worker: no decode of ${m.sha256.slice(0, 12)}… to register`);
         return;
       }
       case 'forget':

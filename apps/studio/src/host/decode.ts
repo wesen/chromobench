@@ -9,7 +9,7 @@ import {
   conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask, stripFrames,
   type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
-import { orientPixels, type Decoded as DecodedMeta, type OpenGuess } from './studio-engine.ts';
+import { analysisSha, orientPixels, type Decoded as DecodedMeta, type OpenGuess } from './studio-engine.ts';
 import type { DecodeMode } from './worker-protocol.ts';
 
 export type { DecodeMode };
@@ -25,6 +25,8 @@ export interface DecodeOptions {
   roll: Map<string, FrameBase>;
   /** Camera RAW decoder (LibRaw, in a worker or in this thread). */
   raw: RawDecoder;
+  /** The first print's analysis image's long side (ANALYSIS_LONG; CHB-034 fusz); absent: no analysis image. */
+  analysisLong?: number;
 }
 
 const fmt3 = (v: ArrayLike<number>): string => Array.from(v, (x) => x.toFixed(2)).join(' ');
@@ -65,7 +67,7 @@ export const BINNED_PHOTO_MAX_LONG = 1024;
 const EXIF_TURN: Partial<Record<number, Orientation>> = { 3: 'rot180', 6: 'cw90', 8: 'ccw90' };
 
 /** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
-export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw'>): Promise<Decoded> {
+export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw' | 'analysisLong'>): Promise<Decoded> {
   const binned = o.long > 0 && o.long <= BINNED_PHOTO_MAX_LONG;
   let raw = await decodeAsync(bytes, { fileName: name, options: binned ? { mode: 'scan', bin: 'cfa-half' } : { mode: 'photo' }, raw: o.raw });
   // binning applies to camera RAW only; a camera whose binned image is smaller than the working size: the demosaic
@@ -98,7 +100,15 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
   if (s < 1) notes.push(`working image ${w}×${h}`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = { ...info0, width: w, height: h, channels: 3, notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }] };
-  return { info, data, full: { width: fullW, height: fullH }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
+  const d: Decoded = { info, data, full: { width: fullW, height: fullH }, notes, rebate: null, kind: 'digital-raw', guess: guessOf(raw, data, w, h, name, 'photo', null) };
+  if (!o.analysisLong || o.long === o.analysisLong) return d;
+  // the first print's analysis image (CHB-034 fusz): this file area-averaged as a decode at the analysis size does
+  // (that decode reads a camera RAW binned, this one demosaiced: the one difference left, 0.0004 log H on DSC_8559)
+  const sa = Math.min(1, o.analysisLong / Math.max(W, H));
+  const aw = Math.max(1, Math.round(W * sa)), ah = Math.max(1, Math.round(H * sa));
+  const ad = region(lin, { x: 0, y: 0, w: W, h: H }, aw, ah, { channels: 3 });
+  const ao = turn ? orientPixels(turn, ad, aw, ah, 3) : { data: ad, width: aw, height: ah };
+  return withAnalysis(d, sha256, { ...d, info: { ...info, width: ao.width, height: ao.height }, data: ao.data as Float32Array });
 }
 
 /** A box (working px) scaled by kx, ky, kept inside its old edges (a strip frame's box is inset already). */
@@ -149,10 +159,20 @@ export function gapBase(rgb: Float32Array, w: number, boxes: readonly Box[], axi
 
 /** Decode → linear → area-averaged working image → conditioning. */
 export async function decodeScan(bytes: Uint8Array, sha256: string, name: string, o: DecodeOptions): Promise<Decoded> {
-  const roll = o.roll;
   // Camera RAW (and CFA DNG) go to LibRaw in scan mode: linear camera RGB, no white balance, CFA-binned.
   const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'scan', bin: 'cfa' }, raw: o.raw });
   const lin = linearise(raw, { sha256, ir: false });
+  const d = scanWorking(raw, lin, sha256, name, o);
+  if (!o.analysisLong || o.long === o.analysisLong) return d;
+  // the first print's analysis image (CHB-034 fusz): the working image a decode at the analysis size makes (the
+  // conditioning and a strip's sizing run again at that size, on a copy of the roll), so it is the CPU engine's
+  const a = scanWorking(raw, lin, sha256, name, { ...o, long: o.analysisLong, roll: new Map(o.roll) });
+  return withAnalysis(d, sha256, a);
+}
+
+/** A scan's working image at o.long from its linear file: resample, conditioning, a strip's frames, dust. */
+function scanWorking(raw: RawImage, lin: ReturnType<typeof linearise>, sha256: string, name: string, o: DecodeOptions): Decoded {
+  const roll = o.roll;
   const W = lin.width, H = lin.height;
   const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
   let w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
@@ -227,7 +247,17 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT, kind: 'negative-scan', guess, frames: boxes };
 }
 
-/** Decodes a file in the given mode. */
+/**
+ * The decode with its first print's analysis image (CHB-034 fusz): `a`, the working image a decode at the analysis
+ * size makes, as its own source (analysisSha); none when it is not smaller than the working image.
+ */
+function withAnalysis(d: Decoded, sha256: string, a: Decoded): Decoded {
+  if (a.info.width >= d.info.width && a.info.height >= d.info.height) return d;
+  const info: SourceInfo = { ...a.info, sha256: analysisSha(sha256), notes: [] };
+  return { ...d, analysis: { info, data: a.data, frames: a.frames ?? null } };
+}
+
+/** Decodes a file in the given mode; with `analysisLong`, also its first print's analysis image (withAnalysis). */
 export function decodeFile(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: DecodeOptions): Promise<Decoded> {
   if (mode === 'photo') o.roll.delete(sha256);
   return mode === 'photo' ? decodePhoto(bytes, sha256, name, o) : decodeScan(bytes, sha256, name, o);
