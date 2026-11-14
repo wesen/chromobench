@@ -518,3 +518,58 @@ from output; README steps 1, 2, 4"
 - Behaviour on the first six runs (chapter reads / first chapter turn / first src write / test runs / failing):
   document chapter-1 1/2/13/16/8; document control-1 0/–/4/11/7; graph chapter-1 2/1/4/17/9; graph chapter-2
   1/2/6/17/9; graph control-2 0/–/4/18/9; slots chapter-1 1/2/5/18/9.
+
+## Step 8: Playbook updated with the lessons; artifact without smooth scroll
+
+The lessons from Step 7 are generic, so they went into the vault playbook: read the smoke run's transcript and run
+every command the prompt prescribes; list own-test files explicitly; when all runs pass the hidden tests the design
+review carries the comparison; pi records no exit codes; go-minitrace globs have no `**`; measure when diaries are
+written; how to run the blind review (Opus reviewers, blinding, change requests, the guess last). The artifact page
+lost its smooth scrolling, which the owner found slow when jumping between chapters.
+
+### Prompt Context
+
+**User prompt (verbatim):** "update the playbook i the publish vault too, if that helps" — "remove the slow scroll
+when selecting a sections in the artifact, please"
+
+**Assistant interpretation:** Add this round's lessons to the vault playbook; make chapter jumps instant.
+
+**Inferred user intent:** Keep the shared method current; a page that is quick to navigate.
+
+**Commit (code):** go-go-parc 3e35caf — "PLAYBOOK pattern extraction: lessons from the first construction runs [...]";
+chromobench 825a08d (build-artifact.py without `scroll-behavior: smooth`; artifact version 2)
+
+### What I did
+- Playbook §5 (smoke test, scoring, transcript traps), §6 ("How to run it"), pitfalls (instruments can be wrong,
+  provider errors), files.
+- Removed the `prefers-reduced-motion: no-preference` smooth-scroll rule from `build-artifact.py`, rebuilt, and
+  republished to the same URL.
+
+### Why
+- The playbook is what a colleague will follow; the traps cost real time here.
+
+### What worked
+- Committing only the playbook path (`git commit -- <file>`) left the vault's other work untouched.
+
+### What didn't work
+- Not pushed: the vault's `main` also carries two unpushed commits from the agent-operated-engines work (da6fb72,
+  3dd7853) and uncommitted files of that work; pushing would publish them too.
+
+### What I learned
+- The other vault work (`agent-operated-engines/_validation`) runs a similar build-and-blind-review loop; the two
+  playbooks can be compared once both are pushed.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- Whether to push the vault now (three commits) or wait for the agent-operated-engines work.
+
+### What should be done in the future
+- Push go-go-parc when the other work is ready.
+
+### Code review instructions
+- `git -C ~/code/wesen/go-go-golems/go-go-parc show 3e35caf`.
+
+### Technical details
+- N/A
