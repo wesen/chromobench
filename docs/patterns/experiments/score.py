@@ -37,6 +37,15 @@ def count_lines(paths):
     return total
 
 
+def own_test_files(ev):
+    """Relative paths of the agent's test files in the evaluation copy."""
+    test_dir = os.path.join(ev, "project", "test")
+    found = [f for ext in ("ts", "js", "mjs") for f in glob.glob(os.path.join(test_dir, "**", f"*.test.{ext}"), recursive=True)]
+    if not found:
+        found = [f for ext in ("ts", "js", "mjs") for f in glob.glob(os.path.join(test_dir, f"*.{ext}"))]
+    return sorted(os.path.relpath(f, ev) for f in found)
+
+
 def score_run(run, task, variant, n, hidden_dir, eval_dir):
     ev = os.path.join(eval_dir, f"{task}-{variant}-{n}")
     if os.path.exists(ev):
@@ -49,8 +58,11 @@ def score_run(run, task, variant, n, hidden_dir, eval_dir):
     own = {}
     if has_src:
         hidden, hidden_text = run_tap(["node", "--test", "--test-reporter=tap", "hidden.test.ts"], ev, 900)
-        if os.path.isdir(os.path.join(ev, "project", "test")):
-            own, _ = run_tap(["node", "--test", "--test-reporter=tap", "project/test/"], ev, 900)
+        # Node 24 treats `node --test project/test/` as one module path (it fails unless the agent added an index.js),
+        # so the test files are listed explicitly: *.test.* anywhere under test/, else every script directly in it.
+        files = own_test_files(ev)
+        if files:
+            own, _ = run_tap(["node", "--test", "--test-reporter=tap"] + files, ev, 900)
     with open(os.path.join(ev, "hidden.out.txt"), "w") as fh:
         fh.write(hidden_text)
     diary = os.path.join(run, "project", "DIARY.md")
