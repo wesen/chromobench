@@ -1,7 +1,7 @@
 ---
 Title: 'Cosplay session 02 findings: enlarger real mode by default, open-as, panels, strip frames, leftovers'
 Ticket: CHB-031
-Status: active
+Status: complete
 Topics:
     - ui
     - product
@@ -11,7 +11,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-12T17:06:19.324260346-05:00
+LastUpdated: 2026-11-14T14:05:19.875063003-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
