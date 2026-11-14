@@ -74,7 +74,7 @@ When several people or agents run browser suites on one machine, give each run i
 `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 pnpm test:browser`.
 By default the `[chromium-webgpu]` and `[gpu-parity]` projects run WebGPU on **SwiftShader** (software), on any
 machine. `REAL_GPU=1` drops those flags so they get the machine's own adapter (Metal on a Mac, headless works);
-on the M1 Max, 6 GPU-parity tests then fail on tolerances tuned for SwiftShader (CHB-034).
+on the M1 Max the full suite passes there too (CHB-034).
 
 ---
 
