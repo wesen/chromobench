@@ -1,0 +1,79 @@
+{
+  "answers": {
+    "q1": "Presenting a result only if its generation is newer than the slot's shown generation — the single check `job.gen > s.shownGen`.",
+    "q2": "On the CPU engine the picture froze until the hand stopped, because no render ever completed during a drag; the fix is a progress threshold (`progressMs`) that lets the running render finish when the slot has shown nothing for that long and the new request is only another draft.",
+    "q3": "Only when the engine can actually stop work — i.e. when it runs off the main thread or on the GPU; with a main-thread engine an abort saves nothing, which is why the running example keeps `preemptBackground` off by default (independent of that, background slots are pumped only when no live slot is busy).",
+    "q4": "The originating project uses a fixed draft budget of 500,000 pixels at the picture's aspect whatever the zoom (with the screen pass at displayed size × device pixel ratio, rounded up to 128); Editor lab instead adapts its preview level from the last preview's cost, coarser above 12 ms and finer below 2.5 ms.",
+    "q5": "not stated in the chapter"
+  },
+  "review": {
+    "solution_stands_alone": false,
+    "unclear": [
+      "The progress rule appears in the Solution as 'unless the slot has shown nothing for longer than a progress threshold' before anything defines that threshold; a first-time reader cannot connect it to `progressMs` in the sketch, to note 2, or to the 12 ms / 2.5 ms figures.",
+      "'if a render is running for a different key, abort it' never says what a key contains. The sketch builds `key ← bridge(renderable).key(renderable) ++ target`, so the pass/size is part of the key, yet Structure and Collaborations speak of the bridge key ('equal keys mean equal pixels') as if keys were content-only.",
+      "'has shown nothing for longer than a progress threshold' reads as 'has never presented anything since it was created', whereas the code means 'nothing has been presented for progressMs'. Reword to 'no result has been presented for longer than progressMs'.",
+      "`roundUp(shownSize × dpr, 128)` is ambiguous: next multiple of 128, or next power of two? Say 'rounded up to the next multiple of 128'.",
+      "Slot declares `shownAt` but its initial value is never given, so the progress rule is undefined the first time a slot is used (presumably slot-creation time, with `shownGen = 0`).",
+      "The Slot's `lane` is never assigned by anyone: which component puts the main viewer on the live lane and a thumbnail on the background lane, and can a slot be promoted when its thumbnail becomes visible?"
+    ],
+    "errors": [
+      "The state diagram says `Running --> Running: request with same key (wait)`, but the sketch does not implement 'wait': a same-key request still increments `gen` and replaces `s.waiting`, so when the running render finishes it is presented and then the identical key is re-rendered and presented again. Either coalesce the request into the running render (keep the newest generation and drop the waiting duplicate) or document the redundant second render.",
+      "The unconditional 'abort it' in the Solution and in Collaborations step 3 contradicts implementation note 3, which makes aborting background renders engine-conditional (useless on a main-thread engine). State the engine condition in the Solution, not only in note 3.",
+      "React's concurrent rendering is a doubtful known use: React restarts interrupted work at a lower priority and never commits a stale tree, but it has no per-slot generation comparison and no explicit abort of a named render. Keep it with a hedge ('priority-based restarting, the same freshness guarantee without a generation counter') or drop it.",
+      "Note 7 mixes units of comparison: 6 ms to compute a 4,000 × 2,674 image but 26 ms to read back a 3,000 × 2,000 result. Fine as an anecdote, but as written the two sizes differ, so a reader cannot tell whether the 20 ms is a readback cost or a bigger-image effect."
+    ],
+    "missing": [
+      "Aborted versus failed versus completed: the sketch's `on finish` has no error path, so a render that throws leaves `s.running` set and the slot wedged.",
+      "Slot lifecycle: what happens when a view closes, is hidden, or is scrolled out of the filmstrip (abort running, drop waiting, keep or evict the thumbnail).",
+      "Who decides `previewing`, and how a lost pointer-up (window blur, pointer leaving, tablet pen) is recovered so the slot is never stuck at draft quality.",
+      "Any debounce/idle window before a request is issued — search-as-you-type is cited in Motivation but the chapter never says whether requests themselves are throttled.",
+      "Guidance for choosing `progressMs`, which the Consequences admit is a per-device tuning parameter.",
+      "What 'live slots are busy' means when several live views exist (main viewer plus inspector): does background work run when only one of them is idle?"
+    ],
+    "too_long": "The Solution is one ~110-word sentence chain carrying five separate rules (generation increment, single waiting slot, conditional abort, lane pumping, present-by-generation, pass choice) and should be split into numbered rules; implementation note 7 (GPU readback timings) is a costing observation that belongs in a short sidebar next to note 8 rather than in the note list, and note 9 is testing advice rather than an implementation note.",
+    "suggested_edits": [
+      "Rewrite the Solution as five numbered rules: (1) every display place is a slot with a generation counter, at most one waiting request and at most one running render; (2) a new request increments the generation, replaces the waiting request, and aborts the running render if its key differs — unless the progress rule applies; (3) at most one render per slot, live slots before background slots; (4) present only if `gen > shownGen`; (5) pick the pass from the interaction (fixed-pixel-budget draft during gestures, displayed size × dpr at rest, full size at 1:1 or beyond).",
+      "Insert one sentence before the abort rule: 'The key is the bridge key of the renderable together with the pass and maximum side, so a pass change is a different key (see Chapter 1 for the renderable key).'",
+      "Reword the progress caveat to: '…abort it, unless no result has been presented for longer than `progressMs` and the new request is only a draft (see note 2).'",
+      "Initialize the slot explicitly in the sketch: `shownGen ← 0; shownAt ← now()` at slot creation, and add an `onSameKey` branch that promotes the running render's generation instead of queueing a duplicate.",
+      "Add an error line to `on finish`: `if job failed: s.running ← none; if job.gen > s.shownGen: report error or leave last frame; pump(queue, s)` — aborted renders must be distinguished from failures so a wedged slot is impossible.",
+      "Change `key ← bridge(renderable).key(renderable) ++ target` to `key ← (bridge.key(renderable), target.pass, target.maxSide)` and say plainly that two requests with the same key are interchangeable.",
+      "Hedge or cut the React known use, and add a one-line note that React's guarantee comes from discarding interrupted work rather than from a generation comparison."
+    ]
+  },
+  "applications": [
+    {
+      "context": "Colour-grading application: waveform, vectorscope and histogram must update while the colourist drags grading wheels on a 4K frame.",
+      "participants": {
+        "Slot": "one slot per scope panel (waveform / vectorscope / histogram) for the current frame, live lane while the panel is visible, background when the panel is collapsed or the frame is only in the filmstrip",
+        "Request": "a graded frame plus the scope kind; pass = draft (downsampled/stride-sampled frame) or screen; presentation callback that hands the computed trace to the panel's draw",
+        "Render bridge": "GPU scope kernel (or a histogram compute shader) whose key is (grade-node-graph key, frame id, sampling stride, bin count) — equal keys mean equal traces",
+        "Queue": "the single scope pump: increments generation per scope slot, aborts a superseded kernel dispatch only if the kernel is off-main-thread, draws a trace only if its generation beats the panel's shown generation",
+        "Target chooser": "draft sampling (e.g. every 4th pixel, fixed ~500k samples) while a wheel drag is in progress; full-resolution sampling on wheel release; the panel's own pixel size only sets the trace resolution, not the frame sampling",
+        "Thumbnail cache": "last trace per (grade key, scope, stride) and the clip/filmstrip scope thumbnails, bounded by count"
+      },
+      "sketch": "request(scopeSlot, gradedFrame, target)\n  s.gen += 1\n  key = (gradeKey(gradedFrame), gradedFrame.id, target.samplingStride, scope.kind)\n  s.waiting = (s.gen, gradedFrame, key)\n  starved = target.pass == DRAFT and s.running and now() - s.shownAt >= progressMs\n  if s.running and s.running.key != key and not starved and engine.canAbort():\n      abort(s.running)\n  pump()\n\npump()\n  for lane in (LIVE, BACKGROUND):            -- live first\n    for s in lane.slots:\n      if not s.running and s.waiting and (lane == LIVE or not liveBusy()):\n          s.running = start(take(s.waiting), onFinish)\n\nonFinish(s, job, trace)\n  s.running = none\n  if job.aborted: return pump()\n  if job.gen > s.shownGen:\n      panel(s).draw(trace); s.shownGen = job.gen; s.shownAt = now()\n  pump()\n\non wheelDrag   -> for scope in visible: request(scope, currentDraftFrame, DRAFT_STRIDE)\non wheelRelease -> for scope in visible: request(scope, currentFrame, FULL_STRIDE)",
+      "key_note": "Implementation note 3 (preempting background work is a property of the engine) matters most: scope computation is either a GPU dispatch that really stops or a main-thread loop where an abort just wastes the work already done, so the queue must query the engine before enabling abort — with a main-thread scope loop the right behaviour is to let the running pass finish and keep only the newest waiting request, otherwise the drag reproduces the chapter's CPU-engine freeze.",
+      "failure_or_adaptation": "Three independent slots drift: the waveform can show grade N while the histogram shows grade N−2, which is worse than lag because the colourist reads balance across panels. Adapt by giving the three scopes one shared generation (one slot whose result fans out to all three panels, or a shared `shownGrade` gate so no panel draws a frame the others do not have). Second adaptation: the scope slot should consume the draft frame that the viewer already graded instead of requesting its own grade — the expensive step is the 4K grade, not the scope count, so a slot per panel would triple the grading work. Third: keep the sampling stride fixed per pass, otherwise the draft and full traces are not comparable and the scope visibly jumps at wheel release."
+    },
+    {
+      "context": "Generative image-editing tool where a diffusion sampler streams intermediate previews every few denoising steps while the user keeps editing the prompt and repainting the mask.",
+      "participants": {
+        "Slot": "the visible canvas (live lane) plus history/thumbnail slots (background lane), one slot per canvas showing a generation",
+        "Request": "(prompt, mask, seed, sampler/scheduler, step budget, latent size) plus a cancellation signal; presentation callback that decodes a latent into a preview",
+        "Render bridge": "the sampler wrapper: key = hash(prompt, mask, seed, sampler, steps, size), and it reports streaming partials (gen, step, image) as denoising proceeds",
+        "Queue": "increments the canvas generation per edit, replaces the waiting request, aborts the running sampler between denoising steps, presents a partial only if (gen, step) is newer than what is on screen",
+        "Target chooser": "draft (few steps at low latent resolution) while the prompt is being typed or the mask is being painted; screen pass on idle (more steps, displayed size); refine at 1:1 or for export",
+        "Thumbnail cache": "content-addressed finished and partial latents keyed by (prompt, mask, seed, step budget, size), bounded by count and by VRAM"
+      },
+      "sketch": "request(canvas, target)\n  s.gen += 1\n  key = (hash(prompt), hash(mask), seed, sampler, target.steps, target.size)\n  s.waiting = (s.gen, key, target, signal = newSignal())\n  starved = target.pass == DRAFT and s.running and now() - s.shownAt >= progressMs\n  if s.running and s.running.key != key and not starved:\n      s.running.signal.abort()          -- checked between steps only\n  pump()\n\nsample(job)\n  latents = noise(job.seed)\n  for step in 1..job.target.steps:\n      latents = denoise(latents, job)\n      if step % job.target.emitEvery == 0:\n          emit(PARTIAL, job.gen, step, decode(latents))\n      if job.signal.aborted: return ABORTED\n  emit(FINISHED, job.gen, job.target.steps, decode(latents))\n\nonEvent(s, g, step, img, kind)\n  if g > s.shownGen or (g == s.shownGen and step > s.shownStep):\n      present(img); s.shownGen = g; s.shownStep = step; s.shownAt = now()\n  if kind != PARTIAL: s.running = none; pump(s)\n\non promptKey / maskStroke -> schedule request(canvas, chooseTarget(busy, ...)) after a short idle",
+      "key_note": "Implementation note 1 (present by generation, not by arrival) matters most, extended to a step index: with streaming previews a superseded run's step 12 can land after the new run's step 4, and even inside one run decodes finish out of order, so `gen > shownGen` alone is not enough — the ordering check must be `(gen, step)` monotone or the canvas flickers backwards between two runs' previews.",
+      "failure_or_adaptation": "A single diffusion run costs seconds, so the chapter's CPU-engine failure is the default here: aborting on every keystroke or mask point means nothing is ever shown. Adapt by (a) keeping the progress rule with a coarse draft that is allowed to finish, (b) debouncing annotative edits rather than aborting immediately, and (c) splitting the key into structural parts (seed, size, sampler) and cosmetic parts (prompt), so a mask repaint can reuse the existing noise/latents of the same seed instead of paying for a full resample. Two further adaptations: keep superseded partial latents in the content-addressed cache (note 6 — discarding a 20-step run is the most expensive waste in this domain), and bound concurrency by VRAM — one running sampler plus a queued one is fine, two live canvases each streaming a full sampler is not. Note 7 also bites: decoding and uploading every preview to the canvas can cost more than the denoising step, so stream at a reduced decode size and present on the sampler's device where possible."
+    }
+  ],
+  "ratings": {
+    "understanding_confidence": 0.93,
+    "usefulness_1to5": 5,
+    "portability_1to5": 5
+  }
+}

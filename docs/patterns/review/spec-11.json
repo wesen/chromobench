@@ -1,0 +1,14 @@
+{
+  "chapter": "../11-kits-with-policy-passes.md",
+  "contexts": [
+    "An image editor where third-party and AI-powered tool packs (background removal, generative fill, upscaling, face retouching) are installed into user-arranged workspaces, and the product must guarantee that generative tools never appear in a 'forensic / documentary' workspace and always show provenance.",
+    "A node-based colour-grading application where a 'film emulation' pack must enforce that its nodes come after the input colour-space transform and before the output transform, and where an assistant agent can author new node layouts."
+  ],
+  "questions": {
+    "q1": "Why must passes be pure checks, and what does the originating project do when a pass throws?",
+    "q2": "Why is the rule 'a viewer listing the finish tools needs the finish kit' installed on the shell rather than in the finish kit?",
+    "q3": "What does every report carry?",
+    "q4": "When should a pass warn rather than error, according to the chapter?",
+    "q5": "How many passes does the originating project's finish kit install in total, and what is the CB code of the third one?"
+  }
+}

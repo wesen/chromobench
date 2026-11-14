@@ -1,0 +1,14 @@
+{
+  "chapter": "../01-interned-operation-graph.md",
+  "contexts": [
+    "A node-based compositing tool for visual effects (read, colour-correct, key, blur, merge nodes) whose artists tweak parameters interactively and whose final frames are rendered on a farm of many machines.",
+    "A WebGPU shader-graph material editor in the browser that must decide which shader variants to compile, cache and reuse as users edit material graphs."
+  ],
+  "questions": {
+    "q1": "Why must every field be length-prefixed before hashing?",
+    "q2": "Is the node id alone a sufficient cache key for evaluated results? If not, what must be added?",
+    "q3": "What can keys built from input keys not do when a change below produces identical pixels, and what mechanism is suggested if it matters?",
+    "q4": "How is a graph sent to another process, and how does the receiver arrive at the same ids?",
+    "q5": "What is the maximum number of entries in the originating project's result cache?"
+  }
+}
