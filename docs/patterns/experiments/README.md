@@ -16,6 +16,10 @@ Method: `go-go-parc/Research/playbooks/pattern-extraction-with-agent-validation.
 
 ## After the batch
 
+0. Retry failures: runs that end with `rc=1 … no answer found` in `batch.log` (seen: provider error
+   `upstream_stream_failed` after ~98 s, e.g. graph/control-1, slots/control-1). Delete those run directories (they
+   may hold partial projects), then run `batch.py` again; it skips runs that have `answer.json`.
+
 1. `python3 -I score.py <runs-root> <hidden-dir> results.json` (hidden tests per run, own tests re-run, diary steps).
 2. go-minitrace: `go-minitrace convert pi --source-dir <run>/session --output-dir analysis/archives/<task>-<variant>-<n>`
    for each run, then `go-minitrace query run --archive-glob 'analysis/archives/*/*.minitrace.json' --sql-file
