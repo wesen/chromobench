@@ -60,6 +60,33 @@ export async function uploadU16(rt: GpuRuntime, img: SourceImg, rect: Box, label
   return out;
 }
 
+/**
+ * An f32 image of `c` channels per pixel → rgba32float by kernels/pack16.wgsl `unpackF32` (CHB-034): the data goes
+ * to a storage buffer as it is, so the main thread does no per-pixel work. Falls back to ChainRunner.upload's CPU
+ * expansion when the data is larger than one storage binding may be.
+ */
+export async function uploadF32(rt: GpuRuntime, data: Float32Array, w: number, h: number, c: number, label: string, cpu: () => GPUTexture): Promise<GPUTexture> {
+  const bytes = w * h * c * 4;
+  if (data.length < w * h * c || bytes > rt.caps.limits.maxStorageBufferBindingSize || bytes > rt.caps.limits.maxBufferSize) return cpu();
+  const pipe = await rt.pipelines.get({ name: 'pack16.unpackF32', code: PACK16_WGSL, entryPoint: 'unpackF32' });
+  const sb = rt.buffers.acquire({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }, `${label}.f32`);
+  rt.device.queue.writeBuffer(sb, 0, data.buffer, data.byteOffset, bytes);
+  const out = rt.textures.acquire({ format: 'rgba32float', w, h, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING }, label);
+  const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.f');
+  rt.device.queue.writeBuffer(ub, 0, new Uint32Array([w, h, c, 0]));
+  const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 7, resource: { buffer: ub, size: 32 } }, { binding: 8, resource: { buffer: sb, size: bytes } }, { binding: 9, resource: out.createView() }] });
+  const enc = rt.device.createCommandEncoder();
+  const pass = enc.beginComputePass();
+  pass.setPipeline(pipe);
+  pass.setBindGroup(0, bg);
+  pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
+  pass.end();
+  rt.device.queue.submit([enc.finish()]);
+  rt.buffers.release(ub);
+  rt.buffers.release(sb);
+  return out;
+}
+
 /** The chain's rgba32float output → 16-bit RGB codes (kernels/pack16.wgsl `pack`, pack2x16unorm). */
 export async function readU16(rt: GpuRuntime, tex: GPUTexture, w: number, h: number): Promise<Uint16Array> {
   const pipe = await rt.pipelines.get({ name: 'pack16.pack', code: PACK16_WGSL, entryPoint: 'pack' });

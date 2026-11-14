@@ -17,6 +17,7 @@ import { nodeAt, type Vec3 } from '../tables/inputs.ts';
 import { compare } from './harness.ts';
 import { REBATE_W, rebateT, scanChain, syntheticScan } from './synthetic.ts';
 import { gold, ref, runtime } from './page-shared.ts';
+import { uploadF32 } from '../engine/textures.ts';
 
 let runner: { rt: GpuRuntime; tm: TableManager; ch: ChainRunner; tmGpu: TableManager; chGpu: ChainRunner } | null = null;
 async function chain() {
@@ -218,7 +219,29 @@ async function lookupBench(o: Record<string, unknown>): Promise<Record<string, u
   return { w, h, rounds, adapter: rt.caps?.adapter ?? null, hw: stat(ms['hw']!), trilinear: stat(ms['trilinear']!), tetra: stat(ms['tetra']!) };
 }
 
+/** CHB-034: the GPU upload of an f32 source (unpackF32) equals ChainRunner.upload's CPU expansion, bit for bit. */
+async function uploadParity(): Promise<Record<string, unknown>> {
+  const { ch, rt } = await chain();
+  const w = 37, h = 23;
+  const out: Record<string, unknown> = {};
+  for (const c of [1, 3, 4]) {
+    const data = new Float32Array(w * h * c);
+    for (let i = 0; i < data.length; i++) data[i] = Math.fround(Math.sin(i * 12.9898) * 43758.5453) % 1;
+    const a = ch.upload(data, w, h, c, 'cpu');
+    const b = await uploadF32(rt, data, w, h, c, 'gpu', () => { throw new Error('GPU upload fell back to the CPU'); });
+    const pa = await ch.readTexture(a, w, h);
+    const pb = await ch.readTexture(b, w, h);
+    rt.textures.release(a);
+    rt.textures.release(b);
+    let diff = 0;
+    for (let i = 0; i < pa.length; i++) if (!Object.is(pa[i], pb[i])) diff++;
+    out[`c${c}`] = { values: pa.length, differing: diff };
+  }
+  return out;
+}
+
 export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Promise<unknown>> = {
+  'upload:f32': () => uploadParity(),
   'chain:lookup-bench': (o) => lookupBench(o),
 
   async 'chain:export-dyes'() {

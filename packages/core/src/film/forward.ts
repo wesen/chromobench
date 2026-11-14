@@ -32,6 +32,16 @@ export function fallbackSpectra(data: PhysicsData): SpectraTable {
   return t;
 }
 
+/**
+ * Seeds the fallback cache with a table built elsewhere (CHB-034: the GPU engine fits it in a worker at creation;
+ * the fit takes ~110 ms and would otherwise run on the main thread at the first film). It must be
+ * `sigmoidSpectraTable(data.cmf(), 64)`; a table already cached is kept.
+ */
+export function seedFallbackSpectra(data: PhysicsData, t: SpectraTable): void {
+  const cmf = data.cmf();
+  if (!sigmoidCache.has(cmf) && t.n === 64 && t.source === 'sigmoid-fit') sigmoidCache.set(cmf, t);
+}
+
 /** Bind a film: window + renormalisation + input gamut compression (spektrafilm defaults). */
 export function makeFilmModel(data: PhysicsData, stock: Stock, spectra: SpectraTable): FilmModel {
   const cmf = data.cmf();

@@ -19,7 +19,7 @@ import { ChainRunner, POINTWISE_WGSL, type RunTarget } from './chain/run.ts';
 import type { Segment } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { REDUCE_WGSL, Reducer } from './measure.ts';
-import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseSpots, parseStrokes, rebateBox, type PhysicsData, type UpNode } from '@chromobench/core';
+import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseSpots, parseStrokes, rebateBox, seedFallbackSpectra, type PhysicsData, type UpNode } from '@chromobench/core';
 import { Blur } from './spatial.ts';
 import { Retouch } from './retouch.ts';
 import { FILM_OPS, FilmGpu } from './film.ts';
@@ -27,6 +27,7 @@ import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
 import { WorkerPool } from './tables/build-workers.ts';
+import type { SpectraJob, SpectraReply } from './tables/spectra-worker.ts';
 import { OpfsStore, TableCache } from './tables/cache.ts';
 import { TableManager } from './tables/manager.ts';
 import type { Vec3 } from './tables/inputs.ts';
@@ -35,7 +36,7 @@ import { cancelled, COMBINE, COMBINE_WGSL, DEFAULT_UM_PER_PX, GPU_OPS, type Cach
 import { fillGrain, lowerChain } from './engine/lower.ts';
 import { reduceMeasure } from './engine/reduce.ts';
 import { addResult } from './engine/results.ts';
-import { combinePass, gaussianBlur, readU16, syntheticSource, uploadU16 } from './engine/textures.ts';
+import { combinePass, gaussianBlur, readU16, syntheticSource, uploadF32, uploadU16 } from './engine/textures.ts';
 
 export { COMBINE_WGSL, GPU_OPS, type U16Result } from './engine/defs.ts';
 
@@ -104,7 +105,9 @@ export class GpuEngine implements Engine {
 
   static async create(opts: GpuEngineOptions = {}): Promise<GpuEngine> {
     const rt = opts.runtime ?? (await GpuRuntime.create(opts));
-    const e = new GpuEngine(rt, opts, !opts.runtime, opts.data ?? (await loadDefaultPhysicsData(opts.packsBase)));
+    const data = opts.data ?? (await loadDefaultPhysicsData(opts.packsBase));
+    const e = new GpuEngine(rt, opts, !opts.runtime, data);
+    prefitSpectra(data);
     // prewarm (guide §5.2): compile the chain and reduction kernels now, not on the first slider move
     if (opts.prewarm !== false) {
       await rt.pipelines.prewarm([
@@ -308,6 +311,12 @@ export class GpuEngine implements Engine {
    * = rect's corner). The full frame is cached per source; a sub-rectangle (a tile of an export, a rebate
    * box) is uploaded for this call only and returned `owned` (CHB-011: no full-frame upload for a tile).
    */
+  /** A read-back result uploaded again for a reduction: on the GPU when it is an f32 array (CHB-034). */
+  private uploadMeasured(data: ArrayLike<number>, w: number, h: number, c: number): Promise<GPUTexture> {
+    const cpu = () => this.chain.upload(data, w, h, c, 'measure');
+    return data instanceof Float32Array ? uploadF32(this.rt, data, w, h, c, 'measure', cpu) : Promise.resolve(cpu());
+  }
+
   private async sourceTexture(root: Node, rect: Box): Promise<{ tex: GPUTexture; owned: boolean }> {
     const img = this.sourceImage(root);
     const full = rect.x === 0 && rect.y === 0 && rect.w === img.w && rect.h === img.h;
@@ -322,7 +331,7 @@ export class GpuEngine implements Engine {
       const d = img.data!;
       const sub = full ? d : new Float32Array(rect.w * rect.h * img.c);
       if (!full) for (let y = 0; y < rect.h; y++) sub.set(d.subarray(((rect.y + y) * img.w + rect.x) * img.c, ((rect.y + y) * img.w + rect.x + rect.w) * img.c), y * rect.w * img.c);
-      tex = this.chain.upload(sub, rect.w, rect.h, img.c, label);
+      tex = await uploadF32(this.rt, sub, rect.w, rect.h, img.c, label, () => this.chain.upload(sub, rect.w, rect.h, img.c, label));
     }
     if (full) this.srcTex.set(root.id, tex);
     return { tex, owned: !full };
@@ -627,7 +636,7 @@ export class GpuEngine implements Engine {
       const data = await img.read();
       const local = { ...a, at: { x: at.x - x0, y: at.y - y0 } };
       const value = await this.gpu(async () => {
-        const tex = this.chain.upload(data, img.width, img.height, info.channels, 'measure');
+        const tex = await this.uploadMeasured(data, img.width, img.height, info.channels);
         try {
           return await this.reduce(n.op, local, tex, img.width, img.height, info, recvId);
         } finally {
@@ -640,7 +649,7 @@ export class GpuEngine implements Engine {
     const img = await this.evaluate(recv, { scale, precision });
     const data = await img.read();
     const value = await this.gpu(async () => {
-      const tex = this.chain.upload(data, img.width, img.height, info.channels, 'measure');
+      const tex = await this.uploadMeasured(data, img.width, img.height, info.channels);
       try {
         return await this.reduce(n.op, a, tex, img.width, img.height, info, recvId);
       } finally {
@@ -659,4 +668,28 @@ export class GpuEngine implements Engine {
     };
     return reduceMeasure(this.reducer, op, a, tex, w, h, info, densities);
   }
+}
+
+/**
+ * Fits core's fallback spectra in a worker and seeds core's cache with them (CHB-034): without it the first film of
+ * a session fits them on the main thread (~110 ms, a visible stall during the first open). Not awaited: a file
+ * opened before the worker answers fits them itself, with the same result.
+ */
+function prefitSpectra(data: PhysicsData): void {
+  if (typeof Worker === 'undefined') return;
+  let w: Worker;
+  try {
+    w = new Worker(new URL('./tables/spectra-worker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    return;
+  }
+  const cmf = data.cmf();
+  w.onmessage = (ev: MessageEvent<SpectraReply>) => {
+    const r = ev.data;
+    if (r.data && r.n && r.source) seedFallbackSpectra(data, { n: r.n, data: r.data, source: r.source });
+    w.terminate();
+  };
+  w.onerror = () => w.terminate();
+  const job: SpectraJob = { cmf: [Float64Array.from(cmf[0]), Float64Array.from(cmf[1]), Float64Array.from(cmf[2])] };
+  w.postMessage(job);
 }
