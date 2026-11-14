@@ -164,8 +164,16 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   const lin = linearise(raw, { sha256, ir: false });
   const d = scanWorking(raw, lin, sha256, name, o);
   if (!o.analysisLong || o.long === o.analysisLong) return d;
-  // the first print's analysis image (CHB-034 fusz): the working image a decode at the analysis size makes (the
-  // conditioning and a strip's sizing run again at that size, on a copy of the roll), so it is the CPU engine's
+  // the first print's analysis image (CHB-034 fusz): the working image a decode at the analysis size makes, so it is
+  // the CPU engine's. One frame without dust healing: the file area-averaged to that size (what that decode's pixels
+  // are). A strip (sized for its frames, F20) or healed dust: that decode's conditioning runs again at that size, on a
+  // copy of the roll (≈ 0.25 s more in the worker for a 6 MP strip)
+  if (!d.frames && !o.dust) {
+    const sa = Math.min(1, o.analysisLong / Math.max(lin.width, lin.height));
+    const aw = Math.max(1, Math.round(lin.width * sa)), ah = Math.max(1, Math.round(lin.height * sa));
+    const data = region(lin, { x: 0, y: 0, w: lin.width, h: lin.height }, aw, ah, { channels: 3 });
+    return withAnalysis(d, sha256, { ...d, info: { ...d.info, width: aw, height: ah }, data, frames: null });
+  }
   const a = scanWorking(raw, lin, sha256, name, { ...o, long: o.analysisLong, roll: new Map(o.roll) });
   return withAnalysis(d, sha256, a);
 }
