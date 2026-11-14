@@ -48,8 +48,8 @@ export const LAB_SUBJECT_FAILURE: Readonly<SubjectFailure> = { chroma: 0.1, trim
 
 /**
  * THE setting: the first print's aim per kind of frame (one place; main.ts and the scripts read it).
- * - A negative integrates the whole frame to grey (density and alpha 1, no subject-failure rule). The owner's
- *   decision on its colour is pending (F30: Negative Lab Pro prints his Epson scans warmer and more saturated; the
+ * - A negative integrates the whole frame to grey (density and alpha 1, no subject-failure rule). The owner kept
+ *   this neutral aim (2026-11-14, F30: Negative Lab Pro prints his Epson scans warmer and more saturated; the
  *   numbers for other alphas and for LAB_SUBJECT_FAILURE are in CHB-031 diary 04). Try another aim with
  *   ?alpha=0.75&subjectFailure=1.
  * - A photo keeps the camera's as-shot white balance as its colour (alpha 0) and moves half way from the camera's
