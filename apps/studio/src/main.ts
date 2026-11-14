@@ -151,7 +151,8 @@ async function startEngine(): Promise<Host> {
     initial: (d, g) => {
       const n = se.notes.get(d.source.sha256);
       const r = n?.kind === 'digital-raw' ? photoRecipe(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
-      return firstPrint(se, g, r, { integrate: h.integrate, aim: firstPrintAim(r.kind, (k) => q.get(k)), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
+      // CHB-034 fusz: metered on the file's analysis image, so both engines propose the same Time
+      return firstPrint(se, g, r, { integrate: h.integrate, aim: firstPrintAim(r.kind, (k) => q.get(k)), analysis: se.analysisOf(r.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
     },
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,

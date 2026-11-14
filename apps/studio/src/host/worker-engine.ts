@@ -76,7 +76,7 @@ export class WorkerClient {
    * 'return': the working image comes back (transferred) for an engine on this thread. The bytes are copied
    * (the caller keeps its buffer).
    */
-  decode(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: { long: number; dust: boolean; keep: 'register' | 'return' }): Promise<WireDecoded> {
+  decode(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: { long: number; dust: boolean; keep: 'register' | 'return'; analysisLong?: number }): Promise<WireDecoded> {
     const buf = bytes.slice().buffer as ArrayBuffer;
     return this.call<WireDecoded>({ kind: 'decode', bytes: buf, sha256, name, mode, ...o }, { transfer: [buf] });
   }
