@@ -7,20 +7,21 @@ import { opened } from './support.ts';
 
 const W = 600, H = 400;
 
-/** Scene light in camera RGB: a left-to-right brightness ramp with a red object. */
-function scene(): [Uint16Array, Uint16Array, Uint16Array] {
+/** Scene light in camera RGB: a left-to-right brightness ramp with a red object; `detail`: a fine checker over it. */
+function scene(detail = false): [Uint16Array, Uint16Array, Uint16Array] {
   const planes = [0, 1, 2].map(() => new Uint16Array(W * H)) as [Uint16Array, Uint16Array, Uint16Array];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const L = 0.02 + 0.5 * (x / W) ** 2;
     let c = [L, L, L];
     if (x > 60 && x < 160 && y > 220 && y < 330) c = [0.35, 0.05, 0.05];
+    if (detail) c = c.map((v) => v * (((x >> 1) + (y >> 1)) % 2 ? 1.8 : 0.2));
     for (let k = 0; k < 3; k++) planes[k]![y * W + x] = Math.round(65535 * Math.min(1, c[k]!));
   }
   return planes;
 }
 
-function bayerDng(): Uint8Array {
-  const [r, g, b] = scene();
+function bayerDng(detail = false): Uint8Array {
+  const [r, g, b] = scene(detail);
   const w = 2 * W, h = 2 * H;
   const raw = new Uint16Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -58,4 +59,27 @@ test('a camera RAW is guessed to be a photo, shot on film and printed on the GPU
   const red = (await page.evaluate(() => window.chromobench.pixel(220, 550)))!;
   expect(red[0]!).toBeGreaterThan(red[1]! + 0.1);
   expect(errors).toEqual([]);
+});
+
+// CHB-034 fusz: the first print proposes the same Time on both engines. They work at different sizes (GPU: the
+// file's 1200 px, CPU: 640 px) and the metered exposure depends on the resolution (fine detail through a nonlinear
+// chain), so both meter a 640 px analysis image (DSC_8559: 5.612 s on the GPU engine, 6.3 s on the CPU engine before;
+// this scene with a fine checker: 7.937 s on the GPU engine, 8.909 s on the CPU engine before).
+test('a photo\'s first print: the same Time and lights on the GPU and the CPU engine', async ({ page }) => {
+  test.setTimeout(180_000);
+  const first: { engine: string; time: number; lights: number[] }[] = [];
+  for (const engine of ['gpu', 'reference']) {
+    await page.goto(`/?nosw&canvas2d&fresh&engine=${engine}`);
+    await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
+    await page.setInputFiles('#file', { name: 'scene.dng', mimeType: 'image/x-adobe-dng', buffer: Buffer.from(bayerDng(true)) });
+    await opened(page, 1, 120_000);
+    first.push(await page.evaluate(() => {
+      const p = window.chromobench.log!.state.print;
+      return { engine: window.chromobench.engineLabel, time: p.enlarger.time_s, lights: [...p.lights.logH] };
+    }));
+  }
+  expect(first[0]!.engine).toMatch(/GPU/);
+  expect(first[1]!.engine).toMatch(/reference/);
+  expect(first[0]!.time).toBe(first[1]!.time);
+  first[0]!.lights.forEach((l, k) => expect(Math.abs(l - first[1]!.lights[k]!)).toBeLessThan(2e-4));
 });

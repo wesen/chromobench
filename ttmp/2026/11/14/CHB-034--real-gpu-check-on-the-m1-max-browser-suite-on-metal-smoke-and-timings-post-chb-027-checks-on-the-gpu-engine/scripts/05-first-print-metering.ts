@@ -36,7 +36,9 @@ const look = (page: Page) => page.evaluate(() => {
   const cb = (window as any).chromobench;
   const p = cb.log.committed.print;
   const t = p.enlarger.time_s as number, L = p.lights.logH as number[];
-  return { time_s: t, lights: L.map((x) => Number(x.toFixed(6))), total: Number((Math.log10(t) + (L[0]! + L[1]! + L[2]!) / 3).toFixed(6)), size: cb.size(), engine: cb.engineLabel };
+  const sc = cb.log.committed.scan;
+  const scan = sc ? { baseT: sc.baseT?.map((x: number) => Number(x.toPrecision(6))) ?? null, flare: sc.flare, rebate: sc.rebate } : undefined;
+  return { time_s: t, lights: L.map((x) => Number(x.toFixed(6))), total: Number((Math.log10(t) + (L[0]! + L[1]! + L[2]!) / 3).toFixed(6)), size: cb.size(), engine: cb.engineLabel, ...(scan ? { scan } : {}) };
 });
 
 for (const file of FILES) {
