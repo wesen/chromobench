@@ -174,7 +174,53 @@ async function lookupTest(mode: number, n: number): Promise<Record<string, unkno
   return { mode, keys: keys.length, rms: Math.sqrt(sq / m), maxVsLook3: lookMax, flips };
 }
 
+/**
+ * CHB-034: GPU time of the preview display chain per table lookup mode at a working size (default 4000 × 2674, the
+ * GPU engine's 4000 px), on the synthetic frame tiled to that size. Modes run round-robin so drift (clocks, heat)
+ * falls on all of them alike; each sample is submit → onSubmittedWorkDone after `warmup` unmeasured rounds.
+ */
+async function lookupBench(o: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const w = (o['w'] as number | undefined) ?? 4000;
+  const h = (o['h'] as number | undefined) ?? 2674;
+  const rounds = (o['rounds'] as number | undefined) ?? 15;
+  const warmup = (o['warmup'] as number | undefined) ?? 3;
+  const { ch, rt } = await chain();
+  const f = await frame();
+  const big = new Float32Array(w * h * 3);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const s = 3 * ((y % H) * W + (x % W));
+    const d = 3 * (y * w + x);
+    big[d] = f.T[s]!;
+    big[d + 1] = f.T[s + 1]!;
+    big[d + 2] = f.T[s + 2]!;
+  }
+  const seg = scanChain(gold(), 'display', 0.48, rebateT(f.T, W, H));
+  const src = ch.upload(big, w, h, 3);
+  const modes = { hw: LOOKUP.hw, trilinear: LOOKUP.trilinear, tetra: LOOKUP.tetra } as const;
+  const ms: Record<string, number[]> = { hw: [], trilinear: [], tetra: [] };
+  for (let r = 0; r < warmup + rounds; r++) {
+    for (const [name, lookup] of Object.entries(modes)) {
+      await rt.device.queue.onSubmittedWorkDone();
+      const t0 = performance.now();
+      const out = await ch.run([seg], src, [0, 0], { outW: w, outH: h, frameW: w, frameH: h, region: { x: 0, y: 0, w, h }, precision: 'preview', lookup });
+      await rt.device.queue.onSubmittedWorkDone();
+      const t = performance.now() - t0;
+      rt.textures.release(out);
+      if (r >= warmup) ms[name]!.push(t);
+    }
+  }
+  rt.textures.release(src);
+  const stat = (a: number[]) => {
+    const s = [...a].sort((x, y) => x - y);
+    const q = (p: number) => Number(s[Math.min(s.length - 1, Math.floor(p * s.length))]!.toFixed(2));
+    return { median: q(0.5), p10: q(0.1), p90: q(0.9), n: s.length };
+  };
+  return { w, h, rounds, adapter: rt.caps?.adapter ?? null, hw: stat(ms['hw']!), trilinear: stat(ms['trilinear']!), tetra: stat(ms['tetra']!) };
+}
+
 export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Promise<unknown>> = {
+  'chain:lookup-bench': (o) => lookupBench(o),
+
   async 'chain:export-dyes'() {
     const f = await frame();
     const t0 = performance.now();

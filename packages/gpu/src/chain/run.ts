@@ -75,7 +75,10 @@ export class ChainRunner {
     const pipe = await this.pipeline(opts.code);
     const d = this.dummies();
     const exact = t.exact ?? t.precision === 'export';
-    const lookup = t.lookup ?? (t.precision === 'export' ? LOOKUP.tetra : LOOKUP.hw);
+    // preview: manual trilinear, core's look3 in f32. The hardware filter (LOOKUP.hw) quantises its weights to 1/256 on
+    // real GPUs (Metal, measured CHB-034: up to 0.86 of an 8-bit level from core); the manual lookup costs ~1.1 ms
+    // per 4000 × 2674 preview on an M1 Max (5.3 → 6.4 ms)
+    const lookup = t.lookup ?? (t.precision === 'export' ? LOOKUP.tetra : LOOKUP.trilinear);
     const builder = t.builder ?? (t.precision === 'export' ? 'f64' : undefined);
     let input = src;
     let prev: GPUTexture | null = null;
