@@ -41,12 +41,12 @@ test('develop: the viewport shows the picture; a slider drag is one undo step (d
   expect(after.ev).toBeGreaterThan(0);
   expect(passes).toContain('draft');
   expect(passes.at(-1)).toBe('screen');
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   expect(await page.evaluate(() => window.demo!.rt.state.dev['p0']!.light.exposure)).toBe(0);
 });
 
 test('chrome: the palette opens on Mod+K, Tab hides the side panels', async ({ page }) => {
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('ControlOrMeta+k');
   await expect(page.locator('.ck-palette input')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('.ck-side-left')).toBeVisible();

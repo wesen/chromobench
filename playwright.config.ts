@@ -7,6 +7,9 @@ const port = Number(process.env['STUDIO_PORT'] ?? 4173);
 const shellPort = Number(process.env['SHELL_DEMO_PORT'] ?? 4186);
 const parityPort = Number(process.env['GPU_PARITY_PORT'] ?? 4185);
 const kitPort = Number(process.env['STUDIO_KIT_PORT'] ?? 4187);
+// REAL_GPU=1 drops the SwiftShader flags so the WebGPU projects get the machine's own adapter (Metal on a Mac;
+// headless works there). Without it every run, on any machine, tests the software adapter.
+const webgpuArgs = process.env['REAL_GPU'] ? [] : ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'];
 
 export default defineConfig({
   testDir: '.',
@@ -23,9 +26,7 @@ export default defineConfig({
         browserName: 'chromium',
         channel: 'chromium',
         baseURL: `http://localhost:${port}`,
-        launchOptions: {
-          args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'],
-        },
+        launchOptions: { args: webgpuArgs },
       },
     },
     {
@@ -38,9 +39,7 @@ export default defineConfig({
         browserName: 'chromium',
         channel: 'chromium',
         baseURL: `http://localhost:${parityPort}`,
-        launchOptions: {
-          args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'],
-        },
+        launchOptions: { args: webgpuArgs },
       },
     },
     {

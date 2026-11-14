@@ -51,7 +51,7 @@ for (const variant of ['finish', 'classic']) {
     expect(Object.keys(spots)).toEqual(['s1']);
     await expect(page.locator('.cb-spot-target')).toHaveCount(1);
     expect(await hook<string[]>(page, 'cb.log().units.map(u => u.label ?? "")')).toHaveLength(3);
-    for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ControlOrMeta+z');
     expect(await hook<unknown>(page, 'cb.log().committed.view.frame')).toEqual({ orientation: 'none', angle_deg: 0, crop: null });
     expect(await hook<object>(page, 'cb.log().committed.retouch.spots')).toEqual({});
   });

@@ -72,7 +72,9 @@ CI=1 pnpm test:browser   # Playwright: about 106 tests incl. GPU conformance 320
 
 When several people or agents run browser suites on one machine, give each run its own ports:
 `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 pnpm test:browser`.
-On a Mac with a GPU, the `[chromium-webgpu]` and `[gpu-parity]` projects exercise the real GPU engine.
+By default the `[chromium-webgpu]` and `[gpu-parity]` projects run WebGPU on **SwiftShader** (software), on any
+machine. `REAL_GPU=1` drops those flags so they get the machine's own adapter (Metal on a Mac, headless works);
+on the M1 Max, 6 GPU-parity tests then fail on tolerances tuned for SwiftShader (CHB-034).
 
 ---
 

@@ -1,0 +1,28 @@
+{
+ "url": "http://localhost:4811/?engine=gpu&fresh",
+ "file": ".playwright-mcp/photos/DSC_8541.NEF",
+ "where": "M1 Max Chrome (Metal), local",
+ "engine": "GPU · apple metal-3 · 4000 px",
+ "open": {
+  "resultMs": 6489,
+  "stalls": [
+   [
+    5702,
+    200
+   ],
+   [
+    6136,
+    116
+   ]
+  ],
+  "wallMs": 9167,
+  "worstStallMs": 200
+ },
+ "drag": {
+  "dragWallMs": 876,
+  "resultMs": 206,
+  "renders": 8,
+  "stalls": [],
+  "worstStallMs": 0
+ }
+}

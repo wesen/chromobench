@@ -134,9 +134,9 @@ test('controls: typed units, a burst on Time, why() follows focus, undo and redo
   await menu(page, 'Edit', 'edit.redo');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
   await page.locator('.ck-vp').first().click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
-  await page.keyboard.press('Control+Shift+Z');
+  await page.keyboard.press('ControlOrMeta+Shift+Z');
   expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
 });
 
