@@ -10,7 +10,8 @@
 - [x] DECIDE: preview LUT lookup on real GPUs: hardware trilinear (up to 0.86 of an 8-bit level from core on Metal) or manual trilinear (exact); then parity tolerances per adapter <!-- t:vcma -->
 - [x] gpu-parity tables.spec stage 1 assumes SwiftShader (adapter.fallback true): make it adapter-aware <!-- t:bubd -->
 - [x] Race: a typed relative entry (+1/3 st, -5 s) right after a commit uses a stale base (now.v) in studio-kit dom/arg.ts <!-- t:1j30 -->
-- [ ] GPU open: one 200 ms main-thread stall per open (CPU engine: none); find it <!-- t:5un4 -->
+- [x] GPU open: one 200 ms main-thread stall per open (CPU engine: none); find it <!-- t:5un4 -->
 - [ ] First print lands on either side of a 1/3-stop Time boundary depending on engine (DSC_8559: 5.612 s GPU, 6.3 s CPU; same luma) <!-- t:fusz -->
 - [x] Correct HANDOFF.md: the browser suite runs SwiftShader, not the Mac's GPU; REAL_GPU=1 <!-- t:8uk4 -->
 - [x] Solve-table bound 2.5e-6 -> 3e-6 (SwiftShader on the Mac measures 2.62e-6; the broken variant still fails at 1.38e-5) <!-- t:1tqv -->
+- [ ] Intermittent: studio-kit roll kit.test 'the roll flow through commands' failed 2 of 6 full pnpm test runs (under parallel load); capture its error <!-- t:4o9y -->

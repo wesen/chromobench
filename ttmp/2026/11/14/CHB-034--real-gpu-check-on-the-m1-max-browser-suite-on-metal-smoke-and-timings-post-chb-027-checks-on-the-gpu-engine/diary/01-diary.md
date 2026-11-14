@@ -586,3 +586,112 @@ bisection for the OkLCh knee's C_max is ill-conditioned there). Metal's f32 arit
 
 ### Technical details
 - Real-GPU bounds: `over2e6 / values < 0.005`, `maxLin < 4.5e-5`, `maxCodes16 ≤ 6`.
+
+## Step 10: The stall in every GPU open, profiled and removed
+
+Step 4 measured one main-thread stall of 100–200 ms in each GPU open and none on the CPU engine (task `5un4`). A
+sampling CPU profile, aligned with a rAF probe, named two causes. The first film of a session fitted core's fallback
+RGB → spectrum table on the main thread (112 ms in `sigmoidSpectraTable`'s Gauss–Newton `fit`/`eval3`); the CPU engine
+does the same work in its worker, which is why it never stalled. The second was the source upload: a JavaScript loop
+expanding 10.7 M RGB floats into a 171 MB RGBA array before `writeTexture` (95 ms in `ChainRunner.upload`). The fit
+now runs in a one-shot module worker when the GPU engine is created, and its result seeds core's cache; f32 sources
+go to the GPU as they are and a compute pass (`unpackF32`) writes the RGBA texture. In the production build, every
+open on the GPU engine is now free of stalls over 100 ms and 4–19 % faster.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 8)
+**Assistant interpretation:** Task `5un4`: find and remove the stall.
+**Inferred user intent:** A GPU engine that never freezes the window.
+**Commit (code):** 523ad8a — "CHB-034: no main-thread stall on a GPU open — f32 sources uploaded as they are and expanded on the GPU (pack16.wgsl unpackF32; was a 95 ms JS loop), core's fallback spectra fitted in a worker at engine creation (was 112 ms at the first film); upload parity test; profiling script; GPU opens 4–19 % faster"
+
+### What I did
+- `scripts/06-open-stall-profile.mjs`: opens a file in the studio (dev server, unminified) in bundled Chromium on the
+  machine's adapter, records a CDP sampling profile (`Profiler.setSamplingInterval` 200 µs) and a rAF probe (gaps
+  > 100 ms), and for each gap aggregates the samples inside it by leaf function and by stack. Profile timestamps are
+  anchored to page time by a `performance.now()` taken right after `Profiler.start`.
+- Before (DSC_8559.NEF, GPU engine): a 217 ms gap with 126.7 ms busy, 111.8 ms self in `eval3`
+  (`packages/core/src/film/upsample.ts`) under `renderGraph > execute > run > exposerAt > film > cached > … >
+  fallbackSpectra > sigmoidSpectraTable > fit > eval3`; then a 183 ms gap with 142.5 ms busy, 94.6 ms in `upload`
+  (`execute > sourceTexture > upload`) and 11 ms in the first print's `integratedExposure`/`keptPixels`.
+- Node microbenchmark of the RGB → RGBA loop (10.7 M pixels): existing 129–140 ms; a loop specialised for three
+  channels 45–48 ms, most of it the allocation and fill of the 171 MB array.
+- `packages/gpu/kernels/pack16.wgsl`: entry point `unpackF32` (bindings 7–9: uniform size (w, h, c), the source as
+  `array<f32>`, an rgba32float storage texture), the CPU loop's channel rules.
+- `packages/gpu/src/engine/textures.ts`: `uploadF32(rt, data, w, h, c, label, cpu)`: `writeBuffer` of the source's
+  bytes, one dispatch; falls back to `cpu()` when the data exceeds `maxStorageBufferBindingSize` or `maxBufferSize`.
+  `engine-gpu.ts`: `sourceTexture` and the two measure uploads (`uploadMeasured`) use it.
+- `packages/gpu/src/chain/run.ts`: `ChainRunner.upload` (still the fallback and used by parity tests) has the
+  three-channel loop without branches.
+- `packages/core/src/film/forward.ts`: `seedFallbackSpectra(data, table)` (kept only when nothing is cached and the
+  table is the 64² sigmoid fit). `packages/gpu/src/tables/spectra-worker.ts`: runs `sigmoidSpectraTable(cmf, 64)` and
+  transfers the data. `GpuEngine.create` calls `prefitSpectra(data)` (not awaited; skipped without `Worker`).
+- `packages/gpu/src/parity/chain-tests.ts` scenario `upload:f32` and a test in `chain.spec.ts`: `uploadF32` and the
+  CPU loop give bitwise equal textures for 1, 3 and 4 channels (37 × 23).
+
+### Why
+- A stall over 100 ms is visible as a frozen window; the GPU engine exists to stay responsive.
+- Worker plus cache seeding instead of making `exposerAt` asynchronous: the film model is reached synchronously deep in
+  the chain lowering; the table depends only on the CMFs, so it can be ready before the first open.
+
+### What worked
+- After (dev server, profile script): DSC_8559.NEF and raw010.dng, no gap over 100 ms.
+- Production build, `scripts/02-open-and-drag.mjs` on the GPU engine (Step 4 → now; JSON in `various/timings-after/`):
+
+  | File | open ms | worst open stall | drag ms | worst drag stall |
+  |---|---|---|---|---|
+  | DSC_8559.NEF | 6570 → 6309 | 200 → 0 | 203 → 204 | 0 → 0 |
+  | DSC_8655.NEF | 6596 → 6298 | 200 → 0 | 206 → 206 | 0 → 0 |
+  | DSC_8541.NEF | 6489 → 6298 | 200 → 0 | 206 → 206 | 0 → 0 |
+  | raw010.dng | 1139 → 1045 | 108 → 0 | 212 → 204 | 108 → 0 |
+  | roll-102 raw000.dng | 2250 → 1830 | 200 → 0 | 205 → 207 | 0 → 0 |
+
+  The drag times include Step 8's manual trilinear lookup: no change at this resolution of measurement.
+- `--project=gpu-parity`: 41/41 on SwiftShader and on Metal (with the new upload test). GPU studio specs
+  (`studio-photo`, `studio-real`, `studio-decoders`): 8/8 on Metal; on SwiftShader 7/8 once (below), then 6/6 for the
+  failing spec alone.
+
+### What didn't work
+- First wiring of the prefit was `if ((opts.workers ?? 0) > 0)`: the studio creates the engine as
+  `GpuEngine.create({ data, cacheLimit: 24 })` (`apps/studio/src/host/engines.ts:175`), without workers, so the
+  prefit would never have run there. Now unconditional (when `Worker` exists).
+- The first edit script for `engine-gpu.ts` asserted two identical measure-upload lines; they differ in indentation
+  (`AssertionError` at the count check); applied separately.
+- `e2e/studio-decoders.spec.ts` "tiff" failed once on SwiftShader after 5 ms, in a run that took 3.7 min instead of
+  1.7 min while the subagent was also working; alone it passed 6/6. Not reproduced.
+- `pnpm test`: `packages/studio-kit/test/roll/kit.test.ts` "the roll flow through commands" failed in 2 of 6 full runs
+  and passed alone and in the 4 others; its code path (core in Node, the mock engine) does not include anything
+  changed here. Its error text was not captured (the runs that kept the log passed). Recorded as a task.
+
+### What I learned
+- The CPU engine had been hiding the spectra fit in its worker all along; only the GPU engine, running core's film
+  model on the main thread, exposed it.
+- Allocation of a 171 MB typed array is itself tens of milliseconds; the fix had to avoid the array, not only
+  speed up the loop.
+
+### What was tricky to build
+- Aligning the profile with the probe: CDP's `startTime` is in µs of a monotonic clock that is not
+  `performance.now()`; anchoring both at the moment the profile starts was enough to attribute each gap.
+- `writeBuffer` with a typed array view: passing `data.buffer, data.byteOffset, bytes` uploads only the view, which
+  matters for a sub-rectangle copied into a new array and for decoders that return views.
+
+### What warrants a second pair of eyes
+- `seedFallbackSpectra` trusts that the worker ran the same `sigmoidSpectraTable` on the same CMFs; it checks size and
+  source label only. The worker imports the same core module, so it is the same code.
+- `uploadF32`'s fallback condition uses the negotiated limits; an adapter with a small `maxStorageBufferBindingSize`
+  (128 MiB default) takes the CPU path for sources above 11 MP at 3 channels.
+
+### What should be done in the future
+- `uploadU16` (16-bit scans) still expands to RGBA on the CPU (a smaller loop; no stall over 100 ms measured).
+- The measure path reads a result back and uploads it again for the reduction; it could reduce the texture directly.
+- Capture the roll test's error when it next fails (task).
+
+### Code review instructions
+- `packages/gpu/kernels/pack16.wgsl` (`unpackF32`), `packages/gpu/src/engine/textures.ts` (`uploadF32`),
+  `packages/gpu/src/engine-gpu.ts` (`sourceTexture`, `uploadMeasured`, `prefitSpectra`), `packages/core/src/film/forward.ts`
+  (`seedFallbackSpectra`), `packages/gpu/src/tables/spectra-worker.ts`.
+- Validate: `REAL_GPU=1 CI=1 pnpm exec playwright test --project=gpu-parity`; profile with
+  `node ttmp/…/scripts/06-open-stall-profile.mjs .playwright-mcp/photos/<file>` against the dev server on 4173.
+
+### Technical details
+- Stacks before (ms of samples): 106.6 `renderGraph > execute > run > exposerAt > film > cached > (anonymous) >
+  spectra > fallbackSpectra > sigmoidSpectraTable > fit > eval3`; 94.6 `execute > sourceTexture > upload`.
