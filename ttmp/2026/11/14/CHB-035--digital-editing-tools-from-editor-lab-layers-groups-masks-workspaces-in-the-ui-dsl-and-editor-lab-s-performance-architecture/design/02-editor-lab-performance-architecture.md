@@ -154,17 +154,21 @@ reads, and the keys of the tiles below that its apron touches (`src/engine.js:47
 
 ```js
 key(i, L, tx, ty) {
-  i = this.resolve(i); if (i < 0) return 0;                          // a hidden layer passes its backdrop's key through
+  // a hidden layer passes its backdrop's key through
+  i = this.resolve(i); if (i < 0) return 0;
   const l = this.doc.layers[i];
-  if (this.identity(l)) return this.key(this.top(i), L, tx, ty);    // pass-through group at full opacity: free
+  // pass-through group at full opacity: free
+  if (this.identity(l)) return this.key(this.top(i), L, tx, ty);
   const parts = [this.lh(l), L, tx * 4099 + ty, this.TS], b0 = this.below(i);
   if (l.raster) parts.push(l.raster.contentKey(/* 64 px block revisions under the tile */));
   const m = this.reach(l, L);
-  if (m) for (/* every tile of the layer below that the apron touches */) below(this.key(b0, L, x, y));
+  if (m) for (/* every tile of the layer below that the apron touches */) below(this.key(b0, L,
+      x, y));
   else below(this.key(b0, L, tx, ty));
   let a = 0x811c9dc5, b = 0x2545f491;                               // two 32-bit lanes …
   for (const v of parts) { a = hmix(a, v); b = hmix(b, v ^ 0x5bd1e995); }
-  return a * 1048576 + (b >>> 12) || 1;                              // … combined into a 52-bit key (an exact JS number)
+  // … combined into a 52-bit key (an exact JS number)
+  return a * 1048576 + (b >>> 12) || 1;
 }
 ```
 
@@ -201,7 +205,8 @@ Editor lab's scheduler (`src/app.js:57-116`):
 on edit:   if the estimated full cost (EMA) > 10 ms during a gesture (40 ms otherwise):
              render the whole stack at the coarse level (1–3) at once, show it upscaled
              adapt the level: preview took > 12 ms → one level coarser; < 2.5 ms → one finer
-           220 ms after the last change: queue level-0 tiles, visible first, nearest the centre first
+           220 ms after the last change: queue level-0 tiles, visible first,
+               nearest the centre first
 each frame: run queued tiles for at most 8 ms, check the clock between tiles
 new edit:  drop the queue (cancel by generation, between tiles, never inside one)
 ```
@@ -235,10 +240,12 @@ Editor lab built probes, not executors, and measured them on the software adapte
  UI and input (main thread, every frame)
         │ edits
         ▼
- Document: immutable versions sharing unchanged layers and 64 px blocks; history = list of versions
+ Document: immutable versions sharing unchanged layers and 64 px blocks; history = list of
+     versions
         │ version, view
         ▼
- Graph compiler: keys, reach, fusion of pointwise runs, checkpoints, zoom and preview levels → tile jobs
+ Graph compiler: keys, reach, fusion of pointwise runs, checkpoints,
+     zoom and preview levels → tile jobs
         │ jobs (a job whose key is cached is not a job)
         ▼
  Scheduler: priorities, generations, coalescing, slices; duplicate requests share one job
@@ -247,10 +254,12 @@ Editor lab built probes, not executors, and measured them on the software adapte
  Executors: GPU (WGSL)  ·  workers (WASM SIMD)  ·  reference (JS, tests and last fallback)
         │ tiles
         ▼
- Cache tiers by content key: GPU textures  ·  CPU (16-bit)  ·  disk (source pyramids, last composite)
+ Cache tiers by content key: GPU textures  ·  CPU (16-bit)  ·  disk (source pyramids,
+     last composite)
         │
         ▼
- Screen (never a mixture of two versions that looks like an edit)          Bench and parity tests beside it all
+ Screen (never a mixture of two versions that looks like an edit)          Bench and parity
+     tests beside it all
 ```
 
 Its worked budget for opening a 24 MP, ten-layer document (Table 9.4, an estimate from 57.6 ms per layer-megapixel in
@@ -295,10 +304,12 @@ bench is its small descendant.
  slider drag ─► store transaction ─► recipe ─► compile() ─► graph (hash-consed node ids)
                                                                   │
  shell render queue (slots, epochs, live/bg lanes) ◄──────────────┘
-   chooseTarget(): draft 500,000 px while previewing · screen = shown size × dpr (↑128) · refine at zoom ≥ 1
+   chooseTarget(): draft 500,000 px while previewing · screen = shown size × dpr (↑128) · refine
+       at zoom ≥ 1
                                                                   │
  GpuEngine.evaluate(node, { scale, region, precision })          ▼
-   cache lookup: `${nodeId}|${scale}|${region}|${precision}`  (whole images, LRU by count and 256 MB)
+   cache lookup: `${nodeId}|${scale}|${region}|${precision}`  (whole images,
+       LRU by count and 256 MB)
    miss: planGraph → pointwise tails fused between materialised nodes → WGSL passes
          source texture cached per source; intermediates released after their last reader
    readback: texture → Float32Array (RGBA → RGB repack in JS)

@@ -239,3 +239,54 @@ own claims against the code, which changed two of them.
 
 ### Technical details
 - Notes files (scratchpad, not committed): `notes-editing-model.md`, `notes-performance.md`.
+
+## Step 3: Validation and the reMarkable bundle
+
+`docmgr doctor` first reported unknown vocabulary (topics `gpu`, `design`; doc type `design`) and related files
+without notes; I switched to the known slugs (`webgpu`, `architecture`, `design-doc`) and related every file with a
+note (`docmgr doc relate --file-note "/abs/path:reason"`); doctor then passed. The upload needed two attempts and a
+reflow of the code blocks.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 1)
+**Assistant interpretation:** Validate the ticket and deliver the bundle to the tablet.
+**Inferred user intent:** Read the documents on the reMarkable.
+**Commit (code):** none (documents).
+
+### What I did
+- `remarquee upload bundle --dry-run …` (clean), then the upload.
+- Checked a local xelatex render for missing glyphs (none) and the code blocks for lines over 98 characters (41);
+  reflowed them (trailing comments moved above their line, long lines broken after a comma), shortened three by hand,
+  and re-uploaded with `--force` over my own upload of minutes before (no annotations could exist yet).
+
+### Why
+- Pandoc does not wrap code blocks; long lines are clipped at the page edge on the tablet.
+
+### What worked
+- `OK: uploaded CHB-035 Digital editing and engine performance from Editor lab.pdf -> /ai/2026/11/14/CHB-035`.
+
+### What didn't work
+- First upload: `Error: pandoc failed: xelatex not found. Please select a different --pdf-engine or install xelatex`.
+  MacTeX is installed but `/Library/TeX/texbin` is not on the agent shell's PATH; `PATH=/Library/TeX/texbin:$PATH`
+  fixed it.
+- `pdftoppm` is not installed, so pages could not be rendered to images for a visual check; the line-length check
+  replaced it.
+
+### What I learned
+- On this Mac, remarquee needs `PATH=/Library/TeX/texbin:$PATH` in agent shells.
+
+### What was tricky to build
+- Reflowing code mechanically without breaking it: only lines inside fences, never diagram lines (box-drawing
+  characters), comments moved rather than cut.
+
+### What warrants a second pair of eyes
+- The reflowed sketches in document 01 Section 17 and 19 (read them once on the tablet).
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `docmgr doctor --ticket CHB-035 --stale-after 30`.
+
+### Technical details
+- Bundle: `/ai/2026/11/14/CHB-035/CHB-035 Digital editing and engine performance from Editor lab.pdf`.

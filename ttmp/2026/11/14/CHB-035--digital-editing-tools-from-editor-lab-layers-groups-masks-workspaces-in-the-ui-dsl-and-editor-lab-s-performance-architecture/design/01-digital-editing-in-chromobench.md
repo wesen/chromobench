@@ -118,7 +118,7 @@ in `packages/contract/src/vocab.ts:13-19`):
  retouch.heal                                           heal and clone spots on the print
  finishing.clarity (and finishing.hue)                  digital "finishing tones"
  output.display                                         display-rgb (gamut knee, transfer curve)
- output.frame                                           crop, straighten, orientation ◄── frame.display()
+ output.frame                                           crop, straighten ◄── frame.display()
 ```
 
 Three facts about this chain matter for everything that follows.
@@ -218,13 +218,15 @@ Editor lab's implementation is twelve lines (`src/engine.js:671-682`):
 
 ```js
 function applyGroup(eng, g, L, R, back, top) {
-  const n = R.w * R.h, out = new Float32Array(n * 4), op = g.opacity, cov = eng.coverage(g, L, R, back, 0);
+  const n = R.w * R.h, out = new Float32Array(n * 4), op = g.opacity, cov = eng.coverage(g, L,
+      R, back, 0);
   if (g.blend === 'pass') {
     for (let j = 0, i = 0; j < n; j++, i += 4) { const k = op * (cov ? cov[j] : 1);
       for (let c = 0; c < 4; c++) out[i + c] = back[i + c] + k * (top[i + c] - back[i + c]); }
     return out;
   }
-  const src = scratch(2, n * 4);                       // isolated: unpremultiply the children's composite …
+  // isolated: unpremultiply the children's composite …
+  const src = scratch(2, n * 4);
   for (let i = 0; i < n * 4; i += 4) { const a = top[i + 3];
     if (a > 0) { src[i] = top[i] / a; src[i + 1] = top[i + 1] / a; src[i + 2] = top[i + 2] / a; }
     else src[i] = src[i + 1] = src[i + 2] = 0; src[i + 3] = a; }
@@ -412,7 +414,8 @@ export const finishModule = (ck, cb, o = {}) => m => {
   return m
     .label('Finish').key('F')
     .txOpts(s => ({ channel: cb.current(s) }))
-    .left(ck.dock.column({ width: 236 }, cb.panel.navigator({ id: 'navigator-finish' }), cb.panel.history({ id: 'history-finish' })))
+    .left(ck.dock.column({ width: 236 }, cb.panel.navigator({ id: 'navigator-finish' }),
+        cb.panel.history({ id: 'history-finish' })))
     .center(fin.viewer({ hud: cb.hud.readout() }))
     .right(ck.dock.column({ width: 300 }, fin.cropPanel(), fin.retouchPanel(), fin.tonesPanel()))
     .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-finish' })))
@@ -428,7 +431,8 @@ separation this document is about (`kits/finish/src/passes.ts`):
 ```js
 // CB-F101: a finishing control in a module labelled Print or Darkroom
 if (n.$ === 'cb.arg' && String(n.props['path'] ?? '').startsWith('finishing.'))
-  p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, {
+  p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module
+      '${m.label}'`, {
     facts: ['finishing tones are digital, after the print; the Print module is physical'],
     fix: 'move it to a Finish module (cb.kits.finish.tonesPanel()) or relabel the module' });
 ```
@@ -461,11 +465,14 @@ The pipeline offers three physically distinct places for an edit. Each has a dif
 photographer's question "could I add layers on or around the negative?" has a different answer at each.
 
 ```text
- STAGE A  scene / negative            STAGE B  darkroom                 STAGE C  the finished print
- ───────────────────────────          ─────────────────                 ───────────────────────────
- before the film (RAW: scene XYZ;     print.expose … print.combine      after view.adapt (print-xyz),
+ STAGE A  scene / negative            STAGE B  darkroom                 STAGE C  the finished
+     print
+ ───────────────────────────          ─────────────────                 ──────────────────────────
+ before the film (RAW: scene XYZ;     print.expose … print.combine      after view.adapt
+     (print-xyz),
  scans: scanner density)              exposures with masks              with retouch and finishing
- "what the camera/negative saw"       "how the paper is exposed"        "what is done to the print"
+ "what the camera/negative saw"       "how the paper is exposed"        "what is done to the
+     print"
  digital, scene-referred              physical (time, filtration)        digital, print-referred
 ```
 
@@ -553,7 +560,8 @@ export interface DigitalLayer {
   blend: BlendMode | 'pass';       // 'pass' only on groups
   params: Record<string, unknown>; // validated by the op's ArgSpecs
   mask: string | null;             // id into recipe.masks (shared with darkroom exposures)
-  parent: string | null;           // a group's id; children are listed after their group in `order`
+  // a group's id; children are listed after their group in `order`
+  parent: string | null;
   source?: Provenance;             // what made it (look, agent turn, script line, user)
 }
 
@@ -581,12 +589,16 @@ Design notes:
 The contract change follows `packages/contract/CONTRACT-DECISIONS.md`'s template:
 
 ```text
-CC-NNN  digital.scene, digital.print: digital layer stacks before the film and after the print (CHB-035)
+CC-NNN  digital.scene,
+    digital.print: digital layer stacks before the film and after the print (CHB-035)
 class:     additive (minor); new recipe paths, new ops in area 'digital'
-changes:   FrameRecipe.digital; DigitalLayer/DigitalStage types; ops digital.* ; mask.subtract/intersect (product forms)
-consumers: DSL (generated), UI (generated controls; edit kit), engines (core reference, GPU WGSL; mock: pass-through)
+changes:   FrameRecipe.digital; DigitalLayer/DigitalStage types; ops digital.* ;
+    mask.subtract/intersect (product forms)
+consumers: DSL (generated), UI (generated controls; edit kit), engines (core reference,
+    GPU WGSL; mock: pass-through)
 migration: migrations[n] adds empty stages to stored recipes (no picture change)
-tests:     conformance cases per op; laws (identity at k = 0; pass-through group at opacity 1 is the identity)
+tests:     conformance cases per op; laws (identity at k = 0; pass-through group at opacity 1 is
+    the identity)
 ```
 
 ### 17. Compiling the stack
@@ -611,18 +623,25 @@ function compileDigital(stage: DigitalStage, back: Node, g: Graph, r: FrameRecip
   }
   function layer(L: DigitalLayer, back: Node): Node {
     const adjusted = I(`digital.${L.kind}`, [back], L.params);                 // A(C_b)
-    const k = coverage(L, back);                                                // opacity × mask, or null
-    return I('digital.mix', [back, adjusted, ...(k ? [k.id] : [])], { blend: L.blend, opacity: L.opacity });
+    // opacity × mask, or null
+    const k = coverage(L, back);
+    return I('digital.mix', [back, adjusted, ...(k ? [k.id] : [])], { blend: L.blend,
+        opacity: L.opacity });
   }
   function group(id: string, G: DigitalLayer, back: Node): Node {
     const kids = stage.order.filter(k => stage.layers[k]?.parent === id);
     if (G.blend === 'pass') {
-      const top = foldLayers(kids, back);                                       // children act on the backdrop
-      if (G.opacity >= 1 && !G.mask) return top;                                // identity: no node at all
-      return I('digital.mix', [back, top, ...maskOf(G, back)], { blend: 'normal', opacity: G.opacity });
+      // children act on the backdrop
+      const top = foldLayers(kids, back);
+      // identity: no node at all
+      if (G.opacity >= 1 && !G.mask) return top;
+      return I('digital.mix', [back, top, ...maskOf(G, back)], { blend: 'normal',
+          opacity: G.opacity });
     }
-    const top = foldLayers(kids, I('digital.transparent', [back], {}));         // isolated: from transparent
-    return I('digital.composite', [back, top, ...maskOf(G, back)], { blend: G.blend, opacity: G.opacity });
+    // isolated: from transparent
+    const top = foldLayers(kids, I('digital.transparent', [back], {}));
+    return I('digital.composite', [back, top, ...maskOf(G, back)], { blend: G.blend,
+        opacity: G.opacity });
   }
 }
 ```
@@ -634,7 +653,8 @@ returns to exactly the graph, and the cached results, of the stack without it.
 The insertion points:
 
 ```text
-stage A (scene):   … capture.expose's input: source.xyz → compileDigital(scene) → capture.expose …   (camera RAW)
+stage A (scene):   … capture.expose's input: source.xyz → compileDigital(scene) → capture.expose
+    …   (camera RAW)
 stage C (print):   … finishing.clarity → compileDigital(print) → output.display …
 ```
 
@@ -702,16 +722,22 @@ export function createEditKit(ck: Ck, cb: Cb) {
       .tool('mask-linear',  { label: 'Linear gradient', key: 'G', on: linearGestures })
       .tool('mask-radial',  { label: 'Radial gradient', key: 'U', on: radialGestures })
       .tool('mask-brush',   { label: 'Mask brush',      key: 'B', on: brushGestures }))
-    .commands(c => c.table(EDIT_COMMANDS))      // add layer, group, ungroup, move, duplicate, delete, fold …
+    // add layer, group, ungroup, move, duplicate, delete, fold …
+    .commands(c => c.table(EDIT_COMMANDS))
     .docs(EDIT_DOCS));
   return {
     kit,
-    viewer: (o?) => cb.viewer(s => cb.frame(s)?.finished() ?? null, { tools: ['mask-linear', 'mask-radial', 'mask-brush'], ...o }),
-    layersPanel: (o?) => …,      // the stack with groups, fold, drag into a group, opacity, blend, mask thumbnail
-    paramsPanel: (o?) => …,      // the active layer's controls from the catalogue (cb.arg on digital.print.layers.<id>.params.*)
-    masksPanel:  (o?) => …,      // components: + linear/radial/brush/luminance/colour, op (+ − ∩), invert, amount
+    viewer: (o?) => cb.viewer(s => cb.frame(s)?.finished() ?? null, { tools: ['mask-linear',
+        'mask-radial', 'mask-brush'], ...o }),
+    // the stack with groups, fold, drag into a group, opacity, blend, mask thumbnail
+    layersPanel: (o?) => …,
+    // the active layer's controls, from the catalogue (cb.arg on …layers.<id>.params.*)
+    paramsPanel: (o?) => …,
+    // components: + linear/radial/brush/luminance/colour, op (+ − ∩), invert, amount
+    masksPanel:  (o?) => …,
     stagePicker: () => …,        // Scene | Print, for camera files
-    keys: { 'Mod+G': 'edit.group', 'Mod+Shift+G': 'edit.ungroup', Delete: 'edit.delete', '[': ['brush.size', -1], ']': ['brush.size', 1] },
+    keys: { 'Mod+G': 'edit.group', 'Mod+Shift+G': 'edit.ungroup', Delete: 'edit.delete',
+        '[': ['brush.size', -1], ']': ['brush.size', 1] },
   };
 }
 ```
@@ -732,7 +758,8 @@ A pass keeps the darkroom physical, like CB-F101:
 ```js
 // CB-E101: a digital layer control or the edit viewer in a module labelled Print or Darkroom
 p.warn('CB-E101', `the edit kit's ${what} is in the module '${m.label}'`, {
-  facts: ['digital layers act on the scene or on the finished print; the Print module is the darkroom'],
+  facts: ['digital layers act on the scene or on the finished print; the Print module is the
+      darkroom'],
   fix: 'put it in an Edit module, or relabel the module' });
 ```
 
@@ -744,7 +771,8 @@ Because layouts are programs, each arrangement the photographer might prefer is 
 ```js
 // 1. Classic plus an Edit module: Library, Print, Edit, Finish as separate screens
 s.module('edit', m => m.label('Edit').key('E')
-  .left(ck.dock.column({ width: 260 }, edit.layersPanel(), cb.panel.history({ id: 'history-edit' })))
+  .left(ck.dock.column({ width: 260 }, edit.layersPanel(),
+      cb.panel.history({ id: 'history-edit' })))
   .center(edit.viewer({ hud: cb.hud.readout() }))
   .right(ck.dock.column({ width: 300 }, edit.paramsPanel(), edit.masksPanel()))
   .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-edit' })))
@@ -754,11 +782,14 @@ s.module('edit', m => m.label('Edit').key('E')
 //    the digital stack in a collapsible tile under it (one screen, two clearly labelled zones)
 .right(ck.dock.column({ width: 300 },
   ck.panel('enlarger', { title: 'Enlarger' }, …),
-  ck.panel('digital', { title: 'Digital (after the print)', collapsed: true /* proposed */ }, edit.layersPanel({ compact: true }))))
+  ck.panel('digital', { title: 'Digital (after the print)', collapsed: true /* proposed */ },
+      edit.layersPanel({ compact: true }))))
 
-// 3. Camera files: Scene edits before the film in their own module, opened from the photo's first print
+// 3. Camera files: Scene edits before the film in their own module,
+    opened from the photo's first print
 s.module('scene', m => m.label('Scene').key('Mod+Alt+S')
-  .center(edit.viewer({ stage: 'scene' })).right(ck.dock.column({ width: 300 }, edit.layersPanel({ stage: 'scene' }), edit.paramsPanel())));
+  .center(edit.viewer({ stage: 'scene' })).right(ck.dock.column({ width: 300 },
+      edit.layersPanel({ stage: 'scene' }), edit.paramsPanel())));
 ```
 
 Arrangement 2 is the one to test first with the photographer persona: it keeps one screen, which he liked in the
@@ -781,7 +812,8 @@ keep provenance (`earlier-work/editor-grammar-examples/editor-grammar-examples.m
 
 ```js
 const sunGlow = define('adjust.sunGlow', {
-  params: { center: param.point({ default: [0.6, 0.35] }), strength: param.slider({ min: 0, max: 1, default: 0.5 }) },
+  params: { center: param.point({ default: [0.6, 0.35] }), strength: param.slider({ min: 0,
+      max: 1, default: 0.5 }) },
   expand: ({ center, strength }) => adjust.temperature(strength.map(s => s * 40))
     .mask(mask.radial({ center, radius: [0.2, 0.14], feather: 0.6 })),
 });
@@ -798,7 +830,8 @@ Editor lab's agent and scripts call one API; chromobench's agent uses the DSL in
 ```js
 // in the agent DSL (sketch)
 const f = frame('DSC_8559');
-const sky = f.masks.add('sky', mask.gradient({ from: [0.5, 0], to: [0.5, 0.55] }).intersect(mask.luminance({ above: 0.5, softness: 0.1 })));
+const sky = f.masks.add('sky', mask.gradient({ from: [0.5, 0], to: [0.5,
+    0.55] }).intersect(mask.luminance({ above: 0.5, softness: 0.1 })));
 const g = f.digital.print.group('Sky', { opacity: 0.8, mask: sky });
 g.add('curve', { points: [[0, 0], [0.5, 0.44], [1, 1]] });
 g.add('hsl', { blue: { sat: -0.15 } });
