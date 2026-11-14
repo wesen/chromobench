@@ -119,7 +119,6 @@ th {{ font-weight: 600; color: var(--muted); font-size: .78rem; letter-spacing: 
   details.menu nav {{ display: flex; flex-direction: column; margin-top: .5rem; font-size: .92rem; }}
   body::before {{ content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }}
 }}
-@media (prefers-reduced-motion: no-preference) {{ html {{ scroll-behavior: smooth; }} }}
 </style>
 <div class="wrap">
   <nav class="rail" aria-label="Chapters">

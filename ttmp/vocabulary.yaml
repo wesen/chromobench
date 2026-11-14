@@ -37,6 +37,8 @@ topics:
       description: Black-and-white film and paper
     - slug: architecture
       description: System architecture and contracts
+    - slug: patterns
+      description: Design patterns and pattern languages extracted from the code bases
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes
