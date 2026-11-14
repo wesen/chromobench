@@ -39,7 +39,7 @@ const FILES = [
 const ENGINES = ['gpu', 'reference'] as const;
 
 async function boot(engine: string): Promise<{ page: Page; close: () => Promise<void> }> {
-  const browser = await chromium.launch({ channel: 'chrome', headless: false });
+  const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed') });
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

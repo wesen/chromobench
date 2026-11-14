@@ -695,3 +695,78 @@ open on the GPU engine is now free of stalls over 100 ms and 4–19 % faster.
 ### Technical details
 - Stacks before (ms of samples): 106.6 `renderGraph > execute > run > exposerAt > film > cached > (anonymous) >
   spectra > fallbackSpectra > sigmoidSpectraTable > fit > eval3`; 94.6 `execute > sourceTexture > upload`.
+
+## Step 11: The subagent's first-print fix reviewed, merged and checked; measurement scripts headless
+
+Task `fusz` (the first print proposing a different Time on the two engines) was delegated to a subagent in its own
+worktree; its diary is `diary/02-diary-first-print-time.md`, Steps 1–3. Its finding corrects my guess of Step 5: the
+difference was never the GPU's preview precision but the resolution of the metered image (CPU 640 px, GPU 4000 px;
+the metered log-mean exposure falls as resolution rises, through detail, grain and DIR). Its fix meters every engine
+on a 640 px analysis image built from the linear file as a 640 px decode builds it. I reviewed the code, merged it
+into this branch with two integration fixes, and re-measured the ten private files with my own script: the Time is
+now identical on both engines for all 15 frames. The user asked the subagent why Chrome kept stealing focus; the
+headed measurement scripts were the cause, and they now run headless with identical results.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 8)
+**Assistant interpretation:** Integrate the delegated task, verify it independently, keep the branch green.
+**Inferred user intent:** All four follow-ups done, in one reviewable branch.
+**Commit (code):** 0371aac — "Merge task/chb-034-first-print-time (fusz: the first print meters a 640 px analysis image on every engine)"; scripts headless in the commit of this step.
+
+### What I did
+- Read `git diff main...task/chb-034-first-print-time` for `decode.ts`, `first-print.ts`, `studio-engine.ts`
+  (14 files, +827/−27): `withAnalysis` / `scanWorking` in decode, `ANALYSIS_LONG = 640`, `analysisSha`,
+  `StudioEngine.analysisOf`, `onAnalysis(recipe, analysis)` moving crop, rebate and open gate into analysis px,
+  `firstPrint` metering on its own `Graph` with the analysis source registered.
+- `git merge --no-ff task/chb-034-first-print-time`: conflicts only in `tasks.md` and `changelog.md` (both sides
+  appended); kept every line, with `5un4` and `fusz` both checked.
+- Renumbered the subagent's `scripts/05-first-print-metering.ts` → `07-…` (05 is the lookup bench) and its references
+  in diary 02.
+- Corrected two doc comments in `studio-engine.ts` (`Decoded.analysis`, `ANALYSIS_LONG`) that still described the
+  subagent's first, discarded approach ("area-averaged from its own working image"); its diary Step 2 shows that
+  version left 0.0015 log H because it blurs twice.
+- Rebuilt, ran `scripts/03-first-print-gpu-vs-cpu.ts` on both engines (under the GPU lock).
+- Scripts 01, 02, 03, 07: `headless: !process.argv.includes('--headed')`. Verified headless with 01 and 02.
+- Saved a memory for future sessions: measurements on this Mac run headless.
+
+### Why
+- A delegated result is checked against the code and against an independent measurement before it is merged.
+- A visible Chrome window per file and engine took the user's focus for no benefit.
+
+### What worked
+- Script 03 after the merge (GPU vs CPU; Time, Δ of log10(time) + mean lights): all 15 frames the same Time;
+  DSC_8559 6.3 / 6.3 (was 5.612 / 6.3), Δ −0.0004; the other NEFs Δ −0.0001 to −0.0003; raw010 −0.0027 per frame,
+  raw000 −0.0012, raw007 −0.0034, roll-102 0.0000. These equal the subagent's table.
+- Checks on the merged tree: typecheck, lint, gen:check; `pnpm test` 105 files, 2797 passed, 19 skipped;
+  `CI=1 pnpm test:browser` 108/108 on SwiftShader (4.3 min) and with `REAL_GPU=1` 108/108 on Metal (57 s).
+- Headless Chrome: `"engine": "GPU · apple metal-3 · 4000 px"`; DSC_8559 open 6307 ms (headed 6309), stall 0, drag
+  204 ms, 8 renders.
+
+### What didn't work
+- N/A
+
+### What I learned
+- My Step 5 explanation (an engine-dependent measurement near a rounding boundary, possibly through the hardware
+  filter) was half right: the boundary was right, the cause was resolution. At equal size the engines agree to 4e-6.
+- The GPU's DSC_8559 print is now 1.3 levels darker than before (luma 103.7): it meters 0.0054 log H more exposure, as
+  the CPU engine does. Its remaining difference to the CPU's luma (105.1) is rendering at 4000 vs 640 px, not metering.
+
+### What was tricky to build
+- Bookkeeping conflicts: docmgr writes whole task lines, so both branches' check marks had to be merged per task id.
+
+### What warrants a second pair of eyes
+- `onAnalysis` maps a strip frame's crop by finding the same box among the working-image frames; when the two decodes
+  find a different number of frames it scales the crop instead (the subagent's tests cover both).
+- Strips open ~0.3 s slower on the GPU engine (a second conditioning at 640 px, in the worker).
+
+### What should be done in the future
+- The subagent's follow-ups: `szeo` (a negative's base depends on the working size), `3nod` (CPU and GPU at 4000 px
+  still 0.0026 apart), `ayqx` (the roll kit meters the working image too), `alwi` (0.0004 binned vs demosaic).
+
+### Code review instructions
+- `apps/studio/src/host/first-print.ts` (`onAnalysis`, `firstPrint`), `decode.ts` (`withAnalysis`, `scanWorking`),
+  `studio-engine.ts` (`analysisOf`), `apps/studio/test/first-print-analysis.test.ts`, `e2e/studio-photo.spec.ts`.
+- Validate: `pnpm test`; `CI=1 pnpm exec playwright test e2e/studio-photo.spec.ts --project=chromium-webgpu`.
+
+### Technical details
+- Subagent branch commits: 3628f3a, 9c6739f, 7ec3684, 53e8c94, b6e4111.

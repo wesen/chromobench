@@ -1,11 +1,11 @@
 // CHB-034: CHB-027's mac-02 run on the Mac itself. Opens a file, then drags the Time slider with 20 real mouse
 // moves; reports time to result and main-thread stalls (rAF gaps > 100 ms), as CHB-026's probe measures them.
 // Usage: node 02-open-and-drag.mjs <url> <file> [--photo-checkbox]
-//   launches the installed Chrome, headed (Metal WebGPU); the engine is chosen by the url (?engine=gpu|reference)
+//   the installed Chrome, headless (Metal WebGPU; --headed for a window); the engine is chosen by the url
 import { chromium } from '@playwright/test';
 const [url, file] = process.argv.slice(2);
 const flag = (f) => process.argv.includes(f);
-const browser = await chromium.launch({ channel: 'chrome', headless: false });
+const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed') });
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 const probe = () => {
   const P = (window.__probe = { t0: performance.now(), stalls: [] });

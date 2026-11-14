@@ -26,7 +26,7 @@ const ri = process.argv.indexOf('--runs');
 const RUNS = ri > 0 ? process.argv.slice(ri + 1).filter((a) => !a.startsWith('--')) : ['metal:engine=gpu', 'cpu:engine=reference'];
 
 async function launch(kind: string): Promise<Browser> {
-  if (kind === 'metal') return chromium.launch({ channel: 'chrome', headless: false });
+  if (kind === 'metal') return chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed') });
   if (kind === 'sw') return chromium.launch({ args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--enable-features=Vulkan'] });
   return chromium.launch();
 }
