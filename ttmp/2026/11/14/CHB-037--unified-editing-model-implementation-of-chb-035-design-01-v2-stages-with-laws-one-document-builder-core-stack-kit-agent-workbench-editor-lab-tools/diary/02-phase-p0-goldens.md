@@ -137,7 +137,7 @@ regenerate and check.
 
 **Inferred user intent:** An oracle P2 can run unchanged except for its compile step.
 
-**Commit (code):** see Step 3.
+**Commit (code):** 03b517d — "CHB-037 P0: golden pictures of today's pipeline (recipe v2 compile on the f64 reference engine)"
 
 ### What I did
 - `engine.ts`: `RefEngine({ data: nodePacksData() })` in a `StudioEngine`; `render(r)` = `compile(r, graph)`, adopt the
@@ -205,3 +205,55 @@ regenerate and check.
 - Case ids and what they exercise: `packages/conformance/goldens/index.json` (`cases[].exercises`, `ops`).
 - Header: `{case, cut, op, domain, width, height, channels, dtype: 'float32', endian: 'little', layout, file, sha256,
   stats: {min, max, mean}, warnings}`.
+
+## Step 3: Regeneration is reproducible; partial regeneration keeps the index order
+
+After the first commit I checked that the goldens are a stable artefact: regenerating everything (with and without
+rewriting the fixtures) gives byte-identical files, so the stored pictures are a function of the code and the
+fixtures alone. A partial regeneration (`--only`) reordered `index.json` (kept entries first, regenerated ones
+appended); it now keeps the order of `cases.ts`.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Make sure the check and the regeneration are trustworthy before handing over.
+
+**Inferred user intent:** P2 must be able to rely on the goldens and to re-run the scripts without noise.
+
+**Commit (code):** see the commit after 03b517d — "CHB-037 P0: render.ts --only keeps the index in case order; diary Step 3"
+
+### What I did
+- `node tools/goldens/render.ts` then `git status`: clean. `node tools/goldens/render.ts --fixtures`: clean.
+- `node tools/goldens/render.ts --only neg-split,cam-auto`: `index.json` changed (order only); fixed `keep()` in
+  render.ts to sort by `CASES` order and drop entries of cases no longer defined; re-ran: clean.
+- Full checks: typecheck, lint, gen:check green; `pnpm test` 106 files, 2799 passed, 19 skipped (baseline 105 / 2797 /
+  19: +1 file, +2 tests, the goldens test); `node tools/goldens/render.ts --check`: 58/58, max |Δ| 0 in every cut.
+
+### Why
+- A regeneration that produces diffs without a code change would make a real change hard to see in review.
+
+### What worked
+- Determinism: no case depends on cache order, timing or randomness (grain is seeded).
+
+### What didn't work
+- `--only` reordered `index.json` (124-line diff with no content change), fixed as above.
+
+### What I learned
+- N/A beyond Step 2.
+
+### What was tricky to build
+- Shared picture files and partial regeneration: `--only` writes the regenerated cases' own files; another case
+  whose header points to a rewritten file then fails the check, which is the right signal (its picture changed too).
+
+### What warrants a second pair of eyes
+- N/A
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `node tools/goldens/render.ts && git status` should stay clean; `node tools/goldens/render.ts --check`.
+
+### Technical details
+- Timing: regenerate ≈ 3.4 s wall, check ≈ 3.1 s, vitest file ≈ 5 s (M-series laptop, Node 24.18).

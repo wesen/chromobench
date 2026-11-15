@@ -96,7 +96,10 @@ async function regenerate(): Promise<void> {
     const [p, d] = out.cuts;
     console.log(`${def.id.padEnd(30)} print ${p!.width}×${p!.height} mean ${stats(p!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}  display ${d!.width}×${d!.height} mean ${stats(d!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}`);
   }
-  const keep = <T extends { id: string }>(a: T[] | undefined, b: T[]): T[] => [...(a ?? []).filter((x) => !b.some((y) => y.id === x.id)), ...b];
+  // with --only, the other cases' entries are kept, all in cases.ts order
+  const order = CASES.map((c) => c.id);
+  const keep = <T extends { id: string }>(a: T[] | undefined, b: T[]): T[] =>
+    [...(a ?? []).filter((x) => !b.some((y) => y.id === x.id) && order.includes(x.id)), ...b].sort((x, y) => order.indexOf(x.id) - order.indexOf(y.id));
   const index: GoldenIndex = {
     format: FORMAT,
     about: "Golden pictures of the recipe-v2 pipeline (compile() in packages/contract/src/graph.ts) on core's f64 reference engine, made before the CHB-037 cut-off. See tools/goldens/README.md.",
