@@ -452,3 +452,51 @@ compatibility.
 - Decision records: D1 one stack concept with stage laws; D2 amount per law; D3 one collection idiom; D4 one mask
   algebra; D5 links; D6 binding times, no stored code; D7 immutable builders and an eval-complete workbench; D8 hard
   cut-off.
+
+## Step 6: v2 on the reMarkable
+
+The v2 document went to the tablet as its own PDF beside v1's bundle, so the earlier annotations on v1 stay intact.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Upload document 01 v2.
+
+**Inferred user intent:** Read v2 on the tablet.
+
+**Commit (code):** (this step's commit) — diary, task, changelog
+
+### What I did
+- `remarquee upload bundle --dry-run --non-interactive --name "CHB-035 v2 One editing model for chromobench"
+  --remote-dir /ai/2026/11/14/CHB-035 <design/01>` (clean), then the upload with `PATH=/Library/TeX/texbin:$PATH`.
+- A local `--pdf-only` render to check for missing glyphs (v2 adds β κ τ θ ƒ ρ ⊕ Σ): no "Missing character" lines in
+  the log; 208 KB PDF.
+
+### Why
+- v2 uses symbols v1 did not; a missing glyph would show as an empty box on the tablet.
+
+### What worked
+- `OK: uploaded CHB-035 v2 One editing model for chromobench.pdf -> /ai/2026/11/14/CHB-035`.
+
+### What didn't work
+- N/A
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- The glyph check reads remarquee's output, which may not include every xelatex warning; one look at Section 31's
+  table on the tablet settles it.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- N/A
+
+### Technical details
+- Tablet: `/ai/2026/11/14/CHB-035/CHB-035 v2 One editing model for chromobench.pdf` (v1's bundle remains beside it).

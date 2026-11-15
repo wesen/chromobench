@@ -11,3 +11,8 @@
 
 Document 01 v2: one editing model (stages with laws; layers, groups, masks, links, bindings; one collection idiom, mutation set, history and compiler), the builder core with four binding times, the eval-complete agent workbench, hard cut-off plan (phases 0-10); research in diary Step 4
 
+
+## 2026-11-14
+
+v2 uploaded to the reMarkable (/ai/2026/11/14/CHB-035/CHB-035 v2 One editing model for chromobench.pdf); diary Step 6
+
