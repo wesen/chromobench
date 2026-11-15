@@ -7,7 +7,7 @@
 import { chooseTarget } from '../../app/render/queue.ts';
 import type { Rect, Rendered } from '../../app/render/types.ts';
 import { Canvas2DPresenter } from '../presenter-2d.ts';
-import type { Compare, ViewportParts } from './state.ts';
+import type { Compare, Cover, ViewportParts } from './state.ts';
 import type { Geometry } from './geometry.ts';
 import type { Paint } from './paint.ts';
 import type { Pointer } from './pointer.ts';
@@ -15,7 +15,7 @@ import type { Pointer } from './pointer.ts';
 export function viewRender(
   { m, p, rt, st, vid, el, lab, busy, msg, presenter, V, api }: ViewportParts,
   { layout, transform }: Geometry,
-  { paint, paintOverlays }: Paint,
+  { paint, paintCover, paintOverlays }: Paint,
   { activeTool, paintTool, updateCursor }: Pointer,
 ) {
   // ── renders: the renderable from state (a cell), through rt.renders; stale answers never show ──
@@ -27,7 +27,9 @@ export function viewRender(
     previewing: boolean;
   }
   let want: Want | null = null;
-  const requested = { after: '', before: '' };
+  /** the cover's renderable and key (a mask overlay), requested with the picture's target */
+  let cover: { r: unknown; key: string } | null = null;
+  const requested = { after: '', before: '', cover: '' };
   const resolve = (x: unknown, s: any): unknown => (typeof x === 'function' ? (x as (s: any) => unknown)(s) : x);
   function visibleRegion(): Rect {
     const [x0, y0] = api.screenToDoc(0, 0);
@@ -42,9 +44,33 @@ export function viewRender(
     const t = chooseTarget({ previewing: job.previewing, shownW: V.nw ? V.nw * V.s : V.W, shownH: V.nh ? V.nh * V.s : V.H, dpr: V.dpr, srcW: V.nw || undefined, srcH: V.nh || undefined, zoom: V.zoom, maxSide: p['maxSide'] });
     const region = t.pass === 'refine' && V.nw ? visibleRegion() : undefined;
     const sig = (k: string): string => `${k}|${t.pass}|${t.maxSide}|${region ? `${region.x},${region.y},${region.w},${region.h}` : ''}`;
-    const go = (which: 'after' | 'before', r: unknown, k: string): void => {
+    const go = (which: 'after' | 'before' | 'cover', r: unknown, k: string): void => {
       if (requested[which] === sig(k)) return;
       requested[which] = sig(k);
+      if (which === 'cover') {
+        // the cover never blocks or replaces the picture: no busy mark, no message; a failure hides it
+        rt.renders.request('vp:' + vid + ':cover', r, {
+          pass: t.pass,
+          maxSide: t.maxSide,
+          ...(region ? { region } : {}),
+          present: (res: Rendered) => {
+            if (!cover) return; // turned off meanwhile (the queue drops answers a newer request replaced)
+            V.cover = res.image;
+            V.coverKey = k;
+            el.dataset['cover'] = `${res.image.width}x${res.image.height}`;
+            paintCover();
+            rt.emit('rendered', { viewport: vid, cover: true, ms: res.ms, w: res.image.width, h: res.image.height, pass: t.pass, previewing: job.previewing });
+          },
+          onError: (e: unknown) => {
+            requested.cover = '';
+            V.cover = null;
+            V.coverKey = null;
+            paintCover();
+            rt.emit('renderError', { viewport: vid, cover: true, error: e });
+          },
+        });
+        return;
+      }
       busy.hidden = false;
       const gen = rt.renders.request('vp:' + vid + ':' + which, r, {
         pass: t.pass,
@@ -91,6 +117,7 @@ export function viewRender(
     };
     go('after', job.r, job.key);
     if (V.compare !== 'off' && job.before != null && job.beforeKey) go('before', job.before, job.beforeKey);
+    if (cover) go('cover', cover.r, cover.key);
   }
   m.cell(
     s => {
@@ -126,6 +153,30 @@ export function viewRender(
     },
     { equals: () => false },
   );
+  // the cover (a mask overlay): its renderable goes with the picture's target; its style repaints without a render
+  if (p['cover'] !== undefined)
+    m.cell(
+      s => (resolve(p['cover'], s) as Cover | null | undefined) ?? null,
+      c => {
+        if (!c || c.image == null) {
+          if (cover) rt.renders.cancel('vp:' + vid + ':cover');
+          cover = null;
+          requested.cover = '';
+          V.cover = null;
+          V.coverKey = null;
+          V.coverStyle = null;
+          delete el.dataset['cover'];
+          paintCover();
+          return;
+        }
+        V.coverStyle = { mode: c.mode ?? 'tint', colour: c.colour ?? [1, 0, 0], opacity: c.opacity ?? 0.5 };
+        const key = rt.renders.keyOf(c.image) ?? '';
+        cover = { r: c.image, key };
+        if (V.coverKey !== key) request();
+        paintCover();
+      },
+      { equals: () => false },
+    );
   // draft → screen: when a gesture ends, render at full size
   const offStore = st.on(() => {
     if (!want) return;

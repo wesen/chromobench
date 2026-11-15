@@ -1,7 +1,8 @@
 // The viewport (port of CraftKit ui/viewport.js onto the render bridge and the presenter). It shows a τ renderable
 // through rt.renders (slots vp:<id>:after / vp:<id>:before; draft while this view previews, screen otherwise,
 // refine of the visible region past 1:1), keeps the view (zoom, centre) in the view tier at view.vp[id], compares
-// before/after, draws SVG overlays, and routes the pointer to the active tool or a held spring.
+// before/after, shows a cover (a one-channel render tinted over the picture, the mask overlay; slot vp:<id>:cover),
+// draws SVG overlays, and routes the pointer to the active tool or a held spring.
 //
 // Tool handlers get (e, ctx, g): e carries u, v (0..1 across the image), x, y (document pixels), ix, iy (pixels of
 // the shown render), sx, sy (screen), the modifiers and pressure; down returns the gesture's state g.
@@ -26,7 +27,7 @@ import { viewPaint } from './viewport/paint.ts';
 import { viewRender } from './viewport/render.ts';
 import { mountThumb } from './viewport/thumb.ts';
 
-export { ZOOMS, type DomViewport } from './viewport/state.ts';
+export { ZOOMS, type Cover, type DomViewport } from './viewport/state.ts';
 
 export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
   const p = n.props as Record<string, any>;
@@ -35,6 +36,9 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
   const vid: string = p['viewId'] || p['id'] || 'main';
   const el = h('div', { class: ['ck-vp', p['small'] && 'is-small'], tabindex: '0', 'data-viewport': vid, role: 'img' });
   const cv = h('canvas', { class: 'ck-vp-c' });
+  // the cover (a mask overlay) above the picture, below the SVG overlays; hidden while there is none
+  const cc = h('canvas', { class: 'ck-vp-cover', 'aria-hidden': 'true' });
+  cc.hidden = true;
   const ov = svgEl('svg', { class: 'ck-vp-o' });
   const hud = h('div', { class: 'ck-vp-hud' });
   const lab = h('div', { class: 'ck-vp-label' });
@@ -46,7 +50,7 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
   // viewport or where the program turns it off (zoomReadout: false); geometry's transform() writes it.
   const zoomEl = h('button', { type: 'button', class: 'ck-vp-zoom', 'aria-label': 'Zoom' });
   zoomEl.hidden = true;
-  el.append(cv, ov, lab, hud, busy, msg, zoomEl);
+  el.append(cv, cc, ov, lab, hud, busy, msg, zoomEl);
   if (p['hud']) {
     const x = m.mount(p['hud']);
     if (x) hud.append(x);
@@ -78,6 +82,7 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
     scale: () => V.s,
     natural: () => [V.nw, V.nh],
     shown: () => ({ image: V.after, pass: V.pass, key: V.key }),
+    cover: () => ({ image: V.coverStyle ? V.cover : null, key: V.coverKey, style: V.coverStyle }),
     setZoom: (z, at) => setZoom(z, at),
     zoomBy: (dir, at) => zoomBy(dir, at),
     fit: () => setView({ zoom: 'fit', cx: 0.5, cy: 0.5 }),
@@ -93,10 +98,11 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
     if (rt.viewports.get(vid) === api) rt.viewports.delete(vid);
     rt.renders.cancel('vp:' + vid + ':after');
     rt.renders.cancel('vp:' + vid + ':before');
+    rt.renders.cancel('vp:' + vid + ':cover');
   });
 
   const readout = !p['small'] && p['zoomReadout'] !== false ? zoomEl : null;
-  const vp: ViewportParts = { n, m, p, rt, st, vid, el, cv, ov, lab, busy, msg, zoom: readout, presenter, colours, fixedStage, themeStage, viewPath, V, api };
+  const vp: ViewportParts = { n, m, p, rt, st, vid, el, cv, cc, ov, lab, busy, msg, zoom: readout, presenter, colours, fixedStage, themeStage, viewPath, V, api };
   const geometry = viewGeometry(vp);
   const { setView, setZoom, zoomBy } = geometry;
   if (readout) {

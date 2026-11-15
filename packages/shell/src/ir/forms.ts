@@ -196,6 +196,7 @@ export const viewportSlots = {
   maxSide: b<number>(),
   proxy: b<number>(),
   onRender: h(),
+  cover: t<unknown>('a cover over the picture: { image (a one-channel renderable), mode tint | inverse | mask, colour, opacity } or null (the mask overlay)'),
   cursor: t<string>(),
   viewId: b<string>(),
   small: b<boolean>(),

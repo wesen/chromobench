@@ -22,6 +22,7 @@ import { sel } from '../../../src/sel.ts';
 import { printingScript } from '../../../src/model/doc.ts';
 import { formatSeconds } from '../../../src/model/units.ts';
 import { stackCommands, maskTools, MASK_TOOLS } from './commands.ts';
+import { overlayCommands, maskCover, overlayOf, overlayReason, OVERLAY_MODES, OVERLAY_COLOURS } from './overlay.ts';
 import { stagePolicy, stagesShown } from './passes.ts';
 import { selectedIn, STACK_STATE } from './state.ts';
 import * as model from './model.ts';
@@ -81,7 +82,11 @@ it (its parameters and its mask show in their panels); drag a row to reorder it 
 Every change is one step of the history (Mod+Z). The layer panel shows an editor for the digital tools: the curve
 (click adds a point, drag moves it, drag it off to remove it), levels over the stage input's histogram, the HSL bands,
 the colour grading wheels and the channel mixer. A colour range mask takes its colour from the picture: Sample, then
-click the picture.`;
+click the picture.
+The mask overlay shows where the selected layer's mask acts: O turns it on and off, Shift+O changes its colour,
+Alt+O how it shows (a tint where the mask acts, a tint where it does not, or the mask alone in grey, white where the
+layer acts fully). It shows by itself while a mask tool is chosen and while a mask's setting is dragged. It is the
+mask the engine applies (the layer's mask times its groups'), computed at the viewer's size.`;
 
 /** a stage's panel title */
 const TITLES: Record<StageName, string> = { scan: 'Scan (on the negative)', scene: 'Scene (before the film)', film: 'Film', darkroom: 'Darkroom', print: 'Print (after the darkroom)' };
@@ -115,8 +120,9 @@ export function createStackKit(ck: Ck, cb: Cb) {
     .forms(...STACK_FORMS)
     .passes(stagePolicy(ck))
     .commands(stackCommands())
+    .commands(overlayCommands())
     .tools(maskTools())
-    .keys({ 'Mod+J': 'layer.duplicate', 'Mod+G': 'layer.group', 'Mod+Shift+G': 'layer.ungroup' })
+    .keys({ 'Mod+J': 'layer.duplicate', 'Mod+G': 'layer.group', 'Mod+Shift+G': 'layer.ungroup', O: 'mask.overlay.toggle', 'Shift+O': 'mask.overlay.colour', 'Alt+O': 'mask.overlay.mode' })
     .docs(STACK_DOCS);
 
   // ── builder calls ──
@@ -206,8 +212,15 @@ export function createStackKit(ck: Ck, cb: Cb) {
       ops: model.byOps,
       /** the selected entry's id on the current frame (or null) */
       selected: (s: any) => selectedIn(s),
+      /** the mask overlay: on, mode, colour, opacity, and why it shows now ('on', 'tool', 'drag' or null) */
+      overlay: (s: any) => {
+        const { live: _l, ...o } = overlayOf(s);
+        return { ...o, shown: overlayReason(s) };
+      },
     },
-    lib: { ...model, addItems, stagesShown, STACK_STATE, MASK_TOOLS },
+    lib: { ...model, addItems, stagesShown, STACK_STATE, MASK_TOOLS, OVERLAY_MODES, OVERLAY_COLOURS },
+    /** the mask overlay for a viewer's shown handle (cb.viewer's default cover) */
+    cover: maskCover,
     /** the built-in editors of the params panel (curve, levels, hsl, grade, mixer), by op */
     editors,
     /** an editor of a form for an op's layers: `stack.editor('my.form', ['covered', 'args'])` */

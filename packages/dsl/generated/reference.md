@@ -998,7 +998,7 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
 - **output**
-  - `h.output.frame({ orientation, angle_deg, crop }) → display-rgb — Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).`
+  - `h.output.frame({ orientation, angle_deg, crop }) → same — Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).`
     - orientation: enum none|cw90|rot180|ccw90|flipH|flipV|transpose|transverse, default "none" — Orientation applied for display.
     - angle_deg: number, deg, [-45, 45], default 0 — Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0.
     - crop: box, px, optional — Crop in document pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented.
@@ -1045,6 +1045,11 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - box: box, px, optional — Region in source px; absent = whole image.
     - mask: Mask, optional — Weighting mask.
     - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
+- **output**
+  - `h.output.frame({ orientation, angle_deg, crop }) → same — Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).`
+    - orientation: enum none|cw90|rot180|ccw90|flipH|flipV|transpose|transverse, default "none" — Orientation applied for display.
+    - angle_deg: number, deg, [-45, 45], default 0 — Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0.
+    - crop: box, px, optional — Crop in document pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented.
 - **view**
   - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
     - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.

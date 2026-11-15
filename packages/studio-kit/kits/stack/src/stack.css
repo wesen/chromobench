@@ -135,3 +135,11 @@ button.cb-stack-chip:hover { border-color: var(--accent); color: var(--text); }
 .cb-ed-colour { gap: 6px; }
 .cb-ed-lab { flex: 1; min-width: 0; }
 .cb-stack-sample.is-on { background: var(--accent); border-color: var(--accent); color: var(--onaccent); }
+/* the mask overlay's controls (CHB-039) */
+.cb-stack-overlay { padding: 2px 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.cb-stack-overlay .cb-seg .ck-btn { min-width: 0; }
+.cb-stack-ov-show.is-on { background: var(--accent); color: var(--onaccent); border-color: var(--accent); }
+.cb-stack-overlay .cb-range { flex: 1; min-width: 40px; }
+.cb-stack-ov-pct { width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.cb-stack-ov-note { padding: 2px 10px; margin: 0; }
+.cb-stack-chip.cb-stack-mask.is-overlay { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

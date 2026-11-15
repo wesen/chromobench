@@ -12,6 +12,20 @@ export const ZOOMS = [1 / 16, 1 / 12, 1 / 8, 1 / 6, 1 / 4, 1 / 3, 1 / 2, 2 / 3, 
 export type Zoom = 'fit' | 'fill' | number;
 export type Compare = 'off' | 'before' | 'split' | 'lr' | 'tb';
 
+/**
+ * A cover: a one-channel render (coverage 0…1, the first channel) shown over the picture under the same view
+ * transform (a mask overlay). `tint`: the colour where the coverage is, at opacity × coverage; `inverse`: the colour
+ * where it is not; `mask`: the coverage alone as opaque grey (white = 1). Colour and opacity change without a render.
+ */
+export interface Cover {
+  image: unknown;
+  mode?: 'tint' | 'inverse' | 'mask';
+  /** sRGB 0…1 (default red) */
+  colour?: [number, number, number];
+  /** 0…1 (default 0.5) */
+  opacity?: number;
+}
+
 export interface DomViewport extends ViewportApi {
   readonly el: HTMLElement;
   readonly presenter: Presenter;
@@ -20,6 +34,8 @@ export interface DomViewport extends ViewportApi {
   screenToDoc(sx: number, sy: number): [number, number];
   /** what is shown now: the render, its pass and its key */
   shown(): { image: PresentImage | null; pass: string | null; key: string | null };
+  /** the cover shown now (a mask overlay): its render, its key and how it is painted; image null when none */
+  cover(): { image: PresentImage | null; key: string | null; style: Omit<Cover, 'image'> | null };
   flash(text: string, kind?: string): void;
 }
 
@@ -46,6 +62,10 @@ export function viewState() {
     fullKey: null as string | null,
     tool: null as string | null,
     dims: null as [number, number] | null,
+    /** the cover's render, its key, and how it is painted (null: no cover) */
+    cover: null as PresentImage | null,
+    coverKey: null as string | null,
+    coverStyle: null as Omit<Cover, 'image'> | null,
   };
 }
 type ViewState = ReturnType<typeof viewState>;
@@ -60,6 +80,8 @@ export interface ViewportParts {
   vid: string;
   el: HTMLElement;
   cv: HTMLCanvasElement;
+  /** the cover's canvas, above the presenter's */
+  cc: HTMLCanvasElement;
   ov: SVGElement;
   lab: HTMLElement;
   busy: HTMLElement;
