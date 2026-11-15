@@ -18,7 +18,7 @@ import type { Engine } from './engine.ts';
 import { ChromobenchError, fail, type Diagnostic } from './errors.ts';
 import type { Graph, Node } from './graph.ts';
 import { resolveLinks, type LinkContext } from './links.ts';
-import { getOp, type OpDef } from './registry.ts';
+import { bindArgs, getOp, type OpDef } from './registry.ts';
 import { paramsToArgs } from './schema.ts';
 import { getLaw, type LawContext } from './stage-laws.ts';
 
@@ -180,7 +180,12 @@ class Compiler {
       media: this.media,
       intern: this.I,
       mask: (id) => this.mask(id, s),
-      args: (op: OpDef, params: Params) => paramsToArgs(op, params),
+      args: (op: OpDef, params: Params) => {
+        // the op's arguments with their defaults (a stored layer may omit a defaulted argument)
+        const r = bindArgs(op, paramsToArgs(op, params));
+        this.warnings.push(...r.warnings);
+        return { ...r.args };
+      },
       setCut: (name, node) => this.setCut(name, node),
       note: (entry, node) => (this.entries[entry] ??= []).push(node),
       warn: (d) => this.warnings.push(d),

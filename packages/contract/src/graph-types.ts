@@ -1,4 +1,4 @@
-// Node and value types shared by graph.ts, registry.ts, recipe.ts and engine.ts.
+// Node and value types shared by graph.ts, registry.ts, compile.ts and engine.ts.
 import type { ImageInfo } from './domains.ts';
 import type { Unit } from './units.ts';
 

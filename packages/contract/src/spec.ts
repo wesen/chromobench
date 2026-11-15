@@ -52,7 +52,7 @@ export interface ArgSpec {
   /** Data-pack list a stockId/string draws its valid values from (CHB-004). */
   valuesFrom?: 'stocks:film' | 'stocks:print' | 'illuminants' | 'scanners' | 'lamps';
   default?: unknown;
-  /** Absent is allowed and means "automatic" / "none"; recipe stores null. */
+  /** Absent is allowed and means "automatic" / "none"; a document stores null. */
   optional?: boolean;
   /** Names agents actually type, mapped to this one (CHB-002 §11 item 10). */
   redirects?: Record<string, Redirect>;

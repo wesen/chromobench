@@ -125,6 +125,19 @@ describe('coalescing (design §23)', () => {
     expect(c.entries['h3']).toEqual([f.id]);
   });
 
+  it('stored params may omit defaulted arguments: the law reads them with their defaults', () => {
+    const g = graph();
+    const d = edit(scanDoc(), [
+      set('main.params', {}),
+      push('darkroom', 'b1', L('burn', { stops: 1 })),
+      push('print', 'h1', L('heal', spots(['s1', { x: 1, y: 1, r: 2, src: { x: 4, y: 1 } }]), { amount: 0.5 })),
+      push('print', 'h2', L('heal', spots(['s2', { x: 6, y: 6, r: 2, src: { x: 9, y: 6 } }]))),
+    ]).doc;
+    const c = compile(d, g);
+    expect(c.cuts['darkroom.main']!.args).toMatchObject({ time_s: 10, fstop: 8 });
+    expect((c.cuts.finished!.args['spots'] as any[]).map((s) => [s.opacity, s.feather])).toEqual([[0.5, 0.3], [1, 0.3]]);
+  });
+
   it('a masked heal, a clone or a multi-spot layer at amount < 1 ends the run', () => {
     const g = graph();
     const d = edit(scanDoc(), [

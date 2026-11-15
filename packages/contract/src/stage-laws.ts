@@ -39,7 +39,7 @@ export interface LawContext {
   intern(op: string, inputs: readonly string[], args: Readonly<Record<string, unknown>>): string;
   /** The node of a mask of the document, compiled for this stage. */
   mask(id: Id): string;
-  /** Layer params → node args (list Colls → arrays in order; bindings are already resolved). */
+  /** Layer params → node args: list Colls → arrays in order, defaults filled, checked (bindings are already resolved). */
   args(op: OpDef, params: Params): Record<string, unknown>;
   setCut(name: CutName, node: string): void;
   /** Records the node an entry compiled to (explain, the stack panel's node ids). */
