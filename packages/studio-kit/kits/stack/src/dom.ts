@@ -432,7 +432,8 @@ function colourSample(m: MountCtx, frame: (s: any) => string | null, cid: Id): H
     const lab = v.lab ? v.lab.split(',').map(Number) : [0.7, 0, 0];
     sw.style.background = oklabCss(lab);
     sw.setAttribute('aria-label', `Colour L ${lab[0]!.toFixed(2)}, a ${lab[1]!.toFixed(3)}, b ${lab[2]!.toFixed(3)}`);
-    txt.textContent = `L ${lab[0]!.toFixed(2)} · a ${lab[1]!.toFixed(3)} · b ${lab[2]!.toFixed(3)}`;
+    txt.textContent = `${lab[0]!.toFixed(2)}  ${lab[1]!.toFixed(3)}  ${lab[2]!.toFixed(3)}`;
+    txt.title = 'OkLab L, a, b of the image the mask reads';
     b.classList.toggle('is-on', v.armed);
     b.setAttribute('aria-pressed', v.armed ? 'true' : 'false');
   }, { equals: (a: any, c: any) => a.lab === c.lab && a.armed === c.armed });
