@@ -408,3 +408,33 @@ P6b, after P5b.
 - **For P7**: the DSL compiles without a LinkContext (roll/look links fail with E_LINK there); measuring bindings need
   the async `compileMeasured` while DSL cuts are synchronous; named looks should become link inserts and
   `LooksProvider` go.
+
+### P8a — Editor lab's tools in the engine: the composite op set, blend modes, encodings, colour masks
+
+Owns `packages/contract/src/catalog/` and the composite law's blend handling, `packages/core/`, `packages/gpu/`,
+`tools/goldens/` (new golden stacks). Not the UI (the stack kit's panels come in P5b-2/P8b). Design §22
+(encodings), §23 (the op table), Part I §4–§7 (adjustment layers, blend modes, groups, masks), v1/v2 Editor lab
+analysis (Part II §9–§13: what to reuse and its defects — do not import them: the curve that adds contrast for
+negative values, sRGB arithmetic).
+
+- **Ops** (stages scene and print unless noted; each with ArgSpecs and units, `encoding`, `identity`, class):
+  `curve` (monotone cubic through control points, OkLab L or per channel; LUT on the GPU), `levels` (black, white,
+  gamma, output range, per channel), `exposure` (EV, offset; linear), `hsl` (per band hue/sat/lightness with band
+  widths; OkLCh), `vibrance` (chroma-weighted; OkLCh), `grade` (shadow/midtone/highlight wheels and balance; OkLab),
+  `mixer` (3×3, monochrome; linear), `vignette` (amount, size, feather; positional, linear), `sharpen` (amount,
+  radius in mm on the print; spatial) beside the existing `clarity`; mask component `colour` (OkLab ΔE, tolerance,
+  softness) and `radial` if not present.
+- **Blend modes**: the W3C compositing set (normal, multiply, screen, overlay, darken, lighten, colour dodge, colour
+  burn, hard light, soft light, difference, exclusion, hue, saturation, colour, luminosity) in the composite law;
+  separable modes in linear light, the non-separable ones with luminance defined in the working space (design §22);
+  isolated groups with a blend.
+- **Encodings**: linear ↔ OkLab conversions inserted by the compiler where adjacent ops differ; adjacent ops in one
+  encoding fuse without converting back (GPU: in the pointwise kernel; `composite.mix` and pointwise layers fuse
+  where possible rather than each being a barrier).
+- **The scene stage** compiles for camera files (layers before `capture.expose`), with masks reading the scene.
+- **Parity**: each op a conformance case, a reference implementation in core (f64) and a GPU implementation with
+  parity (SwiftShader and Metal under the GPU lock); laws: identity at amount 0 and at identity params; blend-mode
+  identities (normal at opacity 1 = source; multiply by white = backdrop; screen by black = backdrop); curve
+  monotonicity; golden stacks for a few combined documents.
+- Acceptance: contract, core, gpu typecheck and vitest; conformance; goldens (old 60 unchanged plus the new stacks);
+  `[gpu-parity]` green on SwiftShader and Metal; lint; generated docs (`pnpm gen:check`).
