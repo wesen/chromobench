@@ -660,7 +660,7 @@ timeline.py
 
 ## Step 10: Harness v2 — supervised runs, a prompt that states time, retried provider failures
 
-The first batch ended at 19:5x with 16 of 24 runs answered. The eight losses were three provider failures
+The first batch ended at 19:48 with 16 of 24 runs answered. The eight losses were three provider failures
 (`upstream_stream_failed`: graph/control-1, slots/control-1, and tiling/chapter-4 after 727 s, which the new check
 classified), four tiling runs and slots/control-2 at the 60-minute limit. Step 9 traced the limit hits mostly to the
 harness. This step fixes the harness and starts a clean rerun of the two affected tasks.
@@ -698,7 +698,7 @@ tiling budget) under CHB-036, test them, commit in steps, record them here, and 
   failures (last assistant `stopReason: "error"`, `errorMessage: "Error Code upstream_stream_failed: …"`).
 - Smoke run: tiling chapter, budget 2 min, watchdog 1 min → `run.json` `timed_out: true`, `outcome: "timeout"`,
   `watchdog.log` "budget 120s reached: killing groups [39635]", no process left.
-- Launched v2 at 20:1x: `batch.py <scratchpad>/pattern-runs-v2 --tasks tiling,slots --par 4 --budget-min
+- Launched v2 at 20:11:32: `batch.py <scratchpad>/pattern-runs-v2 --tasks tiling,slots --par 4 --budget-min
   tiling=120,default=60 --watchdog-min 5 --retries 2` (12 runs). 24 other pi agents were running at launch.
 
 ### Why
