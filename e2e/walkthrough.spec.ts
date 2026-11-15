@@ -256,20 +256,26 @@ test('a roll: frames link to the roll, an override, sync, a look over the roll, 
   await idle(page);
   expect(await hook<string[]>(page, `Object.keys(cb.studio.doc('${ids[1]}').stages.scan.medium.overrides)`)).toContain('baseT');
   expect(await hook<number>(page, `cb.studio.doc('${ids[1]}').stages.darkroom.medium.grade`)).toBe(3);
-  // in the Looks layout: sync, then a look over the roll on one card, approved; one undo takes it off
-  await hook(page, `cb.run('view.layout', 'looks')`);
-  await page.waitForFunction(() => document.body.dataset['layout'] === 'looks', null, { timeout: 60_000 });
-  await idle(page);
-  // sync (copy, in the Looks layout: Classic has no Sync — a P9 finding): frame 1's Time to frames 3 and 4, one step
+  // sync (copy) in Classic: frame 1's Time to frames 3 and 4 — select in the film strip (the source last, so it is
+  // the primary), Settings ▸ Sync Settings; one step
   await hook(page, `cb.run('frame.select', '${ids[0]}')`);
   await hook(page, `cb.set('main.params.time_s', 9, 'Time')`);
   await idle(page);
-  await hook(page, `cb.rt.store.set(['ui', 'selection'], { ids: ${JSON.stringify([ids[0], ids[2], ids[3]])}, primary: '${ids[0]}', anchor: '${ids[0]}' })`);
+  const cell = (id: string) => page.locator(`.ck-filmstrip:visible .ck-coll-cell[data-key="${id}"]`);
+  await cell(ids[2]!).click();
+  await cell(ids[3]!).click({ modifiers: ['ControlOrMeta'] });
+  await cell(ids[0]!).click({ modifiers: ['ControlOrMeta'] });
+  await expect.poll(() => hook<{ ids: string[]; primary: string }>(page, 'cb.state().ui.selection')).toMatchObject({ primary: ids[0] });
   const before = await hook<number>(page, 'cb.log.cursor');
-  await hook(page, `cb.run('looks.sync')`);
+  await page.locator('.ck-menubar-t', { hasText: 'Settings' }).click();
+  await page.locator('.ck-menu-i[data-command="looks.sync"]').click();
   await idle(page);
   expect(await hook<number[]>(page, `${JSON.stringify(ids)}.map((f) => cb.studio.doc(f).stages.darkroom.stack.items.main.params.time_s)`)).toEqual([9, expect.any(Number), 9, 9]);
   expect(await hook<number>(page, 'cb.log.cursor')).toBe(before + 1);
+  // a look over the roll, in the Looks layout: one card, approved; one undo takes it off every frame
+  await hook(page, `cb.run('view.layout', 'looks')`);
+  await page.waitForFunction(() => document.body.dataset['layout'] === 'looks', null, { timeout: 60_000 });
+  await idle(page);
   await page.locator('.ck-panel[data-panel="looks-library"] .cb-look-cell', { hasText: 'More contrast' }).getByRole('button', { name: 'Preview' }).click();
   await hook(page, `cb.run('looks.applyToRoll', 'all')`);
   const card = page.locator('#looks-pending');

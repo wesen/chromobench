@@ -107,6 +107,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
     .forms(...FORMS)
     .passes(checks)
     .commands(looksCommands(cb, M))
+    // Lightroom's Settings shortcuts: copy, paste, sync (CHB-037 P9: in every layout that installs the kit)
+    .keys({ 'Mod+Shift+C': 'looks.copy', 'Mod+Shift+V': 'looks.paste', 'Mod+Shift+S': 'looks.sync' })
     .docs(LOOKS_DOCS);
 
   const P = createLooksPanels(ck, cb, M);
@@ -162,6 +164,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
     views: { survey, cell: lookCell, choice: choiceRow },
     modules: { print: printModule },
     menus: {
+      /** Lightroom's Settings menu: copy, paste and sync a frame's settings (the everyday layouts' way to sync) */
+      settings: () => ck.menu('Settings', ['looks.copy', 'looks.paste', 'looks.sync', 'looks.syncMode']),
       looks: () =>
         ck.menu('Looks', [
           'looks.apply', 'looks.applyToRoll', 'looks.applyToLibrary', '-', 'looks.survey.open', 'looks.preview', 'looks.setReference', 'looks.snapshot', '-',
