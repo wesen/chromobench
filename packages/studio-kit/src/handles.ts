@@ -3,8 +3,8 @@
 // compiles nothing. The render bridge lowers it: compile(doc) → the named cut → what is shown (display RGB).
 //
 // What a handle can name: a cut (source, scan or scene, negative, print, finished, display), an inspection view of
-// the negative (negative, dyes, classes), a test strip (bands of the print, each its own document) and a ring-around
-// tile (the print with the printer lights moved).
+// the negative (negative, dyes, classes), a test strip (bands of the print, each its own document), a ring-around
+// tile (the print with the printer lights moved) and an entry's mask in the picture's geometry (the mask overlay).
 import type { CutName, Document, Vec3 } from '@chromobench/contract';
 import { set } from '@chromobench/values';
 import { edit } from '@chromobench/contract';
@@ -16,7 +16,7 @@ import type { ViewMode } from './model/settings.ts';
 export const ACCESSORS = ['source', 'scan', 'negative', 'print', 'finished', 'display'] as const;
 export type Accessor = (typeof ACCESSORS)[number];
 
-export type HandleWhat = Accessor | 'view' | 'testStrip' | 'ringTile';
+export type HandleWhat = Accessor | 'view' | 'testStrip' | 'ringTile' | 'mask';
 
 /** A renderable: what the viewer and thumbnails show. */
 export interface ImageHandle {
@@ -47,6 +47,11 @@ export interface FrameRef {
   view(mode: ViewMode): ImageHandle;
   testStrip(o?: { vary?: string; step?: number; count?: number }): ImageHandle;
   ringTile(offset: Vec3): ImageHandle;
+  /**
+   * The coverage an entry acts through (its mask times its groups' masks: contract Compiled.coverage) with the
+   * display cut's geometry, one channel: what the mask overlay tints and the mask-only view shows.
+   */
+  mask(entry: string): ImageHandle;
   initial(): FrameRef;
   withDoc(d: Document, expr?: string): FrameRef;
 }
@@ -85,6 +90,7 @@ export function frameRef(frame: string, doc: Document | 'initial' | 'committed',
     view: (mode: ViewMode) => (mode === 'print' ? self.print() : image(self, 'view', { mode }, `${expr}.view('${mode}')`)),
     testStrip: (o: { vary?: string; step?: number; count?: number } = {}) => image(self, 'testStrip', { vary: o.vary ?? 'time', step: o.step ?? 1 / 3, count: o.count ?? 5 }, `cb.testStrip(${expr}, ${JSON.stringify(o)})`),
     ringTile: (offset: Vec3) => image(self, 'ringTile', { offset }, `${expr}.print() /* lights ${JSON.stringify(offset)} */`),
+    mask: (entry: string) => image(self, 'mask', { entry }, `${expr}.display() /* the mask ${entry} acts through */`),
     initial: () => frameRef(frame, 'initial', `${expr}.initial()`),
     withDoc: (d: Document, e = expr) => frameRef(frame, d, e),
   });

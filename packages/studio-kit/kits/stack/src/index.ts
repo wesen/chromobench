@@ -5,3 +5,4 @@ export { STACK_STATE, selectedIn, type StackView } from './state.ts';
 export { stagePolicy, stagesShown, walk } from './passes.ts';
 export { MASK_TOOLS, maskTools, stackCommands, eyedropper } from './commands.ts';
 export * from './editors.ts';
+export * from './overlay.ts';

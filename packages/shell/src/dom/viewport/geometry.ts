@@ -11,7 +11,7 @@ export function zoomPercent(s: number): string {
   return `${p < 10 ? Number(p.toFixed(1)) : Math.round(p)} %`;
 }
 
-export function viewGeometry({ el, cv, ov, V, st, viewPath, api, zoom }: ViewportParts) {
+export function viewGeometry({ el, cv, cc, ov, V, st, viewPath, api, zoom }: ViewportParts) {
   // the readout: what the picture is shown at now (CHB-031 F34)
   function showZoom(): void {
     if (!zoom) return;
@@ -32,6 +32,10 @@ export function viewGeometry({ el, cv, ov, V, st, viewPath, api, zoom }: Viewpor
     cv.height = Math.round(V.H * V.dpr);
     cv.style.width = V.W + 'px';
     cv.style.height = V.H + 'px';
+    cc.width = cv.width;
+    cc.height = cv.height;
+    cc.style.width = cv.style.width;
+    cc.style.height = cv.style.height;
     ov.setAttribute('viewBox', `0 0 ${V.W} ${V.H}`);
     ov.setAttribute('width', String(V.W));
     ov.setAttribute('height', String(V.H));

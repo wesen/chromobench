@@ -17,15 +17,15 @@ module library "Library" key G
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
-                 viewport loupe τ  image τ  overlays: 
+                 viewport loupe τ  cover τ  image τ  overlays: 
              cases.compare:
                row  grow 1
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-a τ  image τ  overlays: 
+                   viewport cmp-a τ  cover τ  image τ  overlays: 
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-b τ  image τ  overlays: 
+                   viewport cmp-b τ  cover τ  image τ  overlays: 
              cases.survey:
                gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
@@ -54,7 +54,7 @@ module roll "Roll" key Mod+Alt+R
 module scene "Scene" key Mod+Alt+S stages scene
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport scene τ  before τ  compare  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
+           viewport scene τ  before τ  compare  cover τ  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
              hud:
                cb.readout
   right  dockcol  width 300
@@ -80,7 +80,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -175,7 +175,7 @@ module edit "Edit" key Mod+Alt+E stages print
              cb.history
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport edit τ  before τ  compare  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
+           viewport edit τ  before τ  compare  cover τ  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
              hud:
                cb.readout
   right  dockcol  width 300
@@ -194,7 +194,7 @@ module finish "Finish" key F stages scan, print
              cb.history
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport finish τ  before τ  compare  image τ  overlays:   tools [crop, spot]
+           viewport finish τ  before τ  compare  cover τ  image τ  overlays:   tools [crop, spot]
              hud:
                cb.readout
   right  dockcol  width 300
@@ -249,7 +249,7 @@ module assistant "Assistant"
   center column  class "cb-viewer"  grow 1
            segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
            cb.ribbon
-           viewport assistant τ  before τ  compare  image τ  overlays:   tools [probe]
+           viewport assistant τ  before τ  compare  cover τ  image τ  overlays:   tools [probe]
              hud:
                cb.readout
   right  dockcol  width 400
@@ -331,6 +331,10 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -406,7 +410,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 187 · keys 121 in 22 scopes · tools 10 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 191 · keys 124 in 22 scopes · tools 10 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -420,7 +424,7 @@ module main "Darkroom" stages darkroom, print
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -549,6 +553,10 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
   looks.pick "Pick Look" ← cb.looks
   looks.param "Set Look Parameter" ← cb.looks
   looks.amount "Look Amount" ← cb.looks
@@ -587,7 +595,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 141 · keys 36 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 145 · keys 39 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -607,15 +615,15 @@ module library "Library" key G
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
-                 viewport loupe τ  image τ  overlays: 
+                 viewport loupe τ  cover τ  image τ  overlays: 
              cases.compare:
                row  grow 1
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-a τ  image τ  overlays: 
+                   viewport cmp-a τ  cover τ  image τ  overlays: 
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-b τ  image τ  overlays: 
+                   viewport cmp-b τ  cover τ  image τ  overlays: 
              cases.survey:
                gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
@@ -637,7 +645,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -733,7 +741,7 @@ module finish "Finish" key F stages scan, print
              cb.history
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport finish τ  before τ  compare  image τ  overlays:   tools [crop, spot]
+           viewport finish τ  before τ  compare  cover τ  image τ  overlays:   tools [crop, spot]
              hud:
                cb.readout
   right  dockcol  width 300
@@ -845,6 +853,10 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
   crop.reset "Reset Crop" (Finish) ← cb.finish
   crop.aspect "Crop Aspect" ← cb.finish
   crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
@@ -866,7 +878,7 @@ commands
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 129 · keys 78 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 133 · keys 81 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -886,15 +898,15 @@ module library "Library" key G
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
-                 viewport loupe τ  image τ  overlays: 
+                 viewport loupe τ  cover τ  image τ  overlays: 
              cases.compare:
                row  grow 1
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-a τ  image τ  overlays: 
+                   viewport cmp-a τ  cover τ  image τ  overlays: 
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-b τ  image τ  overlays: 
+                   viewport cmp-b τ  cover τ  image τ  overlays: 
              cases.survey:
                gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
@@ -916,7 +928,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -1015,7 +1027,7 @@ module assistant "Assistant"
   center column  class "cb-viewer"  grow 1
            segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
            cb.ribbon
-           viewport assistant τ  before τ  compare  image τ  overlays:   tools [probe]
+           viewport assistant τ  before τ  compare  cover τ  image τ  overlays:   tools [probe]
              hud:
                cb.readout
   right  dockcol  width 400
@@ -1071,7 +1083,7 @@ module lab "Lab" key L stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport lab τ  before τ  compare  image τ  overlays:   tools [probe, test-strip]
+               viewport lab τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip]
                  hud:
                    cb.readout
              cases.ring:
@@ -1196,8 +1208,12 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 107 · keys 86 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 111 · keys 89 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1217,15 +1233,15 @@ module library "Library" key G
              cases.loupe:
                column  class "cb-viewer"  grow 1
                  cb.ribbon
-                 viewport loupe τ  image τ  overlays: 
+                 viewport loupe τ  cover τ  image τ  overlays: 
              cases.compare:
                row  grow 1
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-a τ  image τ  overlays: 
+                   viewport cmp-a τ  cover τ  image τ  overlays: 
                  column  class "cb-viewer"  grow 1
                    cb.ribbon
-                   viewport cmp-b τ  image τ  overlays: 
+                   viewport cmp-b τ  cover τ  image τ  overlays: 
              cases.survey:
                gridview survey  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
@@ -1249,7 +1265,7 @@ module print "Print" key D
                cb.ribbon
                match  of [view, ring]  on τ
                  cases.view:
-                   viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip]
+                   viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip]
                      hud:
                        cb.readout
                  cases.ring:
@@ -1395,6 +1411,10 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" ← cb.roll
@@ -1450,7 +1470,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 160 · keys 70 in 11 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+commands 164 · keys 73 in 11 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1487,7 +1507,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -1641,6 +1661,10 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1659,7 +1683,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 123 · keys 56 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 127 · keys 59 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1675,7 +1699,7 @@ module main "Chromobench" stages darkroom
                  cb.ribbon
                  match  of [view, ring]  on τ
                    cases.view:
-                     viewport main τ  image τ  overlays:   tools []
+                     viewport main τ  cover τ  image τ  overlays:   tools []
                    cases.ring:
                      column  class "cb-ring"  grow 1
                        text "Ring-around, 4 pt: click the print that looks …  strong
@@ -1793,8 +1817,12 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 104 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 108 · keys 33 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1804,7 +1832,7 @@ module main "Chromobench" stages darkroom
            listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  rowHeight 150  select ui.selection
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport main τ  image τ  overlays: 
+           viewport main τ  cover τ  image τ  overlays: 
   right  dockcol  width 300
            panel controls-darkroom "Darkroom"
              when  cond τ
@@ -1899,8 +1927,12 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  mask.overlay.toggle "Show Mask Overlay" O ← cb.stack
+  mask.overlay.mode "Mask Overlay Mode" Alt+O ← cb.stack
+  mask.overlay.colour "Mask Overlay Colour" Shift+O ← cb.stack
+  mask.overlay.opacity "Mask Overlay Opacity" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 104 · keys 27 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 108 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

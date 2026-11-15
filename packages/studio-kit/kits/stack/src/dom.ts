@@ -9,7 +9,7 @@ import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/she
 import { makeNode, type NodeData } from '@chromobench/shell';
 import { Coll, type Id, type Why } from '@chromobench/values';
 import { getOp, type ArgSpec, type Document, type Entry, type MaskCombine, type MaskComponent, type StageName } from '@chromobench/contract';
-import { entryName, findEntry, storePath, type Placed } from '../../../src/model/doc.ts';
+import { DOCS, entryName, findEntry, storePath, type Placed } from '../../../src/model/doc.ts';
 import { argModel } from '../../../src/kit/args.ts';
 import { renderArg } from '../../../src/dom/arg.ts';
 import { WHO } from '../../../src/model/history.ts';
@@ -19,6 +19,7 @@ import {
   linkWords, maskOf, maskUsers, opWord, provenance, readsChoices, rowsOf, addableOps, addMenu, type StackRow,
 } from './model.ts';
 import { selectedIn } from './state.ts';
+import { COLOUR_WORDS, coverageMasks, MODE_WORDS, OVERLAY_COLOURS, OVERLAY_MODES, overlayOf, overlayReason, type OverlayMode } from './overlay.ts';
 import { btn, frameOf, numAt, numberControl, parsePercent, peekDoc, readPath, run, words } from './controls/dom.ts';
 import { EDITOR_RENDERERS } from './editors/dom.ts';
 import { EDITOR_FORMS, mathOf, oklabCss, type Editors } from './editors.ts';
@@ -56,6 +57,14 @@ function maskChip(m: MountCtx, frame: (s: any) => string | null, id: Id): HTMLEl
     run(m, 'layer.select', id);
     const f = frame(m.store.readonly());
     const d = f ? peekDoc(m, f) : undefined;
+    if (d && findEntry(d, id)?.entry.mask && (ev.altKey || ev.shiftKey)) {
+      // as on a mask thumbnail in Photoshop: Alt shows the mask alone, Shift its overlay (again: off)
+      const o = overlayOf(m.store.readonly());
+      const mode: OverlayMode = ev.altKey ? 'mask' : 'tint';
+      if (o.on && o.mode === mode) run(m, 'mask.overlay.toggle', false);
+      else run(m, 'mask.overlay.mode', mode);
+      return;
+    }
     if (d && findEntry(d, id)?.entry.mask) {
       // the masks panel shows it: bring it into view
       const p = (chip.ownerDocument as globalThis.Document).querySelector('.cb-stack-masks');
@@ -79,7 +88,7 @@ function maskChip(m: MountCtx, frame: (s: any) => string | null, id: Id): HTMLEl
     chip.textContent = name ? `◐ ${name}` : '+ mask';
     chip.classList.toggle('is-empty', !name);
     chip.setAttribute('aria-label', name ? `Mask ${name}` : 'Add a mask');
-    chip.dataset['tip'] = name ? `Through the mask ${name}: click to edit it in the mask panel` : 'No mask: click to draw one or use one of the library';
+    chip.dataset['tip'] = name ? `Through the mask ${name}: click to edit it in the mask panel; Shift-click shows where it acts on the picture, Alt-click the mask alone (O: the overlay)` : 'No mask: click to draw one or use one of the library';
   });
   return chip;
 }
@@ -515,9 +524,65 @@ const params: Renderer = (n, m) => {
 
 // ── the selected entry's mask ──
 
+/**
+ * The mask overlay's controls (CHB-039): Show (O), how it shows (where it acts, where it does not, the mask alone),
+ * its colour and opacity. View state through the mask.overlay.* commands, so a key, the palette and an agent's
+ * wb.run do the same.
+ */
+function overlayControls(pm: MountCtx): HTMLElement {
+  const show = btn('Show', 'cb-stack-ov-show', { 'aria-pressed': 'false', 'data-tip': 'Show where the mask acts on the picture (O)' });
+  listen(pm.scope, show, 'click', () => run(pm, 'mask.overlay.toggle'));
+  const modes = h('div', { class: 'cb-seg cb-stack-ov-modes', role: 'radiogroup', 'aria-label': 'Overlay shows' });
+  const SHORT: Record<OverlayMode, string> = { tint: 'Tint', inverse: 'Inverse', mask: 'Mask' };
+  for (const md of OVERLAY_MODES) {
+    const b = btn(SHORT[md], `is-${md}`, { 'data-mode': md, 'data-tip': MODE_WORDS[md] });
+    listen(pm.scope, b, 'click', () => run(pm, 'mask.overlay.mode', md));
+    modes.append(b);
+  }
+  const colour = h('select', { class: 'cb-select cb-stack-ov-colour', 'aria-label': 'Overlay colour' }) as HTMLSelectElement;
+  for (const c of OVERLAY_COLOURS) colour.append(h('option', { value: c, text: COLOUR_WORDS[c] }));
+  listen(pm.scope, colour, 'change', () => run(pm, 'mask.overlay.colour', colour.value));
+  const opacity = h('input', { type: 'range', class: 'cb-range', min: '0.05', max: '1', step: '0.05', 'aria-label': 'Overlay opacity' }) as HTMLInputElement;
+  const pct = h('span', { class: 'cb-dim cb-stack-ov-pct' });
+  listen(pm.scope, opacity, 'input', () => run(pm, 'mask.overlay.opacity', Number(opacity.value)));
+  const el = h('div', { class: 'cb-stack-overlay' },
+    h('div', { class: 'cb-stack-num' }, h('span', { class: 'cb-stack-num-l', text: 'Overlay' }), show, modes),
+    h('div', { class: 'cb-stack-num' }, h('span', { class: 'cb-stack-num-l', text: '' }), colour, opacity, pct));
+  pm.cell((s) => ({ ...overlayOf(s), why: overlayReason(s) }), (o) => {
+    show.classList.toggle('is-on', o.on);
+    show.setAttribute('aria-pressed', String(o.on));
+    for (const b of modes.children) (b as HTMLElement).classList.toggle('is-on', (b as HTMLElement).dataset['mode'] === o.mode);
+    colour.value = o.colour;
+    colour.disabled = o.mode === 'mask';
+    opacity.disabled = o.mode === 'mask';
+    opacity.value = String(o.opacity);
+    pct.textContent = `${Math.round(o.opacity * 100)} %`;
+    el.dataset['shown'] = o.why ?? '';
+  }, { equals: (a: any, b: any) => !!a && JSON.stringify(a) === JSON.stringify(b) });
+  return el;
+}
+
+/** while a gesture previews a path of the document's masks (a mask or component setting dragged): overlay.live */
+function watchMaskGestures(m: MountCtx): void {
+  const st = m.store;
+  let live = false;
+  const set = (v: boolean): void => queueMicrotask(() => m.rctx().set({ stack: { overlay: { live: v } } }));
+  const off = st.on(() => {
+    const now = st.previewing && st.gesture.writes().some((w) => w.path[0] === DOCS && w.path[2] === 'masks');
+    if (now === live) return;
+    live = now;
+    set(now);
+  });
+  m.scope.onDispose(() => {
+    off();
+    if (live) set(false);
+  });
+}
+
 const masks: Renderer = (n, m) => {
   const frame = (s: any) => frameOf(n, s);
   const el = h('div', { class: 'cb-panel cb-stack-masks' });
+  watchMaskGestures(m);
   let scope: MountCtx | null = null;
   m.cell((s) => {
     const f = frame(s);
@@ -552,7 +617,9 @@ const masks: Renderer = (n, m) => {
       tools.append(b);
     }
     if (!mk) {
-      el.append(h('p', { class: 'cb-empty', text: `${entryName(p.entry)} acts everywhere. Draw a mask on the print with a tool, or add a range:` }), tools);
+      // a layer in a masked group acts through the group's mask: the overlay shows that
+      if (coverageMasks(d, id).length) el.append(h('p', { class: 'cb-dim cb-stack-ov-note', text: `${entryName(p.entry)} acts through its group's mask.` }), overlayControls(pm));
+      el.append(h('p', { class: 'cb-empty', text: `${entryName(p.entry)} ${coverageMasks(d, id).length ? 'has no mask of its own' : 'acts everywhere'}. Draw a mask on the print with a tool, or add a range:` }), tools);
       const add = h('div', { class: 'cb-card-b' });
       for (const k of componentKinds().filter((x) => x === 'luminance' || x === ('colour' as never))) {
         const b = btn(`+ ${KIND_WORDS[k] ?? k}`, `cb-stack-new-${k}`);
@@ -565,6 +632,7 @@ const masks: Renderer = (n, m) => {
     const mid = mk.id;
     const users = maskUsers(d, mid);
     el.append(h('div', { class: 'cb-stack-head' }, h('strong', { text: mk.mask.name }), h('span', { class: 'cb-dim', text: users.length > 1 ? ` · also used by ${users.filter((u) => u !== id).map((u) => entryNameOf(findEntry(d, u)?.entry) || u).join(', ')}` : '' })));
+    el.append(overlayControls(pm));
     el.append(h('div', { class: 'cb-stack-num' }, h('span', { class: 'cb-stack-num-l', text: 'Draw' }), comb), tools);
     const ol = h('ol', { class: 'cb-stack-comps' });
     for (const [cid, c] of mk.components) {

@@ -49,10 +49,10 @@ Returns:
 
 ## `output.frame`
 
-Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).
+Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels). On a mask (contract 1.4, CHB-039) it puts the mask where the display cut shows the picture: the viewer's mask overlay.
 
 - Owner: CHB-011
-- On: Image (display-rgb) → Image (display-rgb)
+- On: Image (display-rgb, mask) → Image (same)
 - Class: geometric; binding: setting
 - Implementation: mock
 

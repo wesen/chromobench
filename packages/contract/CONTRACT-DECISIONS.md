@@ -535,6 +535,28 @@ tests:     contract composite-law.test.ts; core composite.test.ts (laws: identit
            (packages/gpu/test/browser/digital.spec.ts)
 ```
 
+## Contract 1.4 (CHB-039: the mask overlay)
+
+`CONTRACT_VERSION = '1.4.0'`. The studio shows the selected entry's mask over the picture (a tint, or the mask
+alone). The overlay must be the mask as the engine applies it, in the picture's geometry, so the contract names the
+coverage an entry acts through and lets the document geometry act on a mask.
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| CHB-039 spec §4 | `Compiled.coverage(entry)` | accepted | The entry's mask times its groups' masks (outermost first, `mask.combine` intersect, amount 1: the light law's `maskProduct`, so the same nodes); a group's own mask times its parents'; null without a mask; a disabled entry's mask compiles too. Composite stages apply a group's mask at the group's mix: the product is the effective coverage there, a node of its own |
+| CHB-039 spec §4 | `output.frame` on a mask | accepted | domainIn `display-rgb` or `mask`, domainOut `same`: crop, straighten and orientation on one channel. All three engines' implementations were channel-generic already |
+
+```text
+CC-023  Compiled.coverage; output.frame takes a mask (CHB-039; contract 1.4.0)
+class:     additive (minor). contract:check reports output.frame.domainOut "display-rgb" → "same" as breaking: for
+           its only former input (display-rgb) the output is unchanged
+changes:   Compiled.coverage(entry: Id): Node | null; output.frame domainIn ['display-rgb', 'mask'], domainOut 'same'
+consumers: studio-kit (frame.mask(entry) handles, the render bridge, the stack kit's overlay); DSL (generated: a
+           MaskHandle gains output.frame)
+migration: none
+tests:     packages/contract/test/coverage.test.ts; studio-kit test/overlay.test.ts; e2e/mask-overlay.spec.ts (GPU)
+```
+
 ## Change-note template
 
 ```text

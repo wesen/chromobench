@@ -6,6 +6,23 @@ import type { Id } from '@chromobench/values';
 import { sel } from '../../../src/sel.ts';
 import { findEntry } from '../../../src/model/doc.ts';
 
+export const OVERLAY_MODES = ['tint', 'inverse', 'mask'] as const;
+export type OverlayMode = (typeof OVERLAY_MODES)[number];
+export const OVERLAY_COLOURS = ['red', 'green', 'white', 'black'] as const;
+export type OverlayColour = (typeof OVERLAY_COLOURS)[number];
+
+export interface OverlayView {
+  /** shown by the photographer's choice (O) */
+  on: boolean;
+  mode: OverlayMode;
+  colour: OverlayColour;
+  /** 0…1 */
+  opacity: number;
+  /** a gesture previews a mask now (the masks panel sets it while a mask or component parameter is dragged) */
+  live: boolean;
+}
+export const OVERLAY_STATE: OverlayView = { on: false, mode: 'tint', colour: 'red', opacity: 0.5, live: false };
+
 export interface StackView {
   /** the selected entry of each frame (an id of its document) */
   selected: Record<string, Id | null>;
@@ -18,8 +35,10 @@ export interface StackView {
   mask: { combine: MaskCombine; radius: number; sample: Id | null };
   /** what the HSL editor's sliders change */
   hsl: 'hue_deg' | 'saturation' | 'lightness';
+  /** the mask overlay (CHB-039): shown, how, in which colour and opacity */
+  overlay: OverlayView;
 }
-export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12, sample: null }, hsl: 'saturation' } };
+export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12, sample: null }, hsl: 'saturation', overlay: { ...OVERLAY_STATE } } };
 
 /** the selected entry of a frame (the current one by default), when it is still in its document */
 export function selectedIn(s: any, f: string | null = sel.current(s)): Id | null {
