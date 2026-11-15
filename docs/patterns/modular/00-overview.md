@@ -175,10 +175,10 @@ show render(document, view, level: coarse)
 for step in plan(document, view): if budget.spent(): yield; if stale(request): stop; run(step)
 
 -- 7 Estimate with Confidence: a measured film base says how sure it is
-base = estimateBase(scan) → { value, confidence: 0.92, why: "rebate along the long edge", fallback: percentile }
+base = estimateBase(scan) → { value, confidence: 0.92, why: "rebate along the long edge", fallback: "blank film in the frame" }
 
 -- 8 Count What You Own: the GPU budget is a ledger the engine keeps itself
-texture = gpu.acquire(desc)        -- counted; refused or evicted for when over budget
+texture = gpu.acquire(desc)        -- counted against the budget; over it, something not on screen is evicted first
 gpu.release(texture)               -- destroyed only after the work that used it has finished
 
 -- 9 Keep What Is Dear: results are kept by content key, and evicted by cost of remaking
