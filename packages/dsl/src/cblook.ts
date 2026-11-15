@@ -10,7 +10,8 @@
 //     params: { w: { type: 'number', unit: 'point', min: 0, max: 10, default: 4, doc: 'warmth' } }, stages: ['darkroom'],
 //     fn: (p) => ({ stacks: { darkroom: { order: ['f'], items: { f: { kind: 'layer', op: 'filter', … } } } } }) })`)
 import { Coll, isPlainObject, type Json } from '@chromobench/values';
-import { ChromobenchError, defineLook, diag, STAGE_NAMES, type LookDef, type LookOutput, type StageName } from '@chromobench/contract';
+import { allLooks, ChromobenchError, defineLook, diag, STAGE_NAMES, type LookDef, type LookOutput, type StageName } from '@chromobench/contract';
+import type { QuickJSWASMModule } from 'quickjs-emscripten-core';
 import { loadQuickJS } from './session.ts';
 
 export interface LookSourceOptions {
@@ -20,6 +21,8 @@ export interface LookSourceOptions {
   timeoutMs?: number;
   /** of the sandbox (default 16 MB) */
   memoryBytes?: number;
+  /** a look already registered under the same name and version: refuse it (default) or keep the registered one */
+  existing?: 'fail' | 'keep';
 }
 
 const SETUP = `
@@ -42,8 +45,16 @@ const fail = (message: string, file: string): never => {
 
 /** Evaluates a look file in a sandbox of its own and registers its look function (name and version). */
 export async function defineLookSource(src: string, o: LookSourceOptions = {}): Promise<LookDef> {
+  return defineLookWith(await loadQuickJS(), src, o);
+}
+
+/**
+ * defineLookSource on a loaded QuickJS module (synchronous: the DSL's cb.looks.define). With `existing: 'keep'` a look
+ * already registered under the same name and version is returned instead of refused (the page registering a look the
+ * agent's sandbox, in the same realm, registered first).
+ */
+export function defineLookWith(QJS: QuickJSWASMModule, src: string, o: LookSourceOptions = {}): LookDef {
   const file = o.file ?? 'look.cblook.js';
-  const QJS = await loadQuickJS();
   const rt = QJS.newRuntime({ memoryLimitBytes: o.memoryBytes ?? 16 * 1024 * 1024, maxStackSizeBytes: 512 * 1024 });
   let deadline = Infinity;
   rt.setInterruptHandler(() => Date.now() > deadline);
@@ -81,6 +92,10 @@ export async function defineLookSource(src: string, o: LookSourceOptions = {}): 
   const meta = JSON.parse(call('__meta')) as Partial<LookDef>;
   if (typeof meta.name !== 'string' || typeof meta.version !== 'number') fail('defineLook needs a name and a version', file);
   const stages = (meta.stages ?? []) as StageName[];
+  if (o.existing === 'keep') {
+    const had = allLooks().find((l) => l.name === meta.name && l.version === meta.version);
+    if (had) return had;
+  }
   return defineLook({
     name: meta.name!, version: meta.version!, label: meta.label ?? meta.name!, group: meta.group ?? 'Mine', doc: meta.doc ?? '',
     params: meta.params ?? {}, stages, ...(meta.kinds ? { kinds: meta.kinds } : {}),

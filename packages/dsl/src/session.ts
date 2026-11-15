@@ -18,6 +18,7 @@ import {
 import { equal, plan, transaction, tryTransaction, type Batch, type Edit, type Log, type LogEntry, type Mutation } from '@chromobench/values';
 import { describeMutation, touched } from './describe.ts';
 import type { DslHistory, Submission } from './history.ts';
+import type { WbLayoutData, Workbench } from './workbench.ts';
 import { Host, type DocsProvider, type DslLinks, type FrameEntry } from './host.ts';
 import { PRELUDE } from './prelude/prelude.ts';
 import { assemble } from './results/assemble.ts';
@@ -56,6 +57,8 @@ export interface DslSessionOptions {
   links?: () => DslLinks;
   /** prefix of this session's transaction ids (`chat-eval-3`); unique per session in one log */
   txPrefix?: string;
+  /** the studio as the agent's workbench (`wb`); without one, `wb.*` is E_WORKBENCH (CHB-037 P6b) */
+  workbench?: Workbench;
 }
 
 /** Extra per-eval data for the harness (CHB-008 telemetry, §5.13). */
@@ -103,6 +106,7 @@ export class DslSession {
   readonly traces: EvalTrace[] = [];
   private readonly engine: Engine;
   private readonly history: DslHistory;
+  private readonly workbench: Workbench | null;
   private readonly frameEntries = new Map<string, FrameEntry>();
   private readonly txPrefix: string;
   private QJS!: QuickJSWASMModule;
@@ -128,6 +132,7 @@ export class DslSession {
   private constructor(opts: DslSessionOptions) {
     this.engine = opts.engine;
     this.history = opts.history;
+    this.workbench = opts.workbench ?? null;
     this.txPrefix = opts.txPrefix ? `${opts.txPrefix}-` : '';
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
     this.host = new Host(this.graph, this.frameEntries, this.history);
@@ -139,6 +144,7 @@ export class DslSession {
   static async create(opts: DslSessionOptions): Promise<DslSession> {
     const s = new DslSession(opts);
     s.QJS = await loadQuickJS();
+    s.host.qjs = s.QJS;
     s.initVm();
     return s;
   }
@@ -156,12 +162,14 @@ export class DslSession {
     this.vm = vm;
     const hostFn = vm.newFunction('host', (nH, jH) => vm.newString(this.host.dispatch(vm.getString(nH), vm.getString(jH))));
     const evalFn = vm.newFunction('hostEval', (idH) => this.hostEval(vm.getString(idH)));
+    const callFn = vm.newFunction('hostCall', (nH, jH) => this.hostCall(vm.getString(nH), vm.getString(jH)));
     this.deadline = Date.now() + 5000;
     const pre = vm.unwrapResult(vm.evalCode(PRELUDE, 'prelude.js'));
-    const hooksH = vm.unwrapResult(vm.callFunction(pre, vm.undefined, hostFn, evalFn));
+    const hooksH = vm.unwrapResult(vm.callFunction(pre, vm.undefined, hostFn, evalFn, callFn));
     pre.dispose();
     hostFn.dispose();
     evalFn.dispose();
+    callFn.dispose();
     this.hooks = {
       begin: vm.getProp(hooksH, 'begin'), run: vm.getProp(hooksH, 'run'), memInfo: vm.getProp(hooksH, 'memInfo'), probe: vm.getProp(hooksH, 'probe'),
     };
@@ -207,10 +215,66 @@ export class DslSession {
 
   // ---- host promises -------------------------------------------------------------------------
   private hostEval(id: string): QuickJSHandle {
+    return this.deferred((signal) => this.work(id, signal));
+  }
+
+  /** A workbench call (`wb.*`, cb.looks.define): answered by the page, so deferred like a measurement. */
+  private hostCall(name: string, json: string): QuickJSHandle {
+    return this.deferred(() => this.workbenchCall(name, json));
+  }
+
+  private async workbenchCall(name: string, json: string): Promise<string> {
+    try {
+      const a = (JSON.parse(json) ?? {}) as Record<string, unknown>;
+      return JSON.stringify({ ok: (await this.wbAnswer(name, a)) ?? null });
+    } catch (e) {
+      return JSON.stringify({ err: contractDiag(e) });
+    }
+  }
+
+  private async wbAnswer(name: string, a: Record<string, unknown>): Promise<unknown> {
+    const h = this.host;
+    h.vocabulary[name] = (h.vocabulary[name] ?? 0) + 1;
+    const wb = this.workbench;
+    if (name === 'wb.defineLook') return wb?.defineLook ? await wb.defineLook(String(a['src'])) : a['local'];
+    if (!wb) {
+      throw new ChromobenchError(diag('E_WORKBENCH', 'this session has no workbench: the studio is not attached', { hint: 'frames, cuts, edits and looks work without it; wb.* needs the studio (the chat, the bridge or window.chromobench.eval)' }));
+    }
+    const actor = { eval: h.evalId, ...(typeof a['why'] === 'string' ? { why: a['why'] } : {}) };
+    switch (name) {
+      case 'wb.commands': {
+        const all = await wb.commands();
+        const f = a['filter'];
+        if (f === null || f === undefined) return all;
+        if (typeof f !== 'string') throw new ChromobenchError(diag('E_ARG_TYPE', 'wb.commands(filter) takes a string: part of an id or a label', { fix: "wb.commands('layer.')" }));
+        const q = f.toLowerCase();
+        return all.filter((c) => c.id.toLowerCase().includes(q) || c.label.toLowerCase().includes(q));
+      }
+      case 'wb.run':
+      case 'wb.set': {
+        const r = name === 'wb.run' ? await wb.run(String(a['id']), (a['args'] as unknown[]) ?? [], actor) : await wb.set(String(a['path']), a['value'], actor);
+        h.wbEntries.push(...r.entries);
+        return r;
+      }
+      case 'wb.selectors': return wb.selectors();
+      case 'wb.state': return wb.state(String(a['name']), (a['args'] as unknown[]) ?? []);
+      case 'wb.screen': return wb.screen(typeof a['module'] === 'string' ? { module: a['module'] } : {});
+      case 'wb.layouts': return wb.layouts();
+      case 'wb.build': return wb.build(a['layout'] as WbLayoutData);
+      case 'wb.use': {
+        if (this.history.mode() === 'read-only') throw new ChromobenchError(diag('E_READONLY', 'the agent is read-only: wb.layouts.use cannot propose a layout', { hint: 'describe the layout instead; the photographer can switch the mode' }));
+        return wb.use(a['layout'] as WbLayoutData, actor);
+      }
+      default: throw new ChromobenchError(diag('E_INTERNAL', `unknown workbench call ${name}`));
+    }
+  }
+
+  /** A guest promise settled by host work (a measurement, a workbench call); the pump waits for it. */
+  private deferred(work: (signal: AbortSignal) => Promise<string>): QuickJSHandle {
     const d = this.vm.newPromise();
     const p: Pending = { d, ac: new AbortController(), dead: false };
     this.pending.add(p);
-    this.work(id, p.ac.signal)
+    work(p.ac.signal)
       .then((json) => {
         if (p.dead) return;
         const s = this.vm.newString(json);
@@ -405,7 +469,7 @@ export class DslSession {
     const warnings: Diagnostic[] = [...this.host.warnings];
     // host work still in flight: the agent did not await it
     if (this.pending.size > 0) {
-      warnings.push(diag('UNHANDLED', `${this.pending.size} measurement(s) were started but not awaited; they were cancelled`, { hint: 'await every measurement you need' }));
+      warnings.push(diag('UNHANDLED', `${this.pending.size} measurement(s) or wb call(s) were started but not awaited; they were cancelled`, { hint: 'await every measurement and every wb call you need' }));
       for (const p of [...this.pending]) this.kill(p);
       this.pending.clear();
     }
@@ -416,7 +480,10 @@ export class DslSession {
     }
     // edits: submitted together at the end of a successful eval (DR-3)
     const edits = this.host.edits;
-    const { transactions, lines: editLines } = outcome.ok && edits.length ? this.submit(evalId, warnings) : { transactions: [], lines: [] };
+    const submitted = outcome.ok && edits.length ? this.submit(evalId, warnings) : { transactions: [], lines: [] };
+    const editLines = submitted.lines;
+    // the commands the agent ran made entries of their own (wb.run, wb.set): they belong to this eval too
+    const transactions = [...submitted.transactions, ...this.host.wbEntries];
     if (!outcome.ok && edits.length) {
       warnings.push(diag('EDITS_DROPPED', `the eval failed, so its edits were not submitted: ${edits.map((e) => e.id).join(', ')}`, { hint: 'fix the error and run the edits again' }));
     }

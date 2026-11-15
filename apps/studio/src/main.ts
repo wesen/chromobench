@@ -19,7 +19,7 @@ import '@chromobench/shell/shell.css';
 import {
   buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, mainExposure, memoryKV, modelAt, read, resetStorage, sel, setKnownValues,
   STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
-  type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost,
+  type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
 import { CB_RENDERERS } from '@chromobench/studio-kit/dom';
@@ -219,10 +219,15 @@ async function main(): Promise<void> {
   // the layout's enlarger mode for new documents (CHB-031: real by default, normalised in simple and tiny)
   const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   let rtNow: Runtime | null = null;
+  // the layout on screen is one the assistant wrote (wb.layouts.use, approved by him): not in LAYOUTS, no ?layout=
+  let agentLayout = false;
   const chat: LazyChat = lazyChat(studio, (message, err) => {
     console.warn(message, err);
     rtNow?.diagnostics.warn('CB-H420', message, { runtime: true, facts: err ? [msgOf(err)] : [] });
     rtNow?.chrome.toast(message, { kind: 'warn', ms: 5000, ...(err ? { detail: `Technical: ${msgOf(err)}` } : {}) });
+  }, {
+    // the agent's workbench (CHB-037 P6b): which layout is on screen, which ones exist, and mounting one it wrote
+    layouts: { current: () => ({ id: def.id, label: def.label, agent: agentLayout }), available: () => layouts(), mount: (d) => switchLayout(d) },
   });
   const presenter = hostPresenter({
     device,
@@ -681,13 +686,15 @@ async function main(): Promise<void> {
    * before the studio attaches. A reload lost every frame whose file the browser could not read again without asking.
    */
   let switching = false;
-  async function switchLayout(v: string): Promise<void> {
-    const load2 = LAYOUTS[v as LayoutId];
-    if (switching || !load2 || v === def.id) return;
+  async function switchLayout(v: string | LayoutDef): Promise<void> {
+    // a layout the assistant wrote arrives as a definition (its build replays the recording on ck and cb)
+    const agent = typeof v !== 'string';
+    const load2 = agent ? null : LAYOUTS[v as LayoutId];
+    if (switching || (!agent && (!load2 || (v === def.id && !agentLayout)))) return;
     switching = true;
     try {
-      const def2 = (await load2()).default;
-      const built2 = buildLayout(def2, { env: { params: { ...Object.fromEntries(q), layout: v }, dev: q.has('dev') } });
+      const def2 = agent ? v : (await load2!()).default;
+      const built2 = buildLayout(def2, { env: { params: { ...Object.fromEntries(q), layout: def2.id }, dev: q.has('dev') } });
       const errs = built2.app.diagnostics.list.filter((d) => d.level === 'error');
       if (errs.length) {
         rt.chrome.toast(`The layout ${def2.label} could not be built`, { kind: 'error', detail: `Technical: ${errs.map((d) => `${d.code} ${d.message}`).join('\n')}` });
@@ -703,11 +710,12 @@ async function main(): Promise<void> {
       studio.detach();
       def = def2;
       built = built2;
+      agentLayout = agent;
       studio.setEnlarger(def.enlarger ?? 'real');
       hostActions.layout = def.id;
       hostActions.layouts = layouts();
       const u = new URL(location.href);
-      u.searchParams.set('layout', def.id);
+      if (!agent) u.searchParams.set('layout', def.id);
       try {
         // one undo history across layouts: Mod+Z after the switch undoes the step made before it
         mounted = await mountLayout(built.app, past);

@@ -13,7 +13,7 @@
 // approvals and reverts are methods the UI calls, which nothing the model produces can reach.
 import { toDiagnostic, type AgentMode, type Diagnostic, type EvalRequest, type EvalResult } from '@chromobench/contract';
 import { describeMutation } from '@chromobench/dsl';
-import { plan, transaction, type Edit, type Batch, type LogEntry, type Mutation } from '@chromobench/values';
+import { plan, transaction, type Edit, type Batch, type Log, type LogEntry, type Mutation } from '@chromobench/values';
 import type { AgentDocs } from '../worker/client.ts';
 import {
   ModelError, type ChatModel, type ContentBlockParam, type Effort, type MessageParam, type ModelReply, type ToolDef,
@@ -32,6 +32,11 @@ export interface ChatHost {
   docs: AgentDocs;
   /** Sets the mode; called only from setMode(), i.e. by the UI. */
   setMode(m: AgentMode): void;
+  /**
+   * One mutation in the photographer's words, on the document it changes (the studio's History words: "Time 7.94 →
+   * 10.0 s (+⅓ stop)"); without it the cards say the agent's words (describeChange). CHB-037 P6b.
+   */
+  describe?(m: Mutation, before: object, doc: string): string;
 }
 
 export interface ChatSessionOptions {
@@ -126,10 +131,24 @@ export function describeChange(m: Mutation, inverse?: Mutation): string {
   return `${text} (${(m.value as number[]).map((v) => `${v >= 0 ? '+' : ''}${Math.round((v / 0.025) * 10) / 10}`).join(' / ')} pt)`;
 }
 
-/** The changes of log entries, one line each (prefixed with the frame when they span several). */
-export function changesOf(entries: readonly LogEntry[]): ChangeView[] {
+/**
+ * The changes of log entries, one line each (prefixed with the frame when they span several): in the host's words
+ * (`words`, on the document as it is in `log`) when it has them, else the agent's.
+ */
+export function changesOf(entries: readonly LogEntry[], words?: ChatHost['describe'], log?: Log): ChangeView[] {
   const many = new Set(entries.map((e) => e.doc)).size > 1;
-  return entries.flatMap((e) => e.tx.mutations.map((m, i) => ({ seq: e.seq, text: `${many ? `${e.doc}: ` : ''}${describeChange(m, e.tx.inverses[i])}` })));
+  const say = (e: LogEntry, m: Mutation, i: number): string => {
+    if (words && log?.has(e.doc)) {
+      try {
+        const t = words(m, log.doc(e.doc), e.doc);
+        if (t) return t;
+      } catch {
+        // the host has no words for it: the agent's
+      }
+    }
+    return describeChange(m, e.tx.inverses[i]);
+  };
+  return entries.flatMap((e) => e.tx.mutations.map((m, i) => ({ seq: e.seq, text: `${many ? `${e.doc}: ` : ''}${say(e, m, i)}` })));
 }
 
 export class ChatSession {
@@ -419,7 +438,7 @@ export class ChatSession {
     const applied = res.transactions.filter((e) => e.tx.status === 'applied');
     if (applied.length) it.applied = { frame: applied[0]!.doc, seqs: applied.map((e) => e.seq) };
     if (pending.length) {
-      it.approval = { frame: pending[0]!.doc, seqs: pending.map((e) => e.seq), changes: changesOf(pending) };
+      it.approval = { frame: pending[0]!.doc, seqs: pending.map((e) => e.seq), changes: changesOf(pending, this.host.describe, this.host.docs.log()) };
       it.status = 'waiting';
       this.st.status = 'waiting';
       this.emit({ t: 'approval', step: call.id, pending });
@@ -537,7 +556,7 @@ export class ChatSession {
       return false;
     }
     it.reverted = true;
-    this.sinceLast.push(`the photographer reverted eval ${step} (${changesOf(entries).map((c) => c.text).join('; ')})`);
+    this.sinceLast.push(`the photographer reverted eval ${step} (${changesOf(entries, this.host.describe, this.host.docs.log()).map((c) => c.text).join('; ')})`);
     this.changed();
     return true;
   }

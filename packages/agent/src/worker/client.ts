@@ -14,7 +14,7 @@ import {
   diag, toDiagnostic,
   type AgentMode, type ContextBlock, type Diagnostic, type Engine, type EvalRequest, type EvalResult, type SourceInfo,
 } from '@chromobench/contract';
-import { historyOf, type DslLimits, type DslLinks, type LogHost, type Submission } from '@chromobench/dsl';
+import { historyOf, type DslLimits, type DslLinks, type LogHost, type Submission, type WbRun, type Workbench } from '@chromobench/dsl';
 import type { Log, LogEntry } from '@chromobench/values';
 import type { DocsSnapshot, FromWorker, ImagePayload, ToWorker, WorkerLike } from './protocol.ts';
 
@@ -77,6 +77,8 @@ export interface DslWorkerOptions {
   limits?: Partial<DslLimits>;
   /** Prefix of the transaction ids this session's evals submit under (unique per session in one log). */
   txPrefix?: string;
+  /** the studio as the agent's workbench (`wb` in the DSL, CHB-037 P6b) */
+  workbench?: Workbench;
   graceMs?: number;
   busyMs?: number;
   defaultTimeoutMs?: number;
@@ -112,6 +114,8 @@ export class DslWorkerClient {
   private readonly calls = new Map<number, AbortController>();
   private sent: { log: Log; mode: AgentMode; frames: string; links: DslLinks | undefined } | null = null;
   private resetNote: Diagnostic | null = null;
+  /** the log entries the running eval's workbench commands made on the page's log */
+  private wbEntries: LogEntry[] = [];
   private disposed = false;
   private readonly graceMs: number;
   private readonly busyMs: number;
@@ -151,7 +155,7 @@ export class DslWorkerClient {
       else this.onMessage(m);
     });
     w.start?.();
-    const init: ToWorker = { t: 'init', engine: { id: this.o.engine.id, caps: this.o.engine.capabilities() }, ...(this.o.limits ? { limits: this.o.limits } : {}), txPrefix: this.txPrefix };
+    const init: ToWorker = { t: 'init', engine: { id: this.o.engine.id, caps: this.o.engine.capabilities() }, ...(this.o.limits ? { limits: this.o.limits } : {}), txPrefix: this.txPrefix, ...(this.o.workbench ? { workbench: true } : {}) };
     w.postMessage(init);
   }
 
@@ -170,6 +174,9 @@ export class DslWorkerClient {
         return;
       case 'engine':
         void this.serve(m);
+        return;
+      case 'wb':
+        void this.serveWb(m);
         return;
       case 'engine.cancel':
         this.calls.get(m.call)?.abort();
@@ -208,6 +215,21 @@ export class DslWorkerClient {
     }
   }
 
+  /** A workbench call of the worker's session, answered by the page's Workbench. */
+  private async serveWb(m: Extract<FromWorker, { t: 'wb' }>): Promise<void> {
+    const w = this.worker;
+    try {
+      const wb = this.o.workbench as unknown as Record<string, ((...a: unknown[]) => unknown) | undefined> | undefined;
+      const f = wb?.[m.method];
+      if (!f) throw new Error(`the page has no workbench method ${m.method}`);
+      const ok = await f.apply(wb, m.args);
+      if ((m.method === 'run' || m.method === 'set') && ok) this.wbEntries.push(...((ok as WbRun).entries ?? []));
+      if (w === this.worker) this.post({ t: 'wb.reply', call: m.call, ok: ok ?? null });
+    } catch (e) {
+      if (w === this.worker) this.post({ t: 'wb.reply', call: m.call, err: toDiagnostic(e) });
+    }
+  }
+
   /** The submission the session made on the worker's copy, made again on the page's log (the page decides). */
   private replay(result: EvalResult, sub: Submission | undefined): EvalResult {
     if (!sub) return result;
@@ -228,7 +250,7 @@ export class DslWorkerClient {
       notes.push(`edits not submitted: ${d.code} ${d.message}`);
     }
     const yaml = notes.length ? `${result.yaml.replace(/\n?$/, '\n')}host:\n${notes.map((n) => `  - ${JSON.stringify(n)}`).join('\n')}\n` : result.yaml;
-    return { ...result, yaml, warnings, transactions: [...entries] };
+    return { ...result, yaml, warnings, transactions: [...entries, ...this.wbEntries] };
   }
 
   private finish(r: Running, res: EvalResult): void {
@@ -275,6 +297,7 @@ export class DslWorkerClient {
     this.resetNote = null;
     this.syncDocs();
     const id = ++this.seq;
+    this.wbEntries = [];
     const timeoutMs = Math.min(Math.max(1, req.timeoutMs ?? this.defaultTimeoutMs), this.maxTimeoutMs);
     let resolve!: (r: EvalResult) => void;
     const done = new Promise<EvalResult>((r) => (resolve = r));

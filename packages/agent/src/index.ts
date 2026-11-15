@@ -1,5 +1,7 @@
 // @chromobench/agent (CHB-008): the DSL session in a Web Worker, the in-app chat session with pluggable model
 // transports, and the page side of the external-agent bridge.
+// the workbench port and agent-written looks, for the studio's host (it reaches the DSL through the agent)
+export { defineLookSource, type Workbench } from '@chromobench/dsl';
 export { DslWorkerClient, hostResult, memoryDocs, type AgentDocs, type DslWorkerOptions, type EvalOptions, type FrameView, type MemoryDocs } from './worker/client.ts';
 export { serveDsl } from './worker/server.ts';
 export { createDslWorker, inThreadWorker } from './worker/spawn.ts';

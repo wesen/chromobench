@@ -212,3 +212,30 @@ describe('DSL session in a worker', () => {
     p.dsl.dispose();
   });
 });
+
+describe('the workbench across the worker (CHB-037 P6b)', () => {
+  it('wb calls go to the page and back; the entries a command made are the eval\'s transactions', async () => {
+    const asked: string[] = [];
+    const entry = { seq: 7, doc: 'main', at: 1, tx: { id: 's1', label: 'Rate', by: 'agent', status: 'pending', mutations: [], inverses: [], source: {} } };
+    const workbench = {
+      commands: () => [{ id: 'frame.rate', label: 'Set Stars', keys: [], args: ['n'], enabled: true, hidden: false, builtin: false }],
+      run: (id: string, args: readonly unknown[], o: { eval: string }) => (asked.push(`${id} ${JSON.stringify(args)} ${o.eval}`), { ok: true, entries: [entry], how: 'proposed', module: 'print', frame: FRAME }),
+      set: () => ({ ok: true, entries: [], how: 'none', module: null, frame: null }),
+      selectors: () => [],
+      state: (name: string) => ({ name }),
+      screen: () => ({ layout: { id: 'tiny', label: 'Tiny', agent: false }, module: 'main', modules: [], frame: FRAME, tool: null, text: 'module main', controls: [] }),
+      layouts: () => ({ current: { id: 'tiny', label: 'Tiny', agent: false }, available: [] }),
+      build: (l: unknown) => ({ ok: true, layout: l, errors: [], warnings: [], explain: '', controls: [] }),
+      use: () => ({ status: 'proposed', id: 'x', label: 'X', note: '' }),
+    };
+    const p = await page({ client: { workbench: workbench as never } });
+    const r = await p.dsl.eval({ code: `const c = await wb.commands(); const ran = await wb.run('frame.rate', 2); return JSON.stringify({ n: c.length, how: ran.how, text: await wb.screen().explain(), st: await wb.state('current') })`, frame: FRAME });
+    expect(r.error, r.yaml).toBeUndefined();
+    expect(JSON.parse(first(r.yaml).slice(1, -1).replace(/''/g, "'"))).toEqual({ n: 1, how: 'proposed', text: 'module main', st: { name: 'current' } });
+    expect(asked).toEqual(['frame.rate [2] chat1-eval-1']);
+    expect(r.transactions.map((e) => e.seq)).toEqual([7]);
+    // without a workbench on the page, wb is E_WORKBENCH in the worker too
+    const q = await page();
+    expect((await q.dsl.eval({ code: 'return await wb.commands()', frame: FRAME })).error?.code).toBe('E_WORKBENCH');
+  });
+});
