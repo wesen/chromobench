@@ -443,13 +443,14 @@ of 2026-11-14 is a hard cut-off: no backwards compatibility, no migration, no wr
 | P0 amendment | Explicit pitches | accepted | `source.open` takes `umPerPx` (the scan medium's, or a camera file's film long edge over its long side) and sets `ImageInfo.umPerPx.film`; `print.expose` sets `umPerPx.paper = film × magnification`; `magnification` is always a number (8 = the calibration) |
 | design §27, §28 | Link and binding registries; the upstream-only rule | accepted | Roll links (media and stacks, with overrides) resolve in compile; look and preset resolvers register in phase 7. Bindings read only cuts computed before their value is used; the pitch fields cannot be bound |
 | design §29 | `compile(doc)` with named cuts | accepted | `source`, `scan`, `scene`, `film`, `negative`, `darkroom.main`, `darkroom.H`, `print`, `finished`, `display`; `vocab.ts` (accessors, `PRINT_OPTIONS`) deleted |
-| design §24, P1 amendment | The four mutations of values with the contract's hooks | accepted | `DOCUMENT_RULES` (per mutation: what it touched; per transaction: the whole document, exactly one main, mask references); the five special mutations deleted; `EditLog` keeps transactions (phase 4 replaces it) |
+| design §24, P1 amendment | The four mutations of values with the contract's hooks | accepted | `DOCUMENT_RULES` (per mutation: what it touched; per transaction: the whole document, exactly one main, mask references); the five special mutations deleted |
+| design §26, plan P4 | One history | accepted | `EditLog` (`editlog.ts`) deleted: a frame's history is an entry of the values document log (`Log`, `@chromobench/values`), opened with kind `'frame'` under `LOG_RULES = { frame: DOCUMENT_RULES }`; undo, proposals with staleness (E_STALE), batches, `why`, drafts and serialisation are the log's. `AgentMode` moves to `eval.ts`; `EvalResult.transactions` holds log entries; `edit()` stays |
 | P1 amendment | One error class | accepted | `ChromobenchError` extends values' `ValueError`; `E_RECIPE` → `E_DOCUMENT`; new `E_LINK`, `E_BINDING`, `E_CUT`; `bindArgs` refuses non-JSON (non-finite) values |
 
 ```text
 CC-019  contract 1.0: document format 3, stage laws, one light-law node, one mask algebra, one compiler with cuts (CHB-037)
 class:     breaking (major): CONTRACT_VERSION 1.0.0; recipes and edit logs of versions 1 and 2 are refused
-changes:   recipe.ts, paths.ts, mutations.ts, vocab.ts deleted; document.ts, stage-laws.ts, compile.ts, validate.ts,
+changes:   recipe.ts, paths.ts, mutations.ts, vocab.ts, editlog.ts (P4: the values document log) deleted; LOG_RULES added; document.ts, stage-laws.ts, compile.ts, validate.ts,
            schema.ts, links.ts, bindings.ts, builders.ts, pixel.ts added. Ops removed: print.lights, print.preflash,
            scan.heal, retouch.heal, finishing.clarity, finishing.hue, mask.gradient, mask.and, mask.or, mask.not. Ops added:
            expose, burn, dodge, flash, preflash, densityMask, filter (darkroom terms), heal, clone, clarity, composite.mix,

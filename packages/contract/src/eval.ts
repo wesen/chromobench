@@ -2,10 +2,13 @@
 // Shapes follow goja-cv's cvsession result processor; Look and ContextBlock per CHB-007/008.
 import type { Domain } from './domains.ts';
 import type { Diagnostic } from './errors.ts';
-import type { AgentMode, LogEntry } from './editlog.ts';
+import type { LogEntry } from '@chromobench/values';
 import type { Box } from './spec.ts';
 
 export type { Diagnostic } from './errors.ts';
+
+/** What the photographer lets the agent do with a frame: nothing, propose (pending until approved), or apply. */
+export type AgentMode = 'read-only' | 'ask' | 'auto';
 
 export interface EvalRequest {
   code: string;
@@ -49,7 +52,7 @@ export interface EvalResult {
   /** With line numbers. */
   warnings: Diagnostic[];
   context: ContextBlock;
-  /** The log entries EditLog.propose returned for this eval (seq, frame, transaction, why). */
+  /** The document-log entries this eval's transactions made (seq, document, transaction, why). */
   transactions: LogEntry[];
   error?: Diagnostic;
   /** Recorded by the harness, not rendered to the model. */
