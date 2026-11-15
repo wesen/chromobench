@@ -252,13 +252,14 @@ and in `compile()`, after `finishing.clarity`:
 +  if (tone.some((x) => x !== 0)) v = I('finishing.tone', [v], { shadows: tone[0], highlights: tone[1], contrast: tone[2] });
 ```
 
-The kit's `FINISHING_PATHS` grows by these paths once they exist; the engines (core, GPU, mock) come with them.
+(CHB-037 P5b-2: superseded. Finishing tones are print-stage layers; an op with `stages: ['print']` appears in the
+stack kit's "+ Layer" menu and its finish view without a kit change. `FINISHING_PATHS` is gone.)
 
 ## Notes (no contract change)
 
-- `finishing.clarity` is implemented by the mock engine only; core and the GPU fail with `E_NOT_IMPLEMENTED` when
-  Clarity is not 0. The `classic` layout's Finish module therefore leaves the tones panel out (`tones: false`);
-  the `finish` layout shows it. For CHB-015.
+- (Historical, CHB-022.) `finishing.clarity` was implemented by the mock engine only. Since CHB-037 clarity is the
+  print-stage op `clarity` with reference and GPU implementations, added from the stack kit's + Layer; the tones
+  panel and the `tones: false` option are gone.
 - `scan.heal` (dust on the film) is a pass-through in the mock and missing in core and the GPU. The spot tool offers
   its Dust mode only when the engine lists `scan.heal` and the frame is a negative scan; the default mode is Heal.
 

@@ -48,6 +48,8 @@ test('darkroom: the Enlarger is the darkroom stack; the digital palette is colla
   // a burn: ordered by kind (after the main exposure, before the printer lights' filter)
   await enlarger.locator('.cb-stack-add').click();
   await page.getByRole('menuitem', { name: 'Burn', exact: true }).click();
+  // the rows redraw after the step lands: wait for the new row before reading their order
+  await expect(enlarger.locator('.cb-stack-row')).toHaveCount(3);
   const ids = await enlarger.locator('.cb-stack-row').evaluateAll(rs => rs.map(r => (r as HTMLElement).dataset['id']));
   expect(ids).toEqual(['main', 'burn1', 'lights']);
   // the digital palette: closed, its title says it acts after the print
