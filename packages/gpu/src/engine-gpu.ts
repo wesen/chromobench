@@ -153,6 +153,7 @@ export class GpuEngine implements Engine {
     if (this.disposed) fail('E_INTERNAL', 'engine disposed');
     if (!this.rt.lost) return;
     this.recreating ??= (async () => {
+      this.opts.events?.({ kind: 'recreate', why: `${this.rt.lost?.reason ?? 'lost'}: ${this.rt.lost?.message ?? ''}` });
       const rt = await GpuRuntime.create(this.opts);
       this.rt = rt;
       this.tables = new TableManager(rt, { accel: this.opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
@@ -170,7 +171,8 @@ export class GpuEngine implements Engine {
     await this.ensure();
     const rt = this.rt;
     try {
-      return await f();
+      // while GPU work is in flight, textures the engine lets go are retired, not destroyed (CHB-038)
+      return await rt.busy(f);
     } catch (e) {
       if (rt.lost) throw new ChromobenchError({ code: 'E_DEVICE_LOST', message: `GPU device lost: ${rt.lost.message || rt.lost.reason}`, hint: 'retry: the engine recreates the device' });
       throw e;
@@ -225,7 +227,8 @@ export class GpuEngine implements Engine {
     this.results.clear();
     this.rebateT.clear();
     this.dropFields();
-    for (const t of this.srcTex.values()) t.destroy();
+    // a render of the old decode may be between taking its source texture and submitting (CHB-038): retired, not destroyed
+    for (const t of this.srcTex.values()) this.rt.retire(t);
     this.srcTex.clear();
     this.graph = new Graph();
     for (const k of this.sources.keys()) {
@@ -752,7 +755,7 @@ export class GpuEngine implements Engine {
   }
 
   private dummy(): GPUTexture {
-    this.dummyTex ??= this.rt.device.createTexture({ size: [1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    this.dummyTex ??= this.rt.device.createTexture({ label: 'engine.dummy', size: [1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
     return this.dummyTex;
   }
 
@@ -786,6 +789,8 @@ export class GpuEngine implements Engine {
     // fields serve the tiles of an exact export; any other render (a preview) means that export is over: free them
     if (!grid.exact && this.fields.size) this.dropFields();
     const r = await this.gpu(async () => {
+      // the work the runtime names in the errors it reports (CHB-038)
+      this.rt.activity = `${n.op} ${n.id.slice(0, 8)} ${width}×${height}${grid.exact ? ' exact' : ''}`;
       const g = await this.renderRegion(n.id, grid);
       try {
         return { px: await read(g.tex, width, height), warnings: g.warnings };

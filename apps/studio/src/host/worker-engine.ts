@@ -8,7 +8,7 @@ import {
   type EngineCaps, type Engine, type EngineId, type EvalTarget, type ImageResult, type Measurement, type MeasureSpec, type NodeDef, type NodeRef,
   type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
-import type { DecodeMode, FromWorker, InitJob, InitReply, ToWorker, WireDecoded, WireResult } from './worker-protocol.ts';
+import type { DecodeMode, FromWorker, InitJob, InitReply, ToWorker, WireDecoded, WireResult, WorkerLog } from './worker-protocol.ts';
 
 /** What WorkerClient needs of a Worker (a MessagePort-like object; tests pass a fake). */
 export interface WorkerLike {
@@ -27,11 +27,14 @@ export class WorkerClient {
   readonly worker: WorkerLike;
   /** Jobs posted, replies received, cancels sent (tests and the status line). */
   readonly stats = { jobs: 0, replies: 0, cancels: 0 };
+  /** the worker's events and its crash, for the page's diagnostics journal (CHB-038) */
+  onLog: ((l: WorkerLog) => void) | null = null;
 
   constructor(worker: WorkerLike) {
     this.worker = worker;
     worker.addEventListener('message', (e: MessageEvent) => {
       const m = e.data as FromWorker;
+      if ('log' in m) return void this.onLog?.(m.log);
       const p = this.pending.get(m.id);
       if (!p) return;
       this.pending.delete(m.id);
@@ -41,6 +44,7 @@ export class WorkerClient {
     });
     worker.addEventListener('error', (e: ErrorEvent) => {
       const err = new ChromobenchError({ code: 'E_INTERNAL', message: `engine worker error: ${e.message ?? 'unknown'}` });
+      this.onLog?.({ level: 'error', message: `the engine worker failed: ${e.message ?? 'unknown'}`, code: 'E_WORKER', data: { pending: this.pending.size, ...(e.filename ? { at: `${e.filename}:${e.lineno}` } : {}) } });
       for (const p of this.pending.values()) p.reject(err);
       this.pending.clear();
     });

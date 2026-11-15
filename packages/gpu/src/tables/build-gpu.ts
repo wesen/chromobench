@@ -61,7 +61,7 @@ async function run(rt: GpuRuntime, name: string, code: string, uniforms: ArrayBu
     dev.queue.writeBuffer(ub, 0, uniforms);
     dev.queue.writeBuffer(sb, 0, spec);
     const bg = dev.createBindGroup({
-      layout: pipe.getBindGroupLayout(0),
+      label: pipe.label, layout: pipe.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: ub, size: uniforms.byteLength } },
         { binding: 1, resource: { buffer: sb, size: spec.byteLength } },

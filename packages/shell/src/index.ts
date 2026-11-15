@@ -22,6 +22,9 @@ export { Keymap, KeyRouter, parseChord, chordFromEvent, chordLabel, chordParts, 
 export type { Binding, KeyTarget, Spring, KeyEventLike } from './core/keys.ts';
 export { diag, Diagnostics, BuildError, formatDiag, site, libraryRoot, where, familyOf } from './core/diag.ts';
 export type { Diag, DiagLevel, DiagExtra, CallSite } from './core/diag.ts';
+export { Journal, journalData, errorText, rowText, isJournalSnapshot, JOURNAL_LEVELS, JOURNAL_SOURCES } from './core/journal.ts';
+export type { JournalEvent, JournalRow, JournalLevel, JournalSource, JournalFilter, JournalOptions, JournalSnapshot, JournalTotals } from './core/journal.ts';
+export { captureConsole, captureErrors, guessSource } from './core/journal-capture.ts';
 export { track, bindingPath, missingKey, Tracker, unwrap, rawOf } from './core/track.ts';
 export { parseValue, evalArith, UNITS, MIXED, snap, fmtNum, modStep, monotone } from './core/math.ts';
 export { MAC, OTHER, detectPlatform, suggest, getIn, setIn, pathStr, parsePath, deepEq, shallowEq, stable, hash } from './core/util.ts';
@@ -50,6 +53,7 @@ export type { UiIR, Kit, KitDef, Fragment, FragmentSpec, PassDef, PassCtx, IrSpe
 export { BuiltApp } from './app/built-app.ts';
 export { commandTable, controlsOf, paramNames, reachableCommands, type CommandRow, type ControlRow, type Reach } from './app/introspect.ts';
 export { Runtime } from './app/runtime.ts';
+export { journalRuntime } from './app/journal-runtime.ts';
 export type { Services, Ctx, Explained, WriterOf, ViewportApi, Inspect } from './app/runtime.ts';
 export { RecordingChrome, resolveMenu, menuBar, paletteEntries, searchPalette } from './app/chrome.ts';
 export type { ChromeApi, DialogSpec, ToastOpts, MenuRow, PaletteEntry } from './app/chrome.ts';

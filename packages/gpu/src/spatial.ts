@@ -63,7 +63,7 @@ export class Blur {
       const ub = rt.buffers.acquire({ size: u.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'blur.u');
       dev.queue.writeBuffer(ub, 0, u);
       ubs.push(ub);
-      const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: u.byteLength } }, { binding: 1, resource: from.createView() }, { binding: 2, resource: to.createView() }] });
+      const bg = dev.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: u.byteLength } }, { binding: 1, resource: from.createView() }, { binding: 2, resource: to.createView() }] });
       const pass = enc.beginComputePass(rt.timer.pass('blur'));
       pass.setPipeline(pipe);
       pass.setBindGroup(0, bg);
@@ -82,7 +82,7 @@ export class Blur {
     const rt = this.rt;
     rt.check();
     const dev = rt.device;
-    this.sampler ??= dev.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+    this.sampler ??= dev.createSampler({ label: 'spatial.linear', magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
     const pipe = await rt.pipelines.get({ name: `field.${entry}`, code: fieldCode, entryPoint: entry });
     const out = into ?? this.tex(outW, outH, `field.${entry}`);
     const u = FIELD_PARAMS.pack(p);
@@ -92,7 +92,7 @@ export class Blur {
     if (entry !== 'sampleField' && entry !== 'upsample' && entry !== 'upsampleAt') entries.push({ binding: 1, resource: src.createView() });
     if (entry !== 'down' && entry !== 'downPad' && entry !== 'downPadAt') entries.push({ binding: 3, resource: field!.createView() });
     if (entry === 'sampleField') entries.push({ binding: 4, resource: this.sampler });
-    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
+    const bg = dev.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries });
     const enc = dev.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(pipe);

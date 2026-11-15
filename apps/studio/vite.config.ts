@@ -1,4 +1,5 @@
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { packsPlugin } from '../../packages/data/vite-packs.ts';
@@ -27,8 +28,21 @@ function precachePlugin(): Plugin {
 
 // The studio is plain TypeScript on the shell and studio-kit (CHB-019; no JSX since the React UI was removed).
 // Workers are ES modules (LibRaw and the GPU table builders import code dynamically).
+/** the commit the build is made from (CHB-038: problem reports name it), '+dirty' with local changes */
+function commit(): string {
+  try {
+    const head = execSync('git rev-parse --short HEAD', { cwd: import.meta.dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    const dirty = execSync('git status --porcelain --untracked-files=no', { cwd: import.meta.dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return `${head}${dirty ? '+dirty' : ''}`;
+  } catch {
+    return 'unknown';
+  }
+}
+const version = (JSON.parse(readFileSync(join(import.meta.dirname, 'package.json'), 'utf8')) as { version: string }).version;
+
 export default defineConfig({
   plugins: [packsPlugin(), precachePlugin()],
+  define: { __CHROMOBENCH_VERSION__: JSON.stringify(version), __CHROMOBENCH_COMMIT__: JSON.stringify(commit()) },
   worker: { format: 'es' },
   // LibRaw's module locates libraw.wasm beside itself; the host passes the URL explicitly (?url), and
   // keeping the package out of the pre-bundle keeps that path valid in the dev server too.

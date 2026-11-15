@@ -41,11 +41,18 @@ import { firstPrint, firstPrintAim, photoDocument, withMeasured } from './host/f
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
+import { createDiagnostics, diagnosticsBadge, startJournal, type StudioDiagnostics } from './host/diagnostics.ts';
+import { watchedDevices, watchServiceWorker, swFacts } from './host/capture.ts';
+import { keepJournal } from '@chromobench/studio-kit/kits/diagnostics';
+import { DIAGNOSTICS_RENDERERS } from '@chromobench/studio-kit/kits/diagnostics/dom';
+import '@chromobench/studio-kit/kits/diagnostics/diagnostics.css';
 import { openIdb } from './storage/db.ts';
 import { addScanExtensions, fromFileList, fromHandles, hasDirectoryPicker, hasFilePicker, isScan, listScans, pickDirectory, pickFiles, reconnect, SCAN_EXTENSIONS, type PickedFile } from './storage/fsa.ts';
 import './app.css';
 
 const q = new URLSearchParams(location.search);
+// the diagnostics journal (CHB-038) first, so the boot is in it: the console and uncaught errors from here on
+const journal = startJournal(q);
 /** the KV 'settings' keys of the assistant's layouts (id → layout data) and looks (name → source) */
 const AGENT_LAYOUTS = 'agent-layouts';
 const AGENT_LOOKS = 'agent-looks';
@@ -150,7 +157,7 @@ async function startEngine(): Promise<Host> {
   const h = await createHostEngine({
     ...(refMode === 'exact' || refMode === 'tabulated' ? { refMode } : {}),
     want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), ...(refLong !== null ? { refLong: Number(refLong) } : {}),
-    worker: q.get('worker') !== '0', onStatus: (s) => status(s),
+    worker: q.get('worker') !== '0', onStatus: (s) => status(s), journal, debug: q.has('debug'),
   });
   setKnownValues(h.catalog);
   addScanExtensions(h.extensions);
@@ -191,6 +198,11 @@ async function main(): Promise<void> {
   }
   // the hard cut-off (CHB-037, design D8): edits saved by an earlier studio are cleared once, and he is told
   const storageReset = await resetStorage(kv).catch(() => false);
+  if (storageReset) journal.info('app', 'stored edits of an earlier version were cleared', { code: 'STORAGE_RESET' });
+  // the journal's tail of earlier sessions (a report after a crash or a reload has them), saved as it grows
+  const keptJournal = await keepJournal(journal, kv);
+  addEventListener('pagehide', () => void keptJournal.flush());
+  addEventListener('visibilitychange', () => void (document.visibilityState === 'hidden' && keptJournal.flush()));
   // layouts the assistant wrote and he accepted, looks the assistant wrote: kept in the KV (CHB-037 P9), so View ▸
   // Layout lists them, ?layout=<id> reloads one, and a document linking an agent's look still compiles
   const agentLayouts: Record<string, AgentLayout> = (await kv.get<Record<string, AgentLayout>>('settings', AGENT_LAYOUTS).catch(() => undefined)) ?? {};
@@ -209,6 +221,7 @@ async function main(): Promise<void> {
   try {
     host = await startEngine();
   } catch (e) {
+    journal.error('engine', `the engine did not start: ${msgOf(e)}`, { code: 'ENGINE_START', data: e });
     status(`the engine did not start: ${plainMsg(e)}`, { error: true, detail: `Technical: ${msgOf(e)}` });
     report('The engine did not start', [msgOf(e)], '<p>Try <a href="?engine=reference">the reference engine</a> or <a href="?engine=mock">the mock engine</a>.</p>');
     throw e;
@@ -232,17 +245,17 @@ async function main(): Promise<void> {
   if (Object.keys(agentLooks).length) {
     const { defineLookSource } = await import('@chromobench/agent');
     for (const [name, src] of Object.entries(agentLooks)) {
-      await defineLookSource(src, { file: `${name}.cblook.js`, existing: 'keep' }).catch((e: unknown) => console.warn(`the assistant's look ${name} did not register`, e));
+      await defineLookSource(src, { file: `${name}.cblook.js`, existing: 'keep' }).catch((e: unknown) => void journal.warn('agent', `the assistant's look ${name} did not register: ${msgOf(e)}`, { code: 'LOOK_REGISTER', data: e }));
     }
   }
-  const device = q.has('canvas2d') ? null : await presentDevice();
+  const device = q.has('canvas2d') ? null : await presentDevice(journal);
   // the layout's enlarger mode for new documents (CHB-031: real by default, normalised in simple and tiny)
   const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   let rtNow: Runtime | null = null;
   // the layout on screen is one the assistant wrote (wb.layouts.use, approved by him): not in LAYOUTS
   let agentLayout = !!savedLayout;
   const chat: LazyChat = lazyChat(studio, (message, err) => {
-    console.warn(message, err);
+    journal.warn('agent', err ? `${message}: ${msgOf(err)}` : message, { code: 'CB-H420', ...(err ? { data: err } : {}) });
     rtNow?.diagnostics.warn('CB-H420', message, { runtime: true, facts: err ? [msgOf(err)] : [] });
     rtNow?.chrome.toast(message, { kind: 'warn', ms: 5000, ...(err ? { detail: `Technical: ${msgOf(err)}` } : {}) });
   }, {
@@ -269,7 +282,10 @@ async function main(): Promise<void> {
     device,
     onSpace: (space, why) => {
       studio.bridge.displaySpace = space;
-      if (why !== 'display') status(why, { error: true });
+      if (why !== 'display') {
+        journal.warn('gpu', why, { code: 'PRESENTER_FALLBACK' });
+        status(why, { error: true });
+      }
     },
   });
   const exportState = { format: 'tiff16' as ExportFormat, space: 'srgb' as (typeof EXPORT_SPACES)[number]['id'] };
@@ -277,7 +293,17 @@ async function main(): Promise<void> {
 
   root.innerHTML = '';
   bootTheme.dispose();
-  const mountOpts = { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}) };
+  // the service of the diagnostics kit (Help ▸ Report a Problem…, Help ▸ Diagnostics…, File ▸ Open Report…)
+  const diagnostics: StudioDiagnostics = createDiagnostics({
+    journal, q, kv, studio,
+    rt: () => rtNow!,
+    engineLabel: () => host.label,
+    layout: () => ({ id: def.id, label: def.label }),
+    viewports: () => (rtNow ? viewports(rtNow) : []),
+    openFiles: (files, as) => openFiles(files, { as }),
+    settings: () => ({ dust: host.settings?.dust ?? null, engine: q.get('engine') ?? 'auto', debug: journal.debugOn }),
+  });
+  const mountOpts = { presenter, save, chat, journal, diagnostics, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS, ...DIAGNOSTICS_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}) };
   /**
    * Mounts a built layout with the studio's services and renderers, then attaches the studio (studio-kit's
    * mountStudio, in two halves): `adopt` takes over the log and the mounted documents of the runtime before (View ▸
@@ -508,7 +534,7 @@ async function main(): Promise<void> {
           // in his words (WS-C's explainError), the technical text in the tooltip
           failed.push(`${pf.name}: ${rt.explainError?.(err, {})?.text ?? plainMsg(err)}`);
           details.push(`${pf.name}: ${msgOf(err)}`);
-          console.error(err);
+          journal.error('decode', `${pf.name} could not be opened: ${msgOf(err)}`, { code: (err as { code?: string })?.code ?? 'E_OPEN', data: err });
         }
       }
     } finally {
@@ -652,6 +678,9 @@ async function main(): Promise<void> {
     const dt = e.dataTransfer;
     if (!dt?.files.length) return;
     e.preventDefault();
+    // a problem report dropped on the studio opens as one (File ▸ Open Report…)
+    const zipped = [...dt.files].find((f) => /\.zip$/i.test(f.name));
+    if (zipped) return void zipped.arrayBuffer().then((b) => diagnostics.openReport(new Uint8Array(b)));
     const items = [...dt.items].filter((i) => i.kind === 'file');
     const handles = items.map((i) => (i as DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> }).getAsFileSystemHandle?.() ?? Promise.resolve(null));
     const files = fromFileList(dt.files);
@@ -764,7 +793,8 @@ async function main(): Promise<void> {
         mounted = await mountLayout(built.app, past);
       } catch (e) {
         // the old interface is gone: start the new layout the old way (a reload; frames without a file handle close)
-        console.error(e);
+        journal.error('ui', `the layout ${def2.label} could not be mounted: ${msgOf(e)}`, { code: 'LAYOUT_MOUNT', data: e });
+        await keptJournal.flush();
         location.href = u.toString();
         return;
       }
@@ -775,7 +805,8 @@ async function main(): Promise<void> {
       dropOfflineSelection();
       history.replaceState(history.state, '', u.toString());
       document.body.dataset['layout'] = def.id;
-      for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
+      for (const d of built.app.diagnostics.list) if (d.level === 'warning') journal.warn('ui', d.message, { code: d.code });
+      journal.info('ui', `layout: ${def.label}`, { code: 'LAYOUT', data: { id: def.id } });
       const open = studio.frames.all().length;
       status(`layout: ${def.label}${open ? ` · ${open} frame${open > 1 ? 's' : ''} open` : ''}`);
     } finally {
@@ -803,6 +834,8 @@ async function main(): Promise<void> {
   // service worker state, in the status line
   const offline = el('span', { id: 'offline-state', class: 'small', title: 'Whether the studio starts without a network connection' });
   statusBarEl.insertBefore(offline, statusEl);
+  // the quiet badge: errors since he last looked; a click opens Help ▸ Diagnostics…
+  statusBarEl.insertBefore(diagnosticsBadge(journal, () => void rt.runCommand('diagnostics.show', null)), statusEl);
 
   // ── export and the document ──
   /** File ▸ Save Document: the selected frame's document (format 3), as JSON beside the scan's name */
@@ -837,7 +870,9 @@ async function main(): Promise<void> {
 
   // ── service worker (offline start) ──
   if ('serviceWorker' in navigator && !q.has('nosw')) {
+    swFacts.state = 'registering';
     void navigator.serviceWorker.register('/sw.js').then((reg) => {
+      watchServiceWorker(journal, navigator.serviceWorker, reg);
       const ready = (): void => void (offline.textContent = 'offline ready');
       if (navigator.serviceWorker.controller) ready();
       else offline.textContent = 'caching…';
@@ -848,13 +883,16 @@ async function main(): Promise<void> {
           if (w.state === 'installed' && navigator.serviceWorker.controller) offline.textContent = 'update ready: reload';
         });
       });
-    }).catch(() => undefined);
+    }).catch((e: unknown) => {
+      swFacts.state = 'failed';
+      journal.warn('sw', `the service worker did not register: ${msgOf(e)}`, { code: 'SW_REGISTER', data: e });
+    });
   }
 
   // F18: Open as Photos / Negatives lasts until a restart, then Guess again, unless he kept it (File ▸ Open As)
   if (openAsPref() !== 'auto' && !rt.store.peek(['prefs', 'openAsKeep'])) void rt.runCommand('file.openAs.auto', null);
   showOpenAs();
-  eachMount(() => hook(rt, studio, def.id, host, exportFrame, chat));
+  eachMount(() => hook(rt, studio, def.id, host, exportFrame, chat, diagnostics));
   // a selection restored from last time that is not open: cleared, so the first click on it opens its file
   function dropOfflineSelection(): void {
     if (studio.current && sel.isOffline(rt.state, studio.current)) {
@@ -866,7 +904,8 @@ async function main(): Promise<void> {
   armed = true;
   const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => sel.isOffline(rt.state, x)).length ?? 0;
   status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');
-  for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
+  for (const d of built.app.diagnostics.list) if (d.level === 'warning') journal.warn('ui', d.message, { code: d.code });
+  journal.info('ui', `layout: ${def.label}`, { code: 'LAYOUT', data: { id: def.id } });
   document.body.dataset['ready'] = '1';
   document.body.dataset['layout'] = def.id;
 }
@@ -909,8 +948,8 @@ function viewports(rt: Runtime): DomViewport[] {
 
 type ExportFn = (f: string, to: 'picker' | 'memory', o?: { format?: ExportFormat; space?: 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' }) => Promise<{ width: number; height: number; bytes: number; mime: string; name: string; bits: number } | null>;
 
-function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat): void {
-  window.chromobench = makeHook(rt, studio, layout, host, exportFrame, chat);
+function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat, diagnostics: StudioDiagnostics): void {
+  window.chromobench = makeHook(rt, studio, layout, host, exportFrame, chat, diagnostics);
 }
 
 /** A frame's entry in the log, as the hook reports it. */
@@ -944,7 +983,7 @@ interface HookEntry {
  *   pixel(x, y), canvasPixel(x, y), presenter(), chainRuns(), chainRunsByShown(), measure(x, y), exportPng(space, format),
  *   bench(steps), chat (the session), chatService, eval(code)
  */
-function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat) {
+function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat, diagnostics: StudioDiagnostics) {
   const cur = (): string => studio.current ?? '';
   const vp = (): DomViewport | null => viewports(rt)[0] ?? null;
   const docNow = (): Document | null => studio.doc(cur()) ?? null;
@@ -1106,6 +1145,11 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
     /** the assistant's chat session (CHB-008; empty until the assistant is loaded) and its service */
     chat: chat.session,
     chatService: chat,
+    /**
+     * CHB-038: the diagnostics service (journal, environment(), build({ parts, description }) → zip bytes, openReport(bytes),
+     * opened) and the WebGPU devices the host made (a test injects a validation error into one)
+     */
+    diagnostics: Object.assign(diagnostics, { devices: () => [...watchedDevices] }),
     /** dev entry point: run DSL code in its own worker session on the selected frame (loads the assistant) */
     eval: (code: string, o: { frame?: string; timeoutMs?: number; signal?: AbortSignal } = {}) => chat.devEval(code, o),
   };
@@ -1119,6 +1163,6 @@ declare global {
 }
 
 main().catch((e) => {
-  console.error(e);
+  journal.error('app', `the studio failed to start: ${msgOf(e)}`, { code: 'BOOT', data: e });
   if (document.body.dataset['ready'] !== 'report') report('The studio failed to start', [String((e as Error)?.stack ?? e)]);
 });

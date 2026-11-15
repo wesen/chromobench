@@ -47,7 +47,7 @@ export async function framePass(rt: GpuRuntime, entry: 'orient' | 'straighten' |
   new Float32Array(u, 16, 16).set([region.x, region.y, region.w, region.h, f.crop.x, f.crop.y, f.crop.w, f.crop.h, origin.x, origin.y, frameW, frameH, Math.cos(th), Math.sin(th), 0, 0]);
   const ub = rt.buffers.acquire({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'frame.u');
   dev.queue.writeBuffer(ub, 0, u);
-  const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: 80 } }, { binding: 1, resource: src.createView() }, { binding: 2, resource: out.createView() }] });
+  const bg = dev.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: 80 } }, { binding: 1, resource: src.createView() }, { binding: 2, resource: out.createView() }] });
   const enc = dev.createCommandEncoder();
   const pass = enc.beginComputePass();
   pass.setPipeline(pipe);

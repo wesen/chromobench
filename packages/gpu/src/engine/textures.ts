@@ -47,7 +47,7 @@ export async function uploadU16(rt: GpuRuntime, img: SourceImg, rect: Box, label
   }
   const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.u');
   rt.device.queue.writeBuffer(ub, 0, new Uint32Array([rect.w, rect.h, 0, 0]));
-  const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: 32 } }, { binding: 1, resource: t16.createView() }, { binding: 2, resource: out.createView() }, { binding: 6, resource: { buffer: lut } }] });
+  const bg = rt.device.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub, size: 32 } }, { binding: 1, resource: t16.createView() }, { binding: 2, resource: out.createView() }, { binding: 6, resource: { buffer: lut } }] });
   const enc = rt.device.createCommandEncoder();
   const pass = enc.beginComputePass();
   pass.setPipeline(pipe);
@@ -74,7 +74,7 @@ export async function uploadF32(rt: GpuRuntime, data: Float32Array, w: number, h
   const out = rt.textures.acquire({ format: 'rgba32float', w, h, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING }, label);
   const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.f');
   rt.device.queue.writeBuffer(ub, 0, new Uint32Array([w, h, c, 0]));
-  const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 7, resource: { buffer: ub, size: 32 } }, { binding: 8, resource: { buffer: sb, size: bytes } }, { binding: 9, resource: out.createView() }] });
+  const bg = rt.device.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries: [{ binding: 7, resource: { buffer: ub, size: 32 } }, { binding: 8, resource: { buffer: sb, size: bytes } }, { binding: 9, resource: out.createView() }] });
   const enc = rt.device.createCommandEncoder();
   const pass = enc.beginComputePass();
   pass.setPipeline(pipe);
@@ -94,7 +94,7 @@ export async function readU16(rt: GpuRuntime, tex: GPUTexture, w: number, h: num
   const sb = rt.buffers.acquire({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }, 'pack16.out');
   const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pack16.u');
   rt.device.queue.writeBuffer(ub, 0, new Uint32Array([w, h, 0, 0]));
-  const bg = rt.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 3, resource: { buffer: ub, size: 32 } }, { binding: 4, resource: tex.createView() }, { binding: 5, resource: { buffer: sb, size: bytes } }] });
+  const bg = rt.device.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries: [{ binding: 3, resource: { buffer: ub, size: 32 } }, { binding: 4, resource: tex.createView() }, { binding: 5, resource: { buffer: sb, size: bytes } }] });
   const enc = rt.device.createCommandEncoder();
   const pass = enc.beginComputePass();
   pass.setPipeline(pipe);
@@ -152,7 +152,7 @@ export async function combinePass(rt: GpuRuntime, dummy: GPUTexture, mode: numbe
   const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'combine.u');
   dev.queue.writeBuffer(ub, 0, u);
   const bg = dev.createBindGroup({
-    layout: pipe.getBindGroupLayout(0),
+    label: pipe.label, layout: pipe.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: ub, size: 32 } },
       { binding: 1, resource: a.createView() },

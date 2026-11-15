@@ -8,6 +8,7 @@ import { buildLayout, sel, type LayoutDef } from '../../src/index.ts';
 import { LAYOUTS, type LayoutId } from '../../layouts/index.js';
 import { studioWorkbench, type WorkbenchHost } from '../../kits/chat/src/workbench.ts';
 import { started } from '../helpers.ts';
+import { Journal } from '@chromobench/shell';
 
 const val = (r: { yaml: string; error?: unknown }): any => {
   if (r.error) throw new Error(r.yaml);
@@ -127,6 +128,23 @@ describe('wb over the studio', () => {
         .module(ck.module('main', { label: 'Main', stages: ['darkroom'] }).center(cb.viewer(cb.sel.frame.print())).right(cb.kits.stack.panels.layers('print'))) });
       return JSON.stringify(built.warnings.map((w) => w.code));`);
     expect(val(r)).toContain('CB-S101');
+  });
+});
+
+describe('wb.diagnostics (CHB-038)', () => {
+  it('reads the journal: rows with counts, filters, totals, the environment and the explain text', async () => {
+    const b = await bench();
+    const none = await b.run(`return await wb.diagnostics()`);
+    expect(none.yaml).toMatch(/E_WORKBENCH|no diagnostics journal/);
+    const j = new Journal({ session: 'p1' });
+    (b.rt.services as Record<string, unknown>)['diagnostics'] = { journal: j, environment: () => ({ gpu: { engine: { name: 'synthetic' } } }), show() {}, report() {}, openReport() {}, copySummary() {} };
+    j.error('gpu', 'engine: validation error: Destroyed texture used in a submit', { code: 'GPU_VALIDATION', data: { during: 'film.grain' } });
+    j.error('gpu', 'engine: validation error: Destroyed texture used in a submit', { code: 'GPU_VALIDATION', data: { during: 'film.grain' } });
+    j.info('command', 'frame.next');
+    const d = val(await b.run(`const d = await wb.diagnostics({ level: 'warn' }); const all = await wb.diagnostics(); return JSON.stringify({ rows: d.rows.map((r) => r.code + ' x' + r.count), all: all.rows.length, err: d.totals.error, gpu: d.environment.gpu.engine.name, text: (await wb.diagnostics().explain()).split('\\n')[1] })`));
+    expect(d).toEqual({ rows: ['GPU_VALIDATION x2'], all: 2, err: 2, gpu: 'synthetic', text: 'this session: 2 errors, 0 warnings, 1 info' });
+    const bad = await b.run(`return await wb.diagnostics({ level: 'loud' })`);
+    expect(bad.yaml).toMatch(/no level loud/);
   });
 });
 

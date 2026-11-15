@@ -31,6 +31,8 @@ import { RecordingChrome, type ChromeApi, type DialogSpec, type ToastOpts } from
 import { Workspace } from './workspace.ts';
 import { startAutosave, type PersistenceAdapter, type Saved, type SaveKey } from './persist.ts';
 import { RenderQueue } from './render/queue.ts';
+import { Journal } from '../core/journal.ts';
+import { journalRuntime } from './journal-runtime.ts';
 import type { Presenter, RenderBridge } from './render/types.ts';
 
 export interface Services {
@@ -44,6 +46,8 @@ export interface Services {
   chrome?: ChromeApi;
   /** the host's capabilities (functions), typed by the program: a command's requires: 'host.<name>' needs host.<name> */
   host?: object | null;
+  /** the diagnostics journal (CHB-038): the runtime records its commands, log entries, renders and diagnostics */
+  journal?: Journal;
   /** anything else the program's handlers need (ctx.services.engine, …) */
   [k: string]: unknown;
 }
@@ -238,6 +242,7 @@ export class Runtime<S = any> {
       focusIsButton: () => this.focus.button,
     });
     for (const e of ir.events) this.on(e.event, (...a: unknown[]) => this.runTarget(e.f, a));
+    if (services.journal instanceof Journal) this.stops.push(journalRuntime(this, services.journal));
     if (services.persistence && ir.opts.persist !== false) {
       this.autosave = startAutosave(this, services.persistence, this.saveKey);
       this.stops.push(() => this.autosave?.stop());
@@ -365,6 +370,7 @@ export class Runtime<S = any> {
   }
   runCommand(id: string, e: unknown, ...args: unknown[]): unknown {
     if (e) this.lastEvent = e;
+    this.emit('command', id, args);
     const ctx = this.ctx();
     try {
       return this.commands.run(id, ctx, ...args);

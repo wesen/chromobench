@@ -73,8 +73,8 @@ export class FilmGpu {
   drop(): void {
     for (const b of this.buffers.values()) b.destroy();
     this.buffers.clear();
-    this.onesTex?.destroy();
-    this.onesTex = null;
+    for (const t of this.onesBySize.values()) t.destroy();
+    this.onesBySize.clear();
   }
 
   private buffer(key: string, make: () => Float32Array<ArrayBuffer>): GPUBuffer {
@@ -111,7 +111,7 @@ export class FilmGpu {
     if (o.b) entries.push({ binding: 2, resource: o.b.createView() });
     if (o.tab) entries.push({ binding: 4, resource: { buffer: o.tab } });
     if (outs.length === 3) entries.push({ binding: 5, resource: outs[1]!.createView() }, { binding: 6, resource: outs[2]!.createView() });
-    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
+    const bg = dev.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries });
     const enc = dev.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(pipe);
@@ -309,14 +309,32 @@ export class FilmGpu {
     }
   }
 
-  private onesTex: GPUTexture | null = null;
-  /** A texture of ones on the grid of `like` (cached per size). */
+  /**
+   * Textures of ones by grid size, the newest few (CHB-038). There was one, destroyed when another size was asked: a
+   * thumbnail's grain (160×107) and the viewer's grain take turns, and each pass awaits its pipeline between getting
+   * this texture and submitting, so the other render destroyed it under a pending submit — the owner's repeated
+   * "Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit". Now each size
+   * keeps its own, and one let go is retired (destroyed when no GPU work is in flight).
+   */
+  private readonly onesBySize = new Map<string, GPUTexture>();
+  private static readonly ONES_KEPT = 4;
+  /** A texture of ones on the grid of `like`. */
   private async ones(like: GPUTexture): Promise<GPUTexture> {
-    if (this.onesTex && this.onesTex.width === like.width && this.onesTex.height === like.height) return this.onesTex;
-    this.onesTex?.destroy();
-    const t = this.rt.device.createTexture({ size: [like.width, like.height], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    const key = `${like.width}x${like.height}`;
+    const hit = this.onesBySize.get(key);
+    if (hit) {
+      this.onesBySize.delete(key);
+      this.onesBySize.set(key, hit);
+      return hit;
+    }
+    const t = this.rt.device.createTexture({ label: `film.grain.ones ${key}`, size: [like.width, like.height], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
     this.rt.device.queue.writeTexture({ texture: t }, new Float32Array(like.width * like.height * 4).fill(1), { bytesPerRow: like.width * 16 }, [like.width, like.height]);
-    this.onesTex = t;
+    this.onesBySize.set(key, t);
+    while (this.onesBySize.size > FilmGpu.ONES_KEPT) {
+      const [k, old] = this.onesBySize.entries().next().value!;
+      this.onesBySize.delete(k);
+      this.rt.retire(old);
+    }
     return t;
   }
 }

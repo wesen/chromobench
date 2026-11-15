@@ -118,6 +118,35 @@ export interface WbUse {
   note: string;
 }
 
+/** One row of the studio's diagnostics journal (CHB-038): an event and how often it happened. */
+export interface WbJournalRow {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  source: string;
+  message: string;
+  code?: string;
+  data?: unknown;
+  frame?: string;
+  count: number;
+  first: number;
+  last: number;
+  session: string;
+}
+
+/** What wb.diagnostics() answers: the journal (filtered), its totals, the environment and a text summary. */
+export interface WbDiagnostics {
+  session: string;
+  debug: boolean;
+  /** occurrences in this session by level */
+  totals: { debug: number; info: number; warn: number; error: number };
+  /** errors since the photographer last looked (the badge) */
+  unseen: number;
+  rows: WbJournalRow[];
+  /** browser, screen, GPU devices (adapter, limits, features, losses), engine, layout, service worker */
+  environment: unknown;
+  /** the journal's explain: totals, errors and warnings, the last rows */
+  text: string;
+}
+
 /** Who asks: the eval (provenance) and the agent's reason. */
 export interface WbActor {
   eval: string;
@@ -140,8 +169,10 @@ export interface Workbench {
   use(layout: WbLayoutData, o: WbActor): WbUse | Promise<WbUse>;
   /** registers an agent-written look (a .cblook.js source) where the studio compiles */
   defineLook?(src: string): { name: string; version: number; label: string } | Promise<{ name: string; version: number; label: string }>;
+  /** the studio's diagnostics journal (CHB-038): what went wrong, how often, on what machine */
+  diagnostics?(o: { level?: string; source?: string; limit?: number; text?: string }): WbDiagnostics | Promise<WbDiagnostics>;
 }
 
 /** The workbench methods the sandbox reaches through deferred host calls. */
-export const WB_METHODS = ['commands', 'run', 'set', 'selectors', 'state', 'screen', 'layouts', 'build', 'use', 'defineLook'] as const;
+export const WB_METHODS = ['commands', 'run', 'set', 'selectors', 'state', 'screen', 'layouts', 'build', 'use', 'defineLook', 'diagnostics'] as const;
 export type WbMethod = (typeof WB_METHODS)[number];

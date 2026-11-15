@@ -117,6 +117,12 @@ abstract class Pool<T extends { destroy(): void }, D> {
     for (const [o, w] of [...this.pins]) if (w === owner) { this.pins.delete(o); this.release(o); }
   }
 
+  /**
+   * How a trimmed object is destroyed: the runtime defers it while GPU work is in flight (GpuRuntime.retire), because a
+   * released object may still be bound by a pass that has not been submitted yet (CHB-038). Default: at once.
+   */
+  retire: ((obj: T) => void) | null = null;
+
   /** Destroys least-recently released objects until live bytes ≤ targetBytes or the free lists are empty. */
   trimAll(targetBytes: number): void {
     const all = [...this.free.values()].flat().sort((a, b) => a.releasedAt - b.releasedAt);
@@ -124,7 +130,8 @@ abstract class Pool<T extends { destroy(): void }, D> {
       if (this.budget.live <= targetBytes) break;
       const list = this.free.get(e.key)!;
       list.splice(list.indexOf(e), 1);
-      e.obj.destroy();
+      if (this.retire) this.retire(e.obj);
+      else e.obj.destroy();
       this.budget.live -= e.bytes;
     }
   }

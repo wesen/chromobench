@@ -47,7 +47,7 @@ export class Reducer {
     ];
     if (entry === 'moments') entries.push({ binding: 2, resource: { buffer: pb, size: pbytes } });
     else entries.push({ binding: 3, resource: { buffer: bb, size: nb * 4 } });
-    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
+    const bg = dev.createBindGroup({ label: pipe.label, layout: pipe.getBindGroupLayout(0), entries });
     const pass = enc.beginComputePass();
     pass.setPipeline(pipe);
     pass.setBindGroup(0, bg);

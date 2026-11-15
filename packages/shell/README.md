@@ -154,6 +154,24 @@ ck.kit('files').commands({ 'file.open': { label: 'Open Files…', requires: 'hos
 app.start({ host: { openFiles: () => picker.click() } });
 ```
 
+## The diagnostics journal
+
+`Journal` (`core/journal.ts`, CHB-038) records what happened while a program runs, for the person who has to find out
+why: structured events `{ level: debug|info|warn|error, source: gpu|engine|worker|decode|ui|command|store|agent|sw|app,
+code?, message, data?, frame? }` in a ring of rows (default 3000). A repeated event is one row with its `count`, `first`
+and `last` time (data is the latest occurrence's; put what varies, like the node a render ran, in `data`, not in the
+message). `subscribe`, `rows(filter)`, `totals()`, `unseenErrors`/`markSeen()` (a badge), `text()`, `explain()`;
+`tail(n)` is the last rows and every error, which a host persists, and `restore(snapshot)` puts an earlier session's
+rows first. Debug events are dropped unless `debugOn`.
+
+One capture layer per source, each taking what it watches as an argument (no globals in the headless half):
+`captureConsole(journal, console)` (console.error/warn become rows; the journal's own rows are mirrored to the
+original methods, so DevTools still shows them, without an echo), `captureErrors(journal, window)` (uncaught errors,
+unhandled rejections), and the runtime: `app.start({ journal })` records every command run (`rt.on('command')`), every
+log entry (labels, authors, proposals, approvals; a restore is one row), undo/redo, refusals, the runtime's own
+diagnostics, renders (debug) and render errors (`app/journal-runtime.ts`). Hosts add theirs (the studio: the GPU
+devices, the workers, the service worker).
+
 ## Diagnostics
 
 The build reports in the program's words, at the program's line: CK-Bxxx bindings and options, CK-Dxxx docking,

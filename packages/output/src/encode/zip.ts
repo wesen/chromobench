@@ -51,3 +51,43 @@ export function zip(entries: readonly (readonly [string, Uint8Array])[]): Uint8A
   for (const p of all) { out.set(p, o); o += p.length; }
   return out;
 }
+
+/**
+ * Reads a stored (uncompressed) zip such as `zip` writes (CHB-038: problem reports), through its central directory.
+ * Entries are views into `bytes`. A compressed entry, a bad CRC or a truncated file throws a RangeError.
+ */
+export function unzip(bytes: Uint8Array): Map<string, Uint8Array> {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) throw new RangeError('unzip: not a zip file (no end of central directory)');
+  const count = dv.getUint16(end + 10, true);
+  let p = dv.getUint32(end + 16, true);
+  const dec = new TextDecoder();
+  const out = new Map<string, Uint8Array>();
+  for (let n = 0; n < count; n++) {
+    if (p + 46 > bytes.length || dv.getUint32(p, true) !== 0x02014b50) throw new RangeError('unzip: damaged central directory');
+    const method = dv.getUint16(p + 10, true);
+    const crc = dv.getUint32(p + 16, true);
+    const size = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extra = dv.getUint16(p + 30, true);
+    const comment = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    if (method !== 0) throw new RangeError(`unzip: ${name} is compressed (only stored entries are read)`);
+    if (dv.getUint32(local, true) !== 0x04034b50) throw new RangeError(`unzip: ${name}: damaged local header`);
+    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    if (start + size > bytes.length) throw new RangeError(`unzip: ${name} is cut short`);
+    const data = bytes.subarray(start, start + size);
+    if (crc32(data) !== crc) throw new RangeError(`unzip: ${name}: CRC mismatch`);
+    out.set(name, data);
+    p += 46 + nameLen + extra + comment;
+  }
+  return out;
+}
