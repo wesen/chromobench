@@ -144,3 +144,31 @@ export function detectPlatform(): Platform {
   return nav && /Mac|iPhone|iPad/.test(nav.platform || nav.userAgent || '') ? MAC : OTHER;
 }
 
+
+/**
+ * A proxy over a state object, which may be frozen (the document tier is: the log's documents are deep-frozen).
+ * A frozen target's properties would have to be returned as they are, so the proxy's own target is an empty
+ * stand-in and every trap reads the real object; the handler's traps receive the real object as their target.
+ */
+export function overProxy<T extends object>(real: T, h: ProxyHandler<T>): T {
+  const stand = (Array.isArray(real) ? [] : Object.create(Object.getPrototypeOf(real))) as T;
+  return new Proxy(stand, {
+    get: (_s, k, r) => (h.get ? h.get(real, k, r) : Reflect.get(real, k)),
+    has: (_s, k) => (h.has ? h.has(real, k) : Reflect.has(real, k)),
+    ownKeys: () => (h.ownKeys ? h.ownKeys(real) : Reflect.ownKeys(real)),
+    getOwnPropertyDescriptor: (s, k) => {
+      if (h.getOwnPropertyDescriptor) return h.getOwnPropertyDescriptor(real, k);
+      const d = Reflect.getOwnPropertyDescriptor(real, k);
+      if (!d) return undefined;
+      if (Array.isArray(real) && k === 'length') {
+        (s as unknown[]).length = (real as unknown[]).length;
+        return Reflect.getOwnPropertyDescriptor(s, k);
+      }
+      return { ...d, configurable: true, ...('value' in d ? { writable: true } : {}) };
+    },
+    getPrototypeOf: () => Object.getPrototypeOf(real),
+    set: (_s, k, v, r) => (h.set ? h.set(real, k, v, r) : false),
+    deleteProperty: (_s, k) => (h.deleteProperty ? h.deleteProperty(real, k) : false),
+    defineProperty: () => false,
+  });
+}

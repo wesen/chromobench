@@ -147,7 +147,7 @@ export function explainKit(k: Kit): string {
   const d = k.def;
   const lines = [`kit ${k.name}${d.version ? '@' + d.version : ''}${d.requires.length ? ` (requires ${d.requires.map(r => (typeof r === 'string' ? r : r.name)).join(', ')})` : ''}`];
   if (d.state.length) lines.push(`  state ${d.state.map(s => s.key + (s.view === true ? ' (view)' : Array.isArray(s.view) ? ` (view: ${s.view.join(', ')})` : '')).join(', ')}`);
-  if (d.routes.length) lines.push(`  routes ${d.routes.map(r => r.prefix + (r.keyDepth ? '.*'.repeat(r.keyDepth) : '')).join(', ')}`);
+  if (d.mounts.length) lines.push(`  mounts ${d.mounts.map(r => r.prefix + (r.keyDepth ? '.*'.repeat(r.keyDepth) : '') + (r.kind ? ` (${r.kind})` : '')).join(', ')}`);
   if (d.forms.length) lines.push(`  forms ${d.forms.map(f => f.name).join(', ')}`);
   for (const f of d.fragments) lines.push(`  fragment ${f.target}: ${Object.keys(f.spec.methods || {}).map(m => '.' + m + '()').join(' ')}${Object.keys(f.spec.slots || {}).length ? ' slots ' + Object.keys(f.spec.slots!).join(', ') : ''}`);
   if (d.commands.length) lines.push(`  commands ${d.commands.map(c => c.id).join(', ')}`);

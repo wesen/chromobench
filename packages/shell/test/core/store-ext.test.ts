@@ -1,111 +1,83 @@
-// The store extensions: prefix tiers, named preview layers, routes with adapters, compound history entries.
+// The store's tiers: prefix tiers, named drafts over the gesture, and the document tier as the values document log
+// with mounted documents (a frame per document, under rules), batches across documents, proposals.
 import { describe, expect, it } from 'vitest';
-import { Store, type Patch, type RouteAdapter, type RouteApi } from '../../src/core/store.ts';
-import { History, type HistoryPart } from '../../src/core/history.ts';
+import { plan, set, transaction, ValueError, type Change, type TxOptions } from '@chromobench/values';
+import { MAIN, Store, TxRefused } from '../../src/core/store.ts';
 import { Cell, Scheduler } from '../../src/core/cells.ts';
 import { manualClock } from '../../src/testing/index.ts';
 
 describe('tiers by path prefix', () => {
   it('the longest listed prefix wins', () => {
     const s = new Store({ roll: { frames: [1, 2], contact: { cols: 6 } }, ui: {} }, { view: ['ui', 'roll.contact'] });
-    const h = new History(s);
     expect(s.tierOf(['roll', 'frames'])).toBe('document');
     expect(s.tierOf(['roll', 'contact', 'cols'])).toBe('view');
     s.set('roll.contact.cols', 8);
-    expect(h.entries.length).toBe(0);
+    expect(s.log.steps.length).toBe(0);
     s.tx('Frames', t => void t.roll.frames.push(3));
-    expect(h.entries.length).toBe(1);
+    expect(s.log.steps.length).toBe(1);
     expect(s.snapshot('document')).toEqual({ roll: { frames: [1, 2, 3] } });
     expect(s.snapshot('view')).toEqual({ ui: {}, roll: { contact: { cols: 8 } } });
+    // a document write of the whole slice keeps the view tier inside it
+    s.tx('Roll', t => void (t.roll = { frames: [9], contact: { cols: 1 } }));
+    expect(s.committed.roll).toEqual({ frames: [9], contact: { cols: 1 } });
+    expect(s.log.doc(MAIN)).toEqual({ roll: { frames: [9] } });
+    s.undo();
+    expect(s.committed.roll).toEqual({ frames: [1, 2, 3], contact: { cols: 1 } });
+    expect(() => s.writeView([{ path: ['roll', 'frames'], value: [] }])).toThrow(/document tier/);
   });
 });
 
-describe('named preview layers', () => {
-  it('current = doc ⊕ proposal layers ⊕ gesture; a tx overlapping the gesture cancels it, proposals stay', () => {
+describe('drafts', () => {
+  it('current = committed ⊕ named drafts ⊕ gesture; a tx overlapping the gesture cancels it, drafts stay', () => {
     const s = new Store({ dev: { a: 1, b: 2 } });
-    const h = new History(s);
-    const prop = s.layer('proposal:tx42').set('dev.a', 10);
+    const prop = s.draft('proposal:tx42').set('dev.a', 10);
     expect(s.current.dev.a).toBe(10);
-    expect(s.doc.dev.a).toBe(1);
+    expect(s.committed.dev.a).toBe(1);
     s.preview('dev.a', 20); // the gesture is on top
     expect(s.current.dev.a).toBe(20);
     s.tx('B', t => void (t.dev.b = 3)); // no overlap: the gesture survives
     expect(s.previewing).toBe(true);
     s.tx('A', t => void (t.dev.a = 5)); // overlap: cancelled
     expect(s.previewing).toBe(false);
-    expect(s.current.dev.a).toBe(10); // the proposal still shows
+    expect(s.current.dev.a).toBe(10); // the draft still shows
     expect(prop.size).toBe(1);
     prop.commit('Approve');
-    expect(s.doc.dev.a).toBe(10);
-    expect(h.entries.map(e => e.label)).toEqual(['B', 'A', 'Approve']);
-    s.layer('p2').set('dev.b', 99);
-    s.layer('p2').drop();
+    expect(s.committed.dev.a).toBe(10);
+    expect(s.log.steps.map(st => st.label)).toEqual(['B', 'A', 'Approve']);
+    expect(s.log.last!.tx.source).toEqual({ kind: 'draft', draft: 'proposal:tx42' });
+    expect(s.drafts.size).toBe(0);
+    s.draft('p2').set('dev.b', 99);
+    s.draft('p2').drop();
     expect(s.current.dev.b).toBe(3);
+    expect(s.draft('gesture')).toBe(s.gesture);
   });
 });
 
-/** a fake EditLog route: recipes.<frame>.<field>; refuses values over 100; undo units with a cursor */
-function editLogAdapter() {
-  const logs = new Map<string, { units: { field: string; before: unknown; after: unknown }[]; cursor: number }>();
-  let api: RouteApi | null = null;
-  const log = (f: string) => logs.get(f) || logs.set(f, { units: [], cursor: 0 }).get(f)!;
-  const recipe = (s: Store, f: string) => s.doc.recipes[f];
-  const adapter: RouteAdapter & { logs: typeof logs; previews: number; api: () => RouteApi } = {
-    id: 'recipes',
-    logs,
-    previews: 0,
-    api: () => api!,
-    attach(a) {
-      api = a;
-    },
-    preview() {
-      adapter.previews++;
-    },
-    apply(patches: Patch[]) {
-      const parts: HistoryPart[] = [];
-      const mirror = [];
-      for (const p of patches) {
-        const [, frame, field] = p.path as string[];
-        if (typeof p.after === 'number' && p.after > 100) throw Object.assign(new Error(`${field} ${p.after} is out of range`), { code: 'E_ARG_RANGE' });
-        const L = log(frame!);
-        L.units = L.units.slice(0, L.cursor);
-        L.units.push({ field: field!, before: p.before, after: p.after });
-        L.cursor = L.units.length;
-        const unit = L.cursor;
-        const store = api!.store;
-        parts.push({
-          source: 'recipes',
-          channel: frame!,
-          undo: () => {
-            if (L.cursor !== unit) return false; // moved elsewhere: no longer applies
-            L.cursor--;
-            return [{ path: ['recipes', frame!], value: { ...recipe(store, frame!), [field!]: p.before } }];
-          },
-          redo: () => {
-            if (L.cursor !== unit - 1) return false;
-            L.cursor++;
-            return [{ path: ['recipes', frame!], value: { ...recipe(store, frame!), [field!]: p.after } }];
-          },
-        });
-        mirror.push({ path: ['recipes', frame!], value: { ...recipe(store, frame!), [field!]: p.after } });
-      }
-      return { parts, mirror };
-    },
-  };
-  return adapter;
-}
+/** a frame document's rules: time in (0, 100] per mutation; grade ≤ 5 on the whole document */
+const FRAME_RULES: TxOptions = {
+  validate: (c: Change) => {
+    const t = (c.after as { time?: number }).time;
+    if (typeof t === 'number' && (t <= 0 || t > 100)) throw new ValueError({ code: 'E_ARG_RANGE', message: `time ${t} is out of range`, path: 'time' });
+  },
+  validateTransaction: ({ after }) => {
+    if ((after as { grade: number }).grade > 5) throw new ValueError({ code: 'E_ARG_RANGE', message: 'grade ≤ 5' });
+  },
+};
 
-describe('routes', () => {
+describe('mounted documents', () => {
   const setup = () => {
-    const s = new Store({ recipes: { f1: { time: 10, grade: 2 }, f2: { time: 12, grade: 2 } }, catalog: { f1: { flag: null as string | null } }, ui: {} }, { routes: [{ prefix: 'recipes', keyDepth: 1 }] });
-    const h = new History(s);
-    const sch = new Scheduler(s, manualClock());
-    const a = editLogAdapter();
-    s.route('recipes', a);
-    return { s, h, sch, a };
+    const clock = manualClock();
+    const s = new Store({ catalog: { f1: { flag: null as string | null } }, ui: {} }, { rules: { frame: FRAME_RULES }, mounts: [{ prefix: 'recipes', keyDepth: 1, kind: 'frame' }], now: () => clock.now() });
+    s.open('f1', { time: 10, grade: 2 }, { at: 'recipes.f1', kind: 'frame' });
+    s.open('f2', { time: 12, grade: 2 }, { at: ['recipes', 'f2'], kind: 'frame' });
+    const sch = new Scheduler(s, clock);
+    return { s, sch, clock };
   };
-  it('a compound transaction: plain patches and the mirror land in one notify; one undo undoes both', () => {
-    const { s, h, sch, a } = setup();
+
+  it('a transaction over the main document and a frame: one notify, one step (a batch), one undo', () => {
+    const { s, sch } = setup();
+    expect(s.committed.recipes).toEqual({ f1: { time: 10, grade: 2 }, f2: { time: 12, grade: 2 } });
+    expect(s.tierOf(['recipes', 'f1', 'time'])).toBe('document');
     let runs = 0;
     new Cell(s, (st: any) => `${st.catalog.f1.flag}/${st.recipes.f1.time}`, () => void runs++);
     let notifies = 0;
@@ -117,79 +89,85 @@ describe('routes', () => {
     expect(notifies).toBe(1);
     sch.flushSync();
     expect(runs).toBe(2);
-    expect(s.doc.recipes.f1.time).toBe(14);
-    const e = h.entries[0]!;
-    expect(e.patches.map(p => p.path.join('.'))).toEqual(['catalog.f1.flag']); // recipes are the adapter's
-    expect(e.parts.length).toBe(1);
-    expect(e.channel).toBe('f1');
-    h.undo();
-    expect(s.doc.catalog.f1.flag).toBe(null);
-    expect(s.doc.recipes.f1.time).toBe(10);
-    expect(a.logs.get('f1')!.cursor).toBe(0);
-    h.redo();
-    expect(s.doc.recipes.f1.time).toBe(14);
+    expect(s.committed.recipes.f1.time).toBe(14);
+    expect(s.log.doc('f1')).toEqual({ time: 14, grade: 2 });
+    const st = s.log.undoStep!;
+    expect(s.log.docsOf(st)).toEqual([MAIN, 'f1']);
+    expect(st.batch).toBeDefined();
+    s.undo();
+    expect(s.committed.catalog.f1.flag).toBe(null);
+    expect(s.committed.recipes.f1.time).toBe(10);
+    s.redo();
+    expect(s.committed.recipes.f1.time).toBe(14);
+    expect(s.snapshot('document')).toEqual({ catalog: { f1: { flag: 'pick' } }, recipes: { f1: { time: 14, grade: 2 }, f2: { time: 12, grade: 2 } } });
   });
-  it('an adapter refusal aborts the whole transaction and drops the preview', () => {
-    const { s, h } = setup();
-    const refused: string[] = [];
-    s.onRefused(e => void refused.push(e.message));
+
+  it("a refusal by a document's rules aborts the whole transaction and drops the preview", () => {
+    const { s } = setup();
+    const refused: TxRefused[] = [];
+    s.onRefused(e => void refused.push(e));
     s.preview('recipes.f1.time', 50);
     s.tx('Bad', (t: any) => {
       t.catalog.f1.flag = 'pick';
       t.recipes.f1.time = 500;
     });
-    expect(s.doc.catalog.f1.flag).toBe(null);
-    expect(s.doc.recipes.f1.time).toBe(10);
+    expect(s.committed.catalog.f1.flag).toBe(null);
+    expect(s.committed.recipes.f1.time).toBe(10);
     expect(s.previewing).toBe(false);
-    expect(h.entries.length).toBe(0);
-    expect(refused[0]).toMatch(/out of range/);
+    expect(s.log.steps.length).toBe(0);
+    expect(refused[0]!.message).toMatch(/out of range/);
+    expect(refused[0]!.docs).toEqual([MAIN, 'f1']);
+    // without a listener the refusal throws
+    const bare = new Store({}, { rules: { frame: FRAME_RULES } });
+    bare.open('f', { time: 1, grade: 1 }, { at: 'r.f', kind: 'frame' });
+    expect(() => bare.set('r.f.grade', 9)).toThrow(TxRefused);
   });
-  it('gesture previews under a route are overlaid for readers and told to the adapter; commit goes to apply', () => {
-    const { s, h, a } = setup();
-    s.preview('recipes.f2.time', 13);
-    expect(s.current.recipes.f2.time).toBe(13);
-    expect(a.previews).toBe(1);
-    s.commit('Time');
-    expect(a.logs.get('f2')!.units.length).toBe(1);
-    expect(h.entries[0]!.source).toBe('recipes');
+
+  it('a gesture under a mount previews for readers and commits its net change as one entry of that document', () => {
+    const { s } = setup();
+    for (const v of [13, 15, 17]) s.preview('recipes.f2.time', v);
+    expect(s.current.recipes.f2.time).toBe(17);
+    expect(s.log.doc<{ time: number }>('f2').time).toBe(12);
+    s.commit('Time', { detail: '17 s' });
+    expect(s.log.entries).toHaveLength(1);
+    expect(s.log.last).toMatchObject({ doc: 'f2', tx: { label: 'Time', source: { kind: 'gesture', detail: '17 s' }, mutations: [{ op: 'set', path: 'time', value: 17 }] } });
   });
-  it('a roll balance: one entry holding many units, undone by one undo', () => {
-    const { s, h, a } = setup();
+
+  it('a roll balance: one batch over several frames, one undo; nudges coalesce into one step', () => {
+    const { s, clock } = setup();
     s.tx('Roll balance', (t: any) => {
       t.recipes.f1.grade = 3;
       t.recipes.f2.grade = 3;
     });
-    expect(h.entries.length).toBe(1);
-    expect(h.entries[0]!.parts.length).toBe(2);
-    h.undo();
-    expect([s.doc.recipes.f1.grade, s.doc.recipes.f2.grade]).toEqual([2, 2]);
-    expect([a.logs.get('f1')!.cursor, a.logs.get('f2')!.cursor]).toEqual([0, 0]);
+    expect(s.log.steps.length).toBe(1);
+    expect(s.log.undoStep!.seqs.length).toBe(2);
+    s.undo();
+    expect([s.committed.recipes.f1.grade, s.committed.recipes.f2.grade]).toEqual([2, 2]);
+    for (const v of [11, 12, 13]) {
+      s.set('recipes.f1.time', v, { label: 'Time', coalesce: 'nudge:time' });
+      clock.advance(100);
+    }
+    expect(s.log.steps.length).toBe(1);
+    expect(s.log.last!.tx.mutations).toEqual([{ op: 'set', path: 'time', value: 13 }]);
   });
-  it('interleaved undo: a part that no longer applies is skipped; an entry with nothing left is passed over', () => {
-    const { s, h, a } = setup();
-    const skips: unknown[] = [];
-    h.on((k, e) => void (k === 'skip' && skips.push(e)));
-    s.tx('Flag', (t: any) => void (t.catalog.f1.flag = 'pick'));
-    s.tx('Time', (t: any) => void (t.recipes.f1.time = 20));
-    a.logs.get('f1')!.cursor = 0; // the frame's History panel stepped back on its own
-    const e = h.undo();
-    expect(e!.label).toBe('Flag'); // 'Time' was passed over
-    expect(skips.length).toBe(1);
-  });
-  it('history.push files a change that did not come through a transaction (an approved proposal)', () => {
-    const { s, h, a } = setup();
-    const api = a.api();
-    let undone = false;
-    api.publish([{ path: ['recipes', 'f1'], value: { time: 30, grade: 2 } }]);
-    api.push({ label: 'Approved agent change', channel: 'f1', parts: [{ source: 'recipes', undo: () => ((undone = true), [{ path: ['recipes', 'f1'], value: { time: 10, grade: 2 } }]), redo: () => true }] });
-    expect(s.doc.recipes.f1.time).toBe(30);
-    expect(h.entries.at(-1)!.label).toBe('Approved agent change');
-    h.undo();
-    expect(undone).toBe(true);
-    expect(s.doc.recipes.f1.time).toBe(10);
-  });
-  it('routed prefixes are never in the document snapshot (the shell does not persist them)', () => {
+
+  it('the host changes the log: a proposal approved shows; why says who; close takes a frame away', () => {
     const { s } = setup();
-    expect(Object.keys(s.snapshot('document'))).toEqual(['catalog']);
+    s.change(log => log.propose({ doc: 'f1', tx: transaction({ id: 'a1', label: 'Agent: time', by: 'agent', mutations: [set('time', 20)] }) }, { why: 'brighter' }));
+    expect(s.committed.recipes.f1.time).toBe(10);
+    const seq = s.log.pending()[0]!.seq;
+    s.change(log => log.approve(seq));
+    expect(s.committed.recipes.f1.time).toBe(20);
+    expect(s.log.why('f1', 'time')).toMatchObject({ by: 'agent', approvedBy: 'user', value: 20 });
+    // a batch from the one batch builder, over the mounted frames
+    s.change(log => log.commit(plan(log.targets(['f1', 'f2']), () => [set('grade', 4)], { id: 'look-1', label: 'Look: hard', by: 'user' })));
+    expect([s.committed.recipes.f1.grade, s.committed.recipes.f2.grade]).toEqual([4, 4]);
+    s.undo();
+    expect([s.committed.recipes.f1.grade, s.committed.recipes.f2.grade]).toEqual([2, 2]);
+    s.close('f2');
+    expect(s.committed.recipes).toEqual({ f1: { time: 20, grade: 2 } });
+    expect(s.log.ids()).toEqual([MAIN, 'f1']);
+    expect(() => s.open('x', {}, { at: 'catalog.f1' })).toThrow(/main document holds/);
+    expect(() => s.open('y', {}, { at: 'ui.y' })).toThrow(/view tier/);
   });
 });

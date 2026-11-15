@@ -56,6 +56,8 @@ export function miniKit(ck: Ck<MiniState>) {
   const sel = (s: MiniState) => s.ui.selection.primary;
   return ck
     .kit('mini')
+    // each photo's develop settings are a document of the log (undo says which photo it happened on)
+    .mount('dev', { keyDepth: 1 })
     .commands<MiniState>({
       'photo.pick': {
         label: 'Flag as Pick',
@@ -147,7 +149,7 @@ export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
     )
     .bottom(ck.view.filmstrip(s => s.catalog.photos, { id: 'strip', cell: (p: Photo) => ck.text(p.name), select: { bind: s => s.ui.selection } }));
   const develop = ck
-    .module('develop', { label: 'Develop', key: 'D', icon: 'adj', txOpts: s => ({ channel: s.ui.selection.primary, snapPath: ['dev', s.ui.selection.primary!] }) })
+    .module('develop', { label: 'Develop', key: 'D', icon: 'adj' })
     .left(ck.dock.column({ width: 220 }, ck.panel('navigator')))
     .center(
       ck.viewport(s => pictureOf(s, s.ui.selection.primary), {
@@ -186,8 +188,8 @@ export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
   return ck
     .shell('Mini Studio')
     .state(miniState(o.n), {
-      channelName: (id, s) => s.catalog.photos.find(p => p.id === id)?.name,
-      currentChannel: s => s.ui.selection.primary,
+      docName: (id, s) => s.catalog.photos.find(p => p.id === id)?.name,
+      currentDoc: s => s.ui.selection.primary,
       keepUi: ['selection'],
     })
     .derive('catalog.filtered', (s: MiniState) => s.catalog.photos.filter(p => p.rating >= s.view.filter.minRating))

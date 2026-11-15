@@ -60,7 +60,7 @@ export function mountViewport(n: NodeData, m: MountCtx): HTMLElement {
   const presenter: Presenter = rt.services.presenter ? rt.services.presenter(cv) : new Canvas2DPresenter(cv);
   m.scope.onDispose(() => presenter.dispose());
   const viewPath = ['view', 'vp', vid];
-  if (st.peek(viewPath) === undefined) st.writeDoc([{ path: viewPath, value: { zoom: p['fit'] || 'fit', cx: 0.5, cy: 0.5 } }], { tier: 'view', init: true });
+  if (st.peek(viewPath) === undefined) st.writeView([{ path: viewPath, value: { zoom: p['fit'] || 'fit', cx: 0.5, cy: 0.5 } }], { init: true });
 
   // ── local view state ──
   const V = viewState();

@@ -135,13 +135,13 @@ describe('kits and fragments', () => {
     expect(app.ir.modules.map((m: any) => m.id)).toEqual(['late']);
     expect(() => (ck.shell('x') as any).nope()).toThrow(/No method \.nope\(\) on the shell/);
   });
-  it('routes declared by a kit check bindings under them with the key as a wildcard', () => {
+  it('mounts declared by a kit check bindings under them with the key as a wildcard', () => {
     const ck = createCk();
     const FIELDS = ['print.time_s', 'print.grade'];
     const kit = ck
       .kit('cb')
       .state('recipes', { init: {} })
-      .route('recipes', {
+      .mount('recipes', {
         keyDepth: 1,
         checkPath: rest => (FIELDS.includes(rest.join('.')) ? null : { message: `no recipe field ${rest.join('.')}`, fix: `Did you mean ${FIELDS[0]}?` }),
       });

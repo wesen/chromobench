@@ -30,7 +30,7 @@ function makeSelection(m: MountCtx, n: NodeData) {
   const p = n.props as Record<string, any>;
   const sel = p['select'] || {};
   const path: Key[] = (sel.bind ? (typeof sel.bind === 'string' ? sel.bind.split('.') : bindingPath(m.store, sel.bind).path) : null) || ['workspace', 'selection', String(p['id'] || (n.at ? n.at.file + ':' + n.at.line : n.$))];
-  if (m.store.peek(path) === undefined) m.store.writeDoc([{ path, value: EMPTY }], { tier: 'view', init: true });
+  if (m.store.peek(path) === undefined) m.store.writeView([{ path, value: EMPTY }], { init: true });
   const get = (): Selection => (m.store.peek(path) as Selection) || EMPTY;
   const set = (v: Selection): void => {
     if (m.store.tierOf(path) === 'view') m.store.set(path, v);

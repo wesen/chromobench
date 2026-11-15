@@ -48,6 +48,26 @@ re-run when what it read changes; **bind** a τ lambda naming one state path, tw
 No lambda is stored in a document; interaction lambdas read state through typed selectors (in the studio, `cb.sel.*`)
 and write through commands or transactions.
 
+## State: three tiers, one history
+
+The store (`core/store.ts`) holds one immutable state tree in three tiers (CHB-035 design §26):
+
+- **document**: what the user makes. It *is* the document log of `@chromobench/values` (`store.log`): the program's
+  own document state is the log's `main` document; documents the host opens (`store.open(id, doc, { at, kind })`,
+  a frame at `recipes.<id>`) show at their path, under their kind's rules (`app.start({ rules })`). A kit declares
+  where documents go (`k.mount('recipes', { keyDepth: 1, kind: 'frame', checkPath })`): the build checks bindings
+  under it, and initial state under a declared mount opens as one document per key. Every write to the document
+  tier (`ctx.tx`, `ctx.set`, a draft's commit) becomes one step of the log: each document's net change is one
+  edit, several documents' edits one batch. Undo and redo walk the log's steps (`store.undo()`, `rt.undo()`); a
+  refusal by a document's rules aborts the whole transaction (`TxRefused`, toast CK-T430). The host changes the log
+  directly with `store.change(log => log.approve(seq))` (proposals, batches from `plan`, loads); `ctx.log.why(doc,
+  path)` says who set a value.
+- **view**: how the user looks at it (`ui`, `view`, `prefs`, `workspace`, kit slices marked `view`), written
+  directly, never undone.
+- **preview**: `Draft`s shown over both and never logged: the gesture (`ctx.preview` / `ctx.commit` /
+  `ctx.cancel`, one undo step for a whole drag) and named drafts (`ctx.draft('proposal:a1').set(path, v)`, then
+  `.commit(label)` or `.drop()`). `ctx.tx`'s lambda gets a `Writer` (`t.dev.p0.light.exposure = 0.3`).
+
 ## Extending: fragments, registered first
 
 A fragment adds methods, props and slots to a form (or to the shell or module builders). Its methods are modifier

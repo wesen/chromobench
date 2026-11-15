@@ -1,4 +1,5 @@
-// The headless runtime (CraftKit's App, without the DOM): store (restored through persistence), history,
+// The headless runtime (CraftKit's App, without the DOM): store (restored through persistence; its document tier is
+// the document log),
 // scheduler on the given Clock, commands, the key router, a recording chrome, tools, modules, workspaces, the
 // render queue and the context handed to every ρ handler. app.start(services) makes one; mount() in
 // '@chromobench/shell/dom' starts one and builds the menu bar, dock, chrome layer and key listeners on top.
@@ -7,13 +8,13 @@
 // real engine.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Store, TxRefused, type Layer, type RouteAdapter, type TxOpts } from '../core/store.ts';
-import { History, type HistoryEntry } from '../core/history.ts';
+import type { Log, Rules, Step } from '@chromobench/values';
+import { MAIN, Store, TxRefused, type Draft, type TxOpts } from '../core/store.ts';
 import { Scheduler, Scope, Cell, type CellOpts } from '../core/cells.ts';
 import { browserClock, type Clock } from '../core/clock.ts';
 import type { Commands } from '../core/commands.ts';
 import { KeyRouter, chordLabel, parseChord, type Keymap, type KeyTarget, type KeyEventLike } from '../core/keys.ts';
-import { Diagnostics, where, type Diag } from '../core/diag.ts';
+import { Diagnostics, where } from '../core/diag.ts';
 import { bindingPath } from '../core/track.ts';
 import { deepMerge, OTHER, parsePath, type Platform } from '../core/util.ts';
 import type { NodeData } from '../ir/node.ts';
@@ -35,8 +36,8 @@ export interface Services {
   clock?: Clock;
   platform?: Platform;
   persistence?: PersistenceAdapter | null;
-  /** route adapters by prefix: { recipes: editLogAdapter } */
-  adapters?: Record<string, RouteAdapter>;
+  /** the document log's rules by kind (a studio passes the contract's LOG_RULES) */
+  rules?: Rules;
   bridges?: RenderBridge<any>[];
   presenter?: (canvas: unknown) => Presenter;
   chrome?: ChromeApi;
@@ -62,7 +63,8 @@ export interface ViewportApi {
   [k: string]: unknown;
 }
 
-export type Draft<S> = S & {
+/** What ctx.tx hands to its lambda: the state, writable, plus path helpers. */
+export type WriterOf<S> = S & {
   $set(path: string | (string | number)[], v: unknown): void;
   $update(path: string | (string | number)[], f: (v: any) => unknown): void;
   $merge(path: string | (string | number)[], o: object): void;
@@ -80,19 +82,21 @@ export interface Ctx<S = any> {
   /** the host's capabilities (services.host, or what rt.setHost gave since) */
   readonly host: any;
   readonly mods: { shift: boolean; alt: boolean; mod: boolean };
-  tx(label: string, f: (t: Draft<S>) => void, o?: TxOpts): unknown;
+  tx(label: string, f: (t: WriterOf<S>) => void, o?: TxOpts): unknown;
   set(obj: Record<string, unknown>, o?: TxOpts): void;
   preview(target: string | (string | number)[] | ((s: S) => unknown), value: unknown): void;
   commit(label: string, o?: TxOpts): unknown;
   cancel(): void;
-  layer(name: string): Layer;
+  /** a named draft: writes shown over the state, committed as one transaction or dropped */
+  draft(name: string): Draft;
   run(id: string, ...a: unknown[]): unknown;
   emit(e: string, ...a: unknown[]): void;
   toast(text: string, o?: ToastOpts): void;
   flash(text: string, kind?: string): void;
   dialog(spec: DialogSpec): unknown;
   go(id: string): void;
-  readonly history: History;
+  /** the document log (the document tier): steps, entries, pending proposals, why */
+  readonly log: Log;
   viewport(id?: string): ViewportApi | null;
   /** the active tool's options (ui.toolOptions[tool]) */
   readonly options: Record<string, unknown>;
@@ -113,7 +117,7 @@ export interface Inspect {
   derived: number;
   version: number;
   previewing: boolean;
-  layers: number;
+  drafts: number;
   undo: number;
   redo: number;
   renders: number;
@@ -143,7 +147,6 @@ export class Runtime<S = any> {
   readonly clock: Clock;
   readonly platform: Platform;
   readonly store: Store;
-  readonly history: History;
   readonly scheduler: Scheduler;
   readonly commands: Commands<S>;
   readonly keymap: Keymap;
@@ -199,8 +202,7 @@ export class Runtime<S = any> {
       }
     }
     this.restored = !!restored;
-    this.store = new Store(init, { view: ir.view, routes: ir.routes });
-    this.history = new History(this.store, { clock: this.clock });
+    this.store = new Store(init, { view: ir.view, mounts: ir.mounts, ...(services.rules ? { rules: services.rules } : {}), now: () => this.clock.now() });
     this.scheduler = new Scheduler(this.store, this.clock);
     this.scheduler.onLoop = cells =>
       this.diagnostics.warn('CK-P510', 'Cells kept writing state for ten passes', {
@@ -210,17 +212,7 @@ export class Runtime<S = any> {
       });
     this.scheduler.onError = e => this.handlerError(e, null);
     for (const d of ir.derived) this.store.derive(d.path, d.fn);
-    for (const [prefix, adapter] of Object.entries(services.adapters || {})) this.stops.push(this.store.route(prefix, adapter));
-    for (const r of ir.routes)
-      if (!services.adapters?.[r.prefix] && !r.readonly)
-        this.diagnostics.info('CK-T432', `No adapter for the route '${r.prefix}'`, { runtime: true, facts: ['Writes under it go to the store as plain state.'], fix: `app.start({ adapters: { ${r.prefix}: adapter } })` });
-    this.stops.push(
-      this.store.onRefused(e => this.refused(e)),
-      this.history.on((kind, e) => {
-        if (kind === 'skip')
-          this.diagnostics.info('CK-T431', `Undo skipped a step that no longer applies`, { runtime: true, facts: [`${e.entry.label}: ${e.parts.map((p: any) => p.source).join(', ')}`] });
-      }),
-    );
+    this.stops.push(this.store.onRefused(e => this.refused(e)));
     const asm = assemble(ir, builtinCommands(() => this, ir.themes.values()), this.platform, id => this.selectTool(id, true));
     this.commands = asm.commands;
     this.commands.capable = req => this.capable(req);
@@ -235,7 +227,7 @@ export class Runtime<S = any> {
     this.scope = new Scope(null, 'app');
     // the first module, unless one was restored
     const mod = this.store.peek(['view', 'module']);
-    if (!mod || !this.modules.has(mod)) this.store.writeDoc([{ path: ['view', 'module'], value: ir.modules[0]?.id ?? null }], { tier: 'view', init: true });
+    if (!mod || !this.modules.has(mod)) this.store.writeView([{ path: ['view', 'module'], value: ir.modules[0]?.id ?? null }], { init: true });
     this.keys = new KeyRouter(this.keymap, {
       moduleIds: () => [...this.modules.keys()],
       chain: () => this.scopeChain(),
@@ -334,14 +326,16 @@ export class Runtime<S = any> {
       },
       commit: (label, o) => st.commit(label, Object.assign({}, rt.txOptsNow(env), o || {})),
       cancel: () => st.cancel(),
-      layer: name => st.layer(name),
+      draft: name => st.draft(name),
       run: (id, ...a) => rt.runCommand(id, null, ...a),
       emit: (e, ...a) => rt.emit(e, ...a),
       toast: (t, o) => rt.chrome.toast(t, o),
       flash: (t, k) => rt.chrome.flash(rt.viewport(), t, k),
       dialog: spec => rt.chrome.dialog(spec),
       go: id => rt.go(id),
-      history: this.history,
+      get log() {
+        return st.log;
+      },
       viewport: id => rt.viewport(id),
       get options() {
         const t = st.peek(['ui', 'tool']);
@@ -406,13 +400,15 @@ export class Runtime<S = any> {
     this.chrome.toast(x.text, { kind: 'error', ms: 5000, ...(title ? { title } : {}), detail: x.detail ?? raw });
   }
   private refused(e: TxRefused): void {
-    const cause = e.cause2 as { code?: string; message?: string; diagnostic?: Diag };
+    // a values or contract error carries a diagnostic record: its message is the words without the code
+    const cause = e.cause2 as { code?: string; message?: string; diag?: { message?: string } };
+    const text = cause?.diag?.message ?? cause?.message ?? String(cause);
     this.diagnostics.warn('CK-T430', `A transaction was refused: ${e.label}`, {
       runtime: true,
-      facts: [`${e.route}: ${cause?.message ?? String(cause)}`, ...(cause?.code ? [`code ${cause.code}`] : [])],
+      facts: [`${e.docs.join(', ') || 'the document'}: ${text}`, ...(cause?.code ? [`code ${cause.code}`] : [])],
       fix: 'The document is unchanged; the preview was dropped.',
     });
-    this.toastError(cause, cause?.message ?? String(cause), e.label);
+    this.toastError(cause, text, e.label);
     this.emit('refused', e);
   }
   lambdaError(err: unknown, cell: { at: any; name?: string }): void {
@@ -424,26 +420,28 @@ export class Runtime<S = any> {
   }
 
   // ── undo (toasts say where it happened) ──
-  undo(): HistoryEntry | null {
-    const e = this.history.undo();
-    if (e) this.chrome.toast(`Undo ${e.label}${this.whereOf(e)}`, { kind: 'info', ms: 1400 });
-    return e;
+  undo(): Step | null {
+    const where = this.whereOf(this.store.log.undoStep);
+    const st = this.store.undo();
+    if (st) this.chrome.toast(`Undo ${st.label}${where}`, { kind: 'info', ms: 1400 });
+    return st;
   }
-  redo(): HistoryEntry | null {
-    const e = this.history.redo();
-    if (e) this.chrome.toast(`Redo ${e.label}${this.whereOf(e)}`, { kind: 'info', ms: 1400 });
-    return e;
+  redo(): Step | null {
+    const where = this.whereOf(this.store.log.redoStep);
+    const st = this.store.redo();
+    if (st) this.chrome.toast(`Redo ${st.label}${where}`, { kind: 'info', ms: 1400 });
+    return st;
   }
-  /** an undo on something other than what is on screen says where: .state(init, { channelName }) */
-  whereOf(e: HistoryEntry | null): string {
+  /** a step on another document than the one on screen says which: .state(init, { docName, currentDoc }) */
+  whereOf(step: Step | null): string {
     const so = this.app.ir.stateOpts;
-    const ch = e?.channel;
-    if (!ch || !so.channelName) return '';
+    if (!step || !so.docName) return '';
+    const docs = this.store.log.docsOf(step).filter(d => d !== MAIN);
+    if (docs.length !== 1) return '';
     const st = this.store.readonly();
-    const now = so.currentChannel ? so.currentChannel(st) : this.txOptsNow().channel;
-    if (ch === now) return '';
     try {
-      const n = so.channelName(ch, st);
+      if (so.currentDoc && so.currentDoc(st) === docs[0]) return '';
+      const n = so.docName(docs[0]!, st);
       return n ? ` (on ${n})` : '';
     } catch {
       return '';
@@ -636,9 +634,9 @@ export class Runtime<S = any> {
       derived: this.store.derived.size,
       version: this.store.version,
       previewing: this.store.previewing,
-      layers: this.store.layers.size,
-      undo: this.history.entries.length,
-      redo: this.history.redoStack.length,
+      drafts: this.store.drafts.size,
+      undo: this.store.log.cursor,
+      redo: this.store.log.steps.length - this.store.log.cursor,
       renders: q.renders,
       presented: q.presented,
       dropped: q.dropped,

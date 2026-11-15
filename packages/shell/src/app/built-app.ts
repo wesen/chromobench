@@ -119,7 +119,7 @@ function makeIR(def: ShellDef, ck: CkCore): UiIR {
     contexts: new Map(def.contexts),
     events: def.events.slice(),
     palette: { ...def.palette },
-    routes: [],
+    mounts: [],
     kits: [],
     fragments: [...ck.fragments],
     forms: new Map(ck.forms),

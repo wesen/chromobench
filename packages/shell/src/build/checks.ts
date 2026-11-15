@@ -2,7 +2,7 @@
 //
 //   normalize  fragment defaults, collect panels, assemble commands and keys                 X110
 //   slots      unknown options, lambdas in β slots, bad bind values, unknown forms            B130, B140, B141, B160
-//   bindings   bind paths against the initial state or a route (probe mode)                   B110–B114
+//   bindings   bind paths against the initial state or a mount (probe mode)                   B110–B114
 //   docking    unknown or twice-placed panels, modules without a centre                       D301–D303
 //   menus      menu items naming missing commands                                             B150
 //   keys       the K2xx checks                                                                K201–K221
@@ -115,7 +115,7 @@ export const slotsPass = pass<UiIR>('slots', { on: 'ui', after: 'normalize' }, (
 });
 
 export const bindingsPass = pass<UiIR>('bindings', { on: 'ui', after: 'slots' }, (ir, p) => {
-  const st = new Store(withDefaults(ir.init), { view: ir.view, routes: ir.routes });
+  const st = new Store(withDefaults(ir.init), { view: ir.view });
   for (const d of ir.derived) st.derive(d.path, d.fn);
   const check = (n: NodeData, key: string, bind: unknown): void => {
     let path: Key[] | null;
@@ -135,18 +135,18 @@ export const bindingsPass = pass<UiIR>('bindings', { on: 'ui', after: 'slots' },
       p.error('CK-B113', 'A binding that reads no state', { at: n.at, facts: [`${n.$}.${key} = ${String(bind).slice(0, 60)}`], fix: `${key}: s => s.some.path` });
       return;
     }
-    const route = ir.routes.find(r => {
+    const mount = ir.mounts.find(r => {
       const pre = parsePath(r.prefix);
       return pre.every((k, i) => String(path![i]) === String(k));
     });
-    if (route) {
-      const pre = parsePath(route.prefix);
-      const rest = path.slice(pre.length + (route.keyDepth ?? 0));
-      const shown = [...pre, ...Array(route.keyDepth ?? 0).fill('*'), ...rest].join('.');
-      const res = route.checkPath ? route.checkPath(rest) : null;
+    if (mount) {
+      const pre = parsePath(mount.prefix);
+      const rest = path.slice(pre.length + (mount.keyDepth ?? 0));
+      const shown = [...pre, ...Array(mount.keyDepth ?? 0).fill('*'), ...rest].join('.');
+      const res = mount.checkPath ? mount.checkPath(rest) : null;
       if (res) {
         const r = typeof res === 'string' ? { message: res } : res;
-        p.error('CK-B114', `Binding path not in route '${route.prefix}'`, {
+        p.error('CK-B114', `Binding path not in the documents mounted at '${mount.prefix}'`, {
           at: n.at,
           facts: [`s.${shown}: ${r.message}`],
           ...(r.fix ? { fix: r.fix } : {}),

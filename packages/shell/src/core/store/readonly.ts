@@ -2,7 +2,7 @@
 // takes proxies (read-only or tracking) out of a value before it is written.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { isObj, pathStr, type Key } from '../util.ts';
+import { isObj, overProxy, pathStr, type Key } from '../util.ts';
 import { rawOf as trackedRaw } from '../track.ts';
 import type { Store } from '../store.ts';
 
@@ -40,7 +40,7 @@ export function strip<T>(v: T, depth = 0): T {
 export function readonlyView(store: Store): any {
   const wrap = (v: unknown, path: Key[]): any => {
     if (!isObj(v)) return v;
-    return new Proxy(v, {
+    return overProxy(v, {
       get(t: any, k, r) {
         if (k === RO) return t;
         if (typeof k === 'symbol') return Reflect.get(t, k, r);

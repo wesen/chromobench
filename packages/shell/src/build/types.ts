@@ -5,7 +5,7 @@
 import type { CallSite, Diag } from '../core/diag.ts';
 import type { CommandSpec } from '../core/commands.ts';
 import type { KeyTarget, Spring } from '../core/keys.ts';
-import type { RouteDecl, TxOpts } from '../core/store.ts';
+import type { MountDecl, TxOpts } from '../core/store.ts';
 import type { NodeData } from '../ir/node.ts';
 import type { FormSpec } from '../ir/forms.ts';
 import type { Slot, Time } from '../ir/slots.ts';
@@ -24,9 +24,10 @@ export interface StateOpts<S = any> {
   transient?: string[];
   /** ui.* keys that are saved */
   keepUi?: string[];
-  /** "Undo Contrast (on Old pier)" */
-  channelName?: (channel: string, s: S) => string | null | undefined;
-  currentChannel?: (s: S) => string | null | undefined;
+  /** "Undo Contrast (on Old pier)": the name of a mounted document of the log */
+  docName?: (doc: string, s: S) => string | null | undefined;
+  /** the document on screen (an undo there says no "on …") */
+  currentDoc?: (s: S) => string | null | undefined;
 }
 
 export interface ShellOpts {
@@ -218,7 +219,7 @@ export interface KitDef {
   requires: (string | Kit)[];
   state: KitState[];
   derived: { path: string; fn: (s: any) => unknown; at: CallSite | null }[];
-  routes: RouteDecl[];
+  mounts: MountDecl[];
   forms: FormSpec[];
   fragments: Fragment[];
   commands: CommandDef[];
@@ -263,7 +264,7 @@ export interface UiIR<S = any> {
   contexts: Map<string, unknown>;
   events: { event: string; f: KeyTarget; at: CallSite | null }[];
   palette: { keys: string };
-  routes: RouteDecl[];
+  mounts: MountDecl[];
   kits: { name: string; version: string | undefined; requires: string[]; at: CallSite | null; docs: string[] }[];
   fragments: Fragment[];
   forms: Map<string, FormSpec>;

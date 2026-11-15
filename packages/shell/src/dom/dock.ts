@@ -33,7 +33,7 @@ export class DomDock {
       if (spec && spec.props['solo'] !== undefined) {
         const key = mod.id + ':' + side;
         const soloPath = ['workspace', 'solo', key];
-        if (rt.store.peek(soloPath) === undefined) rt.store.writeDoc([{ path: soloPath, value: typeof spec.props['solo'] === 'boolean' ? spec.props['solo'] : false }], { tier: 'view', init: true });
+        if (rt.store.peek(soloPath) === undefined) rt.store.writeView([{ path: soloPath, value: typeof spec.props['solo'] === 'boolean' ? spec.props['solo'] : false }], { init: true });
         sm.cell(
           s => s.workspace?.solo?.[key],
           v => void inner.classList.toggle('is-solo', !!v),

@@ -53,7 +53,7 @@ export interface ModuleProps<S = any> {
   label?: string;
   key?: string | null;
   icon?: string | null;
-  /** transaction options for edits made in this module: ({ channel, snapPath }) files them into a History list */
+  /** transaction options for edits made in this module (source fields, author, coalescing) */
   txOpts?: ((s: S) => TxOpts) | TxOpts;
   onEnter?: KeyTarget;
   /** Esc tries this first (return false to let the shell continue) */
