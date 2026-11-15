@@ -156,3 +156,54 @@ test('the workbench: wb.commands, wb.run, wb.screen().explain(), and a layout th
   expect(c).toMatchObject({ id: 'just-print', agent: true, modules: ['main'] });
   expect(c['frame']).toBeTruthy();
 });
+
+// CHB-037 P9: what the assistant wrote outlives the page — a layout he accepted is kept (View ▸ Layout lists it, a
+// reload comes back to it) and a look it wrote is registered again at the next start, so a frame linking it opens.
+test('the assistant’s layout and look survive a reload', async ({ page }) => {
+  type R = { yaml: string; error?: { code: string; message: string } };
+  const ev = (code: string) => page.evaluate((c) => window.chromobench.eval(c) as Promise<R>, code);
+  const ok = async (code: string): Promise<string> => {
+    const r = await ev(code);
+    expect(r.error, r.yaml).toBeUndefined();
+    return r.yaml;
+  };
+  // a database of its own (not ?fresh: the reload must find what was kept)
+  await page.goto('/?nosw&engine=mock&layout=classic');
+  await page.evaluate(() => new Promise((ok) => {
+    const r = indexedDB.deleteDatabase('chromobench-studio');
+    r.onsuccess = r.onerror = r.onblocked = () => ok(null);
+  }));
+  await page.reload();
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await page.setInputFiles('#file', FIXTURE);
+  await opened(page);
+  await page.evaluate(() => window.chromobench.rt.go('assistant'));
+  const src = `defineLook({ name: 'agent-warm', version: 1, label: 'Agent warm', group: 'Mine', doc: '', params: {}, stages: ['darkroom'], fn: () => ({ stacks: { darkroom: { order: ['f'], items: { f: { kind: 'layer', op: 'filter', params: { logH: [-0.05, 0, 0.05] }, name: 'Warm', enabled: true, amount: 1, mask: null, blend: 'normal', source: { kind: 'look' } } } } } }) })`;
+  await ok(`await cb.looks.define(${JSON.stringify(src)}); return 'ok'`);
+  await ok(`return JSON.stringify(cb.looks.apply('agent-warm', {}, { why: 'warmer' }))`);
+  // approve whatever waits (ask mode), so the link is in the frame's document
+  for (const seq of await page.evaluate(() => window.chromobench.pending().map((p) => p.seq))) await page.evaluate((s) => window.chromobench.studio.approve(s), seq);
+  await expect.poll(() => page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).some((e) => e.kind === 'link' && (e.ref as { look?: string }).look === 'agent-warm'))).toBe(true);
+  // a simpler screen, accepted
+  await ok(`const b = await wb.layouts.build({ id: 'simpler', label: 'Simpler', build: (ck, cb) => cb.studio('Chromobench').menus(...cb.menus.standard()).module(ck.module('main', { label: 'Print', stages: ['darkroom'] }).center(cb.viewer(cb.sel.frame.print(), { tools: ['probe'] })).right(ck.dock.column({ width: 300 }, cb.panels.controls('darkroom'), cb.panels.history().hidden(cb.sel.doc.not())))) }); return (await wb.layouts.use(b)).status`);
+  await page.getByRole('dialog', { name: 'Use the assistant’s layout?' }).getByRole('button', { name: 'Use Simpler' }).click();
+  await page.waitForFunction(() => document.body.dataset['layout'] === 'simpler');
+  await idle(page);
+  await page.evaluate(() => window.chromobench.rt.save());
+  expect(new URL(page.url()).searchParams.get('layout')).toBe('simpler');
+  // View ▸ Layout lists it
+  expect(await page.evaluate(() => (window.chromobench.state() as { ui: { host: { layouts: { id: string; label: string }[] } } }).ui.host.layouts.find((l) => l.id === 'simpler')?.label)).toBe('Simpler (assistant)');
+  // the reload: the same layout, the frame with its link to the agent's look, no error
+  await page.reload();
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await idle(page);
+  expect(await page.evaluate(() => document.body.dataset['layout'])).toBe('simpler');
+  // the file again (the browser cannot read it without asking): its saved edit comes back by its hash
+  await page.setInputFiles('#file', FIXTURE);
+  await opened(page);
+  expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).some((e) => e.kind === 'link' && (e.ref as { look?: string }).look === 'agent-warm'))).toBe(true);
+  expect(await page.evaluate(() => window.chromobench.printNode())).toBeTruthy();
+  // and back to a built-in layout through View ▸ Layout
+  await page.evaluate(() => window.chromobench.run('view.layout', 'classic'));
+  await page.waitForFunction(() => document.body.dataset['layout'] === 'classic');
+});

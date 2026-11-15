@@ -99,7 +99,7 @@ test('F26: "Where is …?" closes as answered when its file is opened through Fi
   await emptyLibrary(page);
   await page.setInputFiles('#file', [A, B]);
   await opened(page, 2, 120_000);
-  await page.waitForTimeout(1500); // the shell's autosave (debounced)
+  await page.evaluate(() => window.chromobench.rt.save()); // the shell's autosave, flushed (no wait on its debounce)
   await page.reload();
   await ready(page);
   await expect(page.locator('#status')).toContainText('2 frames in the library');

@@ -61,8 +61,8 @@ The store (`core/store.ts`) holds one immutable state tree in three tiers (CHB-0
 
 - **document**: what the user makes. It *is* the document log of `@chromobench/values` (`store.log`): the program's
   own document state is the log's `main` document; documents the host opens (`store.open(id, doc, { at, kind })`,
-  a frame at `recipes.<id>`) show at their path, under their kind's rules (`app.start({ rules })`). A kit declares
-  where documents go (`k.mount('recipes', { keyDepth: 1, kind: 'frame', checkPath })`): the build checks bindings
+  the studio mounts a frame at `docs.<id>`) show at their path, under their kind's rules (`app.start({ rules })`). A kit declares
+  where documents go (`k.mount('docs', { keyDepth: 1, kind: 'frame', checkPath })`): the build checks bindings
   under it, and initial state under a declared mount opens as one document per key. Every write to the document
   tier (`ctx.tx`, `ctx.set`, a draft's commit) becomes one step of the log: each document's net change is one
   edit, several documents' edits one batch. Undo and redo walk the log's steps (`store.undo()`, `rt.undo()`); a

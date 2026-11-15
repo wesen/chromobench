@@ -30,7 +30,9 @@ test('View ▸ Theme and View ▸ Interface Gray: CraftKit by default, Chromogen
   await page.evaluate(() => window.chromobench.run('view.gray.1'));
   await expect.poll(() => token(page, 'panel')).toBe('#1a1a1a');
   await page.evaluate(() => window.chromobench.idle());
-  await page.waitForTimeout(600); // the view tier is saved after a short debounce
+  // the view tier is saved 700 ms after the change (autosave's debounce): flush the pending save instead of waiting
+  // it out (a fixed 600 ms wait lost the race on the M1 Max, CHB-037 P9)
+  await page.evaluate(() => window.chromobench.rt.save());
 
   await boot(page);
   expect(await page.evaluate(() => [window.chromobench.state().prefs?.theme, window.chromobench.state().prefs?.gray])).toEqual(['chromogen', '1']);

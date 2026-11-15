@@ -200,6 +200,23 @@ describe('the log', () => {
     expect(c.undo().doc('f2')).toEqual(log.initial('f2'));
   });
 
+  it('withFields: fields a document lacks join its initial state and its state now, not as a step (CHB-037 P9)', () => {
+    let log = base().commit(edit('f1', tx('w1', [set('main.time', 11)])));
+    const steps = log.steps.length;
+    log = log.withFields('f1', { title: 'other', roll: { rolls: {} } });
+    expect(log.steps.length).toBe(steps);
+    expect((log.doc('f1') as { title: string }).title).toBe('frame'); // a field it has stays
+    expect(log.doc('f1')).toHaveProperty('roll.rolls');
+    expect(log.initial('f1')).toHaveProperty('roll.rolls');
+    // a write under the new field now works, and undo of the older step keeps the field
+    log = log.commit(edit('f1', tx('w2', [set('roll.rolls', { r1: 1 })])));
+    log = log.undo().undo();
+    expect(log.doc('f1')).toHaveProperty('roll.rolls');
+    expect(log.withFields('f1', { title: 'x' })).toBe(log);
+    // it survives serialisation
+    expect(Log.load(JSON.parse(JSON.stringify(log.toJSON())), { rules: { frame: RULES }, now }).doc('f1')).toHaveProperty('roll.rolls');
+  });
+
   it('serialises and loads to the same log; a tampered or foreign log is refused', () => {
     let log = base().commit(edit('f1', tx('a', [set('main.time', 11), insert('stack', 'd', { amount: 1 })])));
     log = log.propose(edit('f2', tx('p', [set('main.grade', 5)], 'agent')), { why: 'w' }).commit(edit('f2', tx('b', [remove('burn')]))).undo();

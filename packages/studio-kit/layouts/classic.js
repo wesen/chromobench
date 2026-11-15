@@ -8,14 +8,16 @@ export default {
   label: 'Classic',
   description: 'Lightroom-like modules: Library, Roll, Print, Edit, Finish, Output',
   build: (ck, cb) => {
-    const { roll, finish, chat, stack } = cb.kits;
+    const { roll, finish, chat, stack, looks } = cb.kits;
     return cb
       .studio('Chromobench')
       .theme('craftkit')
       .use(roll.kit)
       .use(finish.kit)
       .use(chat.kit)
-      .menus(...cb.menus.standard(), roll.menus.roll(), finish.menus.finish())
+      // Settings ▸ Copy / Paste / Sync Settings (Lightroom's), from the looks kit
+      .use(looks.kit)
+      .menus(...cb.menus.standard(), looks.menus.settings(), roll.menus.roll(), finish.menus.finish())
       .module(cb.modules.library())
       .module(roll.modules.roll())
       // arrangement 3: camera files' scene edits, once the catalogue has scene-stage ops (a build-time choice)

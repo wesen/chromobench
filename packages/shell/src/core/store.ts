@@ -223,7 +223,9 @@ export class Store implements DerivedSource {
     if (from === this) return;
     this.cancel();
     for (const [id, at] of from.mounts) this.mounts.set(id, at);
-    this.replace(from.log, { label: 'Adopt' });
+    // the state this program declares and the adopted log's main document lacks (a kit the other program did not
+    // install: the roll kit's roll) joins it, or a write under it fails with E_PATH (CHB-037 P9)
+    this.replace(from.log.withFields(MAIN, this.log.doc(MAIN)), { label: 'Adopt' });
   }
 
   // ── reads ──

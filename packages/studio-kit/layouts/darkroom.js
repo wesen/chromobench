@@ -12,11 +12,13 @@ export default {
   label: 'Darkroom first',
   description: 'One screen: strip, print, enlarger, and a digital palette after the print',
   build: (ck, cb) => {
-    const { stack } = cb.kits;
+    const { stack, looks } = cb.kits;
     return cb
       .studio('Chromobench')
       .theme('craftkit')
-      .menus(...cb.menus.standard())
+      // Settings ▸ Copy / Paste / Sync Settings (Lightroom's), from the looks kit
+      .use(looks.kit)
+      .menus(...cb.menus.standard(), looks.menus.settings())
       .module(
         ck
           .module('main', { label: 'Darkroom', stages: ['darkroom', 'print'] })

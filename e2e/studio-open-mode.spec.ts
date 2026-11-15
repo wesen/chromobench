@@ -109,7 +109,7 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
     const urls = await Promise.all(st.frames.ids().map((id) => st.kv!.get<string>('frames', `thumb:${id}`)));
     return urls.length === 2 && urls.every((u) => u?.startsWith('data:image/jpeg'));
   }), { timeout: 30_000 }).toBe(true);
-  await page.waitForTimeout(1500); // the shell's autosave (debounced)
+  await page.evaluate(() => window.chromobench.rt.save()); // the shell's autosave, flushed (no wait on its debounce)
   await page.reload();
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await expect(page.locator('#status')).toContainText('2 frames in the library');

@@ -147,3 +147,8 @@ P6b: the agent's workbench — wb in the DSL (commands, run as the agent under t
 
 P3b: exact exports fit the budget at 4000 px, browser-free parity warm fixture (1b81bf7); final: vitest 3379, goldens 66/66, gpu-parity 54/54 SwiftShader and Metal, wgsl-check 5/5
 
+
+## 2026-11-15
+
+P9 integration: browser suite green on SwiftShader and Metal (145 passed, 2 skipped); end-to-end walkthroughs; persona session on Darkroom first and Classic (Classic recommended as default for now); fixes: darkroom strip, roll after layout switch (Log.withFields), Settings menu (copy/paste/sync), agent layouts and looks persisted, History wording; HANDOFF rewritten; report reference/02-integration-report.md
+

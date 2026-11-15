@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`layouts build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -368,15 +368,52 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
+  looks.pick "Pick Look" ← cb.looks
+  looks.param "Set Look Parameter" ← cb.looks
+  looks.amount "Look Amount" ← cb.looks
+  looks.preview "Preview Look" ← cb.looks
+  looks.apply "Apply Look to Selection" ← cb.looks
+  looks.applyToSelection "Apply Look to Selected Frames" ← cb.looks
+  looks.applyToRoll "Apply Look to the Roll’s Unedited Frames…" ← cb.looks
+  looks.applyToLibrary "Apply Look to the Library…" ← cb.looks
+  looks.pending.toggle "Include Frame" ← cb.looks
+  looks.pending.approve "Apply Planned Look" ← cb.looks
+  looks.pending.reject "Cancel Planned Look" ← cb.looks
+  looks.batch.toggle "Include Frame in Batch" ← cb.looks
+  looks.batch.approve "Approve Agent Look Batch" ← cb.looks
+  looks.batch.reject "Reject Agent Look Batch" ← cb.looks
+  looks.survey.open "Survey Looks" ← cb.looks
+  looks.survey.toggle "Add Look to Survey" ← cb.looks
+  looks.compare "Compare With" ← cb.looks
+  looks.setReference "Compare With This Frame" ← cb.looks
+  looks.snapshot "Snapshot" ← cb.looks
+  looks.restoreSnapshot "Restore Snapshot" ← cb.looks
+  looks.copy "Copy Settings" (Settings) Ctrl+Shift+C ← cb.looks
+  looks.paste "Paste Settings" (Settings) Ctrl+Shift+V ← cb.looks
+  looks.syncMode "Sync Mode" (Settings) ← cb.looks
+  looks.sync "Sync Settings to Selection" (Settings) Ctrl+Shift+S ← cb.looks
+  looks.saveAsPreset "Save Frame as Preset…" ← cb.looks
+  looks.saveLookAsPreset "Save Look as Preset" ← cb.looks
+  looks.setAmount "Look Amount on This Frame" ← cb.looks
+  looks.bake "Bake Look into Layers" ← cb.looks
+  looks.remove "Remove Look" ← cb.looks
+  looks.deletePreset "Delete Preset" ← cb.looks
+  looks.importPreset "Import Preset" ← cb.looks
+  looks.exportPreset "Export Preset" ← cb.looks
+  looks.favourite "Favourite Look" ← cb.looks
+  looks.group "Look Group" ← cb.looks
+  looks.syncGroup "Sync Group" ← cb.looks
+  looks.virtualCopy "Virtual Copy" ← cb.looks
+  looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 150 · keys 118 in 21 scopes · tools 10 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 187 · keys 121 in 22 scopes · tools 10 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module main "Darkroom" stages darkroom, print
   left   dockcol  width 200
-           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
+           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  rowHeight 150  select ui.selection
            panel history "History"  hidden τ
              cb.history
   center column  class "cb-viewer"  grow 1
@@ -512,8 +549,45 @@ commands
   mask.addComponent "Add Mask Component" ← cb.stack
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
+  looks.pick "Pick Look" ← cb.looks
+  looks.param "Set Look Parameter" ← cb.looks
+  looks.amount "Look Amount" ← cb.looks
+  looks.preview "Preview Look" ← cb.looks
+  looks.apply "Apply Look to Selection" ← cb.looks
+  looks.applyToSelection "Apply Look to Selected Frames" ← cb.looks
+  looks.applyToRoll "Apply Look to the Roll’s Unedited Frames…" ← cb.looks
+  looks.applyToLibrary "Apply Look to the Library…" ← cb.looks
+  looks.pending.toggle "Include Frame" ← cb.looks
+  looks.pending.approve "Apply Planned Look" ← cb.looks
+  looks.pending.reject "Cancel Planned Look" ← cb.looks
+  looks.batch.toggle "Include Frame in Batch" ← cb.looks
+  looks.batch.approve "Approve Agent Look Batch" ← cb.looks
+  looks.batch.reject "Reject Agent Look Batch" ← cb.looks
+  looks.survey.open "Survey Looks" ← cb.looks
+  looks.survey.toggle "Add Look to Survey" ← cb.looks
+  looks.compare "Compare With" ← cb.looks
+  looks.setReference "Compare With This Frame" ← cb.looks
+  looks.snapshot "Snapshot" ← cb.looks
+  looks.restoreSnapshot "Restore Snapshot" ← cb.looks
+  looks.copy "Copy Settings" (Settings) Ctrl+Shift+C ← cb.looks
+  looks.paste "Paste Settings" (Settings) Ctrl+Shift+V ← cb.looks
+  looks.syncMode "Sync Mode" (Settings) ← cb.looks
+  looks.sync "Sync Settings to Selection" (Settings) Ctrl+Shift+S ← cb.looks
+  looks.saveAsPreset "Save Frame as Preset…" ← cb.looks
+  looks.saveLookAsPreset "Save Look as Preset" ← cb.looks
+  looks.setAmount "Look Amount on This Frame" ← cb.looks
+  looks.bake "Bake Look into Layers" ← cb.looks
+  looks.remove "Remove Look" ← cb.looks
+  looks.deletePreset "Delete Preset" ← cb.looks
+  looks.importPreset "Import Preset" ← cb.looks
+  looks.exportPreset "Export Preset" ← cb.looks
+  looks.favourite "Favourite Look" ← cb.looks
+  looks.group "Look Group" ← cb.looks
+  looks.syncGroup "Sync Group" ← cb.looks
+  looks.virtualCopy "Virtual Copy" ← cb.looks
+  looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 104 · keys 33 in 6 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 141 · keys 36 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -1358,10 +1432,10 @@ commands
   looks.setReference "Compare With This Frame" (Looks) ← cb.looks
   looks.snapshot "Snapshot" (Looks) Ctrl+Alt+N ← cb.looks
   looks.restoreSnapshot "Restore Snapshot" ← cb.looks
-  looks.copy "Copy Settings" (Looks) ← cb.looks
-  looks.paste "Paste Settings" (Looks) ← cb.looks
+  looks.copy "Copy Settings" (Looks) Ctrl+Shift+C ← cb.looks
+  looks.paste "Paste Settings" (Looks) Ctrl+Shift+V ← cb.looks
   looks.syncMode "Sync Mode" (Looks) ← cb.looks
-  looks.sync "Sync Settings to Selection" (Looks) ← cb.looks
+  looks.sync "Sync Settings to Selection" (Looks) Ctrl+Shift+S ← cb.looks
   looks.saveAsPreset "Save Frame as Preset…" (Looks) ← cb.looks
   looks.saveLookAsPreset "Save Look as Preset" (Looks) ← cb.looks
   looks.setAmount "Look Amount on This Frame" ← cb.looks
@@ -1376,7 +1450,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 160 · keys 67 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+commands 160 · keys 70 in 11 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1727,7 +1801,7 @@ exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core)
 module main "Chromobench" stages darkroom
   left   dockcol  width 180
-           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
+           listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  rowHeight 150  select ui.selection
   center column  class "cb-viewer"  grow 1
            cb.ribbon
            viewport main τ  image τ  overlays: 

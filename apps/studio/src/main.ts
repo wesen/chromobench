@@ -27,6 +27,7 @@ import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
 import '@chromobench/studio-kit/kits/roll/roll.css';
 import '@chromobench/studio-kit/studio-kit.css';
 import { CHAT_RENDERERS } from '@chromobench/studio-kit/kits/chat/dom';
+import { realizeLayout, type AgentLayout } from '@chromobench/studio-kit/kits/chat';
 import '@chromobench/studio-kit/kits/chat/chat.css';
 import { LOOKS_RENDERERS } from '@chromobench/studio-kit/kits/looks/dom';
 import '@chromobench/studio-kit/kits/looks/looks.css';
@@ -45,6 +46,9 @@ import { addScanExtensions, fromFileList, fromHandles, hasDirectoryPicker, hasFi
 import './app.css';
 
 const q = new URLSearchParams(location.search);
+/** the KV 'settings' keys of the assistant's layouts (id → layout data) and looks (name → source) */
+const AGENT_LAYOUTS = 'agent-layouts';
+const AGENT_LOOKS = 'agent-looks';
 const root = document.getElementById('app')!;
 const statusBarEl = document.getElementById('statusbar')!;
 
@@ -179,11 +183,25 @@ async function startEngine(): Promise<Host> {
 }
 
 async function main(): Promise<void> {
+  let kv: KV;
+  try {
+    kv = q.has('fresh') ? memoryKV() : await openIdb();
+  } catch {
+    kv = memoryKV();
+  }
+  // the hard cut-off (CHB-037, design D8): edits saved by an earlier studio are cleared once, and he is told
+  const storageReset = await resetStorage(kv).catch(() => false);
+  // layouts the assistant wrote and he accepted, looks the assistant wrote: kept in the KV (CHB-037 P9), so View ▸
+  // Layout lists them, ?layout=<id> reloads one, and a document linking an agent's look still compiles
+  const agentLayouts: Record<string, AgentLayout> = (await kv.get<Record<string, AgentLayout>>('settings', AGENT_LAYOUTS).catch(() => undefined)) ?? {};
+  const agentLooks: Record<string, string> = (await kv.get<Record<string, string>>('settings', AGENT_LOOKS).catch(() => undefined)) ?? {};
   const id = q.get('layout') ?? DEFAULT_LAYOUT;
-  const load = LAYOUTS[id as LayoutId];
-  if (!load) {
-    const guess = closest(id, Object.keys(LAYOUTS));
-    report(`Unknown layout '${id}'`, [`?layout=${id} is not a registered layout.`, guess ? `Did you mean ?layout=${guess}?` : '', `Layouts: ${Object.keys(LAYOUTS).join(', ')}`]);
+  const load = id in LAYOUTS ? LAYOUTS[id as LayoutId] : undefined;
+  const savedLayout = load ? undefined : agentLayouts[id];
+  if (!load && !savedLayout) {
+    const ids = [...Object.keys(LAYOUTS), ...Object.keys(agentLayouts)];
+    const guess = closest(id, ids);
+    report(`Unknown layout '${id}'`, [`?layout=${id} is not a registered layout.`, guess ? `Did you mean ?layout=${guess}?` : '', `Layouts: ${ids.join(', ')}`]);
     return;
   }
   status('starting the engine…');
@@ -202,7 +220,7 @@ async function main(): Promise<void> {
 
   // the layout is built after setKnownValues, so the paper and stock menus list the data packs' stocks; View ▸
   // Layout builds another one in place (CHB-031 F24)
-  let def = (await load()).default;
+  let def: LayoutDef = savedLayout ? realizeLayout(savedLayout) : (await load!()).default;
   let built = buildLayout(def, { env: { params: Object.fromEntries(q), dev: q.has('dev') } });
   const errors = built.app.diagnostics.list.filter((d) => d.level === 'error');
   if (errors.length) {
@@ -210,27 +228,42 @@ async function main(): Promise<void> {
     return;
   }
 
-  let kv: KV;
-  try {
-    kv = q.has('fresh') ? memoryKV() : await openIdb();
-  } catch {
-    kv = memoryKV();
+  // the agent's looks are registered before any saved document compiles (the DSL is loaded only when there are any)
+  if (Object.keys(agentLooks).length) {
+    const { defineLookSource } = await import('@chromobench/agent');
+    for (const [name, src] of Object.entries(agentLooks)) {
+      await defineLookSource(src, { file: `${name}.cblook.js`, existing: 'keep' }).catch((e: unknown) => console.warn(`the assistant's look ${name} did not register`, e));
+    }
   }
-  // the hard cut-off (CHB-037, design D8): edits saved by an earlier studio are cleared once, and he is told
-  const storageReset = await resetStorage(kv).catch(() => false);
   const device = q.has('canvas2d') ? null : await presentDevice();
   // the layout's enlarger mode for new documents (CHB-031: real by default, normalised in simple and tiny)
   const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
   let rtNow: Runtime | null = null;
-  // the layout on screen is one the assistant wrote (wb.layouts.use, approved by him): not in LAYOUTS, no ?layout=
-  let agentLayout = false;
+  // the layout on screen is one the assistant wrote (wb.layouts.use, approved by him): not in LAYOUTS
+  let agentLayout = !!savedLayout;
   const chat: LazyChat = lazyChat(studio, (message, err) => {
     console.warn(message, err);
     rtNow?.diagnostics.warn('CB-H420', message, { runtime: true, facts: err ? [msgOf(err)] : [] });
     rtNow?.chrome.toast(message, { kind: 'warn', ms: 5000, ...(err ? { detail: `Technical: ${msgOf(err)}` } : {}) });
   }, {
     // the agent's workbench (CHB-037 P6b): which layout is on screen, which ones exist, and mounting one it wrote
-    layouts: { current: () => ({ id: def.id, label: def.label, agent: agentLayout }), available: () => layouts(), mount: (d) => switchLayout(d) },
+    layouts: {
+      current: () => ({ id: def.id, label: def.label, agent: agentLayout }),
+      available: () => layouts(),
+      mount: (d) => switchLayout(d),
+      builtIn: (x) => x in LAYOUTS,
+      keepLayout: async (l) => {
+        agentLayouts[l.id] = l;
+        await kv.put('settings', AGENT_LAYOUTS, agentLayouts);
+        // View ▸ Layout lists it from now on
+        hostActions.layouts = layouts();
+        studio.publishHost();
+      },
+      keepLook: async (name, src) => {
+        agentLooks[name] = src;
+        await kv.put('settings', AGENT_LOOKS, agentLooks);
+      },
+    },
   });
   const presenter = hostPresenter({
     device,
@@ -643,7 +676,11 @@ async function main(): Promise<void> {
   document.body.append(fileInput, folderInput);
   let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
   if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
-  const layouts = (): { id: string; label: string }[] => Object.keys(LAYOUTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
+  const layouts = (): { id: string; label: string }[] => [
+    ...Object.keys(LAYOUTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) })),
+    // the assistant's layouts he accepted (kept in the KV)
+    ...Object.values(agentLayouts).map((l) => ({ id: l.id, label: `${l.label} (assistant)` })),
+  ];
   const hostActions: StudioHost = {
     openFiles: async () => {
       if (!hasFilePicker()) return fileInput.click();
@@ -691,12 +728,14 @@ async function main(): Promise<void> {
   let switching = false;
   async function switchLayout(v: string | LayoutDef): Promise<void> {
     // a layout the assistant wrote arrives as a definition (its build replays the recording on ck and cb)
-    const agent = typeof v !== 'string';
+    // a layout the assistant wrote and he kept is chosen by id (View ▸ Layout) and realized from its data
+    const kept = typeof v === 'string' && !(v in LAYOUTS) ? agentLayouts[v] : undefined;
+    const agent = typeof v !== 'string' || !!kept;
     const load2 = agent ? null : LAYOUTS[v as LayoutId];
-    if (switching || (!agent && (!load2 || (v === def.id && !agentLayout)))) return;
+    if (switching || (!agent && (!load2 || (v === def.id && !agentLayout))) || (kept && v === def.id)) return;
     switching = true;
     try {
-      const def2 = agent ? v : (await load2!()).default;
+      const def2 = typeof v !== 'string' ? v : kept ? realizeLayout(kept) : (await load2!()).default;
       const built2 = buildLayout(def2, { env: { params: { ...Object.fromEntries(q), layout: def2.id }, dev: q.has('dev') } });
       const errs = built2.app.diagnostics.list.filter((d) => d.level === 'error');
       if (errs.length) {
@@ -718,7 +757,8 @@ async function main(): Promise<void> {
       hostActions.layout = def.id;
       hostActions.layouts = layouts();
       const u = new URL(location.href);
-      if (!agent) u.searchParams.set('layout', def.id);
+      // a reload comes back to this layout (an assistant's layout too: it is kept once he accepted it)
+      u.searchParams.set('layout', def.id);
       try {
         // one undo history across layouts: Mod+Z after the switch undoes the step made before it
         mounted = await mountLayout(built.app, past);
