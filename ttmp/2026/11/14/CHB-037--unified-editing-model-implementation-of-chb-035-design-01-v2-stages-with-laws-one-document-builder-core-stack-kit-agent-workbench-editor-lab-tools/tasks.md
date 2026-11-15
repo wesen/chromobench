@@ -25,3 +25,12 @@
 - [ ] Default arrangement (owner decision): persona session recommends Classic as the default now (opening a file into Print, not Library) and Darkroom first once it has Finish, scene and ring-around/test-strip palettes and P9-1 is fixed <!-- t:qv4l -->
 - [ ] Exact export speed: 4000 px darkroom export 1650 ms on Metal (tiles 512 + 64 halo); plan haloed tiles from the DAG's live-texture peak, build fields in one pass — owner: gpu engine (P3b future items) <!-- t:mr9z -->
 - [ ] Agent layouts: View > Layout cannot remove a kept assistant layout; File > Import Look for .cblook.js files — owner: apps/studio host <!-- t:1qlj -->
+- [ ] P10-1 (perf): heal seam coefficients are cached per GPU call only (packages/gpu/src/retouch.ts SpotRun); every render and export tile re-reads windows and re-solves — cache per edit (found by CHB-042 ch 5) <!-- t:iwwa -->
+- [ ] P10-2 (docs): comments claim adaptive drafts (shell queue.ts:299 ≈30 ms, apps/studio/src/main.ts:338 ≈150 ms); drafts are a fixed 500k px — fix the comments or implement a frame-budget slicer (CHB-042 ch 6) <!-- t:7uba -->
+- [ ] P10-3 (perf gate): the export/darkroom bench runs only with BENCH=1 and gates nothing; render times start at render start, not at input, and go only to the debug journal — add a time-to-picture gate (CHB-042 ch 10) <!-- t:xshr -->
+- [ ] P10-4 (gpu): GpuTimer.wall is never called and GpuTimer.log never read, yet timed passes await timestamp readback — measure or remove (CHB-042 ch 10) <!-- t:4abm -->
+- [ ] P10-5 (gpu): Pool.acquireChecked (trim, halve, retry) is used only in runtime.test.ts; the live recovery is the render-level one — wire in or delete (CHB-042 ch 8) <!-- t:t3aq -->
+- [ ] P10-6 (ingest): two estimators of the film base — rebatePercentile/W_REBATE_PERCENTILE only in gold200.test.ts, production falls back to W_REBATE_BLANK then brightest columns — keep one (CHB-042 ch 7) <!-- t:zj23 -->
+- [ ] P10-7 (contract): engine abilities outside the Engine contract (evaluateU16 by typeof in output/export/run.ts:61-65; openDecoded/forgetSource by casts in apps/studio/src/host/engines.ts:256,259) — declare them as optional capabilities (CHB-042 ch 1) <!-- t:bqhj -->
+- [ ] P10-8 (gpu): layout.ts can generate WGSL struct declarations but kernels declare structs by hand (wgsl() only in a unit test); op codes and MAXOPS repeated as literals in pointwise.wgsl — generate them (CHB-042 ch 2) <!-- t:1dv4 -->
+- [ ] P10-9 (blend): OkLCh hue/saturation/colour/luminosity modes skip W3C ClipColor; luminosity can leave the gamut (CHB-042 ch 4) <!-- t:dpba -->
