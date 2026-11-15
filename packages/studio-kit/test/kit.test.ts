@@ -36,7 +36,7 @@ describe('cb.arg', () => {
   it('controls("darkroom") explains as sections of generated controls (snapshot)', () => {
     const ck = createCk();
     const cb = createCb(ck);
-    expect(ck.explain(cb.panel.controls('darkroom'))).toMatchSnapshot();
+    expect(ck.explain(cb.panels.controls('darkroom'))).toMatchSnapshot();
   });
   it('typed entry in darkroom units: +1/3 st on 10 s is 12.599 s; f/8; +4 pt; 62.5 CC; *2', () => {
     const time = argModel('print.enlarger.time_s')!;

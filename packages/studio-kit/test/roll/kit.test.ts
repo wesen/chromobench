@@ -12,13 +12,13 @@ const codes = (def: unknown, level: 'error' | 'warning') => buildVariant(def).ap
 
 describe('cb.kits.roll in variants (guide §5.5)', () => {
   it('CB-R001: roll forms without the kit installed', () => {
-    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.kits['roll'].setup())) });
+    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.kits['roll'].panels.setup())) });
     expect(codes(def, 'error')).toEqual(['CB-R001 fix: .use(cb.kits.roll.kit) on the studio']);
   });
   it('CB-R002: a balance bar with no contact sheet or roll library (warning with a computed fix)', () => {
-    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(cb.kits['roll'].balanceBar())) });
+    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(cb.kits['roll'].panels.balanceBar())) });
     expect(codes(def, 'error')).toEqual([]);
-    expect(codes(def, 'warning')).toEqual(['CB-R002 fix: add cb.kits.roll.contactSheet() to the centre, or cb.kits.roll.library() to the left dock']);
+    expect(codes(def, 'warning')).toEqual(['CB-R002 fix: add cb.kits.roll.views.contactSheet() to the centre, or cb.kits.roll.panels.library() to the left dock']);
   });
   it('CB-R003: rollScope on a path the roll does not share', () => {
     const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(ck.panel.define('p', {}, cb.arg('print.lights.logH').rollScope('roll'), cb.arg('scan.stock').rollScope('ask')))) });

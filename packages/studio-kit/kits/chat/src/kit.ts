@@ -2,15 +2,15 @@
 // cb.core. Headless: the panel form, the Assistant module and the service contract; renderers are ./dom.ts
 // (CHAT_RENDERERS, passed to mountStudio).
 //
-//   s.module('assistant', cb.kits.chat.module())          // viewer in the centre, the chat on the right
-//   m.right(ck.dock.column({ width: 380 }, cb.kits.chat.panel()))
+//   s.use(cb.kits.chat.kit).module(cb.kits.chat.modules.assistant())   // viewer in the centre, the chat on the right
+//   m.right(ck.dock.column({ width: 380 }, cb.kits.chat.panels.chat()))
 //
 // The chat session arrives as the service `chat` (ChatService), like the engine: studio-kit imports only the
 // contract and the shell. @chromobench/agent's ChatSession satisfies ChatSessionLike (a type test checks it).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AgentMode, Diagnostic } from '@chromobench/contract';
-import type { Ck } from '@chromobench/shell';
+import { slot, type Ck } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 
 export type ChatEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -96,18 +96,36 @@ export const MODES: readonly { id: AgentMode; label: string; title: string }[] =
 ];
 export const EFFORT_LABELS: Record<ChatEffort, string> = { low: 'Quick', medium: 'Normal', high: 'Careful', xhigh: 'Very careful', max: 'Thorough' };
 
+const CHAT_DOCS = `## cb.kits.chat
+The in-app chat with the darkroom assistant (CHB-008): the chat panel and the Assistant module. The session arrives
+as the service \`chat\` (ChatService); the agent's edits are proposals on the frames' EditLogs, approved or not.`;
+
 export function createChatKit(ck: Ck, cb: Cb) {
-  const panel = (o: Record<string, unknown> = {}): any => cb.panel.chat({ title: 'Assistant', ...o });
+  const { build: b, traced: t } = slot;
+  const kit = ck
+    .kit('cb.chat')
+    .version('1')
+    .requires('cb.core')
+    .forms({ name: 'cb.chat', slots: { compact: b<boolean>(), frame: t<string | null>() }, doc: 'The chat with the darkroom assistant (renderer: CHAT_RENDERERS)', kind: 'cb' })
+    .docs(CHAT_DOCS);
+  const chat = (o: Record<string, unknown> = {}): any => {
+    const { id, title, ...rest } = o as { id?: string; title?: string };
+    return ck.panel.define(id ?? 'chat', { title: title ?? 'Assistant' }, ck.node('cb.chat', rest));
+  };
   /** the Assistant module: the print in the centre, the chat on the right */
-  const module = (o: { id?: string; width?: number } = {}) =>
+  const assistant = (o: { id?: string; width?: number } = {}) =>
     ck
       .module(o.id ?? 'assistant', { label: 'Assistant', txOpts: (s: any) => ({ channel: cb.sel.current(s) }) })
-      .left(ck.dock.column({ width: 220 }, cb.panel.navigator({ id: 'navigator-assistant' }), cb.panel.history({ id: 'history-assistant' })))
+      .left(ck.dock.column({ width: 220 }, cb.panels.navigator({ id: 'navigator-assistant' }), cb.panels.history({ id: 'history-assistant' })))
       .center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { id: 'assistant', views: true, compare: true, tools: ['probe'], hud: cb.hud.readout() }))
-      .right(ck.dock.column({ width: o.width ?? 400 }, panel({ id: 'chat' })))
-      .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-assistant' })))
+      .right(ck.dock.column({ width: o.width ?? 400 }, chat({ id: 'chat' })))
+      .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-assistant' })))
       .keys({ ...cb.keys.views });
-  return { panel, module, MODES, EFFORT_LABELS };
+  return ck.product(kit, {
+    panels: { chat },
+    modules: { assistant },
+    lib: { MODES, EFFORT_LABELS },
+  });
 }
 
 export type ChatKit = ReturnType<typeof createChatKit>;

@@ -3,9 +3,9 @@
 // previewed batch with one card, and roll-level settings. Headless: forms, commands, passes, state; the DOM
 // renderers are kits/roll/src/dom.ts (ROLL_RENDERERS, passed to mountStudio).
 //
-//   const roll = cb.kits.roll;
-//   cb.studio('X').use(roll.kit)
-//     .module('roll', m => m.left(roll.library()).center(roll.contactSheet()).right(roll.setup(), roll.balanceBar()))
+//   const { roll } = cb.kits;      // the product: kit, panels, views, modules, menus, keys, sel, lib, tools, commands, docs
+//   cb.studio('X').use(roll.kit).menus(...cb.menus.standard(), roll.menus.roll()).module(roll.modules.roll())
+//   ck.module('m').left(roll.panels.library()).center(roll.views.contactSheet()).right(roll.panels.balanceBar())
 //
 // The physics (ingest's film layout and roll base, core's integrate-to-grey) arrives as the service
 // `rollPhysics` (RollPhysics), like the engine: studio-kit imports only the contract and the shell.
@@ -238,7 +238,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     const bars = ir.find('roll.balanceBar') as NodeData[];
     const sheets = [...(ir.find('roll.library') as NodeData[]), ...(ir.find('gridview') as NodeData[]).filter((n) => n.props['id'] === 'contact')];
     if (bars.length && !sheets.length)
-      p.warn('CB-R002', 'cb.kits.roll.balanceBar() has no contact sheet or roll library to choose a reference from', { at: bars[0]!.at, fix: 'add cb.kits.roll.contactSheet() to the centre, or cb.kits.roll.library() to the left dock' });
+      p.warn('CB-R002', 'cb.kits.roll.panels.balanceBar() has no contact sheet or roll library to choose a reference from', { at: bars[0]!.at, fix: 'add cb.kits.roll.views.contactSheet() to the centre, or cb.kits.roll.panels.library() to the left dock' });
     for (const n of ir.find('cb.arg') as NodeData[]) {
       const mode = n.props['rollScope'];
       if (!mode || mode === 'frame') continue;
@@ -468,32 +468,45 @@ export function createRollKit(ck: Ck, cb: Cb) {
     return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, rest));
   };
 
-  return {
-    kit,
-    state: ROLL_STATE,
+  /** the Roll module: rolls and their setup left, the contact sheet in the centre, the balance bar and analysis right */
+  const rollModule = (o: { id?: string } = {}) =>
+    ck
+      .module(o.id ?? 'roll', { label: 'Roll', key: 'Mod+Alt+R' })
+      .left(ck.dock.column({ width: 300 }, panels.library(), panels.setup()))
+      .center(contactSheet({ size: 180 }))
+      .right(ck.dock.column({ width: 320 }, panels.balanceBar(), panels.inspector(), cb.panels.history({ id: 'history-roll' })))
+      .keys(keys.cull);
+  const panels = {
     library: panel('roll.library', 'roll-library', 'Rolls'),
     setup: panel('roll.setup', 'roll-setup', 'Roll setup'),
     balanceBar: panel('roll.balanceBar', 'roll-balance', 'Print the roll like…'),
     inspector: panel('roll.inspector', 'roll-inspector', 'Roll analysis'),
-    contactSheet,
-    contactCell,
-    /** the Roll menu: new roll, analysis, first print, reference and match */
+  };
+  const keys = {
+    /** the cull keys plus M (match) and R (reference); scope them to the module that shows the sheet */
+    cull: { ...cb.keys.cull, M: 'roll.matchToReference', R: 'roll.setReference' } as Record<string, any>,
+  };
+
+  return ck.product(kit, {
+    panels,
+    views: { contactSheet, contactCell },
+    modules: { roll: rollModule },
     menus: {
+      /** the Roll menu: new roll, analysis, first print, reference and match */
       roll: () => ck.menu('Roll', ['roll.fromFrames', 'roll.analyse', 'roll.firstPrint', '-', 'roll.setReference', 'roll.matchToReference', 'roll.clearMatch', '-', 'roll.contact.mode', 'roll.cull.sweep', 'roll.exportSheet']),
     },
-    /** the cull keys plus M (match) and R (reference); scope them to the module that shows the sheet */
-    cullKeys: { ...cb.keys.cull, M: 'roll.matchToReference', R: 'roll.setReference' } as Record<string, any>,
-    badge: rollBadge,
-    tag: rollTag,
-    of: rollOf,
-    frames: rollFrames,
-    /** CHB-021's "apply look to the roll": per-frame mutations as one batch */
-    batch: (frames: readonly FrameId[], recipe: (f: FrameId) => FrameRecipe | undefined, build: (f: FrameId, r: FrameRecipe) => Mutation[] | { skip: string }, o: { id: string; label: string; why?: string }) => buildBatch(frames, recipe, build, o),
-    applyBatch,
-    /** exposure bookkeeping, for variants that show it */
-    exposure: { totalOf, splitTotal },
-    missing,
-  };
+    keys,
+    sel: { roll: rollOf, frames: rollFrames, badge: rollBadge, tag: rollTag, contact: contactRecipe },
+    lib: {
+      state: ROLL_STATE,
+      /** CHB-021's "apply look to the roll": per-frame mutations as one batch */
+      batch: (frames: readonly FrameId[], recipe: (f: FrameId) => FrameRecipe | undefined, build: (f: FrameId, r: FrameRecipe) => Mutation[] | { skip: string }, o: { id: string; label: string; why?: string }) => buildBatch(frames, recipe, build, o),
+      applyBatch,
+      /** exposure bookkeeping, for layouts that show it */
+      exposure: { totalOf, splitTotal },
+    },
+    whenAbsent: missing,
+  });
 }
 
 export type RollKit = ReturnType<typeof createRollKit>;

@@ -4,8 +4,11 @@
 //
 //   cb.studio(name)       ck.shell(name).use(cb.core) with chromobench's state options
 //   cb.core               the kit: state, routes, forms, fragments, commands, tools, keys, passes, docs
-//   cb.arg / cb.nudge     controls from ArgSpec          cb.panel.*   history, approvals, why, snapshots, …
-//   cb.frame / cb.viewer  handles and the viewer         cb.view.*    grid, strip, loupe, compare, survey, ring
+//   cb.sel.*              the typed selectors (current, frame, recipe, visible, …): every read of state
+//   cb.arg / cb.viewer    a control from ArgSpec; the viewer      cb.panels.*   history, approvals, why, snapshots, …
+//   cb.modules.*          library, print                          cb.views.*    grid, strip, loupe, compare, survey, ring
+//   cb.menus.*            file … help, standard()                 cb.keys.*     cull, libraryModes, views, darkroom
+//   cb.kits.*             roll, finish, looks, chat: each { kit, panels, views, modules, menus, keys, sel, lib, … }
 //   cb.cell.frame         a θ cell: a print thumbnail (bg lane, cached by node id) + name, flag, stars
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -100,7 +103,7 @@ export function createCb(ck: Ck) {
   /** CB-R001, CB-F102, CB-L001: a kit's forms or tools used where the kit is not installed (the kit's own passes run
    *  only where it is installed, so cb.core runs each kit's check) */
   const kitsPass = ck.pass('cb.kits', { on: 'ui', after: 'slots' }, (ir: any, p) => {
-    for (const k of Object.values(cb.kits)) (k as { missing?: (ir: unknown, p: unknown) => void }).missing?.(ir, p);
+    for (const k of Object.values(cb.kits)) (k as { whenAbsent?: (ir: unknown, p: unknown) => void }).whenAbsent?.(ir, p);
   });
   const handlesPass = ck.pass('cb.handles', { on: 'ui', after: 'normalize' }, (ir: any, p) => {
     for (const n of ir.find('viewport') as NodeData[]) {
@@ -715,10 +718,24 @@ export function createCb(ck: Ck) {
         .use(core),
     arg,
     viewer,
-    view: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_ },
-    views: { library: libraryViews },
+    /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
+    views: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_, library: libraryViews },
     cell: { frame: cellFrame },
-    panel: {
+    /** the studio's panels: each defines a panel where it is placed (props: id, title, …) */
+    panels: {
+      /** the darkroom's tools as buttons (each is also a key: I, T, R, \\) */
+      tools: (o: { id?: string; title?: string } = {}) =>
+        ck.panel.define(
+          o.id ?? 'tools',
+          { title: o.title ?? 'Tools' },
+          ck.row(
+            { class: 'cb-tools' },
+            ck.ui.button({ run: 'tool.probe', text: 'Densitometer', small: true }),
+            ck.ui.button({ run: 'tool.test-strip', text: 'Test strip', small: true }),
+            ck.ui.button({ run: 'tool.ring-around', text: 'Ring-around', small: true }),
+            ck.ui.button({ run: 'view.beforeAfter', text: 'Before / after', small: true }),
+          ),
+        ),
       controls,
       history: panel('cb.history', 'history', 'History'),
       approvals: panel('cb.approvals', 'approvals', 'Agent proposals'),
@@ -732,7 +749,6 @@ export function createCb(ck: Ck) {
       library: panel('cb.library', 'library', 'Library'),
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
       output: panel('cb.output', 'output', 'Save'),
-      chat: panel('cb.chat', 'chat', 'Chat'),
       navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
     },
     /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
@@ -750,6 +766,36 @@ export function createCb(ck: Ck) {
       libraryModes: { G: ['view.mode', 'grid'], E: ['view.mode', 'loupe'], C: ['view.mode', 'compare'], N: ['view.mode', 'survey'] } as Record<string, any>,
       views: { '1': ['view.show', 'print'], '2': ['view.show', 'negative'], '3': ['view.show', 'dyes'], '4': ['view.show', 'classes'] } as Record<string, any>,
       darkroom: { '\\': 'view.beforeAfter', Y: 'view.sideBySide', P: 'probe.pin', S: 'snapshot.new', ArrowRight: 'frame.next', ArrowLeft: 'frame.previous' } as Record<string, any>,
+    },
+    /** the studio's modules (the kits offer theirs: cb.kits.roll.modules.roll(), …) */
+    modules: {
+      /** Library (G): the navigator and the library left, filter and the library views centre, metadata right */
+      library: (o: { id?: string } = {}) =>
+        ck
+          .module(o.id ?? 'library', { label: 'Library', key: 'G' })
+          .left(ck.dock.column({ width: 236 }, cb.panels.navigator(), cb.panels.library()))
+          .center(ck.column({ grow: 1 }, cb.bar.filter(), cb.views.library()))
+          .right(ck.dock.column({ width: 260 }, cb.panels.metadata()))
+          .bottom(ck.dock.column({ width: 124 }, cb.views.strip()))
+          .keys({ ...cb.keys.cull, ...cb.keys.libraryModes }),
+      /** Print (D): navigator, snapshots, history left; the print with views, compare and the darkroom tools centre;
+       *  tools, densitometer, darkroom controls, exposures, approvals right (o.extraRight adds panels below) */
+      print: (o: { id?: string; extraRight?: unknown[] } = {}) =>
+        ck
+          .module(o.id ?? 'print', { label: 'Print', key: 'D', txOpts: (s: any) => ({ channel: sel.current(s) }) })
+          .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-print' }), cb.panels.snapshots(), cb.panels.history()))
+          .center(
+            viewer((s: any) => sel.frame(s)?.print() ?? null, {
+              id: 'main',
+              views: true,
+              compare: true,
+              tools: ['probe', 'test-strip', 'ring-around', 'mask-ellipse', 'mask-gradient', 'mask-brush'],
+              hud: cb.hud.readout(),
+            }),
+          )
+          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.panels.exposures(), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
+          .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-print' })))
+          .keys({ ...cb.keys.views, ...cb.keys.darkroom }),
     },
     /** the studio's standard menus; the kits add theirs (cb.kits.roll.menus.roll(), …) */
     menus: {
@@ -782,7 +828,7 @@ export function createCb(ck: Ck) {
   cb.kits['looks'] = createLooksKit(ck, cb as any);
   cb.kits['chat'] = createChatKit(ck, cb as any); // CHB-008: the assistant chat
   // the kits' fragment methods (cb.arg(…).pad(), .testStrip(), .rollScope()) on the nodes layouts build with this ck
-  ck.extend(core, cb.kits['roll'].kit, cb.kits['finish'].kit, cb.kits['looks'].kit);
+  ck.extend(core, ...Object.values(cb.kits).map(k => k.kit));
   return cb;
 }
 

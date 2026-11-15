@@ -19,7 +19,7 @@ export default {
             ck.match(
               s => s.view.step,
               {
-                pick: cb.view.grid({ id: 'pick-grid', size: 'large', keys: { P: 'frame.pick', X: 'frame.reject', Enter: ['step.go', 'print'] } }),
+                pick: cb.views.grid({ id: 'pick-grid', size: 'large', keys: { P: 'frame.pick', X: 'frame.reject', Enter: ['step.go', 'print'] } }),
                 print: ck.row(
                   { grow: 1 },
                   cb.viewer(s => cb.sel.frame(s)?.print() ?? null, { id: 'main', tools: ['ring-around'] }),
@@ -33,7 +33,7 @@ export default {
                     cb.approvals({ compact: true }),
                   ),
                 ),
-                save: cb.panel.output({ simple: true }),
+                save: cb.panels.output({ simple: true }),
               },
               { of: ['pick', 'print', 'save'] },
             ),

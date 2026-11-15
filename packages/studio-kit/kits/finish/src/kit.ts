@@ -5,9 +5,9 @@
 // Modules (CHB-032): state.ts (state, spots, crop check, edits), context.ts (what tools, commands and panels
 // share), tools.ts (crop and spot tools), commands.ts, panels.ts (builder calls), passes.ts; this file declares the kit.
 //
-//   const fin = cb.kits.finish;
-//   cb.studio('X').use(fin.kit)
-//     .module('finish', m => m.label('Finish').center(fin.viewer()).right(fin.cropPanel(), fin.retouchPanel(), fin.tonesPanel()).keys(fin.keys))
+//   const { finish } = cb.kits;
+//   cb.studio('X').use(finish.kit).menus(...cb.menus.standard(), finish.menus.finish()).module(finish.modules.finish())
+//   ck.module('f').center(finish.views.viewer()).right(finish.panels.crop(), finish.panels.retouch()).keys(finish.keys.finish)
 //
 // Units: everything the recipe stores is sensor px of the un-oriented source (geometry.ts); a gesture converts
 // at the boundary. The crop tool shows the whole frame, oriented and not straightened, with the region the crop
@@ -86,26 +86,34 @@ export function createFinishKit(ck: Ck, cb: Cb) {
   const P = createFinishPanels(ck, cb, F);
   const { shown, viewer, cropPanel, retouchPanel, tonesPanel } = P;
 
-  return {
-    kit,
-    state: FINISH_STATE,
-    viewer,
-    shown,
-    cropPanel,
-    retouchPanel,
-    tonesPanel,
-    /** the Finish menu: every finish command, so each is also in the palette and has its key shown */
+  const keys = {
+    /** the finish module's keys: X swaps the aspect, Delete removes the selected spot, [ ] size the brush */
+    finish: { X: 'crop.swap', Enter: 'crop.done', Delete: 'spot.delete', Backspace: 'spot.delete', '[': ['spot.size', -1], ']': ['spot.size', 1], 'Shift+[': 'spot.prev', 'Shift+]': 'spot.next', '\\': 'finish.toggle' } as Record<string, any>,
+  };
+  /** the Finish module (CHB-022 guide §9.1): crop and straighten (R), spot heal and clone (Q), the finishing tones, on the
+   *  finished print; tones: false leaves the tones out (their ops run on the mock engine only until CHB-015 lands them) */
+  const finishModule = (o: { id?: string; tones?: boolean; extraRight?: unknown[] } = {}) =>
+    ck
+      .module(o.id ?? 'finish', { label: 'Finish', key: 'F', txOpts: (s: any) => ({ channel: cb.sel.current(s) }) })
+      .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-finish' }), cb.panels.history({ id: 'history-finish' })))
+      .center(viewer({ hud: cb.hud.readout() }))
+      .right(ck.dock.column({ width: 300 }, cropPanel(), retouchPanel(), ...(o.tones === false ? [] : [tonesPanel()]), ...((o.extraRight ?? []) as any[])))
+      .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-finish' })))
+      .keys(keys.finish);
+
+  return ck.product(kit, {
+    panels: { crop: cropPanel, retouch: retouchPanel, tones: tonesPanel },
+    views: { viewer },
+    modules: { finish: finishModule },
     menus: {
+      /** the Finish menu: every finish command, so each is also in the palette and has its key shown */
       finish: () => ck.menu('Finish', ['tool.crop', 'crop.reset', 'crop.swap', 'crop.lock', 'crop.fix', '-', 'orient.ccw', 'orient.cw', 'orient.flipH', 'orient.flipV', '-', 'tool.spot', 'spot.delete', 'spot.clear', 'spot.show', '-', 'finish.toggle', 'finish.resetTones']),
     },
-    /** the finish module's keys: X swaps the aspect, Delete removes the selected spot, [ ] size the brush */
-    keys: { X: 'crop.swap', Enter: 'crop.done', Delete: 'spot.delete', Backspace: 'spot.delete', '[': ['spot.size', -1], ']': ['spot.size', 1], 'Shift+[': 'spot.prev', 'Shift+]': 'spot.next', '\\': 'finish.toggle' } as Record<string, any>,
-    edits,
-    spots: spotsOf,
-    cropProblem,
-    largestCrop,
-    missing,
-  };
+    keys,
+    sel: { shown },
+    lib: { state: FINISH_STATE, edits, spots: spotsOf, cropProblem, largestCrop },
+    whenAbsent: missing,
+  });
 }
 
 export type FinishKit = ReturnType<typeof createFinishKit>;

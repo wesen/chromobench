@@ -61,7 +61,6 @@ export const CB_FORMS: FormSpec[] = [
   panelSpec('cb.library', 'The roll: frames by flag, counts'),
   panelSpec('cb.densitometer', 'Pinned probes and their densities'),
   panelSpec('cb.output', 'Save the print (CHB-011 replaces this with export and colour management)', { simple: b<boolean>() }),
-  panelSpec('cb.chat', "The chat slot (CHB-008's chat kit fills it); until then window.chromobench.propose()"),
   spec('cb.steps', { steps: b<string[]>(), labels: b<Record<string, string>>() }, 'Step buttons for view.step with Next and Back'),
   spec('cb.readout', { frame: t<string | null>() }, 'The densitometer line under the probe'),
   spec('cb.ribbon', { frame: t<string | null>() }, 'The ribbon over a shown agent proposal'),

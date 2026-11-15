@@ -12,8 +12,8 @@ export default {
       .module(
         ck
           .module('main', { label: 'Chromobench' })
-          .left(ck.dock.column({ width: 180 }, cb.view.strip({ vertical: true })))
+          .left(ck.dock.column({ width: 180 }, cb.views.strip({ vertical: true })))
           .center(cb.viewer(s => cb.sel.frame(s)?.print() ?? null))
-          .right(ck.dock.column({ width: 300 }, cb.panel.controls('darkroom'), cb.panel.history())),
+          .right(ck.dock.column({ width: 300 }, cb.panels.controls('darkroom'), cb.panels.history())),
       ),
 };

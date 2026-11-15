@@ -28,7 +28,7 @@ export function finishPasses(ck: Ck): { labelPass: any; missing: (ir: any, p: an
       if (!/print|darkroom/i.test(m.label ?? '')) continue;
       for (const r of Object.values(m.regions ?? {})) walk(r, (n) => {
         if (n.$ === 'cb.arg' && String(n.props['path'] ?? '').startsWith('finishing.'))
-          p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, { at: n.at, facts: ['finishing tones are digital, after the print; the Print module is physical'], fix: 'move it to a Finish module (cb.kits.finish.tonesPanel()) or relabel the module' });
+          p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, { at: n.at, facts: ['finishing tones are digital, after the print; the Print module is physical'], fix: 'move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module' });
       });
     }
   });

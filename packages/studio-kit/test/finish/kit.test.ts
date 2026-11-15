@@ -215,8 +215,8 @@ describe('passes and agent edits (guide §9.4–9.5)', () => {
   const warn = (def: unknown, code: string) => buildVariant(def).app.diagnostics.list.filter((d) => d.code === code).map((d) => `${d.level} ${d.fix ?? ''}`);
   it('CB-F101: a finishing control in a module labelled Print; CB-F102: finish tools without the kit', () => {
     const bad = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('print', { label: 'Print' }).right(ck.panel.define('p', {}, cb.arg('finishing.values.clarity')))) });
-    expect(warn(bad, 'CB-F101')).toEqual(['warning move it to a Finish module (cb.kits.finish.tonesPanel()) or relabel the module']);
-    const ok = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].tonesPanel())) });
+    expect(warn(bad, 'CB-F101')).toEqual(['warning move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module']);
+    const ok = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].panels.tones())) });
     expect(warn(ok, 'CB-F101')).toEqual([]);
     const nokit = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
     expect(warn(nokit, 'CB-F102')).toEqual(['error .use(cb.kits.finish.kit) on the studio']);

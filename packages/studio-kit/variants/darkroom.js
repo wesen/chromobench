@@ -16,7 +16,7 @@ export default {
       .module(
         ck
           .module('main', { label: 'Chromobench' })
-          .left(ck.dock.column({ width: 200 }, cb.view.strip({ vertical: true }), cb.panel.history().hidden(noFrame(cb))))
+          .left(ck.dock.column({ width: 200 }, cb.views.strip({ vertical: true }), cb.panels.history().hidden(noFrame(cb))))
           .center(
             cb.viewer(s => cb.sel.frame(s)?.print() ?? null, {
               tools: ['probe', 'test-strip', 'ring-around', 'mask-brush', 'mask-gradient'],
@@ -48,8 +48,8 @@ export default {
                 ),
               ),
               ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('print.paper'), cb.arg('print.grade'))).hidden(noFrame(cb)),
-              cb.panel.exposures().hidden(noFrame(cb)),
-              cb.panel.approvals().hidden(noFrame(cb)),
+              cb.panels.exposures().hidden(noFrame(cb)),
+              cb.panels.approvals().hidden(noFrame(cb)),
             ),
           )
           .keys({ ...cb.keys.darkroom }),

@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -694,7 +694,7 @@ commands 107 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"

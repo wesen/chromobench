@@ -114,7 +114,7 @@ export function createLooksModel(cb: Cb) {
     const ids: string[] = s?.ui?.selection?.ids ?? [];
     return ids.length ? ids : [sel.current(s)].filter((x): x is string => !!x);
   };
-  const rollFrameIds = (s: any): string[] => (cb.kits['roll']?.of?.(s)?.frames as string[] | undefined) ?? [];
+  const rollFrameIds = (s: any): string[] => (cb.kits['roll']?.sel?.roll?.(s)?.frames as string[] | undefined) ?? [];
   function targets(ctx: any, to: unknown, where?: 'unedited' | ((f: { id: string; recipe: FrameRecipe; unedited: boolean }) => boolean)): string[] {
     const s = ctx.state;
     let ids: string[];
@@ -124,7 +124,7 @@ export function createLooksModel(cb: Cb) {
     else if (to === 'library') ids = sel.visible(s).map((x: CatalogFrame) => x.id);
     else if (typeof to === 'string') ids = [to];
     else if (Array.isArray(to)) ids = to.map(String);
-    else if (to && typeof to === 'object' && 'roll' in (to as any)) ids = (cb.kits['roll']?.of?.(s, (to as any).roll)?.frames as string[] | undefined) ?? [];
+    else if (to && typeof to === 'object' && 'roll' in (to as any)) ids = (cb.kits['roll']?.sel?.roll?.(s, (to as any).roll)?.frames as string[] | undefined) ?? [];
     else ids = selection(s);
     const studio = studioOf(ctx);
     return ids.filter((f) => {
