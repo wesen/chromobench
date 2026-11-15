@@ -8,13 +8,32 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://e2e/studio-mask-overlay.spec.ts
+      Note: browser acceptance on the GPU engine
+    - Path: repo://packages/contract/src/catalog/view-output-mask.ts
+      Note: output.frame takes a mask (the overlay in the picture's geometry)
+    - Path: repo://packages/contract/src/compile.ts
+      Note: 'Compiled.coverage: the entry''s mask chain as the laws'' nodes'
+    - Path: repo://packages/shell/src/dom/viewport/paint.ts
+      Note: coverRgba and paintCover
+    - Path: repo://packages/shell/src/dom/viewport/render.ts
+      Note: the cover requested with the picture's target
+    - Path: repo://packages/studio-kit/kits/stack/src/dom.ts
+      Note: overlay controls in the masks panel, gesture watch, chip
+    - Path: repo://packages/studio-kit/kits/stack/src/overlay.ts
+      Note: overlay state, when it shows, commands
+    - Path: repo://packages/studio-kit/src/bridge/render-bridge.ts
+      Note: case 'mask' in lower(); mask renders kept out of the draft speed estimate
+    - Path: repo://packages/studio-kit/src/handles.ts
+      Note: frame.mask(entry) handle
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T14:30:13.780357-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary
@@ -200,3 +219,83 @@ viewport cover, the stack kit's overlay state, commands, keys and controls)"
 ### Technical details
 - Shared files touched (for merging with CHB-038): packages/studio-kit/src/bridge/render-bridge.ts (+7 lines: the
   `case 'mask'` and `h.what !== 'mask'` in `render`); nothing in apps/studio.
+
+## Step 3: The browser spec on the GPU engine, timings, and the agent's view of the overlay
+
+I wrote e2e/studio-mask-overlay.spec.ts against the real studio (classic layout, Edit module, WebGPU engine, the
+Canvas2D presenter) on a synthetic negative from e2e/scenes.ts, ran it on SwiftShader and, under the GPU lock, on
+the M1 Max's Metal adapter (headless) for timings. The agent reads the overlay with `wb.state('stack.overlay')` and
+sets it with `wb.run('mask.overlay.*')`, also in read-only mode (view state is not an edit). The mask chip of the
+entry whose mask is shown is outlined in the accent colour.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Acceptance: toggling shows a tint where the mask covers and none elsewhere (pixel
+checks on a synthetic scene), mask-only values match the engine's mask node, the overlay follows a parameter drag;
+timings on the GPU; reachable through `wb`.
+
+**Inferred user intent:** Proof in the real app, on the real engine, that the overlay is right and fast.
+
+**Commit (code):** efac177 — "CHB-039: browser spec on the GPU engine (tint where the mask covers, mask-only values
+are the engine's coverage node, the overlay follows a drag), wb.state('stack.overlay'), the mask chip marks the
+shown mask"
+
+### What I did
+- The spec: an exposure layer (+1 stop) on the print through a linear mask (coverage 0 above 0.4 H, 1 below 0.6 H).
+  `o` on the focused viewer → the cover canvas is red at alpha 128 below and transparent above; the composed viewer
+  (a screenshot of the viewport) is unchanged above (±2) and half way to red below (±3); `inverse` swaps them; `mask`
+  mode: the cover's render equals `engine.evaluate(bridge.lower(maskHandle).named, { scale, region })` of the
+  same render (max |Δ| < 1e-6, values 0…1) and the canvas shows black, white and a mid grey; O again hides it; a
+  drag of the component's Amount slider (mouse down, three moves) shows the overlay by itself (`stack.overlay.live`)
+  and at each step the cover's value below the gradient equals the dragged amount; on release it hides.
+- Kit selector `stack.overlay` (on, mode, colour, opacity, shown: 'on' | 'tool' | 'drag' | null); workbench test in
+  read-only mode; the chip's `is-overlay` mark.
+- Timings: `OVERLAY_W=3000 REAL_GPU=1 … npx playwright test e2e/studio-mask-overlay.spec.ts`, under
+  `mkdir <scratchpad>/gpu.lock` (owner CHB-039, removed after). Screenshots with `OVERLAY_SHOTS=<dir>` into
+  `various/shots/` (synthetic scene only).
+
+### Why
+- Pixel checks on the cover canvas prove where the tint is; the composed screenshot proves what the photographer
+  sees; comparing with `engine.evaluate` of the contract's coverage node proves there is no second drawing path.
+
+### What worked
+- SwiftShader (480 × 320): cover renders during the drag ≈ 34–39 ms (the first 245 ms: pipelines), the picture's
+  drafts ≈ 115 ms.
+- Metal, M1 Max, 480 × 320: cover 5–17 ms, picture 10–12 ms. 3000 × 2000: cover 29–39 ms after each drag step,
+  picture 18–20 ms; the cover's time includes waiting for the picture's render on the one GPU queue (it is
+  requested right after it), so its own work is ≈ 10 ms. Both land within about one 30 fps frame.
+
+### What didn't work
+- `expect(c[3]).toBe(128)` right after `mask.overlay.mode` read the old canvas: cells run on the next frame;
+  replaced by `expect.poll`.
+- `RangeError: Maximum call stack size exceeded` from `Math.min(...vals)` over the cover's 150k values in
+  `page.evaluate`; replaced by a loop.
+- The first timing run showed no picture renders during the drag: the exposure layer was at 0 stops, the identity,
+  so the mask changed nothing in the print (the composite law drops identities). Set +1 stop.
+
+### What I learned
+- On the GPU the overlay costs one small render per drag step; the picture and the cover share one queue, so the
+  overlay arrives a picture-render later than it could on its own.
+
+### What was tricky to build
+- Reading what the photographer sees: the presenter and the cover are two canvases composed by the browser, so the
+  composed check needs a screenshot of the viewport element, mapped with the viewport's `docToScreen`.
+
+### What warrants a second pair of eyes
+- The drag check reads `stack.overlay.live` while the mouse is down: it depends on `watchMaskGestures` seeing the
+  store's gesture paths (`docs.<f>.masks…`), i.e. on the physical layout of a document in the store.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- e2e/studio-mask-overlay.spec.ts; run:
+  `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 npx playwright test e2e/studio-mask-overlay.spec.ts --project=chromium-webgpu`.
+
+### Technical details
+- Log lines: `GPU · apple metal-3 · 4000 px: cover renders during the drag 8, ms 65.6 7.2 31.6 29.8 30.3 29.0 29.3
+  38.9; picture renders 10, ms 30.8 14.4 40.8 20.0 19.3 18.9 18.2 19.1 19.9 18.7` (OVERLAY_W=3000);
+  `GPU · google swiftshader (software) · 4000 px: cover renders during the drag 4, ms 244.9 38.5 33.6 34.5; picture
+  renders 5, ms 128.1 113.7 116.9 114.3 636.1`.
