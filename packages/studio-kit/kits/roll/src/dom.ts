@@ -5,7 +5,9 @@
 //   mountStudio(app, el, studio, { rollPhysics, renderers: ROLL_RENDERERS })
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonicalJSON, getPath, type Vec3 } from '@chromobench/contract';
+import { canonicalJSON } from '@chromobench/values';
+import type { Vec3 } from '@chromobench/contract';
+import { read } from '../../../src/model/doc.ts';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import { makeNode, type NodeData } from '@chromobench/shell';
 import { frameRef } from '../../../src/handles.ts';
@@ -78,13 +80,13 @@ function row(label: string, value: string, evidence: string | null, note: string
 
 const setup = panelOf('cb-roll-setup', (s) => {
   const r = rollOf(s);
-  return { r, recipes: r ? r.frames.map((f) => s.recipes?.[f]) .map((x) => x && canonicalJSON(SHARED_PATHS.map((p) => getPath(x, p)))).join('|') : '', s };
+  return { r, recipes: r ? r.frames.map((f) => s.docs?.[f]).map((x) => x && canonicalJSON(SHARED_PATHS.map((p) => read(x, p) ?? null))).join('|') : '', s };
 }, (el, v, m, n) => {
   const r: Roll | null = v.r;
   if (!r) return void el.append(h('p', { class: 'cb-empty', text: 'No roll selected' }));
   const s = v.s;
   const a = r.analysis;
-  const div = divergence(r, (f) => s.recipes?.[f]);
+  const div = divergence(r, (f) => s.docs?.[f]);
   const over = (p: string): string | null => {
     const fs = (div as Record<string, string[] | undefined>)[p];
     return fs?.length ? `overridden on ${fs.length} frame${fs.length === 1 ? '' : 's'}: ${fs.map((f) => nameOf(s, f)).join(', ')}` : null;
@@ -94,30 +96,30 @@ const setup = panelOf('cb-roll-setup', (s) => {
   if (!a) el.append(h('p', { class: 'cb-dim', text: 'Not analysed yet: Roll ▸ Analyse Roll' }));
   for (const sec of sections) {
     if (sec === 'stock') {
-      const cur = String(r.fragment['scan.stock'] ?? '');
+      const cur = String(r.fragment['stock'] ?? '');
       const sel = h('select', { 'aria-label': 'Stock', id: 'roll-stock' }) as HTMLSelectElement;
       const names = [...new Set([cur, ...(a?.ranking ?? []).map((x) => x.stock)].filter(Boolean))];
       for (const x of names) sel.append(h('option', { value: x, text: stockName(x), ...(x === cur ? { selected: true } : {}) }));
-      listen(m.scope, sel, 'change', () => void m.rt.runCommand('roll.setShared', null, 'scan.stock', sel.value));
+      listen(m.scope, sel, 'change', () => void m.rt.runCommand('roll.setShared', null, 'stages.scan.medium.stock', sel.value));
       const rk = a?.ranking;
       const ev = rk && rk.length
         ? `${stockName(rk[0]!.stock)} fits the base to ${(a!.base.absD ? rk[0]!.maxDiffD : rk[0]!.shapeDiffD).toFixed(3)} D${rk[1] ? `; ${stockName(rk[1].stock)} is ${((a!.base.absD ? rk[1].maxDiffD - rk[0]!.maxDiffD : rk[1].shapeDiffD - rk[0]!.shapeDiffD)).toFixed(3)} D further` : ''}${a!.base.absD ? '' : ' (weak: by shape only, no open gate)'}`
         : 'no ranking (no stock data from the host)';
-      el.append(row('Stock', cur ? stockName(cur) : '–', ev, over('scan.stock'), sel));
+      el.append(row('Stock', cur ? stockName(cur) : '–', ev, over('stages.scan.medium.stock'), sel));
     } else if (sec === 'scanner') {
-      el.append(row('Scanner', r.fragment['scan.scanner'] ? valueName('scanners', String(r.fragment['scan.scanner'])) : '–', 'estimated, not calibrated (CHB-013 measures the scanner)', over('scan.scanner')));
+      el.append(row('Scanner', r.fragment['scanner'] ? valueName('scanners', String(r.fragment['scanner'])) : '–', 'estimated, not calibrated (CHB-013 measures the scanner)', over('stages.scan.medium.scanner')));
     } else if (sec === 'base' && a) {
       const b = a.base;
-      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; written to every frame's scan.baseT` : 'no rebate found';
+      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; written to every frame's film base (baseT)` : 'no rebate found';
       const mixedNote = b.mixed.length ? `mixed: ${b.mixed.map((f) => `${nameOf(s, f)} (${b.deviationD[f]!.toFixed(3)} D)`).join(', ')} keep their own base` : null;
-      el.append(row('Base', b.T ? `T ${d3(b.T)}` : '–', ev, mixedNote ?? over('scan.baseT')));
+      el.append(row('Base', b.T ? `T ${d3(b.T)}` : '–', ev, mixedNote ?? over('stages.scan.medium.baseT')));
     } else if (sec === 'veil' && a) {
       const b = a.base;
       const veilOfBase = b.veil && b.T ? (b.veil.map((x, k) => x / b.T![k]!) as Vec3) : null;
       const ev = b.veil
-        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base, written to scan.flare${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
+        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base, written to the scan's flare${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
         : 'no opaque holder in view: the veil is not measured or corrected';
-      el.append(row('Veil (flare)', b.veil ? d3(b.veil.map((x) => x * 1000)) + ' ‰' : '–', ev, over('scan.flare')));
+      el.append(row('Veil (flare)', b.veil ? d3(b.veil.map((x) => x * 1000)) + ' ‰' : '–', ev, over('stages.scan.medium.flare')));
     } else if (sec === 'noise' && a) {
       const ss = r.frames.map((f) => a.frames[f]).filter((x) => x?.sigma);
       const f0 = ss[0];
@@ -139,7 +141,7 @@ const thumb = (m: MountCtx, image: unknown, which: 'before' | 'after'): Node => 
   return el;
 };
 
-const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: sel.current(s), cat: s.catalog, rec: s.rollView?.pending ? s.recipes : null }), (el, v, m) => {
+const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: sel.current(s), cat: s.catalog, rec: s.rollView?.pending ? s.docs : null }), (el, v, m) => {
   const r: Roll | null = v.r;
   if (!r) return void el.append(h('p', { class: 'cb-empty', text: 'No roll selected' }));
   const s = { catalog: v.cat };

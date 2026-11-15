@@ -39,24 +39,28 @@ export interface RollStudio {
   studio: Studio;
   strips: PlantedStrip[];
   ids: string[];
-}
-export async function openRoll(offsets: number[], o: { now?: () => number } = {}): Promise<RollStudio> {
-  const studio = createStudio({ engine: new MockEngine(), kv: null, ...(o.now ? { now: o.now } : {}) });
-  const strips = offsets.map((d, i) => strip(i, d));
-  const ids: string[] = [];
-  for (const [i, s] of strips.entries()) ids.push((await studio.open(tiffOf(s), `frame-${String(i + 1).padStart(2, '0')}.tif`)).id);
-  return { studio, strips, ids };
-}
-
-export interface StartedRoll extends RollStudio {
   rt: Runtime;
   clock: ManualClock;
 }
-/** the 'roll' layout booted headless on MockEngine with the planted frames open */
+/** the planted frames open in a studio (the 'roll' layout booted headless, no KV): their documents in the log */
+export async function openRoll(offsets: number[]): Promise<RollStudio> {
+  const clock = manualClock(1_000);
+  const studio = createStudio({ engine: new MockEngine(), kv: null });
+  const { app } = buildLayout((await LAYOUTS.roll()).default);
+  const rt = await app.boot(studio.services({ clock }));
+  studio.attach(rt);
+  const strips = offsets.map((d, i) => strip(i, d));
+  const ids: string[] = [];
+  for (const [i, s] of strips.entries()) ids.push((await studio.open(tiffOf(s), `frame-${String(i + 1).padStart(2, '0')}.tif`)).id);
+  return { studio, strips, ids, rt, clock };
+}
+
+export type StartedRoll = RollStudio;
+/** the 'roll' layout booted headless on MockEngine with the planted frames open, a KV and the roll physics */
 export async function startedRoll(offsets: number[]): Promise<StartedRoll> {
   const clock = manualClock(1_000);
-  // a KV, as in the browser: the logs are saved (structured-cloned) on every unit
-  const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), now: () => clock.now() });
+  // a KV, as in the browser: the frames' edits are saved (structured-cloned) on every change of the log
+  const studio = createStudio({ engine: new MockEngine(), kv: memoryKV() });
   const { app } = buildLayout((await LAYOUTS.roll()).default);
   const rt = await app.boot(studio.services({ clock, rollPhysics: physics() }));
   studio.attach(rt);

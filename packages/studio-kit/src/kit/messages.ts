@@ -1,8 +1,8 @@
 // Messages for the photographer (CHB-027 F7, F8): errors in his words, and what the typed-value fields say.
-// The contract's errors stay as they are for the DSL and the agents (`E_ARG_RANGE: print.enlarger.time_s = 0 is
+// The contract's errors stay as they are for the DSL and the agents (`E_ARG_RANGE: main.params.time_s = 0 is
 // outside the allowed range [0.1, 600] (s).`); a toast shows "Time must be between 0.1 s and 600 s" and keeps the
 // original as its detail (tooltip) for developers. Headless: plain strings, no DOM.
-import { fieldPattern, fieldSpec, type ArgSpec } from '@chromobench/contract';
+import { ruleAt, schemas, type ArgSpec } from '@chromobench/contract';
 import type { Explained } from '@chromobench/shell';
 import type { ControlModel } from '../model/controls.ts';
 import { formatSeconds } from '../model/units.ts';
@@ -27,15 +27,15 @@ function diagOf(err: unknown): DiagLike | null {
   return null;
 }
 
-/** what a person calls the value at a recipe path: the control's label ("Time", "Magenta"), else the last word */
+/** what a person calls the value at a document path: the control's label ("Time", "Magenta"), else the last word */
 function nameOf(path: string): { label: string; arg: ArgModel | null } {
   const a = argModel(path);
   if (a) {
     const comp = a.component !== null ? a.model.components?.[a.component] : undefined;
     return { label: comp ? `${a.model.label} ${comp}` : a.model.label, arg: a };
   }
-  const ex = /^print\.exposures\.([^.]+)\.(\w+)$/.exec(path);
-  if (ex) return { label: `Exposure ${ex[1]} ${ex[2] === 'time_s' ? 'time' : ex[2]!.replace(/_/g, ' ')}`, arg: null };
+  const ex = /^([^.]+)\.params\.(\w+)$/.exec(path);
+  if (ex) return { label: `${ex[1]} ${ex[2] === 'time_s' ? 'time' : ex[2]!.replace(/_/g, ' ')}`, arg: null };
   const last = path.split('.').pop() ?? path;
   const word = last.replace(/_s$/, '').replace(/_/g, ' ');
   return { label: word.charAt(0).toUpperCase() + word.slice(1), arg: null };
@@ -60,11 +60,18 @@ function bound(x: number, spec: ArgSpec | undefined, a: ArgModel | null): string
   return spec?.unit && spec.unit !== 'none' ? `${n} ${spec.unit}` : n;
 }
 
-/** "Time must be between 0.1 s and 600 s" for a recipe path and its hard range; null when the path has no range */
+/** the schema's ArgSpec of a medium, geometry or output path, or undefined */
+function specAt(path: string): ArgSpec | undefined {
+  const s = schemas();
+  const m = /^stages\.(\w+)\.medium\.(.+)$/.exec(path);
+  const r = m ? ruleAt((s.media as Record<string, never>)[m[1]!] ?? {}, m[2]!) : path.startsWith('geometry.') ? ruleAt(s.geometry, path.slice(9)) : path.startsWith('output.') ? ruleAt(s.output, path.slice(7)) : undefined;
+  return r && typeof (r as ArgSpec).type === 'string' && typeof (r as ArgSpec).doc === 'string' ? (r as ArgSpec) : undefined;
+}
+
+/** "Time must be between 0.1 s and 600 s" for a document path and its hard range; null when the path has no range */
 export function rangeText(path: string): string | null {
   const { label, arg } = nameOf(path);
-  const pat = fieldPattern(path);
-  const spec = arg ? undefined : pat ? fieldSpec(pat) : undefined;
+  const spec = arg ? undefined : specAt(path);
   const min = arg?.model.min ?? spec?.min;
   const max = arg?.model.max ?? spec?.max;
   if (min !== undefined && max !== undefined) return `${label} must be between ${bound(min, spec, arg)} and ${bound(max, spec, arg)}`;
@@ -221,21 +228,23 @@ export function clampedText(m: ControlModel, hit: 'min' | 'max', component: numb
  * these, with the contract doc as the fallback for the controls not listed.
  */
 const TIPS: Record<string, string> = {
-  'print.enlarger.filtration': 'Colour filtration in the enlarger head, as a change from the neutral pack for this film and paper (0 = neutral). More yellow makes the print bluer, more magenta makes it greener.',
-  'print.lights.logH': 'Printer lights: more red, green or blue light on the paper, in points (12 points = 1 stop). More light of a colour prints more of its opposite: more blue light makes the print yellower.',
-  'print.enlarger.time_s': 'Exposure time under the enlarger. Longer prints darker; ⅓ stop is about 26 % more time.',
-  'print.enlarger.fstop': 'Enlarger lens aperture. One stop down halves the light.',
-  'print.grade': 'Contrast: 2 is the paper as made, higher is harder, lower is softer. The mid-grey stays where it is.',
-  'print.paper': 'The colour paper the print is made on.',
-  'print.preflash': 'A weak, even pre-exposure of the paper that tames the highlights.',
-  'print.enlarger.mode': 'Real: a darkroom enlarger, where the time, the aperture and the filtration expose the paper. Normalised: the grey card prints at the aim whatever the time; make the print lighter or darker with the printer lights.',
-  'scan.stock': 'The film the negative was shot on. It sets the orange mask and the film’s colour response.',
-  'capture.stock': 'The film the photo is put on, as if it had been shot on it.',
-  'capture.exposureEV': 'Exposure of the film, in stops from its rated speed.',
-  'capture.development.push': 'Push (+) or pull (−) development, in stops.',
-  'view.illuminant': 'The light the print is looked at under.',
-  'view.flare': 'Stray light on the print where it is looked at; it softens the deepest blacks.',
-  'scan.flare': 'Stray light in the scanner or camera scan, measured from the film holder; it is taken out.',
+  'main.params.filtration': 'Colour filtration in the enlarger head, as a change from the neutral pack for this film and paper (0 = neutral). More yellow makes the print bluer, more magenta makes it greener.',
+  'lights.params.logH': 'Printer lights: more red, green or blue light on the paper, in points (12 points = 1 stop). More light of a colour prints more of its opposite: more blue light makes the print yellower.',
+  'main.params.time_s': 'Exposure time under the enlarger. Longer prints darker; ⅓ stop is about 26 % more time.',
+  'main.params.fstop': 'Enlarger lens aperture. One stop down halves the light.',
+  'stages.darkroom.medium.grade': 'Contrast: 2 is the paper as made, higher is harder, lower is softer. The mid-grey stays where it is.',
+  'stages.darkroom.medium.paper': 'The colour paper the print is made on.',
+  'preflash:fraction': 'A weak, even pre-exposure of the paper that tames the highlights.',
+  'burn:stops': 'More light under the mask, in stops of the main exposure.',
+  'dodge:stops': 'Light held back under the mask during the main exposure, in stops.',
+  'stages.darkroom.medium.mode': 'Real: a darkroom enlarger, where the time, the aperture and the filtration expose the paper. Normalised: the grey card prints at the aim whatever the time; make the print lighter or darker with the printer lights.',
+  'stages.scan.medium.stock': 'The film the negative was shot on. It sets the orange mask and the film’s colour response.',
+  'stages.film.medium.stock': 'The film the photo is put on, as if it had been shot on it.',
+  'stages.film.medium.exposureEV': 'Exposure of the film, in stops from its rated speed.',
+  'stages.film.medium.push': 'Push (+) or pull (−) development, in stops.',
+  'stages.print.medium.illuminant': 'The light the print is looked at under.',
+  'stages.print.medium.flare': 'Stray light on the print where it is looked at; it softens the deepest blacks.',
+  'stages.scan.medium.flare': 'Stray light in the scanner or camera scan, measured from the film holder; it is taken out.',
 };
 /** the tooltip of a control's label */
-export const controlTip = (m: ControlModel): string => TIPS[m.path] ?? m.doc;
+export const controlTip = (m: ControlModel): string => TIPS[m.path] ?? TIPS[`${m.op}:${m.arg}`] ?? m.doc;

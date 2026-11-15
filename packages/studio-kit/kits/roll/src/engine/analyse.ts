@@ -1,8 +1,10 @@
 // roll.analyse (guide §4.2, §6.3): a pass over a roll's frames that measures, per frame, the film layout
 // (veil, open gate, image area, rebate), σ and class shares at the analysis size, and the integrated exposure
 // under the frame's own rebate; then, per roll, the base (median of confident rebates, spread, mixed frames),
-// the veil, the stock ranking and the roll's mean auto lights. It never writes recipes.
-import { canonicalJSON, getPath, type Box, type Diagnostic, type Engine, type FrameRecipe, type Graph, type Vec3 } from '@chromobench/contract';
+// the veil, the stock ranking and the roll's mean auto lights. It never writes documents.
+import { canonicalJSON, set } from '@chromobench/values';
+import { documentKind, edit, type Box, type Diagnostic, type Document, type Engine, type Graph, type Vec3 } from '@chromobench/contract';
+import { read, withEnlargerMode } from '../../../../src/model/doc.ts';
 import { ALPHA, ANALYSIS_LONG, STOCK_AMBIGUOUS_D, UNDER_BLANK } from './constants.ts';
 import { totalOf } from './lower.ts';
 import { measureExposure, readSource, type Pixels } from './measure.ts';
@@ -12,7 +14,7 @@ export interface AnalyseEntry {
   id: FrameId;
   sha256: string;
   graph: Graph;
-  recipe: FrameRecipe;
+  doc: Document;
 }
 
 export interface AnalyseOptions {
@@ -51,13 +53,13 @@ export type PixelAnalysis = Omit<FrameAnalysis, 'latd' | 'auto' | 'under' | 'id'
  * The pixel half of a frame's analysis, on its source at the analysis size. A rebate or crop the photographer
  * picked (scan.rebate, view.frame.crop, source px) wins over the search.
  */
-export function analysePixels(px: Pixels, recipe: FrameRecipe | null, physics: RollPhysics, o: { veil?: boolean; conditionedVeil?: Vec3 | null } = {}): PixelAnalysis {
+export function analysePixels(px: Pixels, recipe: Document | null, physics: RollPhysics, o: { veil?: boolean; conditionedVeil?: Vec3 | null } = {}): PixelAnalysis {
   const { rgb, w, h, scale } = px;
   const lay = physics.layout(rgb, w, h);
   const useVeil = o.veil !== false;
   const veil: Vec3 = useVeil && lay.surround ? lay.surround.L : [0, 0, 0];
-  const picked = recipe ? (getPath(recipe, 'scan.rebate') as Box | null | undefined) : null;
-  const pickedCrop = recipe ? (getPath(recipe, 'view.frame.crop') as Box | null | undefined) : null;
+  const picked = recipe ? (read(recipe, 'stages.scan.medium.rebate') as Box | null | undefined) : null;
+  const pickedCrop = recipe ? (read(recipe, 'geometry.crop') as Box | null | undefined) : null;
   let rebate: FrameAnalysis['layout']['rebate'] = null;
   let rebateA: Box | null = null;
   if (picked) {
@@ -103,16 +105,16 @@ export function analysePixels(px: Pixels, recipe: FrameRecipe | null, physics: R
 /** A frame's analysis: pixels, then the integrated exposure under its own rebate box and a real enlarger. */
 export async function analyseFrame(engine: Engine, e: AnalyseEntry, physics: RollPhysics, o: AnalyseOptions = {}): Promise<FrameAnalysis> {
   const long = o.long ?? ANALYSIS_LONG;
-  const px = await readSource(engine, e.graph, e.recipe, long, o.signal);
+  const px = await readSource(engine, e.graph, e.doc, long, o.signal);
   const cond = physics.conditioned?.(e.sha256) ?? null;
-  const p = analysePixels(px, e.recipe, physics, { ...(o.veil !== undefined ? { veil: o.veil } : {}), conditionedVeil: cond?.veil ?? null });
-  let r: FrameRecipe = { ...e.recipe, print: { ...e.recipe.print, enlarger: { ...e.recipe.print.enlarger, mode: 'real' } } };
-  if (r.kind === 'negative-scan' && r.scan && !r.scan.rebate && p.layout.rebate) r = { ...r, scan: { ...r.scan, rebate: p.layout.rebate.box } };
+  const p = analysePixels(px, e.doc, physics, { ...(o.veil !== undefined ? { veil: o.veil } : {}), conditionedVeil: cond?.veil ?? null });
+  let r: Document = withEnlargerMode(e.doc, 'real');
+  if (documentKind(r) === 'negative-scan' && !read(r, 'stages.scan.medium.rebate') && p.layout.rebate) r = edit(r, [set('stages.scan.medium.rebate', p.layout.rebate.box)]).doc;
   const X = await measureExposure(engine, e.graph, r, { area: p.layout.crop, ...(o.signal ? { signal: o.signal } : {}) });
   const t = totalOf(r);
   const latd = r6v(X.map((x, k) => -(x - t[k]!)));
   const auto = r6v(physics.integrateToGrey(latd, { latd: [0, 0, 0], lights: [0, 0, 0] }, o.alpha ?? ALPHA));
-  const under = canonicalJSON({ stock: r.scan?.stock ?? null, scanner: r.scan?.scanner ?? null, rebate: r.scan?.rebate ?? null, crop: r.view.frame.crop ?? null, long });
+  const under = canonicalJSON({ stock: read(r, 'stages.scan.medium.stock') ?? null, scanner: read(r, 'stages.scan.medium.scanner') ?? null, rebate: read(r, 'stages.scan.medium.rebate') ?? null, crop: r.geometry.crop ?? null, long });
   return { id: e.id, sha256: e.sha256, ...p, latd, auto, under };
 }
 

@@ -20,6 +20,9 @@ function walk(n: unknown, f: (n: NodeData) => void, seen = new Set<unknown>()): 
     }
   }
 }
+/** a control of a print-stage finishing layer (the clarity layer's arguments) */
+const isFinishing = (path: string): boolean => /^clarity\.params\./.test(path);
+
 /** CB-F101: a finishing control in a module labelled Print or Darkroom (a pass of the kit); CB-F102: finish tools
  *  without the kit (a check cb.core's pass cb.kits runs, since the kit's own passes run only where it is installed). */
 export function finishPasses(ck: Ck): { labelPass: any; missing: (ir: any, p: any) => void } {
@@ -27,7 +30,7 @@ export function finishPasses(ck: Ck): { labelPass: any; missing: (ir: any, p: an
     for (const m of ir.modules as { id: string; label: string; regions: Record<string, NodeData | null> }[]) {
       if (!/print|darkroom/i.test(m.label ?? '')) continue;
       for (const r of Object.values(m.regions ?? {})) walk(r, (n) => {
-        if (n.$ === 'cb.arg' && String(n.props['path'] ?? '').startsWith('finishing.'))
+        if (n.$ === 'cb.arg' && isFinishing(String(n.props['path'] ?? '')))
           p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, { at: n.at, facts: ['finishing tones are digital, after the print; the Print module is physical'], fix: 'move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module' });
       });
     }

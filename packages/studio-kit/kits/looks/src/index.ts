@@ -2,6 +2,7 @@
 export { createLooksKit, type LooksKit } from './kit.ts';
 export { agentBatches, looksView, amountOf, LOOKS_STATE, type LooksDoc, type LooksView, type CompareSource, type AgentBatch } from './state.ts';
 export * from './engine/look.ts';
+export * from './engine/paths.ts';
 export * from './engine/amount.ts';
 export * from './engine/diff.ts';
 export * from './engine/groups.ts';

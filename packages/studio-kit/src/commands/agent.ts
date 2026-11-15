@@ -27,9 +27,9 @@ export const agentCommands = (): CommandTable<CbState> => ({
     label: 'Reject Agent Change',
     palette: false,
     run: (ctx, f: string, tx: string) => {
-      const p = (sel.proposals(ctx.state, f)).find((x: any) => x.tx === tx);
+      const p = sel.proposals(ctx.state, f).find(x => x.tx === tx);
       if (!p) return;
-      studioOf(ctx).route.reject(f, p.seqs);
+      studioOf(ctx).reject(p.seq);
       ctx.set({ ui: { showProposal: ctx.state.ui.showProposal === tx ? null : ctx.state.ui.showProposal } });
     },
   },
@@ -46,7 +46,7 @@ export const agentCommands = (): CommandTable<CbState> => ({
     label: 'Agent Mode',
     palette: false,
     run: (ctx, mode: 'read-only' | 'ask' | 'auto') => {
-      studioOf(ctx).frames.setMode(mode);
+      studioOf(ctx).mode = mode;
       ctx.set({ prefs: { agentMode: mode } });
     },
   },

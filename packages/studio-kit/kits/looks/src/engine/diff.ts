@@ -1,11 +1,15 @@
-// The diff pass (guide §5.4): which recipe paths differ between two recipes, and by how much, in units a darkroom
-// person reads — seconds and stops, printer points, CC, f-stops, names. One pass feeds the survey captions, the
-// Amount result line, approval cards, "what changed since the snapshot" and cb.looks.diff in the DSL.
+// The diff pass (guide §5.4; CHB-037: documents): which document paths differ between two documents, and by how
+// much, in units a darkroom person reads — seconds and stops, printer points, CC, f-stops, names. Layers are
+// compared by id (one present on one side only is one change); masks by id. One pass feeds the survey captions,
+// the Amount result line, approval cards, "what changed since the snapshot" and the agent's looks provider.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonicalJSON, fieldPattern, fieldSpec, getPath, LOGH_PER_POINT, settablePaths, type FrameRecipe, type Unit } from '@chromobench/contract';
+import { canonicalJSON, Coll } from '@chromobench/values';
+import { LOGH_PER_POINT, stagesOf, type Document, type Entry, type Unit } from '@chromobench/contract';
+import { entriesOf, read } from '../../../../src/model/doc.ts';
 import { formatStops, signed } from '../../../../src/model/units.ts';
 import { groupOf, type SyncGroups, SYNC_GROUPS } from './groups.ts';
+import { settablePaths, specAt } from './paths.ts';
 
 export interface DiffEntry {
   path: string;
@@ -24,18 +28,23 @@ export interface DiffEntry {
 }
 
 const LABELS: Record<string, string> = {
-  'print.enlarger.time_s': 'time', 'print.enlarger.fstop': 'aperture', 'print.enlarger.filtration': 'filtration', 'print.enlarger.magnification': 'magnification',
-  'print.enlarger.mode': 'enlarger mode', 'print.enlarger.lamp': 'lamp', 'print.lights.logH': 'lights', 'print.lights.auto': 'auto lights', 'print.grade': 'grade', 'print.preflash': 'preflash',
-  'print.paper': 'paper', 'print.aim': 'aim', 'scan.stock': 'film', 'capture.stock': 'film', 'capture.exposureEV': 'exposure', 'capture.development.push': 'push',
-  'capture.development.halation.strength': 'halation', 'capture.development.grain.amount': 'grain', 'capture.development.grain.size_um': 'grain size', 'finishing.look': 'look amount',
-  'view.illuminant': 'viewing light', 'view.flare': 'viewing flare',
+  'main.params.time_s': 'time', 'main.params.fstop': 'aperture', 'main.params.filtration': 'filtration', 'stages.darkroom.medium.magnification': 'magnification',
+  'stages.darkroom.medium.mode': 'enlarger mode', 'stages.darkroom.medium.lamp': 'lamp', 'lights.params.logH': 'lights', 'lights.source': 'auto lights', 'stages.darkroom.medium.grade': 'grade',
+  'stages.darkroom.medium.paper': 'paper', 'stages.darkroom.medium.aim': 'aim', 'stages.scan.medium.stock': 'film', 'stages.film.medium.stock': 'film', 'stages.film.medium.exposureEV': 'exposure',
+  'stages.film.medium.push': 'push', 'stages.film.medium.halation.strength': 'halation', 'stages.film.medium.grain.amount': 'grain', 'stages.film.medium.grain.size_um': 'grain size',
+  'stages.print.medium.illuminant': 'viewing light', 'stages.print.medium.flare': 'viewing flare', 'geometry.crop': 'crop', 'geometry.orientation': 'orientation',
 };
-export function labelOf(path: string): string {
+export function labelOf(path: string, doc?: Document | null): string {
   if (LABELS[path]) return LABELS[path]!;
   const s = path.split('.');
-  if (s[0] === 'print' && s[1] === 'exposures') return `exposure ${s[2]} ${s.slice(3).join('.')}`.trim();
+  const e = doc && s[0] && !path.startsWith('stages.') && !path.startsWith('geometry.') && !path.startsWith('output.') && !path.startsWith('masks.') ? layerAt(doc, s[0]) : undefined;
+  if (e) return `${e.kind === 'layer' ? e.op : 'group'} ${s[0]}${s.length > 1 ? ` ${s.slice(s[1] === 'params' ? 2 : 1).join('.')}` : ''}`.trim();
   return s.slice(-2).join(' ').replace(/_/g, ' ');
 }
+const layerAt = (doc: Document, id: string): Entry | undefined => {
+  for (const st of stagesOf(doc)) for (const p of entriesOf(doc, st)) if (p.id === id) return p.entry;
+  return undefined;
+};
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const num = (x: number, d = 2): string => {
@@ -67,12 +76,12 @@ function equal(unit: Unit | null, a: unknown, b: unknown, k: number): boolean {
   return canonicalJSON(a ?? null) === canonicalJSON(b ?? null);
 }
 
-/** One changed path in darkroom words. */
-export function describeChange(path: string, a: unknown, b: unknown, groups: SyncGroups = SYNC_GROUPS): DiffEntry {
-  const spec = fieldSpec(fieldPattern(path) ?? '');
+/** One changed path in darkroom words (`doc`: the document that names the path's layer, for its op). */
+export function describeChange(path: string, a: unknown, b: unknown, groups: SyncGroups = SYNC_GROUPS, doc?: Document | null): DiffEntry {
+  const spec = specAt(path, doc);
   const unit = (spec?.unit as Unit | undefined) ?? null;
-  const label = labelOf(path);
-  const base = { path, a, b, unit, label, group: groupOf(path, groups) };
+  const label = labelOf(path, doc);
+  const base = { path, a, b, unit, label, group: groupOf(path, groups, doc) };
   if (a === undefined || b === undefined) {
     const short = a === undefined ? 'added' : 'removed';
     return { ...base, short, shown: `${label} ${short}` };
@@ -114,27 +123,6 @@ export function describeChange(path: string, a: unknown, b: unknown, groups: Syn
   return { ...base, short: 'changed', shown: `${label} changed` };
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-function keysAt(r: unknown, prefix: string): string[] {
-  const v = prefix ? getPath(r, prefix) : r;
-  if (Array.isArray(v)) return v.filter(isObj).map((e) => String(e['id']));
-  if (isObj(v)) return Object.keys(v);
-  return [];
-}
-/** concrete paths of a pattern over two recipes (exposure ids, record keys) */
-function expandBoth(a: FrameRecipe, b: FrameRecipe, pattern: string): string[] {
-  let paths: string[] = [''];
-  for (const seg of pattern.split('.')) {
-    const next: string[] = [];
-    for (const p of paths) {
-      if (seg !== '*') next.push(p ? `${p}.${seg}` : seg);
-      else for (const k of new Set([...keysAt(a, p), ...keysAt(b, p)])) next.push(`${p}.${k}`);
-    }
-    paths = next;
-  }
-  return paths;
-}
-
 export interface DiffOptions {
   /** multiplies the per-unit tolerances (default 1) */
   tolerance?: number;
@@ -143,40 +131,58 @@ export interface DiffOptions {
   groups?: SyncGroups;
 }
 
-/** Every settable path that differs between `a` and `b` (plus masks), in darkroom units. A recipe vs itself: []. */
-export function diffRecipes(a: FrameRecipe, b: FrameRecipe, o: DiffOptions = {}): DiffEntry[] {
+/** The layer fields compared besides the params. */
+const ENTRY_FIELDS = ['enabled', 'amount', 'mask'] as const;
+
+/**
+ * Every settable path that differs between `a` and `b` (the fixed parts, every layer by id, masks), in darkroom
+ * units. A document vs itself: [].
+ */
+export function diffDocs(a: Document, b: Document, o: DiffOptions = {}): DiffEntry[] {
   const k = o.tolerance ?? 1;
   const want = (p: string): boolean => !o.only || o.only.some((x) => p === x || p.startsWith(`${x}.`));
   const out: DiffEntry[] = [];
-  const seen = new Set<string>();
-  for (const pattern of settablePaths()) {
-    for (const path of pattern.includes('*') ? expandBoth(a, b, pattern) : [pattern]) {
-      if (seen.has(path) || !want(path)) continue;
-      seen.add(path);
-      const x = getPath(a, path);
-      const y = getPath(b, path);
-      if (x === undefined && y === undefined) continue;
-      const spec = fieldSpec(pattern);
-      // an exposure that exists on one side only is one change, not one per field
-      if (pattern.startsWith('print.exposures.*.') && (x === undefined || y === undefined)) {
-        const id = path.split('.')[2]!;
-        const p = `print.exposures.${id}`;
-        if (!seen.has(p)) {
-          seen.add(p);
-          out.push(describeChange(p, getPath(a, p), getPath(b, p), o.groups));
-        }
-        continue;
-      }
-      if (equal((spec?.unit as Unit | undefined) ?? null, x, y, k)) continue;
-      out.push(describeChange(path, x, y, o.groups));
+  for (const path of settablePaths()) {
+    if (!want(path)) continue;
+    const x = read(a, path);
+    const y = read(b, path);
+    if (x === undefined && y === undefined) continue;
+    if (equal((specAt(path, b)?.unit as Unit | undefined) ?? null, x, y, k)) continue;
+    out.push(describeChange(path, x, y, o.groups, b));
+  }
+  // layers by id, in every stage (the main exposure and the printer lights are compared above, by their params)
+  const layers = (d: Document): Map<string, Entry> => new Map(stagesOf(d).flatMap((s) => entriesOf(d, s).map((p) => [p.id, p.entry] as const)));
+  const la = layers(a);
+  const lb = layers(b);
+  for (const id of new Set([...la.keys(), ...lb.keys()])) {
+    if (!want(id)) continue;
+    const x = la.get(id);
+    const y = lb.get(id);
+    if (!x || !y) {
+      out.push(describeChange(id, x, y, o.groups, y ? b : a));
+      continue;
+    }
+    if (x.kind !== 'layer' || y.kind !== 'layer' || x.op !== y.op) {
+      if (x.kind === 'group' && y.kind === 'group') continue; // a group's children are compared by their ids
+      if (canonicalJSON(x) !== canonicalJSON(y)) out.push({ ...describeChange(id, x, y, o.groups, b), short: 'changed', shown: `${labelOf(id, b)} changed` });
+      continue;
+    }
+    for (const f of ENTRY_FIELDS) if (canonicalJSON(x[f] ?? null) !== canonicalJSON(y[f] ?? null)) out.push(describeChange(`${id}.${f}`, x[f], y[f], o.groups, b));
+    if (id === 'main' || id === 'lights') continue;
+    for (const p of new Set([...Object.keys(x.params), ...Object.keys(y.params)])) {
+      const path = `${id}.params.${p}`;
+      const xv = Coll.is(x.params[p]) ? Coll.values(x.params[p] as never) : x.params[p];
+      const yv = Coll.is(y.params[p]) ? Coll.values(y.params[p] as never) : y.params[p];
+      if (equal((specAt(path, b)?.unit as Unit | undefined) ?? null, xv, yv, k)) continue;
+      out.push(describeChange(path, xv, yv, o.groups, b));
     }
   }
   if (want('masks')) {
-    for (const id of new Set([...Object.keys(a.masks ?? {}), ...Object.keys(b.masks ?? {})])) {
-      const x = a.masks?.[id];
-      const y = b.masks?.[id];
+    for (const id of new Set([...a.masks.order, ...b.masks.order])) {
+      const x = a.masks.items[id];
+      const y = b.masks.items[id];
       if (canonicalJSON(x ?? null) === canonicalJSON(y ?? null)) continue;
-      out.push({ path: `masks.${id}`, a: x, b: y, unit: null, label: `mask ${id}`, short: x === undefined ? 'added' : 'changed', shown: `mask ${id} ${x === undefined ? 'added' : 'changed'}`, group: groupOf(`masks.${id}`, o.groups) });
+      out.push({ path: `masks.${id}`, a: x, b: y, unit: null, label: `mask ${id}`, short: x === undefined ? 'added' : y === undefined ? 'removed' : 'changed', shown: `mask ${id} ${x === undefined ? 'added' : y === undefined ? 'removed' : 'changed'}`, group: groupOf(`masks.${id}`, o.groups) });
     }
   }
   return out;

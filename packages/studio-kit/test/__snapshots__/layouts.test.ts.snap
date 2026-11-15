@@ -124,23 +124,22 @@ module print "Print" key D
                then:
                  column
                    section "Exposure"
-                     cb.arg  path "print.enlarger.mode"  rollScope "frame"  segmented
-                     cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
+                     cb.arg  path "stages.darkroom.medium.mode"  rollScope "frame"  segmented
+                     cb.arg  path "main.params.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  rollScope "frame"  stepper  f  log2  aside st
                      text τ  dim  wrap
                    section "Filtration"
-                     cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "main.params.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
                    section "Printer lights"
-                     cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
-                     cb.arg  path "print.paper"  rollScope "frame"  select
-                     cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-                     cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
+                     cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
+                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
                    section "Film and viewing"
-                     cb.arg  path "capture.stock"  rollScope "frame"  select
-                     cb.arg  path "scan.stock"  rollScope "frame"  select
-                     cb.arg  path "scan.scanner"  rollScope "frame"  select
-                     cb.arg  path "view.illuminant"  rollScope "frame"  select
+                     cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
+                     cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
+                     cb.arg  path "stages.scan.medium.scanner"  rollScope "frame"  select
+                     cb.arg  path "stages.print.medium.illuminant"  rollScope "frame"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
@@ -194,7 +193,7 @@ module finish "Finish" key F
              row  class "cb-finish-spot-cmds"
                button  run spot.delete  small  text "Delete"
                button  run spot.clear  small  text "Clear all"
-             text "Heal and clone work on the print; Dust works o…  dim
+             text "Heal and clone are layers of the print (the Re…  dim
   bottom dockcol  width 124
            filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module assistant "Assistant"
@@ -246,7 +245,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -259,8 +258,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -304,9 +304,10 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
+  finish.addClarity "Add Clarity" (Finish) ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 125 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 127 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -370,19 +371,19 @@ module main "Chromobench"
                  text τ  dim  wrap
                then:
                  column
-                   cb.arg  path "print.enlarger.mode"  segmented
-                   cb.arg  path "print.enlarger.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
-                   cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-                   cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-                   cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   cb.arg  path "stages.darkroom.medium.mode"  segmented
+                   cb.arg  path "main.params.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
+                   cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
+                   cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
            panel paper "Paper"  hidden τ
              when  cond τ
                else:
                  text "Select a photo to print it."  dim  wrap
                then:
                  column
-                   cb.arg  path "print.paper"  select
-                   cb.arg  path "print.grade"  slider  step 0.5 none
+                   cb.arg  path "stages.darkroom.medium.paper"  select
+                   cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
            panel exposures "Exposures"  hidden τ
              cb.exposures
            panel approvals "Agent proposals"  hidden τ
@@ -411,7 +412,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -424,8 +425,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -434,7 +436,7 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 82 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -543,23 +545,22 @@ module print "Print" key D
                then:
                  column
                    section "Exposure"
-                     cb.arg  path "print.enlarger.mode"  segmented
-                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     cb.arg  path "stages.darkroom.medium.mode"  segmented
+                     cb.arg  path "main.params.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
                      text τ  dim  wrap
                    section "Filtration"
-                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
                    section "Printer lights"
-                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
-                     cb.arg  path "print.paper"  select
-                     cb.arg  path "print.grade"  slider  step 0.5 none
-                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                     cb.arg  path "stages.darkroom.medium.paper"  select
+                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
                    section "Film and viewing"
-                     cb.arg  path "capture.stock"  select
-                     cb.arg  path "scan.stock"  select
-                     cb.arg  path "scan.scanner"  select
-                     cb.arg  path "view.illuminant"  select
+                     cb.arg  path "stages.film.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.scanner"  select
+                     cb.arg  path "stages.print.medium.illuminant"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
@@ -613,11 +614,13 @@ module finish "Finish" key F
              row  class "cb-finish-spot-cmds"
                button  run spot.delete  small  text "Delete"
                button  run spot.clear  small  text "Clear all"
-             text "Heal and clone work on the print; Dust works o…  dim
+             text "Heal and clone are layers of the print (the Re…  dim
            panel finish-tones "Finishing (digital, after the print)"
              text "Not darkroom controls: they change the finishe…  dim
-             cb.arg  path "finishing.values.clarity"  why "finishing, not darkroom"  slider  fraction  step 0.01 fraction
+             cb.arg  path "clarity.params.strength"  why "finishing, not darkroom"  slider  fraction  step 0.01 fraction
+             cb.arg  path "clarity.params.radius_mm"  why "finishing, not darkroom"  slider  mm  step 0.5 mm
              row  class "cb-finish-tone-cmds"
+               button  run finish.addClarity  small  text "+ Clarity"
                button  run finish.toggle  small  text "Before / after"
                button  run finish.resetTones  small  text "Reset"
   bottom dockcol  width 124
@@ -646,7 +649,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -659,8 +662,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -688,9 +692,10 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
+  finish.addClarity "Add Clarity" (Finish) ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 107 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 109 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -799,23 +804,22 @@ module print "Print" key D
                then:
                  column
                    section "Exposure"
-                     cb.arg  path "print.enlarger.mode"  segmented
-                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     cb.arg  path "stages.darkroom.medium.mode"  segmented
+                     cb.arg  path "main.params.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
                      text τ  dim  wrap
                    section "Filtration"
-                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
                    section "Printer lights"
-                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
-                     cb.arg  path "print.paper"  select
-                     cb.arg  path "print.grade"  slider  step 0.5 none
-                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                     cb.arg  path "stages.darkroom.medium.paper"  select
+                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
                    section "Film and viewing"
-                     cb.arg  path "capture.stock"  select
-                     cb.arg  path "scan.stock"  select
-                     cb.arg  path "scan.scanner"  select
-                     cb.arg  path "view.illuminant"  select
+                     cb.arg  path "stages.film.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.scanner"  select
+                     cb.arg  path "stages.print.medium.illuminant"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
@@ -851,44 +855,41 @@ module lab "Lab" key L
                  text "Select a photo to print it."  dim  wrap
                then:
                  column
-                   section "Capture"
-                     cb.arg  path "capture.stock"  select
-                     cb.arg  path "capture.exposureEV"  slider  st  step 0.333 st
-                     cb.arg  path "capture.whiteBalance.mode"  segmented
-                     cb.arg  path "capture.whiteBalance.temperature_K"  slider  K  step 50 K
-                     cb.arg  path "capture.whiteBalance.tint"  slider  step 1 none
-                   section "Film"
-                     cb.arg  path "capture.development.dir.amount"  slider  fraction  step 0.05 fraction
-                     cb.arg  path "capture.development.dir.diffusion_um"  slider  um  step 1 um
-                     cb.arg  path "capture.development.push"  stepper  st  step 1 st
-                     cb.arg  path "capture.development.grain.amount"  slider  fraction  step 0.05 fraction
-                     cb.arg  path "capture.development.grain.size_um"  slider  um  step 0.5 um
-                     cb.arg  path "capture.development.halation.strength"  slider  fraction  step 0.05 fraction
-                   section "Finishing"
-                     cb.arg  path "finishing.values.clarity"  slider  fraction  step 0.01 fraction
+                   section "Enlarger"
+                     cb.arg  path "main.params.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
+                     cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                   section "Printer lights"
+                     cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Scan"
-                     cb.arg  path "scan.stock"  select
-                     cb.arg  path "scan.scanner"  select
-                     cb.arg  path "scan.flare"  slider  percent  step 0.05 percent
-                   section "Output"
-                     cb.arg  path "view.output.rendering"  segmented
-                   section "Frame"
-                     cb.arg  path "view.frame.orientation"  select
-                     cb.arg  path "view.frame.angle_deg"  slider  deg  step 0.1 deg  detent 0
+                     cb.arg  path "stages.scan.medium.scanner"  select
+                     cb.arg  path "stages.scan.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.flare"  slider  percent  step 0.05 percent
+                   section "Capture"
+                     cb.arg  path "stages.scene.medium.whiteBalance.mode"  segmented
+                     cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  slider  K  step 50 K
+                     cb.arg  path "stages.scene.medium.whiteBalance.tint"  slider  step 1 none
+                     cb.arg  path "stages.film.medium.stock"  select
+                     cb.arg  path "stages.film.medium.exposureEV"  slider  st  step 0.333 st
+                   section "Film"
+                     cb.arg  path "stages.film.medium.push"  stepper  st  step 1 st
+                     cb.arg  path "stages.film.medium.dir.amount"  slider  fraction  step 0.05 fraction
+                     cb.arg  path "stages.film.medium.dir.diffusion_um"  slider  um  step 1 um
+                     cb.arg  path "stages.film.medium.halation.strength"  slider  fraction  step 0.05 fraction
+                     cb.arg  path "stages.film.medium.grain.amount"  slider  fraction  step 0.05 fraction
+                     cb.arg  path "stages.film.medium.grain.size_um"  slider  um  step 0.5 um
                    section "Print"
-                     cb.arg  path "print.grade"  slider  step 0.5 none
-                     cb.arg  path "print.paper"  select
-                     cb.arg  path "print.enlarger.mode"  segmented
-                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
-                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
-                   section "Source"
-                     cb.arg  path "source.decode.encoding"  segmented
+                     cb.arg  path "stages.darkroom.medium.paper"  select
+                     cb.arg  path "stages.darkroom.medium.mode"  segmented
+                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
                    section "View"
-                     cb.arg  path "view.flare"  slider  percent  step 0.01 percent
-                     cb.arg  path "view.illuminant"  select
+                     cb.arg  path "stages.print.medium.illuminant"  select
+                     cb.arg  path "stages.print.medium.flare"  slider  percent  step 0.01 percent
+                   section "Frame"
+                     cb.arg  path "geometry.orientation"  select
+                     cb.arg  path "geometry.angle_deg"  slider  deg  step 0.1 deg  detent 0
+                   section "Output"
+                     cb.arg  path "output.rendering"  segmented
   center column  class "cb-viewer"  grow 1
            segmented "View"  bind view.view  options [{…}, {…}, {…}, {…}]  small
            cb.ribbon
@@ -976,7 +977,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -989,8 +990,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -999,7 +1001,7 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 84 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 85 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1120,10 +1122,10 @@ module print "Print" key D
                  text "Select a photo to print it."  dim  wrap
                then:
                  column
-                   cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-                   cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
-                   cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-                   cb.arg  path "print.paper"  rollScope "frame"  select
+                   cb.arg  path "main.params.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                   cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                   cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
+                   cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
            panel looks-groups "Sync groups"
              looks.groups  model τ
            panel looks-presets "Presets"
@@ -1154,7 +1156,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -1167,8 +1169,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1227,7 +1230,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 133 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 134 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1323,23 +1326,22 @@ module print "Print" key D
                then:
                  column
                    section "Exposure"
-                     cb.arg  path "print.enlarger.mode"  rollScope "frame"  segmented
-                     cb.arg  path "print.enlarger.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  rollScope "frame"  stepper  f  log2  aside st
+                     cb.arg  path "stages.darkroom.medium.mode"  rollScope "frame"  segmented
+                     cb.arg  path "main.params.time_s"  rollScope "frame"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  rollScope "frame"  stepper  f  log2  aside st
                      text τ  dim  wrap
                    section "Filtration"
-                     cb.arg  path "print.enlarger.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "main.params.filtration"  rollScope "frame"  slider  CC  step 1 CC  aside pt  detent 0
                    section "Printer lights"
-                     cb.arg  path "print.lights.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
-                     cb.arg  path "print.paper"  rollScope "frame"  select
-                     cb.arg  path "print.grade"  rollScope "frame"  slider  step 0.5 none
-                     cb.arg  path "print.preflash"  rollScope "frame"  slider  fraction  step 0.005 fraction
+                     cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
+                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
                    section "Film and viewing"
-                     cb.arg  path "capture.stock"  rollScope "frame"  select
-                     cb.arg  path "scan.stock"  rollScope "frame"  select
-                     cb.arg  path "scan.scanner"  rollScope "frame"  select
-                     cb.arg  path "view.illuminant"  rollScope "frame"  select
+                     cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
+                     cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
+                     cb.arg  path "stages.scan.medium.scanner"  rollScope "frame"  select
+                     cb.arg  path "stages.print.medium.illuminant"  rollScope "frame"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
              cb.exposures
@@ -1371,7 +1373,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -1384,8 +1386,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1410,7 +1413,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 99 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 100 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1468,10 +1471,10 @@ module main "Chromobench"
                            thumb  image τ
                            button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
                column  class "cb-simple-side"  width 320
-                 cb.arg  labels [Lighter, Darker]  path "print.enlarger.time_s"  step "1/3 st"  widget "nudge"  nudge  s  log2  step 1/3 st  aside st
-                 cb.arg  axis "yellow-blue"  labels [Warmer, Cooler]  path "print.lights.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
-                 cb.arg  axis "magenta-green"  labels [Greener, More magenta]  path "print.lights.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
-                 cb.arg  labels [Softer, Harder]  path "print.grade"  step 0.5  widget "nudge"  nudge  step 0.5
+                 cb.arg  labels [Lighter, Darker]  path "main.params.time_s"  step "1/3 st"  widget "nudge"  nudge  s  log2  step 1/3 st  aside st
+                 cb.arg  axis "yellow-blue"  labels [Warmer, Cooler]  path "lights.params.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
+                 cb.arg  axis "magenta-green"  labels [Greener, More magenta]  path "lights.params.logH"  step "2 pt"  widget "nudge"  nudge  pt  step 2 pt  aside log H  detent 0
+                 cb.arg  labels [Softer, Harder]  path "stages.darkroom.medium.grade"  step 0.5  widget "nudge"  nudge  step 0.5
                  button  primary  run tool.ring-around  text "Which looks best?"
                  cb.approvals  compact
            cases.save:
@@ -1501,7 +1504,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -1514,8 +1517,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1524,7 +1528,7 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 82 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1543,23 +1547,22 @@ module main "Chromobench"
                then:
                  column
                    section "Exposure"
-                     cb.arg  path "print.enlarger.mode"  segmented
-                     cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-                     cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+                     cb.arg  path "stages.darkroom.medium.mode"  segmented
+                     cb.arg  path "main.params.time_s"  slider  s  log2  step 1/6 st  aside st
+                     cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
                      text τ  dim  wrap
                    section "Filtration"
-                     cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+                     cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
                    section "Printer lights"
-                     cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+                     cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
-                     cb.arg  path "print.paper"  select
-                     cb.arg  path "print.grade"  slider  step 0.5 none
-                     cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+                     cb.arg  path "stages.darkroom.medium.paper"  select
+                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
                    section "Film and viewing"
-                     cb.arg  path "capture.stock"  select
-                     cb.arg  path "scan.stock"  select
-                     cb.arg  path "scan.scanner"  select
-                     cb.arg  path "view.illuminant"  select
+                     cb.arg  path "stages.film.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.stock"  select
+                     cb.arg  path "stages.scan.medium.scanner"  select
+                     cb.arg  path "stages.print.medium.illuminant"  select
                      text τ  dim  wrap
            panel history "History"
              cb.history
@@ -1587,7 +1590,7 @@ commands
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
-  file.saveRecipe "Save Recipe" (File) ← cb.core
+  file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
@@ -1600,8 +1603,9 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Exposure" (Frame) ← cb.core
-  exposure.remove "Remove Exposure" ← cb.core
+  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
+  exposure.remove "Remove Darkroom Layer" ← cb.core
+  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1610,7 +1614,7 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+commands 82 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

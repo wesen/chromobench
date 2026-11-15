@@ -1,15 +1,27 @@
-// The EditLog route and the history adapter (guide §6, stage 1 "done means"): a drag is one unit, a burst is one
-// unit, the interleaved undo of §6.3, CB-H401 after a panel jump (with a spy proving no stale log.undo), proposals
-// as previews with partial approval, E_STALE and Apply anyway (§11), persistence round trips with memoryKV.
+// The studio on the document log (CHB-037 P5b-1): a frame is a document at docs.<f> in the store's log; a drag is
+// one step and Esc logs nothing; nudges on one control coalesce; two frames in one transaction are one batch step;
+// the agent proposes into the log (ask), commits (auto) or is refused (read-only); proposals are published for the
+// panels with the document Show renders, approved whole or in part, E_STALE and Apply anyway; saved edits round trip
+// through the KV with their history; the hard cut-off on old storage.
 import { makeM1Tiff } from '@chromobench/engine-mock';
-import { canonicalJSON, sha256Hex } from '@chromobench/contract';
-import { describe, expect, it, vi } from 'vitest';
-import { BURST_MS, frameRef, memoryKV } from '../src/index.ts';
+import { sha256Hex, type Document } from '@chromobench/contract';
+import { set } from '@chromobench/values';
+import type { RecordingChrome } from '@chromobench/shell';
+import { describe, expect, it } from 'vitest';
+import {
+  frameRef, frameSave, historyRows, isFrameSave, logKey, memoryKV, modelAt, resetStorage, sel, STORAGE_FORMAT, whyRows, type CbState,
+  type FrameSave, type ModelLookup,
+} from '../src/index.ts';
 import { hashBytes } from '../src/bridge/frames.ts';
-import { recipePath, started } from './helpers.ts';
+import { at, docOf, otherTiff, setDoc, shown, started, timeOf } from './helpers.ts';
+
+const TIME = 'main.params.time_s';
+const LIGHTS = 'lights.params.logH';
+const lookup: ModelLookup = (p, d) => modelAt(p, d) ?? undefined;
+const state = (rt: { state: unknown }) => rt.state as CbState;
 
 describe('file identity (CHB-027)', () => {
-  it('hashBytes: WebCrypto for big files gives the contract\'s sha256Hex', async () => {
+  it("hashBytes: WebCrypto for big files gives the contract's sha256Hex", async () => {
     const big = new Uint8Array(3 << 20).map((_, i) => (i * 2654435761) >>> 24);
     expect(await hashBytes(big)).toBe(sha256Hex(big));
     const small = new Uint8Array([1, 2, 3]);
@@ -17,260 +29,255 @@ describe('file identity (CHB-027)', () => {
   });
 });
 
-const TIME = 'print.enlarger.time_s';
-
-describe('the EditLog route', () => {
-  it('projects recipes.<frame> from the log and catalogues the frame', async () => {
+describe('frames are documents in the log', () => {
+  it('the frame opens at docs.<f> under the frame rules, and is catalogued in the view tier', async () => {
     const { rt, studio, f } = await started();
-    const s = rt.state as any;
-    expect(rt.store.peek(['recipes', f])).toBe(studio.frames.get(f)!.log.committed);
-    expect(s.catalog.frames[f].name).toBe('m1.tif');
+    const s = state(rt);
+    expect(rt.store.log.kind(f)).toBe('frame');
+    expect(rt.store.mounts.get(f)).toEqual(['docs', f]);
+    expect(rt.store.peek(['docs', f])).toBe(rt.store.log.doc(f));
+    expect(studio.doc(f)).toBe(rt.store.log.doc(f));
+    expect(s.docs[f]!.format).toBe(3);
+    expect(s.catalog.frames[f]!.name).toBe('m1.tif');
+    expect(rt.store.tierOf(['catalog'])).toBe('view');
     expect(s.ui.selection.primary).toBe(f);
-    expect(s.proposals[f]).toEqual([]);
+    // opening a file is no undo step
+    expect(rt.store.log.canUndo).toBe(false);
   });
 
-  it('a 120-move drag is one EditLog unit and one undo step; Esc logs nothing', async () => {
-    const { rt, studio, f } = await started();
-    const log = studio.frames.get(f)!.log;
-    for (let i = 1; i <= 120; i++) rt.store.preview(recipePath(f, TIME), 10 + i * 0.02);
-    expect(log.state.print.enlarger.time_s).toBeCloseTo(12.4);
-    expect(log.committed.print.enlarger.time_s).toBe(10);
-    expect((rt.state as any).recipes[f].print.enlarger.time_s).toBeCloseTo(12.4);
+  it('a 120-move drag is one step; Esc logs nothing; undo and redo walk the log', async () => {
+    const { rt, f } = await started();
+    for (let i = 1; i <= 120; i++) rt.store.preview(at(rt, f, TIME), 10 + i * 0.02);
+    expect(timeOf(rt, f)).toBe(10);
+    expect((shown(rt, f).stages.darkroom.stack.items['main'] as any).params.time_s).toBeCloseTo(12.4);
     rt.store.commit('Time');
-    expect(log.units.length).toBe(1);
-    expect(log.entries.length).toBe(1);
-    expect(log.committed.print.enlarger.time_s).toBeCloseTo(12.4);
-    expect(rt.history.entries.length).toBe(1);
+    expect(rt.store.log.steps.length).toBe(1);
+    expect(rt.store.log.last!.tx.mutations).toEqual([set(TIME, 12.4)]);
+    expect(timeOf(rt, f)).toBeCloseTo(12.4);
     // Esc
-    rt.store.preview(recipePath(f, TIME), 20);
+    rt.store.preview(at(rt, f, TIME), 20);
     rt.store.cancel();
-    expect(log.entries.length).toBe(1);
-    expect(log.state.print.enlarger.time_s).toBeCloseTo(12.4);
-    // undo is the log's undo
+    expect(rt.store.log.steps.length).toBe(1);
+    expect(timeOf(rt, f)).toBeCloseTo(12.4);
     rt.run('edit.undo');
-    expect(log.cursor).toBe(0);
-    expect((rt.state as any).recipes[f].print.enlarger.time_s).toBe(10);
+    expect(rt.store.log.cursor).toBe(0);
+    expect(timeOf(rt, f)).toBe(10);
     rt.run('edit.redo');
-    expect(log.cursor).toBe(1);
+    expect(timeOf(rt, f)).toBeCloseTo(12.4);
   });
 
-  it('a keyboard burst is one unit; a pause starts a new one; another control commits the burst first', async () => {
-    const { rt, studio, f, clock } = await started();
-    const log = studio.frames.get(f)!.log;
-    const step = (p: string, v: unknown) => studio.route.step(rt.store, rt.clock, recipePath(f, p), v, p);
-    step(TIME, 11);
+  it('nudges on one control coalesce into one step; a pause or another control starts a new one', async () => {
+    const { rt, f, clock } = await started();
+    const nudge = (path: string, v: unknown) => setDoc(rt, f, path, v, path, { coalesce: `${f}:${path}` });
+    nudge(TIME, 11);
     clock.advance(300);
-    step(TIME, 12);
+    nudge(TIME, 12);
     clock.advance(300);
-    step(TIME, 13);
-    expect(log.units.length).toBe(0);
-    clock.advance(BURST_MS);
-    expect(log.units.length).toBe(1);
-    expect(log.committed.print.enlarger.time_s).toBe(13);
-    step(TIME, 14);
-    step('print.grade', 3); // another control: the time burst commits now
-    expect(log.units.length).toBe(2);
-    clock.advance(BURST_MS);
-    expect(log.units.length).toBe(3);
-    expect(rt.history.entries.length).toBe(3);
+    nudge(TIME, 13);
+    expect(rt.store.log.steps.length).toBe(1);
+    expect(timeOf(rt, f)).toBe(13);
+    clock.advance(2000); // a pause
+    nudge(TIME, 14);
+    expect(rt.store.log.steps.length).toBe(2);
+    nudge('stages.darkroom.medium.grade', 3); // another control
+    expect(rt.store.log.steps.length).toBe(3);
+    rt.run('edit.undo');
+    rt.run('edit.undo');
+    expect(timeOf(rt, f)).toBe(13);
   });
 
-  it('a component write lifts to the whole field; two frames in one tx share a tx id', async () => {
+  it('two frames in one transaction are one batch step; a refused value aborts all of it', async () => {
     const { rt, studio, f } = await started();
-    const e2 = await studio.open(makeM1Tiff().map((b, i) => (i === 300 ? b ^ 1 : b)), 'm1b.tif');
-    rt.store.tx('Yellow', (t: any) => {
-      t.recipes[f].print.enlarger.filtration.y = 10;
-      t.recipes[e2.id].print.enlarger.filtration.y = 10;
+    const g = (await studio.open(otherTiff(), 'm2.tif')).id;
+    rt.ctx().tx('Both', (t: any) => {
+      t.$set(at(rt, f, TIME), 12);
+      t.$set(at(rt, g, TIME), 14);
     });
-    const a = studio.frames.get(f)!.log;
-    const b = e2.log;
-    expect(a.entries[0]!.m).toEqual({ op: 'set', path: 'print.enlarger.filtration', value: { c: 0, m: 0, y: 10 } });
-    expect(a.units[0]!.tx).toBe(b.units[0]!.tx);
-    expect(rt.history.entries.length).toBe(1);
-    rt.run('edit.undo');
-    expect(a.cursor + b.cursor).toBe(0);
-  });
-
-  it('a refused value aborts the whole transaction', async () => {
-    const { rt, studio, f } = await started();
-    rt.store.tx('Bad', (t: any) => {
-      t.recipes[f].print.grade = 3;
-      t.recipes[f].print.enlarger.time_s = -5;
+    const step = rt.store.log.undoStep!;
+    expect(rt.store.log.docsOf(step).sort()).toEqual([f, g].sort());
+    expect(step.batch).toBeTruthy();
+    // a value out of range on one frame: nothing changes on either
+    rt.ctx().tx('Bad', (t: any) => {
+      t.$set(at(rt, f, TIME), 13);
+      t.$set(at(rt, g, TIME), 0);
     });
-    expect(studio.frames.get(f)!.log.units.length).toBe(0);
-    expect(rt.diagnostics.list.some(d => d.code === 'CK-T430')).toBe(true);
-  });
-});
-
-describe('one global undo (§6.3)', () => {
-  it('flag, time, keyword, approved agent change: Mod+Z walks them newest first', async () => {
-    const { rt, studio, f } = await started();
-    const log = studio.frames.get(f)!.log;
-    rt.run('frame.pick');
-    rt.store.preview(recipePath(f, TIME), 12.6);
-    rt.store.commit('Time');
-    rt.store.tx('Add Keyword "beach"', (t: any) => void t.catalog.frames[f].keywords.push('beach'));
-    studio.propose([{ op: 'set', path: 'print.lights.logH', value: [0.1, 0, 0] }], { tx: 'eval-k2', why: 'warmer' });
-    rt.run('proposal.approve', f, 'eval-k2');
-    const s = () => rt.state as any;
-    expect(log.units.map(u => u.tx)).toEqual([log.units[0]!.tx, 'eval-k2']);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Flag as Pick', 'Time', 'Add Keyword "beach"', 'Approve Agent Change (warmer)']);
+    expect(timeOf(rt, f)).toBe(12);
+    expect(timeOf(rt, g)).toBe(14);
+    expect((rt.chrome as RecordingChrome).toasts.at(-1)!.text).toBe('Time must be between 0.1 s and 600 s');
     rt.run('edit.undo');
-    expect(s().recipes[f].print.lights.logH).toEqual([0, 0, 0]);
-    expect(log.cursor).toBe(1);
-    rt.run('edit.undo');
-    expect(s().catalog.frames[f].keywords).toEqual([]);
-    rt.run('edit.undo');
-    expect(s().recipes[f].print.enlarger.time_s).toBe(10);
-    rt.run('edit.undo');
-    expect(s().catalog.frames[f].flag).toBe(null);
-    expect(log.stateHash).toBe(sha256Hex(canonicalJSON(studio.frames.get(f)!.initial)));
+    expect(timeOf(rt, f)).toBe(10);
+    expect(timeOf(rt, g)).toBe(10);
   });
 
-  it('CHB-031 F36: Undo and Redo of a change on another frame select that frame, after the toast named it', async () => {
+  it('Undo and Redo of a change on another frame select that frame, after the toast named it (F36)', async () => {
     const { rt, studio, f } = await started();
-    const g = (await studio.open(makeM1Tiff().map((b, i) => (i === 300 ? b ^ 1 : b)), 'm1b.tif')).id;
+    const g = (await studio.open(otherTiff(), 'm2.tif')).id;
     rt.run('frame.select', f);
-    rt.store.preview(recipePath(f, TIME), 12.6);
-    rt.store.commit('Time');
+    setDoc(rt, f, TIME, 12.6, 'Time');
     rt.run('frame.select', g);
-    const toasts = () => (rt.chrome as unknown as { log: { kind: string; text?: string }[] }).log.filter(x => x.kind === 'toast').map(x => x.text);
     rt.run('edit.undo');
-    expect(toasts().at(-1)).toBe('Undo Time (on m1.tif)');
+    expect((rt.chrome as RecordingChrome).toasts.at(-1)!.text).toBe('Undo Time (on m1.tif)');
+    await Promise.resolve();
     await Promise.resolve();
     expect(studio.current).toBe(f);
-    expect((rt.state as any).recipes[f].print.enlarger.time_s).toBe(10);
+    expect(timeOf(rt, f)).toBe(10);
     rt.run('frame.select', g);
     rt.run('edit.redo');
     await Promise.resolve();
-    expect(studio.current).toBe(f);
-    // a step on the frame on screen changes nothing in the selection
-    rt.run('edit.undo');
     await Promise.resolve();
     expect(studio.current).toBe(f);
   });
 
-  it('CB-H401: after a History-panel jump the stale part is skipped, with no log.undo, and the next step is undone', async () => {
+  it('History rows and History jumps move the one cursor', async () => {
     const { rt, studio, f } = await started();
-    const log = studio.frames.get(f)!.log;
-    rt.run('frame.pick');
-    rt.store.preview(recipePath(f, TIME), 12.6);
-    rt.store.commit('Time');
-    rt.run('history.jump', f, 0); // the panel moves the frame's cursor; the global stack is unchanged
-    expect(log.cursor).toBe(0);
-    expect(rt.history.entries.length).toBe(2);
-    const spy = vi.spyOn(log, 'undo');
-    rt.run('edit.undo');
-    expect(spy).not.toHaveBeenCalled();
-    expect((rt.state as any).catalog.frames[f].flag).toBe(null);
-    expect(rt.diagnostics.list.some(d => d.code === 'CB-H401')).toBe(true);
-    expect(log.stateHash).toBe(sha256Hex(canonicalJSON(studio.frames.get(f)!.initial)));
-    // the mutant check: the part's guard is what prevents the second undo
-    expect(studio.route.stats.skips).toBe(1);
+    setDoc(rt, f, TIME, 12.6, 'Time');
+    rt.run('frame.rotateRight');
+    const rows = historyRows(rt.store.log, f, lookup);
+    expect(rows.map(r => r.changes.map(c => c.text).join('; '))).toEqual(['Time 10.0 → 12.6 s (+⅓ stop)', 'Rotated right']);
+    expect(rows.map(r => r.cursor)).toEqual([1, 2]);
+    rt.run('history.jump', 0);
+    expect(rt.store.log.cursor).toBe(0);
+    expect(historyRows(rt.store.log, f, lookup).every(r => !r.inEffect)).toBe(true);
+    rt.run('history.jump', 2);
+    expect(docOf(rt, f).geometry.orientation).toBe('cw90');
+    expect(whyRows(rt.store.log, f, TIME, lookup).rows.map(r => r.text)).toEqual(['10.0 s', '10.0 s → 12.6 s']);
+    void studio;
   });
 });
 
-describe('agent proposals as previews (§6.4, §11)', () => {
-  it('pending entries publish proposals.<f> with the proposed recipe; the log is untouched', async () => {
+describe('agent proposals (§26)', () => {
+  it('ask: a proposal is pending, published at ui.log with the document Show renders; the document is untouched', async () => {
     const { rt, studio, f } = await started();
-    studio.propose([{ op: 'set', path: 'print.lights.logH', value: [0.1, 0, 0] }], { tx: 'eval-k2', why: 'warmer' });
-    const p = (rt.state as any).proposals[f];
-    expect(p.length).toBe(1);
-    expect(p[0].tx).toBe('eval-k2');
-    expect(p[0].why).toBe('warmer');
-    expect(p[0].recipe.print.lights.logH).toEqual([0.1, 0, 0]);
-    expect(p[0].changes[0].text).toBe("Printer lights R 0 → +4 pt");
-    expect((rt.state as any).recipes[f].print.lights.logH).toEqual([0, 0, 0]);
-    // a drag during a shown proposal still works: the proposal never uses the preview slot
-    rt.run('proposal.show', 'eval-k2');
-    rt.store.preview(recipePath(f, TIME), 11);
-    rt.store.commit('Time');
-    expect((rt.state as any).proposals[f][0].recipe.print.enlarger.time_s).toBe(11);
+    const seq = studio.propose([set(LIGHTS, [0.1, 0, 0])], { why: 'warmer', tx: 'eval-1' });
+    await studio.flush();
+    expect(rt.store.log.pending(f).map(e => e.seq)).toEqual([seq]);
+    const [p] = sel.proposals(state(rt), f);
+    expect(p).toMatchObject({ seq, tx: 'eval-1', why: 'warmer', by: 'agent' });
+    expect(p!.changes.map(c => c.text)).toEqual(['Printer lights R 0 → +4 pt']);
+    expect((p!.doc!.stages.darkroom.stack.items['lights'] as any).params.logH).toEqual([0.1, 0, 0]);
+    expect((docOf(rt, f).stages.darkroom.stack.items['lights'] as any).params.logH).toEqual([0, 0, 0]);
+    // Show: the viewer's handle carries the proposed document
+    rt.run('proposal.show', 'eval-1');
+    expect(state(rt).ui.showProposal).toBe('eval-1');
+    // approve: one step, by the agent, approved by the user
+    rt.run('proposal.approve', f, 'eval-1');
+    await studio.flush();
+    expect((docOf(rt, f).stages.darkroom.stack.items['lights'] as any).params.logH).toEqual([0.1, 0, 0]);
+    expect(rt.store.log.last).toMatchObject({ approvedBy: 'user' });
+    expect(rt.store.log.last!.tx.by).toBe('agent');
+    expect(sel.proposals(state(rt), f)).toEqual([]);
+    expect(rt.store.log.why(f, LIGHTS)).toMatchObject({ by: 'agent', approvedBy: 'user' });
   });
 
-  it('partial approval: the photographer unticks one change; the rest is one unit, the unticked stays pending', async () => {
+  it('partial approval: the unchecked change is left out; the rest is one step', async () => {
     const { rt, studio, f } = await started();
-    const log = studio.frames.get(f)!.log;
-    const [a, b] = studio.propose(
-      [
-        { op: 'set', path: 'print.grade', value: 3 },
-        { op: 'set', path: TIME, value: 12 },
-      ],
-      { tx: 'eval-2' },
-    );
-    rt.run('proposal.toggle', 'eval-2', b!.seq);
+    studio.propose([set(TIME, 12), set('stages.darkroom.medium.grade', 3)], { tx: 'eval-2', why: 'two' });
+    await studio.flush();
+    rt.run('proposal.toggle', 'eval-2', 1);
     rt.run('proposal.approve', f, 'eval-2');
-    expect(log.committed.print.grade).toBe(3);
-    expect(log.committed.print.enlarger.time_s).toBe(10);
-    expect(log.pending().map(e => e.seq)).toEqual([b!.seq]);
-    expect(log.units.at(-1)!.seqs).toEqual([a!.seq]);
-    rt.run('proposal.reject', f, 'eval-2');
-    expect(log.pending()).toEqual([]);
-    expect((rt.state as any).proposals[f]).toEqual([]);
+    await studio.flush();
+    expect(timeOf(rt, f)).toBe(12);
+    expect((docOf(rt, f).stages.darkroom.medium as any).grade).toBe(2);
+    expect(rt.store.log.pending(f)).toEqual([]);
+    expect(rt.store.log.entries.some(e => e.tx.id === 'eval-2' && e.tx.status === 'rejected')).toBe(true);
+    rt.run('edit.undo');
+    expect(timeOf(rt, f)).toBe(10);
   });
 
-  it('the stale flow: E_STALE keeps the card, Apply anyway forces, three undos return to the start from cache', async () => {
-    const { rt, studio, f, clock } = await started();
-    const log = studio.frames.get(f)!.log;
-    rt.store.preview(recipePath(f, TIME), 12.599);
-    rt.store.commit('Time');
-    studio.propose([{ op: 'set', path: 'print.lights.logH', value: [0.1, 0, 0] }], { tx: 'eval-k2', why: 'warmer' });
-    studio.route.step(rt.store, rt.clock, recipePath(f, 'print.lights.logH.1'), 0.05, 'Lights G');
-    clock.advance(BURST_MS);
-    expect(log.committed.print.lights.logH).toEqual([0, 0.05, 0]);
-    const r = rt.run('proposal.approve', f, 'eval-k2') as { code: string }[];
-    expect(r[0]!.code).toBe('E_STALE');
-    expect((rt.state as any).ui.approvals['eval-k2'].stale[0].code).toBe('E_STALE');
-    expect((rt.state as any).proposals[f].length).toBe(1);
-    expect(rt.diagnostics.list.some(d => d.code === 'CB-H410')).toBe(true);
-    rt.run('proposal.approve', f, 'eval-k2', true);
-    expect(log.committed.print.lights.logH).toEqual([0.1, 0, 0]);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Time', 'Lights G', 'Approve Agent Change (warmer)']);
-    const bridge = studio.bridge;
-    const h0 = { $: 'cb.image', frame: f, recipe: studio.frames.get(f)!.initial, what: 'print', args: {}, expr: 'frame.print()' } as const;
-    const start = bridge.key(h0);
-    rt.run('edit.undo');
-    rt.run('edit.undo');
-    rt.run('edit.undo');
-    expect(log.cursor).toBe(0);
-    expect(bridge.key({ ...h0, recipe: (rt.state as any).recipes[f] })).toBe(start);
+  it('E_STALE keeps the card with the reason; Apply anyway forces; reject marks it rejected', async () => {
+    const { rt, studio, f } = await started();
+    studio.propose([set(TIME, 12)], { tx: 'eval-3' });
+    setDoc(rt, f, TIME, 15, 'Time'); // the photographer changes what the proposal would undo
+    await studio.flush();
+    rt.run('proposal.approve', f, 'eval-3');
+    expect(state(rt).ui.approvals['eval-3']!.stale![0]!.code).toBe('E_STALE');
+    expect(timeOf(rt, f)).toBe(15);
+    rt.run('proposal.approve', f, 'eval-3', true);
+    expect(timeOf(rt, f)).toBe(12);
+    studio.propose([set('stages.darkroom.medium.grade', 3)], { tx: 'eval-4' });
+    await studio.flush();
+    rt.run('proposal.reject', f, 'eval-4');
+    await studio.flush();
+    expect(rt.store.log.pending(f)).toEqual([]);
+    expect(rt.store.log.entries.at(-1)!.tx.status).toBe('rejected');
   });
 
-  it('auto mode: the agent unit enters the global stack when it happens', async () => {
+  it('auto commits as the agent; read-only refuses with E_READONLY', async () => {
     const { rt, studio, f } = await started({ mode: 'auto' });
-    studio.propose([{ op: 'set', path: 'print.grade', value: 4 }], { tx: 'eval-a' });
-    expect((rt.state as any).recipes[f].print.grade).toBe(4);
-    expect(rt.history.entries.map(e => e.label)).toEqual(['Agent Change']);
-    rt.run('edit.undo');
-    expect((rt.state as any).recipes[f].print.grade).toBe(2);
+    studio.propose([set(TIME, 11)]);
+    expect(timeOf(rt, f)).toBe(11);
+    expect(rt.store.log.last!.tx.by).toBe('agent');
+    rt.run('agent.mode', 'read-only');
+    expect(studio.mode).toBe('read-only');
+    expect(() => studio.propose([set(TIME, 12)])).toThrow(/E_READONLY/);
+    expect(timeOf(rt, f)).toBe(11);
   });
 });
 
-describe('persistence', () => {
-  it('logs resume by SHA-256; the catalog and snapshots survive a reload through the KV', async () => {
+describe('saved edits (persistence)', () => {
+  it("a frame's edit is saved under (hash, mode) and resumes with its history; the catalog and snapshots survive a reload", async () => {
     const kv = memoryKV();
     const a = await started({ kv });
-    a.rt.store.preview(recipePath(a.f, TIME), 15);
-    a.rt.store.commit('Time');
+    setDoc(a.rt, a.f, TIME, 15, 'Time');
     a.rt.run('frame.pick');
     a.rt.run('snapshot.new', 'warm');
+    a.studio.propose([set('stages.darkroom.medium.grade', 3)], { why: 'harder' });
     await a.studio.flush();
-    await (a.rt as any).flushSave?.();
+    const saved = await kv.get<FrameSave>('logs', logKey(sha256Hex(makeM1Tiff()), 'negative-scan'));
+    expect(isFrameSave(saved)).toBe(true);
+    expect(saved!.applied.map(t => t.label)).toEqual(['Time']);
+    expect(saved!.pending.map(t => t.why)).toEqual(['harder']);
+    // the workspace (catalog, snapshots) is saved by the shell's autosave
     a.clock.advance(2000);
     a.clock.runIdle();
     await new Promise(r => setTimeout(r, 0));
     const b = await started({ kv });
     expect(b.f).toBe(a.f);
-    const s = b.rt.state as any;
-    expect(s.recipes[b.f].print.enlarger.time_s).toBe(15);
-    expect(s.catalog.frames[b.f].flag).toBe('pick');
-    expect(s.snapshots[b.f][0].name).toBe('warm');
-    // restore is one EditLog unit
-    b.rt.store.preview(recipePath(b.f, TIME), 20);
-    b.rt.store.commit('Time');
+    expect(timeOf(b.rt, b.f)).toBe(15);
+    const s = state(b.rt);
+    expect(s.catalog.frames[b.f]!.flag).toBe('pick');
+    expect(s.snapshots[b.f]![0]!.name).toBe('warm');
+    expect(historyRows(b.rt.store.log, b.f, lookup).map(r => r.label)).toEqual(['Time']);
+    expect(b.rt.store.log.why(b.f, TIME).label).toBe('Time');
+    expect(b.rt.store.log.pending(b.f).map(e => e.why)).toEqual(['harder']);
+    // the restored step is undoable; the snapshot restore is one step
+    setDoc(b.rt, b.f, TIME, 20, 'Time');
     b.rt.run('snapshot.restore', 's1');
-    expect((b.rt.state as any).recipes[b.f].print.enlarger.time_s).toBe(15);
-    expect(b.studio.frames.get(b.f)!.log.units.at(-1)!.label).toBe('Restore "warm"');
+    expect(timeOf(b.rt, b.f)).toBe(15);
+    expect(b.rt.store.log.undoStep!.label).toBe('Restore "warm"');
+  });
+
+  it('a record of another format is not read: the frame opens new', async () => {
+    const kv = memoryKV();
+    const bytes = makeM1Tiff();
+    await kv.put('logs', logKey(sha256Hex(bytes), 'negative-scan'), { initial: { kind: 'negative-scan' }, entries: [], units: [], cursor: 0 });
+    const { rt, f } = await started({ kv, bytes });
+    expect(timeOf(rt, f)).toBe(10);
+    expect(rt.store.log.steps.length).toBe(0);
+  });
+
+  it('frameSave is what the log holds for one frame', async () => {
+    const { rt, f } = await started();
+    setDoc(rt, f, TIME, 12, 'Time');
+    const s = frameSave(rt.store.log, f);
+    expect(s.initial).toBe(rt.store.log.initial(f));
+    expect(s.applied.map(t => t.mutations)).toEqual([[set(TIME, 12)]]);
+    expect(s.pending).toEqual([]);
+  });
+
+  it('resetStorage: old data is cleared once (true), then never again (false)', async () => {
+    const kv = memoryKV();
+    expect(await resetStorage(kv)).toBe(false); // nothing there
+    expect(await kv.get('settings', 'storage-format')).toBe(STORAGE_FORMAT);
+    const old = memoryKV();
+    await old.put('logs', 'abc', { initial: {}, entries: [] });
+    await old.put('workspace', 'Studio:1:doc', { recipes: {} });
+    expect(await resetStorage(old)).toBe(true);
+    expect(await old.keys('logs')).toEqual([]);
+    expect(await old.keys('workspace')).toEqual([]);
+    await old.put('logs', 'new', { format: 'chromobench-frame' });
+    expect(await resetStorage(old)).toBe(false);
+    expect(await old.keys('logs')).toEqual(['new']);
   });
 });
 
@@ -278,7 +285,7 @@ describe('adaptive drafts (CHB-027)', () => {
   it('a draft is sized to the time budget from the measured speed, on half-octave steps; a screen pass is not', async () => {
     const { rt, studio, f } = await started();
     const b = studio.bridge;
-    const h = frameRef(f, rt.store.peek(['recipes', f]) as never).print();
+    const h = frameRef(f, rt.store.peek(['docs', f]) as Document).print();
     const t = (pass: 'draft' | 'screen') => ({ slot: 's', epoch: 1, lane: 'live' as const, pass, maxSide: 4096, signal: new AbortController().signal });
     const full = await b.render(h, t('draft'));
     b.draftTargetMs = 100;

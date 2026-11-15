@@ -1,11 +1,21 @@
-// The roll as data (guide §6.1–6.2). A roll record (the contract's Roll, contract 0.3) lives in the
-// catalog-like document slice `roll`; recipes hold plain copies of the shared settings, and divergence is
-// computed, never stored.
-import { canonicalJSON, getPath, type Box, type Roll as ContractRoll, type Diagnostic, type FrameRecipe, type RollStatus, type Vec3 } from '@chromobench/contract';
-import { SHARED_PATHS, type SharedPath } from './constants.ts';
+// The roll as data (guide §6.1–6.2). A roll record (the contract's Roll) lives in the main document's slice `roll`
+// (its changes are steps of the log, with the batches that make them); documents hold plain copies of the shared
+// settings (the roll's `fragment`, by key: sharedKey(path)), and divergence is computed, never stored. The contract's `media` and
+// `stacks` stay empty until phase 7 makes the shared settings a roll link.
+import { canonicalJSON } from '@chromobench/values';
+import { type Box, type Roll as ContractRoll, type Diagnostic, type Document, type RollStatus, type Vec3 } from '@chromobench/contract';
+import { read } from '../../../../src/model/doc.ts';
+import { SHARED_PATHS, sharedKey, type SharedKey, type SharedPath } from './constants.ts';
 
 export type FrameId = string;
-export type RollFragment = Partial<Record<SharedPath, unknown>>;
+/** The shared settings of a roll, by key (`stock`, `baseT`; sharedKey(path)). */
+export type RollFragment = Partial<Record<SharedKey, unknown>>;
+/** A shared path's value in a fragment (undefined: the roll does not set it). */
+export const fragmentGet = (f: RollFragment, path: SharedPath | string): unknown => f[sharedKey(path)];
+/** The fragment with a shared path set. */
+export const fragmentWith = (f: RollFragment, path: SharedPath | string, v: unknown): RollFragment => ({ ...f, [sharedKey(path)]: v });
+/** The fragment as [path, value] pairs, in SHARED_PATHS order. */
+export const fragmentEntries = (f: RollFragment): [SharedPath, unknown][] => SHARED_PATHS.filter((p) => sharedKey(p) in f).map((p) => [p, f[sharedKey(p)]]);
 
 // ── what the injected physics returns (structurally ingest's FilmLayout / RollBase, core's StockRank) ──
 export interface LayoutLike {
@@ -106,41 +116,43 @@ export interface RollAnalysis {
   diagnostics: Diagnostic[];
 }
 
-/** The contract's roll record (contract 0.3, CHB-020 R6) with the kit's analysis and fragment types. */
+/** The contract's roll record (CHB-020 R6) with the kit's analysis and its shared fragment. */
 export type { RollStatus };
-export type Roll = ContractRoll<RollAnalysis, RollFragment>;
+export type Roll = ContractRoll<RollAnalysis> & { fragment: RollFragment };
 
 export const newRoll = (id: string, label: string, frames: FrameId[], fragment: RollFragment = {}): Roll => ({
-  id, label, frames, fragment, analysis: null, reference: null, match: null, status: 'imported',
+  id, label, frames, media: {}, stacks: {}, fragment, analysis: null, reference: null, match: null, status: 'imported',
 });
 
-/** The shared fragment as one recipe has it (the roll's starting point when it is created). */
-export function fragmentOf(r: FrameRecipe): RollFragment {
+/** The shared fragment as one document has it (the roll's starting point when it is created). */
+export function fragmentOf(d: Document): RollFragment {
   const f: RollFragment = {};
   for (const p of SHARED_PATHS) {
-    const v = getPath(r, p);
-    if (v !== undefined) f[p] = JSON.parse(JSON.stringify(v));
+    const v = read(d, p);
+    if (v !== undefined) f[sharedKey(p)] = JSON.parse(JSON.stringify(v));
   }
   return f;
 }
 
-/** Shared paths on which a frame's recipe differs from the roll's value (computed, not stored). */
-export function diverging(roll: Pick<Roll, 'fragment'>, r: FrameRecipe): SharedPath[] {
+/** Shared paths on which a frame's document differs from the roll's value (computed, not stored). */
+export function diverging(roll: Pick<Roll, 'fragment'>, d: Document): SharedPath[] {
   const out: SharedPath[] = [];
   for (const p of SHARED_PATHS) {
-    if (!(p in roll.fragment)) continue;
-    if (canonicalJSON(getPath(r, p) ?? null) !== canonicalJSON(roll.fragment[p] ?? null)) out.push(p);
+    if (!(sharedKey(p) in roll.fragment)) continue;
+    const v = read(d, p);
+    if (v === undefined) continue; // a path this kind of frame does not have (a scan setting on a photo)
+    if (canonicalJSON(v ?? null) !== canonicalJSON(fragmentGet(roll.fragment, p) ?? null)) out.push(p);
   }
   return out;
 }
 
 /** For each shared path, the frames that diverge on it ("base overridden on 2 frames"). */
-export function divergence(roll: Pick<Roll, 'fragment' | 'frames'>, recipeOf: (f: FrameId) => FrameRecipe | undefined): Partial<Record<SharedPath, FrameId[]>> {
+export function divergence(roll: Pick<Roll, 'fragment' | 'frames'>, docOf: (f: FrameId) => Document | undefined): Partial<Record<SharedPath, FrameId[]>> {
   const out: Partial<Record<SharedPath, FrameId[]>> = {};
   for (const f of roll.frames) {
-    const r = recipeOf(f);
-    if (!r) continue;
-    for (const p of diverging(roll, r)) (out[p] ??= []).push(f);
+    const d = docOf(f);
+    if (!d) continue;
+    for (const p of diverging(roll, d)) (out[p] ??= []).push(f);
   }
   return out;
 }
@@ -150,8 +162,8 @@ export const meanVec = (vs: readonly Vec3[]): Vec3 | null =>
 export const r6 = (x: number): number => Number(x.toFixed(6));
 export const r6v = (v: readonly number[]): Vec3 => [r6(v[0]!), r6(v[1]!), r6(v[2]!)];
 
-// ── the measured base and veil as recipe settings (contract 0.3: scan.flare per channel, scan.baseT) ──
-/** The holder reads f/(1+f) of the open gate: a veil L (signal units) is scan.flare f = 100·L/(1 − L) per channel, percent (catalog max 20). */
+// ── the measured base and veil as scan medium settings (flare per channel, baseT) ──
+/** The holder reads f/(1+f) of the open gate: a veil L (signal units) is the scan flare f = 100·L/(1 − L) per channel, percent (catalog max 20). */
 export function flareOfVeil(L: readonly number[]): Vec3 {
   return [0, 1, 2].map((k) => Number(Math.min(20, Math.max(0, (100 * L[k]!) / (1 - Math.min(L[k]!, 0.99)))).toFixed(4))) as Vec3;
 }

@@ -1,10 +1,11 @@
 // cb.kits.looks: the builder calls (split from kit.ts, CHB-032): the panels and their models, the library and the
 // survey grids, a look's cell and a one-row choice. Each form node carries its model, so the renderers stay dumb.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { FrameRecipe } from '@chromobench/contract';
+import type { Document } from '@chromobench/contract';
 import type { Ck } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { sel } from '../../../src/sel.ts';
+import { docAt } from './engine/paths.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { type Look, type Preset } from './engine/look.ts';
 import { planFrame } from './engine/plan.ts';
@@ -39,7 +40,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
     const v = looksView(s);
     const l = pickedLook(s);
     const f = sel.current(s);
-    const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
+    const r = f ? docAt(s, f) : undefined;
     const pf = l && f && r ? planFrame(l, paramsOf(s, l), f, r, optsOf(s)) : null;
     return {
       pct: v.amount,
@@ -59,7 +60,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
     { key: 'before', label: 'Before (first print)', src: 'before' },
     { key: 'defaults', label: 'Defaults', src: 'defaults' },
   ];
-  const srcKey = (src: CompareSource): string => (typeof src === 'string' ? src : 'snapshot' in src ? `snapshot:${src.snapshot}` : 'frame' in src ? `frame:${src.frame}` : 'look' in src ? `look:${src.look}` : 'recipe');
+  const srcKey = (src: CompareSource): string => (typeof src === 'string' ? src : 'snapshot' in src ? `snapshot:${src.snapshot}` : 'frame' in src ? `frame:${src.frame}` : 'look' in src ? `look:${src.look}` : 'doc');
   const diffModel = (s: any, o: Record<string, unknown>, services: any) => {
     const v = looksView(s);
     const against = (o['against'] as string | undefined) ?? null;
@@ -67,7 +68,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       against === 'snapshot' ? ((s.snapshots?.[sel.current(s) ?? ''] ?? []).slice(-1)[0] ? { snapshot: (s.snapshots[sel.current(s)!] as any[]).slice(-1)[0].id } : v.compare)
         : against === 'defaults' ? 'defaults' : against === 'before' ? 'before' : v.compare;
     const studio = services?.studio as Studio | undefined;
-    const entries = diffAgainst(s, src, (f) => studio?.frames.get(f)?.initial);
+    const entries = diffAgainst(s, src, (f) => (studio?.rt?.store.log.has(f) ? studio.log.initial<Document>(f) : undefined));
     return { against: srcKey(src), entries: entries.map((e) => ({ shown: e.shown, group: e.group ?? 'Other', path: e.path })), previewing: !!(v.preview && v.picked) };
   };
   const compareModel = (s: any) => {

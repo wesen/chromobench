@@ -1,5 +1,6 @@
 // CHB-022 smoke in Chromium (studio-kit dev host, MockEngine): the Finish module of the 'finish' layout —
-// crop with a handle, straighten by dragging outside the crop, a spot by a click, undo three times.
+// crop with a handle, straighten by dragging outside the crop, a spot by a click (a heal layer in the print stage's
+// Retouch group), undo three times.
 import { expect, test, type Page } from '@playwright/test';
 
 const errors: string[] = [];
@@ -29,7 +30,7 @@ for (const layout of ['finish', 'classic']) {
     await page.mouse.down();
     await page.mouse.move(hb.x - 40, hb.y - 30, { steps: 4 });
     await page.mouse.up();
-    const crop = await hook<{ w: number; h: number } | null>(page, 'cb.log().committed.view.frame.crop');
+    const crop = await hook<{ w: number; h: number } | null>(page, 'cb.doc().geometry.crop');
     expect(crop).not.toBeNull();
     expect(crop!.w).toBeLessThan(96);
     // straighten: drag outside the crop, around its centre
@@ -39,7 +40,7 @@ for (const layout of ['finish', 'classic']) {
     await page.mouse.down();
     await page.mouse.move(cx - 30, fb.y + fb.height + 20, { steps: 5 });
     await page.mouse.up();
-    const fr = await hook<{ angle_deg: number; crop: { w: number } }>(page, 'cb.log().committed.view.frame');
+    const fr = await hook<{ angle_deg: number; crop: { w: number } }>(page, 'cb.doc().geometry');
     expect(fr.angle_deg).not.toBe(0);
     expect(fr.crop.w).toBeLessThanOrEqual(crop!.w);
     // a spot on the finished print
@@ -47,12 +48,12 @@ for (const layout of ['finish', 'classic']) {
     await expect(page.locator('.ck-vp[data-tool="spot"]')).toHaveCount(1);
     const vb = (await vp.boundingBox())!;
     await page.mouse.click(vb.x + vb.width / 2, vb.y + vb.height / 2);
-    const spots = await hook<Record<string, { src: { x: number } }>>(page, 'cb.log().committed.retouch.spots');
-    expect(Object.keys(spots)).toEqual(['s1']);
+    const spots = await hook<string[]>(page, 'cb.doc().stages.print.stack.items.retouch.stack.order');
+    expect(spots).toEqual(['s1']);
     await expect(page.locator('.cb-spot-target')).toHaveCount(1);
-    expect(await hook<string[]>(page, 'cb.log().units.map(u => u.label ?? "")')).toHaveLength(3);
+    expect(await hook<string[]>(page, 'cb.log().inEffect(cb.studio.current).map(e => e.tx.label)')).toHaveLength(3);
     for (let i = 0; i < 3; i++) await page.keyboard.press('ControlOrMeta+z');
-    expect(await hook<unknown>(page, 'cb.log().committed.view.frame')).toEqual({ orientation: 'none', angle_deg: 0, crop: null });
-    expect(await hook<object>(page, 'cb.log().committed.retouch.spots')).toEqual({});
+    expect(await hook<unknown>(page, 'cb.doc().geometry')).toEqual({ orientation: 'none', angle_deg: 0, crop: null });
+    expect(await hook<string[]>(page, 'cb.doc().stages.print.stack.order')).toEqual([]);
   });
 }

@@ -1,7 +1,7 @@
 // Reading a frame through any Engine (contract only, so it runs on MockEngine, RefEngine and the GPU engine):
 // its source pixels at the analysis size, and its integrated paper exposure (the first print's measure,
-// after apps/studio's host/first-print.ts, CHB-023).
-import { compile, type Box, type Engine, type FrameRecipe, type Graph, type Node, type Vec3 } from '@chromobench/contract';
+// after apps/studio's host/first-print.ts, CHB-023), both as cuts of the one compiler.
+import { compile, cutNode, type Box, type Document, type Engine, type Graph, type Node, type Vec3 } from '@chromobench/contract';
 import { EXPOSURE_PIXELS } from './constants.ts';
 
 export interface Pixels {
@@ -13,8 +13,8 @@ export interface Pixels {
 }
 
 /** The source (camera-linear) at long side ≤ `long`, as interleaved RGB. */
-export async function readSource(engine: Engine, g: Graph, r: FrameRecipe, long: number, signal?: AbortSignal): Promise<Pixels> {
-  const n = g.intern('source.open', [], { source: r.source.sha256, encoding: r.source.decode.encoding }).node;
+export async function readSource(engine: Engine, g: Graph, d: Document, long: number, signal?: AbortSignal): Promise<Pixels> {
+  const n = cutNode(compile(d, g), 'source');
   engine.adopt(g.closure(n.id));
   const info = n.info as { width: number; height: number };
   const s = Math.min(1, long / Math.max(info.width, info.height));
@@ -42,19 +42,15 @@ export function integratedExposure(x: ArrayLike<number>, n: number, stride = 3):
   return T.map((t) => Math.log10(Math.max(t, 1e-12) / Math.max(m, 1))) as Vec3;
 }
 
-function lightsNode(r: FrameRecipe, g: Graph): Node {
-  const top = compile(r, g);
-  const def = g.closure(top.id).find((d) => d.op === 'print.lights');
-  if (!def) throw new Error('no print.lights node in the display chain');
-  return g.adopt([def])[0]!;
-}
+/** The paper's log exposure after the light law: the darkroom.H cut. */
+const exposureNode = (d: Document, g: Graph): Node => cutNode(compile(d, g), 'darkroom.H');
 
 /**
- * The frame's integrated paper exposure (relative to the aim, log H) under recipe r: the paper exposure that
- * print.lights hands print.develop, over the image area (`area`, source px; default the central 80 %).
+ * The frame's integrated paper exposure (relative to the aim, log H) under document d: the paper exposure the light
+ * law hands print.develop (the darkroom.H cut), over the image area (`area`, source px; default the central 80 %).
  */
-export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, o: { area?: Box | null; pixels?: number; signal?: AbortSignal } = {}): Promise<Vec3> {
-  const n = lightsNode(r, g);
+export async function measureExposure(engine: Engine, g: Graph, d: Document, o: { area?: Box | null; pixels?: number; signal?: AbortSignal } = {}): Promise<Vec3> {
+  const n = exposureNode(d, g);
   engine.adopt(g.closure(n.id));
   const info = n.info as { width: number; height: number };
   const box = o.area ?? { x: Math.round(info.width * 0.1), y: Math.round(info.height * 0.1), w: Math.max(1, Math.round(info.width * 0.8)), h: Math.max(1, Math.round(info.height * 0.8)) };

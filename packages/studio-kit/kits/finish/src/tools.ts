@@ -1,10 +1,12 @@
 // cb.kits.finish: the viewport tools (split from kit.ts, CHB-032): crop and straighten (R), spot heal, clone and
-// dust (Q): gestures that write view.frame, retouch.spots and scan.dust.spots, and their SVG overlays.
+// dust (Q): gestures that write the document's geometry and its spot layers (print-stage heal/clone in the Retouch
+// group, scan-stage heal in the Dust group), and their SVG overlays.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { setPath, type Box, type FrameRecipe, type FrameSettings, type RetouchSpot } from '@chromobench/contract';
+import type { Box, Document as Doc, Geometry as FrameSettings } from '@chromobench/contract';
 import { canvasToSource, centreOf, constrain, cropCorners, cropOf, fitsInside, rotate, roundBox, sensorTurn, shownContains, sourceToCanvas, swapsAxes, toShown, toSource, towards, type Pt } from './geometry.ts';
 import { suggestSource, type ProxyImage } from './suggest.ts';
-import { type DustSpot, plain, spotsOf, nextSpotId } from './state.ts';
+import { plain, spotsOf, nextSpotId, spotData, spotHome, stackWithSpot, type HealSpotData } from './state.ts';
+import { DOCS } from '../../../src/model/doc.ts';
 import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 
@@ -27,8 +29,8 @@ export function createFinishTools(F: FinishContext) {
   const { frameOf, sizeIn, sizes, remember, opts, framePath, normalise, dustAvailable, lockAspect } = F;
   // ── the crop tool ──
   const HANDLE_PX = 9;
-  const canvasOf = (r: FrameRecipe): FrameRecipe => setPath(r, 'view.frame', { orientation: r.view.frame.orientation, angle_deg: 0, crop: null });
-  const screenOf = (vp: any, fr: { W: number; H: number; r: FrameRecipe }, f: FrameSettings, p: Pt): [number, number] => {
+  const canvasOf = (r: Doc): Doc => ({ ...r, geometry: { orientation: r.geometry.orientation, angle_deg: 0, crop: null } });
+  const screenOf = (vp: any, fr: { W: number; H: number; r: Doc }, f: FrameSettings, p: Pt): [number, number] => {
     const q = sourceToCanvas(f, fr.W, fr.H, p.x, p.y);
     const [nw, nh] = vp.natural();
     return vp.toScreen(q.x / nw, q.y / nh);
@@ -58,7 +60,7 @@ export function createFinishTools(F: FinishContext) {
     return fitsInside(r, theta, W, H) ? r : roundBox(b, theta, W, H) ?? r;
   };
 
-  interface CropG { fr: { f: string; W: number; H: number; r: FrameRecipe }; start: FrameSettings; box0: Box; mode: 'move' | 'resize' | 'rotate'; hx: number; hy: number; p0: Pt; a0: number; last: Box; cur: FrameSettings | null }
+  interface CropG { fr: { f: string; W: number; H: number; r: Doc }; start: FrameSettings; box0: Box; mode: 'move' | 'resize' | 'rotate'; hx: number; hy: number; p0: Pt; a0: number; last: Box; cur: FrameSettings | null }
   const cropDown = (e: any, ctx: any): CropG | false => {
     const fr = frameOf(ctx);
     if (!fr) return false;
@@ -67,7 +69,7 @@ export function createFinishTools(F: FinishContext) {
       ctx.run('crop.done');
       return false;
     }
-    const start = plain(fr.r.view.frame);
+    const start = plain(fr.r.geometry);
     const box0 = cropOf(start, fr.W, fr.H);
     const theta = sensorTurn(start);
     const p0 = canvasToSource(start, fr.W, fr.H, e.x, e.y);
@@ -154,7 +156,7 @@ export function createFinishTools(F: FinishContext) {
     ctx.commit(g.mode === 'rotate' ? 'Straighten' : g.mode === 'move' ? 'Move Crop' : 'Crop');
   };
   const svg = (g: any, tag: string, a: Record<string, string | number>, text?: string): any => {
-    const x = (g.ownerDocument as Document).createElementNS('http://www.w3.org/2000/svg', tag);
+    const x = (g.ownerDocument as globalThis.Document).createElementNS('http://www.w3.org/2000/svg', tag);
     // presentation inline, so every host draws the overlay without a stylesheet
     const look = String(a['class'] ?? '').split(' ').map((c) => LOOK[c]).filter(Boolean).reduce((o, l) => ({ ...o, ...l }), {} as Record<string, string>);
     for (const [k, v] of Object.entries({ ...look, ...a })) x.setAttribute(k, String(v));
@@ -164,11 +166,11 @@ export function createFinishTools(F: FinishContext) {
   };
   const cropOverlay = (g: any, vp: any, s: any): void => {
     const f = sel.current(s);
-    const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
-    const z = sizeIn(s) ?? (r && vp ? { W: swapsAxes(r.view.frame.orientation) ? vp.natural()[1] : vp.natural()[0], H: swapsAxes(r.view.frame.orientation) ? vp.natural()[0] : vp.natural()[1] } : null);
+    const r = f ? (s.docs?.[f] as Doc | undefined) : undefined;
+    const z = sizeIn(s) ?? (r && vp ? { W: swapsAxes(r.geometry.orientation) ? vp.natural()[1] : vp.natural()[0], H: swapsAxes(r.geometry.orientation) ? vp.natural()[0] : vp.natural()[1] } : null);
     if (!r || !z) return;
     const fr = { W: z.W, H: z.H, r };
-    const fs = r.view.frame;
+    const fs = r.geometry;
     const box = cropOf(fs, z.W, z.H);
     const theta = sensorTurn(fs);
     const quad = cropCorners(box, theta).map((p) => screenOf(vp, fr, fs, p));
@@ -198,7 +200,7 @@ export function createFinishTools(F: FinishContext) {
   };
 
   // ── the spot tool ──
-  interface SpotG { fr: { f: string; W: number; H: number; r: FrameRecipe }; kind: 'new' | 'target' | 'source'; id: string; spot: RetouchSpot | DustSpot; dust: boolean; moved: boolean; e0: { sx: number; sy: number }; p0: Pt; hover?: undefined }
+  interface SpotG { fr: { f: string; W: number; H: number; r: Doc }; kind: 'new' | 'target' | 'source'; id: string; spot: HealSpotData; dust: boolean; op: 'heal' | 'clone'; moved: boolean; e0: { sx: number; sy: number }; p0: Pt; hover?: undefined }
   const spotScreen = (vp: any, f: FrameSettings, W: number, H: number, p: Pt): [number, number] => {
     const q = toShown(f, W, H, p.x, p.y);
     return vp.docToScreen(q.x, q.y);
@@ -207,7 +209,7 @@ export function createFinishTools(F: FinishContext) {
     const fr = frameOf(ctx);
     if (!fr) return false;
     remember(fr);
-    const fs = fr.r.view.frame;
+    const fs = fr.r.geometry;
     const p = toSource(fs, fr.W, fr.H, e.x, e.y);
     const o = opts(ctx.state).spot;
     const vp = ctx.vp;
@@ -215,62 +217,64 @@ export function createFinishTools(F: FinishContext) {
     if (vp) {
       const sc = vp.scale?.() ?? 1;
       for (const s of [...spotsOf(fr.r)].reverse()) {
+        const base = spotData(fr.r, s.id)!;
+        const dust = s.kind === 'dust';
+        const op = s.mode === 'clone' ? 'clone' : 'heal';
         if (s.src) {
           const [sx, sy] = spotScreen(vp, fs, fr.W, fr.H, s.src);
           if (Math.hypot(sx - e.sx, sy - e.sy) <= Math.max(7, s.r * sc * 0.5)) {
             ctx.set({ finish: { selected: s.id } });
-            return { fr, kind: 'source', id: s.id, spot: plain(fr.r.retouch.spots[s.id]!), dust: false, moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
+            return { fr, kind: 'source', id: s.id, spot: plain(base), dust, op, moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
           }
         }
         const [tx, ty] = spotScreen(vp, fs, fr.W, fr.H, s);
         if (Math.hypot(tx - e.sx, ty - e.sy) <= Math.max(7, s.r * sc)) {
           ctx.set({ finish: { selected: s.id } });
-          const spot = s.kind === 'dust' ? plain((fr.r.scan!.dust.spots as DustSpot[]).find((d) => d.id === s.id)!) : plain(fr.r.retouch.spots[s.id]!);
-          return { fr, kind: 'target', id: s.id, spot, dust: s.kind === 'dust', moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
+          return { fr, kind: 'target', id: s.id, spot: plain(base), dust, op, moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
         }
       }
     }
     if (p.x < 0 || p.y < 0 || p.x > fr.W || p.y > fr.H) return false;
     const dust = o.mode === 'dust' && dustAvailable(ctx, fr.r);
-    const mode = o.mode === 'clone' ? 'clone' : 'heal';
+    const op = o.mode === 'clone' && !dust ? 'clone' : 'heal';
     const id = nextSpotId(fr.r, dust ? 'dust' : 'retouch');
     const r = Math.max(1, Number(o.r) || 12);
-    const spot = dust ? { id, x: round2(p.x), y: round2(p.y), r } : { mode, x: round2(p.x), y: round2(p.y), r, src: { x: round2(p.x), y: round2(p.y) }, feather: o.feather, opacity: o.opacity, enabled: true } as RetouchSpot;
-    return { fr, kind: 'new', id, spot, dust, moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
+    const spot: HealSpotData = { x: round2(p.x), y: round2(p.y), r, src: { x: round2(p.x), y: round2(p.y) }, feather: dust ? 0.3 : o.feather, opacity: dust ? 1 : o.opacity };
+    return { fr, kind: 'new', id, spot, dust, op, moved: false, e0: { sx: e.sx, sy: e.sy }, p0: p };
   };
   const round2 = (v: number): number => Math.round(v * 100) / 100;
   const insideFrame = (p: Pt, r: number, W: number, H: number): Pt => ({ x: round2(Math.min(W - r, Math.max(r, p.x))), y: round2(Math.min(H - r, Math.max(r, p.y))) });
+  /** the stage's stack with the spot as the gesture has it, shown over the document (committed on release) */
   const previewSpot = (ctx: any, g: SpotG): void => {
-    if (g.dust) {
-      const list = ((g.fr.r.scan?.dust.spots ?? []) as DustSpot[]).filter((d) => d.id !== g.id);
-      ctx.preview(['recipes', g.fr.f, 'scan', 'dust', 'spots'], plain([...list, g.spot]));
-    } else ctx.preview(['recipes', g.fr.f, 'retouch', 'spots', g.id], plain(g.spot));
+    const kind = g.dust ? 'dust' : 'retouch';
+    ctx.preview([DOCS, g.fr.f, 'stages', spotHome(kind).stage, 'stack'], plain(stackWithSpot(g.fr.r, kind, g.id, g.spot, g.op)));
   };
   const spotDrag = (e: any, ctx: any, g: SpotG): SpotG => {
     if (!g.moved && Math.hypot(e.sx - g.e0.sx, e.sy - g.e0.sy) < 3) return g;
     g.moved = true;
     const { W, H } = g.fr;
-    const p = toSource(g.fr.r.view.frame, W, H, e.x, e.y);
-    const s = g.spot as RetouchSpot;
+    const p = toSource(g.fr.r.geometry, W, H, e.x, e.y);
+    const s = g.spot;
     if (g.kind === 'new' || g.kind === 'source') {
       // the source pin follows the pointer and refuses to leave the picture
-      if (!g.dust) s.src = insideFrame(p, s.r, W, H);
+      s.src = insideFrame(p, s.r, W, H);
     } else {
       // move the target (and its source with it)
       const dx = p.x - g.p0.x, dy = p.y - g.p0.y;
-      const base = (g.dust ? ((g.fr.r.scan!.dust.spots as DustSpot[]).find((d) => d.id === g.id) as unknown as RetouchSpot) : g.fr.r.retouch.spots[g.id]!) as RetouchSpot;
+      const base = spotData(g.fr.r, g.id)!;
       s.x = round2(base.x + dx);
       s.y = round2(base.y + dy);
-      if (s.src && base.src) s.src = insideFrame({ x: base.src.x + dx, y: base.src.y + dy }, s.r, W, H);
+      s.src = insideFrame({ x: base.src.x + dx, y: base.src.y + dy }, s.r, W, H);
     }
     previewSpot(ctx, g);
     return g;
   };
   const spotUp = (_e: any, ctx: any, g: SpotG): void => {
     if (g.kind !== 'new' && !g.moved) return void ctx.cancel();
-    if (g.kind === 'new' && !g.dust && !g.moved) {
-      // a click: the source is found on what the viewer shows (a proxy), then written into the spot
-      const s = g.spot as RetouchSpot;
+    if (g.kind === 'new' && !g.moved) {
+      // a click: the source is found on what the viewer shows (a proxy), then written into the spot (dust too:
+      // every heal layer has an explicit source)
+      const s = g.spot;
       s.src = sourceFor(ctx, g.fr, s) ?? insideFrame({ x: s.x + 2.5 * s.r, y: s.y }, s.r, g.fr.W, g.fr.H);
     }
     previewSpot(ctx, g);
@@ -278,10 +282,10 @@ export function createFinishTools(F: FinishContext) {
     if (g.kind === 'new') ctx.set({ finish: { selected: g.id } });
   };
   /** suggestSource on the viewer's shown image (shown px), mapped to sensor px */
-  const sourceFor = (ctx: any, fr: { W: number; H: number; r: FrameRecipe }, s: RetouchSpot): Pt | null => {
+  const sourceFor = (ctx: any, fr: { W: number; H: number; r: Doc }, s: HealSpotData): Pt | null => {
     const img = ctx.vp?.shown?.()?.image as ProxyImage | undefined;
     if (!img?.data) return null;
-    const fs = fr.r.view.frame;
+    const fs = fr.r.geometry;
     const t = toShown(fs, fr.W, fr.H, s.x, s.y);
     const [nw, nh] = ctx.vp.natural();
     const best = suggestSource(img, t, s.r, {
@@ -297,11 +301,11 @@ export function createFinishTools(F: FinishContext) {
   };
   const spotOverlay = (g: any, vp: any, s: any, gs: any): void => {
     const f = sel.current(s);
-    const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
+    const r = f ? (s.docs?.[f] as Doc | undefined) : undefined;
     const z = f ? sizes.get(f) : undefined;
     if (!r) return;
     const o = opts(s);
-    const fs = r.view.frame;
+    const fs = r.geometry;
     const sc = vp.scale?.() ?? 1;
     if (z && o.show) {
       for (const sp of spotsOf(r)) {

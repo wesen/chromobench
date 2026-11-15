@@ -99,9 +99,9 @@ async function main(): Promise<void> {
   const kv = q.has('fresh') ? memoryKV() : localStorageKV(`cb-kit-${id}`);
   const studio: Studio = createStudio({ engine: new MockEngine(), kv });
   const save = async (f: string) => {
-    const r = (rt.store.peek(['recipes', f]) as never) ?? null;
-    if (!r) return;
-    const res = await studio.bridge.render({ $: 'cb.image', frame: f, recipe: r, what: 'print', args: {}, expr: 'frame.print()' }, { slot: 'save', epoch: 0, lane: 'bg', pass: 'screen', maxSide: 4096, signal: new AbortController().signal });
+    const d = (rt.store.peek(['docs', f]) as never) ?? null;
+    if (!d) return;
+    const res = await studio.bridge.render({ $: 'cb.image', frame: f, doc: d, what: 'print', args: {}, expr: 'frame.print()' }, { slot: 'save', epoch: 0, lane: 'bg', pass: 'screen', maxSide: 4096, signal: new AbortController().signal });
     const { width: w, height: hh, data, channels } = res.image;
     const cv = document.createElement('canvas');
     cv.width = w;
@@ -130,7 +130,8 @@ async function main(): Promise<void> {
 }
 
 function hook(rt: Runtime, studio: Studio, layout: string): void {
-  const log = (f?: string) => studio.frames.get(f ?? studio.current ?? '')?.log ?? null;
+  // the frame's document (the selected one by default) and the store's log (every frame's history)
+  const doc = (f?: string) => studio.doc(f ?? studio.current ?? '') ?? null;
   (window as unknown as { chromobench: Record<string, unknown> }).chromobench = {
     app: rt.app,
     rt,
@@ -139,7 +140,9 @@ function hook(rt: Runtime, studio: Studio, layout: string): void {
     explain: () => rt.explain({ live: true }),
     run: (cmd: string, ...a: unknown[]) => rt.runCommand(cmd, null, ...a),
     state: () => rt.store.peek([]),
-    log,
+    doc,
+    log: () => rt.store.log,
+    /** an agent's change on the selected frame: [{ op: 'set', path: 'lights.params.logH', value: [0.1, 0, 0] }] */
     propose: (ms: never[], why?: string) => studio.propose(ms, why ? { why } : {}),
     idle: () => new Promise(r => setTimeout(r, 50)),
     chainRuns: () => Object.fromEntries(studio.bridge.runs),

@@ -1,13 +1,16 @@
 // cb.kits.looks: the command table (split from kit.ts, CHB-032): pick, parameters, Amount, apply to the selection,
 // the roll or the library, planned and agent batches, survey, compare, snapshots, copy / paste / sync, presets.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { canonicalJSON, transaction, type Batch, type Log } from '@chromobench/values';
+import type { Document } from '@chromobench/contract';
 import type { Cb } from '../../../src/cb.ts';
+import { read } from '../../../src/model/doc.ts';
 import { sel } from '../../../src/sel.ts';
 import { presetToFile, readPresetFile } from './engine/files.ts';
 import { bake, fromPreset, lookFrame, type AmountBase, type Look, type Preset } from './engine/look.ts';
 import { changing, newBatchId } from './engine/plan.ts';
 import type { CommandTable } from '@chromobench/shell';
-import { type CompareSource, plain, looksView, agentBatches } from './state.ts';
+import { type AgentBatch, type CompareSource, plain, looksView, agentBatches } from './state.ts';
 import type { LooksModel } from './model.ts';
 
 /** the looks kit's command table */
@@ -18,7 +21,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       label: 'Pick Look',
       palette: false,
       run: (ctx: any, id: string | null) => {
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'picked'], value: looksView(ctx.state).picked === id ? null : id }, { path: ['looksView', 'preview'], value: true }], { tier: 'view' });
+        ctx.rt.store.writeView([{ path: ['looksView', 'picked'], value: looksView(ctx.state).picked === id ? null : id }, { path: ['looksView', 'preview'], value: true }]);
       },
     },
     'looks.param': {
@@ -27,7 +30,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       run: (ctx: any, name: string, value: unknown) => {
         const l = pickedLook(ctx.state);
         if (!l) return;
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'params', l.id], value: { ...paramsOf(ctx.state, l), [name]: value } }], { tier: 'view' });
+        ctx.rt.store.writeView([{ path: ['looksView', 'params', l.id], value: { ...paramsOf(ctx.state, l), [name]: value } }]);
       },
     },
     'looks.amount': { label: 'Look Amount', palette: false, run: (ctx: any, pct: number) => setView(ctx, 'amount', Math.max(0, Math.min(200, Number(pct)))) },
@@ -106,7 +109,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       palette: false,
       run: (ctx: any, batch: string, f: string) => {
         const off = looksView(ctx.state).batchOff?.[batch] ?? [];
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'batchOff', batch], value: off.includes(f) ? off.filter((x) => x !== f) : [...off, f] }], { tier: 'view' });
+        ctx.rt.store.writeView([{ path: ['looksView', 'batchOff', batch], value: off.includes(f) ? off.filter((x) => x !== f) : [...off, f] }]);
       },
     },
     'looks.batch.approve': {
@@ -116,11 +119,24 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
         const b = agentBatches(ctx.state).find((x) => x.batch === batch);
         if (!b) return null;
         const off = new Set(looksView(ctx.state).batchOff?.[batch] ?? []);
-        const items = b.frames.filter((f) => !off.has(f.frame)).map((f) => ({ frame: f.frame, seqs: f.seqs }));
-        const res = studioOf(ctx).route.approveBatch(items, `Approve ${b.why}`, { force: !!force });
-        const stale = res.refused.flatMap((x) => x.diags.map((d) => ({ frame: x.frame, code: d.code, message: `${ctx.state.catalog?.frames?.[x.frame]?.name ?? x.frame}: ${d.message}` })));
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'batchStale', batch], value: stale }], { tier: 'view' });
-        return res;
+        const on = b.frames.filter((f) => !off.has(f.frame)).map((f) => f.frame);
+        const known = new Set((looksView(ctx.state).batchStale?.[batch] ?? []).map((x) => x.frame));
+        const stale = force ? [] : on.filter((f) => known.has(f) || staleEntry(studioOf(ctx).log, b, f));
+        const approve = on.filter((f) => !stale.includes(f));
+        const refused = stale.map((f) => ({ frame: f, code: 'E_STALE', message: `${ctx.state.catalog?.frames?.[f]?.name ?? f}: changed since the look was proposed` }));
+        if (!approve.length) {
+          // nothing to approve: the card stays as it is and says which frames changed
+          ctx.rt.store.writeView([{ path: ['looksView', 'batchStale', batch], value: refused }]);
+          return { approved: [], refused };
+        }
+        const kept = regroup(ctx, b, approve, b.frames.map((f) => f.frame).filter((f) => !approve.includes(f)), force);
+        if (kept) {
+          ctx.rt.store.writeView([
+            { path: ['looksView', 'batchStale', kept], value: refused },
+            { path: ['looksView', 'batchOff', kept], value: [...off] },
+          ]);
+        }
+        return { approved: approve, refused };
       },
     },
     'looks.batch.reject': {
@@ -130,8 +146,9 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
         const b = agentBatches(ctx.state).find((x) => x.batch === batch);
         if (!b) return;
         const stale = new Set((looksView(ctx.state).batchStale?.[batch] ?? []).map((x) => x.frame));
-        for (const f of b.frames) if (!onlyStale || stale.has(f.frame)) studioOf(ctx).route.reject(f.frame, f.seqs);
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'batchStale', batch], value: [] }], { tier: 'view' });
+        // Skip: the stale frames' proposals are rejected; the others stay pending as one card
+        const kept = regroup(ctx, b, [], onlyStale ? b.frames.map((f) => f.frame).filter((f) => !stale.has(f)) : [], false);
+        if (kept) ctx.rt.store.writeView([{ path: ['looksView', 'batchOff', kept], value: looksView(ctx.state).batchOff?.[batch] ?? [] }]);
       },
     },
     'looks.survey.open': {
@@ -140,7 +157,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       run: (ctx: any, mode?: 'set' | 'ring') => {
         const v = looksView(ctx.state);
         const open = v.mode !== 'survey' || (mode && mode !== v.survey);
-        ctx.rt.store.writeDoc([{ path: ['looksView', 'mode'], value: open ? 'survey' : 'print' }, ...(mode ? [{ path: ['looksView', 'survey'], value: mode }] : [])], { tier: 'view' });
+        ctx.rt.store.writeView([{ path: ['looksView', 'mode'], value: open ? 'survey' : 'print' }, ...(mode ? [{ path: ['looksView', 'survey'], value: mode }] : [])]);
       },
     },
     'looks.survey.toggle': {
@@ -279,4 +296,48 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     'looks.virtualCopy': { label: 'Virtual Copy', enabled: () => false, why: 'Virtual copies need a catalog field and a stack display (CHB-019/020)', run: () => null },
     'looks.match': { label: 'Match to Reference', enabled: () => false, why: 'Match measures both frames (measure.stats); not built yet — use Roll ▸ Print the Roll Like the Reference', run: () => null },
   };
+}
+
+/** A frame of an agent batch whose proposal is stale: a value it would undo is no longer the one it saw. */
+function staleEntry(log: Log, b: AgentBatch, frame: string): boolean {
+  const f = b.frames.find((x) => x.frame === frame);
+  const e = f ? log.entry(f.seq) : undefined;
+  if (!e || !log.has(frame)) return false;
+  const d = log.doc<Document>(frame);
+  return e.tx.mutations.some((m, i) => {
+    const inv = e.tx.inverses[i];
+    return m.op === 'set' && inv?.op === 'set' && canonicalJSON(read(d, inv.path) ?? null) !== canonicalJSON(inv.value ?? null);
+  });
+}
+
+let regroupSeq = 0;
+/**
+ * The log approves and rejects a batch as a whole (selecting one entry selects the batch), so a card's partial
+ * decision is made in one change of the log: the batch is rejected, the frames to approve are proposed again as a
+ * batch of their own and approved (one step), and the frames to keep are proposed again as a new pending batch
+ * (returned: its id). With every frame approved, the batch is approved as it is.
+ */
+function regroup(ctx: any, b: AgentBatch, approve: readonly string[], keep: readonly string[], force: boolean): string | null {
+  const studio = ctx.services.studio;
+  const base = b.batch.replace(/~\d+$/, '');
+  const keepId = keep.length ? `${base}~${++regroupSeq}` : null;
+  studio.change((log: Log) => {
+    if (!keep.length && approve.length === b.frames.length) return log.approve(b.frames[0]!.seq, { by: 'user', ...(force ? { force: true } : {}) });
+    const entries = b.frames.map((f) => ({ f, e: log.entry(f.seq)! })).filter((x) => x.e);
+    if (!entries.length) return log;
+    const first = entries[0]!.e;
+    const make = (frames: readonly string[], id: string): Batch => ({
+      id, label: first.tx.label, by: first.tx.by, source: first.tx.source, skipped: [],
+      edits: entries.filter((x) => frames.includes(x.f.frame)).map((x) => ({ doc: x.f.frame, tx: transaction({ id: `${id}:${x.f.frame}`, label: x.e.tx.label, by: x.e.tx.by, source: x.e.tx.source, batch: id, mutations: x.e.tx.mutations }) })),
+    });
+    const why = first.why !== undefined ? { why: first.why } : {};
+    let next = log.reject(first.seq);
+    if (approve.length) {
+      const id = `${base}~${++regroupSeq}`;
+      next = next.propose(make(approve, id), why).approve({ batch: id }, { by: 'user' });
+    }
+    if (keepId) next = next.propose(make(keep, keepId), why);
+    return next;
+  }, `Approve ${b.why}`);
+  return keepId;
 }

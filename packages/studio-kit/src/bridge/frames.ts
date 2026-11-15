@@ -1,21 +1,19 @@
-// The open frames: per frame its source info, its own content-addressed Graph and its EditLog (what CHB-009's
-// FrameSession held). A frame is a file opened in one mode (CHB-027): a colour negative ('negative-scan') or a
-// photo ('digital-raw'). Logs are saved under (source SHA-256, mode) on every non-preview event and resumed by
-// both, so a moved file re-attaches its recipe and a photo's recipe never lands on the file opened as a negative
-// (F3). A file is open once: opening it again finds the open frame; re-opening it in the other mode replaces the
-// frame (same id) with a fresh decode and that mode's recipe.
+// The open frames: per frame its source info, its own content-addressed Graph and its first document (what
+// CHB-009's FrameSession held; the edit itself is the frame's document in the store's log, opened by the Studio).
+// A frame is a file opened in one mode (CHB-027): a colour negative ('negative-scan') or a photo ('digital-raw').
+// Edits are saved under (source SHA-256, mode) and resumed by both, so a moved file re-attaches its edit and a
+// photo's edit never lands on the file opened as a negative (F3). A file is open once: opening it again finds the
+// open frame; re-opening it in the other mode replaces the frame (same id) with a fresh decode and that mode's
+// document.
 //
 // A scan of a strip of film (CHB-027 WS-D, F16) is several frames: the opener reports one box per frame on the
 // strip, and each becomes a frame of its own — same file and source (the whole strip, so the strip's base and veil
-// are shared), its recipe cropped to its box (view.frame.crop), identity (sha, mode, index): id
-// `frame_<sha8>-<n>`, log key `<sha>:<mode>:<n>`. A file with one frame keeps its id and key without an index.
-import {
-  EditLog, fail, Graph, sha256Hex,
-  type AgentMode, type Box, type EditLogData, type Engine, type FrameRecipe, type Mutation, type Orientation, type SourceInfo, type SourceRef,
-} from '@chromobench/contract';
-import { StudioLog } from '../model/enlarger.ts';
+// are shared), its document cropped to its box (geometry.crop), identity (sha, mode, index): id
+// `frame_<sha8>-<n>`, save key `<sha>:<mode>:<n>`. A file with one frame keeps its id and key without an index.
+import { fail, Graph, sha256Hex, type Box, type Document, type Engine, type FrameKind, type Orientation, type SourceInfo, type SourceRef } from '@chromobench/contract';
 import { stripOrientation } from '../model/orient.ts';
-import { defaultFor } from '../model/recipes.ts';
+import { defaultDocument, kindOfDoc } from '../model/doc.ts';
+import { isFrameSave, type FrameSave } from './saved.ts';
 import type { KV } from './kv.ts';
 
 /**
@@ -31,8 +29,8 @@ export async function hashBytes(bytes: Uint8Array): Promise<string> {
   return hex;
 }
 
-/** What a frame is: a colour negative or a photo from a digital camera (the recipe's kind). */
-export type FrameKind = FrameRecipe['kind'];
+/** What a frame is: a colour negative or a photo from a digital camera (the document's kind). */
+export type { FrameKind };
 /** How the photographer asked to open: let the studio guess, or say. */
 export type OpenAs = 'auto' | 'photo' | 'negative';
 
@@ -60,25 +58,26 @@ export interface FrameEntry {
   readonly kind: FrameKind;
   readonly info: SourceInfo;
   readonly graph: Graph;
-  readonly log: EditLog;
-  /** the recipe frame.add created */
-  readonly initial: FrameRecipe;
+  /** the document the frame opens with when nothing is saved (its first print, cropped to a strip's box) */
+  readonly first: Document;
+  /** the edit saved for the frame's key, read on open (the Studio restores it into the log) */
+  readonly saved: FrameSave | null;
   /** a frame of a strip: its place (1-based), the strip's frame count and its box (source px); absent for a whole file */
   readonly strip?: { index: number; of: number; box: Box };
 }
 
 /**
- * A frame's first recipe computed from the opened frame (CHB-023: the automatic first print). It gets the default
- * recipe of the frame's kind and the frame's graph (the source is registered in it); it runs only when no log is
+ * A frame's first document computed from the opened frame (CHB-023: the automatic first print). It gets the neutral
+ * document of the frame's kind and the frame's graph (the source is registered in it); it runs only when nothing is
  * saved for the hash and mode.
  */
-export type InitialRecipe = (defaults: FrameRecipe, graph: Graph) => Promise<FrameRecipe>;
+export type InitialDocument = (defaults: Document, graph: Graph) => Promise<Document>;
 
 /** What opening a file did. */
 export type OpenOutcome =
-  /** opened now, with a new recipe */
+  /** opened now, with a new document */
   | 'opened'
-  /** opened now, its saved recipe resumed */
+  /** opened now, its saved edit resumed */
   | 'resumed'
   /** the file was open already (in the mode asked, or the mode did not matter): nothing changed */
   | 'already'
@@ -95,7 +94,7 @@ export interface OpenResult {
 }
 
 export interface OpenFileOptions {
-  initial?: FrameRecipe | InitialRecipe;
+  initial?: Document | InitialDocument;
   /** default 'auto' */
   as?: OpenAs;
   /** reads the file's bytes again (re-open in the other mode); the bytes are kept in memory when absent */
@@ -104,8 +103,6 @@ export interface OpenFileOptions {
 
 export interface FramesOptions {
   kv?: KV | null;
-  mode?: AgentMode;
-  now?: () => number;
   opener?: SourceOpener;
   /**
    * How the library last had a file open (CHB-031 F18), by hash: a file it knows opens that way when the caller
@@ -114,42 +111,40 @@ export interface FramesOptions {
   known?: (sha: string) => 'photo' | 'negative' | null | undefined;
 }
 
-/** The KV key of a frame's log: the hash and the mode, and the frame's place on a strip. */
+/** The KV key of a frame's saved edit: the hash and the mode, and the frame's place on a strip. */
 export const logKey = (sha: string, kind: FrameKind, index?: number): string => `${sha}:${asOf(kind)}${index ? `:${index}` : ''}`;
-/** The id of a frame of a strip (a whole file keeps the recipe's `frame_<sha8>`). */
+/** The id of a frame of a strip (a whole file keeps the document's `frame_<sha8>`). */
 export const stripFrameId = (sha: string, index: number): string => `frame_${sha.slice(0, 8)}-${index}`;
 
-/** A strip frame's recipe: its id, its box as the crop and, when given, the strip's orientation (F20). */
-export function stripFrameRecipe(r: FrameRecipe, id: string, box: Box, orientation?: Orientation): FrameRecipe {
-  return { ...r, frame: id, view: { ...r.view, frame: { ...r.view.frame, crop: { ...box }, ...(orientation ? { orientation } : {}) } } };
+/** A strip frame's document: its id, its box as the crop and, when given, the strip's orientation (F20). */
+export function stripFrameDocument(d: Document, id: string, box: Box, orientation?: Orientation): Document {
+  return { ...d, frame: id, geometry: { ...d.geometry, crop: { ...box }, ...(orientation ? { orientation } : {}) } };
 }
 
 /**
- * A strip frame's saved log from a decode at another working size (CHB-031: the reference engine decodes strips
- * larger now; the GPU engine decodes at another size again): its crop and rebate are working-image pixels of that
- * size. A strip frame's crop sits on its frame, so its centre scales with the box's centre from the image origin:
- * when that says the scale changed (by more than a third), the crop and the rebate are scaled to this decode, as one
- * 'auto' step. The exact ratio is the frame's first box (the log's initial crop) when that agrees. `W × H`: this
- * decode's working image.
+ * A strip frame's saved edit from a decode at another working size (CHB-031: the engines decode strips at different
+ * sizes): its crop and rebate are pixels of that size. A strip frame's crop sits on its frame, so its centre scales
+ * with the box's centre from the image origin: when that says the scale changed (by more than a third), the sets
+ * that scale the crop and the rebate to this decode, else null. The exact ratio is the frame's first box (the saved
+ * initial crop) when that agrees. `W × H`: this decode's working image.
  */
-export function rescaleStripLog(log: EditLog, box: Box, W: number, H: number): boolean {
-  const r = log.committed;
-  const crop = r.view?.frame?.crop;
-  if (!crop || crop.w <= 0 || crop.h <= 0) return false;
+export function rescaleStrip(doc: Document, initial: Document, box: Box, W: number, H: number): { op: 'set'; path: string; value: Box }[] | null {
+  const crop = doc.geometry.crop;
+  if (!crop || crop.w <= 0 || crop.h <= 0) return null;
   const bx = box.x + box.w / 2, by = box.y + box.h / 2;
   const est = ((crop.x + crop.w / 2) * bx + (crop.y + crop.h / 2) * by) / Math.max(1e-9, bx * bx + by * by);
-  if (!(est > 0) || Math.abs(Math.log(est)) < 0.3) return false;
-  const was = log.toJSON().initial.view?.frame?.crop;
+  if (!(est > 0) || Math.abs(Math.log(est)) < 0.3) return null;
+  const was = initial.geometry.crop;
   const exact = was && was.w > 0 && was.h > 0 && Math.abs(Math.log((box.w / was.w) * est)) < 0.2 ? [box.w / was.w, box.h / was.h] as const : null;
   const [kx, ky] = exact ?? [1 / est, 1 / est];
   const scale = (b: Box): Box => {
     const x = Math.min(W - 1, Math.max(0, Math.round(b.x * kx))), y = Math.min(H - 1, Math.max(0, Math.round(b.y * ky)));
     return { x, y, w: Math.max(1, Math.min(W - x, Math.round(b.w * kx))), h: Math.max(1, Math.min(H - y, Math.round(b.h * ky))) };
   };
-  const ms: Mutation[] = [{ op: 'set', path: 'view.frame.crop', value: scale(crop) }];
-  if (r.scan?.rebate) ms.push({ op: 'set', path: 'scan.rebate', value: scale(r.scan.rebate) });
-  log.apply(ms, 'auto', 'Working size changed');
-  return true;
+  const out: { op: 'set'; path: string; value: Box }[] = [{ op: 'set', path: 'geometry.crop', value: scale(crop) }];
+  const rebate = (doc.stages.scan?.medium as { rebate?: Box | null } | undefined)?.rebate;
+  if (rebate) out.push({ op: 'set', path: 'stages.scan.medium.rebate', value: scale(rebate) });
+  return out;
 }
 
 /** A decoded file: what every frame of it shares. */
@@ -158,8 +153,6 @@ interface Decoded { name: string; kind: FrameKind; info: SourceInfo; boxes: Box[
 export class Frames {
   readonly engine: Engine;
   readonly kv: KV | null;
-  mode: AgentMode;
-  private readonly now: (() => number) | undefined;
   private readonly opener: SourceOpener;
   private readonly known: FramesOptions['known'];
   private readonly map = new Map<string, FrameEntry>();
@@ -169,13 +162,10 @@ export class Frames {
   private readonly listeners = new Set<(e: FrameEntry) => void>();
   private readonly removedListeners = new Set<(e: FrameEntry) => void>();
   private readonly opening = new Map<string, Promise<OpenResult>>();
-  private saving: Promise<unknown> = Promise.resolve();
 
   constructor(engine: Engine, o: FramesOptions = {}) {
     this.engine = engine;
     this.kv = o.kv ?? null;
-    this.mode = o.mode ?? 'ask';
-    this.now = o.now;
     this.known = o.known;
     this.opener = o.opener ?? (async (src, as) => ({ info: await engine.open(src), kind: kindOf(as === 'photo' ? 'photo' : 'negative') }));
   }
@@ -213,7 +203,7 @@ export class Frames {
     return !!e && this.readers.has(e.sha);
   }
 
-  /** Opens bytes in the engine and creates (or resumes, by hash and mode) the frame's edit log. */
+  /** Opens bytes in the engine and makes the frame (its saved edit read by hash and mode, or its first document). */
   async open(bytes: Uint8Array, name: string, o: OpenFileOptions = {}): Promise<FrameEntry> {
     return (await this.openFile(bytes, name, o)).entry;
   }
@@ -254,11 +244,11 @@ export class Frames {
 
   /**
    * Re-opens an open frame as a photo or as a negative (F3, F6): decodes the file again in that mode and resumes
-   * that mode's saved log or starts that mode's recipe. The frame keeps its id; the other mode's log stays saved.
+   * that mode's saved edit or starts that mode's document. The frame keeps its id; the other mode's edit stays saved.
    * A frame of a strip re-opens the whole file (the engine holds one decode per file): all its frames are replaced
    * by the file's frames in the new mode.
    */
-  async reopen(id: string, as: 'photo' | 'negative', o: { initial?: FrameRecipe | InitialRecipe } = {}): Promise<OpenResult> {
+  async reopen(id: string, as: 'photo' | 'negative', o: { initial?: Document | InitialDocument } = {}): Promise<OpenResult> {
     const e = this.map.get(id) ?? fail('E_NO_FRAME', `frame ${id} is not open`);
     const read = this.readers.get(e.sha) ?? fail('E_NO_SOURCE', `${e.name} is not at hand: open the file again`, { hint: 'File ▸ Open Files…' });
     const bytes = await read();
@@ -267,7 +257,7 @@ export class Frames {
     return this.load(bytes, sha, e.name, as, o.initial, this.allBySha(sha));
   }
 
-  private async load(bytes: Uint8Array, sha: string, name: string, as: OpenAs, initial: FrameRecipe | InitialRecipe | undefined, replacing: FrameEntry[]): Promise<OpenResult> {
+  private async load(bytes: Uint8Array, sha: string, name: string, as: OpenAs, initial: Document | InitialDocument | undefined, replacing: FrameEntry[]): Promise<OpenResult> {
     const r = await this.opener({ kind: 'file', sha256: sha, name, bytes }, as);
     const boxes = r.frames && r.frames.length >= 2 ? r.frames.map(b => ({ ...b })) : null;
     const d: Decoded = { name, kind: r.kind, info: r.info, boxes };
@@ -279,12 +269,12 @@ export class Frames {
    * The frames of a decoded file: the whole file, or one per box of its strip. Frames open already (`present`) are
    * replaced in place when the id stays (re-open), else removed; frames missing are created or resumed.
    */
-  private async build(sha: string, d: Decoded, initial: FrameRecipe | InitialRecipe | undefined, present: FrameEntry[]): Promise<OpenResult> {
+  private async build(sha: string, d: Decoded, initial: Document | InitialDocument | undefined, present: FrameEntry[]): Promise<OpenResult> {
     const reopening = present.length > 0 && present[0]!.kind !== d.kind;
     const keep = reopening ? [] : present;
     const plan = d.boxes
       ? d.boxes.map((box, i) => ({ index: i + 1, box, id: stripFrameId(sha, i + 1) as string | null }))
-      // a whole file keeps the id it had (a re-open) or takes its saved log's
+      // a whole file keeps the id it had (a re-open) or takes its saved document's
       : [{ index: 0, box: null as Box | null, id: present.length === 1 && !present[0]!.strip ? present[0]!.id : null }];
     const made: FrameEntry[] = [];
     let resumed = 0;
@@ -298,20 +288,17 @@ export class Frames {
       }
       const graph = new Graph();
       graph.registerSource(d.info);
-      const saved = await this.savedLog(sha, d.kind, p.index || undefined);
-      const opts = { mode: this.mode, graph, ...(this.now ? { now: this.now } : {}) };
-      let defaults = defaultFor(sha, d.name, d.kind);
-      if (p.box) defaults = stripFrameRecipe(defaults, p.id!, p.box, turn);
-      let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && initial.kind === d.kind ? initial : null;
-      if (first && p.box) first = stripFrameRecipe(first, p.id!, p.box, turn);
-      // a StudioLog: no inert control enters it, whoever writes (CHB-031 srvr)
-      const log = saved ? new StudioLog(saved, opts) : StudioLog.make(first ?? defaults, { ...opts, by: 'auto' });
+      const saved = await this.savedEdit(sha, d.kind, p.index || undefined);
+      let defaults = defaultDocument(d.kind, { sha256: sha, name: d.name, width: d.info.width, height: d.info.height });
+      if (p.box) defaults = stripFrameDocument(defaults, p.id!, p.box, turn);
+      let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && kindOfDoc(initial) === d.kind ? initial : null;
+      if (first && p.box) first = stripFrameDocument(first, p.id!, p.box, turn);
+      const doc = saved?.initial ?? first ?? defaults;
       if (saved) resumed++;
-      if (saved && p.box) rescaleStripLog(log, p.box, d.info.width, d.info.height);
       const strip = p.box && d.boxes ? { index: p.index, of: d.boxes.length, box: { ...p.box } } : undefined;
-      made.push({ id: p.id ?? log.frame, sha, name: d.name, kind: d.kind, info: d.info, graph, log, initial: log.toJSON().initial, ...(strip ? { strip } : {}) });
+      made.push({ id: p.id ?? doc.frame, sha, name: d.name, kind: d.kind, info: d.info, graph, first: first ?? defaults, saved, ...(strip ? { strip } : {}) });
     }
-    // frames of the old decode that have no place in the new one leave the studio (their logs stay saved)
+    // frames of the old decode that have no place in the new one leave the studio (their edits stay saved)
     for (const e of present) if (!made.some(m => m.id === e.id)) this.drop(e);
     const added = made.filter(m => !present.includes(m) || reopening);
     for (const e of added) this.add(e);
@@ -319,26 +306,28 @@ export class Frames {
     return { entry: made[0]!, entries: made, outcome: fresh.length && resumed === fresh.length ? 'resumed' : 'opened' };
   }
 
-  /** The saved log of (sha, kind[, index]); an old log saved by hash alone counts only for a whole file of its kind (F3). */
-  private async savedLog(sha: string, kind: FrameKind, index?: number): Promise<EditLogData | undefined> {
-    if (!this.kv) return undefined;
-    const now = await this.kv.get<EditLogData>('logs', logKey(sha, kind, index)).catch(() => undefined);
-    if (now || index) return now;
-    const old = await this.kv.get<EditLogData>('logs', sha).catch(() => undefined);
-    return old && old.initial?.kind === kind ? old : undefined;
+  /** The saved edit of (sha, kind[, index]), or null (nothing saved, or a record of another format: not read). */
+  private async savedEdit(sha: string, kind: FrameKind, index?: number): Promise<FrameSave | null> {
+    if (!this.kv) return null;
+    const v = await this.kv.get<unknown>('logs', logKey(sha, kind, index)).catch(() => undefined);
+    return isFrameSave(v) && kindOfDoc(v.initial) === kind ? v : null;
   }
 
   add(e: FrameEntry): FrameEntry {
     this.map.set(e.id, e);
-    e.log.on(ev => {
-      if (ev.type !== 'preview' && this.map.get(e.id) === e) this.save(e);
-    });
-    this.save(e);
     for (const f of this.listeners) f(e);
     return e;
   }
 
-  /** Takes a frame out of the studio (its log stays saved: opening the file again resumes it). Other frames of its strip stay. */
+  /** Saves a frame's edit under its key (the Studio calls it when the frame's part of the log changed). */
+  save(e: FrameEntry, data: FrameSave): void {
+    if (!this.kv) return;
+    const kv = this.kv;
+    this.saving = this.saving.then(() => kv.put('logs', logKey(e.sha, e.kind, e.strip?.index), data)).catch(() => undefined);
+  }
+  private saving: Promise<unknown> = Promise.resolve();
+
+  /** Takes a frame out of the studio (its edit stays saved: opening the file again resumes it). Other frames of its strip stay. */
   remove(id: string): FrameEntry | undefined {
     const e = this.map.get(id);
     if (!e) return undefined;
@@ -356,18 +345,7 @@ export class Frames {
     for (const f of this.removedListeners) f(e);
   }
 
-  setMode(mode: AgentMode): void {
-    this.mode = mode;
-    for (const e of this.map.values()) e.log.setMode(mode);
-  }
-
-  private save(e: FrameEntry): void {
-    if (!this.kv) return;
-    const kv = this.kv;
-    const data = e.log.toJSON();
-    this.saving = this.saving.then(() => kv.put('logs', logKey(e.sha, e.kind, e.strip?.index), data)).catch(() => undefined);
-  }
-  /** resolves when every queued log write has finished */
+  /** resolves when every queued write has finished */
   flush(): Promise<unknown> {
     return this.saving;
   }

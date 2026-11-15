@@ -4,9 +4,10 @@
 // Boundary with CHB-019: its ring-around *tool* keeps its layout and tile source (cb.views.ringAround); this kit's
 // survey can show the same tiles as looks, so a layout may build the ring from either.
 
-import { fieldPattern, fieldSpec } from '@chromobench/contract';
 import { ringTiles } from '../../../../src/model/tools.ts';
+import { LIGHTS_PATH } from '../../../../src/model/doc.ts';
 import { add, look, type Look } from './look.ts';
+import { specAt } from './paths.ts';
 
 /** nine looks: the six colour directions, current, and density ±1 step (the CHB-009 ring) */
 export function ring(o: { step?: number; density?: boolean } = {}): Look[] {
@@ -16,7 +17,7 @@ export function ring(o: { step?: number; density?: boolean } = {}): Look[] {
     .filter((t) => t.row !== 3 || Math.abs(Number(t.id.slice(1))) === 1)
     .map((t) => {
       const l = look(t.id === 'current' ? 'current' : `${t.label}`).id(`ring-${t.id}`).group('Ring-around');
-      const out = l.edits(() => (t.id === 'current' ? {} : { 'print.lights.logH': add([...t.offset]) }));
+      const out = l.edits(() => (t.id === 'current' ? {} : { [LIGHTS_PATH]: add([...t.offset]) }));
       return Object.freeze({ ...out, origin: 'sweep' as const });
     });
 }
@@ -24,7 +25,7 @@ export function ring(o: { step?: number; density?: boolean } = {}): Look[] {
 /** a row of looks moving one path by the given steps (stops for times and f-numbers, the stored unit otherwise) */
 export function axis(path: string, o: { steps?: number[]; unit?: 'stop' | 'none' } = {}): Look[] {
   const steps = o.steps ?? [-2, -1, 0, 1, 2];
-  const spec = fieldSpec(fieldPattern(path) ?? '');
+  const spec = specAt(path);
   const inStops = o.unit === 'stop' || spec?.unit === 's' || spec?.unit === 'fstop';
   return steps.map((s) => {
     const name = s === 0 ? 'current' : `${path.split('.').pop()} ${s > 0 ? '+' : '−'}${Math.abs(s)}${inStops ? ' st' : ''}`;

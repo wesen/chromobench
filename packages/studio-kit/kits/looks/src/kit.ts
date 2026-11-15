@@ -10,18 +10,18 @@
 //   ck.module('p').left(looks.panels.library()).center(cb.viewer(looks.sel.print, { compare: { before: looks.sel.before } }))
 //     .right(ck.dock.column({}, looks.panels.params(), looks.panels.amount(), looks.panels.diff(), looks.panels.card()))
 //
-// A look resolves, per frame, to plain `set` mutations (re-run concretely when a parameter or the Amount moves).
-// A user apply commits one batch (one tx and LoggedMutation.batch on every frame's EditLog, one global undo step);
-// an agent apply (cb.looks.apply in the DSL) proposes per frame with the batch id, and the card here coalesces the
-// pending entries of a batch into one approval with partial approval by frame, E_STALE, Apply anyway and Skip.
+// A look resolves, per frame, to plain `set` mutations on document paths (re-run concretely when a parameter or the
+// Amount moves). A user apply commits one batch of the values batch builder (`plan`: one transaction per frame with
+// the batch id, one step of the log); an agent apply proposes such a batch, and the card here shows the pending
+// entries of a batch as one approval with partial approval by frame, E_STALE, Apply anyway and Skip.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { toDiagnostic, type Diagnostic } from '@chromobench/contract';
 import { slot, type Ck, type FormSpec, type NodeData } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
-import { diffRecipes, summary } from './engine/diff.ts';
+import { diffDocs, summary } from './engine/diff.ts';
 import { add, bake, choice, fromPreset, look, mul, pt, set, slider, type Look } from './engine/look.ts';
-import { planApply } from './engine/plan.ts';
+import { planLook } from './engine/plan.ts';
 import { axis, ring } from './engine/sweep.ts';
 import { looksProvider } from './engine/provider.ts';
 import { LOOKS_STATE, looksView, agentBatches } from './state.ts';
@@ -110,7 +110,7 @@ export function createLooksKit(ck: Ck, cb: Cb) {
    *  previewed, compared with a chosen source) or the survey (N) in the centre; parameters, Amount, diff, batches right */
   const printModule = (o: { id?: string } = {}) =>
     ck
-      .module(o.id ?? 'print', { label: 'Print', key: 'D', txOpts: (st: any) => ({ channel: cb.sel.current(st) }) })
+      .module(o.id ?? 'print', { label: 'Print', key: 'D' })
       .left(ck.dock.column({ width: 300 }, library({ size: 96 }), cb.panels.snapshots(), cb.panels.history()))
       .center(
         ck.match(
@@ -131,7 +131,7 @@ export function createLooksKit(ck: Ck, cb: Cb) {
           panels.compare(),
           panels.card(),
           cb.panels.approvals(),
-          ck.panel.define('enlarger', { title: 'Enlarger' }, cb.ifFrame(cb.arg('print.enlarger.time_s'), (cb.arg('print.lights.logH') as any).pad(), cb.arg('print.grade'), cb.arg('print.paper'))),
+          ck.panel.define('enlarger', { title: 'Enlarger' }, cb.ifFrame(cb.arg('main.params.time_s'), (cb.arg('lights.params.logH') as any).pad(), cb.arg('stages.darkroom.medium.grade'), cb.arg('stages.darkroom.medium.paper'))),
           panels.groups(),
           panels.presets(),
         ),
@@ -179,9 +179,9 @@ export function createLooksKit(ck: Ck, cb: Cb) {
       bake,
       register: (l: Look) => (extra.set(l.id, l), l),
       sweep: { ring, axis },
-      diffRecipes,
+      diffDocs,
       summary,
-      planApply,
+      planLook,
       /** the DSL's LooksProvider (cb.looks.* for the agent), over the same registry */
       provider: (getState: () => any) => looksProvider(() => looksOf(getState())),
       errors: (e: unknown): Diagnostic => toDiagnostic(e),

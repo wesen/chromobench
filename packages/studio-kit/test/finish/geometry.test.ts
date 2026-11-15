@@ -3,7 +3,7 @@
 // reference sampler straighten(), keep-inside, orientation steps that keep the region read, no DOM imports.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { mulberry32, ORIENTATIONS, straighten, type Box, type FrameSettings, type Orientation } from '@chromobench/contract';
+import { mulberry32, ORIENTATIONS, straighten, type Box, type Geometry as FrameSettings, type Orientation } from '@chromobench/contract';
 import {
   angleOf, composeOrientation, constrain, cropCorners, fitCrop, fitsInside, frameValid, largestCrop, orientFrame, orientPoint, parseAspect, sensorTurn,
   shownSize, swapAspect, toShown, toSource, towards, unorientPoint,

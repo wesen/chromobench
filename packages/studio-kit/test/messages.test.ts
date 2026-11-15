@@ -1,6 +1,7 @@
 // CHB-027 WS-C: the photographer's words for errors and typed values (F7, F8), names for stock ids (F9), printer
 // seconds and the slider range (F13), undo naming the frame (F12).
-import { checkSet, defaultRecipe, isChromobenchError } from '@chromobench/contract';
+import { edit, isChromobenchError } from '@chromobench/contract';
+import { set } from '@chromobench/values';
 import type { RecordingChrome } from '@chromobench/shell';
 import { describe, expect, it } from 'vitest';
 import {
@@ -9,9 +10,11 @@ import {
 } from '../src/index.ts';
 import { trackRange } from '../src/kit/args.ts';
 import { makeM1Tiff } from '@chromobench/engine-mock';
-import { recipePath, started } from './helpers.ts';
+import { at, started } from './helpers.ts';
+import { defaultDocument } from '../src/model/doc.ts';
 
-const TIME = 'print.enlarger.time_s';
+const TIME = 'main.params.time_s';
+const d0 = () => defaultDocument('negative-scan', { sha256: 'a'.repeat(64), width: 3000, height: 2000 });
 
 function thrown(f: () => unknown): unknown {
   try {
@@ -24,19 +27,18 @@ function thrown(f: () => unknown): unknown {
 
 describe('explainError (F7)', () => {
   it('E_ARG_RANGE on the time reads as a sentence, the original stays as the detail', () => {
-    const r = defaultRecipe('negative-scan', { sha256: 'a'.repeat(64) });
-    const err = thrown(() => checkSet(r, TIME, 0));
+    const err = thrown(() => edit(d0(), [set(TIME, 0)]));
     expect(isChromobenchError(err)).toBe(true);
     const x = explainError(err, { label: 'Time' })!;
     expect(x.text).toBe('Time must be between 0.1 s and 600 s');
     expect(x.title).toBeUndefined(); // the text already starts with the label
-    expect(x.detail).toBe('E_ARG_RANGE: print.enlarger.time_s = 0 is outside the allowed range [0.1, 600] (s).');
+    expect(x.detail).toMatch(/^E_ARG_RANGE: main\.params\.time_s = 0 is outside the allowed range \[0\.1, 600\]/);
   });
   it('a component, an f-number, a stock off the list, a plain error', () => {
-    expect(rangeText('print.enlarger.fstop')).toBe('Aperture must be between f/2.8 and f/45');
-    expect(rangeText('print.enlarger.filtration.m')).toMatch(/^Filtration M must be between /);
-    const r = defaultRecipe('negative-scan', { sha256: 'a'.repeat(64) });
-    const err = thrown(() => checkSet(r, 'print.paper', 42));
+    expect(rangeText('main.params.fstop')).toBe('Aperture must be between f/2.8 and f/45');
+    expect(rangeText('main.params.filtration.m')).toMatch(/^Filtration M must be between /);
+    expect(rangeText('stages.darkroom.medium.grade')).toMatch(/^Grade must be between /);
+    const err = thrown(() => edit(d0(), [set('stages.darkroom.medium.paper', 42)]));
     expect(explainError(err)!.text).toMatch(/^Paper needs a /);
     expect(explainError(new Error('boom'))).toBeNull();
     expect(explainError(Object.assign(new Error('E_STALE: expect failed'), { code: 'E_STALE' }))!.text).toMatch(/not applied/);
@@ -61,12 +63,12 @@ describe('typed values (F8)', () => {
     expect(parseEntry(a, '−5 s', 15)).toBe(10);
     expect(parseEntry(a, '5', 15)).toBe(5);
     expect(badEntryText(a.model, '-5')).toBe('Time: “-5” — to change the time, add a unit (−5 s or −1/3 st); to set it, type 5');
-    expect(badEntryText(argModel('print.enlarger.fstop')!.model, '+1')).toBe('Aperture: “+1” — to change the aperture, type +1/3 st; to set it, type f/1');
+    expect(badEntryText(argModel('main.params.fstop')!.model, '+1')).toBe('Aperture: “+1” — to change the aperture, type +1/3 st; to set it, type f/1');
     // signed values: a plain signed number sets them; with a unit it changes them
-    const r = argModel('print.lights.logH.r')!;
+    const r = argModel('lights.params.logH.r')!;
     expect(parseEntry(r, '-2', [0.1, 0, 0])).toEqual([-0.05, 0, 0]);
     expect(parseEntry(r, '-2 pt', [0.1, 0, 0])).toEqual([0.05, 0, 0]);
-    const y = argModel('print.enlarger.filtration.y')!;
+    const y = argModel('main.params.filtration.y')!;
     expect(parseEntry(y, '-10', { c: 0, m: 0, y: 5 })).toEqual({ c: 0, m: 0, y: -10 });
     expect(parseEntry(y, '-10 CC', { c: 0, m: 0, y: 5 })).toEqual({ c: 0, m: 0, y: -5 });
   });
@@ -84,7 +86,7 @@ describe('typed values (F8)', () => {
     expect(clampEntry(a, 12, null)).toEqual({ value: 12, hit: null });
     expect(clampedText(a.model, 'max', null)).toBe('Time can be at most 600 s: set to 600 s');
     expect(clampedText(a.model, 'min', null)).toBe("Time can't go below 0.1 s: set to 0.1 s");
-    const y = argModel('print.enlarger.filtration.y')!;
+    const y = argModel('main.params.filtration.y')!;
     const c = clampEntry(y, { c: 0, m: 0, y: 1e6 }, 2);
     expect(c.hit).toBe('max');
     expect((c.value as { y: number }).y).toBe(y.model.max);
@@ -102,7 +104,7 @@ describe('names (F9)', () => {
     expect(valueName(undefined, 'grey_0')).toBe('grey 0');
   });
   it('the paper control formats its value by name; history says the change in names', () => {
-    const paper = argModel('print.paper')!.model;
+    const paper = argModel('stages.darkroom.medium.paper')!.model;
     expect(paper.valuesFrom).toBe('stocks:print');
     expect(paper.format('kodak_portra_endura')).toBe('Kodak Portra Endura');
     expect(paper.valueText('kodak_portra_endura')).toBe('Paper Kodak Portra Endura');
@@ -132,11 +134,11 @@ describe('round values and the slider range (F13)', () => {
 describe('in a started studio', () => {
   it('a refused edit toasts the sentence, with the code as the detail (F7)', async () => {
     const { rt, f } = await started();
-    rt.ctx().tx('Time', (t: any) => t.$set(recipePath(f, TIME), 0));
+    rt.ctx().tx('Time', (t: any) => t.$set(at(rt, f, TIME), 0));
     const toast = (rt.chrome as RecordingChrome).toasts.at(-1)!;
     expect(toast.text).toBe('Time must be between 0.1 s and 600 s');
     expect(toast.kind).toBe('error');
-    expect(toast.detail).toMatch(/^E_ARG_RANGE: print\.enlarger\.time_s = 0/);
+    expect(toast.detail).toMatch(/^E_ARG_RANGE: main\.params\.time_s = 0/);
     // the diagnostics keep the code
     expect(rt.diagnostics.list.some((d: any) => d.code === 'CK-T430' && d.facts.some((x: string) => /E_ARG_RANGE/.test(x)))).toBe(true);
   });
@@ -145,7 +147,7 @@ describe('in a started studio', () => {
     const b = makeM1Tiff();
     b[b.length - 1] = b[b.length - 1]! ^ 1; // another file (another hash)
     const g = (await studio.open(b, 'second.tif')).id;
-    rt.ctx().tx('Time', (t: any) => t.$set(recipePath(f, TIME), 12));
+    rt.ctx().tx('Time', (t: any) => t.$set(at(rt, f, TIME), 12));
     rt.store.set(['ui', 'selection'], { ids: [f], primary: f, anchor: f });
     expect(rt.commands.label('edit.undo', rt.store.readonly())).toBe('Undo Time');
     rt.store.set(['ui', 'selection'], { ids: [g], primary: g, anchor: g });

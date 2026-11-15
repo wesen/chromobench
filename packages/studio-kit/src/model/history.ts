@@ -1,9 +1,12 @@
-// Moved from apps/studio/src/core/history.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
-// History (guide §5.8): a view of the frame's edit log. Applied units in order with the undo cursor,
-// pending agent transactions, rejected entries, and labels in darkroom words from the registry.
-import { applyMutation, canonicalJSON, getPath, type Author, type EditLog, type FrameRecipe, type LoggedMutation, type Mutation, type Orientation, type Provenance } from '@chromobench/contract';
+// History (guide §5.8; CHB-037): the frame's part of the store's document log in the photographer's words. The
+// log has one cursor for every document; a frame's history is the steps that touched it (in effect, and the redo
+// tail), each described from the document as it was before it: "Time 7.94 → 10.0 s (+⅓ stop)", "Added a burn",
+// "Rotated right". No paths, ids or JSON.
+import { applyTransaction, canonicalJSON, getPath, type Author, type Log, type Mutation } from '@chromobench/values';
+import type { Document, Orientation } from '@chromobench/contract';
 import { composeOrientation } from '../../kits/finish/src/geometry.ts';
 import { componentOf, type ControlModel } from './controls.ts';
+import { findEntry, read } from './doc.ts';
 import { formatSeconds, fstopMarkStops, num, stopWords } from './units.ts';
 
 export interface Change {
@@ -11,39 +14,28 @@ export interface Change {
   text: string;
 }
 
-export interface HistoryGroup {
-  tx: string;
-  index: number;
+/** One step of the log that touched the frame. */
+export interface HistoryRow {
+  /** the log's cursor after this step (History jumps there) */
+  cursor: number;
   by: Author;
-  ts: number;
+  at: number;
   label: string;
   changes: Change[];
   inEffect: boolean;
   approved: boolean;
-}
-
-export interface PendingGroup {
-  tx: string;
-  why?: string;
-  /** the cross-frame batch the entries belong to (LoggedMutation.batch, contract 0.3) */
-  batch?: string;
-  seqs: number[];
-  changes: Change[];
+  /** the step also changed other frames (a batch over a roll) */
+  batch: boolean;
 }
 
 export const WHO: Record<Author, string> = { user: 'You', agent: 'Agent', auto: 'Auto' };
 
-export type ModelLookup = (path: string) => ControlModel | undefined;
+export type ModelLookup = (path: string, doc?: Document) => ControlModel | undefined;
 
-/** Finds the control model for a path, including exposure fields and probes. */
-export function lookupFor(models: readonly ControlModel[]): ModelLookup {
+/** Finds the control model for a document path (a layer's argument by its op's argument, whatever the entry's id). */
+export function lookupFor(models: readonly ControlModel[], layer?: (path: string, doc?: Document) => ControlModel | null): ModelLookup {
   const by = new Map(models.map((m) => [m.path, m]));
-  return (p) => by.get(p);
-}
-
-function short(v: unknown): string {
-  const s = canonicalJSON(v);
-  return s.length > 40 ? `${s.slice(0, 37)}…` : s;
+  return (p, doc) => by.get(p) ?? layer?.(p, doc) ?? undefined;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -59,22 +51,16 @@ export function orientationWords(from: Orientation, to: Orientation): string {
   return MIRRORED.has(from) !== MIRRORED.has(to) ? 'Rotated and flipped' : 'Rotated';
 }
 
-/** Names for recipe paths that have no control model (boxes, records, objects), by path or record prefix. */
+/** Names for document paths that have no control model (boxes, records, objects), by path or prefix. */
 const PATH_NAMES: Record<string, string> = {
-  'print.lights.auto': 'Automatic balance',
-  'print.densityMasks': 'Density mask',
-  'retouch.spots': 'Retouch spot',
-  'scan.baseT': 'Film base',
-  'scan.rebate': 'Film edge',
-  'scan.openGate': 'Open gate',
-  'scan.dust': 'Dust',
-  'scan.dust.spots': 'Dust spots',
-  'view.output.display.proof': 'Soft proof',
-  'view.output.printer': 'Printer',
-  'finishing.hues': 'Hue',
-  roll: 'Roll',
+  'stages.scan.medium.baseT': 'Film base',
+  'stages.scan.medium.rebate': 'Film edge',
+  'stages.scan.medium.openGate': 'Open gate',
+  'output.display.proof': 'Soft proof',
+  'output.printer': 'Printer',
+  'geometry.crop': 'Crop',
 };
-/** A readable name for a recipe path: the table, else its last segments as words ("view.output.export.dpi" → "Export dpi"). */
+/** A readable name for a document path: the table, else its last segments as words ("output.export.dpi" → "Export dpi"). */
 export function pathName(path: string): string {
   const segs = path.split('.');
   for (let n = segs.length; n > 0; n--) {
@@ -82,9 +68,9 @@ export function pathName(path: string): string {
     if (name) return n < segs.length && !/^\d+$/.test(segs[n]!) ? `${name} ${segs.slice(n).join(' ')}` : name;
   }
   const words = segs
-    .filter((s) => !['print', 'scan', 'capture', 'view', 'output', 'values', 'finishing', 'retouch'].includes(s))
+    .filter((s) => !['stages', 'scan', 'scene', 'film', 'darkroom', 'print', 'medium', 'params', 'output', 'geometry'].includes(s))
     .slice(-2)
-    .map((s) => s.replace(/_(s|px|um|deg|K)$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase());
+    .map((s) => s.replace(/_(s|px|um|mm|deg|K)$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase());
   return cap(words.join(' ') || path);
 }
 
@@ -97,7 +83,7 @@ function plainValue(v: unknown): string | null {
   return null;
 }
 
-/** A change of a path without a control model: "Crop set", "Automatic balance changed", "Export dpi 300 → 600". */
+/** A change of a path without a control model: "Crop set", "Export dpi 300 → 600". */
 function plainChange(name: string, old: unknown, value: unknown): string {
   if (old === undefined || old === null) return value === null || value === undefined ? `${name} unchanged` : `${name} set${plainValue(value) !== null && !isObj(value) ? ` to ${plainValue(value)}` : ''}`;
   if (value === null || value === undefined) return `${name} removed`;
@@ -121,24 +107,25 @@ function componentChange(model: ControlModel, old: unknown, value: unknown): str
   return `${model.label} ${changed.map((k) => `${model.components![k]} ${num1(old, k)} → ${num1(value, k)}`).join(', ')}${unit}`;
 }
 
-/** The exposure's kind for a path under print.exposures.<id> ("Dodge", "Burn"), from the recipe before the change. */
-function exposureName(before: FrameRecipe, id: string): string {
-  const kind = getPath(before, `print.exposures.${id}.kind`);
-  return typeof kind === 'string' ? cap(kind) : 'Exposure';
-}
 const article = (w: string): string => (/^[aeiou]/i.test(w) ? 'an' : 'a');
+/** What an entry is called in a sentence: its op's word ("burn", "contrast mask", "heal spot"), or a group's name. */
+function entryWord(e: { kind: string; op?: string; name?: string }): string {
+  if (e.kind === 'group') return `group "${e.name}"`;
+  const words: Record<string, string> = { expose: 'main exposure', densityMask: 'contrast mask', filter: 'filter', heal: 'heal spot', clone: 'clone spot', preflash: 'preflash' };
+  return words[e.op ?? ''] ?? e.op ?? 'layer';
+}
 
 /**
  * One line for a mutation, in the photographer's words and units (CHB-031 F32): "Time 7.94 → 10.0 s (+⅓ stop)",
- * "Aperture f/8 → f/9 (−⅓ stop)", "Filtration Y 0 → +20 CC", "Rotated right", "Crop set". No paths, ids or JSON.
+ * "Aperture f/8 → f/9 (−⅓ stop)", "Filtration Y 0 → +20 CC", "Rotated right", "Crop set", "Added a burn".
  */
-export function describe(m: Mutation, before: FrameRecipe, lookup: ModelLookup): string {
+export function describe(m: Mutation, before: Document, lookup: ModelLookup): string {
   switch (m.op) {
     case 'set': {
-      const old = getPath(before, m.path);
-      if (m.path === 'view.frame.orientation' && typeof old === 'string' && typeof m.value === 'string') return orientationWords(old as Orientation, m.value as Orientation);
-      if (m.path === 'view.frame.crop') return plainChange('Crop', old, m.value);
-      const model = lookup(m.path);
+      const old = read(before, m.path);
+      if (m.path === 'geometry.orientation' && typeof old === 'string' && typeof m.value === 'string') return orientationWords(old as Orientation, m.value as Orientation);
+      if (m.path === 'geometry.crop') return plainChange('Crop', old, m.value);
+      const model = lookup(m.path, before);
       if (model) {
         const parts = componentChange(model, old, m.value);
         if (parts) return parts;
@@ -151,99 +138,117 @@ export function describe(m: Mutation, before: FrameRecipe, lookup: ModelLookup):
         const text = numeric && ma && mb && ma[2] === mb[2] ? `${model.label} ${ma[1]} → ${b}` : `${model.label} ${a} → ${b}`;
         // the change in stops: of time (longer is more light) and of the lens (a larger f-number is less light)
         const both = typeof old === 'number' && typeof m.value === 'number' && old > 0 && m.value > 0;
-        const stops = !both ? null : model.storageUnit === 's' ? Math.log2(m.value as number / (old as number)) : model.storageUnit === 'fstop' ? fstopMarkStops(old as number, m.value as number) : null;
-        return stops !== null ? `${text} (${stopWords(stops)})` : text;
+        const stops = !both ? null : model.storageUnit === 's' ? Math.log2((m.value as number) / (old as number)) : model.storageUnit === 'fstop' ? fstopMarkStops(old as number, m.value as number) : null;
+        const who = /^([^.]+)\.params\./.exec(m.path)?.[1];
+        const owner = who && who !== 'main' && who !== 'lights' ? findEntry(before, who)?.entry : undefined;
+        const prefix = owner ? `${cap(owner.name || entryWord(owner))}: ` : '';
+        return `${prefix}${stops !== null ? `${text} (${stopWords(stops)})` : text}`;
       }
-      const ex = /^print\.exposures\.([^.]+)\.(\w+)$/.exec(m.path);
-      if (ex) {
-        const name = exposureName(before, ex[1]!);
-        if (ex[2] === 'time_s' && typeof m.value === 'number') return `${name} time → ${formatSeconds(m.value)} s`;
-        if (ex[2] === 'stops' && typeof m.value === 'number') return `${name} ${stopWords(m.value)}`;
-        if (ex[2] === 'enabled') return `${name} ${m.value ? 'on' : 'off'}`;
-        return plainChange(`${name} ${pathName(ex[2]!).toLowerCase()}`, getPath(before, m.path), m.value);
+      const en = /^([^.]+)\.(enabled|amount|mask|name|blend)$/.exec(m.path);
+      const owner = en ? findEntry(before, en[1]!)?.entry : undefined;
+      if (en && owner) {
+        const name = cap(owner.name || entryWord(owner));
+        if (en[2] === 'enabled') return `${name} ${m.value ? 'on' : 'off'}`;
+        if (en[2] === 'amount' && typeof m.value === 'number') return `${name} amount ${Math.round(Number(old ?? 1) * 100)} → ${Math.round(m.value * 100)} %`;
+        if (en[2] === 'mask') return m.value ? `${name} through a mask` : `${name} without its mask`;
+        return plainChange(`${name} ${en[2]}`, old, m.value);
       }
-      const probe = /^probes\.(.+)$/.exec(m.path);
-      if (probe) return m.value === null ? `Probe ${probe[1]} removed` : old ? `Probe ${probe[1]} moved` : `Probe ${probe[1]} placed`;
+      const p = /^([^.]+)\.params\.(\w+)/.exec(m.path);
+      const layer = p ? findEntry(before, p[1]!)?.entry : undefined;
+      if (p && layer) {
+        if (p[2] === 'time_s' && typeof m.value === 'number') return `${cap(layer.name || entryWord(layer))} time → ${formatSeconds(m.value)} s`;
+        if (p[2] === 'stops' && typeof m.value === 'number') return `${cap(layer.name || entryWord(layer))} ${stopWords(layer.kind === 'layer' && layer.op === 'dodge' ? -m.value : m.value)}`;
+        return plainChange(`${cap(layer.name || entryWord(layer))} ${pathName(p[2]!).toLowerCase()}`, old, m.value);
+      }
+      const probe = /^([^.]+)$/.exec(m.path);
+      if (probe && before.probes.items[probe[1]!]) return m.value === undefined ? `Probe ${probe[1]} removed` : `Probe ${probe[1]} moved`;
       return plainChange(pathName(m.path), old, m.value);
     }
-    case 'exposure.add': {
-      const e = m.exposure;
-      const how = typeof e.stops === 'number' ? ` (${stopWords(e.kind === 'dodge' ? -e.stops : e.stops)})` : typeof e.time_s === 'number' ? ` (${formatSeconds(e.time_s)} s)` : '';
-      return `Added ${article(e.kind)} ${e.kind}${how}`;
+    case 'insert': {
+      const it = m.item as { kind?: string; op?: string; name?: string; params?: { stops?: number; time_s?: number } } | undefined;
+      if (m.coll === 'masks') return 'Mask drawn';
+      if (m.coll === 'probes') return `Probe ${m.id} placed`;
+      if (it?.kind === 'layer' || it?.kind === 'group') {
+        const w = entryWord(it as { kind: string });
+        const pr = it.params ?? {};
+        const how = typeof pr.stops === 'number' ? ` (${stopWords(it.op === 'dodge' ? -pr.stops : pr.stops)})` : typeof pr.time_s === 'number' && it.op !== 'expose' ? ` (${formatSeconds(pr.time_s)} s)` : '';
+        return `Added ${article(w)} ${w}${how}`;
+      }
+      return `Added ${m.id}`;
     }
-    case 'exposure.remove': return `Removed the ${exposureName(before, m.id).toLowerCase()}`;
-    case 'mask.set': return getPath(before, `masks.${m.id}`) ? 'Mask changed' : 'Mask drawn';
-    case 'frame.add': return 'Frame added';
+    case 'remove': {
+      const e = findEntry(before, m.id)?.entry;
+      if (e) return `Removed the ${entryWord(e)}`;
+      if (before.masks.items[m.id]) return 'Mask removed';
+      if (before.probes.items[m.id]) return `Probe ${m.id} removed`;
+      return `Removed ${m.id}`;
+    }
+    case 'move': {
+      const e = findEntry(before, m.id)?.entry;
+      return e ? `Moved the ${entryWord(e)}${m.into ? ' into a group' : ''}` : `Moved ${m.id}`;
+    }
   }
 }
 
-/** Applied units (in effect and the redo tail) with labels, oldest first. */
-export function historyGroups(log: EditLog, lookup: ModelLookup): HistoryGroup[] {
-  const data = log.toJSON();
-  let r = data.initial;
-  const out: HistoryGroup[] = [];
-  data.units.forEach((u, index) => {
+/** The steps of the log that touched frame f, oldest first (in effect, then the redo tail), in words. */
+export function historyRows(log: Log, f: string, lookup: ModelLookup): HistoryRow[] {
+  const out: HistoryRow[] = [];
+  let d = log.initial<Document>(f);
+  log.steps.forEach((st, i) => {
+    const mine = st.seqs.map((s) => log.entry(s)!).filter((e) => e.doc === f);
+    if (!mine.length) return;
     const changes: Change[] = [];
-    let by: Author = 'user';
-    let ts = 0;
     let approved = false;
-    for (const seq of u.seqs) {
-      const e = data.entries[seq - 1]!;
-      by = e.by;
-      ts = e.ts;
+    for (const e of mine) {
       approved ||= e.approvedBy === 'user';
-      changes.push({ seq, text: describe(e.m, r, lookup) });
-      try {
-        r = applyMutation(r, e.m).recipe;
-      } catch {
-        // an entry that no longer applies (beyond the cursor after a branch) is shown, not folded
+      let cur = d;
+      for (const m of e.tx.mutations) {
+        changes.push({ seq: e.seq, text: describe(m, cur, lookup) });
+        try {
+          cur = applyTransaction(cur, { ...e.tx, mutations: [m], inverses: [] }).doc;
+        } catch {
+          // a mutation that does not apply here (beyond the cursor after a branch) is shown, not folded
+        }
       }
+      d = cur;
     }
-    out.push({ tx: u.tx, index, by, ts, label: u.label, changes, inEffect: index < data.cursor, approved });
+    const first = mine[0]!;
+    out.push({ cursor: i + 1, by: first.tx.by, at: first.at, label: st.label, changes, inEffect: i < log.cursor, approved, batch: log.docsOf(st).length > 1 });
   });
   return out;
 }
 
-/** Pending agent entries grouped by transaction, described against the committed state. */
-export function pendingGroups(log: EditLog, lookup: ModelLookup): PendingGroup[] {
-  const by = new Map<string, LoggedMutation[]>();
-  for (const e of log.pending()) by.set(e.tx ?? '', [...(by.get(e.tx ?? '') ?? []), e]);
-  return [...by].map(([tx, es]) => ({
-    tx,
-    ...(es[0]?.why ? { why: es[0].why } : {}),
-    ...(es[0]?.batch ? { batch: es[0].batch } : {}),
-    seqs: es.map((e) => e.seq),
-    changes: es.map((e) => ({ seq: e.seq, text: describe(e.m, log.committed, lookup) })),
-  }));
-}
-
-/** Moves the undo cursor to `target` (several undos or redos at once). */
-export function moveCursor(log: EditLog, target: number): void {
-  while (log.cursor > target && log.undo());
-  while (log.cursor < target && log.redo());
-}
-
-/** "Why is Yellow 62.5 CC?" rows from why(path), plus pending proposals on the path. */
+/** "Why is Yellow 62.5 CC?" rows from the log's trail of the path, plus pending proposals on the path. */
 export interface WhyRow { when: string; who: string; text: string; note: string }
 
-export function whyRows(log: EditLog, path: string, lookup: ModelLookup): { title: string; rows: WhyRow[]; now: string } {
-  const model = lookup(path);
-  const fmt = (v: unknown): string => (model ? model.format(v) : short(v));
+export function whyRows(log: Log, f: string, path: string, lookup: ModelLookup): { title: string; rows: WhyRow[]; now: string } {
+  const doc = log.doc<Document>(f);
+  const model = lookup(path, doc);
+  const fmt = (v: unknown): string => (v === undefined ? '—' : model ? model.format(v) : short(v));
   const time = (ts: number): string => new Date(ts).toTimeString().slice(0, 5);
-  const prov: Provenance[] = log.why(path);
   const rows: WhyRow[] = [];
   let prev: unknown;
-  for (const p of prov) {
-    if (p.seq === 0) {
-      rows.push({ when: 'default', who: WHO[p.by], text: fmt(p.value), note: 'frame.add' });
-    } else {
-      const v = p.path === path ? p.value : getPath(log.committed, path);
-      rows.push({ when: time(p.ts), who: WHO[p.by], text: `${fmt(prev)} → ${fmt(v)}`, note: `${p.tx ? `tx ${p.tx}` : ''}${p.approvedBy ? ' · approved' : ''}` });
-    }
-    prev = p.seq === 0 ? p.value : p.path === path ? p.value : prev;
+  let trail: ReturnType<Log['trail']> = [];
+  try {
+    trail = log.trail(f, path);
+  } catch {
+    trail = [];
   }
-  for (const e of log.pending()) {
-    if (e.m.op === 'set' && e.m.path === path) rows.push({ when: time(e.ts), who: WHO[e.by], text: `${fmt(getPath(log.committed, path))} → ${fmt(e.m.value)}`, note: `tx ${e.tx ?? ''} · pending` });
+  for (const w of trail) {
+    if (w.seq === 0) rows.push({ when: 'opened', who: WHO[w.by], text: fmt(w.value), note: String(w.source['kind'] ?? 'open') });
+    else rows.push({ when: time(w.at), who: WHO[w.by], text: `${fmt(prev)} → ${fmt(w.value)}`, note: `${w.label}${w.approvedBy ? ' · approved' : ''}` });
+    prev = w.value;
   }
-  return { title: `Why is ${model?.label ?? path} ${fmt(getPath(log.committed, path))}?`, rows, now: fmt(getPath(log.committed, path)) };
+  for (const e of log.pending(f)) {
+    for (const m of e.tx.mutations) if (m.op === 'set' && m.path === path) rows.push({ when: time(e.at), who: WHO[e.tx.by], text: `${fmt(read(doc, path))} → ${fmt(m.value)}`, note: `${e.tx.label} · pending` });
+  }
+  const now = fmt(read(doc, path));
+  return { title: `Why is ${model?.label ?? pathName(path)} ${now}?`, rows, now };
 }
+
+function short(v: unknown): string {
+  const s = canonicalJSON(v);
+  return s.length > 40 ? `${s.slice(0, 37)}…` : s;
+}
+
+export { getPath };

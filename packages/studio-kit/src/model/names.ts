@@ -1,5 +1,5 @@
-// Names for the ids the recipe stores (CHB-027 F9): 'kodak_portra_endura' is "Kodak Portra Endura", 'fujifilm_c200'
-// is "Fujifilm C200". The recipe, the DSL and the agents keep the ids; only what a person reads changes. The data
+// Names for the ids the document stores (CHB-027 F9): 'kodak_portra_endura' is "Kodak Portra Endura", 'fujifilm_c200'
+// is "Fujifilm C200". The document, the DSL and the agents keep the ids; only what a person reads changes. The data
 // packs carry no display names, so the names are made from the ids, with a table for the ones the rule gets wrong.
 
 /** Stock ids whose name the rule below would get wrong. */
@@ -53,10 +53,10 @@ export function valueName(from: string | undefined, id: string): string {
   return id.replace(/_/g, ' ');
 }
 
-/** Names for enum values a person reads, by recipe path (CHB-031: the enlarger's two modes). */
+/** Names for enum values a person reads, by document path (CHB-031: the enlarger's two modes). */
 export const ENUM_NAMES: Record<string, Record<string, string>> = {
-  'print.enlarger.mode': { real: 'Real enlarger (time and aperture)', normalised: 'Normalised (grey card at the aim)' },
+  'stages.darkroom.medium.mode': { real: 'Real enlarger (time and aperture)', normalised: 'Normalised (grey card at the aim)' },
 };
 
-/** The recipe paths that hold a stock id (for code that has a path, not a control model). */
-export const STOCK_PATHS = new Set(['print.paper', 'scan.stock', 'capture.stock']);
+/** The document paths that hold a stock id (for code that has a path, not a control model). */
+export const STOCK_PATHS = new Set(['stages.darkroom.medium.paper', 'stages.scan.medium.stock', 'stages.film.medium.stock']);

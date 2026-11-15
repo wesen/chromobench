@@ -1,10 +1,11 @@
-// cb.core's tools (gestures on the viewer): the densitometer, the test strip, the ring-around, the burn masks.
+// cb.core's tools (gestures on the viewer): the densitometer, the test strip, the ring-around, the burn masks (a mask
+// in the document's library and a burn layer through it).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ToolTable } from '@chromobench/shell';
 import { frameRef, isImageHandle } from '../handles.ts';
 import { sel, type CbState } from '../sel.ts';
-import { stripLabel, stripMutation, stripValues, type StripVary } from '../model/tools.ts';
-import { maskGesture, recipeOf } from './env.ts';
+import { stripBase, stripLabel, stripMutation, stripValues, type StripVary } from '../model/tools.ts';
+import { docOf, maskGesture, setDoc } from './env.ts';
 
 export const coreTools = (): ToolTable<CbState> => ({
   'probe': {
@@ -25,16 +26,15 @@ export const coreTools = (): ToolTable<CbState> => ({
     icon: 'layers',
     key: 'T',
     cursor: 'pointer',
-    image: (r, s: any) => (isImageHandle(r) && r.what === 'print' ? frameRef(r.frame, r.recipe).testStrip(s.ui?.toolOptions?.['test-strip']) : r),
+    image: (r, s: any) => (isImageHandle(r) && r.what === 'print' ? frameRef(r.frame, r.doc).testStrip(s.ui?.toolOptions?.['test-strip']) : r),
     // the bands' edges and values over the print (click a band to use its value)
     overlay: (g: any, vp: any, s: any) => {
       const f = sel.current(s);
-      const r = f ? s.recipes?.[f] : undefined;
+      const r = f ? sel.doc(s, f) : undefined;
       const [w, h] = vp.natural();
       if (!r || !w) return;
       const o = s.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
-      const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
-      const vals = stripValues(o.vary, base, o.step, o.count);
+      const vals = stripValues(o.vary, stripBase(o.vary, r), o.step, o.count);
       const doc = g.ownerDocument as Document;
       const el = (tag: string, a: Record<string, string | number>) => {
         const x = doc.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -56,14 +56,13 @@ export const coreTools = (): ToolTable<CbState> => ({
     on: {
       down: (e, ctx) => {
         const f = sel.current(ctx.state);
-        const r = f ? recipeOf(ctx, f) : undefined;
+        const r = f ? docOf(ctx, f) : undefined;
         if (!f || !r) return false;
         const o = ctx.state.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
-        const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
-        const vals = stripValues(o.vary, base, o.step, o.count);
+        const vals = stripValues(o.vary, stripBase(o.vary, r), o.step, o.count);
         const i = Math.max(0, Math.min(vals.length - 1, Math.floor(e.u * vals.length)));
         const m = stripMutation(o.vary, r, vals[i]!);
-        if (m.op === 'set') ctx.tx('Test strip band', (tx: any) => tx.$set(['recipes', f, ...m.path.split('.')], m.value));
+        setDoc(ctx, f, m.path, m.value, 'Test strip band');
         ctx.set({ ui: { tool: null } });
         return false;
       },
@@ -86,7 +85,7 @@ export const coreTools = (): ToolTable<CbState> => ({
     on: {
       down: (e, ctx) => ({ x0: e.x, y0: e.y }),
       drag: () => undefined,
-      up: (e, ctx, g) => maskGesture(ctx, { kind: 'gradient', from: [g.x0, g.y0], to: [e.x, e.y] }),
+      up: (e, ctx, g) => maskGesture(ctx, { kind: 'linear', from: [g.x0, g.y0], to: [e.x, e.y] }),
     },
   },
   'mask-brush': {

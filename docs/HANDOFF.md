@@ -58,7 +58,7 @@ pnpm --filter @chromobench/studio preview    # serve the build, http://localhost
 
 Useful URL options (`apps/studio/DEMO.md`): `?engine=gpu|reference|mock`, `?long=N` (GPU working size, default
 4000; `0` = the file's own size), `?refLong=N` (CPU working size, default 640), `?refMode=exact`, `?canvas2d`,
-`?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?layout=` / `?variant=`.
+`?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?layout=`.
 
 ### Checks (all must pass before merging)
 
@@ -90,7 +90,7 @@ on the M1 Max the full suite passes there too (CHB-034).
 | `packages/output/` | export encoders (TIFF 16, PNG, ICC) |
 | `packages/data/` | data packs (film and paper stocks, cameras, lights) as safetensors + manifests (committed) |
 | `packages/shell/` | the UI shell ("CraftKit Shell" ported): store, history/undo, viewport, menus, panels, render queue |
-| `packages/studio-kit/` | the studio's UI DSL (`cb`) on top of the shell's (`ck`); layouts in `variants/*.js`; kits (roll, looks, finish) |
+| `packages/studio-kit/` | the studio's UI DSL (`cb`) on top of the shell's (`ck`); layouts in `layouts/*.js`; kits (roll, looks, finish) |
 | `packages/dsl/` | the agent DSL run in a QuickJS sandbox |
 | `packages/agent/` | agent integration (chat, bridge client) |
 | `packages/engine-mock/`, `packages/conformance/` | the mock engine and the engine conformance suite |

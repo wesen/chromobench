@@ -12,7 +12,7 @@ export interface LayoutDef {
   id: string;
   label: string;
   description?: string;
-  /** the enlarger mode of new recipes in this layout (default 'real'; simple and tiny: 'normalised', CHB-031) */
+  /** the enlarger mode of new documents in this layout (default 'real'; simple and tiny: 'normalised', CHB-031) */
   enlarger?: 'real' | 'normalised';
   build(ck: Ck, cb: Cb, env: LayoutEnv): { build(): BuiltApp } | unknown;
 }

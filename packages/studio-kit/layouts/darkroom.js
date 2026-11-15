@@ -2,7 +2,7 @@
 // the enlarger is on the right. No library module: the roll's frames are the only choice that matters here.
 
 /** no open frame selected: the panels that only show a frame's settings are not drawn (CHB-031 8iv8) */
-const noFrame = cb => s => !cb.sel.recipe(s);
+const noFrame = cb => s => !cb.sel.doc(s);
 
 export default {
   id: 'darkroom',
@@ -35,19 +35,19 @@ export default {
                 'enlarger',
                 { title: 'Enlarger' },
                 ck.when(
-                  s => !!cb.sel.recipe(s),
+                  s => !!cb.sel.doc(s),
                   ck.column(
                     {},
-                    cb.arg('print.enlarger.mode'),
-                    cb.arg('print.enlarger.time_s').testStrip({ step: '1/3 st' }),
-                    cb.arg('print.enlarger.fstop'),
-                    cb.arg('print.enlarger.filtration'),
-                    cb.arg('print.lights.logH').pad(),
+                    cb.arg('stages.darkroom.medium.mode'),
+                    cb.arg('main.params.time_s').testStrip({ step: '1/3 st' }),
+                    cb.arg('main.params.fstop'),
+                    cb.arg('main.params.filtration'),
+                    cb.arg('lights.params.logH').pad(),
                   ),
                   ck.text(s => (cb.sel.library(s).length ? 'Select a photo to print it.' : 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here.'), { dim: true, wrap: true }),
                 ),
               ),
-              ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('print.paper'), cb.arg('print.grade'))).hidden(noFrame(cb)),
+              ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('stages.darkroom.medium.paper'), cb.arg('stages.darkroom.medium.grade'))).hidden(noFrame(cb)),
               cb.panels.exposures().hidden(noFrame(cb)),
               cb.panels.approvals().hidden(noFrame(cb)),
             ),

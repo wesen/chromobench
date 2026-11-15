@@ -1,8 +1,9 @@
-// Moved from apps/studio/src/core/controls.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
-// Controls generated from the op registry (guide §5.7): one ControlModel per recipe path that an
-// op argument with `ui` metadata owns. The model converts between the stored unit and the unit the
-// photographer reads; widgets only ever see display values.
-import { argPath, convert, type ArgSpec, type OpDef, type Unit } from '@chromobench/contract';
+// Controls generated from the catalogue (guide §5.7; contract 1.0): one ControlModel per document path whose ArgSpec
+// carries `ui` metadata. A medium, geometry or output field is a path from the root (`stages.darkroom.medium.paper`,
+// the schema's ArgSpec, which is the consuming op's); a layer's argument is `<entryId>.params.<arg>` (the op's
+// ArgSpec). The model converts between the stored unit and the unit the photographer reads; widgets only ever see
+// display values.
+import { allOps, convert, schemas, type ArgSpec, type OpDef, type Unit } from '@chromobench/contract';
 import {
   filtrationAside, formatFstop, formatSeconds, formatStops, FSTOPS_THIRD, fstopStops, num, signed, stopsBetween,
 } from './units.ts';
@@ -107,7 +108,8 @@ function valueTypeOf(spec: ArgSpec): ValueType | null {
   }
 }
 
-export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): ControlModel | null {
+/** A control model for an argument (`op` names the op or the document part it belongs to, for the group). */
+export function modelFor(op: Pick<OpDef, 'name' | 'area'>, arg: string, spec: ArgSpec, path: string): ControlModel | null {
   const ui = spec.ui;
   if (!ui) return null;
   const type = valueTypeOf(spec);
@@ -177,21 +179,32 @@ export function modelFor(op: OpDef, arg: string, spec: ArgSpec, path: string): C
   return model;
 }
 
-/** One control per recipe path owned by an argument with ui metadata (first owner wins). */
-export function generateControls(ops: readonly OpDef[]): ControlModel[] {
+const isSpec = (r: unknown): r is ArgSpec => !!r && typeof (r as ArgSpec).type === 'string' && typeof (r as ArgSpec).doc === 'string';
+
+/** The models of the document's fixed parts: every medium, geometry and output field whose ArgSpec has ui hints. */
+export function documentControls(): ControlModel[] {
   const out: ControlModel[] = [];
-  const seen = new Set<string>();
-  for (const op of ops) {
-    if (op.internal) continue;
-    for (const [arg, spec] of Object.entries(op.args)) {
-      const path = argPath(op, arg, spec);
-      if (!path || seen.has(path)) continue;
-      const m = modelFor(op, arg, spec, path);
-      if (!m) continue;
-      seen.add(path);
-      out.push(m);
+  const walk = (rule: unknown, path: string, area: string): void => {
+    if (isSpec(rule)) {
+      const m = modelFor({ name: path, area: area as OpDef['area'] }, path.split('.').pop()!, rule, path);
+      if (m) out.push(m);
+      return;
     }
-  }
+    if (!rule || typeof rule !== 'object' || typeof (rule as { check?: unknown }).check === 'function') return;
+    for (const [k, r] of Object.entries(rule)) walk(r, `${path}.${k}`, area);
+  };
+  const s = schemas();
+  for (const [stage, m] of Object.entries(s.media)) walk(m, `stages.${stage}.medium`, stage);
+  walk(s.geometry, 'geometry', 'frame');
+  walk(s.output, 'output', 'output');
   return out;
 }
 
+/** The layer ops (catalogue `stages`): an entry of a stage's stack names one of these. */
+export const layerOps = (): OpDef[] => allOps().filter((o) => !o.internal && (o.stages?.length ?? 0) > 0);
+
+/** The model of a layer's argument at `<id>.params.<arg>`, or null when the op has no such argument with ui hints. */
+export function layerControl(op: OpDef, id: string, arg: string): ControlModel | null {
+  const spec = op.args[arg];
+  return spec ? modelFor(op, arg, spec, `${id}.params.${arg}`) : null;
+}

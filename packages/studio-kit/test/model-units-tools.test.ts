@@ -1,17 +1,22 @@
-// Golden numbers of the darkroom units and the tools' arithmetic (guide §8), from fixtures/golden/CHB-009.json.
+// Golden numbers of the darkroom units and the tools' arithmetic (guide §8), from fixtures/golden/CHB-009.json; the
+// tools write darkroom layers and masks as values the contract's rules accept (CHB-037).
 import { readFileSync } from 'node:fs';
-import { Graph, sha256Hex, type FrameRecipe } from '@chromobench/contract';
+import { compile, edit, Graph, layerEntry, sha256Hex, type Document } from '@chromobench/contract';
+import { insert, set, type Mutation } from '@chromobench/values';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { describe, expect, it } from 'vitest';
-import { defaultFor } from '../src/model/recipes.ts';
+import { defaultDocument, exposureRows, printingScript } from '../src/model/doc.ts';
 import {
-  bandOffsets, exposureRows, maskSpec, parseMask, printingScript, ringTiles, simplify, stripLabel, stripMutation, stripValues, type MaskDoc, type Pt3,
+  addDarkroomLayer, bandOffsets, maskComponent, maskedLayer, ringLights, ringTiles, simplify, stripBase, stripLabel, stripMutation, stripValues, type Pt3,
 } from '../src/model/tools.ts';
 import {
   burnSeconds, dodgeSeconds, filtrationAside, formatSeconds, formatStops, FSTOPS_THIRD, fstopLogH, fstopStops, PT, PT_PER_STOP, STOP, timeAtStops,
 } from '../src/model/units.ts';
 
 const G = JSON.parse(readFileSync(new URL('../../../fixtures/golden/CHB-009.json', import.meta.url), 'utf8'));
+const FMT = { seconds: formatSeconds, stops: formatStops };
+const d0 = (): Document => defaultDocument('negative-scan', { sha256: 'ab'.repeat(32), name: 'x.tif', width: 96, height: 64 });
+const apply = (d: Document, ms: readonly Mutation[]): Document => edit(d, ms).doc;
 
 describe('darkroom units (golden)', () => {
   it('points and stops', () => {
@@ -52,24 +57,32 @@ describe('exposures', () => {
     expect(dodgeSeconds(12, 0.25)).toBeCloseTo(G.exposures.dodgeQuarterStop_withheld_s, 2);
     expect(burnSeconds(12, 0.5)).toBeCloseTo(G.exposures.burnHalfStop_added_s, 2);
   });
-  it('rows and printing script', () => {
-    const r = defaultFor('ab'.repeat(32), 'x.tif');
-    const rr: FrameRecipe = {
-      ...r,
-      print: {
-        ...r.print,
-        enlarger: { ...r.print.enlarger, time_s: 12, filtration: { c: 0, m: 51.6, y: 52.5 } },
-        exposures: [
-          { id: 'dodge1', kind: 'dodge', enabled: true, mask: 'face', time_s: null, stops: 0.25, filtration: null, through: null },
-          { id: 'burn1', kind: 'burn', enabled: true, mask: 'sky', time_s: null, stops: 0.5, filtration: null, through: null },
-          { id: 'flash1', kind: 'flash', enabled: true, mask: null, time_s: 2, stops: null, filtration: null, through: 'base' },
-        ],
-      },
-    };
-    const rows = exposureRows(rr);
-    expect(rows.map((x) => x.seconds)).toEqual(['12.0 s', '−1.91 s', '+4.97 s', '2.0 s']);
-    expect(rows.map((x) => x.change)).toEqual(['—', '−1/4 st', '+1/2 st', '—']);
-    expect(printingScript(rr)).toBe('Expose 12.0 s, hold back face for 1.91 s; burn sky 4.97 s; flash 2.0 s.');
+  it('rows and printing script: the light law\'s seconds for each darkroom layer', () => {
+    const d = apply(d0(), [
+      set('main.params.time_s', 12),
+      set('main.params.filtration', { c: 0, m: 51.6, y: 52.5 }),
+      insert('stages.darkroom.stack', 'dodge1', layerEntry('dodge', { stops: 0.25 }, { name: 'Dodge', mask: null })),
+      insert('stages.darkroom.stack', 'burn1', layerEntry('burn', { stops: 0.5 }, { name: 'Burn' })),
+      insert('stages.darkroom.stack', 'flash1', layerEntry('flash', { time_s: 2 }, { name: 'Flash' })),
+    ]);
+    const rows = exposureRows(d, FMT);
+    expect(rows.map((x) => x.id)).toEqual(['main', 'lights', 'dodge1', 'burn1', 'flash1']);
+    expect(rows.filter((x) => x.t > 0).map((x) => x.seconds)).toEqual(['12.0 s', '−1.91 s', '+4.97 s', '2.0 s']);
+    expect(rows.map((x) => x.change)).toEqual(['—', '—', '−1/4 st', '+1/2 st', '—']);
+    expect(rows[1]!.note).toBe('printer lights');
+    expect(printingScript(d, FMT)).toBe('Expose 12.0 s, hold back the sheet for 1.91 s; burn the sheet 4.97 s; flash 2.0 s.');
+    // amount scales a contribution's time (the light law)
+    expect(exposureRows(apply(d, [set('burn1.amount', 0.5)]), FMT).find((x) => x.id === 'burn1')!.seconds).toBe(`+${formatSeconds(burnSeconds(12, 0.5) / 2)} s`);
+  });
+  it('the darkroom layers the Exposures panel adds are valid entries of the light law', () => {
+    let d = d0();
+    for (const op of ['burn', 'dodge', 'flash', 'preflash', 'densityMask'] as const) {
+      const r = addDarkroomLayer(d, op);
+      d = apply(d, r.mutations);
+      expect(d.stages.darkroom.stack.items[r.id]).toMatchObject({ kind: 'layer', op });
+    }
+    expect(d.stages.darkroom.stack.order).toEqual(['main', 'lights', 'burn1', 'dodge1', 'flash1', 'preflash1', 'contrast1']);
+    expect(addDarkroomLayer(d, 'burn').id).toBe('burn2');
   });
 });
 
@@ -78,10 +91,17 @@ describe('test strip and ring-around', () => {
     expect(bandOffsets(5)).toEqual([-2, -1, 0, 1, 2]);
     expect(bandOffsets(4)).toEqual([-1.5, -0.5, 0.5, 1.5]);
   });
-  it('a band click is one set', () => {
-    const r = defaultFor('ab'.repeat(32), 'x.tif');
-    expect(stripMutation('time', r, 15.1191)).toEqual({ op: 'set', path: 'print.enlarger.time_s', value: 15.1191 });
-    expect(stripMutation('filtration.y', r, 10)).toEqual({ op: 'set', path: 'print.enlarger.filtration', value: { c: 0, m: 0, y: 10 } });
+  it('a band click is one set on the main exposure; in normalised mode a time band moves the printer lights', () => {
+    const d = d0();
+    expect(stripBase('time', d)).toBe(10);
+    expect(stripMutation('time', d, 15.1191)).toEqual({ path: 'main.params.time_s', value: 15.1191 });
+    expect(stripMutation('filtration.y', d, 10)).toEqual({ path: 'main.params.filtration', value: { c: 0, m: 0, y: 10 } });
+    const n = apply(d, [set('stages.darkroom.medium.mode', 'normalised')]);
+    const m = stripMutation('time', n, 20);
+    expect(m.path).toBe('lights.params.logH');
+    (m.value as number[]).forEach((v) => expect(v).toBeCloseTo(Math.log10(2), 6));
+    expect(stripLabel('time', 20, n)).toBe('+1 st');
+    expect(stripLabel('time', 20, d)).toBe('20.0 s');
   });
   it('a filtration strip steps the signed shift through 0 (contract 0.2) and is labelled with signs', () => {
     expect(stripValues('filtration.y', 0, 5, 5)).toEqual([-10, -5, 0, 5, 10]);
@@ -106,6 +126,9 @@ describe('test strip and ring-around', () => {
     expect(off('R')[0]).toBeLessThan(0);
     expect(off('C')[0]).toBeGreaterThan(0);
     expect(tiles.filter((t) => t.row === 3).map((t) => t.label)).toEqual(['−2 step', '−1 step', '+1 step', '+2 step']);
+    // the chosen tile's lights, held to ±1.5 log H
+    expect(ringLights(d0(), g.offset)).toEqual(g.offset.map((x) => Number(x.toFixed(6))));
+    expect(ringLights(apply(d0(), [set('lights.params.logH', [1.45, 0, 0])]), [0.1, 0, 0])[0]).toBe(1.5);
   });
 });
 
@@ -116,37 +139,35 @@ describe('masks', () => {
     const corner: Pt3[] = [[0, 0, 1], [5, 0, 1], [10, 0, 1], [10, 5, 1], [10, 10, 1]];
     expect(simplify(corner, 0.5)).toEqual([[0, 0, 1], [10, 0, 1], [10, 10, 1]]);
   });
-  it('MaskSpec round-trips through mask.set and renders on the mock', async () => {
+  it('a mask tool makes a mask value in the library and a burn through it; the document compiles and renders on the mock', async () => {
     const engine = new MockEngine();
     const bytes = makeM1Tiff();
     const info = await engine.open({ kind: 'file', sha256: sha256Hex(bytes), bytes });
     const g = new Graph();
     g.registerSource(info);
-    const src = g.intern('source.open', [], { source: info.sha256, encoding: 'linear' }).node;
-    const doc: MaskDoc = {
-      shapes: [
-        { kind: 'ellipse', cx: 48, cy: 32, rx: 10, ry: 8 },
-        { kind: 'ellipse', cx: 30, cy: 20, rx: 12, ry: 4, angle: 30 },
-        { kind: 'gradient', from: [0, 0], to: [0, 64] },
-        { kind: 'stroke', points: [[10, 10, 0.5], [20, 12, 0.5]], radius: 4, hardness: 0.5, mode: 'add' },
-      ],
-      feather: 3,
-      invert: true,
-    };
-    const spec = maskSpec(g, src.id, doc);
-    expect(spec.version).toBe(1);
-    expect(spec.nodes.at(-1)!.op).toBe('mask.not');
-    expect(parseMask(spec)).toEqual(doc);
-    const root = g.adopt(spec.nodes).at(-1)!;
-    engine.adopt(spec.nodes);
-    const r = await engine.evaluate(root, { scale: 'full', precision: 'preview' });
-    expect(r.info.domain).toBe('mask');
-    // the tilted ellipse (mask.ellipse.angle_deg) covers its rotated major axis, not the box corner
-    const tilted = spec.nodes.find((n) => n.op === 'mask.ellipse' && n.args['angle_deg'] === 30)!;
-    const e = g.adopt(spec.nodes.slice(0, spec.nodes.indexOf(tilted) + 1)).at(-1)!;
-    const m = await (await engine.evaluate(e, { scale: 'full', precision: 'preview' })).read();
-    const at = (x: number, y: number) => m[y * r.width + x];
-    expect(at(30 + 9, 20 + 5)).toBe(1); // 10.4 px along the 30° axis
-    expect(at(30 + 9, 20 - 5)).toBe(0);
+    let d = defaultDocument('negative-scan', { sha256: info.sha256, name: 'm1.tif', width: info.width, height: info.height });
+    const shapes = [
+      { kind: 'ellipse' as const, cx: 48, cy: 32, rx: 10, ry: 8, angle: 30 },
+      { kind: 'linear' as const, from: [0, 0] as [number, number], to: [0, 64] as [number, number] },
+      { kind: 'stroke' as const, points: [[10, 10, 0.5], [20, 12, 0.5]] as Pt3[], radius: 4, hardness: 0.5, mode: 'add' as const },
+    ];
+    const made: string[] = [];
+    for (const sh of shapes) {
+      const r = maskedLayer(d, g, sh, { featherPx: 8 });
+      d = apply(d, r.mutations);
+      made.push(`${r.mask}:${r.layer}`);
+    }
+    expect(made).toEqual(['m1:burn1', 'm2:burn2', 'm3:burn3']);
+    expect(d.masks.items['m1']!.components.items['m1c1']).toMatchObject({ kind: 'ellipse', params: { box: { x: 38, y: 24, w: 20, h: 16 }, angle_deg: 30 }, combine: 'add', amount: 1 });
+    expect(d.masks.items['m2']!.components.items['m2c1']!.kind).toBe('linear');
+    expect(d.masks.items['m3']!.components.items['m3c1']!.kind).toBe('paint');
+    // the feather is stored in mm on the print: 8 px at the print's pitch
+    expect(d.masks.items['m1']!.feather_mm).toBeGreaterThan(0);
+    expect(d.stages.darkroom.stack.items['burn1']).toMatchObject({ op: 'burn', mask: 'm1', params: { stops: 0.5 } });
+    const c = compile(d, g);
+    engine.adopt(g.closure(c.display.id));
+    const r = await engine.evaluate(c.display, { scale: 'full', precision: 'preview' });
+    expect(r.width).toBe(info.width);
+    expect(maskComponent({ kind: 'ellipse', cx: 5, cy: 5, rx: 2, ry: 3 })).toEqual(['ellipse', { box: { x: 3, y: 2, w: 4, h: 6 } }]);
   });
 });

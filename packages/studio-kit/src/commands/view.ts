@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CommandTable } from '@chromobench/shell';
 import type { CbState } from '../sel.ts';
-import { type ViewMode } from '../model/recipes.ts';
+import { type ViewMode } from '../model/settings.ts';
 import { needFrame, step } from './env.ts';
 
 export const viewCommands = (): CommandTable<CbState> => ({
