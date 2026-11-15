@@ -398,3 +398,109 @@ each number in the chapters against the lines listed in Step 1.
 ### Technical details
 
 - N/A
+
+## Step 5: Revision after review
+
+A fresh reader, playing a second-year student, reviewed chapters 3 and 8; the coordinator passed on its general
+lessons for all chapters. I applied them to chapters 5 and 6 and cut both to at most 2,800 words by `wc -w`:
+chapter 5 went from 3,079 to 2,791, chapter 6 from 3,114 to 2,800. Both still have all 16 template sections.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Revision round. A fresh reader (playing a second-year CS student with no image/GPU
+knowledge) reviewed chapters 3 and 8 of this volume. Its findings generalise; apply the lessons below to your
+chapters 5 and 6, which are also the longest (≈3,100 words raw). Edit only your two chapters and your diary (add a
+"Revision after review" step). Do not commit. Report what changed and word counts before/after (target ≤ 2,800
+raw)." (followed by the list of general lessons)
+
+**Assistant interpretation:** Shorten both chapters to ≤ 2,800 raw words, gloss or remove jargon, make the
+Solution general, fix the sketches, add a non-image example of the participants, and make exercises doable
+without a GPU.
+
+**Inferred user intent:** Chapters a student with no image or GPU background can read without stopping.
+
+### What I did
+
+- Both chapters:
+  - Glossed or replaced jargon. GPU is glossed once ("the graphics processor"), shader once ("the small program a
+    GPU runs once per pixel"), 32-bit/64-bit floating point once. "Readback" became "copies … from GPU memory back
+    to main memory". "Uniform block" became "parameter block". "Parity" became "agreement". "Worker" became
+    "background thread". In chapter 6, "tile", "render" and "frame" are introduced in a clause. "Image pyramid
+    level 2" became "a copy at a quarter of the width and height". "Projection" (GIMP) became "drawing chunks".
+  - Cut platform trivia: browser API names in note 7 of chapter 6 and the browser support versions. No Editor lab
+    book section numbers remain in either chapter.
+  - Added one line in Applicability naming the participants in a non-image system: chapter 5 a web service (query
+    planner, plan, row executor, key = query text and schema version); chapter 6 a search results page (first hits,
+    further index shards, new query = new generation).
+  - Shortened the implementation notes by roughly 20 % while keeping every lesson.
+- Chapter 5:
+  - Motivation now has three failures. The fourth was Editor lab's baked-in shader constants, a second program's
+    bug inside Motivation; it moved to note 6, where it already appeared.
+  - The binding-time scale reads as a list in the Solution ("for example: per installation, per document, per
+    edit, per frame, per element") and as a commented table at the top of the Sketch. chromobench's four times
+    appear only in note 1, as the design states them (still a proposal).
+  - Sketch: `Stage` is now defined, with `solve` and `formula`. `prepare` stores the result with an explicit `if
+    key not in store` instead of the earlier `store.get or store.put` expression, which left the return value of
+    `put` unstated. The key's comment says to hash large inputs. `pairwiseSum` has a precise comment (worst-case
+    rounding error grows with log n).
+  - Notes merged or cut: the crossing cost is folded into note 7; the oracle note is one sentence. The quoted
+    reduce-kernel comment is gone; the chapter no longer quotes it.
+  - Exercises: exercise 3 is now a stand-alone measurement. It names the sRGB formula, so a student can compute
+    the nearest-entry error without Editor lab. Exercise 4 is to be tested on paper with three spots.
+- Chapter 6:
+  - Sketch holes fixed:
+    - `rows` was never reset per band, so every band rewrote all earlier rows. It is now `rows ← []` per band.
+    - The step sizer existed only as a comment and an unused function. `nextSize` is now called in the slice loop
+      and keeps its own `recent` list.
+    - `plan`, `run` and `show` are defined in a comment.
+    - The planner now runs when the request arrives, matching Collaborations, which no longer says "when the
+      gesture pauses".
+  - Removed the "Cancelling against keeping" force (the Solution and note 4 carry it); five forces remain.
+  - Removed the "sequential solver" bullet from Do not use; it repeated the cancellation force.
+  - Exercise 3 is now a simulation of the sketch's `nextSize` against the textbook's cost model (0.2 ms per step
+    plus 30 ns per pixel, quadrupling at step 10). No GPU or Editor lab is needed.
+  - Note 9 keeps every fact about chromobench's missing slicer, more briefly. The progress rule is now explained
+    in a clause ("nothing shown for 250 ms: let the running render finish").
+
+### Why
+
+- The reviewer's lessons were general; both chapters had the same problems: too long, unexplained GPU words, and
+  sketch names that were never defined.
+
+### What worked
+
+- All numbers survived the cut; no claim was added, so the Step 1 file:line list still covers the chapters.
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- The sketch in chapter 6 had a real bug (rows not reset per band). Writing the sketch as code I would run, not as
+  an illustration, would have caught it.
+
+### What was tricky to build
+
+- Cutting about 300 words per chapter without losing a lesson. Most came from Motivation, Collaborations,
+  Variations, Known uses and Related chapters. The notes kept every point but lost their second examples.
+
+### What warrants a second pair of eyes
+
+- Chapter 5, note 4 glosses chromaticity as "hue and saturation". That is close enough for the audience but not a
+  colour scientist's definition.
+- Chapter 6's search-engine line describes a plausible design, not a named real system.
+
+### What should be done in the future
+
+- N/A
+
+### Code review instructions
+
+- `wc -w docs/patterns/modular/05-solve-once-apply-many.md docs/patterns/modular/06-work-in-small-slices.md`
+  (2,791 and 2,800); `grep -c "^## "` gives 16 for each.
+
+### Technical details
+
+- Exercise 3 of chapter 6 uses the model from Editor lab's book chapter 7 (§7.3 program). Its 1/15 s interval
+  becomes a 66 ms budget.
