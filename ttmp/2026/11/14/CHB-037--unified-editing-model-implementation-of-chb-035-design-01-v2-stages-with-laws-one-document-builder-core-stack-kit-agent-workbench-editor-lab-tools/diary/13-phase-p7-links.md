@@ -9,13 +9,32 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://packages/contract/src/links-looks.ts
+      Note: The built-in looks as groups of light and print layers (commit 33c73c0)
+    - Path: repo://packages/contract/src/links.ts
+      Note: Look functions, resolvers, insertLink/linkSiblings/setLinkAmount/bakeLink, presets, linked media (commit 33c73c0)
+    - Path: repo://packages/dsl/src/cblook.ts
+      Note: '*.cblook.js in a QuickJS sandbox (commit 8d7d9c9)'
+    - Path: repo://packages/dsl/src/host/named-looks.ts
+      Note: cb.looks as link inserts, whatIf, diff, bake (commit 9c951df)
+    - Path: repo://packages/studio-kit/kits/looks/src/commands.ts
+      Note: Apply, bake, remove, one Amount, sync by copy or link (commit 660f5a6)
+    - Path: repo://packages/studio-kit/kits/looks/src/engine/looks.ts
+      Note: 'Looks as links in the kit: items, apply mutations, plans (commit 660f5a6)'
+    - Path: repo://packages/studio-kit/kits/roll/src/kit.ts
+      Note: 'Rolls on links: New Roll links the frames, the roll holds media.scan, Set on/Reset to the Roll (commit 660f5a6)'
+    - Path: repo://packages/studio-kit/src/bridge/render-bridge.ts
+      Note: Compile with the state's links, cache per link context (commit 660f5a6)
+    - Path: repo://packages/studio-kit/src/model/doc.ts
+      Note: read/physical through links, linksOf/linkDataOf (commit 660f5a6)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T01:31:33.02042-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Diary — phase P7 links
 
@@ -364,3 +383,73 @@ agent's worker gets that data in its snapshot.
 ### Technical details
 - Receipt: `{ status: 'queued', label: 'Look: Warm print at 50 %', frames: 2, link: 'warm-print1', layers:
   ['darkroom: filter {"logH":[-0.05,0,0.05]} × 0.5 (light and density)'] }`.
+
+## Step 5: *.cblook.js in the sandbox, the browser suite, and what is left
+
+Looks written as code are cheap to support because the DSL already loads QuickJS synchronously: `defineLookSource`
+evaluates a `.cblook.js` file in a sandbox of its own (no clock, no randomness, a time and memory limit per call),
+reads its `defineLook({...})` and registers the look in the contract; its function runs at every compile that
+expands its link and its output is checked. Then the whole repo's checks and the browser suite.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** `*.cblook.js` in the QuickJS sandbox if cheap; the acceptance checks.
+
+**Inferred user intent:** The photographer and the agent can write their own looks without code entering the
+document or the page.
+
+**Commit (code):** 8d7d9c9 — "CHB-037 P7: *.cblook.js — look functions written as code, evaluated in their own QuickJS sandbox"
+
+### What I did
+- `packages/dsl/src/cblook.ts` (`defineLookSource`, exported from the DSL), `packages/dsl/test/cblook.test.ts` (2 tests:
+  expansion with params and the frame kind, compile; purity, bad output, two looks in one file, an endless loop).
+- Checks: `pnpm typecheck` (whole repo, 0 errors), `pnpm lint`, `pnpm gen:check` (26 files), `pnpm test` (126 files,
+  2937 passed, 19 skipped).
+- Browser, headless on SwiftShader, ports 5591–5594:
+  `CI=1 pnpm test:browser --grep "look|roll"` → 7 tests (looks ×2, roll, studio-real's Roll module, F36 history,
+  two gpu-parity lookup tests): 6 passed, then the roll spec failed on the mixed frame's base (Step 2), fixed, rerun
+  passed. `CI=1 pnpm test:browser --project studio-kit --project chromium-webgpu` → 64 tests, 61 passed, 3 failed
+  with load timeouts (`studio-photo` "a photo's first print" `page.waitForFunction: Timeout 60000ms exceeded`,
+  `studio-decoders` dng, `studio-real` offline) — rerun alone: 3 passed (2.0 min).
+
+### Why
+- Design §31 rule 2: compile-time functions run "in the host (built-in looks and bindings) or in the QuickJS sandbox
+  (looks written as *.cblook.js by the photographer or the agent)".
+
+### What worked
+- The look function crosses the sandbox as JSON both ways (params, kind, facts, the document, the size in; stacks and
+  masks out), so nothing but data and a name enter the document.
+
+### What didn't work
+- The three load timeouts above in the full run (other agents' suites ran at the same time); they pass alone.
+
+### What I learned
+- `delete globalThis.Date` in the setup makes `Date.now()` in a look file a ReferenceError at load, which is the
+  message the photographer needs ("a look function is pure").
+
+### What was tricky to build
+- **The sandbox per look.** One runtime per look file (16 MB, 512 KB stack) keeps a bad look from touching another and
+  from the agent's session; the interrupt handler gives each call 200 ms (the file's load five times that).
+
+### What warrants a second pair of eyes
+- A sandboxed look runs on whatever thread compiles: the page's bridge compiles on the main thread, so a slow look
+  costs frame time there (the limit bounds it).
+
+### What should be done in the future
+- Load `.cblook.js` files in the studio (File ▸ Import Look): the host calls `defineLookSource` (it can import the DSL;
+  studio-kit cannot) and the looks kit lists it (`cb.kits.looks.lib.register(lookItem(name))`). Not built: it is UI in
+  P5b-2's and P6b's area. An agent-written look: a `cb.looks.define(src)` in the DSL would be the same call.
+- A cache of look expansions by input hash (Step 1).
+
+### Code review instructions
+- `packages/dsl/src/cblook.ts`; `pnpm exec vitest run packages/dsl/test/cblook.test.ts`.
+- Browser: `STUDIO_PORT=5591 STUDIO_KIT_PORT=5592 SHELL_DEMO_PORT=5593 GPU_PARITY_PORT=5594 CI=1 pnpm test:browser --grep "look|roll"`.
+
+### Technical details
+- A look file: `defineLook({ name: 'my-warm', version: 1, label: 'My warm', group: 'Mine', doc: '', params: { w: {
+  type: 'number', unit: 'point', min: 0, max: 10, default: 4, doc: '…' } }, stages: ['darkroom'], fn: (p, input) => ({
+  stacks: { darkroom: { order: ['f'], items: { f: { kind: 'layer', op: 'filter', params: { logH: [-p.w * 0.0125, 0,
+  p.w * 0.0125] }, name: 'Warmth', enabled: true, amount: 1, mask: null, blend: 'normal', source: { kind: 'look' } } } } }
+  }) })`.

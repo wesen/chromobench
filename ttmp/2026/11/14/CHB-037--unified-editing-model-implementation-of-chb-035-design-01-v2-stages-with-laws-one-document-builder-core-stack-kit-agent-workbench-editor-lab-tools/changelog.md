@@ -92,3 +92,12 @@ P6a: the DSL and the agent on contract 1.0 and the values log — frames are vie
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/agent/src/worker/client.ts — AgentDocs, docs snapshots, replay
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/dsl/src/history.ts — The agent's door into the log
 
+
+## 2026-11-15
+
+P7 links: look functions, presets, bake, rolls on linked media, looks kit on links, sync copy/link, DSL named looks as links, *.cblook.js (commits 33c73c0, 660f5a6, 9c951df, c8f9c4a, 8d7d9c9)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p7/packages/contract/src/links.ts — The link mechanism
+
