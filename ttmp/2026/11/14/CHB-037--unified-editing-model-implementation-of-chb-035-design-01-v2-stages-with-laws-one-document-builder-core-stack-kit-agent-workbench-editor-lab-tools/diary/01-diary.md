@@ -710,3 +710,53 @@ collapsed digital palette; ratings are undoable again and the History jump asks 
 
 ### Technical details
 - Browser on the P5b-2 branch after its merge: 123 passed, 2 skipped, `film.spec.ts` load timeout, `tools/wgsl-check`.
+
+## Step 13: P8b merged — editors for Editor lab's tools
+
+The stack kit's params panel has editors for curve, levels, HSL, grade and mixer, and the colour-mask eyedropper; each
+gesture is one undo step. Editors are data (`{ form, covers }`), so layouts built in the agent's sandbox can carry
+them. Merged; all checks green.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the editors.
+
+**Inferred user intent:** Lightroom-grade controls for the new layer tools.
+
+**Commit (code):** 528b537 — "Merge P8b editors (…)"
+
+### What I did
+- Merged with `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 134 files / 3194 passed / 19
+  skipped, goldens 66/66.
+
+### Why
+- N/A
+
+### What worked
+- The curve is drawn with core's own `toneCurve`/`evalCurve`, reaching studio-kit through an injected `editorMath`
+  service (studio-kit may not import core).
+
+### What didn't work
+- On the P8b branch: `tools/wgsl-check` (P3b's) and a load timeout in `arrangements.spec.ts` (passes 8/8 alone).
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P8b's notes for P9: the mock engine still lacks P8a's ops (P3b), editor validation (registered form, real
+  argument names) does not exist, scene-stage editors are unit-tested only, data colours use CSS `oklch()` that the
+  colour lint does not count.
+
+### What should be done in the future
+- Merge P3b and P6b; then P9.
+
+### Code review instructions
+- `packages/studio-kit/kits/stack/` editors; `diary/15-phase-p8b-editors.md`.
+
+### Technical details
+- N/A
