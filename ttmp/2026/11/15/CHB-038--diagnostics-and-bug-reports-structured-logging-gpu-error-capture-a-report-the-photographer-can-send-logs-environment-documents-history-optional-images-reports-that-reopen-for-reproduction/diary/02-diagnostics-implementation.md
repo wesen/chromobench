@@ -9,13 +9,43 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://apps/studio/src/host/capture.ts
+      Note: GPU, worker and service-worker capture
+    - Path: repo://apps/studio/src/host/diagnostics.ts
+      Note: the host's service, badge
+    - Path: repo://e2e/diagnostics.spec.ts
+      Note: browser specs and regression tests
+    - Path: repo://packages/gpu/src/device.ts
+      Note: GpuEvent, busy/retire
+    - Path: repo://packages/gpu/src/film.ts
+      Note: the grain's ones per size (the owner's error)
+    - Path: repo://packages/shell/src/app/journal-runtime.ts
+      Note: the runtime's capture
+    - Path: repo://packages/shell/src/core/journal-capture.ts
+      Note: console and error capture
+    - Path: repo://packages/shell/src/core/journal.ts
+      Note: the journal
+    - Path: repo://packages/studio-kit/kits/diagnostics/src/kit.ts
+      Note: the kit's commands and service
+    - Path: repo://packages/studio-kit/kits/diagnostics/src/report.ts
+      Note: report files and read-back
 ExternalSources: []
-Summary: "Implementation of CHB-038: the diagnostics journal, capture layers, the report kit, reopening reports, wb.diagnostics()"
+Summary: 'Implementation of CHB-038: the diagnostics journal, capture layers, the report kit, reopening reports, wb.diagnostics()'
 LastUpdated: 2026-11-15T14:15:33.185582-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
+
+
+
+
+
+
+
+
+
 
 
 # Diary — diagnostics implementation

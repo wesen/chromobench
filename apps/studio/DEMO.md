@@ -23,7 +23,9 @@ URL options: `?layout=classic|darkroom|simple|lab|tiny|roll|finish|looks` (the s
 Enlarger and a collapsed "Digital (after the print)" palette; View ▸ Layout switches in place and also lists layouts
 the assistant wrote and you accepted), `?engine=gpu|reference|mock` (default: GPU when WebGPU works, else the
 reference engine), `?long=N` (long side of the working image on the GPU, default 4000; `0` = the file's own size),
-`?canvas2d` (present without WebGPU), `?nosw` (no service worker), `?fresh` (keep nothing in the browser).
+`?canvas2d` (present without WebGPU), `?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?debug`
+(the diagnostics journal keeps debug events — every render — and the GPU engine wraps every queue submit in error
+scopes; slower, for chasing a WebGPU error).
 
 The layouts are programs written in studio-kit's JS API (`packages/studio-kit/layouts/*.js`); `lab` is classic
 plus every parameter, the raw journal and the node list. Synthetic files to try: `node e2e/make-scenes.ts <dir>`.

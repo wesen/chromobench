@@ -159,7 +159,7 @@ agent); `P9_SHOTS=<dir>` writes its screenshots there.
 | `packages/output/` | export encoders (TIFF 16, PNG, ICC), exact tiled export |
 | `packages/data/` | data packs (film and paper stocks, cameras, lights) as safetensors + manifests (committed) |
 | `packages/shell/` | `ck`, the UI DSL: forms, modules, panels, dock, store (three tiers, one history), passes, DOM renderers (README) |
-| `packages/studio-kit/` | `cb`, the studio's DSL on `ck`; layouts in `layouts/*.js`; kits: `stack`, `roll`, `looks`, `finish`, `chat` |
+| `packages/studio-kit/` | `cb`, the studio's DSL on `ck`; layouts in `layouts/*.js`; kits: `stack`, `roll`, `looks`, `finish`, `chat`, `diagnostics` |
 | `packages/dsl/` | the agent DSL run in a QuickJS sandbox (`frame`, transactions, `cb.looks`, `wb`); `generated/instructions.md` is what the agent reads |
 | `packages/agent/` | agent integration (chat transports, the worker client, the bridge client) |
 | `bridge/` | Go server for external agents (MCP) |
@@ -405,6 +405,39 @@ After each user-visible change, a **persona session** (CHB-026 `playbooks/01-cos
 the way to find what a photographer would trip over.
 
 ---
+
+## 9b. Diagnostics and problem reports (CHB-038)
+
+Ticket `ttmp/2026/11/15/CHB-038--…/` (spec `design-doc/01-…`, implementation diary `diary/02-diagnostics-implementation.md`).
+
+- **The journal.** One per page (`packages/shell/src/core/journal.ts`): every source writes structured rows with dedupe
+  and counts — the console and uncaught errors (shell capture layers), the runtime (commands, log entries, renders,
+  refusals), the GPU devices (`GpuRuntime` events: the device with adapter, features and limits, every uncaptured
+  validation/out-of-memory/internal error with the node the engine ran last, losses, recreations; the presenter's
+  device likewise), the engine worker (`{ id: 0, log }` messages), LibRaw's worker, the service worker (its version:
+  `public/sw.js` answers `{ type: 'version' }`; no answer means an older build). Its tail is kept in the KV
+  (`settings/diagnostics-journal`), so a report after a reload or a crash has the earlier session. `?debug` keeps every
+  render and wraps every GPU queue submit in error scopes.
+- **The photographer** sees a quiet red pill in the status line ("2 problems") when errors happened; it opens Help ▸
+  Diagnostics… (the rows, newest first, ×N, filter by level and source, Copy, Clear, Report a Problem…). Help ▸
+  Report a Problem… is one dialog: "What happened?", what is always in it (the journal, this computer's browser and
+  graphics card, the settings), and three choices with their sizes — his edits (on), small pictures (on), the original
+  files (off). Save the report… downloads one `chromobench-report-<date>-<time>-<session>.zip`; Copy summary puts a few
+  lines on the clipboard. Nothing is sent by the studio.
+- **The owner** opens a report with File ▸ Open Report… or by dropping the zip on the studio: the environment, his
+  description, the journal's errors and warnings, each frame with its picture and steps; "Open the photos with their
+  edits" (when the originals are in it) opens them with their documents and history in the log (the saved edit goes to
+  the KV under the file's key and the file opens as it was). The zip's `README.txt`, `journal.txt` and
+  `environment.json` are readable without the studio.
+- **The agent** reads it: `await wb.diagnostics({ level: 'warn', source: 'gpu' })`, `.explain()`.
+- **The owner's WebGPU error** ("Destroyed texture [Texture (unlabeled 160x107 px, RGBA32Float)] used in a submit") was a
+  use-after-destroy in the film grain (a thumbnail and the viewer rendering a camera file's grain in lockstep); fixed
+  by `GpuRuntime.busy/retire` (destruction deferred while engine work is in flight) and a texture of ones per size;
+  regression tests in `e2e/diagnostics.spec.ts`. Every GPU object is labelled now, so the next such error names its
+  owner. Open: E_GPU_OOM with two 24 MP camera files at 4000 px (the source textures fill the 512 MB budget).
+- **Capturing an error in your own Chrome:** reproduce it, then Help ▸ Report a Problem… (tick the originals if the
+  files may matter) and send the zip, or `node tools/scripts/console-capture.ts <url> --sequence --files a.NEF b.NEF`
+  headless.
 
 ## 10. Things that live outside the repository
 
