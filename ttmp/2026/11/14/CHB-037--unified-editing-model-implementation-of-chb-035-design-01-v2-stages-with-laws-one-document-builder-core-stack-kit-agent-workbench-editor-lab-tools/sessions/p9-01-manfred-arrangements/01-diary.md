@@ -1,3 +1,11 @@
+---
+Title: Diary, P9 persona session 01
+Ticket: CHB-037
+Status: active
+DocType: diary
+Summary: "Chronological diary of the P9 persona session (synthetic material, headless SwiftShader)."
+---
+
 # Diary
 
 ## Goal
@@ -565,7 +573,7 @@ I closed the driver's browser (`steps/99-quit.mjs`), stopped the preview server 
 **Inferred user intent:** A decision on the default arrangement plus actionable findings.
 
 ### What I did
-- Wrote `experience-report.md` (final), this step.
+- Wrote `02-experience-report.md` (final), this step.
 
 ### What worked
 - All of S1–S5 done; S3 only partly (the roll module is broken; sync tested through Frame ▸ Apply).
@@ -586,7 +594,7 @@ I closed the driver's browser (`steps/99-quit.mjs`), stopped the preview server 
 - Re-run S3 and S4 on a build with the Settings menu and the roll fix, on the real GPU.
 
 ### Code review instructions
-- Read `experience-report.md` § Findings and § Recommended default arrangement.
+- Read `02-experience-report.md` § Findings and § Recommended default arrangement.
 
 ### Technical details
 - Profile (32 MB) stays in `profile/` (git-ignored).

@@ -1,8 +1,16 @@
+---
+Title: Experience report, P9 session 01 (Manfred on Darkroom first and Classic)
+Ticket: CHB-037
+Status: active
+DocType: analysis
+Summary: "Manfred works a synthetic negative, a roll and a camera file in both arrangements; P9-1..P9-18; recommends Classic as the default for now."
+---
+
 # Experience report: P9-01, Manfred on "Darkroom first" and "Classic"
 
 Session: CHB-037 phase P9. Synthetic material only (`.playwright-mcp/p9-synthetic/`). Headless Chromium with the
 WebGPU engine on SwiftShader (software). **Every time below is a SwiftShader time**; on my real graphics card it
-should be much faster. The detail is in the [diary](diary.md).
+should be much faster. The detail is in the [diary](01-diary.md).
 
 ## S1: a negative to a finished print, all on one screen ("Darkroom first")
 
