@@ -175,3 +175,84 @@ and §26, generic (no image or UI knowledge):
 - Do not change other packages except the boundary script, the root config needed to include the package, and moving
   `canonicalJSON` if you do so (then the contract imports it from values; keep `nodeId` hashes byte-identical:
   conformance and vitest must stay green).
+
+## 6. Wave 2 specifications
+
+P2 is split in two sequential parts so each agent's scope fits: **P2a** (the contract) then **P2b** (the reference
+engine, mock, conformance and golden parity). P5a runs in parallel with P2a once P1 is merged.
+
+### P5a — the UI DSL made consistent (design §32, §17; CHB-029)
+
+Owns `packages/shell/`, `packages/studio-kit/` (builders, layouts, kits' build-time code, `cb`), `apps/studio/src`
+call sites, `e2e/` specs that name layouts. Behaviour of the studio does not change; its code does.
+
+1. **Immutable builders on `@chromobench/values`**: `ck.shell`, modules, `ck.kit`, the command/menu/tool recorders
+   return values; every chain method is a modifier (`with`, `then`, `explain`). No mutable `def` records.
+2. **No Proxy recording of unknown methods**: an unknown chain method is a build error with "did you mean"; builder
+   fragments and node fragments are registered explicitly (`ck.extend(...)`).
+3. **One registration per kind**: kits declare panels, tools, commands, menus and passes; layouts place them by id.
+   Remove the command `menu:` field (menus only from `menus`), instance-global `ck.install` (passes only through kits:
+   move finish/looks/roll's installs into their kits), `ck.panel` define-by-arity (`ck.panel(id)` is a reference,
+   `ck.panel.define(id, props, ...kids)` defines), tools in three places (kits declare; modules and viewports pick
+   by id).
+4. **Uniform signatures**: containers `(props?, ...children)`, leaves `(value, props?)`, controls one props object
+   (`ui.slider({ min, max, … })`); `enabled` + `why` everywhere (no `disabled`); `ck.when(cond, a, b)` always an
+   interaction node (build-time choice is plain JS or `.with(when(bool, m))`); `pick` always a selector; remove
+   aliases (`stack`, `label`) or keep exactly one name per form.
+5. **Scopes by declaration site**: shell keys global, module keys module, kit keys kit; no scope argument.
+6. **Typed state and selectors**: per-kit state declared with types; reads through `cb.sel.*`; one `current`.
+7. **One kit product shape**: `kit.panels.*`, `kit.modules.*`, `kit.tools`, `kit.commands`, `kit.docs`; layouts
+   compose kits only; no layout imports another layout (CHB-029 item 4: `cb.modules.*`, `cb.menus.*`).
+8. **Host capabilities** typed at mount; commands declare `requires` (CHB-029 item 1); declarative command tables
+   per area (item 3).
+9. **Rename variant → layout** everywhere (item 9), including `packages/studio-kit/variants/` → `layouts/` and the
+   boundary script.
+- Not in P5a: the catalogue's `ui.order`/`advanced` (contract, later), status bar and jobs (CHB-029 items 5, 6:
+  only if trivial after the above; otherwise list them as remaining).
+- Acceptance: typecheck, lint, gen:check, vitest green; `CI=1 pnpm test:browser` green on SwiftShader (ports 5551–5554);
+  explain snapshots updated deliberately (the diary explains each kind of snapshot change); `packages/shell/README`
+  or docs describe the rules.
+
+### P2a — contract 1.0 (design §20–29, §35)
+
+Owns `packages/contract/` only. Builds the new model; deletes the old one. Consumers outside the contract break
+until their phases; the contract's own tests, typecheck of the contract package and its generated docs must be
+green, and the diary lists the consumer breakage.
+
+1. **Document format 3** (`document.ts`): components exactly as design §20 (Op, Mask, Layer, Group, LinkEntry,
+   Stage with medium and stack, Document with stages, masks, geometry, output, source), on `Coll` from values. Media
+   carry today's fixed settings (§21, §23 table).
+2. **Catalogue**: `OpDef` gains `stages` (where an op may live) and `encoding`; ops are renamed/restructured as §23
+   requires: darkroom entry ops (`expose`, `burn`, `dodge`, `flash`, `preflash` (verify against today's
+   `print.preflash`; keep as medium if it is not added light, and record the finding), `densityMask`, `filter`); a
+   generalised combine node for the light law (contributions, modulators, masks; structured args, no JSON strings);
+   `heal`/`clone` with structured spot lists (scan and print); `clarity` (radius in mm on the print) replacing
+   `finishing.clarity`; mask components and the one algebra (§25: add = max, subtract = a·(1−b), intersect = a·b,
+   invert = 1−m), geometry in document pixels, physical sizes in µm/mm; remove `finishing.hue`, `finishing.look`,
+   `mask.and/or` (min/max), `scan.heal`/`retouch.heal` JSON forms. The P8 op set (curve, levels, …) is NOT in P2a.
+3. **Laws** (§22): `defineLaw` registry; `light`, `composite`, `repair` with their amount, blend, group and order
+   rules; coalescing of adjacent coalescible entries (§23); composite needs the mix/blend semantics of Part I §4–6
+   as a node (normal blend at least; the full blend-mode set comes in P8).
+4. **Compiler** (§29): `compile(doc)` → graph with named cuts (`scan`, `negative`, `scene`, `film`, `darkroom.H`,
+   `print`, `finished`, `display`); stage media compile to today's fixed chain; link and binding resolution steps
+   with registries and the upstream-only rule enforced (look functions themselves come in P7; P2a provides the hook
+   and roll links if simple); structural identities (disabled / amount 0 / identity groups produce no node).
+5. **Mutations and validation**: the four mutations from values with the contract's validation hook (ArgSpecs for
+   params, law rules, stage acceptance); `vocab.ts` becomes the cut vocabulary; delete `recipe.ts`, `paths.ts`
+   (except what moves), the five old mutations, `RECIPE_FIELDS`, `MOVED_PATHS`, migrations. Adapt `editlog.ts`
+   minimally to transactions of the four mutations so the contract stays coherent (P4 replaces it).
+6. **CONTRACT-DECISIONS.md**: one change note, CC-018 or the next free number, class breaking, contract 1.0; docs
+   regenerated (`pnpm gen`).
+- Tests: law properties (design §37: light law equals today's `combinePixel` formula for random entries — compute the
+  expected value with a small independent implementation in the test; composite identities; coalescing), mask
+  algebra laws, validation errors, compile identities, cut addressing.
+
+### P2b — reference engine, mock, conformance, golden parity
+
+Owns `packages/core/`, `packages/engine-mock/`, `packages/conformance/`, `tools/goldens/` (from P0). After P2a:
+implement every new or changed op in the f64 reference engine (`packages/core/src/ops/ops.ts` and the print, mask
+and retouch modules), the mock engine's pass-throughs, the conformance generator for the new catalogue; translate
+P0's golden recipes into format-3 documents (a one-off script in `tools/goldens/`) and make the reference engine
+reproduce every golden within P0's tolerance. Acceptance: contract + core + mock + conformance tests green; goldens
+check green; the diary lists any golden that legitimately changes (with the physics reason) and every remaining
+consumer breakage.
