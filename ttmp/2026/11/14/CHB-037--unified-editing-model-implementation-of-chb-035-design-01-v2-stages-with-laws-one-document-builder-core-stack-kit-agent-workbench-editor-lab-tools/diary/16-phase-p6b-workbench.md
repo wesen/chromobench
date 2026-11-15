@@ -188,3 +188,171 @@ the shell's introspection … and Store.acting (agent author, propose, refuse)"
 - `CommandRow { id, label, group?, source?, doc?, menu?, keys: { chord, scope, args? }[], args, enabled, why?,
   hidden, checked?, builtin, requires? }`; `ControlRow { module, panel, form, label?, bind?, path?, command?, args?,
   lambda?, value? }`; `Reach { id, args?, from: key|menu|button|toolbar|control, where }`.
+
+## Step 3: The workbench — wb in the sandbox, across the worker, over the studio; the completeness tests
+
+`wb` is one more prelude global whose every call is a deferred host call (`hostCall`, beside the measurements'
+`hostEval`), answered by a `Workbench` the session is given (`DslSessionOptions.workbench`). Across the worker it is
+one more request/response pair (`wb` / `wb.reply`), like the engine's. In the studio the workbench is studio-kit's
+`studioWorkbench` (in the chat kit, the agent's kit), which reads the shell's own introspection, runs commands under
+`Store.acting`, and builds layouts by replaying the sandbox's recording on a fresh ck and cb. The two completeness
+tests passed the first time they ran over the eight built layouts.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Build `wb` (commands, run, set, selectors, state, screen, layout, layouts.build/use),
+`cb.looks.define`, the chat card in words, and the two completeness tests.
+
+**Inferred user intent:** The agent can do and see everything the photographer can, through the same table.
+
+**Commit (code):** 5d74cc3 — "CHB-037 P6b: the workbench - wb in the DSL (…), the wb protocol across the worker,
+studio-kit's studioWorkbench (…), the studio's host adapter (…), cb.looks.define, approval cards in the History's
+words; the two completeness tests"
+
+### What I did
+- dsl: `src/workbench.ts` (the port and its data types: `WbCommand`, `WbRun`, `WbScreen`, `WbControl`,
+  `WbLayoutData`, `WbBuild`, `WbUse`, `WB_METHODS`); the prelude's `wb` and the layout recorder (`rec`, `recData`,
+  `recordLayout`); the session's `hostCall`/`deferred`/`wbAnswer` (filter for `wb.commands(filter)`, read-only
+  refusal of `use`, the entries of `wb.run`/`wb.set` appended to `EvalResult.transactions`); `cb.looks.define`
+  (`looks.define` native: `defineLookWith(QJS, src)` registers here; then `wb.defineLook` registers at the host);
+  `test/workbench.test.ts` (6 tests on a fake workbench).
+- agent: protocol `wb`/`wb.reply`, `init.workbench`; `ProxyWorkbench` in the server; `DslWorkerClient` option
+  `workbench`, `serveWb`, the running eval's wb entries kept on the page's seqs; `ChatHost.describe` and
+  `changesOf(entries, words, log)`; re-exports `defineLookSource` and `Workbench` for the studio host; tests.
+- studio-kit chat kit: `src/workbench.ts` — `studioWorkbench(host)`, `realize`/`realizeLayout`, `selectorTable`,
+  `toData`; `test/chat/workbench.test.ts` (4 behaviour tests and the two completeness tests).
+- studio: `host/workbench.ts` (`createWorkbench`: the layout proposal as a dialog "Use the assistant's layout?",
+  looks via `defineLookSource(src, { existing: 'keep' })`); `host/chat.ts` (workbench for every DSL session: chat,
+  bridge, dev; `describe` from studio-kit's History words); `host/lazy-chat.ts` passes `layouts`; `main.ts`: the
+  `layouts` host for the chat and `switchLayout(v: string | LayoutDef)` (an agent layout mounts in place, no
+  `?layout=` for it, `agentLayout` flag) — the one change outside my files, needed to mount a layout.
+
+### Why
+- Design §34's two principles; the recording keeps §31 rule 3 (interaction lambdas are the host's own: selectors and
+  path lambdas built by the realizer from names) and rule 1 (nothing but data and names crosses).
+
+### What worked
+- Completeness: over classic, darkroom, simple, lab, tiny, roll, finish, looks — every command a key, a menu, a
+  toolbar or a button reaches is in `wb.commands()`; every control (> 100) maps to a document path, a state path or
+  a command.
+- The recorder handles `...cb.menus.standard()` (iterator → `{ $spread }`), `{ ...cb.keys.darkroom }` (one own key
+  `$spreadN` per recording), `.with(fn)` at build time, `cb.sel.frame.print()`, `cb.state.view.step`.
+- An agent layout with `cb.kits.stack.panels.layers('print')` in a darkroom-only module gets CB-S101 from the stage
+  policy pass, as a built-in layout would.
+
+### What didn't work
+- First prelude load: `SyntaxError: expecting ','` at `prelude.js:359:146`: my Python edit turned `\'` into `'`
+  inside a single-quoted guest string; the hint now uses double quotes.
+- `expected 'shell "Chromobench" · theme craftkit …' to match /^module main/`: the module explain still starts with
+  the shell's header line; the test reads the second line.
+- The worker test expected `dsl-eval-1`; the test page's session prefix is `chat1` (`chat1-eval-1`).
+
+### What I learned
+- The shell's `bindingPath` (probe mode) resolves the realizer's selector lambdas to state paths exactly as it does
+  hand-written ones, so explain, the binding checks and the completeness test see no difference.
+
+### What was tricky to build
+- **Proxy invariants for the recorder.** A recording must be callable (`ck.module(…)`) and spreadable both ways. The
+  target is an arrow function (no non-configurable `prototype`, so `ownKeys` may report only the spread key), the
+  `get` trap answers `Symbol.iterator` with a generator yielding `{ $spread: expr }`, and `ownKeys` /
+  `getOwnPropertyDescriptor` expose one enumerable key `$spreadN` whose value is the expression, so `{ ...a, ...b }`
+  keeps both.
+- **The mode for a command.** `Store.acting` is synchronous: an async command's writes after its first `await` are
+  by the user (as before). The studio's document commands write synchronously (ctx.tx).
+
+### What warrants a second pair of eyes
+- `realizeExpr` walks names on the real ck/cb objects: it refuses `__proto__`, `constructor`, `prototype`,
+  `call/apply/bind` and names starting with `_`, and calls only what it finds. A layout can still call any public
+  builder of ck and cb (that is the point), including `ck.ui.button({ run: 'file.export' })`.
+- Build-time queries (`stack.has('scene')`) answer a recording (truthy) in the sandbox.
+
+### What should be done in the future
+- Persist agent layouts (KV, View ▸ Layout lists them) and agent looks (re-registered at start); today both last the
+  page's session (a reload falls back to `?layout=` and a document linking an agent look fails with E_LINK).
+- A lighter worker snapshot than `Log.load` per change (P6a's note) was not needed by the workbench; not done.
+
+### Code review instructions
+- `packages/dsl/src/prelude/prelude.ts` (recorder, `wb`), `packages/dsl/src/session.ts` (`wbAnswer`),
+  `packages/studio-kit/kits/chat/src/workbench.ts`, `apps/studio/src/host/workbench.ts`, `apps/studio/src/main.ts`
+  (`switchLayout`).
+- `pnpm exec vitest run packages/dsl/test/workbench.test.ts packages/studio-kit/test/chat packages/agent`.
+
+### Technical details
+
+```js
+await wb.commands('frame.')                 // [{ id, label, args, keys: [{ chord, args }], menu, enabled, why, hidden }]
+await wb.run('module.print')                // the D key; { ok, how: 'none', module: 'print' }
+await wb.run('frame.rate', 4)               // ask: { how: 'proposed', entries: [pending by agent] }; auto: 'committed'
+await wb.set('view.view', 'loupe')          // a state path, as the View control writes it
+await wb.state('frame')                     // { $: 'cb.frame', frame, expr }; wb.selectors() lists them
+await wb.screen().explain()                 // the module on screen, live; (await wb.screen()).controls
+const b = await wb.layouts.build({ id: 'just-print', label: 'Just the print', build: (ck, cb) => cb.studio('Chromobench')
+  .menus(...cb.menus.standard())
+  .module(ck.module('main', { label: 'Print', stages: ['darkroom'] })
+    .center(cb.viewer(cb.sel.frame.print(), { tools: ['probe'] }))
+    .right(ck.dock.column({ width: 300 }, cb.panels.controls('darkroom'), cb.panels.history().hidden(cb.sel.doc.not())))) })
+// b: { ok, errors, warnings, explain, controls, layout }; mem.l = b.layout
+await wb.layouts.use(b, { why: 'fewer panels' })   // { status: 'proposed' }: a dialog asks; approved, it is mounted
+await cb.looks.define(src)                         // a .cblook.js source, registered here and in the studio
+```
+
+## Step 4: Docs, the agent's prompt, and the browser spec
+
+The reference gains a Workbench section, the instructions one bullet (still under 4000 characters), the topics a page
+"The workbench" (fragments for the calls that need the studio, a runnable E_LAYOUT block and a runnable
+`cb.looks.define` block), and the chat's prompt and eval tool say that the studio is `wb`. The browser spec drives the
+whole surface from `window.chromobench.eval` in the real studio: commands, a module switch, the live screen, a rating
+proposed in ask mode, and a layout the agent writes, proposed in a dialog, accepted and mounted.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Document the surface where the agent reads it, and prove it in the browser.
+
+**Inferred user intent:** The agent finds `wb` without being told, and the studio really answers it.
+
+**Commit (code):** 9b2f369 — "CHB-037 P6b: the workbench documented (…), approval cards in the History's words
+(test), the browser spec for the workbench (…)"; d6db290 (prompt and eval tool)
+
+### What I did
+- `packages/dsl/src/docs/generate.ts` (`WORKBENCH_REFERENCE`, the instructions bullet), `topics/workbench.md`;
+  `pnpm gen` (reference, instructions, the bridge's copies, topics module, eval tool text).
+- `e2e/chat.spec.ts`: the demo's approval card now says "Printer lights" (the History's words, was the path
+  `lights.params.logH`); new test "the workbench: …".
+- `packages/agent/test/chat.test.ts`: the card uses the host's words when it has them.
+
+### Why
+- The agent reads the instructions, the reference and the topics; the docs test runs every runnable block.
+
+### What worked
+- `STUDIO_PORT=5551 STUDIO_KIT_PORT=5552 SHELL_DEMO_PORT=5553 GPU_PARITY_PORT=5554 CI=1 pnpm test:browser --grep
+  "chat|agent|bridge|workbench"` → 9 passed (40.5 s), the new workbench test among them.
+- `pnpm typecheck` 0 errors, `pnpm lint` ok, `pnpm gen:check` ok (26 files), `pnpm test` → 136 files, 3207 passed,
+  19 skipped.
+
+### What didn't work
+- `pnpm gen` failed with `SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Expected a semicolon` in `prompt.ts`: the
+  outline is a template literal and my new line used backticks; escaped.
+
+### What I learned
+- The studio's hook (`window.chromobench`) is re-made for every mounted layout, so after the agent's layout is
+  mounted the next `eval` already sees it (`wb.layout()` → `{ id: 'just-print', agent: true }`).
+
+### What was tricky to build
+- N/A (docs and tests).
+
+### What warrants a second pair of eyes
+- The topic's `wb` blocks are fragments (the docs test has no studio); the same calls run in
+  `packages/studio-kit/test/chat/workbench.test.ts` and the browser spec.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `packages/dsl/src/docs/topics/workbench.md`, `packages/dsl/generated/reference.md` (## Workbench), `e2e/chat.spec.ts`.
+
+### Technical details
+- Instructions length after the bullet: under the 4000-character test limit (`docs.test.ts`).
