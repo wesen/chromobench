@@ -438,3 +438,71 @@ negative values, sRGB arithmetic).
   monotonicity; golden stacks for a few combined documents.
 - Acceptance: contract, core, gpu typecheck and vitest; conformance; goldens (old 60 unchanged plus the new stacks);
   `[gpu-parity]` green on SwiftShader and Metal; lint; generated docs (`pnpm gen:check`).
+
+### Amendments after P5b-1 (main agent)
+
+- The studio runs on documents and the log (diary `09-phase-p5b1-studio.md`): frames mounted at `docs.<frame>`
+  (`k.mount('docs', { keyDepth: 1, kind: 'frame' })`), `model/doc.ts` (`entriesOf`, `storePath`, `newDarkroomLayer`,
+  `withoutInert`, `exposureStep`), `maskedLayer`, the Exposures panel is the darkroom stack, retouch and dust are
+  groups (`retouch`, `dust`), frame handles name cuts, `ui.log` publishes proposals, `Studio.propose/approve/
+  approveBatch/reject/jump`. Gotcha: `edit()` on a document read through the store's read-only proxy throws; `strip`
+  it first.
+- Integration branch at this point: typecheck 0 errors, lint, gen:check (26), vitest 124 files / 2935 passed,
+  goldens 60/60; browser (on the P5b-1 branch) 113 passed, 1 skipped (bench), 1 load-dependent gpu-parity timeout.
+- Queued for a GPU/performance phase after P8a (core and gpu are P8a's now): the reference engine renders the
+  1024×683 test negative's screen view in ~4.2 s in the worker (find whether the tabulated preview path was lost);
+  GPU `output.frame`; GPU tiled export wrong at tile borders for spatial ops; the load-dependent `film.spec.ts`
+  parity timeout.
+
+## 8. Wave 4 specifications
+
+### P5b-2 — the stack kit, the stage policy pass, the arrangements (design §33)
+
+Owns `packages/studio-kit/` (except `kits/looks/` and `kits/roll/`, which are P7's), `apps/studio/`, `e2e/`, and in
+`packages/shell` only what a module's stage declaration needs (`ModuleProps.stages`, or a module fragment).
+
+- **`cb.kits.stack`**, a kit product generic over stages: `panels.layers(stage, { row, order, filter, density,
+  title })` (rows, groups, drag into and out of groups, enable, amount with the law's unit hint, blend when the law
+  allows, mask chip, provenance chip from `log.why`), `panels.params()` (the selected entry's controls from the
+  catalogue, an "Advanced" disclosure if the catalogue marks args advanced), `panels.masks()` (components, the one
+  algebra, what the mask reads), the "+ Layer" menu from the catalogue (`opsForStage`), mask tools (linear, radial,
+  paint, luminance, colour), commands as a table (add, duplicate, delete, rename, group, ungroup, move, toggle,
+  amount, blend, attach/detach mask), all as transactions through the log.
+- **Specialised views** (design §33): the darkroom's Enlarger panel = the main exposure's controls plus filters as
+  rows (θ per item; order by kind — the light law is order-free); the finish view = retouch and clarity on the print
+  stack; the Exposures panel becomes the darkroom stack view. One look and feel everywhere.
+- **The stage policy pass** replaces CB-F101 (and v1's CB-E101): modules declare their stages, controls know their
+  op's stages from the catalogue, the pass warns when a module shows a stage it does not declare.
+- **Arrangements** (design §33): the classic layout gains an Edit module (print stack); the darkroom arrangement with
+  a collapsible digital palette (darkroom + print stages, labelled zones); a Scene module for camera files (scene
+  stage) — enabled once P8a's scene-stage ops exist (merge the integration branch when P8a lands, or build it so it
+  appears when the catalogue has scene ops).
+- **The two behaviour fixes P5b-1 decided** (diary 09, last report): (1) library membership stays view tier, the
+  photographer's ratings (flag, stars, colour label, keywords) move to a document-tier record keyed by frame id so a
+  mis-rating is one undo step (`sel.library`/`sel.entry` merge both); (2) the History panel's jump asks before
+  crossing other frames' later steps ("This also undoes N later changes on <frames>"), marks this frame's steps that
+  sit under other frames' later steps.
+- If cheap: CHB-029 items 5 (status bar, dialogs from DSL pieces) and 6 (jobs).
+- Acceptance: typecheck, lint, gen:check, vitest, the browser suite headless on SwiftShader (ports 5571–5574) incl.
+  new specs for the stack panel (add a curve-free layer kind available now, e.g. a darkroom burn or a print clarity;
+  group, fade, mask, undo) and the arrangements; explain snapshots per layout updated deliberately.
+
+### P7 — links: looks, rolls, presets, sync (design §27–§28)
+
+Owns the contract's link resolution (`packages/contract/src/links*` and its registry; P8a is in the catalogue and the
+composite law — coordinate through merges), `packages/studio-kit/kits/looks/`, `packages/studio-kit/kits/roll/`, and
+the looks/roll parts of `packages/dsl` (the `LooksProvider`, named looks).
+
+- **Look functions**: registered, versioned, pure `(params, facts) → Group` (per stage; a look may touch several
+  stages); built-in looks rewritten as look functions returning groups (darkroom looks as filter/burn layers, print
+  looks as print layers); `*.cblook.js` evaluated in the QuickJS sandbox if cheap (else record as remaining).
+- **Link entries** expand at compile (the contract's resolvers): `{ look, version }` with params and an amount (the
+  stage law's amount); "bake" turns a link into its plain group with the source recorded.
+- **Rolls**: the roll record holds partial media and stacks; frames' media link to the roll; per-frame changes are
+  overrides; divergence = the overrides; the roll kit on links (first print per roll, match, alpha) — replace the
+  roll `fragment` copies.
+- **Presets** = looks without parameters; **sync** = copy values or insert the same link (the user chooses; the UI
+  says which); one batch per apply through `plan`.
+- **DSL**: named looks become link inserts; `LooksProvider` goes; the DSL compiles with a LinkContext.
+- Acceptance: contract, studio-kit (looks, roll), dsl typecheck and vitest; looks and roll browser specs; one-step
+  undo of a look over a roll; lint; gen:check.

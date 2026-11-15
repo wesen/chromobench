@@ -480,3 +480,61 @@ docs check passes again.
 
 ### Technical details
 - Checks after the merge are in this step's commit message.
+
+## Step 9: P5b-1 merged — the whole repository green on the unified model
+
+The studio, output, ingest and the e2e specs now run on documents and the log. With P5b-1 merged, the integration
+branch is green end to end for the first time since the contract cut: typecheck 0 errors, lint, gen:check (26 files),
+vitest 124 files / 2935 passed / 19 skipped, goldens 60/60.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Finish the studio phase, merge, plan wave 4.
+
+**Inferred user intent:** A working studio on the new core.
+
+**Commit (code):** 85ec9d1 — "Merge P5b-1 studio on the document and the log (…)"
+
+### What I did
+- The P5b-1 agent ended twice before finishing (its context ran out while its e2e fork worked). I asked it to finish
+  and to reconsider two behaviour changes; it decided both (ratings back to undoable via a document-tier record;
+  a confirming History jump) but could not implement them. I messaged the still-running fork to commit its work and
+  report to me; it did (9864cc7 fixes, 438029a e2e, b8c739f/4e92c5a diary).
+- Merged with `merge-phase.sh`; full checks as above on the integration branch.
+- Wave 4 specs: P5b-2 (stack kit, stage policy pass, arrangements, the two behaviour fixes) and P7 (links), in
+  disjoint files; a GPU/performance phase queued after P8a.
+
+### Why
+- The browser suite found real studio bugs the unit tests missed (history wording for component writes, a lost save
+  after coalesced key presses, thumbnails re-rendering drafts on the worker).
+
+### What worked
+- Browser on the P5b-1 branch: chromium-webgpu 48/48, shell-demo 3/3, studio-kit 9/9, gpu-parity 46/48 (one
+  load-dependent timeout in `film.spec.ts`, one bench skipped).
+
+### What didn't work
+- A sub-agent whose context runs out mid-task hands back early; its forks keep running and must be addressed
+  directly (SendMessage to the fork) to commit and report.
+
+### What I learned
+- The reference engine needs ~4.2 s for a 1024×683 screen render in the worker: likely a lost tabulated preview path;
+  queued.
+
+### What was tricky to build
+- N/A (coordination).
+
+### What warrants a second pair of eyes
+- P5b-1 behaviour changes kept: key/wheel runs coalesce into one step at once; preflash is a darkroom layer; Heal Dust
+  adds layers instead of altering pixels; saved edits return as real undo steps after reload; Save Document saves no
+  history.
+
+### What should be done in the future
+- Launch P5b-2 and P7; merge P8a when it reports; then the GPU/performance phase, P6b, P8b (UI for P8a's ops), P9.
+
+### Code review instructions
+- `diary/09-phase-p5b1-studio.md`; `CI=1 pnpm test:browser` headless.
+
+### Technical details
+- Running: P8a (Editor lab ops in the engines).
