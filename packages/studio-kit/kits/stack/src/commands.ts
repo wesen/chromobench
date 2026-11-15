@@ -16,6 +16,7 @@ import {
   maskOf, newMaskOn, nudgeEntry, opWord, renameEntry, setAmount, setBlend, toggleEntry, ungroup, componentDefaults, formatAmount, linkKey,
 } from './model.ts';
 import { selectedIn, STACK_STATE, type StackView } from './state.ts';
+import { mathOf, sampleOklab } from './editors.ts';
 
 const studioOf = (ctx: any): Studio => {
   const s = ctx.services?.studio as Studio | undefined;
@@ -316,6 +317,48 @@ function drawn(ctx: any, kind: MaskComponentKind, params: Params): void {
   const r = maskGesture(fr.d, t, kind, params, { combine: view(ctx.state).mask.combine, feather_mm });
   if (commit(ctx, fr.f, r.mutations, r.label)) select(ctx, fr.f, r.layer);
 }
+/**
+ * The eyedropper: the colour under (x, y) (document px) of the cut the selected layer's mask reads, in OkLab as the
+ * colour component measures it (core's encodeTransform through the host's editorMath), written in one step into the
+ * armed colour component, else as a new colour range. A colour range needs a layer of a stage whose cuts hold colour
+ * (the scene or the print).
+ */
+export async function eyedropper(ctx: any, x: number, y: number): Promise<boolean> {
+  const studio = studioOf(ctx);
+  const math = mathOf(ctx.services);
+  if (!math) {
+    ctx.toast('The eyedropper needs the host\'s colour conversion (services.editorMath)', { kind: 'warn' });
+    return false;
+  }
+  const fr = frame(ctx);
+  const t = selectedIn(ctx.state);
+  const p = fr && t ? findEntry(fr.d, t) : undefined;
+  if (!fr || !t || !p || (p.stage !== 'print' && p.stage !== 'scene')) {
+    ctx.toast('Select a layer of the print (or the scene) first: a colour range measures colour, which the darkroom of a negative does not have', { kind: 'warn' });
+    return false;
+  }
+  const m = maskOf(fr.d, t);
+  let lab: [number, number, number];
+  try {
+    lab = await sampleOklab(studio, math, fr.f, fr.d, p.stage, m?.mask.reads, x, y);
+  } catch (e) {
+    ctx.toast(`Eyedropper: ${words(e)}`, { kind: 'warn' });
+    return false;
+  }
+  const armed = view(ctx.state).mask.sample;
+  const d = studio.doc(fr.f) ?? fr.d;
+  const now = maskOf(d, t);
+  const into = armed && now?.components.find(([cid, c]) => cid === armed && c.kind === ('colour' as MaskComponentKind));
+  ctx.set({ stack: { mask: { sample: null } } });
+  if (into) {
+    // Sample is one shot: the eyedropper goes back to no tool (the tool's own button keeps it for more ranges)
+    if (ctx.state?.ui?.tool === 'mask-colour') ctx.run('tool.none');
+    return commit(ctx, fr.f, [set(`${armed}.params.colour`, lab)], `Sample the colour of ${now!.mask.name}`);
+  }
+  drawn(ctx, 'colour' as MaskComponentKind, { ...componentDefaults('colour' as MaskComponentKind), colour: lab });
+  return true;
+}
+
 const shape = (ctx: any, s: MaskShape): void => {
   const [kind, params] = maskComponent(s);
   // the radial component (a soft ellipse) where the catalogue has it; the hard ellipse before
@@ -391,10 +434,12 @@ export function maskTools(): ToolTable {
       on: { down: (_e: any, ctx: any) => void drawn(ctx, 'luminance', { ...componentDefaults('luminance'), above: 0.5, softness: 0.1 }) },
     },
     'mask-colour': {
-      label: 'Colour Range Mask', icon: 'colorrange', cursor: 'crosshair',
+      label: 'Colour Range Mask (eyedropper)', icon: 'colorrange', cursor: 'crosshair',
       enabled: (s: any) => hasKind('colour') && !!sel.doc(s),
       why: 'Colour ranges arrive with the colour mask component (mask.colour)',
-      on: { down: (_e: any, ctx: any) => void (hasKind('colour') && drawn(ctx, 'colour' as MaskComponentKind, componentDefaults('colour' as MaskComponentKind))) },
+      // a click samples the colour under it from the image the mask reads: into the armed component (Sample in the
+      // masks panel), else a new colour range on the selected layer's mask
+      on: { down: (e: any, ctx: any) => void (hasKind('colour') && eyedropper(ctx, e.x, e.y)) },
     },
   };
 }

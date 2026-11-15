@@ -37,6 +37,13 @@ s1.data.theme;                        // 'craftkit'; s1.trail lists the modifier
 | panels | `ck.panel.define(id, props?, ...children)` defines where it stands; `ck.panel(id)` references one defined elsewhere in the program | |
 | choice (τ) | `ck.match(on, cases, { of })`, `ck.when(cond, a, b)` (`cond` a lambda of state), `ck.pick(key, map)` (a selector) | a boolean in `ck.when` is CK-L120: choose at build time with JavaScript or `ck.mod.when` |
 
+The curve and the wheel are also DOM widgets (`@chromobench/shell/dom`: `curvePlane(scope, { fn, preview, commit,
+cancel, nudge, newId, fixedEnds })`, `wheelDisc(scope, { preview, commit, cancel, nudge, reset, puck })`): the drawing
+and the gestures with callbacks instead of one store path. `ck.ui.curve` and `ck.ui.wheel` are those widgets bound to
+a path; a kit whose values live elsewhere (the stack kit's curve editor writes a document's Coll of points, its
+grading wheels two arguments of a layer) uses the same widgets, so every curve and wheel looks and behaves the same.
+`fn` is the function drawn through the points (default the shell's `monotone`; the stack kit passes core's).
+
 One name per form: there are no aliases (`ck.ui.button({ run: 'id' })` is the command button; a switch is
 `ck.ui.checkbox({ switch: true })`). Nodes say `enabled` and `why` (never `disabled`), like commands.
 

@@ -61,7 +61,7 @@ module scene "Scene" key Mod+Alt+S stages scene
            panel layers-scene "Scene (before the film)"
              stack.layers  empty "A negative scan has no scene stage: its edits …  stage "scene"  composite law · + Layer 8 ops
            panel layer-params-scene "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-scene "Mask"
              stack.masks
   bottom dockcol  width 124
@@ -160,7 +160,7 @@ module print "Print" key D stages darkroom
              stack.layers  stage "darkroom"  light law · + Layer 6 ops
              text τ  class "cb-script"  dim  wrap
            panel layer-params-print "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-print "Mask"
              stack.masks
            panel approvals "Agent proposals"
@@ -180,7 +180,7 @@ module edit "Edit" key Mod+Alt+E stages print
                cb.readout
   right  dockcol  width 300
            panel layer-params-edit "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-edit "Mask"
              stack.masks
   bottom dockcol  width 124
@@ -236,7 +236,7 @@ module finish "Finish" key F stages scan, print
            panel finish-dust "Dust (on the negative)"
              stack.layers  empty "A photo has no negative: dust is healed on a s…  stage "scan"  repair law
            panel layer-params-finish "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
   bottom dockcol  width 124
            filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module assistant "Assistant"
@@ -440,7 +440,7 @@ module main "Darkroom" stages darkroom, print
            panel digital "Digital (after the print)"  hidden τ
              stack.layers  density "compact"  stage "print"  composite law · + Layer 10 ops
            panel layer-params "Layer"  hidden τ
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks "Mask"  hidden τ
              stack.masks
            panel approvals "Agent proposals"  hidden τ
@@ -643,7 +643,7 @@ module print "Print" key D stages darkroom
              stack.layers  stage "darkroom"  light law · + Layer 6 ops
              text τ  class "cb-script"  dim  wrap
            panel layer-params-print "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-print "Mask"
              stack.masks
            panel approvals "Agent proposals"
@@ -701,7 +701,7 @@ module finish "Finish" key F stages scan, print
            panel finish-dust "Dust (on the negative)"
              stack.layers  empty "A photo has no negative: dust is healed on a s…  stage "scan"  repair law
            panel layer-params-finish "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
   bottom dockcol  width 124
            filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
@@ -922,7 +922,7 @@ module print "Print" key D stages darkroom
              stack.layers  stage "darkroom"  light law · + Layer 6 ops
              text τ  class "cb-script"  dim  wrap
            panel layer-params-print "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-print "Mask"
              stack.masks
            panel approvals "Agent proposals"
@@ -1493,7 +1493,7 @@ module print "Print" key D stages darkroom
              stack.layers  stage "darkroom"  light law · + Layer 6 ops
              text τ  class "cb-script"  dim  wrap
            panel layer-params-print "Layer"
-             stack.params
+             stack.params  editors {curve, levels, hsl, grade, mixer}
            panel layer-masks-print "Mask"
              stack.masks
            panel approvals "Agent proposals"
