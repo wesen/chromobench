@@ -815,3 +815,57 @@ basically cover all the necessary functionality and introspection into the workb
 
 ### Technical details
 - N/A
+
+## Step 15: P3b merged — every phase is in; P9 next
+
+The engine fixes are in: exact tiled export (halos and whole-frame fields; tiled equals whole with 0 differing 16-bit
+codes), GPU `output.frame` (the studio host no longer implements it), the CPU preview fixed (4.2 s → 0.74 s for a
+slider step: `output.frame` was not on the sample grid, so every stage ran twice), engine-mock with P8a's ops,
+robust tests, and WGSL includes resolved by one linker shared by the engine and the check.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the last implementation phase; specify the integration phase.
+
+**Inferred user intent:** A finished, verified studio.
+
+**Commit (code):** 34b4ba9 — "Merge P3b engines (…)"
+
+### What I did
+- Merged with `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 137 files / 3379 passed / 19
+  skipped, goldens 66/66. On P3b's branch: `[gpu-parity]` 54 passed, 2 skipped on SwiftShader and on Metal;
+  conformance 524/524; `tools/wgsl-check` 5 passed.
+- P9 spec (integration: browser on SwiftShader and Metal, walkthroughs, persona session, persistence of agent
+  layouts/looks, HANDOFF, darkroom export speed).
+
+### Why
+- All feature phases are merged; what remains is proving the whole and handing it over.
+
+### What worked
+- The CPU preview's slowness was not a lost table path but a full-resolution `output.frame` behind the display cut.
+
+### What didn't work
+- Exactness costs: the 4000 px darkroom export went from ~781 ms to ~1650 ms (48 haloed 512 px tiles and a field pass
+  instead of 12 tiles of 1024 px).
+
+### What I learned
+- An "approximate at tile borders" bug survived because no test compared tiled and whole output for spatial ops; the
+  `law:tiles` test now does.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P3b plans haloed tiles with an assumed 20 textures per pixel (from one bench, not from the DAG); a heavy document
+  could still run out of GPU memory.
+
+### What should be done in the future
+- P9; the owner's decision on medium presets (film-stock looks).
+
+### Code review instructions
+- `packages/gpu/src/chain/wgsl-link.ts`, the `law:tiles` and `law:frame` parity specs; `diary/14-phase-p3b-engines.md`.
+
+### Technical details
+- CPU timings (P3b, loaded machine): slider step 4.2–9.2 s → 0.74–1.29 s; draft 4.1–7.0 s → 0.45–0.78 s.

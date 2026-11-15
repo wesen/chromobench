@@ -584,3 +584,32 @@ renames P6a asked for (eval `Look` → show words: `EvalResult.shows`, `EVAL_LIM
 `log.commit(x, { why })`; the chat approval card in words (studio-kit's history `describe`); `frame.get` reads through
 links (`readField`); `cb.looks.define(src)` for agent-written looks. Acceptance: whole-repo typecheck, lint, gen:check,
 vitest, the chat/agent browser specs headless (ports 5551–5554), the two completeness tests.
+
+## 10. P9 — integration
+
+All phases are merged (integration at 34b4ba9: typecheck 0, lint, gen:check 26, vitest 137 files / 3379 passed /
+19 skipped, goldens 66/66). P9 owns the whole repository for fixes found by integration; it changes design only where a
+check forces it, and records each change.
+
+1. **The full browser suite** headless, twice: on SwiftShader (ports 5511–5514) and on the M1 Max with `REAL_GPU=1`
+   under the GPU lock. Every failure is fixed or explained (load-dependent timeouts must pass alone and be made
+   robust where cheap).
+2. **End-to-end walkthroughs** in the browser (headless, Playwright, synthetic fixtures): a negative scan from import
+   to export through the darkroom (first print, dodge/burn through a mask, density mask, filter look), the print
+   stack (curve, HSL, grade, a masked clarity, blend modes, a group), finish (crop, heal), undo/redo across all of it,
+   a roll (link, override, sync, a look over the roll, one-step undo); a camera file through the scene stage; the
+   agent with only `eval` doing the same through `wb` and proposals, and building "a simpler screen" with
+   `wb.layouts.build` (CHB-030's acceptance). Screenshots of the arrangements for the owner.
+3. **The persona session** (CHB-026 protocol, `reference/01-persona-manfred.md`) on the two arrangements (classic with
+   Edit, darkroom with the digital palette): findings triaged into CHB-037 tasks; the default arrangement recommended
+   to the owner with reasons. The photographer's own photos may be used locally only if the protocol already does so;
+   never commit, quote or publish anything from them.
+4. **Persist agent layouts and agent looks** in the studio's KV (P6b's open item: a reload breaks documents linking an
+   agent look) if small; otherwise record.
+5. **Docs**: `docs/HANDOFF.md` rewritten for the unified model (document format 3, stages and laws, the log, the
+   stack kit, links, the workbench, the checks); the README of each package touched is current.
+6. **The darkroom export speed** (P3b: exact tiling doubled 4000 px darkroom export to ~1650 ms): recover with the
+   DAG's real live-texture peak and one-pass fields if cheap; otherwise record.
+- Acceptance: everything green (typecheck, lint, gen:check, vitest, goldens, browser on SwiftShader and Metal); a
+  report in `reference/02-integration-report.md` with the walkthrough results, screenshots (synthetic only), persona
+  findings, open items.
