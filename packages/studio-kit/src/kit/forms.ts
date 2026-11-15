@@ -1,5 +1,5 @@
 // The headless half of studio-kit's forms: slots with binding times, docs and explain words. Renderers live in
-// src/dom (passed to mount as `renderers`), so variants build and explain in Node.
+// src/dom (passed to mount as `renderers`), so layouts build and explain in Node.
 import { slot, type FormSpec, type NodeData } from '@chromobench/shell';
 import { argModel, parseStep } from './args.ts';
 import { formatStops } from '../model/units.ts';

@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
-// Serves packages/studio-kit, so the dev host at /demo/ imports /src, /variants and the M1 fixture directly.
+// Serves packages/studio-kit, so the dev host at /demo/ imports /src, /layouts and the M1 fixture directly.
 const root = fileURLToPath(new URL('..', import.meta.url));
 export default defineConfig({
   root,

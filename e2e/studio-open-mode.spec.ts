@@ -152,7 +152,7 @@ test('the host top bar is folded into the menus: File (open, open as, export, re
   await expect(page.locator('.ck-dialog #export-format')).toBeVisible();
   await expect(page.locator('.ck-dialog #export-space')).toBeVisible();
   await page.locator('.ck-dialog button', { hasText: 'Cancel' }).click();
-  // View ▸ Layout… lists the variants
+  // View ▸ Layout… lists the layouts
   await page.locator('.ck-menubar-t', { hasText: 'View' }).click();
   await page.locator('.ck-menu-i[data-command="view.layout"]').click();
   await expect(page.locator('.ck-dialog')).toContainText('Darkroom');

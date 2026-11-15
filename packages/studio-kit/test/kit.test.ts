@@ -13,7 +13,7 @@ const studioWith = (body: (ck: ReturnType<typeof createCk>, cb: ReturnType<typeo
 };
 
 describe('cb.arg', () => {
-  it('CB-A101: an unknown path is an error at the variant line, with a computed fix', () => {
+  it('CB-A101: an unknown path is an error at the layout line, with a computed fix', () => {
     const app = studioWith((ck, cb) => ck.column({}, cb.arg('print.enlarger.time')));
     const d = app.diagnostics.list.find(x => x.code === 'CB-A101')!;
     expect(d.level).toBe('error');

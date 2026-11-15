@@ -35,8 +35,8 @@ const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?:
   { dir: 'packages/studio-kit/kits', skip: /\/dom\.ts$/, forbid: /^(@chromobench\/shell\/dom|\.\.?\/.*dom(\.ts|\/))/, why: 'the headless half of a kit never imports the DOM half' },
   // a layout receives ck and cb and imports nothing: no layout imports another (CHB-029 item 4); the registry
   // (index.js) imports the layouts lazily
-  { dir: 'packages/studio-kit/variants', skip: /(\.d\.ts|\/index\.js)$/, forbid: /./, why: 'a layout receives ck and cb and imports nothing (no layout imports another)' },
-  { dir: 'packages/studio-kit/variants', skip: /\.d\.ts$/, forbid: /^(?!\.\/[a-z-]+\.js$)/, why: 'the layout registry imports only the layouts beside it' },
+  { dir: 'packages/studio-kit/layouts', skip: /(\.d\.ts|\/index\.js)$/, forbid: /./, why: 'a layout receives ck and cb and imports nothing (no layout imports another)' },
+  { dir: 'packages/studio-kit/layouts', skip: /\.d\.ts$/, forbid: /^(?!\.\/[a-z-]+\.js$)/, why: 'the layout registry imports only the layouts beside it' },
 ];
 
 function* files(dir: string): Generator<string> {

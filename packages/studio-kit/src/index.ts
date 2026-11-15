@@ -2,7 +2,7 @@
 // Headless: nothing here touches the DOM. Renderers are '@chromobench/studio-kit/dom'.
 export { createCb, FRAME_CONTEXT, CORE_STATE, type Cb } from './cb.ts';
 export { sel, type Sel, type CbState, type CatalogFrame, type Selection, type Snapshot, type CbView, type CbUi, type CbPrefs } from './sel.ts';
-export { defineVariant, buildVariant, type VariantDef, type VariantEnv, type BuiltVariant } from './variant.ts';
+export { defineLayout, buildLayout, type LayoutDef, type LayoutEnv, type BuiltLayout } from './layout.ts';
 export { Studio, createStudio, type StudioOptions, type StudioHost, type HostFlags } from './studio.ts';
 export { frameRef, isImageHandle, isFrameRef, effectiveRecipe, ACCESSORS, PRINT_OPTIONS, type FrameRef, type ImageHandle, type Accessor } from './handles.ts';
 export { EditLogRoute, recipePathOf, BURST_MS, type Proposal } from './bridge/editlog-route.ts';

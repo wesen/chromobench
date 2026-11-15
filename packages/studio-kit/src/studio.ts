@@ -1,5 +1,5 @@
 // The studio's services (guide §7.1 steps 2–6): frames + EditLogs, the EditLog route, the render bridge and
-// persistence, handed to app.start / mount as services. Nothing is recorded in the variant: one variant runs
+// persistence, handed to app.start / mount as services. Nothing is recorded in the layout: one layout runs
 // headless with MockEngine and memoryKV, and in the browser with a real engine and IndexedDB.
 //
 //   const studio = createStudio({ engine: new MockEngine(), kv: memoryKV() });
@@ -31,7 +31,7 @@ export interface StudioOptions {
   /** opens a source as a photo, a negative or as guessed (the host's engine; default: Engine.open as a negative) */
   opener?: SourceOpener;
   /**
-   * The enlarger mode of new recipes (the layout's, VariantDef.enlarger; CHB-031): 'real' (the contract's default)
+   * The enlarger mode of new recipes (the layout's, LayoutDef.enlarger; CHB-031): 'real' (the contract's default)
    * or 'normalised'. The first recipe is made in it (initialInMode); saved recipes keep the mode they store.
    */
   enlarger?: EnlargerMode;
@@ -57,7 +57,7 @@ export interface StudioHost {
   saveRecipe?(): unknown;
   /** File ▸ Open As ▸ Heal Dust: the host decodes with dust healing */
   dust?(on: boolean): unknown;
-  /** View ▸ Layout: the variants and how to switch */
+  /** View ▸ Layout: the layouts and how to switch */
   layouts?: { id: string; label: string }[];
   layout?: string;
   setLayout?(id: string): unknown;

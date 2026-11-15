@@ -1,4 +1,4 @@
-// M1 walking skeleton (CHB-009 guide §5.12), on the shell-based studio since CHB-019 (variant lab, MockEngine):
+// M1 walking skeleton (CHB-009 guide §5.12), on the shell-based studio since CHB-019 (layout lab, MockEngine):
 // open a 16-bit TIFF, render through the mock chain, drag the generated red printer-light slider +4 points
 // (preview during the drag, one apply on release), undo, then an agent proposal in ask mode that is approved.
 // Changed deliberately in the migration: the drag starts with a pointerdown (studio-kit's slider commits a value
@@ -32,7 +32,7 @@ function near(a: number[] | null, b: number[], tol = 1e-4): void {
 }
 
 async function open(page: Page): Promise<void> {
-  await page.goto('/?engine=mock&variant=lab&nosw&fresh');
+  await page.goto('/?engine=mock&layout=lab&nosw&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
   await opened(page);

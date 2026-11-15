@@ -1,4 +1,4 @@
-// CHB-021 stages 4–5 through commands on the booted 'looks' variant (MockEngine, six M1-derived frames): user apply
+// CHB-021 stages 4–5 through commands on the booted 'looks' layout (MockEngine, six M1-derived frames): user apply
 // as one batch (one tx + LoggedMutation.batch per frame, one global undo), the roll plan with partial approval,
 // E_STALE and Apply anyway (recomputed), the agent's cb.looks.apply from a real DslSession coalesced into one card,
 // snapshot restore, compare sources, survey tiles = main view node ids, copy/paste/sync, presets round trip.
@@ -9,9 +9,9 @@ import { m1Codes, M1, MockEngine } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import { manualClock } from '@chromobench/shell/testing';
 import { DslSession } from '@chromobench/dsl';
-import { buildVariant, createStudio, defineVariant, memoryKV } from '../../src/index.ts';
+import { buildLayout, createStudio, defineLayout, memoryKV } from '../../src/index.ts';
 import { agentBatches, looksView, warmPrint } from '../../kits/looks/src/index.ts';
-import { VARIANTS } from '../../variants/index.js';
+import { LAYOUTS } from '../../layouts/index.js';
 
 function frames(n: number): Uint8Array[] {
   const base = m1Codes();
@@ -26,7 +26,7 @@ function frames(n: number): Uint8Array[] {
 async function startedLooks(n = 6) {
   const clock = manualClock(1_000);
   const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), now: () => clock.now() });
-  const built = buildVariant((await VARIANTS.looks()).default);
+  const built = buildLayout((await LAYOUTS.looks()).default);
   const rt = await built.app.boot(studio.services({ clock }));
   studio.attach(rt);
   const ids: string[] = [];
@@ -39,11 +39,11 @@ async function startedLooks(n = 6) {
 }
 const lights = (s: Awaited<ReturnType<typeof startedLooks>>, f: string) => s.studio.frames.get(f)!.log.committed.print.lights.logH;
 
-describe('cb.kits.looks in variants', () => {
+describe('cb.kits.looks in layouts', () => {
   it('CB-L001: looks forms without the kit; CB-L002: an unknown look in a choice', () => {
-    const errs = (def: unknown) => buildVariant(def).app.diagnostics.list.filter((d) => d.level === 'error' && d.code.startsWith('CB-L')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('main').right(cb.kits['looks'].panels.amount())) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).module(ck.module('main').right(ck.panel.define('p', {}, cb.kits['looks'].views.choice(['warm-print', 'warm prnt'])))) }))).toEqual(['CB-L002']);
+    const errs = (def: unknown) => buildLayout(def).app.diagnostics.list.filter((d) => d.level === 'error' && d.code.startsWith('CB-L')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
+    expect(errs(defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('main').right(cb.kits['looks'].panels.amount())) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
+    expect(errs(defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).module(ck.module('main').right(ck.panel.define('p', {}, cb.kits['looks'].views.choice(['warm-print', 'warm prnt'])))) }))).toEqual(['CB-L002']);
   });
 });
 

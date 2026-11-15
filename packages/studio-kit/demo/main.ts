@@ -1,9 +1,9 @@
-// The studio-kit dev host: mounts a variant (?variant=classic|darkroom|simple|lab|tiny|roll|looks) on MockEngine with the M1
+// The studio-kit dev host: mounts a layout (?layout=classic|darkroom|simple|lab|tiny|roll|looks) on MockEngine with the M1
 // fixture TIFF plus a few synthetic frames of the same roll, the Canvas2D presenter and a KV in localStorage
-// (?fresh: in memory). window.chromobench is the test hook (CHB-009's surface: log, propose, … plus app, variant,
-// explain, run). An unknown variant shows the Build Report page with a did-you-mean.
+// (?fresh: in memory). window.chromobench is the test hook (CHB-009's surface: log, propose, … plus app, layout,
+// explain, run). An unknown layout shows the Build Report page with a did-you-mean.
 //
-//   pnpm --filter @chromobench/studio-kit demo        → http://localhost:4187/demo/?variant=classic
+//   pnpm --filter @chromobench/studio-kit demo        → http://localhost:4187/demo/?layout=classic
 //
 // The real host is apps/studio (IndexedDB KV, WebGPU presenter, engine choice, ingest, first print, export).
 
@@ -12,10 +12,10 @@ import { m1Codes, MockEngine, M1 } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import type { Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, localStorageKV, memoryKV, type Studio } from '../src/index.ts';
+import { buildLayout, createStudio, localStorageKV, memoryKV, type Studio } from '../src/index.ts';
 import { mountStudio } from '../src/dom/index.ts';
 import '../src/dom/studio-kit.css';
-import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '../variants/index.js';
+import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '../layouts/index.js';
 import { ROLL_RENDERERS } from '../kits/roll/src/dom.ts';
 import '../kits/roll/src/roll.css';
 import { LOOKS_RENDERERS } from '../kits/looks/src/dom.ts';
@@ -26,7 +26,7 @@ import fixtureUrl from '../../../fixtures/synthetic/m1-negative-96x64.tif?url';
 
 const q = new URLSearchParams(location.search);
 const root = document.getElementById('app')!;
-const id = q.get('variant') ?? DEFAULT_VARIANT;
+const id = q.get('layout') ?? DEFAULT_LAYOUT;
 
 function report(title: string, lines: string[]): void {
   root.innerHTML = '';
@@ -42,7 +42,7 @@ function report(title: string, lines: string[]): void {
   document.body.dataset['ready'] = 'report';
 }
 
-/** ?variant=roll: planted 135 frames in a holder (sprocket holes, veil), differently exposed, one frame with a
+/** ?layout=roll: planted 135 frames in a holder (sprocket holes, veil), differently exposed, one frame with a
  *  mixed base — what the roll kit's analysis is for (CHB-020) */
 function plantedRoll(): { name: string; bytes: Uint8Array }[] {
   return [0, 0.004, 0.008, 0.002, 0.04, 0.006].map((off, i) => {
@@ -83,14 +83,14 @@ function rollFrames(): { name: string; bytes: Uint8Array }[] {
 }
 
 async function main(): Promise<void> {
-  const load = VARIANTS[id as VariantId];
+  const load = LAYOUTS[id as LayoutId];
   if (!load) {
-    const guess = closest(id, Object.keys(VARIANTS));
-    report(`CB-K520 Unknown variant '${id}'`, [`?variant=${id} is not a registered variant.`, guess ? `Did you mean ?variant=${guess}?` : '', `Variants: ${Object.keys(VARIANTS).join(', ')}`]);
+    const guess = closest(id, Object.keys(LAYOUTS));
+    report(`CB-K520 Unknown layout '${id}'`, [`?layout=${id} is not a registered layout.`, guess ? `Did you mean ?layout=${guess}?` : '', `Layouts: ${Object.keys(LAYOUTS).join(', ')}`]);
     return;
   }
   const def = (await load()).default;
-  const built = buildVariant(def, { env: { dev: true } });
+  const built = buildLayout(def, { env: { dev: true } });
   const errors = built.app.diagnostics.list.filter(d => d.level === 'error');
   if (errors.length) {
     report(`Build Report: ${def.label}`, errors.map(d => `${d.code} ${d.message}${d.at ? `  ${d.at.file}:${d.at.line}` : ''}${d.fix ? `\n  fix: ${d.fix}` : ''}`));
@@ -126,16 +126,16 @@ async function main(): Promise<void> {
   hook(rt, studio, def.id);
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
-  document.body.dataset['variant'] = def.id;
+  document.body.dataset['layout'] = def.id;
 }
 
-function hook(rt: Runtime, studio: Studio, variant: string): void {
+function hook(rt: Runtime, studio: Studio, layout: string): void {
   const log = (f?: string) => studio.frames.get(f ?? studio.current ?? '')?.log ?? null;
   (window as unknown as { chromobench: Record<string, unknown> }).chromobench = {
     app: rt.app,
     rt,
     studio,
-    variant,
+    layout,
     explain: () => rt.explain({ live: true }),
     run: (cmd: string, ...a: unknown[]) => rt.runCommand(cmd, null, ...a),
     state: () => rt.store.peek([]),

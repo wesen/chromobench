@@ -257,8 +257,8 @@ The kit's `FINISHING_PATHS` grows by these paths once they exist; the engines (c
 ## Notes (no contract change)
 
 - `finishing.clarity` is implemented by the mock engine only; core and the GPU fail with `E_NOT_IMPLEMENTED` when
-  Clarity is not 0. The `classic` variant's Finish module therefore leaves the tones panel out (`tones: false`);
-  the `finish` variant shows it. For CHB-015.
+  Clarity is not 0. The `classic` layout's Finish module therefore leaves the tones panel out (`tones: false`);
+  the `finish` layout shows it. For CHB-015.
 - `scan.heal` (dust on the film) is a pass-through in the mock and missing in core and the GPU. The spot tool offers
   its Dust mode only when the engine lists `scan.heal` and the frame is a negative scan; the default mode is Heal.
 

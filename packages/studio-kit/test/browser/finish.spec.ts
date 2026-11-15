@@ -1,4 +1,4 @@
-// CHB-022 smoke in Chromium (studio-kit dev host, MockEngine): the Finish module of the 'finish' variant —
+// CHB-022 smoke in Chromium (studio-kit dev host, MockEngine): the Finish module of the 'finish' layout —
 // crop with a handle, straighten by dragging outside the crop, a spot by a click, undo three times.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -13,9 +13,9 @@ test.afterEach(() => {
 
 const hook = <T>(page: Page, f: string): Promise<T> => page.evaluate(`(() => { const cb = window.chromobench; return ${f}; })()`) as Promise<T>;
 
-for (const variant of ['finish', 'classic']) {
-  test(`${variant}: crop, straighten, remove a spot, undo three times`, async ({ page }) => {
-    await page.goto(`/demo/?variant=${variant}&fresh`);
+for (const layout of ['finish', 'classic']) {
+  test(`${layout}: crop, straighten, remove a spot, undo three times`, async ({ page }) => {
+    await page.goto(`/demo/?layout=${layout}&fresh`);
     await page.waitForFunction(() => document.body.dataset['ready'] === '1');
     await page.keyboard.press('f');
     const vp = page.locator('.ck-vp[data-rendered]').first();

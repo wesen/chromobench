@@ -1,4 +1,4 @@
-// CHB-020 smoke (guide §11): the 'roll' variant on MockEngine with six planted 135 frames in a holder — new roll
+// CHB-020 smoke (guide §11): the 'roll' layout on MockEngine with six planted 135 frames in a holder — new roll
 // (analysis + automatic first print), the contact sheet's print thumbnails, cull keys, a reference, the match
 // previewed on one card, approved, and one Mod+Z taking it off every frame.
 import { expect, test, type Page } from '@playwright/test';
@@ -24,7 +24,7 @@ async function select(page: Page, i: number): Promise<void> {
 const methods = (page: Page): Promise<string[]> => hook<string[]>(page, `cb.studio.frames.all().map(e => e.log.committed.print.lights.auto.method)`);
 
 test('roll: new roll, first print, cull, reference, match, approve, undo', async ({ page }) => {
-  await page.goto('/demo/?variant=roll&fresh');
+  await page.goto('/demo/?layout=roll&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await expect(page.locator('#roll-new')).toBeVisible();
 

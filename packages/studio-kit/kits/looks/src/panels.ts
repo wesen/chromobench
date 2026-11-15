@@ -146,7 +146,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       ),
       ck.view.grid((s: any) => surveyLooks(s), { id: o.id ?? 'looks-survey', cell: lookCell({ size: o.size ?? 220, survey: true }), key: (l: Look) => l.id, size: () => (o.size ?? 220) + 30, empty: 'Add looks to the survey (Survey ± in the library)' } as any),
     );
-  /** a one-row choice of looks for a simple variant: a button per look applies it at the current Amount */
+  /** a one-row choice of looks for a simple layout: a button per look applies it at the current Amount */
   const choiceRow = (ids: string[]) => ck.row({ class: 'cb-looks-choice' }, ...ids.map((id) => ck.ui.button({ label: lookById({}, id)?.name ?? id, run: ['looks.apply', id], small: true } as any)));
   return { panel, paramsModel, amountModel, diffModel, compareModel, cardModel, groupsModel, presetsModel, lookCell, library, survey, choiceRow };
 }

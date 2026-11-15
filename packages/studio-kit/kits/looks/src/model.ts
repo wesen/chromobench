@@ -23,7 +23,7 @@ export function createLooksModel(cb: Cb) {
   const extra = new Map<string, Look>();
   let syncGroups: SyncGroups = SYNC_GROUPS;
 
-  // ── the look registry: built-ins, looks a variant registers, the library's presets ──
+  // ── the look registry: built-ins, looks a layout registers, the library's presets ──
   const looksOf = (s: any): Look[] => {
     const presets = Object.values((s?.looks?.presets ?? {}) as Record<string, Preset>).map((p) => fromPreset(plain(p)));
     const seen = new Set<string>();

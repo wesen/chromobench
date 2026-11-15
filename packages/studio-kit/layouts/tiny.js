@@ -1,5 +1,5 @@
 // The smallest complete studio (guide §1): the roll on the left, the selected frame printed, the darkroom
-// controls and the frame's history on the right. A variant imports nothing; the host passes ck and cb.
+// controls and the frame's history on the right. A layout imports nothing; the host passes ck and cb.
 export default {
   id: 'tiny',
   label: 'Tiny',

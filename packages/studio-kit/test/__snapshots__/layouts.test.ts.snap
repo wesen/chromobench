@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > classic: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -309,7 +309,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 125 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 200
@@ -437,7 +437,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 81 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -693,7 +693,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 107 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -1002,7 +1002,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 84 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -1230,7 +1230,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 133 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core)
 module roll "Roll" key G
   left   dockcol  width 300
@@ -1413,7 +1413,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 99 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
@@ -1527,7 +1527,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 81 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 180
@@ -1613,7 +1613,7 @@ tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradien
 commands 81 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
+exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `
 {
   "classic": [],
   "darkroom": [],

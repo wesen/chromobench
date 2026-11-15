@@ -1,5 +1,5 @@
 // CHB-023: the photographer's file types through packages/ingest in the studio (since CHB-019 the shell-based
-// studio, default variant), on the GPU engine:
+// studio, default layout), on the GPU engine:
 // a deflate-compressed 16-bit RGB TIFF, a 16-bit PNG and a Bayer DNG that LibRaw decodes in its worker
 // (scan mode, CFA-binned). Each is a synthetic colour negative (orange mask, a grey ramp, a rebate
 // band on the left) so the first print has something to balance.

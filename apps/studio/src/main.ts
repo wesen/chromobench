@@ -1,9 +1,9 @@
 // The studio host (CHB-019 guide §7.1; CHB-023's real-engine wiring): boot the engine, open IndexedDB, build the
-// variant (?variant=, default classic), mount it with studio-kit's services plus the WebGPU presenter, the export
+// layout (?layout=, default classic), mount it with studio-kit's services plus the WebGPU presenter, the export
 // and the first print, and wire the host frame around it (files, export, status line) and the test/agent hook
 // window.chromobench.
 //
-// URL options: ?variant=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
+// URL options: ?layout=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
 // reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
@@ -12,7 +12,7 @@ import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, explainError, frameRef, memoryKV, sel, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
+import { buildLayout, createStudio, explainError, frameRef, memoryKV, sel, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
@@ -24,7 +24,7 @@ import { LOOKS_RENDERERS } from '@chromobench/studio-kit/kits/looks/dom';
 import '@chromobench/studio-kit/kits/looks/looks.css';
 import { chromogen, craftkit, resolveTheme, type Runtime as ShellRuntime } from '@chromobench/shell';
 import { themeHandle } from '@chromobench/shell/dom';
-import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants';
+import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/layouts';
 import type { BridgePageClient } from '@chromobench/agent';
 import { createStudioChat, type StudioChat } from './host/chat.ts';
 import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
@@ -163,11 +163,11 @@ async function startEngine(): Promise<Host> {
 }
 
 async function main(): Promise<void> {
-  const id = q.get('variant') ?? DEFAULT_VARIANT;
-  const load = VARIANTS[id as VariantId];
+  const id = q.get('layout') ?? DEFAULT_LAYOUT;
+  const load = LAYOUTS[id as LayoutId];
   if (!load) {
-    const guess = closest(id, Object.keys(VARIANTS));
-    report(`Unknown variant '${id}'`, [`?variant=${id} is not a registered variant.`, guess ? `Did you mean ?variant=${guess}?` : '', `Variants: ${Object.keys(VARIANTS).join(', ')}`]);
+    const guess = closest(id, Object.keys(LAYOUTS));
+    report(`Unknown layout '${id}'`, [`?layout=${id} is not a registered layout.`, guess ? `Did you mean ?layout=${guess}?` : '', `Layouts: ${Object.keys(LAYOUTS).join(', ')}`]);
     return;
   }
   status('starting the engine…');
@@ -184,10 +184,10 @@ async function main(): Promise<void> {
   engineEl.title = engineTip(host.label);
   engineEl.dataset['engine'] = host.label;
 
-  // the variant is built after setKnownValues, so the paper and stock menus list the data packs' stocks; View ▸
+  // the layout is built after setKnownValues, so the paper and stock menus list the data packs' stocks; View ▸
   // Layout builds another one in place (CHB-031 F24)
   let def = (await load()).default;
-  let built = buildVariant(def, { env: { params: Object.fromEntries(q), dev: q.has('dev') } });
+  let built = buildLayout(def, { env: { params: Object.fromEntries(q), dev: q.has('dev') } });
   const errors = built.app.diagnostics.list.filter((d) => d.level === 'error');
   if (errors.length) {
     report(`Build Report: ${def.label}`, errors.map((d) => `${d.code} ${d.message}${d.at ? `  ${d.at.file}:${d.at.line}` : ''}${d.fix ? `\n  fix: ${d.fix}` : ''}`));
@@ -596,7 +596,7 @@ async function main(): Promise<void> {
   document.body.append(fileInput, folderInput);
   let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
   if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
-  const layouts = (): { id: string; label: string }[] => Object.keys(VARIANTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
+  const layouts = (): { id: string; label: string }[] => Object.keys(LAYOUTS).map((v) => ({ id: v, label: v === def.id ? def.label : v[0]!.toUpperCase() + v.slice(1) }));
   const hostActions: StudioHost = {
     openFiles: async () => {
       if (!hasFilePicker()) return fileInput.click();
@@ -643,12 +643,12 @@ async function main(): Promise<void> {
    */
   let switching = false;
   async function switchLayout(v: string): Promise<void> {
-    const load2 = VARIANTS[v as VariantId];
+    const load2 = LAYOUTS[v as LayoutId];
     if (switching || !load2 || v === def.id) return;
     switching = true;
     try {
       const def2 = (await load2()).default;
-      const built2 = buildVariant(def2, { env: { params: { ...Object.fromEntries(q), variant: v }, dev: q.has('dev') } });
+      const built2 = buildLayout(def2, { env: { params: { ...Object.fromEntries(q), layout: v }, dev: q.has('dev') } });
       const errs = built2.app.diagnostics.list.filter((d) => d.level === 'error');
       if (errs.length) {
         rt.chrome.toast(`The layout ${def2.label} could not be built`, { kind: 'error', detail: `Technical: ${errs.map((d) => `${d.code} ${d.message}`).join('\n')}` });
@@ -668,7 +668,7 @@ async function main(): Promise<void> {
       hostActions.layout = def.id;
       hostActions.layouts = layouts();
       const u = new URL(location.href);
-      u.searchParams.set('variant', def.id);
+      u.searchParams.set('layout', def.id);
       try {
         mounted = await mountStudio(built.app, root, studio, mountOpts);
       } catch (e) {
@@ -684,7 +684,7 @@ async function main(): Promise<void> {
       await savedThumbs();
       dropOfflineSelection();
       history.replaceState(history.state, '', u.toString());
-      document.body.dataset['variant'] = def.id;
+      document.body.dataset['layout'] = def.id;
       for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
       const open = studio.frames.all().length;
       status(`layout: ${def.label}${open ? ` · ${open} frame${open > 1 ? 's' : ''} open` : ''}`);
@@ -775,7 +775,7 @@ async function main(): Promise<void> {
   status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';
-  document.body.dataset['variant'] = def.id;
+  document.body.dataset['layout'] = def.id;
 }
 
 /** A rendered thumbnail as a small JPEG data URL, drawn as the shell's thumb draws it (F5: kept in the catalog). */
@@ -816,12 +816,12 @@ function viewports(rt: Runtime): DomViewport[] {
 
 type ExportFn = (f: string, to: 'picker' | 'memory', o?: { format?: ExportFormat; space?: 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' }) => Promise<{ width: number; height: number; bytes: number; mime: string; name: string; bits: number } | null>;
 
-function hook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn, chat: StudioChat): void {
-  window.chromobench = makeHook(rt, studio, variant, host, exportFrame, chat);
+function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: StudioChat): void {
+  window.chromobench = makeHook(rt, studio, layout, host, exportFrame, chat);
 }
 
 /** The test and agent hook (CHB-009's surface on studio-kit; CHB-007/008 replace propose with a real DSL eval). */
-function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, exportFrame: ExportFn, chat: StudioChat) {
+function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: StudioChat) {
   const cur = (): string => studio.current ?? '';
   const vp = (): DomViewport | null => viewports(rt)[0] ?? null;
   const idle = async (): Promise<void> => {
@@ -842,7 +842,7 @@ function makeHook(rt: Runtime, studio: Studio, variant: string, host: Host, expo
     app: rt.app,
     rt,
     studio,
-    variant,
+    layout,
     get engine() {
       return studio.engine;
     },

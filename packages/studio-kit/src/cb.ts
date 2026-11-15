@@ -36,7 +36,7 @@ import { orientFrame } from '../kits/finish/src/geometry.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
 
-// variants' lines, not studio-kit's, are the call sites of their nodes
+// layouts' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
 
 /** cb.core's state slices, typed by CbState (the kits declare theirs: ROLL_STATE, FINISH_STATE, LOOKS_STATE) */
@@ -404,7 +404,7 @@ export function createCb(ck: Ck) {
     arrangements: { DARKROOM },
     kits: {} as Record<string, any>,
   };
-  // kits built on cb.core reach variants as cb.kits.<name> (CHB-020 roll; CHB-021 looks and CHB-022 finish later)
+  // kits built on cb.core reach layouts as cb.kits.<name> (CHB-020 roll; CHB-021 looks and CHB-022 finish later)
   cb.kits['roll'] = createRollKit(ck, cb as any);
   cb.kits['finish'] = createFinishKit(ck, cb as any);
   cb.kits['looks'] = createLooksKit(ck, cb as any);

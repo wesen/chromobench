@@ -7,8 +7,8 @@
 //   ƒ     helper     a pure function of the form's own value (format: v => v.toFixed(1)) or a mount function
 //   ρ     runtime    handlers, called with ctx (run: ctx => …, drag: (e, ctx, g) => …)
 //
-// A slot descriptor carries its binding time at runtime and its value type as a phantom type, so TS variants
-// get errors in the editor (a lambda in a β slot is a type error) and JS variants get the same checks at build.
+// A slot descriptor carries its binding time at runtime and its value type as a phantom type, so TS layouts
+// get errors in the editor (a lambda in a β slot is a type error) and JS layouts get the same checks at build.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Time = 'β' | 'τ' | 'bind' | 'θ' | 'ƒ' | 'ρ';

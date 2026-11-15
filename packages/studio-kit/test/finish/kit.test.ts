@@ -4,8 +4,8 @@
 // the passes (CB-F101, CB-F102) and the agent edits (the worked example as mutations).
 import { describe, expect, it } from 'vitest';
 import { defaultRecipe, type FrameRecipe } from '@chromobench/contract';
-import { buildVariant, defineVariant } from '../../src/index.ts';
-import { VARIANTS } from '../../variants/index.js';
+import { buildLayout, defineLayout } from '../../src/index.ts';
+import { LAYOUTS } from '../../layouts/index.js';
 import { cropProblem, edits, frameValid, nextSpotId, sensorTurn, spotsOf, toShown, toSource, type ProxyImage } from '../../kits/finish/src/index.ts';
 import { started } from '../helpers.ts';
 
@@ -25,7 +25,7 @@ function vp(nw: number, nh: number, image: ProxyImage | null = null): any {
 const ev = (x: number, y: number, o: Record<string, unknown> = {}) => ({ x, y, sx: x * S, sy: y * S, u: 0, v: 0, ix: x, iy: y, shift: false, alt: false, mod: false, pressure: 0.5, pen: false, button: 0, inside: true, detail: 1, ...o });
 
 async function finishStudio() {
-  const st = await started({ def: (await VARIANTS.finish()).default });
+  const st = await started({ def: (await LAYOUTS.finish()).default });
   const { rt, studio, f } = st;
   rt.runCommand('frame.select', null, f);
   const e = studio.frames.get(f)!;
@@ -212,13 +212,13 @@ describe('the spot tool (guide §5.5, §6.2)', () => {
 });
 
 describe('passes and agent edits (guide §9.4–9.5)', () => {
-  const warn = (def: unknown, code: string) => buildVariant(def).app.diagnostics.list.filter((d) => d.code === code).map((d) => `${d.level} ${d.fix ?? ''}`);
+  const warn = (def: unknown, code: string) => buildLayout(def).app.diagnostics.list.filter((d) => d.code === code).map((d) => `${d.level} ${d.fix ?? ''}`);
   it('CB-F101: a finishing control in a module labelled Print; CB-F102: finish tools without the kit', () => {
-    const bad = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('print', { label: 'Print' }).right(ck.panel.define('p', {}, cb.arg('finishing.values.clarity')))) });
+    const bad = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('print', { label: 'Print' }).right(ck.panel.define('p', {}, cb.arg('finishing.values.clarity')))) });
     expect(warn(bad, 'CB-F101')).toEqual(['warning move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module']);
-    const ok = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].panels.tones())) });
+    const ok = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].panels.tones())) });
     expect(warn(ok, 'CB-F101')).toEqual([]);
-    const nokit = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
+    const nokit = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
     expect(warn(nokit, 'CB-F102')).toEqual(['error .use(cb.kits.finish.kit) on the studio']);
   });
   it('the worked example as the agent writes it: edits.crop → 1568 × 1960 at (716, 20); cropProblem fixes a bad crop', () => {

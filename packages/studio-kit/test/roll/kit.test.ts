@@ -1,27 +1,27 @@
-// CHB-020 stages 3–6 headless: cb.kits.roll in a variant (build checks CB-R001..R003), and the whole flow
-// through commands on the booted 'roll' variant — new roll (analysis + automatic first print, one undo step),
+// CHB-020 stages 3–6 headless: cb.kits.roll in a layout (build checks CB-R001..R003), and the whole flow
+// through commands on the booted 'roll' layout — new roll (analysis + automatic first print, one undo step),
 // cull, reference, match previewed and coalesced, partial approval, E_STALE / Apply anyway, hand-edited frames
 // skipped, one global undo restoring every frame.
 import { describe, expect, it } from 'vitest';
 import { canonicalJSON } from '@chromobench/contract';
-import { buildVariant, defineVariant } from '../../src/index.ts';
+import { buildLayout, defineLayout } from '../../src/index.ts';
 import { contactRecipe, rollBadge, rollOf, type RollDoc } from '../../kits/roll/src/index.ts';
 import { startedRoll, type StartedRoll } from './fixtures.ts';
 
-const codes = (def: unknown, level: 'error' | 'warning') => buildVariant(def).app.diagnostics.list.filter((d) => d.level === level && d.code.startsWith('CB-R')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
+const codes = (def: unknown, level: 'error' | 'warning') => buildLayout(def).app.diagnostics.list.filter((d) => d.level === level && d.code.startsWith('CB-R')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
 
-describe('cb.kits.roll in variants (guide §5.5)', () => {
+describe('cb.kits.roll in layouts (guide §5.5)', () => {
   it('CB-R001: roll forms without the kit installed', () => {
-    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.kits['roll'].panels.setup())) });
+    const def = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.kits['roll'].panels.setup())) });
     expect(codes(def, 'error')).toEqual(['CB-R001 fix: .use(cb.kits.roll.kit) on the studio']);
   });
   it('CB-R002: a balance bar with no contact sheet or roll library (warning with a computed fix)', () => {
-    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(cb.kits['roll'].panels.balanceBar())) });
+    const def = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(cb.kits['roll'].panels.balanceBar())) });
     expect(codes(def, 'error')).toEqual([]);
     expect(codes(def, 'warning')).toEqual(['CB-R002 fix: add cb.kits.roll.views.contactSheet() to the centre, or cb.kits.roll.panels.library() to the left dock']);
   });
   it('CB-R003: rollScope on a path the roll does not share', () => {
-    const def = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(ck.panel.define('p', {}, cb.arg('print.lights.logH').rollScope('roll'), cb.arg('scan.stock').rollScope('ask')))) });
+    const def = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['roll'].kit).module(ck.module('m', { label: 'M' }).right(ck.panel.define('p', {}, cb.arg('print.lights.logH').rollScope('roll'), cb.arg('scan.stock').rollScope('ask')))) });
     const errs = codes(def, 'error');
     expect(errs.length).toBe(1);
     expect(errs[0]).toMatch(/^CB-R003 fix: cb.arg\('print.lights.logH'\)/);
