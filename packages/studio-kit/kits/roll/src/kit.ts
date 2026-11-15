@@ -70,7 +70,8 @@ export const rollOf = (s: any, id?: string | null): Roll | null => {
   const byFrame = f ? d.order.map((r) => d.rolls[r]!).find((r) => r?.frames.includes(f)) : null;
   return byFrame ?? (d.order.length ? d.rolls[d.order[0]!] ?? null : null);
 };
-export const rejectedOf = (s: any): Set<FrameId> => new Set(Object.values((s?.catalog?.frames ?? {}) as Record<string, CatalogFrame>).filter((f) => f.flag === 'reject').map((f) => f.id));
+// the ratings are the document tier (ratings.<frame>, CHB-037 P5b-2); the catalog says which frames exist
+export const rejectedOf = (s: any): Set<FrameId> => new Set(Object.keys(s?.catalog?.frames ?? {}).filter((id) => s?.ratings?.[id]?.flag === 'reject'));
 export const rollFrames = (s: any): CatalogFrame[] => {
   const r = rollOf(s);
   const cat = s?.catalog?.frames ?? {};
@@ -486,7 +487,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     ck.column(
       { class: 'cb-cell cb-roll-cell' },
       ck.view.thumb({ image: (s: any) => (contactRecipe(s, item.id) ? frameRef(item.id, contactRecipe(s, item.id)!).print() : null), max: o.size ?? 200, badge: (s: any) => rollBadge(s, item.id) } as any),
-      ck.text((s: any) => caption(s.catalog?.frames?.[item.id] ?? item), { dim: true }),
+      ck.text((s: any) => caption(cb.sel.entry(s, item.id) ?? item), { dim: true }),
     );
   const contactSheet = (o: { size?: number; keys?: Record<string, unknown>; columns?: number } = {}) =>
     ck.column(

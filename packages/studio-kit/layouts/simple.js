@@ -13,7 +13,7 @@ export default {
       .menus(...cb.menus.standard())
       .module(
         ck
-          .module('main', { label: 'Chromobench' })
+          .module('main', { label: 'Chromobench', stages: ['darkroom'] })
           .top(cb.bar.steps(['pick', 'print', 'save'], { labels: { pick: '① Pick', print: '② Print', save: '③ Save' } }))
           .center(
             ck.match(

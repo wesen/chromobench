@@ -282,62 +282,11 @@ export function withoutInert(doc: Document, ms: readonly Mutation[]): Mutation[]
   return out;
 }
 
-// ---- darkroom rows (the Exposures panel, the printing script) -------------------------------------------------
-
-export interface ExposureRow {
-  id: string;
-  op: string;
-  name: string;
-  enabled: boolean;
-  amount: number;
-  mask: string | null;
-  /** stops relative to the main exposure ('—' when given in seconds or for the main) */
-  change: string;
-  /** what a printer counts: '+4.97 s', '−1.91 s', '12.0 s' */
-  seconds: string;
-  /** seconds of light (withheld for a dodge) */
-  t: number;
-  filtration: string;
-  note: string;
-}
-
-const fmtCmy = (f: { c: number; m: number; y: number }): string => `${Number(f.c.toFixed(1))} / ${Number(f.m.toFixed(1))} / ${Number(f.y.toFixed(1))}`;
+// ---- the printing script (the Exposures panel's footer) -------------------------------------------------------
 
 /** Seconds the light law gives a darkroom contribution (termSeconds of the contract's light law), amount applied. */
 export function layerSeconds(l: Layer, tMain: number): number {
   return termSeconds(l.op, paramsOf(l), tMain) * l.amount;
-}
-
-/** The darkroom's exposures as rows: the main exposure, then every burn, dodge, flash, preflash, density mask and filter. */
-export function exposureRows(doc: Document, fmt: { seconds: (t: number) => string; stops: (s: number) => string }): ExposureRow[] {
-  const main = mainExposure(doc);
-  const rows: ExposureRow[] = [];
-  for (const p of entriesOf(doc, 'darkroom')) {
-    const e = p.entry;
-    if (e.kind !== 'layer') continue;
-    const pr = paramsOf(e);
-    const base = { id: p.id, op: e.op, name: e.name, enabled: e.enabled, amount: e.amount, mask: e.mask };
-    if (e.op === 'expose') {
-      rows.push({ ...base, change: '—', seconds: `${fmt.seconds(main.time_s)} s`, t: main.time_s, filtration: fmtCmy(main.filtration), note: '' });
-    } else if (e.op === 'burn' || e.op === 'dodge' || e.op === 'flash') {
-      const t = layerSeconds(e, main.time_s);
-      const stops = typeof pr['stops'] === 'number' ? (pr['stops'] as number) : null;
-      const change = stops === null ? '—' : `${fmt.stops(e.op === 'dodge' ? -stops : stops)} st`;
-      const seconds = e.op === 'dodge' ? `−${fmt.seconds(t)} s` : e.op === 'burn' ? `+${fmt.seconds(t)} s` : `${fmt.seconds(t)} s`;
-      const pack = pr['filtration'] as Cmy | undefined;
-      const filtration = e.op === 'dodge' || !pack ? "(main's)" : fmtCmy(pack);
-      const note = e.op === 'dodge' ? 'held back during main' : e.op === 'burn' ? (pack ? 'own filtration' : 'after main') : 'no negative';
-      rows.push({ ...base, change, seconds, t, filtration, note });
-    } else if (e.op === 'preflash') {
-      rows.push({ ...base, change: '—', seconds: `${Number(((pr['fraction'] as number) * 100).toFixed(1))} %`, t: 0, filtration: '—', note: 'of the grey card, before the main' });
-    } else if (e.op === 'densityMask') {
-      rows.push({ ...base, change: '—', seconds: '—', t: 0, filtration: '—', note: `${pr['polarity'] === 'same' ? 'unsharp' : 'contrast'} mask γ ${pr['gamma']} · ${pr['radius_um']} µm` });
-    } else if (e.op === 'filter') {
-      const l = pr['logH'] as number[];
-      rows.push({ ...base, change: '—', seconds: '—', t: 0, filtration: `${l.map((x) => (x / PT >= 0 ? '+' : '') + Number((x / PT).toFixed(1))).join(' / ')} pt`, note: p.id === LIGHTS ? 'printer lights' : 'filter' });
-    }
-  }
-  return rows;
 }
 
 /** "Expose 12.0 s, hold back face for 1.91 s; burn sky 4.97 s; flash 2.0 s." */
@@ -348,7 +297,8 @@ export function printingScript(doc: Document, fmt: { seconds: (t: number) => str
   for (const p of entriesOf(doc, 'darkroom')) {
     const e = p.entry;
     if (e.kind !== 'layer' || !e.enabled || e.amount === 0) continue;
-    const where = e.mask ?? 'the sheet';
+    // where: the mask's name in the library (what the photographer called it), else the whole sheet
+    const where = e.mask ? (Coll.get(doc.masks, e.mask)?.name ?? e.mask) : 'the sheet';
     if (e.op === 'dodge') head.push(`hold back ${where} for ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'burn') parts.push(`burn ${where} ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'flash') parts.push(`flash ${fmt.seconds(layerSeconds(e, main.time_s))} s`);

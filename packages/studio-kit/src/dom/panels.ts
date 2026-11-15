@@ -6,13 +6,13 @@
 import { canonicalJSON, Coll } from '@chromobench/values';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
-import { describe, historyRows, whyRows, WHO, type ModelLookup } from '../model/history.ts';
-import { exposureRows, printingScript, TIME_PATH } from '../model/doc.ts';
+import { describe, historyRows, jumpCrosses, whyRows, WHO, type ModelLookup } from '../model/history.ts';
+import { TIME_PATH } from '../model/doc.ts';
 import { modelAt } from '../kit/args.ts';
-import { formatSeconds, formatStops } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
 import { sel } from '../sel.ts';
+import { STACK_RENDERERS } from '../../kits/stack/src/dom.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
@@ -38,7 +38,6 @@ const frameDeps = (s: any, n: NodeData) => {
   return { f, r: f ? s.docs?.[f] : undefined, p: f ? sel.proposals(s, f) : undefined, v: sel.logVersion(s) };
 };
 const lookup: ModelLookup = (p, d) => modelAt(p, d) ?? undefined;
-const FMT = { seconds: formatSeconds, stops: formatStops };
 
 const history = list(
   'cb-history',
@@ -49,19 +48,35 @@ const history = list(
     const log = st.log;
     const rows = historyRows(log, v.f, lookup);
     const ol = h('ol', { class: 'cb-hist', id: 'history' });
+    const nameOf = (d: string): string => (d === 'main' ? 'the library' : (sel.entry(m.store.readonly(), d)?.name ?? d));
+    /** a jump: at once when it touches only this frame, else after the photographer confirms (inline, under the row) */
+    const jump = (li: HTMLElement, to: number): void => {
+      ol.querySelector('.cb-hist-confirm')?.remove();
+      const c = jumpCrosses(log, v.f, to, nameOf);
+      if (!c.count) return void m.rt.runCommand('history.jump', null, to);
+      const yes = btn('Jump anyway', 'cb-hist-yes is-primary');
+      const no = btn('Cancel', 'cb-hist-no');
+      const box = h('li', { class: 'cb-hist-confirm', role: 'alert' }, h('span', { text: `This also ${c.redo ? 'redoes' : 'undoes'} ${c.count} later ${c.count === 1 ? 'change' : 'changes'} on ${c.names.join(', ')}.` }), h('span', { class: 'cb-card-b' }, yes, no));
+      listen(m.scope, yes, 'click', () => m.rt.runCommand('history.jump', null, to));
+      listen(m.scope, no, 'click', () => box.remove());
+      li.after(box);
+    };
     // the opening: jumping there undoes every step of this frame (and the steps of other frames after them)
     const firstCursor = rows.length ? rows[0]!.cursor - 1 : log.cursor;
     const atStart = !rows.some(r => r.inEffect);
     const start = h('li', { class: ['cb-hist-i', atStart && 'is-cursor'], 'data-index': '0' }, h('span', { class: 'cb-who', text: WHO.auto }), ' Frame added');
-    listen(m.scope, start, 'click', () => m.rt.runCommand('history.jump', null, firstCursor));
+    listen(m.scope, start, 'click', () => jump(start, firstCursor));
     ol.append(start);
     let cursor: HTMLElement = start;
     const last = [...rows].reverse().find(r => r.inEffect);
     for (const g of rows) {
       const text = g.changes.map(c => c.text).join('; ');
+      // a step of this frame under later steps of other frames: a jump to it crosses them (marked, and it asks)
+      const under = g.inEffect ? jumpCrosses(log, v.f, g.cursor, nameOf) : { count: 0, names: [] as string[] };
+      const tip = [...g.changes.map(c => c.text), ...(under.count ? [`Later changes on ${under.names.join(', ')} sit on top of this step`] : [])].join('\n');
       // the whole step in the tooltip, one change a line (a long row is cut with an ellipsis)
-      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g === last && 'is-cursor'], 'data-cursor': String(g.cursor), title: g.changes.map(c => c.text).join('\n') }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', text || g.label);
-      listen(m.scope, li, 'click', () => m.rt.runCommand('history.jump', null, g.cursor));
+      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g === last && 'is-cursor', under.count > 0 && 'is-crossed'], 'data-cursor': String(g.cursor), title: tip }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', text || g.label);
+      listen(m.scope, li, 'click', () => jump(li, g.cursor));
       ol.append(li);
       if (g === last) cursor = li;
     }
@@ -160,31 +175,6 @@ const snapshots = list(
   same,
 );
 
-const exposures = list('cb-exposures', frameDeps, (el, v, m) => {
-  if (!v.r) return;
-  const t = h('table', { class: 'cb-tbl' });
-  t.append(h('tr', {}, ...['', 'kind', 'change', 'seconds', 'filtration', ''].map(x => h('th', { text: x }))));
-  for (const r of exposureRows(v.r, FMT)) {
-    const fixed = r.id === 'main';
-    const rm = fixed ? null : btn('×', 'exp-rm', { 'aria-label': `Remove ${r.id}` });
-    if (rm) listen(m.scope, rm, 'click', () => m.rt.runCommand('exposure.remove', null, r.id));
-    const on = fixed ? null : (h('input', { type: 'checkbox', 'aria-label': `${r.name} on` }) as HTMLInputElement);
-    if (on) {
-      on.checked = r.enabled;
-      listen(m.scope, on, 'change', () => m.rt.runCommand('exposure.toggle', null, r.id));
-    }
-    t.append(h('tr', { class: !r.enabled ? 'is-off' : null, 'data-id': r.id }, h('td', {}, on, ` ${r.id}`), h('td', { text: r.op === 'expose' ? 'main' : r.op }), h('td', { text: r.change }), h('td', { text: r.seconds }), h('td', { text: r.filtration }), h('td', {}, rm)));
-  }
-  el.append(t, h('p', { class: 'cb-script', text: printingScript(v.r, FMT) }));
-  const row = h('div', { class: 'cb-card-b' });
-  for (const [k, label] of [['dodge', 'dodge'], ['burn', 'burn'], ['flash', 'flash'], ['preflash', 'preflash'], ['densityMask', 'contrast mask']] as const) {
-    const b = btn(`+ ${label}`, `exp-add-${k}`);
-    listen(m.scope, b, 'click', () => m.rt.runCommand('exposure.add', null, k));
-    row.append(b);
-  }
-  el.append(row);
-});
-
 const journal = list('cb-journal', frameDeps, (el, v, m) => {
   const log = m.rt.store.log;
   if (!v.f || !log.has(v.f)) return;
@@ -220,7 +210,7 @@ const explain: Renderer = (_n, m) => {
 
 const metadata = list(
   'cb-metadata',
-  s => ({ f: sel.current(s), c: sel.current(s) ? s.catalog?.frames?.[sel.current(s)!] : undefined }),
+  s => ({ f: sel.current(s), c: sel.entry(s) }),
   (el, v, m) => {
     if (!v.c) return void el.append(h('p', { class: 'cb-empty', text: 'No frame selected' }));
     const e = studioOf(m).frames.get(v.f);
@@ -242,9 +232,9 @@ const metadata = list(
 
 const library = list(
   'cb-library',
-  s => ({ c: s.catalog, flag: s.view?.filter?.flag }),
+  s => ({ c: s.catalog, r: s.ratings, flag: s.view?.filter?.flag }),
   (el, v, m) => {
-    const fr = Object.values(v.c?.frames ?? {}) as any[];
+    const fr = Object.keys(v.c?.frames ?? {}).map(id => ({ ...v.c.frames[id], ...(v.r?.[id] ?? {}) })) as any[];
     const count = (pred: (x: any) => boolean) => fr.filter(pred).length;
     const ul = h('ul', { class: 'cb-list' });
     for (const [label, flag, n] of [
@@ -377,7 +367,6 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.approvals': approvals,
   'cb.why': why,
   'cb.snapshots': snapshots,
-  'cb.exposures': exposures,
   'cb.journal': journal,
   'cb.nodes': nodes,
   'cb.explain': explain,
@@ -390,4 +379,6 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.readout': readout,
   'cb.ribbon': ribbon,
   'cb.filter': filter,
+  // the stack kit is in every studio (cb.studio installs it)
+  ...STACK_RENDERERS,
 };

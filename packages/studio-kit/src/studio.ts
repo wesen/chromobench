@@ -25,7 +25,7 @@ import { explainError } from './kit/messages.ts';
 import { DOCS, linkDataOf, linksOf, withEnlargerMode, type EnlargerMode, type LinkData } from './model/doc.ts';
 import { describe, type Change, type ModelLookup } from './model/history.ts';
 import { modelAt } from './kit/args.ts';
-import type { CatalogFrame } from './sel.ts';
+import type { CatalogEntry as CatalogFrame } from './sel.ts';
 
 /** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
 export const frameName = (f: Pick<FrameEntry, 'name' | 'strip'>): string => (f.strip ? `${f.name} · ${f.strip.index}/${f.strip.of}` : f.name);
@@ -398,7 +398,7 @@ export class Studio {
     const cat = st.peek(['catalog']) as { frames: Record<string, CatalogFrame>; order: string[] } | undefined;
     const had = cat?.frames?.[f.id];
     const entry: CatalogFrame | null = !had
-      ? { id: f.id, sha256: f.sha, name: frameName(f), flag: null, stars: 0, label: null, keywords: [], kind: asOf(f.kind), ...(f.strip ? { file: f.name } : {}) }
+      ? { id: f.id, sha256: f.sha, name: frameName(f), kind: asOf(f.kind), ...(f.strip ? { file: f.name } : {}) }
       // re-opened in the other mode: the catalog says how it is open
       : had.kind !== asOf(f.kind) || had.sha256 !== f.sha ? { ...had, sha256: f.sha, kind: asOf(f.kind) } : null;
     const order = (cat?.order ?? []).includes(f.id) ? null : [...(cat?.order ?? []), f.id];

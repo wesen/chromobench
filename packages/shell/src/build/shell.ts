@@ -58,6 +58,8 @@ export interface ModuleProps<S = any> {
   onEnter?: KeyTarget;
   /** Esc tries this first (return false to let the shell continue) */
   onEscape?: KeyTarget;
+  /** the editing stages the module shows (a kit's policy pass checks them: studio-kit's stage policy) */
+  stages?: readonly string[];
 }
 
 export interface ModuleValue<S = any> extends Built<ModuleDef<S>> {
@@ -77,6 +79,8 @@ export interface ModuleValue<S = any> extends Built<ModuleDef<S>> {
   txOpts(f: ((s: S) => TxOpts) | TxOpts): ModuleValue<S>;
   onEnter(f: KeyTarget): ModuleValue<S>;
   onEscape(f: KeyTarget): ModuleValue<S>;
+  /** the editing stages the module shows (replaces the declaration; documents a module that mixes stages) */
+  stages(...names: string[]): ModuleValue<S>;
   [fragment: string]: unknown;
 }
 
@@ -102,6 +106,7 @@ export const moduleMods = {
   txOpts: field('txOpts'),
   onEnter: field('onEnter'),
   onEscape: field('onEscape'),
+  stages: (...names: string[]): MM => modifier<ModuleDef>('stages', d => ({ ...d, stages: Object.freeze([...names]) }), names),
 };
 
 export function moduleKind(fragments: () => readonly Fragment[]): BuilderKind<ModuleDef, ModuleValue> {
@@ -124,6 +129,7 @@ export const moduleData = (id: string, props: ModuleProps, at: CallSite | null):
   ...(props.txOpts !== undefined ? { txOpts: props.txOpts } : {}),
   ...(props.onEnter !== undefined ? { onEnter: props.onEnter } : {}),
   ...(props.onEscape !== undefined ? { onEscape: props.onEscape } : {}),
+  ...(props.stages !== undefined ? { stages: Object.freeze([...props.stages]) } : {}),
 });
 
 // ── the shell ─────────────────────────────────────────────────────────────

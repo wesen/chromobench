@@ -26,8 +26,6 @@ export const FINISH_STATE: { finish: FinishView } = {
 
 /** The print-stage clarity layer's id (created on first use). */
 export const CLARITY = 'clarity';
-/** Paths the finishing panel offers: the clarity layer's arguments (a print-stage layer, after the print). */
-export const FINISHING_PATHS = [`${CLARITY}.params.strength`, `${CLARITY}.params.radius_mm`] as const;
 
 /** A spot as stored in a heal or clone layer (document px). */
 export interface HealSpotData { x: number; y: number; r: number; src: Pt; feather: number; opacity: number }

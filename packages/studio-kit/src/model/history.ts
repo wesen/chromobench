@@ -290,3 +290,16 @@ function short(v: unknown): string {
 }
 
 export { getPath };
+
+/**
+ * What a jump of the log's one cursor to `to` crosses besides frame f: the other documents' steps it undoes (or
+ * redoes) on the way, with their names. One cursor serves every frame (P4), so a jump back on this frame also
+ * takes back later changes on other frames: the History panel says so before it does it.
+ */
+export function jumpCrosses(log: Log, f: string, to: number, nameOf: (doc: string) => string): { count: number; names: string[]; redo: boolean } {
+  const redo = to > log.cursor;
+  const [a, b] = redo ? [log.cursor, to] : [to, log.cursor];
+  const others = log.steps.slice(a, b).filter(st => log.docsOf(st).some(d => d !== f));
+  const names = [...new Set(others.flatMap(st => log.docsOf(st).filter(d => d !== f)).map(nameOf))];
+  return { count: others.length, names, redo };
+}

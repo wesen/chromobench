@@ -9,7 +9,7 @@
 //   cb.arg / cb.viewer    a control from ArgSpec; the viewer      cb.panels.*   history, approvals, why, snapshots, …
 //   cb.modules.*          library, print                          cb.views.*    grid, strip, loupe, compare, survey, ring
 //   cb.menus.*            file … help, standard()                 cb.keys.*     cull, libraryModes, views, darkroom
-//   cb.kits.*             roll, finish, looks, chat: each { kit, panels, views, modules, menus, keys, sel, lib, … }
+//   cb.kits.*             roll, finish, looks, chat, stack: each { kit, panels, views, modules, menus, keys, sel, lib, … }
 //   cb.cell.frame         a θ cell: a print thumbnail (bg lane, cached by node id) + name, flag, stars
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -32,19 +32,22 @@ import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
+import { createStackKit } from '../kits/stack/src/kit.ts';
+import { MASK_TOOLS } from '../kits/stack/src/commands.ts';
 
 // layouts' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
 
 /** cb.core's state slices, typed by CbState (the kits declare theirs: ROLL_STATE, FINISH_STATE, LOOKS_STATE) */
-export const CORE_STATE: Pick<CbState, 'catalog' | 'snapshots' | 'view' | 'ui' | 'prefs'> = {
+export const CORE_STATE: Pick<CbState, 'catalog' | 'ratings' | 'snapshots' | 'view' | 'ui' | 'prefs'> = {
   catalog: { frames: {}, order: [] },
+  ratings: {},
   snapshots: {},
   view: { mode: 'grid', view: 'print', compare: 'off', split: 0.5, step: 'pick', filter: { text: '', flag: null }, thumbSize: 150, vp: {} },
   ui: {
     selection: { ids: [], primary: null, anchor: null },
     tool: null,
-    toolOptions: { 'test-strip': { vary: 'time', step: 1 / 3, count: 5 }, 'ring-around': { step: 4 }, 'mask-brush': { radius: 6 } },
+    toolOptions: { 'test-strip': { vary: 'time', step: 1 / 3, count: 5 }, 'ring-around': { step: 4 } },
     focusPath: null,
     probe: null,
     showProposal: null,
@@ -113,6 +116,8 @@ export function createCb(ck: Ck) {
     .version('1')
     .state('catalog', { init: CORE_STATE.catalog })
     .state('snapshots', { init: CORE_STATE.snapshots })
+    // the ratings are the document tier (one undo step each); the library's membership is the view tier
+    .state('ratings', { init: CORE_STATE.ratings })
     // a frame's document: docs.<frame> is the frame's document in the log (the Studio opens it); a binding under
     // it names the document's tree (stages.darkroom.stack.items.main.params.time_s)
     .mount(DOCS, {
@@ -217,7 +222,7 @@ export function createCb(ck: Ck) {
         max: o.size === 'large' ? 320 : 160,
         badge: (s: any) => badgeOf(s, item.id),
       } as any),
-      ck.text((s: any) => cellCaption(s.catalog?.frames?.[item.id] ?? item), { dim: true }),
+      ck.text((s: any) => cellCaption(sel.entry(s, item.id) ?? item), { dim: true }),
     );
   const EMPTY = 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here';
   const LIBRARY_KEYS = { Delete: 'frame.remove', Backspace: 'frame.remove' };
@@ -295,7 +300,9 @@ export function createCb(ck: Ck) {
           transient: ['vp'],
           ...opts['state'] as object,
         } as any)
-        .use(core),
+        .use(core)
+        // every studio has the stack kit: the darkroom's exposures are its view of the darkroom stage
+        .use(cb.kits['stack'].kit),
     arg,
     viewer,
     /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
@@ -321,7 +328,6 @@ export function createCb(ck: Ck) {
       approvals: panel('cb.approvals', 'approvals', 'Agent proposals'),
       why: panel('cb.why', 'why', 'Why'),
       snapshots: panel('cb.snapshots', 'snapshots', 'Snapshots'),
-      exposures: panel('cb.exposures', 'exposures', 'Exposures'),
       journal: panel('cb.journal', 'journal', 'Journal'),
       nodes: panel('cb.nodes', 'nodes', 'Nodes'),
       explain: panel('cb.explain', 'explain', 'Explain'),
@@ -362,18 +368,18 @@ export function createCb(ck: Ck) {
        *  tools, densitometer, darkroom controls, exposures, approvals right (o.extraRight adds panels below) */
       print: (o: { id?: string; extraRight?: unknown[] } = {}) =>
         ck
-          .module(o.id ?? 'print', { label: 'Print', key: 'D' })
+          .module(o.id ?? 'print', { label: 'Print', key: 'D', stages: ['darkroom'] })
           .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-print' }), cb.panels.snapshots(), cb.panels.history()))
           .center(
             viewer((s: any) => sel.frame(s)?.print() ?? null, {
               id: 'main',
               views: true,
               compare: true,
-              tools: ['probe', 'test-strip', 'ring-around', 'mask-ellipse', 'mask-gradient', 'mask-brush'],
+              tools: ['probe', 'test-strip', 'ring-around', ...MASK_TOOLS],
               hud: cb.hud.readout(),
             }),
           )
-          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.panels.exposures(), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
+          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.kits['stack'].panels.exposures(), cb.kits['stack'].panels.params({ id: 'layer-params-print' }), cb.kits['stack'].panels.masks({ id: 'layer-masks-print' }), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
           .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-print' })))
           .keys({ ...cb.keys.views, ...cb.keys.darkroom }),
     },
@@ -390,13 +396,15 @@ export function createCb(ck: Ck) {
       frame: () =>
         ck.menu('Frame', [
           'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.rotateLeft', 'frame.rotateRight', 'frame.flip', '-', 'frame.reopenAsPhoto', 'frame.reopenAsNegative', 'frame.remove',
-          '-', 'frame.next', 'frame.previous', '-', 'snapshot.new', 'probe.pin', 'exposure.add', 'print.applyToSelection',
+          '-', 'frame.next', 'frame.previous', '-', 'snapshot.new', 'probe.pin', 'print.applyToSelection',
         ]),
       view: () => ck.menu('View', ['view.beforeAfter', 'view.sideBySide', '-', 'view.fit', 'view.actual', 'view.zoomIn', 'view.zoomOut', '-', 'view.layout', 'app.theme']),
       window: () => ck.menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'workspace.reset']),
       help: () => ck.menu('Help', ['app.shortcuts', 'app.diagnostics']),
-      /** File, Edit, Frame, View, Window, Help */
-      standard: () => [cb.menus.file(), cb.menus.edit(), cb.menus.frame(), cb.menus.view(), cb.menus.window(), cb.menus.help()],
+      /** the stack kit's Layer menu (add from the catalogue, duplicate, delete, group, order, masks) */
+      layer: () => cb.kits['stack'].menus.layer(),
+      /** File, Edit, Frame, Layer, View, Window, Help */
+      standard: () => [cb.menus.file(), cb.menus.edit(), cb.menus.frame(), cb.menus.layer(), cb.menus.view(), cb.menus.window(), cb.menus.help()],
     },
     ring: { tiles: ringTiles },
     arrangements: { DARKROOM },
@@ -407,6 +415,8 @@ export function createCb(ck: Ck) {
   cb.kits['finish'] = createFinishKit(ck, cb as any);
   cb.kits['looks'] = createLooksKit(ck, cb as any);
   cb.kits['chat'] = createChatKit(ck, cb as any); // CHB-008: the assistant chat
+  // CHB-035 §33: one stack kit for every stage (layers, params, masks; the darkroom's exposures and enlarger views)
+  cb.kits['stack'] = createStackKit(ck, cb as any);
   // the kits' fragment methods (cb.arg(…).pad(), .testStrip(), .rollScope()) on the nodes layouts build with this ck
   ck.extend(core, ...Object.values(cb.kits).map(k => k.kit));
   return cb;

@@ -1,0 +1,76 @@
+/* cb.kits.stack: the one row, the one amount control, the one mask chip, the one provenance chip, on the shell's
+   tokens (no literal colours: tools/scripts/check-colours.ts). Every stage's stack looks the same: a Lightroom-like
+   row of on/off, name and what it does, chips on the right, a slim amount track under it. */
+
+.cb-stack { outline: none; }
+.cb-stack-law { margin: 2px 10px 4px; font-size: 11px; }
+.cb-stack-rows { display: flex; flex-direction: column; }
+.cb-stack-cell { padding-left: calc(var(--depth, 0) * 14px); }
+.cb-stack-row { display: flex; flex-direction: column; gap: 1px; padding: 3px 8px 4px 6px; border-left: 2px solid transparent; cursor: default; }
+.cb-stack-row:hover { background: var(--hover); }
+.cb-stack-row.is-sel { background: var(--sel); border-left-color: var(--accent); }
+.cb-stack-row.is-off .cb-stack-text, .cb-stack-row.is-off .cb-stack-amount { opacity: .45; }
+.cb-stack-row.is-group > .cb-stack-line:first-child .cb-stack-name { font-weight: 600; }
+.cb-stack-row.is-dragging { opacity: .5; }
+.cb-stack-row.is-drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.cb-stack-row.is-drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.cb-stack-row.is-drop-into { outline: 1px dashed var(--accent); outline-offset: -2px; }
+.cb-stack-line { display: flex; align-items: center; gap: 6px; min-height: 20px; }
+.cb-stack-line.is-controls { padding-left: 22px; }
+.cb-stack-on { margin: 0; flex: none; }
+.cb-stack-tw { flex: none; width: 14px; height: 16px; padding: 0; border: 0; background: transparent; color: var(--text3); font-size: 10px; }
+.cb-stack-tw[hidden] { display: none; }
+.cb-stack-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.cb-stack-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-stack-detail { color: var(--text3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.cb-stack-rename { flex: 1; height: 18px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--accent); border-radius: var(--radius, 2px); padding: 0 3px; }
+.cb-stack-blend { height: 20px; max-width: 8.5em; background: var(--field); color: var(--text); border: 1px solid var(--line2); border-radius: var(--radius, 3px); font: inherit; font-size: 11px; }
+.cb-stack-blend[hidden] { display: none; }
+
+/* the chips: the mask the entry uses, who last changed it */
+.cb-stack-chips { display: flex; gap: 4px; flex: none; }
+.cb-stack-chip { height: 18px; line-height: 16px; padding: 0 6px; border: 1px solid var(--line2); border-radius: 9px; background: var(--panel2); color: var(--text2); font: inherit; font-size: 11px; white-space: nowrap; max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+button.cb-stack-chip { cursor: pointer; }
+button.cb-stack-chip:hover { border-color: var(--accent); color: var(--text); }
+.cb-stack-mask.is-empty { border-style: dashed; color: var(--text3); background: transparent; }
+.cb-stack-prov[hidden] { display: none; }
+.cb-stack-prov.is-user { color: var(--text3); background: transparent; border-color: transparent; }
+.cb-stack-prov.is-agent { background: var(--pending); color: var(--onpending); border-color: var(--pending); }
+.cb-stack-prov.is-auto { color: var(--text2); border-style: dotted; }
+
+/* the one number control (amount, mask settings, arguments without ui hints) */
+.cb-stack-num { display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 1px 10px; }
+.cb-stack-row .cb-stack-num, .cb-stack-comp .cb-stack-num { padding: 0; }
+.cb-stack-num[hidden] { display: none; }
+.cb-stack-num-l { color: var(--text2); min-width: 4.5em; white-space: nowrap; }
+.cb-stack-num-l:empty { display: none; }
+.cb-stack-num .cb-num { width: 4.5em; }
+.cb-stack-amount { flex: 1; }
+.cb-stack-amount.is-compact .cb-num { width: 3.8em; font-size: 11px; color: var(--text2); }
+
+.cb-stack-foot { display: flex; gap: 6px; padding: 4px 10px 6px; }
+.cb-stack-foot[hidden] { display: none; }
+.cb-stack.is-compact .cb-stack-row { padding-top: 1px; padding-bottom: 2px; }
+.cb-stack.is-compact .cb-stack-law { display: none; }
+/* a specialised row: the standard row with the entry's own controls under it (the Enlarger's main exposure) */
+.cb-stack-main > .cb-arg { padding-left: 30px; padding-right: 10px; }
+
+/* the parameters and the mask of the selected entry */
+.cb-stack-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
+.cb-stack-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-stack-head .cb-stack-prov { margin-left: auto; }
+.cb-stack-doc { margin: 0 10px 4px; font-size: 11px; }
+.cb-stack-args > .cb-arg, .cb-stack-adv > .cb-arg { padding-left: 10px; padding-right: 10px; }
+.cb-stack-adv { margin: 2px 0; }
+.cb-stack-adv > summary { padding: 2px 10px; color: var(--text2); cursor: pointer; }
+.cb-stack-cmds, .cb-stack-mtools { flex-wrap: wrap; gap: 4px; padding: 4px 10px; }
+.cb-stack-combine { display: flex; gap: 0; }
+.cb-stack-combine .is-on { background: var(--accent); color: var(--onaccent); }
+.cb-stack-comps { list-style: none; margin: 2px 0; padding: 0; }
+.cb-stack-comp { margin: 2px 10px; padding: 3px 6px; border: 1px solid var(--line); border-radius: var(--radius, 3px); }
+.cb-stack-comp.is-off { opacity: .55; }
+.cb-stack-comp-rm { margin-left: auto; }
+.cb-stack-combine-sel { height: 20px; background: var(--field); color: var(--text); border: 1px solid var(--line2); border-radius: var(--radius, 3px); font: inherit; font-size: 11px; }
+
+/* a mask tool's gesture drawn on the print */
+.cb-stack-gesture { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }

@@ -36,19 +36,20 @@ spots before it left it.`;
 
 export function createFinishKit(ck: Ck, cb: Cb) {
   const F = createFinishContext();
+  /** the stack kit (cb.kits.stack): its finish view and the layer panel (created after this kit in cb) */
+  const stack = () => (cb as any).kits['stack'];
   const { frameOf, remember, needFrame } = F;
   const T = createFinishTools(F);
   const { canvasOf, cropDown, cropDrag, cropUp, cropOverlay, spotDown, spotDrag, spotUp, spotOverlay } = T;
 
-  // ── passes (guide §9.5): CB-F101 on the kit; CB-F102 (finish tools without the kit) is run by cb.core's cb.kits ──
-  const { labelPass, missing } = finishPasses(ck);
+  // ── passes (guide §9.5): CB-F102 (finish tools without the kit) is run by cb.core's cb.kits ──
+  const { missing } = finishPasses();
 
   const kit = ck
     .kit('cb.finish')
     .version('1')
     .requires('cb.core')
     .state('finish', { init: FINISH_STATE.finish, view: true })
-    .passes(labelPass)
     .tools({
       crop: {
         label: 'Crop & Straighten',
@@ -86,30 +87,31 @@ export function createFinishKit(ck: Ck, cb: Cb) {
     .docs(FINISH_DOCS);
 
   const P = createFinishPanels(ck, cb, F);
-  const { shown, viewer, cropPanel, retouchPanel, tonesPanel } = P;
+  const { shown, viewer, cropPanel, retouchPanel } = P;
 
   const keys = {
     /** the finish module's keys: X swaps the aspect, Delete removes the selected spot, [ ] size the brush */
     finish: { X: 'crop.swap', Enter: 'crop.done', Delete: 'spot.delete', Backspace: 'spot.delete', '[': ['spot.size', -1], ']': ['spot.size', 1], 'Shift+[': 'spot.prev', 'Shift+]': 'spot.next', '\\': 'finish.toggle' } as Record<string, any>,
   };
-  /** the Finish module (CHB-022 guide §9.1): crop and straighten (R), spot heal and clone (Q), the finishing tones, on the
-   *  finished print; tones: false leaves the tones out (their ops run on the mock engine only until CHB-015 lands them) */
-  const finishModule = (o: { id?: string; tones?: boolean; extraRight?: unknown[] } = {}) =>
+  /** the Finish module (CHB-022 guide §9.1): crop and straighten (R), spot heal and clone (Q) on the finished print;
+   *  the finish view of the stack kit (retouch and clarity on the print stack, the dust on the negative) and the
+   *  selected layer's settings. It shows the scan stage (dust) and the print stage, and says so. */
+  const finishModule = (o: { id?: string; extraRight?: unknown[] } = {}) =>
     ck
-      .module(o.id ?? 'finish', { label: 'Finish', key: 'F' })
+      .module(o.id ?? 'finish', { label: 'Finish', key: 'F', stages: ['scan', 'print'] })
       .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-finish' }), cb.panels.history({ id: 'history-finish' })))
       .center(viewer({ hud: cb.hud.readout() }))
-      .right(ck.dock.column({ width: 300 }, cropPanel(), retouchPanel(), ...(o.tones === false ? [] : [tonesPanel()]), ...((o.extraRight ?? []) as any[])))
+      .right(ck.dock.column({ width: 300 }, cropPanel(), retouchPanel(), stack().panels.finish(), stack().panels.layers('scan', { id: 'finish-dust', title: 'Dust (on the negative)', add: false, empty: 'A photo has no negative: dust is healed on a scan.' }), stack().panels.params({ id: 'layer-params-finish' }), ...((o.extraRight ?? []) as any[])))
       .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-finish' })))
       .keys(keys.finish);
 
   return ck.product(kit, {
-    panels: { crop: cropPanel, retouch: retouchPanel, tones: tonesPanel },
+    panels: { crop: cropPanel, retouch: retouchPanel },
     views: { viewer },
     modules: { finish: finishModule },
     menus: {
       /** the Finish menu: every finish command, so each is also in the palette and has its key shown */
-      finish: () => ck.menu('Finish', ['tool.crop', 'crop.reset', 'crop.swap', 'crop.lock', 'crop.fix', '-', 'orient.ccw', 'orient.cw', 'orient.flipH', 'orient.flipV', '-', 'tool.spot', 'spot.delete', 'spot.clear', 'spot.show', '-', 'finish.addClarity', 'finish.toggle', 'finish.resetTones']),
+      finish: () => ck.menu('Finish', ['tool.crop', 'crop.reset', 'crop.swap', 'crop.lock', 'crop.fix', '-', 'orient.ccw', 'orient.cw', 'orient.flipH', 'orient.flipV', '-', 'tool.spot', 'spot.delete', 'spot.clear', 'spot.show', '-', 'finish.toggle']),
     },
     keys,
     sel: { shown },

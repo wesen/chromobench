@@ -1,12 +1,12 @@
-// cb.kits.finish: the builder calls (split from kit.ts, CHB-032): the finish viewer and the crop, spot and tones
-// panels, built from ck.ui and cb.arg only.
+// cb.kits.finish: the builder calls (split from kit.ts, CHB-032): the finish viewer and the crop and spot panels,
+// built from ck.ui only (the spots and clarity are rows of the stack kit's finish view).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Document } from '@chromobench/contract';
 import type { Ck } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { frameRef, type ImageHandle } from '../../../src/handles.ts';
 import { ASPECTS } from './geometry.ts';
-import { type SpotMode, FINISHING_PATHS, type SpotRef, spotsOf, cropProblem, withoutFinishing } from './state.ts';
+import { type SpotMode, cropProblem, withoutFinishing } from './state.ts';
 import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 
@@ -56,22 +56,8 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.ui.slider({ min: 1, max: 200, bind: (s: any) => s.finish.spot.r, label: 'Size', step: 1, unit: 'px', decimals: 0 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.feather, label: 'Feather', step: 0.05, decimals: 2 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.opacity, label: 'Opacity', step: 0.05, decimals: 2 } as any),
-      ck.view.list((s: any) => spotsOf(s.docs?.[sel.current(s) ?? '']), {
-        id: 'finish-spots',
-        key: (x: SpotRef) => x.id,
-        row: (x: SpotRef) => ck.row({ class: 'cb-spot-row' },
-          ck.ui.button({ label: `${x.id} · ${x.mode} · r ${x.r}`, run: ['spot.select', x.id], small: true, quiet: true } as any),
-          ck.ui.button({ label: '✕', run: ['spot.delete', x.id], small: true, quiet: true } as any)),
-        empty: 'No spots: choose the tool (Q) and click a speck',
-      } as any),
       ck.row({ class: 'cb-finish-spot-cmds' }, ck.ui.button({ run: 'spot.delete', text: 'Delete', small: true }), ck.ui.button({ run: 'spot.clear', text: 'Clear all', small: true })),
       ck.text('Heal and clone are layers of the print (the Retouch group); Dust heals the negative of a scan (the Dust group).', { dim: true } as any),
     );
-  const tonesPanel = (o: { id?: string; title?: string; only?: string[] } = {}) =>
-    ck.panel.define(o.id ?? 'finish-tones', { title: o.title ?? 'Finishing (digital, after the print)' },
-      ck.text('Not darkroom controls: they change the finished print digitally.', { dim: true } as any),
-      ...FINISHING_PATHS.filter((p) => !o.only || o.only.some((x) => p.endsWith(x))).map((p) => cb.arg(p, { why: 'finishing, not darkroom' })),
-      ck.row({ class: 'cb-finish-tone-cmds' }, ck.ui.button({ run: 'finish.addClarity', text: '+ Clarity', small: true }), ck.ui.button({ run: 'finish.toggle', text: 'Before / after', small: true }), ck.ui.button({ run: 'finish.resetTones', text: 'Reset', small: true })),
-    );
-  return { shown, viewer, cropPanel, retouchPanel, tonesPanel };
+  return { shown, viewer, cropPanel, retouchPanel };
 }

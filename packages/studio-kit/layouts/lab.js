@@ -17,7 +17,7 @@ export default {
       .module(cb.kits.chat.modules.assistant())
       .module(
         ck
-          .module('lab', { label: 'Lab', key: 'L' })
+          .module('lab', { label: 'Lab', key: 'L', stages: ['darkroom'] })
           .left(ck.dock.column({ width: 280 }, cb.panels.controls('all', { title: 'All parameters' })))
           .center(cb.viewer(st => cb.sel.frame(st)?.print() ?? null, { id: 'lab', views: true, compare: true, tools: ['probe', 'test-strip', 'ring-around'], hud: cb.hud.readout() }))
           .right(ck.dock.column({ width: 320 }, cb.panels.densitometer({ id: 'densitometer-lab' }), cb.panels.history({ id: 'history-lab' }), cb.panels.approvals({ id: 'approvals-lab' }), cb.panels.journal(), cb.panels.nodes(), cb.panels.explain()))
