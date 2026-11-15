@@ -11,7 +11,7 @@ export default ck;
 
 // core
 export { Store, Draft, Writer, MAIN, PathIndex, strip, TxRefused } from './core/store.ts';
-export type { Write, TxOpts, WriteInfo, MountDecl, StoreOpts } from './core/store.ts';
+export type { Actor, Write, TxOpts, WriteInfo, MountDecl, StoreOpts } from './core/store.ts';
 export { Cell, Scope, Scheduler } from './core/cells.ts';
 export type { CellOpts, SchedulerStats } from './core/cells.ts';
 export { browserClock } from './core/clock.ts';
@@ -48,6 +48,7 @@ export type { UiIR, Kit, KitDef, Fragment, FragmentSpec, PassDef, PassCtx, IrSpe
 
 // app
 export { BuiltApp } from './app/built-app.ts';
+export { commandTable, controlsOf, paramNames, reachableCommands, type CommandRow, type ControlRow, type Reach } from './app/introspect.ts';
 export { Runtime } from './app/runtime.ts';
 export type { Services, Ctx, Explained, WriterOf, ViewportApi, Inspect } from './app/runtime.ts';
 export { RecordingChrome, resolveMenu, menuBar, paletteEntries, searchPalette } from './app/chrome.ts';

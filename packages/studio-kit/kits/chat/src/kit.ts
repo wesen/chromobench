@@ -15,7 +15,7 @@ import type { Cb } from '../../../src/cb.ts';
 
 export type ChatEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface ChatLook {
+export interface ChatShow {
   n: number;
   caption: string;
   mime: string;
@@ -37,7 +37,7 @@ export type ChatItemView =
   | { kind: 'assistant'; id: string; text: string; thinking: string; model?: string; fallback?: string }
   | {
       kind: 'step'; id: string; code: string; frame?: string; status: 'writing' | 'running' | 'waiting' | 'done' | 'error' | 'stopped' | 'not-run';
-      text?: string; looks: ChatLook[]; ms?: number; isError?: boolean; approval?: ChatApproval; applied?: { frame: string; seqs: number[] }; reverted?: boolean;
+      text?: string; shows: ChatShow[]; ms?: number; isError?: boolean; approval?: ChatApproval; applied?: { frame: string; seqs: number[] }; reverted?: boolean;
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string };
 

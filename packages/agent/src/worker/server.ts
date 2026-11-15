@@ -177,7 +177,7 @@ export function serveDsl(ep: Endpoint): () => void {
     history.submission = null;
     try {
       const result = await s.eval(m.req);
-      const transfer = [...new Set(result.looks.map((l) => l.image.bytes.buffer))].filter((b): b is ArrayBuffer => b instanceof ArrayBuffer);
+      const transfer = [...new Set(result.shows.map((l) => l.image.bytes.buffer))].filter((b): b is ArrayBuffer => b instanceof ArrayBuffer);
       send({ t: 'result', id: m.id, result, ...(history.submission ? { submission: history.submission } : {}) }, transfer);
     } catch (e) {
       send({ t: 'failed', id: m.id, error: toDiagnostic(e) });

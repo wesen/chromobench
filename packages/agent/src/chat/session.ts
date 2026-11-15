@@ -43,7 +43,7 @@ export interface ChatSessionOptions {
   maxSteps?: number;
 }
 
-export interface LookView {
+export interface ShowView {
   n: number;
   caption: string;
   mime: string;
@@ -74,7 +74,7 @@ export type ChatItem =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; text: string; thinking: string; model?: string; fallback?: string }
   | {
-      kind: 'step'; id: string; code: string; frame?: string; status: StepStatus; text?: string; looks: LookView[]; ms?: number;
+      kind: 'step'; id: string; code: string; frame?: string; status: StepStatus; text?: string; shows: ShowView[]; ms?: number;
       isError?: boolean; approval?: ApprovalView; applied?: { frame: string; seqs: number[] }; reverted?: boolean;
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string };
@@ -97,7 +97,7 @@ export type ChatEvent =
   | { t: 'thinking'; delta: string }
   | { t: 'step.code'; step: string; partial: string }
   | { t: 'step.started'; step: string; code: string }
-  | { t: 'step.done'; step: string; text: string; looks: LookView[]; ms: number; isError: boolean }
+  | { t: 'step.done'; step: string; text: string; shows: ShowView[]; ms: number; isError: boolean }
   | { t: 'approval'; step: string; pending: LogEntry[] }
   | { t: 'notice'; kind: 'fallback' | 'mode' | 'info'; detail: string }
   | { t: 'error'; kind: string; message: string }
@@ -292,7 +292,7 @@ export class ChatSession {
           },
           toolStart: (id) => {
             partial.set(id, '');
-            this.st.items.push({ kind: 'step', id, code: '', status: 'writing', looks: [] });
+            this.st.items.push({ kind: 'step', id, code: '', status: 'writing', shows: [] });
             this.changed();
           },
           toolInput: (id, json) => {
@@ -383,7 +383,7 @@ export class ChatSession {
   private async runStep(call: ToolUseBlock, signal: AbortSignal): Promise<ToolResultBlockParam> {
     let it = this.item<'step'>(call.id);
     if (!it) {
-      it = { kind: 'step', id: call.id, code: '', status: 'writing', looks: [] };
+      it = { kind: 'step', id: call.id, code: '', status: 'writing', shows: [] };
       this.st.items.push(it);
     }
     const input = call.input as { code?: unknown; frame?: unknown } | null;
@@ -406,7 +406,7 @@ export class ChatSession {
     const t0 = Date.now();
     const res = await this.host.evaluate({ code, ...(frame ? { frame } : {}) }, signal);
     it.ms = Date.now() - t0;
-    it.looks = res.looks.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, bytes: l.image.bytes, width: l.image.width, height: l.image.height, numbers: l.numbers }));
+    it.shows = res.shows.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, bytes: l.image.bytes, width: l.image.width, height: l.image.height, numbers: l.numbers }));
     it.text = res.yaml;
     it.isError = !!res.error;
     if (this.stopped && res.error?.code === 'E_CANCELLED') {
@@ -427,8 +427,8 @@ export class ChatSession {
       note = this.decisionNote(it, how);
     }
     it.status = this.stopped ? 'stopped' : res.error ? 'error' : 'done';
-    this.emit({ t: 'step.done', step: call.id, text: res.yaml, looks: it.looks, ms: it.ms, isError: !!res.error });
-    const images = res.looks.map((l) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: l.image.mime, data: toBase64(l.image.bytes) } }));
+    this.emit({ t: 'step.done', step: call.id, text: res.yaml, shows: it.shows, ms: it.ms, isError: !!res.error });
+    const images = res.shows.map((l) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: l.image.mime, data: toBase64(l.image.bytes) } }));
     this.st.imagesSent += images.length;
     return { type: 'tool_result', tool_use_id: call.id, ...(res.error ? { is_error: true } : {}), content: [text(res.yaml + note), ...images] };
   }

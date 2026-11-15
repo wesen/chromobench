@@ -13,7 +13,7 @@ import SYNC_VARIANT from '@jitl/quickjs-wasmfile-release-sync';
 import {
   ChromobenchError, Graph, LOG_RULES, canonicalJSON, diag, documentKind, nodeId, readField, sha256Hex, toDiagnostic as contractDiag,
   type AgentMode, type Box, type ContextBlock, type Diagnostic, type Document, type Engine, type EvalRequest, type EvalResult,
-  type ImageInfo, type Look, type NodeDef,
+  type ImageInfo, type NodeDef, type Show,
 } from '@chromobench/contract';
 import { equal, plan, transaction, tryTransaction, type Batch, type Edit, type Log, type LogEntry, type Mutation } from '@chromobench/values';
 import { describeMutation, touched } from './describe.ts';
@@ -422,19 +422,19 @@ export class DslSession {
     }
     const changed = outcome.ok ? [...new Set(edits.flatMap((e) => e.mutations.map(touched)))] : [];
     // images: at most `shows`, in creation order
-    const looks: Look[] = [];
+    const shows: Show[] = [];
     const reqs = this.host.shows;
     if (reqs.length > this.limits.shows) {
       const extra = reqs.slice(this.limits.shows);
-      warnings.push(diag('LOOKS', `${reqs.length} images were shown; only the first ${this.limits.shows} are delivered. Dropped: ${extra.map((l) => `image ${l.n}${l.line !== undefined ? ` (line ${l.line})` : ''}`).join(', ')}`));
+      warnings.push(diag('SHOWS', `${reqs.length} images were shown; only the first ${this.limits.shows} are delivered. Dropped: ${extra.map((l) => `image ${l.n}${l.line !== undefined ? ` (line ${l.line})` : ''}`).join(', ')}`));
     }
     const se = this.showEngine();
     for (const r of reqs.slice(0, this.limits.shows)) {
       try {
-        looks.push(await renderShow(se, r));
+        shows.push(await renderShow(se, r));
       } catch (e) {
         const d = contractDiag(e);
-        warnings.push(diag('LOOKS', `image ${r.n} could not be rendered: ${d.code} ${d.message}`));
+        warnings.push(diag('SHOWS', `image ${r.n} could not be rendered: ${d.code} ${d.message}`));
       }
     }
     const context = this.context(frame, changed);
@@ -457,15 +457,15 @@ export class DslSession {
       ...(outcome.ok ? { value: outcome.value } : {}),
       ...(error ? { error } : {}),
       ...(errorWhere ? { errorWhere } : {}),
-      edits: editLines, shown: looks, console: consoleLines, warnings, context, cap: this.limits.yamlChars,
+      edits: editLines, shown: shows, console: consoleLines, warnings, context, cap: this.limits.yamlChars,
     });
     const ms = Math.round(performance.now() - t0);
     const allWarnings = cut ? [...warnings, diag('CUT', 'the returned value was cut')] : warnings;
     this.traces.push({
       evalId, ms, resultChars: yaml.length, cut, ops: { ...this.host.ops }, vocabulary: { ...this.host.vocabulary },
-      errors: error ? [error.code] : [], warnings: allWarnings.map((w) => w.code), shows: looks.length, edits: edits.length,
+      errors: error ? [error.code] : [], warnings: allWarnings.map((w) => w.code), shows: shows.length, edits: edits.length,
     });
-    return { yaml, looks, warnings: allWarnings, context, transactions, ...(error ? { error } : {}), trace: { ms, ops: { ...this.host.ops } } };
+    return { yaml, shows, warnings: allWarnings, context, transactions, ...(error ? { error } : {}), trace: { ms, ops: { ...this.host.ops } } };
   }
 
   /**

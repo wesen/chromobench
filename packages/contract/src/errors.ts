@@ -18,7 +18,7 @@ export interface Diagnostic {
 
 /**
  * The closed list of codes. Owners in comments. Codes starting with `W_` and the bare
- * upper-case words (RANGE, LOOKS, …) are warnings; `E_` codes and the JavaScript error names
+ * upper-case words (RANGE, SHOWS, …) are warnings; `E_` codes and the JavaScript error names
  * (SyntaxError, ReferenceError, TypeError, RangeError, Error; CHB-007, contract 0.2) are errors.
  * A ticket adds codes through CHB-002's change process (CONTRACT-DECISIONS.md).
  */
@@ -38,6 +38,9 @@ export const ERROR_CODES = {
   E_DOCUMENT: 'The document does not validate (format 3: stages, media, entries, masks, references).',
   E_MUTATION: 'A structural mutation is invalid (duplicate id, unknown id, position, cycle).',
   E_LINK: 'A link cannot be resolved (unknown roll, look or preset, or no resolver for its kind).',
+  // the agent's workbench (CHB-037 P6b)
+  E_WORKBENCH: 'The workbench refused: no workbench in this session, an unknown command or selector, or a command that failed.',
+  E_LAYOUT: 'An agent-written layout cannot be built (a lambda where a selector, path or command id belongs; an unknown builder; a build error).',
   E_BINDING: 'A binding is unknown, reads a cut that is not upstream of its stage, or lacks its measurement.',
   E_CUT: 'No such cut, or the document has none of that name (a scan cut of a camera file).',
   E_NO_SOURCE: 'source.open references a source the graph or engine has not opened.',
@@ -117,7 +120,7 @@ export const ERROR_CODES = {
   W_NO_REBATE: 'No rebate (film edge or blank film) was found.',
   W_NO_FILM: 'No film was found in the image.',
   W_VEIL_FROM_ROLL: "No holder on this frame: the roll's veil was subtracted instead.",
-  LOOKS: 'Too many looks; extra looks dropped.',
+  SHOWS: 'Too many images shown; extra images dropped.',
   CUT: 'Output truncated.',
   UNHANDLED: 'Unhandled promise rejection in the eval.',
   EDITS_DROPPED: 'Edits were dropped.',

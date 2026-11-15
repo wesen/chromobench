@@ -24,9 +24,9 @@ describe('DSL session in a worker', () => {
     const inPage = await direct.eval({ code: E1, frame: FRAME });
     expect(viaWorker.error).toBeUndefined();
     expect(viaWorker.yaml).toBe(inPage.yaml);
-    expect(viaWorker.looks).toHaveLength(1);
-    expect(viaWorker.looks[0]!.image.bytes).toBeInstanceOf(Uint8Array);
-    expect(viaWorker.looks[0]!.image.bytes.length).toBe(inPage.looks[0]!.image.bytes.length);
+    expect(viaWorker.shows).toHaveLength(1);
+    expect(viaWorker.shows[0]!.image.bytes).toBeInstanceOf(Uint8Array);
+    expect(viaWorker.shows[0]!.image.bytes.length).toBe(inPage.shows[0]!.image.bytes.length);
     expect(viaWorker.context).toEqual(inPage.context);
     direct.dispose();
     p.dsl.dispose();

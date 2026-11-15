@@ -99,7 +99,7 @@ const EMPTY_CONTEXT = (mode: AgentMode): ContextBlock => ({ mode, changed: [], p
 export function hostResult(error: Diagnostic, mode: AgentMode = 'ask', warnings: Diagnostic[] = []): EvalResult {
   const lines = [`error: ${error.code}`, `message: ${JSON.stringify(error.message)}`];
   if (error.hint) lines.push(`hint: ${JSON.stringify(error.hint)}`);
-  return { yaml: `${lines.join('\n')}\n`, looks: [], warnings, context: EMPTY_CONTEXT(mode), transactions: [], error };
+  return { yaml: `${lines.join('\n')}\n`, shows: [], warnings, context: EMPTY_CONTEXT(mode), transactions: [], error };
 }
 
 export class DslWorkerClient {

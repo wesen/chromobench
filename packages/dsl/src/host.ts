@@ -8,7 +8,7 @@
 // builders and frame.propose), show.ts (show, explain), named-looks.ts (cb.looks.*: looks as links), errors.ts (the prelude's
 // traps); words.ts and types.ts hold the shared helpers and records. Each native is a function of the Host.
 import {
-  AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind,
+  AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind, readField, storedPath,
   type Compiled, type Diagnostic, type Document, type Domain, type Graph, type LinkContext, type Node,
 } from '@chromobench/contract';
 import { getPath as getPathOf, type Log } from '@chromobench/values';
@@ -240,6 +240,8 @@ export class Host {
   private get(key: string, path: unknown): unknown {
     const v = this.view(key);
     if (typeof path !== 'string') throw new ChromobenchError(diag('E_ARG_TYPE', 'frame.get(path) takes a document path', { fix: `${v.expr}.get('main.params.time_s')` }));
+    // a field of a linked medium (a frame on a roll) reads through the link, as the compiler sees it (CHB-037 P6b)
+    if (storedPath(v.doc, path) !== path) return readField(v.doc, path, this.links());
     return getPathOrFix(v, path);
   }
 

@@ -265,7 +265,7 @@ describe('ChatSession', () => {
     expect(Buffer.from(img.source!.data, 'base64').subarray(1, 4).toString()).toBe('PNG');
     expect(chat.state.imagesSent).toBe(1);
     const step = chat.state.items.find((i) => i.kind === 'step')!;
-    expect(step.kind === 'step' && step.looks[0]!.bytes.length).toBeGreaterThan(100);
+    expect(step.kind === 'step' && step.shows[0]!.bytes.length).toBeGreaterThan(100);
     p.dsl.dispose();
   });
 

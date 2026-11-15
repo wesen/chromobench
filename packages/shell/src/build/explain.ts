@@ -25,6 +25,8 @@ export interface ExplainOpts {
   depth?: number;
   /** bind paths: a store over the initial state (probe mode) */
   store?: Store;
+  /** an app: this module only, without the command list (the screen an agent asks about) */
+  module?: string;
 }
 
 const probeStore = new Store({});
@@ -177,6 +179,7 @@ export function explainApp(ir: UiIR, sum: AppSummary, o: ExplainOpts = {}): stri
   const out = [`shell ${JSON.stringify(ir.name)} · theme ${ir.theme ?? 'craftkit'} · kits: ${kits.length ? kits.join(', ') : 'none'}`];
   const opts: ExplainOpts = { ...o, forms: ir.forms, panels: ir.panels };
   for (const m of ir.modules) {
+    if (o.module && m.id !== o.module) continue;
     out.push(`module ${m.id} ${JSON.stringify(m.label)}${m.key ? ` key ${m.key}` : ''}${m.stages?.length ? ` stages ${m.stages.join(', ')}` : ''}`);
     for (const side of ['top', 'left', 'center', 'right', 'bottom', 'toolbar'] as const) {
       const r = m.regions[side];
@@ -187,7 +190,7 @@ export function explainApp(ir: UiIR, sum: AppSummary, o: ExplainOpts = {}): stri
       for (const l of rest) out.push(`  ${' '.repeat(7)}${l}`);
     }
   }
-  if (sum.commandRows?.length) {
+  if (sum.commandRows?.length && !o.module) {
     out.push('commands');
     for (const c of sum.commandRows) out.push(`  ${c.id} ${JSON.stringify(c.label)}${c.menu ? ` (${c.menu})` : ''}${c.chord ? ` ${chordLabel(c.chord, sum.platform)}` : ''}${c.source ? ` ← ${c.source}` : ''}`);
   }
