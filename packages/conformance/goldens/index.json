@@ -1823,6 +1823,261 @@
         "output.display",
         "output.frame"
       ]
+    },
+    {
+      "id": "stack-print-tone",
+      "title": "Print tone: exposure +0.3, an S-curve on L, levels on blue, vibrance (one OkLab run, one linear run)",
+      "exercises": [
+        "exposure",
+        "curve",
+        "levels",
+        "vibrance",
+        "composite.encode"
+      ],
+      "fixture": "negative",
+      "document": "cases/stack-print-tone/document.json",
+      "cuts": {
+        "print": "cases/stack-print-tone/print.json",
+        "display": "cases/stack-print-tone/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "exposure",
+        "levels",
+        "composite.encode",
+        "curve",
+        "vibrance",
+        "composite.encode",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "stack-print-colour",
+      "title": "Print colour: HSL bands, colour grading (teal shadows, warm highlights), a channel mixer at 0.7",
+      "exercises": [
+        "hsl",
+        "grade",
+        "mixer",
+        "composite.mix"
+      ],
+      "fixture": "negative",
+      "document": "cases/stack-print-colour/document.json",
+      "cuts": {
+        "print": "cases/stack-print-colour/print.json",
+        "display": "cases/stack-print-colour/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "hsl",
+        "grade",
+        "composite.encode",
+        "mixer",
+        "composite.mix",
+        "composite.encode",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "stack-print-masked",
+      "title": "Masked layers: a curve under a radial mask, exposure under a colour range intersected with a gradient, a vignette, sharpening",
+      "exercises": [
+        "mask.radial",
+        "mask.colour",
+        "mask.linear",
+        "mask.combine",
+        "composite.mix",
+        "vignette",
+        "sharpen"
+      ],
+      "fixture": "negative",
+      "document": "cases/stack-print-masked/document.json",
+      "cuts": {
+        "print": "cases/stack-print-masked/print.json",
+        "display": "cases/stack-print-masked/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "curve",
+        "mask.radial",
+        "composite.mix",
+        "composite.encode",
+        "exposure",
+        "mask.colour",
+        "mask.linear",
+        "mask.combine",
+        "composite.mix",
+        "vignette",
+        "composite.encode",
+        "sharpen",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "stack-print-blends",
+      "title": "Blend modes and groups: multiply, screen, soft light, luminosity and colour layers; an isolated luminosity group under a mask; a pass group at 0.6",
+      "exercises": [
+        "composite.mix blend",
+        "multiply",
+        "screen",
+        "soft-light",
+        "luminosity",
+        "colour",
+        "isolated group",
+        "pass group"
+      ],
+      "fixture": "negative",
+      "document": "cases/stack-print-blends/document.json",
+      "cuts": {
+        "print": "cases/stack-print-blends/print.json",
+        "display": "cases/stack-print-blends/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "curve",
+        "composite.mix",
+        "composite.encode",
+        "exposure",
+        "composite.mix",
+        "composite.encode",
+        "curve",
+        "composite.mix",
+        "curve",
+        "composite.mix",
+        "vibrance",
+        "composite.mix",
+        "composite.encode",
+        "exposure",
+        "composite.encode",
+        "vibrance",
+        "mask.linear",
+        "composite.mix",
+        "grade",
+        "hsl",
+        "composite.mix",
+        "composite.encode",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "stack-print-mono",
+      "title": "Black and white from the colour negative: a monochrome mixer with a red filter, levels, split toning by colour grading",
+      "exercises": [
+        "mixer monochrome",
+        "levels",
+        "grade"
+      ],
+      "fixture": "negative",
+      "document": "cases/stack-print-mono/document.json",
+      "cuts": {
+        "print": "cases/stack-print-mono/print.json",
+        "display": "cases/stack-print-mono/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "mixer",
+        "composite.encode",
+        "levels",
+        "grade",
+        "composite.encode",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "stack-scene",
+      "title": "The scene stage of a camera file: exposure under a highlight luminance mask (reading scene.input), a curve on R, HSL, then the film; a print vignette",
+      "exercises": [
+        "scene stage",
+        "scene.input",
+        "mask.luminance",
+        "exposure",
+        "curve R",
+        "hsl",
+        "vignette"
+      ],
+      "fixture": "camera",
+      "document": "cases/stack-scene/document.json",
+      "cuts": {
+        "print": "cases/stack-scene/print.json",
+        "display": "cases/stack-scene/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "composite.encode",
+        "exposure",
+        "mask.luminance",
+        "composite.mix",
+        "curve",
+        "composite.encode",
+        "hsl",
+        "composite.encode",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "composite.encode",
+        "vignette",
+        "composite.encode",
+        "output.display",
+        "output.frame"
+      ]
     }
   ]
 }

@@ -1,0 +1,328 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-negative",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "order": [
+      "spot",
+      "warm"
+    ],
+    "items": {
+      "spot": {
+        "name": "Centre",
+        "components": {
+          "order": [
+            "r1"
+          ],
+          "items": {
+            "r1": {
+              "kind": "radial",
+              "params": {
+                "box": {
+                  "x": 18,
+                  "y": 8,
+                  "w": 56,
+                  "h": 46
+                },
+                "angle_deg": 15,
+                "feather": 0.7
+              },
+              "combine": "add",
+              "amount": 1,
+              "enabled": true
+            }
+          }
+        },
+        "feather_mm": 0,
+        "invert": false,
+        "reads": "stage-input"
+      },
+      "warm": {
+        "name": "Warm tones, top",
+        "components": {
+          "order": [
+            "c1",
+            "g1"
+          ],
+          "items": {
+            "c1": {
+              "kind": "colour",
+              "params": {
+                "colour": [
+                  0.62,
+                  0.03,
+                  0.06
+                ],
+                "tolerance": 0.06,
+                "softness": 0.12
+              },
+              "combine": "add",
+              "amount": 1,
+              "enabled": true
+            },
+            "g1": {
+              "kind": "linear",
+              "params": {
+                "from": {
+                  "x": 0,
+                  "y": 10
+                },
+                "to": {
+                  "x": 0,
+                  "y": 50
+                }
+              },
+              "combine": "intersect",
+              "amount": 1,
+              "enabled": true
+            }
+          }
+        },
+        "feather_mm": 0,
+        "invert": false,
+        "reads": "stage-input"
+      }
+    }
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "scan"
+    },
+    "kind": "file",
+    "name": "negative-96x64.tif",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ]
+            },
+            "source": {
+              "alpha": 1,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 3.969
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights"
+        ]
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "order": [
+          "c",
+          "x",
+          "n",
+          "sh"
+        ],
+        "items": {
+          "c": {
+            "kind": "layer",
+            "op": "curve",
+            "params": {
+              "points": {
+                "order": [
+                  "c-p0",
+                  "c-p1",
+                  "c-p2",
+                  "c-p3"
+                ],
+                "items": {
+                  "c-p0": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "c-p1": {
+                    "x": 0.3,
+                    "y": 0.36
+                  },
+                  "c-p2": {
+                    "x": 0.7,
+                    "y": 0.76
+                  },
+                  "c-p3": {
+                    "x": 1,
+                    "y": 1
+                  }
+                }
+              }
+            },
+            "name": "curve",
+            "enabled": true,
+            "amount": 0.8,
+            "mask": "spot",
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          },
+          "x": {
+            "kind": "layer",
+            "op": "exposure",
+            "params": {
+              "stops": -0.6
+            },
+            "name": "exposure",
+            "enabled": true,
+            "amount": 1,
+            "mask": "warm",
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          },
+          "n": {
+            "kind": "layer",
+            "op": "vignette",
+            "params": {
+              "stops": -0.8,
+              "size": 0.35,
+              "feather": 0.8
+            },
+            "name": "vignette",
+            "enabled": true,
+            "amount": 1,
+            "mask": null,
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          },
+          "sh": {
+            "kind": "layer",
+            "op": "sharpen",
+            "params": {
+              "strength": 0.7,
+              "radius_mm": 0.15
+            },
+            "name": "sharpen",
+            "enabled": true,
+            "amount": 1,
+            "mask": null,
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          }
+        }
+      }
+    },
+    "scan": {
+      "medium": {
+        "baseT": null,
+        "flare": 0,
+        "flat": null,
+        "format": "135",
+        "openGate": null,
+        "rebate": {
+          "h": 64,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "scanner": "xt5-rgb-led",
+        "stock": "kodak_portra_400",
+        "umPerPx": 6
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    }
+  }
+}

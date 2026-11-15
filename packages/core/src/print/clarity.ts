@@ -9,33 +9,38 @@
 //   L′ = max(0, L + s·w·(L − L̄))              s = strength (negative softens)
 //   out = XYZ · (L′ / L)³                      the detail scales the colour, so chromaticity is kept
 // σ in pixels = radius_mm · 1000 / (ImageInfo.umPerPx.paper). A pixel with Y ≤ 0 is left as it is.
+// sharpen (contract 1.1) is the same lightness detail without the midtone weight (w = 1), at a small radius: an unsharp
+// mask that keeps chromaticity and clips nothing (Editor lab's `unsharp`, src/engine.js:287–297, without its clamp).
 import { fail } from '@chromobench/contract';
 import { gaussianBlur1 } from './masks.ts';
 
-/** σ in print pixels of a clarity radius in mm; the image must carry the print's pitch (µm per pixel). */
-export function claritySigma(radius_mm: number, umPerPxPaper: number | undefined): number {
-  if (umPerPxPaper === undefined) fail('E_EVAL', 'clarity: the image has no print pitch (ImageInfo.umPerPx.paper)', { hint: 'build the chain through print.expose from source.open with its umPerPx (compile does)' });
+/** σ in print pixels of a radius in mm on the print (clarity, sharpen); the image must carry the print's pitch. */
+export function claritySigma(radius_mm: number, umPerPxPaper: number | undefined, op = 'clarity'): number {
+  if (umPerPxPaper === undefined) fail('E_EVAL', `${op}: the image has no print pitch (ImageInfo.umPerPx.paper)`, { hint: 'build the chain through print.expose from source.open with its umPerPx (compile does)' });
   return (radius_mm * 1000) / umPerPxPaper;
 }
 
-/** The clarity gain (L′ / L)³ of one pixel: its luminance Y, the low-passed Ȳ, the white's Y_w and the strength. */
-export function clarityGain(Y: number, Yb: number, Yw: number, strength: number): number {
+/**
+ * The gain (L′ / L)³ of one pixel: its luminance Y, the low-passed Ȳ, the white's Y_w and the strength; `midtones`
+ * weights the detail to the midtones (clarity) or not (sharpen).
+ */
+export function clarityGain(Y: number, Yb: number, Yw: number, strength: number, midtones = true): number {
   if (!(Y > 0)) return 1;
   const L = Math.cbrt(Y / Yw), Lb = Math.cbrt(Math.max(Yb, 0) / Yw);
-  const w = Math.max(0, 1 - (2 * L - 1) ** 2);
+  const w = midtones ? Math.max(0, 1 - (2 * L - 1) ** 2) : 1;
   const L2 = Math.max(0, L + strength * w * (L - Lb));
   return (L2 / L) ** 3;
 }
 
-/** clarity on an interleaved c-channel print-xyz image (Y = channel 1); channels beyond three are copied. */
-export function clarity(src: Float64Array, w: number, h: number, c: number, strength: number, sigma_px: number, Yw: number): Float64Array {
+/** clarity (or sharpen: midtones false) on an interleaved c-channel print-xyz image (Y = channel 1); channels beyond three are copied. */
+export function clarity(src: Float64Array, w: number, h: number, c: number, strength: number, sigma_px: number, Yw: number, midtones = true): Float64Array {
   const out = src.slice();
   if (strength === 0) return out;
   const Y = new Float64Array(w * h);
   for (let i = 0; i < w * h; i++) Y[i] = src[i * c + 1]!;
   const Yb = gaussianBlur1(Y, w, h, sigma_px);
   for (let i = 0; i < w * h; i++) {
-    const g = clarityGain(Y[i]!, Yb[i]!, Yw, strength);
+    const g = clarityGain(Y[i]!, Yb[i]!, Yw, strength, midtones);
     for (let k = 0; k < Math.min(3, c); k++) out[i * c + k] = src[i * c + k]! * g;
   }
   return out;

@@ -1,0 +1,301 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-camera",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "order": [
+      "hi"
+    ],
+    "items": {
+      "hi": {
+        "name": "Highlights",
+        "components": {
+          "order": [
+            "hl"
+          ],
+          "items": {
+            "hl": {
+              "kind": "luminance",
+              "params": {
+                "above": 0.35,
+                "softness": 0.25
+              },
+              "combine": "add",
+              "amount": 1,
+              "enabled": true
+            }
+          }
+        },
+        "feather_mm": 0,
+        "invert": false,
+        "reads": "scene.input"
+      }
+    }
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "photo"
+    },
+    "kind": "file",
+    "name": "camera-96x64.dng",
+    "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                -0.009711,
+                -0.009711,
+                -0.009711
+              ]
+            },
+            "source": {
+              "alpha": 0,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                -0.009711,
+                -0.009711,
+                -0.009711
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 7.937
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights"
+        ]
+      }
+    },
+    "film": {
+      "medium": {
+        "dir": {
+          "amount": 1,
+          "diffusion_um": 0
+        },
+        "exposureEV": 0,
+        "format": {
+          "longEdge_mm": 36
+        },
+        "grain": {
+          "amount": 1,
+          "seed": 1,
+          "size_um": 12
+        },
+        "halation": {
+          "strength": 1
+        },
+        "push": 0,
+        "stock": "kodak_portra_400"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "order": [
+          "pv"
+        ],
+        "items": {
+          "pv": {
+            "kind": "layer",
+            "op": "vignette",
+            "params": {
+              "stops": -0.5,
+              "size": 0.4,
+              "feather": 0.7
+            },
+            "name": "vignette",
+            "enabled": true,
+            "amount": 1,
+            "mask": null,
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          }
+        }
+      }
+    },
+    "scene": {
+      "medium": {
+        "whiteBalance": {
+          "mode": "daylight",
+          "temperature_K": 5500,
+          "tint": 0
+        }
+      },
+      "stack": {
+        "order": [
+          "sx",
+          "sr",
+          "sh"
+        ],
+        "items": {
+          "sx": {
+            "kind": "layer",
+            "op": "exposure",
+            "params": {
+              "stops": -0.7
+            },
+            "name": "exposure",
+            "enabled": true,
+            "amount": 1,
+            "mask": "hi",
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          },
+          "sr": {
+            "kind": "layer",
+            "op": "curve",
+            "params": {
+              "channel": "R",
+              "points": {
+                "order": [
+                  "sr-p0",
+                  "sr-p1",
+                  "sr-p2"
+                ],
+                "items": {
+                  "sr-p0": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "sr-p1": {
+                    "x": 0.5,
+                    "y": 0.53
+                  },
+                  "sr-p2": {
+                    "x": 1,
+                    "y": 1
+                  }
+                }
+              }
+            },
+            "name": "curve",
+            "enabled": true,
+            "amount": 1,
+            "mask": null,
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          },
+          "sh": {
+            "kind": "layer",
+            "op": "hsl",
+            "params": {
+              "bands": {
+                "order": [
+                  "sb"
+                ],
+                "items": {
+                  "sb": {
+                    "centre_deg": 260,
+                    "saturation": 0.3,
+                    "lightness": -0.15
+                  }
+                }
+              }
+            },
+            "name": "hsl",
+            "enabled": true,
+            "amount": 1,
+            "mask": null,
+            "blend": "normal",
+            "source": {
+              "kind": "user"
+            }
+          }
+        }
+      }
+    }
+  }
+}
