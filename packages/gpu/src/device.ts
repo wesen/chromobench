@@ -100,12 +100,13 @@ export type GpuEvent =
   | GpuMemoryEvent;
 
 /**
- * The engine's memory (CHB-041), in bytes: each render's high-water mark (`render`), textures of frames not on screen
+ * The engine's memory (CHB-041), in bytes: each render's high-water mark (`render`; live + pending, the bytes let go
+ * but not destroyed yet while a pass that binds them has not been submitted, CHB-045), textures of frames not on screen
  * let go to make room (`evict`), and the recovery after an E_GPU_OOM (`recover`: everything not needed let go and the
  * render tried once more; ok false when that failed too). `limit` is the budget, `live` what is allocated after.
  */
 export type GpuMemoryEvent =
-  | { kind: 'memory'; what: 'render'; during: string; peak: number; live: number; limit: number; resident: number }
+  | { kind: 'memory'; what: 'render'; during: string; peak: number; live: number; pending: number; limit: number; resident: number }
   | { kind: 'memory'; what: 'evict'; freed: number; frames: number; live: number; limit: number; during: string | null }
   | { kind: 'memory'; what: 'recover'; ok: boolean; freed: number; live: number; limit: number; during: string; message: string };
 
@@ -163,8 +164,6 @@ export class GpuRuntime {
     this.textures = new TexturePool(device, this.budget);
     this.pipelines = new PipelineCache(device);
     this.timer = new GpuTimer(device);
-    this.buffers.retire = (b) => this.retire(b);
-    this.textures.retire = (t) => this.retire(t);
     this.budget.onShort = (need) => void this.reclaim(need);
     device.lost.then((info) => {
       this.lost = info;
@@ -256,30 +255,12 @@ export class GpuRuntime {
     if (this.lost) cb(this.lost);
   }
 
-  // ── lifetimes (CHB-038) ──
+  // ── lifetimes (CHB-038, CHB-045) ──
   // A texture or buffer may be bound by a pass that has been encoded but not submitted yet: every pass awaits its
   // pipeline first, so another render can run in between. Destroying it then makes that submit a validation error
-  // ("Destroyed texture … used in a submit"). Engine work runs inside busy(); what is let go meanwhile is retired and
-  // destroyed when no work is in flight.
-  private inFlight = 0;
-  private retired: { destroy(): void }[] = [];
-  /** Runs GPU work; while any runs, retire() defers destruction. */
-  async busy<T>(f: () => Promise<T>): Promise<T> {
-    this.inFlight++;
-    try {
-      return await f();
-    } finally {
-      if (--this.inFlight === 0 && this.retired.length) {
-        const r = this.retired.splice(0);
-        for (const o of r) o.destroy();
-      }
-    }
-  }
-  /** Destroys a GPU object now, or after the work in flight when there is any. */
-  retire(o: { destroy(): void }): void {
-    if (this.inFlight === 0 || this.destroyed) o.destroy();
-    else this.retired.push(o);
-  }
+  // ("Destroyed texture … used in a submit"); handing it to another render lets that render overwrite what the pass
+  // reads. The pools' leases cover that window per object (pool.ts: lease, release, discard): what a pass may still
+  // bind waits for that pass's submit, and its bytes stay in the budget (pending) until it is destroyed.
   // ── memory (CHB-041) ──
   // Who keeps GPU memory between renders that the runtime may take back (the engine's resident textures, the film
   // grain's textures of ones): asked in the order they were added when an allocation does not fit after the pools'
@@ -309,11 +290,6 @@ export class GpuRuntime {
     this.reclaim(Infinity, true);
     this.budget.trimFree(0);
     return before - this.budget.live;
-  }
-
-  /** objects waiting for the work in flight to end (tests) */
-  get retiring(): number {
-    return this.retired.length;
   }
 
   /** Throws E_DEVICE_LOST if the device is gone. */
@@ -362,7 +338,6 @@ export class GpuRuntime {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    for (const o of this.retired.splice(0)) o.destroy();
     this.buffers.destroyAll();
     this.textures.destroyAll();
     this.pipelines.clear();

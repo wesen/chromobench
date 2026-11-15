@@ -99,16 +99,115 @@ describe('budget (CHB-041)', () => {
     expect(p.acquire(tex(64), 'y')).toBeDefined();
   });
 
-  it('discard retires the object (destroyed after the work in flight) and frees its bytes now', () => {
+  it('discard destroys an object no pass holds at once and takes its bytes out of the budget', () => {
+    const dev = fakeDevice();
     const budget = new Budget(1 << 20);
-    const p = new TexturePool(fakeDevice(), budget);
-    const retired: unknown[] = [];
-    p.retire = (o) => retired.push(o);
+    const p = new TexturePool(dev, budget);
     const a = p.acquire(tex(64), 'a');
     p.discard(a);
-    expect(retired).toEqual([a]);
+    expect(dev.destroyed).toEqual(['a']);
     expect(budget.live).toBe(0);
+    expect(budget.pending).toBe(0);
     expect(p.liveCount).toBe(0);
+  });
+});
+
+describe('leases and pending bytes (CHB-045: GPUC-1, GPUC-4)', () => {
+  it('a leased object released mid-pass is not handed out again until its lease ends (an export\'s field and a preview)', () => {
+    const p = new TexturePool(fakeDevice(), new Budget(1 << 20));
+    const field = p.acquire(tex(64), 'field');
+    const done = p.lease(field); // a tile took the field and awaits its pipeline
+    p.release(field); // a preview drops the fields
+    expect(p.bytesFree).toBe(0);
+    const other = p.acquire(tex(64), 'other render');
+    expect(other).not.toBe(field); // before: the field itself, written by the other render
+    done(); // the tile submitted
+    expect(p.bytesFree).toBe(65536);
+    expect(p.acquire(tex(64), 'next')).toBe(field);
+  });
+
+  it('an object leased twice returns to the pool only after both leases; ending a lease twice counts once', () => {
+    const p = new TexturePool(fakeDevice(), new Budget(1 << 20));
+    const f = p.acquire(tex(64), 'f');
+    const a = p.lease(f), b = p.lease(f);
+    p.release(f);
+    a();
+    a();
+    expect(p.bytesFree).toBe(0);
+    b();
+    expect(p.bytesFree).toBe(65536);
+  });
+
+  it('a leased object discarded is pending: counted in the budget until its last lease ends, then destroyed', () => {
+    const dev = fakeDevice();
+    const budget = new Budget(3 * 65536);
+    const p = new TexturePool(dev, budget);
+    const a = p.acquire(tex(64), 'a');
+    const done = p.lease(a);
+    p.discard(a);
+    expect(dev.destroyed).toEqual([]);
+    expect(budget.live).toBe(0);
+    expect(budget.pending).toBe(65536);
+    expect(budget.held).toBe(65536);
+    expect(p.pendingCount).toBe(1);
+    // allocation counts it: two more fit, a third does not (before: four fitted in a budget of three)
+    p.acquire(tex(64), 'b');
+    p.acquire(tex(64), 'c');
+    expect(() => p.acquire(tex(64), 'd')).toThrow(/d: 65536 bytes do not fit the budget/);
+    done();
+    expect(dev.destroyed).toEqual(['a']);
+    expect(budget.pending).toBe(0);
+    expect(p.pendingCount).toBe(0);
+    expect(p.acquire(tex(64), 'd')).toBeDefined();
+  });
+
+  it('the high-water marks include pending bytes', () => {
+    const budget = new Budget(1 << 20);
+    const p = new TexturePool(fakeDevice(), budget);
+    const a = p.acquire(tex(64), 'a');
+    const done = p.lease(a);
+    const w = budget.watch();
+    p.discard(a);
+    p.acquire(tex(128), 'b'); // live 2·65536, pending 65536
+    expect(w.end()).toBe(3 * 65536);
+    expect(budget.peak).toBe(3 * 65536);
+    done();
+    budget.resetPeak();
+    expect(budget.peak).toBe(2 * 65536);
+  });
+
+  it('trimming the free lists destroys at once (a released object has no lease); released then discarded while leased: destroyed once, at the lease\'s end', () => {
+    const dev = fakeDevice();
+    const budget = new Budget(2 * 65536);
+    const p = new TexturePool(dev, budget);
+    const a = p.acquire(tex(64), 'a');
+    p.release(a);
+    p.acquire({ ...tex(64), usage: 8 }, 'b');
+    p.acquire({ ...tex(64), usage: 16 }, 'c'); // trims a
+    expect(dev.destroyed).toEqual(['a']);
+    expect(budget.held).toBe(2 * 65536);
+    const q = new TexturePool(dev, new Budget(1 << 20));
+    const f = q.acquire(tex(64), 'f');
+    const done = q.lease(f);
+    q.release(f);
+    q.discard(f);
+    expect(q.bytesFree).toBe(0);
+    done();
+    expect(dev.destroyed).toEqual(['a', 'f']);
+    expect(q.bytesFree).toBe(0);
+    expect(q.budget.held).toBe(0);
+  });
+
+  it('destroyAll destroys pending objects too', () => {
+    const dev = fakeDevice();
+    const budget = new Budget(1 << 20);
+    const p = new TexturePool(dev, budget);
+    const a = p.acquire(tex(64), 'a');
+    p.lease(a);
+    p.discard(a);
+    p.destroyAll();
+    expect(dev.destroyed).toEqual(['a']);
+    expect(budget.held).toBe(0);
   });
 });
 
@@ -116,8 +215,13 @@ describe('residency (CHB-041)', () => {
   const t = (name: string) => ({ label: name }) as unknown as GPUTexture;
   const made = () => {
     const gone: string[] = [];
-    const r = new Residency((x) => gone.push((x as unknown as { label: string }).label));
-    return { r, gone };
+    const held: string[] = [];
+    const r = new Residency((x) => gone.push((x as unknown as { label: string }).label), (x) => {
+      const l = (x as unknown as { label: string }).label;
+      held.push(l);
+      return () => held.splice(held.indexOf(l), 1);
+    });
+    return { r, gone, held };
   };
 
   it('evicts frames not on screen first, least recently used first, and stops when enough is free', () => {
@@ -133,18 +237,22 @@ describe('residency (CHB-041)', () => {
     expect(r.stats()).toMatchObject({ bytes: 100, pinnedBytes: 100, frames: 1 });
   });
 
-  it('never evicts a texture a render holds, nor a pinned frame, unless all', () => {
-    const { r, gone } = made();
+  it('never evicts a texture a render holds, nor a pinned frame, unless all; a lease is a pool lease too', () => {
+    const { r, gone, held } = made();
     r.put('A', 'full|a', t('A'), 100);
     r.put('B', 'full|b', t('B'), 100);
-    r.lease('full|a');
+    const doneA = r.lease('full|a');
+    expect(held).toEqual(['A']);
     r.pin(['B']);
     expect(r.evict(Infinity).bytes).toBe(0);
-    r.unlease('full|a');
+    doneA();
+    doneA();
+    expect(held).toEqual([]);
     expect(r.evict(Infinity).frames).toEqual(['A']);
     r.lease('full|b');
     expect(r.evict(Infinity, { all: true }).frames).toEqual(['B']);
     expect(gone).toEqual(['A', 'B']);
+    expect(held).toEqual(['B']); // the pool destroys B when that render's lease ends
   });
 
   it('a frame\'s proxies hold no more than its full-size texture would', () => {

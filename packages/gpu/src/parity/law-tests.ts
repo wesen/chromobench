@@ -502,6 +502,64 @@ async function tilesTest(): Promise<Record<string, unknown>> {
 }
 LAW_TESTS['law:tiles'] = tilesTest;
 
+/**
+ * CHB-045 GPUC-1 (CHB-037 P10-10): an exact export tile that has taken a whole-frame field and not yet submitted the pass
+ * that reads it, while a preview starts (dropFields) and another render takes a texture of the field's descriptor from
+ * the pool and writes it. The interleaving is forced: the tile's first upsampleAt runs the preview and the intruder
+ * before it reads the field. With leases the field returns to the pool only after the tile's pass is submitted, so the
+ * intruder gets another texture and the tile equals the whole-frame export; `broken` turns the leases off (the code
+ * before the fix): the pool hands the field itself to the intruder and the tile reads its writes.
+ */
+async function fieldRaceTest(o: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  const TW = 352, TH = 232;
+  const rt = await runtime();
+  const { tiff } = syntheticScan(gold().solve, TW, TH);
+  const gpu = await GpuEngine.create({ runtime: rt, workers: 4, opfs: false, exactBox: 96 });
+  const sha = (await gpu.open({ kind: 'file', sha256: '', bytes: tiff })).sha256;
+  const g = new Graph();
+  g.registerSource(gpu.graph.source(sha)!);
+  const main: [Id, Entry] = ['main', L('expose', { time_s: 12, fstop: 8, filtration: { c: 0, m: 0, y: 0 } })];
+  const d = scanDocument(sha, { darkroom: [main, ['dm', L('densityMask', { gamma: 0.5, radius_um: 300, polarity: 'same' })]] }, [], [TW, TH]);
+  const n = compile(d, g).display;
+  gpu.adopt(g.closure(n.id));
+  const pool = rt.textures as unknown as { lease(t: GPUTexture): () => void };
+  const lease = pool.lease;
+  if (o['broken']) pool.lease = () => () => undefined;
+  const blur = (gpu as unknown as { blur: { upsampleAt(f: GPUTexture, ...rest: unknown[]): Promise<GPUTexture> } }).blur;
+  const upsampleAt = blur.upsampleAt;
+  let intruder: GPUTexture | null = null;
+  let same: boolean | null = null;
+  try {
+    const whole = await gpu.evaluateU16(n, { scale: 'full' });
+    const region = { x: 128, y: 64, w: 64, h: 64 };
+    const first = await gpu.evaluateU16(n, { scale: 'full', region }); // builds the fields; the next tile takes them from the cache
+    blur.upsampleAt = async function (this: unknown, field: GPUTexture, ...rest: unknown[]): Promise<GPUTexture> {
+      if (same === null) {
+        // the tile holds the field and awaits its pipeline: a preview starts, and another render takes a texture
+        await gpu.evaluate(n, { scale: 0.5, precision: 'preview' });
+        intruder = rt.textures.acquire({ format: field.format, w: field.width, h: field.height, usage: field.usage }, 'test.intruder');
+        same = intruder === field;
+        rt.device.queue.writeTexture({ texture: intruder }, new Float32Array(field.width * field.height * 4).fill(0.25), { bytesPerRow: field.width * 16 }, [field.width, field.height]);
+      }
+      return upsampleAt.call(blur, field, ...rest);
+    };
+    const raced = await gpu.evaluateU16(n, { scale: 'full', region });
+    let codes = 0, firstCodes = 0;
+    for (let y = 0; y < region.h; y++) for (let x = 0; x < region.w; x++) for (let k = 0; k < 3; k++) {
+      const want = whole.data[((region.y + y) * TW + region.x + x) * 3 + k]!;
+      if (raced.data[(y * region.w + x) * 3 + k] !== want) codes++;
+      if (first.data[(y * region.w + x) * 3 + k] !== want) firstCodes++;
+    }
+    return { same, codes, firstCodes, pending: rt.budget.pending };
+  } finally {
+    blur.upsampleAt = upsampleAt;
+    pool.lease = lease;
+    if (intruder) rt.textures.release(intruder);
+    gpu.dispose();
+  }
+}
+LAW_TESTS['law:field-race'] = fieldRaceTest;
+
 function max8(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let m = 0;
   for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(Math.round(a[i]! * 255) - Math.round(b[i]! * 255)));

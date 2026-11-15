@@ -2,13 +2,14 @@
 // and its proxies, the source sampled on a render's grid), and which it lets go first when memory runs short.
 //
 //   get(key) / put(frame, key, tex)   a texture kept for a frame; every use marks the frame and the texture used
-//   lease(key) … unlease(key)          a render holds it between taking it and submitting (never evicted then, unless all)
+//   lease(key) → end                   a render holds it between taking it and submitting (never evicted then, unless all;
+//                                      a pool lease too, so a texture let go while held waits for that submit, CHB-045)
 //   pin(frames)                        the frames on screen (the viewer's, the thumbnails being drawn): evicted last
 //   evict(need)                        frames not pinned, least recently used first, until `need` bytes are free;
 //                                      { all: true } (the recovery after E_GPU_OOM) then pinned and leased ones too
 //
-// A texture let go is handed to `letGo` (the pool's discard: out of the budget now, destroyed when no GPU work is in
-// flight), so a render that still binds one stays valid. A frame comes back by uploading again.
+// A texture let go is handed to `letGo` (the pool's discard: out of the live bytes now, destroyed when no lease is open
+// on it), so a render that still binds one stays valid. A frame comes back by uploading again.
 //
 // PROXIES_KEPT is a rule, not a measurement: a window resize or a draft size makes new grids; the newest few are what
 // the viewer and its drafts ask for again.
@@ -32,9 +33,12 @@ export class Residency {
   private pinned: ReadonlySet<string> = new Set();
   private clock = 0;
   private readonly letGo: (tex: GPUTexture) => void;
+  private readonly hold: (tex: GPUTexture) => () => void;
 
-  constructor(letGo: (tex: GPUTexture) => void) {
+  /** `letGo`: the pool's discard; `hold`: the pool's lease (a texture let go while held is destroyed when it ends). */
+  constructor(letGo: (tex: GPUTexture) => void, hold: (tex: GPUTexture) => () => void = () => () => undefined) {
     this.letGo = letGo;
+    this.hold = hold;
   }
 
   /** The texture kept under `key`, marked used (and its frame), or null. */
@@ -55,7 +59,8 @@ export class Residency {
     const old = this.items.get(key);
     if (old && old.tex !== tex) this.drop(old);
     const used = ++this.clock;
-    this.items.set(key, { key, frame, tex, bytes, used, leases: old?.leases ?? 0, proxy: !!o.proxy });
+    if (old && old.tex === tex) Object.assign(old, { frame, bytes, used, proxy: !!o.proxy });
+    else this.items.set(key, { key, frame, tex, bytes, used, leases: 0, proxy: !!o.proxy });
     this.frameUsed.set(frame, used);
     if (o.proxy) {
       const proxies = [...this.items.values()].filter((i) => i.frame === frame && i.proxy && i.leases === 0 && i.key !== key).sort((a, b) => b.used - a.used);
@@ -69,13 +74,19 @@ export class Residency {
     }
   }
 
-  lease(key: string): void {
+  /** A render takes the texture kept under `key` until the returned function (after its passes are submitted). */
+  lease(key: string): () => void {
     const it = this.items.get(key);
-    if (it) it.leases++;
-  }
-  unlease(key: string): void {
-    const it = this.items.get(key);
-    if (it && it.leases > 0) it.leases--;
+    if (!it) return () => undefined;
+    it.leases++;
+    const end = this.hold(it.tex);
+    let open = true;
+    return () => {
+      if (!open) return;
+      open = false;
+      it.leases--;
+      end();
+    };
   }
 
   /** The frames on screen: their textures go last. */
@@ -89,7 +100,7 @@ export class Residency {
   /**
    * Lets go of textures until `need` bytes are freed (Infinity: all that may go): frames not pinned, least recently
    * used first, none leased; with `all`, then the pinned frames' and the leased ones too (a render that binds one keeps
-   * it valid: letGo destroys after the work in flight). Returns the bytes freed and the frames touched.
+   * it valid: its pool lease defers the destruction to that render's submit). Returns the bytes freed and the frames touched.
    */
   evict(need: number, o: { all?: boolean } = {}): { bytes: number; frames: string[] } {
     const order = [...this.items.values()].sort((a, b) => {

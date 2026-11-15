@@ -148,6 +148,26 @@ test('output.frame: crop and the eight orientations are a pixel permutation of o
   expect(r.straighten.core8bit).toBeLessThanOrEqual(1);
 });
 
+// CHB-045 GPUC-1: a preview starting while an export tile holds a whole-frame field it has not read yet (forced: the
+// preview and another render's write run inside the tile's upsampleAt). The field goes back to the pool only after the
+// tile's pass is submitted; without the leases (broken) the pool hands the field to the other render, which writes it.
+test('an export tile keeps its field while a preview starts and another render takes a texture (field textures leased)', async ({ page }) => {
+  test.setTimeout(300_000);
+  const r = await run(page, 'law:field-race');
+  expect(r.error).toBeUndefined();
+  expect(r.firstCodes).toBe(0);
+  expect(r.same).toBe(false);
+  expect(r.codes).toBe(0);
+  expect(r.pending).toBe(0);
+});
+
+test('broken variant: without leases the pool hands the tile\'s field to the other render and the tile reads its writes', async ({ page }) => {
+  test.setTimeout(300_000);
+  const r = await run(page, 'law:field-race', { broken: true });
+  expect(r.same).toBe(true);
+  expect(r.codes).toBeGreaterThan(0);
+});
+
 test('an export tile by tile equals the whole-frame export for every spatial op (halos, whole-frame fields and extremes)', async ({ page }) => {
   test.setTimeout(600_000);
   const r = await run(page, 'law:tiles');

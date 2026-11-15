@@ -12,7 +12,7 @@ export type GpuEventLike =
   | { kind: 'error'; type: 'validation' | 'out-of-memory' | 'internal' | 'unknown'; message: string; during: string | null; scope?: 'submit' }
   | { kind: 'lost'; reason: string; message: string }
   | { kind: 'recreate'; why: string }
-  | { kind: 'memory'; what: 'render'; during: string; peak: number; live: number; limit: number; resident: number }
+  | { kind: 'memory'; what: 'render'; during: string; peak: number; live: number; pending: number; limit: number; resident: number }
   | { kind: 'memory'; what: 'evict'; freed: number; frames: number; live: number; limit: number; during: string | null }
   | { kind: 'memory'; what: 'recover'; ok: boolean; freed: number; live: number; limit: number; during: string; message: string };
 
@@ -80,7 +80,7 @@ function memoryRow(journal: Journal, e: Extract<GpuEventLike, { kind: 'memory' }
         m.high = e.peak;
         m.during = e.during;
       }
-      journal.info('gpu', 'GPU memory per render', { code: 'GPU_MEMORY', data: { peakMB: MB(e.peak), liveMB: MB(e.live), residentMB: MB(e.resident), limitMB: MB(e.limit), during: e.during, highMB: MB(m.high), highDuring: m.during, renders: m.renders } });
+      journal.info('gpu', 'GPU memory per render', { code: 'GPU_MEMORY', data: { peakMB: MB(e.peak), liveMB: MB(e.live), pendingMB: MB(e.pending), residentMB: MB(e.resident), limitMB: MB(e.limit), during: e.during, highMB: MB(m.high), highDuring: m.during, renders: m.renders } });
       if (grew) journal.info('gpu', `GPU memory high-water mark: ${MB(e.peak)} MB of ${MB(e.limit)} MB`, { code: 'GPU_MEMORY_HIGH', data: { during: e.during, liveMB: MB(e.live), residentMB: MB(e.resident) } });
       return;
     }

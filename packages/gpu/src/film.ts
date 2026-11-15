@@ -310,7 +310,13 @@ export class FilmGpu {
           sum = next;
         }
         // − density_min, then the final blur in print-grid pixels, then the amount
-        const dm = await this.one('axpy', sum!, { u: [0, 4], m: [[1, 1, 1], [0, 0, 0], [0, 0, 0]], g: spec.densityMin.map((v) => -v) }, { b: await this.ones(sum!) });
+        const ones = this.ones(sum!);
+        let dm: GPUTexture;
+        try {
+          dm = await this.one('axpy', sum!, { u: [0, 4], m: [[1, 1, 1], [0, 0, 0], [0, 0, 0]], g: spec.densityMin.map((v) => -v) }, { b: ones.tex });
+        } finally {
+          ones.done();
+        }
         this.rt.textures.release(sum!);
         const fin = spec.finalBlur_px > 0 ? await this.gauss(dm, [spec.finalBlur_px, spec.finalBlur_px, spec.finalBlur_px]) : dm;
         if (fin !== dm) this.rt.textures.release(dm);
@@ -330,28 +336,27 @@ export class FilmGpu {
    * thumbnail's grain (160×107) and the viewer's grain take turns, and each pass awaits its pipeline between getting
    * this texture and submitting, so the other render destroyed it under a pending submit — the owner's repeated
    * "Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit". Now each size
-   * keeps its own, and one let go is retired (destroyed when no GPU work is in flight). CHB-041: from the texture pool,
-   * so they count in the budget (a 4000-px one is 171 MB), and discarded (retired) when let go.
+   * keeps its own, from the texture pool (CHB-041: they count in the budget, a 4000-px one is 171 MB), and the pass
+   * that reads one holds a lease until it has submitted (CHB-045): one let go meanwhile is destroyed when it ends.
    */
   private readonly onesBySize = new Map<string, GPUTexture>();
   private static readonly ONES_KEPT = 4;
-  /** A texture of ones on the grid of `like`. */
-  private async ones(like: GPUTexture): Promise<GPUTexture> {
+  /** A texture of ones on the grid of `like`, leased: call done() after the pass that reads it is submitted. */
+  ones(like: { width: number; height: number }): { tex: GPUTexture; done: () => void } {
     const key = `${like.width}x${like.height}`;
-    const hit = this.onesBySize.get(key);
-    if (hit) {
-      this.onesBySize.delete(key);
-      this.onesBySize.set(key, hit);
-      return hit;
+    let t = this.onesBySize.get(key);
+    if (t) this.onesBySize.delete(key);
+    else {
+      t = this.rt.textures.acquire({ format: 'rgba32float', w: like.width, h: like.height, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }, `film.grain.ones ${key}`);
+      this.rt.device.queue.writeTexture({ texture: t }, new Float32Array(like.width * like.height * 4).fill(1), { bytesPerRow: like.width * 16 }, [like.width, like.height]);
     }
-    const t = this.rt.textures.acquire({ format: 'rgba32float', w: like.width, h: like.height, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }, `film.grain.ones ${key}`);
-    this.rt.device.queue.writeTexture({ texture: t }, new Float32Array(like.width * like.height * 4).fill(1), { bytesPerRow: like.width * 16 }, [like.width, like.height]);
     this.onesBySize.set(key, t);
+    const done = this.rt.textures.lease(t);
     while (this.onesBySize.size > FilmGpu.ONES_KEPT) {
       const [k, old] = this.onesBySize.entries().next().value!;
       this.onesBySize.delete(k);
       this.rt.textures.discard(old);
     }
-    return t;
+    return { tex: t, done };
   }
 }
