@@ -13,10 +13,12 @@ export * from './spec.ts';
 export * from './source.ts';
 export * from './document.ts';
 export {
-  AREAS, DISPLAY_RGB_CONSUMERS, ENCODINGS, acceptsDomain, allOps, bindArgs, closest, defineOp, editDistance, getOp, hasOp,
-  nodeArgs, nodeSlots, opsAccepting, opsByArea, opsForStage, opsProducing, outputChannels, registerOp,
-  type Area, type Binding, type BindResult, type Coalesce, type OpEncoding, type Kind, type LightTerm, type NodeSlot, type OpClass, type OpDef,
+  AREAS, DISPLAY_RGB_CONSUMERS, ENCODINGS, LAYER_MENUS, acceptsDomain, allOps, bindArgs, closest, defineOp, editDistance, getOp, hasOp,
+  nodeArgs, nodeSlots, opEncoding, opsAccepting, opsByArea, opsForStage, opsProducing, outputChannels, registerOp,
+  type Area, type Binding, type BindResult, type Coalesce, type EncodingSpec, type LayerMenu, type OpEncoding, type OpUi, type Kind, type LightTerm,
+  type NodeSlot, type OpClass, type OpDef,
 } from './registry.ts';
+export * from './encodings.ts';
 export * from './graph.ts';
 export * from './pixel.ts';
 export * from './stage-laws.ts';
@@ -32,5 +34,6 @@ export * from './laws.ts';
 export * from './roll.ts';
 export * from './frame.ts';
 export { CATALOG } from './catalog/index.ts';
+export { DEFAULT_HSL_BANDS } from './catalog/adjust.ts';
 export { COMBINE_ROLES } from './catalog/capture-film-print.ts';
 export type { OpArgs, OpName } from './generated/op-args.ts';

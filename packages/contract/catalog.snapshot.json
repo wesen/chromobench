@@ -1,6 +1,21 @@
 {
   "blendModes": [
-    "normal"
+    "normal",
+    "multiply",
+    "screen",
+    "overlay",
+    "darken",
+    "lighten",
+    "colour-dodge",
+    "colour-burn",
+    "hard-light",
+    "soft-light",
+    "difference",
+    "exclusion",
+    "hue",
+    "saturation",
+    "colour",
+    "luminosity"
   ],
   "contractVersion": "1.0.0",
   "cuts": {
@@ -10,7 +25,7 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 5
+      "order": 6
     },
     "darkroom.main": {
       "domain": "paper-logH",
@@ -18,7 +33,7 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 4
+      "order": 5
     },
     "display": {
       "domain": "display-rgb",
@@ -26,14 +41,14 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 8
+      "order": 9
     },
     "film": {
       "domain": "film-dyes",
       "kinds": [
         "digital-raw"
       ],
-      "order": 2
+      "order": 3
     },
     "finished": {
       "domain": "print-xyz",
@@ -41,7 +56,7 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 7
+      "order": 8
     },
     "negative": {
       "domain": "film-dyes",
@@ -49,7 +64,7 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 3
+      "order": 4
     },
     "print": {
       "domain": "print-xyz",
@@ -57,7 +72,7 @@
         "negative-scan",
         "digital-raw"
       ],
-      "order": 6
+      "order": 7
     },
     "scan": {
       "domain": "scanner-density",
@@ -67,6 +82,13 @@
       "order": 1
     },
     "scene": {
+      "domain": "scene-xyz",
+      "kinds": [
+        "digital-raw"
+      ],
+      "order": 2
+    },
+    "scene.input": {
       "domain": "scene-xyz",
       "kinds": [
         "digital-raw"
@@ -140,6 +162,22 @@
       ],
       "unit": "logH"
     },
+    "print-oklab": {
+      "channels": 3,
+      "range": [
+        -0.3,
+        1
+      ],
+      "unit": "none"
+    },
+    "print-rgb": {
+      "channels": 3,
+      "range": [
+        0,
+        1.2
+      ],
+      "unit": "none"
+    },
     "print-xyz": {
       "channels": 3,
       "range": [
@@ -179,6 +217,22 @@
         4
       ],
       "unit": "D"
+    },
+    "scene-oklab": {
+      "channels": 3,
+      "range": [
+        -0.3,
+        1.6
+      ],
+      "unit": "none"
+    },
+    "scene-rgb": {
+      "channels": 3,
+      "range": [
+        0,
+        4
+      ],
+      "unit": "none"
     },
     "scene-xyz": {
       "channels": 3,
@@ -357,9 +411,11 @@
   },
   "maskComponents": [
     "linear",
+    "radial",
     "ellipse",
     "paint",
-    "luminance"
+    "luminance",
+    "colour"
   ],
   "mutationOps": [
     "set",
@@ -402,7 +458,12 @@
       "stages": [
         "darkroom"
       ],
-      "term": "contribution"
+      "term": "contribution",
+      "ui": {
+        "label": "Burn",
+        "menu": "light",
+        "order": 10
+      }
     },
     "capture.expose": {
       "area": "capture",
@@ -458,13 +519,18 @@
       "class": "spatial",
       "domainIn": "print-xyz",
       "domainOut": "print-xyz",
-      "encoding": "linear",
+      "encoding": "stage",
       "on": "Image",
       "owner": "CHB-037",
       "returns": "Image",
       "stages": [
         "print"
-      ]
+      ],
+      "ui": {
+        "label": "Clarity",
+        "menu": "detail",
+        "order": 10
+      }
     },
     "clone": {
       "area": "retouch",
@@ -526,7 +592,52 @@
       "stages": [
         "scan",
         "print"
-      ]
+      ],
+      "ui": {
+        "label": "Clone",
+        "menu": "retouch",
+        "order": 20
+      }
+    },
+    "composite.encode": {
+      "area": "composite",
+      "args": {
+        "to": {
+          "type": "enum",
+          "values": [
+            "scene-xyz",
+            "scene-rgb",
+            "scene-oklab",
+            "print-xyz",
+            "print-rgb",
+            "print-oklab"
+          ]
+        },
+        "white": {
+          "default": "D65",
+          "type": "enum",
+          "values": [
+            "D50",
+            "D65"
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainFromArg": "to",
+      "domainIn": [
+        "scene-xyz",
+        "scene-rgb",
+        "scene-oklab",
+        "print-xyz",
+        "print-rgb",
+        "print-oklab"
+      ],
+      "domainOut": "same",
+      "dsl": false,
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image"
     },
     "composite.mix": {
       "area": "composite",
@@ -542,7 +653,22 @@
           "default": "normal",
           "type": "enum",
           "values": [
-            "normal"
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "darken",
+            "lighten",
+            "colour-dodge",
+            "colour-burn",
+            "hard-light",
+            "soft-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "colour",
+            "luminosity"
           ]
         },
         "mask": {
@@ -558,13 +684,91 @@
       "domainIn": [
         "scanner-density",
         "scene-xyz",
-        "print-xyz"
+        "scene-rgb",
+        "scene-oklab",
+        "print-xyz",
+        "print-rgb",
+        "print-oklab"
       ],
       "domainOut": "same",
       "dsl": false,
       "on": "Image",
       "owner": "CHB-037",
       "returns": "Image"
+    },
+    "curve": {
+      "area": "composite",
+      "args": {
+        "channel": {
+          "default": "L",
+          "type": "enum",
+          "values": [
+            "L",
+            "R",
+            "G",
+            "B"
+          ]
+        },
+        "points": {
+          "default": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ],
+          "maxItems": 16,
+          "minItems": 2,
+          "of": {
+            "x": {
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "y": {
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            }
+          },
+          "type": "list"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab",
+        "scene-rgb",
+        "print-rgb"
+      ],
+      "domainOut": "same",
+      "encoding": {
+        "arg": "channel",
+        "values": {
+          "B": "linear",
+          "G": "linear",
+          "L": "oklab",
+          "R": "linear"
+        }
+      },
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Curve",
+        "menu": "tone",
+        "order": 20
+      }
     },
     "darkroom.contactSheet": {
       "area": "darkroom",
@@ -810,7 +1014,12 @@
       "stages": [
         "darkroom"
       ],
-      "term": "modulator"
+      "term": "modulator",
+      "ui": {
+        "label": "Density mask",
+        "menu": "light",
+        "order": 50
+      }
     },
     "dodge": {
       "area": "darkroom",
@@ -839,7 +1048,12 @@
       "stages": [
         "darkroom"
       ],
-      "term": "contribution"
+      "term": "contribution",
+      "ui": {
+        "label": "Dodge",
+        "menu": "light",
+        "order": 20
+      }
     },
     "expose": {
       "area": "darkroom",
@@ -883,7 +1097,59 @@
       "stages": [
         "darkroom"
       ],
-      "term": "main"
+      "term": "main",
+      "ui": {
+        "label": "Main exposure",
+        "menu": "light",
+        "order": 0
+      }
+    },
+    "exposure": {
+      "area": "composite",
+      "args": {
+        "offset": {
+          "default": 0,
+          "max": 0.2,
+          "min": -0.2,
+          "type": "number",
+          "unit": "fraction",
+          "usual": [
+            -0.05,
+            0.05
+          ]
+        },
+        "stops": {
+          "default": 0,
+          "max": 6,
+          "min": -6,
+          "type": "number",
+          "unit": "stop",
+          "usual": [
+            -3,
+            3
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-rgb",
+        "print-rgb"
+      ],
+      "domainOut": "same",
+      "encoding": "linear",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Exposure",
+        "menu": "tone",
+        "order": 10
+      }
     },
     "film.couple": {
       "area": "film",
@@ -1022,7 +1288,12 @@
       "stages": [
         "darkroom"
       ],
-      "term": "modulator"
+      "term": "modulator",
+      "ui": {
+        "label": "Filter",
+        "menu": "light",
+        "order": 60
+      }
     },
     "flash": {
       "area": "darkroom",
@@ -1066,7 +1337,119 @@
       "stages": [
         "darkroom"
       ],
-      "term": "contribution"
+      "term": "contribution",
+      "ui": {
+        "label": "Flash",
+        "menu": "light",
+        "order": 30
+      }
+    },
+    "grade": {
+      "area": "composite",
+      "args": {
+        "balance": {
+          "default": 0,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "highlightsChroma": {
+          "default": 0,
+          "max": 0.3,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0,
+            0.1
+          ]
+        },
+        "highlightsHue_deg": {
+          "default": 70,
+          "max": 360,
+          "min": 0,
+          "type": "number",
+          "unit": "deg"
+        },
+        "highlightsLightness": {
+          "default": 0,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "midtonesChroma": {
+          "default": 0,
+          "max": 0.3,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0,
+            0.1
+          ]
+        },
+        "midtonesHue_deg": {
+          "default": 60,
+          "max": 360,
+          "min": 0,
+          "type": "number",
+          "unit": "deg"
+        },
+        "midtonesLightness": {
+          "default": 0,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "shadowsChroma": {
+          "default": 0,
+          "max": 0.3,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0,
+            0.1
+          ]
+        },
+        "shadowsHue_deg": {
+          "default": 230,
+          "max": 360,
+          "min": 0,
+          "type": "number",
+          "unit": "deg"
+        },
+        "shadowsLightness": {
+          "default": 0,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab"
+      ],
+      "domainOut": "same",
+      "encoding": "oklab",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Colour grading",
+        "menu": "colour",
+        "order": 30
+      }
     },
     "heal": {
       "area": "retouch",
@@ -1128,7 +1511,135 @@
       "stages": [
         "scan",
         "print"
-      ]
+      ],
+      "ui": {
+        "label": "Heal",
+        "menu": "retouch",
+        "order": 10
+      }
+    },
+    "hsl": {
+      "area": "composite",
+      "args": {
+        "bands": {
+          "default": [
+            {
+              "centre_deg": 25,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 55,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 105,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 145,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 195,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 260,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 295,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            },
+            {
+              "centre_deg": 330,
+              "hue_deg": 0,
+              "lightness": 0,
+              "saturation": 0,
+              "width_deg": 45
+            }
+          ],
+          "maxItems": 16,
+          "of": {
+            "centre_deg": {
+              "max": 360,
+              "min": 0,
+              "type": "number",
+              "unit": "deg"
+            },
+            "hue_deg": {
+              "default": 0,
+              "max": 60,
+              "min": -60,
+              "type": "number",
+              "unit": "deg"
+            },
+            "lightness": {
+              "default": 0,
+              "max": 1,
+              "min": -1,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "saturation": {
+              "default": 0,
+              "max": 1,
+              "min": -1,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "width_deg": {
+              "default": 45,
+              "max": 180,
+              "min": 5,
+              "type": "number",
+              "unit": "deg"
+            }
+          },
+          "type": "list"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab"
+      ],
+      "domainOut": "same",
+      "encoding": "oklab",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "HSL",
+        "menu": "colour",
+        "order": 10
+      }
     },
     "invert.classes": {
       "area": "invert",
@@ -1220,6 +1731,143 @@
       "owner": "CHB-003",
       "returns": "Image"
     },
+    "levels": {
+      "area": "composite",
+      "args": {
+        "black": {
+          "default": 0,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "channel": {
+          "default": "L",
+          "type": "enum",
+          "values": [
+            "L",
+            "R",
+            "G",
+            "B"
+          ]
+        },
+        "gamma": {
+          "default": 1,
+          "max": 10,
+          "min": 0.1,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0.3,
+            3
+          ]
+        },
+        "outBlack": {
+          "default": 0,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "outWhite": {
+          "default": 1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "white": {
+          "default": 1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab",
+        "scene-rgb",
+        "print-rgb"
+      ],
+      "domainOut": "same",
+      "encoding": {
+        "arg": "channel",
+        "values": {
+          "B": "linear",
+          "G": "linear",
+          "L": "oklab",
+          "R": "linear"
+        }
+      },
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Levels",
+        "menu": "tone",
+        "order": 30
+      }
+    },
+    "mask.colour": {
+      "area": "mask",
+      "args": {
+        "colour": {
+          "default": [
+            0.7,
+            0,
+            0
+          ],
+          "max": 1.5,
+          "min": -0.5,
+          "type": "vec3",
+          "unit": "none"
+        },
+        "softness": {
+          "default": 0.05,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0,
+            0.3
+          ]
+        },
+        "tolerance": {
+          "default": 0.1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            0,
+            0.3
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab"
+      ],
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Mask",
+      "ui": {
+        "label": "Colour range",
+        "menu": "mask",
+        "order": 60
+      }
+    },
     "mask.combine": {
       "area": "mask",
       "args": {
@@ -1296,7 +1944,12 @@
       "domainOut": "mask",
       "on": "Image",
       "owner": "CHB-010",
-      "returns": "Mask"
+      "returns": "Mask",
+      "ui": {
+        "label": "Ellipse",
+        "menu": "mask",
+        "order": 30
+      }
     },
     "mask.feather": {
       "area": "mask",
@@ -1358,7 +2011,12 @@
       "domainOut": "mask",
       "on": "Image",
       "owner": "CHB-010",
-      "returns": "Mask"
+      "returns": "Mask",
+      "ui": {
+        "label": "Linear gradient",
+        "menu": "mask",
+        "order": 10
+      }
     },
     "mask.luminance": {
       "area": "mask",
@@ -1391,7 +2049,12 @@
       "domainOut": "mask",
       "on": "Image",
       "owner": "CHB-010",
-      "returns": "Mask"
+      "returns": "Mask",
+      "ui": {
+        "label": "Luminance range",
+        "menu": "mask",
+        "order": 50
+      }
     },
     "mask.paint": {
       "area": "mask",
@@ -1433,7 +2096,53 @@
       "domainOut": "mask",
       "on": "Image",
       "owner": "CHB-009",
-      "returns": "Mask"
+      "returns": "Mask",
+      "ui": {
+        "label": "Brush",
+        "menu": "mask",
+        "order": 40
+      }
+    },
+    "mask.radial": {
+      "area": "mask",
+      "args": {
+        "angle_deg": {
+          "default": 0,
+          "max": 90,
+          "min": -90,
+          "type": "number",
+          "unit": "deg"
+        },
+        "box": {
+          "default": {
+            "h": 16,
+            "w": 16,
+            "x": 0,
+            "y": 0
+          },
+          "type": "box",
+          "unit": "px"
+        },
+        "feather": {
+          "default": 0.5,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": "any",
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Mask",
+      "ui": {
+        "label": "Radial gradient",
+        "menu": "mask",
+        "order": 20
+      }
     },
     "measure.densitometer": {
       "area": "measure",
@@ -1609,6 +2318,79 @@
       "on": "Image",
       "owner": "CHB-003",
       "returns": "Value"
+    },
+    "mixer": {
+      "area": "composite",
+      "args": {
+        "blue": {
+          "default": [
+            0,
+            0,
+            1
+          ],
+          "max": 2,
+          "min": -2,
+          "type": "vec3",
+          "unit": "fraction"
+        },
+        "green": {
+          "default": [
+            0,
+            1,
+            0
+          ],
+          "max": 2,
+          "min": -2,
+          "type": "vec3",
+          "unit": "fraction"
+        },
+        "grey": {
+          "default": [
+            0.2627,
+            0.678,
+            0.0593
+          ],
+          "max": 2,
+          "min": -2,
+          "type": "vec3",
+          "unit": "fraction"
+        },
+        "monochrome": {
+          "default": false,
+          "type": "bool"
+        },
+        "red": {
+          "default": [
+            1,
+            0,
+            0
+          ],
+          "max": 2,
+          "min": -2,
+          "type": "vec3",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-rgb",
+        "print-rgb"
+      ],
+      "domainOut": "same",
+      "encoding": "linear",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Channel mixer",
+        "menu": "colour",
+        "order": 40
+      }
     },
     "output.display": {
       "area": "output",
@@ -1807,7 +2589,12 @@
       "stages": [
         "darkroom"
       ],
-      "term": "contribution"
+      "term": "contribution",
+      "ui": {
+        "label": "Preflash",
+        "menu": "light",
+        "order": 40
+      }
     },
     "print.combine": {
       "area": "print",
@@ -2285,6 +3072,49 @@
       "owner": "CHB-006",
       "returns": "Regions"
     },
+    "sharpen": {
+      "area": "composite",
+      "args": {
+        "radius_mm": {
+          "default": 0.1,
+          "max": 2,
+          "min": 0.01,
+          "type": "number",
+          "unit": "mm",
+          "usual": [
+            0.03,
+            0.5
+          ]
+        },
+        "strength": {
+          "default": 0.5,
+          "max": 3,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction",
+          "usual": [
+            0,
+            1.5
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "domainIn": "print-xyz",
+      "domainOut": "print-xyz",
+      "encoding": "stage",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "print"
+      ],
+      "ui": {
+        "label": "Sharpen",
+        "menu": "detail",
+        "order": 20
+      }
+    },
     "source.info": {
       "area": "source",
       "args": {},
@@ -2373,6 +3203,10 @@
             "paper-logH",
             "paper-dyes",
             "print-xyz",
+            "scene-rgb",
+            "scene-oklab",
+            "print-rgb",
+            "print-oklab",
             "display-rgb",
             "mask",
             "scan-classes",
@@ -2453,6 +3287,45 @@
       "on": "Image",
       "owner": "CHB-006",
       "returns": "Image"
+    },
+    "vibrance": {
+      "area": "composite",
+      "args": {
+        "saturation": {
+          "default": 0,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "vibrance": {
+          "default": 0.25,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-oklab",
+        "print-oklab"
+      ],
+      "domainOut": "same",
+      "encoding": "oklab",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Vibrance",
+        "menu": "colour",
+        "order": 20
+      }
     },
     "view.adapt": {
       "area": "view",
@@ -2536,6 +3409,56 @@
       "on": "Image",
       "owner": "CHB-003",
       "returns": "Image"
+    },
+    "vignette": {
+      "area": "composite",
+      "args": {
+        "feather": {
+          "default": 0.5,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "size": {
+          "default": 0.5,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "stops": {
+          "default": -0.5,
+          "max": 4,
+          "min": -4,
+          "type": "number",
+          "unit": "stop",
+          "usual": [
+            -2,
+            2
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scene-rgb",
+        "print-rgb"
+      ],
+      "domainOut": "same",
+      "encoding": "linear",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scene",
+        "print"
+      ],
+      "ui": {
+        "label": "Vignette",
+        "menu": "effect",
+        "order": 10
+      }
     }
   },
   "output": {
@@ -2865,7 +3788,7 @@
       "output": "scan"
     },
     "scene": {
-      "input": "source",
+      "input": "scene.input",
       "kinds": [
         "digital-raw"
       ],

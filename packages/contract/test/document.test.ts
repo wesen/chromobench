@@ -89,13 +89,15 @@ describe('document format 3', () => {
   });
 
   it('masks: components checked by their op; reads must be a cut before the stage that uses the mask', () => {
-    expect(diagOf(() => edit(scanDoc(), [insert('masks', 'm', maskOf([['c1', { ...linear(), kind: 'radial' as never }]]))])).code).toBe('E_DOCUMENT');
+    expect(diagOf(() => edit(scanDoc(), [insert('masks', 'm', maskOf([['c1', { ...linear(), kind: 'conic' as never }]]))])).code).toBe('E_DOCUMENT');
     expect(diagOf(() => edit(scanDoc(), [insert('masks', 'm', maskOf([['c1', linear()]], { reads: 'scene' }))])).code).toBe('E_CUT');
     const late = edit(scanDoc(), [insert('masks', 'm', maskOf([['c1', linear()]], { reads: 'finished' }))]).doc;
     expect(diagOf(() => edit(late, [push('darkroom', 'b', L('burn', { stops: 1 }, { mask: 'm' }))]))).toMatchObject({ code: 'E_CUT', path: 'b.mask' });
     expect(diagOf(() => edit(scanDoc(), [push('darkroom', 'b', L('burn', { stops: 1 }, { mask: 'nope' }))])).code).toBe('E_DOCUMENT');
     expect(readableCuts('darkroom', 'negative-scan', 'mask')).toEqual(['source', 'scan', 'negative', 'darkroom.main']);
-    expect(readableCuts('print', 'digital-raw', 'binding')).toEqual(['source', 'scene', 'film', 'negative', 'darkroom.main', 'darkroom.H', 'print']);
+    expect(readableCuts('print', 'digital-raw', 'binding')).toEqual(['source', 'scene.input', 'scene', 'film', 'negative', 'darkroom.main', 'darkroom.H', 'print']);
+    // the scene stage's masks read the white-balanced scene, never the scene stage's own output
+    expect(readableCuts('scene', 'digital-raw', 'mask')).toEqual(['source', 'scene.input']);
     expect(readableCuts('scan', 'negative-scan', 'medium')).toEqual([]);
   });
 

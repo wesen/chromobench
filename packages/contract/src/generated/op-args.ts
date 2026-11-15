@@ -24,7 +24,7 @@ export interface CaptureExposeArgs {
   exposureEV?: number;
 }
 
-/** clarity: Local contrast on the print (a large unsharp mask weighted to the midtones), in linear light. Replaces finishing.clarity, whose radius was in preview pixels. */
+/** clarity: Local contrast on the print (a large unsharp mask weighted to the midtones): the low-pass of the print's luminance in linear light, the detail in lightness. Replaces finishing.clarity, whose radius was in preview pixels. */
 export interface ClarityArgs {
   /** Local contrast: positive adds, negative softens. Unit: fraction. Range [-1, 1]. Default 0.25. */
   strength?: number;
@@ -38,7 +38,15 @@ export interface CloneArgs {
   spots?: { x: number; y: number; r: number; src: Point | [number, number]; feather?: number; opacity?: number }[];
 }
 
-/** composite.mix: The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back). The receiver is the backdrop. mixPixel (pixel.ts) is the formula. */
+/** composite.encode: Converts a composite stage's image between its encodings: XYZ (the stage's), linear Rec. 2020 RGB, OkLab over that RGB (contract encodings.ts). The compiler inserts it where adjacent ops differ in encoding. */
+export interface CompositeEncodeArgs {
+  /** The encoding to convert to, a domain of the same stage as the receiver. */
+  to: "scene-xyz" | "scene-rgb" | "scene-oklab" | "print-xyz" | "print-rgb" | "print-oklab";
+  /** The XYZ white of the stage (print: Document.output.white, after view.adapt; scene: D65): XYZ is adapted from it to D65 (Bradford) before linear Rec. 2020. Default "D65". */
+  white?: "D50" | "D65";
+}
+
+/** composite.mix: The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back), in the encoding back and top share. The receiver is the backdrop. mixPixel (pixel.ts) is the mix; core composite/blend.ts defines B. */
 export interface CompositeMixArgs {
   /** What the entry made from the backdrop (its op applied, or a group's children). */
   top: NodeHandle;
@@ -46,8 +54,16 @@ export interface CompositeMixArgs {
   amount?: number;
   /** Coverage; absent = everywhere. */
   mask?: NodeHandle;
-  /** Blend mode B(back, top) (normal: top; the W3C set arrives with phase 8). Default "normal". */
-  blend?: "normal";
+  /** Blend mode B(back, top), the W3C set: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), hue, saturation, colour and luminosity in OkLCh. A mode other than normal needs a working encoding (rgb or oklab). Default "normal". */
+  blend?: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "colour-dodge" | "colour-burn" | "hard-light" | "soft-light" | "difference" | "exclusion" | "hue" | "saturation" | "colour" | "luminosity";
+}
+
+/** curve: A point curve (Lightroom's point curve, Photoshop's Curves) on lightness or one channel. Not Editor lab's parametric curve, whose negative contrast added contrast (design §13). */
+export interface CurveArgs {
+  /** What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve). Default "L". */
+  channel?: "L" | "R" | "G" | "B";
+  /** Control points in order of x (in a document: a Coll of points). The curve is the monotone cubic through them (Fritsch–Carlson): it never overshoots, so monotone points give a monotone curve; beyond the end points it continues along the end tangents. Default [{"x":0,"y":0},{"x":1,"y":1}]. */
+  points?: { x: number; y: number }[];
 }
 
 /** darkroom.contactSheet: A contact sheet of several frames. */
@@ -128,6 +144,14 @@ export interface ExposeArgs {
   filtration?: Cmy;
 }
 
+/** exposure: Exposure in linear light: rgb · 2^stops + offset (Editor lab `exposure`, without its sRGB round trip and gamma). */
+export interface ExposureArgs {
+  /** Exposure change: linear RGB × 2^stops. Unit: stop. Range [-6, 6]. Default 0. */
+  stops?: number;
+  /** Added after the gain, a fraction of white (a black level: negative removes a veil). Unit: fraction. Range [-0.2, 0.2]. Default 0. */
+  offset?: number;
+}
+
 /** film.couple: DIR coupler interlayer effects. */
 export interface FilmCoupleArgs {
   /** DIR coupler strength. Unit: fraction. Range [0, 2.5]. Default 1. */
@@ -178,10 +202,40 @@ export interface FlashArgs {
   through?: "base" | "open";
 }
 
+/** grade: Colour grading with shadow, midtone and highlight wheels in OkLab (Lightroom's Color Grading): weights (1 − t)², 2t(1 − t), t² of the lightness, a, b += L·Σ w·chroma·(cos hue, sin hue), L += 0.25·Σ w·lightness. */
+export interface GradeArgs {
+  /** Shadows: the OkLCh hue of the tint. Unit: deg. Range [0, 360]. Default 230. */
+  shadowsHue_deg?: number;
+  /** Shadows: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). Unit: none. Range [0, 0.3]. Default 0. */
+  shadowsChroma?: number;
+  /** Shadows: lightness change, ΔL = 0.25 · lightness · weight. Unit: fraction. Range [-1, 1]. Default 0. */
+  shadowsLightness?: number;
+  /** Midtones: the OkLCh hue of the tint. Unit: deg. Range [0, 360]. Default 60. */
+  midtonesHue_deg?: number;
+  /** Midtones: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). Unit: none. Range [0, 0.3]. Default 0. */
+  midtonesChroma?: number;
+  /** Midtones: lightness change, ΔL = 0.25 · lightness · weight. Unit: fraction. Range [-1, 1]. Default 0. */
+  midtonesLightness?: number;
+  /** Highlights: the OkLCh hue of the tint. Unit: deg. Range [0, 360]. Default 70. */
+  highlightsHue_deg?: number;
+  /** Highlights: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). Unit: none. Range [0, 0.3]. Default 0. */
+  highlightsChroma?: number;
+  /** Highlights: lightness change, ΔL = 0.25 · lightness · weight. Unit: fraction. Range [-1, 1]. Default 0. */
+  highlightsLightness?: number;
+  /** Moves the split between the wheels: positive gives the highlights more of the range (t = clamp(L, 0, 1)^(2^−balance)). Unit: fraction. Range [-1, 1]. Default 0. */
+  balance?: number;
+}
+
 /** heal: Heals circular spots: the source patch, matched to the target's surroundings, replaces the target (dust on the negative in the scan stage, blemishes on the print). Adjacent heal layers coalesce into one node. */
 export interface HealArgs {
   /** Spots in order; each reads the image as the spots before it left it (in a document: a Coll of spots). Default []. */
   spots?: { x: number; y: number; r: number; src: Point | [number, number]; feather?: number; opacity?: number }[];
+}
+
+/** hsl: Hue, saturation and lightness per hue band in OkLCh (Lightroom's HSL panel); replaces the never-compiled finishing.hue. */
+export interface HslArgs {
+  /** Hue bands (in a document: a Coll; default the eight of Lightroom's HSL panel: red, orange, yellow, green, aqua, blue, purple, magenta). A band weighs a pixel by w = smoothstep(cos width, 1, cos(h − centre)); weights are normalised by max(1, Σw) and faded towards neutral (chroma below 0.04). Default [{"centre_deg":25,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":55,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":105,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":145,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":195,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":260,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":295,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":330,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0}]. */
+  bands?: { centre_deg: number; width_deg?: number; hue_deg?: number; saturation?: number; lightness?: number }[];
 }
 
 /** invert.classes: Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut. */
@@ -202,6 +256,32 @@ export interface InvertDyesArgs {
   stock?: StockId;
   /** Scanner model. Default "xt5-rgb-led". */
   scanner?: string;
+}
+
+/** levels: Levels on lightness or one channel: out = outBlack + (outWhite − outBlack)·g((x − black)/(white − black)), g(t) = t^(1/gamma) on [0, 1] and continued with slope 1 beyond, so nothing is clipped in the working encoding (the display knee clips). */
+export interface LevelsArgs {
+  /** What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve). Default "L". */
+  channel?: "L" | "R" | "G" | "B";
+  /** Input black point (the channel's lightness). Unit: fraction. Range [0, 1]. Default 0. */
+  black?: number;
+  /** Input white point. Unit: fraction. Range [0, 1]. Default 1. */
+  white?: number;
+  /** Midtone gamma: t^(1/gamma) between black and white (above 1 brightens). Unit: none. Range [0.1, 10]. Default 1. */
+  gamma?: number;
+  /** Output black: where the input black lands. Unit: fraction. Range [0, 1]. Default 0. */
+  outBlack?: number;
+  /** Output white: where the input white lands. Unit: fraction. Range [0, 1]. Default 1. */
+  outWhite?: number;
+}
+
+/** mask.colour: Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance). The receiver is the cut the mask reads, encoded to OkLab by the compiler. */
+export interface MaskColourArgs {
+  /** The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures). Unit: none. Range [-0.5, 1.5]. Default [0.7,0,0]. */
+  colour?: Vec3;
+  /** OkLab distance ΔE within which the mask is 1. Unit: none. Range [0, 1]. Default 0.1. */
+  tolerance?: number;
+  /** Distance over which it falls to 0 beyond the tolerance (a smoothstep). Unit: none. Range [0, 1]. Default 0.05. */
+  softness?: number;
 }
 
 /** mask.combine: The one mask algebra (design §25): v ← v + amount·(op(v, c) − v), op add = max, subtract = v·(1 − c), intersect = v·c. maskCombine (pixel.ts) is the formula. */
@@ -262,6 +342,16 @@ export interface MaskPaintArgs {
   strokes?: { points: [number, number, number?][]; radius: number; hardness?: number; mode?: "add" | "erase" }[];
 }
 
+/** mask.radial: Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather. The receiver only gives the size. */
+export interface MaskRadialArgs {
+  /** Bounding box of the outer ellipse in document px (before rotation). Unit: px. Default {"x":0,"y":0,"w":16,"h":16}. */
+  box?: Box | [number, number, number, number];
+  /** Rotation about the box centre. Unit: deg. Range [-90, 90]. Default 0. */
+  angle_deg?: number;
+  /** Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between. Unit: fraction. Range [0, 1]. Default 0.5. */
+  feather?: number;
+}
+
 /** measure.densitometer: Reads densities at a point, like a hand densitometer. */
 export interface MeasureDensitometerArgs {
   /** Centre in source px. Unit: px. Default {"x":0,"y":0}. */
@@ -296,6 +386,20 @@ export interface MeasureStatsArgs {
   box?: Box | [number, number, number, number];
   /** Weighting mask. */
   mask?: NodeHandle;
+}
+
+/** mixer: A 3 × 3 channel mixer in linear RGB, or black and white from weighted channels (Editor lab `bw`, generalised and in linear light). */
+export interface MixerArgs {
+  /** Output red from input R, G, B (linear RGB). Unit: fraction. Range [-2, 2]. Default [1,0,0]. */
+  red?: Vec3;
+  /** Output green from input R, G, B. Unit: fraction. Range [-2, 2]. Default [0,1,0]. */
+  green?: Vec3;
+  /** Output blue from input R, G, B. Unit: fraction. Range [-2, 2]. Default [0,0,1]. */
+  blue?: Vec3;
+  /** Black and white: every channel becomes grey = grey · (R, G, B); the rows are not used. Default false. */
+  monochrome?: boolean;
+  /** Weights of R, G, B in the monochrome grey (default the luminance of Rec. 2020: a neutral conversion; filters shift them, as a red filter on panchromatic film). Unit: fraction. Range [-2, 2]. Default [0.2627,0.678,0.0593]. */
+  grey?: Vec3;
 }
 
 /** output.display: Turns the print's XYZ into encoded RGB in an output space. The print stage comes before it; the knee is last. */
@@ -446,6 +550,14 @@ export interface ScanSpecksArgs {
   threshold?: number;
 }
 
+/** sharpen: An unsharp mask on the print's lightness (clarity without the midtone weight, at a small radius): the low-pass of Y in linear light, L = (Y / Y_w)^⅓, out = XYZ·(L′/L)³ (chromaticity kept, no clipping). */
+export interface SharpenArgs {
+  /** Sharpening: the lightness detail added, L′ = L + s·(L − L̄). Unit: fraction. Range [0, 3]. Default 0.5. */
+  strength?: number;
+  /** Radius (Gaussian σ) of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size). Unit: mm. Range [0.01, 2]. Default 0.1. */
+  radius_mm?: number;
+}
+
 /** source.info: Facts about the decoded source. */
 export interface SourceInfoArgs {
 }
@@ -468,6 +580,14 @@ export interface SourceXyzArgs {
   temperature_K?: number;
   /** Custom white balance tint (green–magenta). Unit: none. Range [-150, 150]. Default 0. */
   tint?: number;
+}
+
+/** vibrance: Vibrance and saturation in OkLCh chroma (Editor lab `vibrance`, in chroma instead of an sRGB spread). */
+export interface VibranceArgs {
+  /** Chroma change weighted to muted colours: C × (1 + v·(1 − C/0.3)²) below C = 0.3 (monotone: colours keep their order). Unit: fraction. Range [-1, 1]. Default 0.25. */
+  vibrance?: number;
+  /** Uniform chroma change after vibrance: C × (1 + saturation). Unit: fraction. Range [-1, 1]. Default 0. */
+  saturation?: number;
 }
 
 /** view.adapt: Chromatic adaptation of the print XYZ to the output white. */
@@ -494,12 +614,24 @@ export interface ViewReflectArgs {
   illuminant?: string;
 }
 
+/** vignette: A vignette in linear light, centred on the frame (document pixels): rgb · 2^(stops · smoothstep(size, size + feather·(1 − size), ρ)), ρ = 1 at the corners. */
+export interface VignetteArgs {
+  /** Exposure change at the corners (negative darkens). Unit: stop. Range [-4, 4]. Default -0.5. */
+  stops?: number;
+  /** Where the falloff starts, a fraction of the distance from the centre to the corners on the frame's ellipse. Unit: fraction. Range [0, 1]. Default 0.5. */
+  size?: number;
+  /** How much of the rest of the way the falloff takes (0: a hard edge, 1: it reaches the corners). Unit: fraction. Range [0, 1]. Default 0.5. */
+  feather?: number;
+}
+
 export interface OpArgs {
   "burn": BurnArgs;
   "capture.expose": CaptureExposeArgs;
   "clarity": ClarityArgs;
   "clone": CloneArgs;
+  "composite.encode": CompositeEncodeArgs;
   "composite.mix": CompositeMixArgs;
+  "curve": CurveArgs;
   "darkroom.contactSheet": DarkroomContactSheetArgs;
   "darkroom.lightsToFiltration": DarkroomLightsToFiltrationArgs;
   "darkroom.ringAround": DarkroomRingAroundArgs;
@@ -507,16 +639,21 @@ export interface OpArgs {
   "densityMask": DensityMaskArgs;
   "dodge": DodgeArgs;
   "expose": ExposeArgs;
+  "exposure": ExposureArgs;
   "film.couple": FilmCoupleArgs;
   "film.develop": FilmDevelopArgs;
   "film.grain": FilmGrainArgs;
   "film.halation": FilmHalationArgs;
   "filter": FilterArgs;
   "flash": FlashArgs;
+  "grade": GradeArgs;
   "heal": HealArgs;
+  "hsl": HslArgs;
   "invert.classes": InvertClassesArgs;
   "invert.classify": InvertClassifyArgs;
   "invert.dyes": InvertDyesArgs;
+  "levels": LevelsArgs;
+  "mask.colour": MaskColourArgs;
   "mask.combine": MaskCombineArgs;
   "mask.constant": MaskConstantArgs;
   "mask.ellipse": MaskEllipseArgs;
@@ -525,10 +662,12 @@ export interface OpArgs {
   "mask.linear": MaskLinearArgs;
   "mask.luminance": MaskLuminanceArgs;
   "mask.paint": MaskPaintArgs;
+  "mask.radial": MaskRadialArgs;
   "measure.densitometer": MeasureDensitometerArgs;
   "measure.histogram": MeasureHistogramArgs;
   "measure.patches": MeasurePatchesArgs;
   "measure.stats": MeasureStatsArgs;
+  "mixer": MixerArgs;
   "output.display": OutputDisplayArgs;
   "output.encode": OutputEncodeArgs;
   "output.frame": OutputFrameArgs;
@@ -547,13 +686,16 @@ export interface OpArgs {
   "scan.rankStocks": ScanRankStocksArgs;
   "scan.rebate": ScanRebateArgs;
   "scan.specks": ScanSpecksArgs;
+  "sharpen": SharpenArgs;
   "source.info": SourceInfoArgs;
   "source.open": SourceOpenArgs;
   "source.xyz": SourceXyzArgs;
+  "vibrance": VibranceArgs;
   "view.adapt": ViewAdaptArgs;
   "view.flare": ViewFlareArgs;
   "view.inspect": ViewInspectArgs;
   "view.reflect": ViewReflectArgs;
+  "vignette": VignetteArgs;
 }
 
 export type OpName = keyof OpArgs;

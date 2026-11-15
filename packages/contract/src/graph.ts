@@ -6,7 +6,8 @@ import { canonicalJSON } from '@chromobench/values';
 import { DOMAINS, type Domain, type ImageInfo } from './domains.ts';
 import { fail, type Diagnostic } from './errors.ts';
 import type { Node, NodeDef, NodeInfo, ValueInfo } from './graph-types.ts';
-import { acceptsDomain, bindArgs, getOp, nodeSlots, opsProducing, outputChannels, type OpDef } from './registry.ts';
+import { ENCODED_DOMAINS, encodingOfDomain } from './encodings.ts';
+import { acceptsDomain, bindArgs, getOp, nodeSlots, opEncoding, opsProducing, outputChannels, type OpDef } from './registry.ts';
 import type { SourceInfo } from './source.ts';
 import type { Box } from './spec.ts';
 
@@ -106,6 +107,8 @@ export class Graph {
     }
     // Node-typed values (top level or list-item fields) may be Node objects: bind ids, then check each one.
     const { args, warnings } = bindArgs(op, toIds(raw) as Record<string, unknown>);
+    const r0 = recv[0];
+    if (r0 && isImage(r0.info)) checkEncoding(op, args, r0.info.domain);
     const extra: string[] = [];
     for (const slot of nodeSlots(op, args)) {
       const n = this.nodes.get(slot.id) ?? fail('E_NO_NODE', `${op.name}.${slot.at}: unknown node ${String(slot.id).slice(0, 12)}…`);
@@ -218,6 +221,24 @@ export class Graph {
     }
     return out;
   }
+}
+
+/**
+ * The working encodings (contract 1.1): a layer op whose encoding follows an argument (curve, levels) takes the domain
+ * of that encoding; composite.encode converts within one stage. Both are what the compiler builds; this check makes a
+ * hand-built graph fail the same way.
+ */
+function checkEncoding(op: OpDef, args: Readonly<Record<string, unknown>>, d: Domain): void {
+  const got = encodingOfDomain(d);
+  if (!got) return;
+  if (op.name === 'composite.encode') {
+    const to = encodingOfDomain(args['to'] as Domain)!;
+    if (to.stage !== got.stage) fail('E_DOMAIN', `composite.encode converts within one stage: ${d} cannot become ${String(args['to'])}`, { hint: `encode to ${ENCODED_DOMAINS[got.stage][to.encoding]}` });
+    return;
+  }
+  if (!op.stages || typeof op.encoding !== 'object') return;
+  const want = opEncoding(op, args);
+  if (want !== got.encoding) fail('E_DOMAIN', `${op.name} with ${op.encoding.arg} ${String(args[op.encoding.arg])} computes in ${want}; this input is ${d}`, { hint: `composite.encode to ${ENCODED_DOMAINS[got.stage][want]} first` });
 }
 
 /** Node objects (anything with an id) in a raw argument value → their ids, at any depth of arrays and objects. */

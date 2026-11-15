@@ -2,6 +2,22 @@
 
 # mask.* ops
 
+## `mask.colour`
+
+Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance). The receiver is the cut the mask reads, encoded to OkLab by the compiler.
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab) → Mask (mask)
+- Class: pointwise; binding: setting
+- UI: "Colour range" in the mask menu (order 60)
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `colour` | vec3 | none | [-0.5, 1.5] |  | `[0.7,0,0]` | The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures). |
+| `tolerance` | number | none | [0, 1] | [0, 0.3] | `0.1` | OkLab distance ΔE within which the mask is 1. |
+| `softness` | number | none | [0, 1] | [0, 0.3] | `0.05` | Distance over which it falls to 0 beyond the tolerance (a smoothstep). |
+
 ## `mask.combine`
 
 The one mask algebra (design §25): v ← v + amount·(op(v, c) − v), op add = max, subtract = v·(1 − c), intersect = v·c. maskCombine (pixel.ts) is the formula.
@@ -37,6 +53,7 @@ Mask component 'ellipse': the ellipse inscribed in the box. The edge is antialia
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
+- UI: "Ellipse" in the mask menu (order 30)
 - Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -73,6 +90,7 @@ Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
+- UI: "Linear gradient" in the mask menu (order 10)
 - Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -87,6 +105,7 @@ Mask component 'luminance': how far the receiver's luminance (the mean of its ch
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
+- UI: "Luminance range" in the mask menu (order 50)
 - Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -102,8 +121,25 @@ Mask component 'paint': brush strokes rasterised with soft round dabs.
 - Owner: CHB-009
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
+- UI: "Brush" in the mask menu (order 40)
 - Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
 | `strokes` | list of {points, radius, hardness, mode} |  |  |  | `[]` | Brush strokes in order (in a document: a Coll of strokes). |
+
+## `mask.radial`
+
+Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather. The receiver only gives the size.
+
+- Owner: CHB-037
+- On: Image (any) → Mask (mask)
+- Class: pointwise; binding: setting
+- UI: "Radial gradient" in the mask menu (order 20)
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` | Bounding box of the outer ellipse in document px (before rotation). |
+| `angle_deg` | number | deg | [-90, 90] |  | `0` | Rotation about the box centre. |
+| `feather` | number | fraction | [0, 1] |  | `0.5` | Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between. |

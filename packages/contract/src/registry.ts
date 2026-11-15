@@ -13,6 +13,7 @@ import { fail, isChromobenchError, type Diagnostic } from './errors.ts';
 import type { FieldSpec } from './graph-types.ts';
 import { checkArgValue, formatValue, NODE_ARG_TYPES, normaliseShape, tidy, type ArgSpec } from './spec.ts';
 import { UNITS } from './units.ts';
+import { ENCODED_DOMAINS, type WorkingStage } from './encodings.ts';
 
 export type Kind = 'Image' | 'Mask' | 'Value' | 'Regions' | 'Table' | 'Term';
 export type Area = 'source' | 'scan' | 'invert' | 'capture' | 'film' | 'print'
@@ -23,11 +24,19 @@ export type Binding = 'stock' | 'scan' | 'setting' | 'pixel';
 
 /**
  * The working encoding of a layer op's arithmetic (design §22): 'stage' = the stage's own values (scanner density,
- * log H, print XYZ); 'linear' = linear light (both composite stages hold linear XYZ, so no conversion is inserted);
- * 'oklab' = OkLab/OkLCh, for ops defined by eye (P8: the compiler inserts the conversions).
+ * log H, print XYZ); 'linear' = linear RGB (Rec. 2020, D65), for ops that model light; 'oklab' = OkLab/OkLCh, for ops
+ * defined by eye. The compiler converts a layer's input to its op's encoding (encodings.ts, composite.encode).
  */
 export type OpEncoding = 'stage' | 'linear' | 'oklab';
 export const ENCODINGS: readonly OpEncoding[] = ['stage', 'linear', 'oklab'];
+/** An op's encoding: fixed, or chosen by an enum argument (curve and levels: lightness in OkLab, a channel in RGB). */
+export type EncodingSpec = OpEncoding | { readonly arg: string; readonly values: Readonly<Record<string, OpEncoding>> };
+
+/** The "+ Layer" menu a layer op (or the mask menu a component op) is listed in. */
+export type LayerMenu = 'light' | 'retouch' | 'tone' | 'colour' | 'detail' | 'effect' | 'mask';
+export const LAYER_MENUS: readonly LayerMenu[] = ['light', 'retouch', 'tone', 'colour', 'detail', 'effect', 'mask'];
+/** How the UI lists an op the photographer adds (design §33): its name in menus and panels, its menu, its place there. */
+export interface OpUi { readonly label: string; readonly menu: LayerMenu; readonly order: number }
 
 /** A light-law term (design §22): light that reaches the paper, or a filter in the light path. */
 export type LightTerm = 'main' | 'contribution' | 'modulator';
@@ -66,8 +75,10 @@ export interface OpDef {
   validate?: (args: Readonly<Record<string, unknown>>) => string | null;
   /** The stages whose stacks may hold this op as a layer (design §21). Absent: not a layer op. */
   stages?: readonly StageName[];
-  /** Layer ops: the encoding the op computes in. */
-  encoding?: OpEncoding;
+  /** Layer ops: the encoding the op computes in (opEncoding resolves an argument-dependent one). */
+  encoding?: EncodingSpec;
+  /** Layer ops and mask components: label, menu and order for the UI ("+ Layer", the mask menu). */
+  ui?: OpUi;
   /** Light-law ops: what the term is. */
   term?: LightTerm;
   /** Layer ops whose adjacent layers merge into one node. */
@@ -161,8 +172,20 @@ export function registerOp(def: OpDef): OpDef {
   if (def.stages) {
     if (def.stages.length === 0) invalid(n, 'stages must not be empty (omit it for a node-only op)');
     if (!def.encoding) invalid(n, 'a layer op declares its encoding');
+    const spec = def.encoding;
+    if (typeof spec === 'object') {
+      const a = def.args[spec.arg];
+      if (a?.type !== 'enum' || !a.values!.every((v) => ENCODINGS.includes(spec.values[v]!))) invalid(n, `encoding: ${spec.arg} must be an enum whose every value maps to an encoding`);
+    }
+    const encs = typeof def.encoding === 'object' ? Object.values(def.encoding.values) : [def.encoding!];
+    if (def.stages.includes('scan') && encs.some((e) => e !== 'stage')) invalid(n, 'a scan-stage op computes in the stage encoding (scanner density)');
+    // a composite layer op accepts exactly the domains of its encodings in the stages it lives in
+    const composite = def.stages.filter((s): s is WorkingStage => s === 'scene' || s === 'print');
+    const din = domainsOf(def.domainIn);
+    for (const s of composite) for (const e of encs) if (din !== 'any' && !din.includes(ENCODED_DOMAINS[s][e])) invalid(n, `a ${e} op in the ${s} stage takes ${ENCODED_DOMAINS[s][e]}`);
     if (def.stages.includes('darkroom') !== (def.returns === 'Term')) invalid(n, 'darkroom layer ops (and only they) return Term');
   }
+  if (def.ui && (!LAYER_MENUS.includes(def.ui.menu) || !def.ui.label)) invalid(n, `ui: a label and one of the menus ${LAYER_MENUS.join(', ')}`);
   if (def.returns === 'Term' && (!def.term || def.on !== 'none' || def.stages?.join() !== 'darkroom')) invalid(n, "a Term op is a darkroom-only layer op with on 'none' and a term role");
   if (def.coalesce) {
     const l = def.args[def.coalesce.list];
@@ -215,6 +238,15 @@ export function registerOp(def: OpDef): OpDef {
   const frozen = Object.freeze({ ...def, args: Object.freeze({ ...def.args }) });
   REGISTRY.set(n, frozen);
   return frozen;
+}
+
+/** The encoding a layer op computes in for these (bound) params; 'stage' for ops without one. */
+export function opEncoding(op: OpDef, params: Readonly<Record<string, unknown>> = {}): OpEncoding {
+  const e = op.encoding;
+  if (e === undefined) return 'stage';
+  if (typeof e === 'string') return e;
+  const v = params[e.arg] ?? op.args[e.arg]?.default;
+  return e.values[v as string] ?? fail('E_INTERNAL', `${op.name}: no encoding for ${e.arg} = ${String(v)}`);
 }
 
 /** Identity helper so catalog files get type checking without registering at import. */

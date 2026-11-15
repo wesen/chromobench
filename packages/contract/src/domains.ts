@@ -11,6 +11,10 @@ export type Domain =
   | 'paper-logH'        // log10 exposure per paper layer                    (tap log_e_print)
   | 'paper-dyes'        // paper dye amounts                                 (tap cmy_print)
   | 'print-xyz'         // XYZ of the print under the viewing light
+  | 'scene-rgb'         // the scene stage's linear working RGB (Rec. 2020 primaries, D65; white = 1)   (contract 1.1)
+  | 'scene-oklab'       // the scene stage's perceptual working encoding: OkLab over scene-rgb
+  | 'print-rgb'         // the print stage's linear working RGB (Rec. 2020 primaries, D65; white = 1)
+  | 'print-oklab'       // the print stage's perceptual working encoding: OkLab over print-rgb
   | 'display-rgb'       // encoded output RGB                                (tap rgb_out)
   | 'mask'              // one channel, 0..1
   | 'scan-classes'      // one channel, integer class codes (CHB-003/006)
@@ -40,6 +44,10 @@ export const DOMAINS: Readonly<Record<Domain, DomainInfo>> = Object.freeze({
   'paper-logH': { channels: 3, unit: 'logH', range: [-4, 3], tap: 'log_e_print', doc: 'paper log exposure' },
   'paper-dyes': { channels: 3, unit: 'none', range: [0, 3], tap: 'cmy_print', doc: 'paper dye amounts' },
   'print-xyz': { channels: 3, unit: 'none', range: [0, 1.2], doc: 'print under the viewing light' },
+  'scene-rgb': { channels: 3, unit: 'none', range: [0, 4], doc: 'scene in linear Rec. 2020 RGB under D65 (white = 1): the scene stage\'s linear encoding' },
+  'scene-oklab': { channels: 3, unit: 'none', range: [-0.3, 1.6], doc: 'scene in OkLab (L, a, b) over scene-rgb (white L = 1): the scene stage\'s perceptual encoding' },
+  'print-rgb': { channels: 3, unit: 'none', range: [0, 1.2], doc: 'print in linear Rec. 2020 RGB under D65 (white = 1): the print stage\'s linear encoding' },
+  'print-oklab': { channels: 3, unit: 'none', range: [-0.3, 1], doc: 'print in OkLab (L, a, b) over print-rgb (white L = 1): the print stage\'s perceptual encoding' },
   'display-rgb': { channels: 3, unit: 'none', range: [0, 1], tap: 'rgb_out', doc: 'encoded output RGB' },
   mask: { channels: 1, unit: 'fraction', range: [0, 1], doc: 'one channel, 0..1' },
   'scan-classes': { channels: 1, unit: 'none', range: [0, 3], doc: 'class codes: 0 ok, 1 blank, 2 below base, 3 out of gamut' },
