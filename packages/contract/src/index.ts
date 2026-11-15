@@ -2,8 +2,9 @@
 // Contract 1.0 (CHB-037, CHB-035 design 01 v2): document format 3 (stages with media and stacks of layers and groups,
 // masks, links, bindings), the op catalogue with stages and encodings, the stage laws (light, composite, repair), the
 // one compiler with named cuts, validation through the values hooks (a frame's history is the values document log
-// with LOG_RULES). Importing this module registers the catalogue.
-export const CONTRACT_VERSION = '1.0.0';
+// with LOG_RULES). Contract 1.1 (CHB-037 P8a): the composite op set, blend modes, working encodings, colour and radial
+// masks. Importing this module registers the catalogue.
+export const CONTRACT_VERSION = '1.1.0';
 
 export * from './errors.ts';
 export * from './units.ts';

@@ -66,6 +66,7 @@ export interface CameraLinearHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -98,6 +99,7 @@ export interface SceneXyzHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -119,6 +121,7 @@ export interface ScannerDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -150,6 +153,7 @@ export interface FilmLogHHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -180,6 +184,7 @@ export interface FilmDyesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -205,6 +210,7 @@ export interface PrintingDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -224,6 +230,7 @@ export interface PaperLogHHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -247,6 +254,7 @@ export interface PaperDyesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -267,6 +275,7 @@ export interface PrintXyzHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -284,6 +293,84 @@ export interface PrintXyzHandle extends ImageHandleBase {
   };
 }
 
+export interface SceneRgbHandle extends ImageHandleBase {
+  readonly mask: {
+    constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
+    ellipse(args?: Partial<OpArgs["mask.ellipse"]>): MaskHandle;
+    linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
+    luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
+    paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+  };
+  readonly measure: {
+    histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
+    patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
+    stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
+  };
+  readonly view: {
+    inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
+  };
+}
+
+export interface SceneOklabHandle extends ImageHandleBase {
+  readonly mask: {
+    colour(args?: Partial<OpArgs["mask.colour"]>): MaskHandle;
+    constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
+    ellipse(args?: Partial<OpArgs["mask.ellipse"]>): MaskHandle;
+    linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
+    luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
+    paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+  };
+  readonly measure: {
+    histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
+    patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
+    stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
+  };
+  readonly view: {
+    inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
+  };
+}
+
+export interface PrintRgbHandle extends ImageHandleBase {
+  readonly mask: {
+    constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
+    ellipse(args?: Partial<OpArgs["mask.ellipse"]>): MaskHandle;
+    linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
+    luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
+    paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+  };
+  readonly measure: {
+    histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
+    patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
+    stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
+  };
+  readonly view: {
+    inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
+  };
+}
+
+export interface PrintOklabHandle extends ImageHandleBase {
+  readonly mask: {
+    colour(args?: Partial<OpArgs["mask.colour"]>): MaskHandle;
+    constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
+    ellipse(args?: Partial<OpArgs["mask.ellipse"]>): MaskHandle;
+    linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
+    luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
+    paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+  };
+  readonly measure: {
+    histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
+    patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
+    stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
+  };
+  readonly view: {
+    inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
+  };
+}
+
 export interface DisplayRgbHandle extends ImageHandleBase {
   readonly mask: {
     constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
@@ -291,6 +378,7 @@ export interface DisplayRgbHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -312,6 +400,7 @@ export interface MaskHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -330,6 +419,7 @@ export interface ScanClassesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -348,6 +438,7 @@ export interface ScalarFieldHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -366,6 +457,7 @@ export interface SilverDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
