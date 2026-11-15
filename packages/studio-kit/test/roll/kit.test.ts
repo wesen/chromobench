@@ -57,10 +57,10 @@ describe('the roll flow through commands (guide §9)', () => {
     expect(recipes(r)).toEqual(printed);
     expect(rollOf(rt.state)!.status).toBe('first-printed');
 
-    // cull: reject frame 2 (the library: view tier, no document involvement)
+    // cull: reject frame 2 (a rating: the document tier, one undo step; no frame document involved)
     rt.runCommand('frame.select', null, ids[1]);
     rt.runCommand('frame.reject', null);
-    expect((rt.state as any).catalog.frames[ids[1]!].flag).toBe('reject');
+    expect((rt.state as any).ratings[ids[1]!].flag).toBe('reject');
     // reference: frame 4
     rt.runCommand('frame.select', null, ids[3]);
     rt.runCommand('roll.setReference', null);

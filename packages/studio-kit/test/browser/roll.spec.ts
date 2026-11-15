@@ -43,10 +43,10 @@ test('roll: new roll, first print, cull, reference, match, approve, undo', async
   // cull with the keys on the contact sheet: reject frame 5, pick frame 1
   await select(page, 4);
   await page.keyboard.press('x');
-  await expect.poll(() => hook<string | null>(page, `cb.state().catalog.frames[cb.state().roll.rolls['roll-1'].frames[4]].flag`)).toBe('reject');
+  await expect.poll(() => hook<string | null>(page, `cb.state().ratings[cb.state().roll.rolls['roll-1'].frames[4]]?.flag`)).toBe('reject');
   await select(page, 0);
   await page.keyboard.press('p');
-  await expect.poll(() => hook<string | null>(page, `cb.state().catalog.frames[cb.state().roll.rolls['roll-1'].frames[0]].flag`)).toBe('pick');
+  await expect.poll(() => hook<string | null>(page, `cb.state().ratings[cb.state().roll.rolls['roll-1'].frames[0]]?.flag`)).toBe('pick');
 
   // reference: frame 3 (R), then match (M): previewed on one card, nothing applied yet
   await select(page, 2);

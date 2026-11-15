@@ -255,6 +255,7 @@ commands
   frame.unflag "Unflag" (Frame) U ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -350,7 +351,7 @@ commands
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 145 · keys 113 in 19 scopes · tools 10 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 146 · keys 113 in 19 scopes · tools 10 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -432,6 +433,7 @@ commands
   frame.unflag "Unflag" (Frame) ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -491,7 +493,7 @@ commands
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 101 · keys 33 in 6 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 102 · keys 33 in 6 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -688,6 +690,7 @@ commands
   frame.unflag "Unflag" (Frame) U ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -767,7 +770,7 @@ commands
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 126 · keys 78 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 127 · keys 78 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -1036,6 +1039,7 @@ commands
   frame.unflag "Unflag" (Frame) U ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -1095,7 +1099,7 @@ commands
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 104 · keys 86 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 105 · keys 86 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1232,6 +1236,7 @@ commands
   frame.unflag "Unflag" (Frame) U ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -1341,7 +1346,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 153 · keys 67 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+commands 154 · keys 67 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1471,6 +1476,7 @@ commands
   frame.unflag "Unflag" (Frame) U ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -1546,7 +1552,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 119 · keys 56 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 120 · keys 56 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1619,6 +1625,7 @@ commands
   frame.unflag "Unflag" (Frame) ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -1678,7 +1685,7 @@ commands
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 101 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 102 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1722,6 +1729,7 @@ commands
   frame.unflag "Unflag" (Frame) ← cb.core
   frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
+  frame.keywords "Set Keywords" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
   frame.reopenAsNegative "Re-open as Negative" (Frame) ← cb.core
@@ -1781,7 +1789,7 @@ commands
   mask.removeComponent "Remove Mask Component" ← cb.stack
   mask.set "Mask Setting" ← cb.stack
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 101 · keys 27 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 102 · keys 27 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

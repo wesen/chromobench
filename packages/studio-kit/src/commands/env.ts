@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Document } from '@chromobench/contract';
 import type { Studio } from '../studio.ts';
-import { sel, type CatalogFrame } from '../sel.ts';
+import { NO_RATING, sel, type CatalogFrame, type Rating } from '../sel.ts';
 import { DOCS, storePath } from '../model/doc.ts';
 import { orientFrame } from '../../kits/finish/src/geometry.ts';
 
@@ -23,10 +23,16 @@ export const setDoc = (ctx: any, f: string, path: string, value: unknown, label:
   return ctx.tx(label, (t: any) => t.$set(storePath(f, d, path), value), o);
 };
 export const needFrame = { enabled: (s: any) => !!sel.current(s), why: 'Open a frame first' };
-export const flag = (ctx: any, v: CatalogFrame['flag'], label: string) =>
+/** A rating change of frames (ratings.<frame>, the document tier): one step, undone by one Mod+Z. */
+export const rate = (ctx: any, label: string, ids: readonly string[], f: (r: Rating) => Partial<Rating>) =>
   ctx.tx(label, (t: any) => {
-    for (const id of sel.targets(ctx.state)) if (t.catalog.frames[id]) t.catalog.frames[id].flag = v;
+    for (const id of ids) {
+      if (!ctx.state.catalog?.frames?.[id]) continue;
+      const cur = sel.rating(ctx.state, id);
+      t.$set(['ratings', id], { ...NO_RATING, ...cur, ...f(cur), keywords: [...(f(cur).keywords ?? cur.keywords)] });
+    }
   });
+export const flag = (ctx: any, v: CatalogFrame['flag'], label: string) => rate(ctx, label, sel.targets(ctx.state), () => ({ flag: v }));
 export const openFrame = { enabled: (s: any) => !!sel.doc(s), why: 'Open a frame first' };
 export const orientCurrent = (ctx: any, step: 'cw90' | 'ccw90' | 'flipH', label: string): void => {
   const f = sel.current(ctx.state);

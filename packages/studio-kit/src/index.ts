@@ -2,7 +2,7 @@
 // are format-3 documents in the store's log). Headless: nothing here touches the DOM. Renderers are
 // '@chromobench/studio-kit/dom'.
 export { createCb, FRAME_CONTEXT, CORE_STATE, NO_FRAME, type Cb } from './cb.ts';
-export { sel, type Sel, type CbState, type CatalogFrame, type Selection, type Snapshot, type CbView, type CbUi, type CbPrefs } from './sel.ts';
+export { sel, NO_RATING, type Sel, type CbState, type CatalogFrame, type CatalogEntry, type Rating, type Selection, type Snapshot, type CbView, type CbUi, type CbPrefs } from './sel.ts';
 export { defineLayout, buildLayout, type LayoutDef, type LayoutEnv, type BuiltLayout } from './layout.ts';
 export { Studio, createStudio, frameName, initialInMode, type StudioOptions, type StudioHost, type HostFlags, type Proposal, type LogView, type Approved } from './studio.ts';
 export { frameRef, isImageHandle, isFrameRef, effectiveDoc, cutOf, ACCESSORS, type FrameRef, type ImageHandle, type Accessor } from './handles.ts';

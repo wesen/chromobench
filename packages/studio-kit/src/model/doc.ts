@@ -258,7 +258,8 @@ export function printingScript(doc: Document, fmt: { seconds: (t: number) => str
   for (const p of entriesOf(doc, 'darkroom')) {
     const e = p.entry;
     if (e.kind !== 'layer' || !e.enabled || e.amount === 0) continue;
-    const where = e.mask ?? 'the sheet';
+    // where: the mask's name in the library (what the photographer called it), else the whole sheet
+    const where = e.mask ? (Coll.get(doc.masks, e.mask)?.name ?? e.mask) : 'the sheet';
     if (e.op === 'dodge') head.push(`hold back ${where} for ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'burn') parts.push(`burn ${where} ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'flash') parts.push(`flash ${fmt.seconds(layerSeconds(e, main.time_s))} s`);

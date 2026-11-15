@@ -39,8 +39,9 @@ import { MASK_TOOLS } from '../kits/stack/src/commands.ts';
 libraryRoot(new URL('.', import.meta.url).href);
 
 /** cb.core's state slices, typed by CbState (the kits declare theirs: ROLL_STATE, FINISH_STATE, LOOKS_STATE) */
-export const CORE_STATE: Pick<CbState, 'catalog' | 'snapshots' | 'view' | 'ui' | 'prefs'> = {
+export const CORE_STATE: Pick<CbState, 'catalog' | 'ratings' | 'snapshots' | 'view' | 'ui' | 'prefs'> = {
   catalog: { frames: {}, order: [] },
+  ratings: {},
   snapshots: {},
   view: { mode: 'grid', view: 'print', compare: 'off', split: 0.5, step: 'pick', filter: { text: '', flag: null }, thumbSize: 150, vp: {} },
   ui: {
@@ -115,6 +116,8 @@ export function createCb(ck: Ck) {
     .version('1')
     .state('catalog', { init: CORE_STATE.catalog })
     .state('snapshots', { init: CORE_STATE.snapshots })
+    // the ratings are the document tier (one undo step each); the library's membership is the view tier
+    .state('ratings', { init: CORE_STATE.ratings })
     // a frame's document: docs.<frame> is the frame's document in the log (the Studio opens it); a binding under
     // it names the document's tree (stages.darkroom.stack.items.main.params.time_s)
     .mount(DOCS, {
@@ -219,7 +222,7 @@ export function createCb(ck: Ck) {
         max: o.size === 'large' ? 320 : 160,
         badge: (s: any) => badgeOf(s, item.id),
       } as any),
-      ck.text((s: any) => cellCaption(s.catalog?.frames?.[item.id] ?? item), { dim: true }),
+      ck.text((s: any) => cellCaption(sel.entry(s, item.id) ?? item), { dim: true }),
     );
   const EMPTY = 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here';
   const LIBRARY_KEYS = { Delete: 'frame.remove', Backspace: 'frame.remove' };

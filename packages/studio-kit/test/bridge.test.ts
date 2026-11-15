@@ -235,7 +235,8 @@ describe('saved edits (persistence)', () => {
     expect(b.f).toBe(a.f);
     expect(timeOf(b.rt, b.f)).toBe(15);
     const s = state(b.rt);
-    expect(s.catalog.frames[b.f]!.flag).toBe('pick');
+    expect(s.ratings[b.f]!.flag).toBe('pick');
+    expect(sel.entry(s, b.f)!.flag).toBe('pick');
     expect(s.snapshots[b.f]![0]!.name).toBe('warm');
     expect(historyRows(b.rt.store.log, b.f, lookup).map(r => r.label)).toEqual(['Time']);
     expect(b.rt.store.log.why(b.f, TIME).label).toBe('Time');

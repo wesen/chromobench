@@ -139,3 +139,7 @@
 .cb-cell .ck-thumb:has(> .ck-thumb-i:not([hidden])) > .ck-thumb-c {
   display: none;
 }
+
+/* the History panel: a step of this frame with later changes of other frames on top (a jump to it crosses them) */
+.cb-hist-i.is-crossed .cb-who::after { content: ' ⤒'; color: var(--text3); }
+.cb-hist-confirm { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; background: var(--pendsoft); color: var(--text); border-left: 2px solid var(--pending); font-size: 12px; }

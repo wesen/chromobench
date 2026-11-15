@@ -192,8 +192,9 @@ test('tools: test strip band, ring-around tile, masks and darkroom layers, apply
   [0.05, -0.1, 0.05].forEach((v, i) => expect(lights[i]).toBeCloseTo(v, 9));
   await expect(page.locator('#history')).toContainText('Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt');
 
-  // masks: drag an ellipse → a mask in the library plus a burn through it; a dodge from the darkroom layers
-  await page.evaluate(() => window.chromobench.tool('mask-ellipse'));
+  // masks: drag an ellipse with the radial mask tool and no layer selected → a mask in the library plus a burn
+  // through it; a dodge from the Exposures panel's + Layer (the darkroom stack)
+  await page.evaluate(() => window.chromobench.tool('mask-radial'));
   const box = (await page.locator('.ck-vp').first().boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
   await page.mouse.down();
@@ -203,7 +204,8 @@ test('tools: test strip band, ring-around tile, masks and darkroom layers, apply
   const masks = await page.evaluate(() => Object.values(window.chromobench.doc!.masks.items).flatMap((m) => Object.values(m.components.items).map((c) => c.kind)));
   expect(masks).toContain('ellipse');
   expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).some((e) => e.kind === 'layer' && e.op === 'burn' && !!e.mask))).toBe(true);
-  await page.getByRole('button', { name: '+ dodge' }).click();
+  await page.locator('.ck-panel[data-panel="exposures"] .cb-stack-add').first().click();
+  await page.getByRole('menuitem', { name: 'Dodge', exact: true }).click();
   await idle(page);
   expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).map((e) => (e.kind === 'layer' ? e.op : e.kind)))).toContain('dodge');
   await expect(page.locator('.cb-script')).not.toBeEmpty();
