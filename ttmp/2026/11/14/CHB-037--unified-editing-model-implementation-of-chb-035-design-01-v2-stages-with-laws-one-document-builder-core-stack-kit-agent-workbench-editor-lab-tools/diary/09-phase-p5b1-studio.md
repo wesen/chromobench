@@ -282,3 +282,165 @@ the route and the StudioLog, controls on document paths, the darkroom tools on l
 
 ### Technical details
 - Deleted: `src/bridge/editlog-route.ts`, `src/model/enlarger.ts` (StudioLog), `src/model/recipes.ts`.
+
+## Step 4: The kits, the app and the core tests (four forks of me, in parallel)
+
+With the core's API fixed, four forks worked at once in the same worktree on disjoint directories, none
+committing: the finish kit; the looks and roll kits; apps/studio; the studio-kit core tests. I merged their
+reports, fixed the two core issues they found, and committed studio-kit and apps/studio as two commits.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** The spec's kit items (finish tools on geometry and heal layers; looks and rolls as
+batches through `plan`; deletes of `buildBatch` and `planApply`), the app's items (first print on cuts and
+`bakeLights(doc)`, StudioEngine with the host `output.frame`, dust layers, export, the hard cut-off message), and
+tests for all of it.
+
+**Inferred user intent:** Every feature of the studio works on the new model, with tests.
+
+**Commit (code):** 0f200ab — "CHB-037 P5b-1: studio-kit on format-3 documents and the store's log"; ec21bbd —
+"CHB-037 P5b-1: apps/studio on documents and the log"
+
+### What I did
+- Finish kit: crop/straighten/orientation write `geometry`; each heal or clone spot is a print-stage layer with one
+  spot in a pass group `retouch` ("Retouch", inserted at the bottom of the print stack on the first spot); dust
+  spots are scan-stage heal layers in the group `dust` with a source from `suggestSource`; clarity is a print-stage
+  `clarity` layer added by "+ Clarity" (`finish.addClarity`); before/after renders the document with the print
+  stage's entries and the Dust group disabled (`withoutFinishing`, never committed). A spot gesture previews the
+  stage's stack and commits on release (a move is sets only).
+- Looks kit: looks and presets name document paths (`engine/paths.ts`), layers instead of exposures, `planLook`
+  (the card) and one batch through values `plan` over `studio.log.targets`, `withoutInert` on every edit,
+  `diffDocs`; agent look batches: one card per batch, approve `log.approve({ batch })`, a partial decision rejects
+  the batch and proposes/approves the chosen frames as a new batch in one change.
+- Roll kit: `buildBatch`/`setWithExpect` deleted; `frameSets` + values `plan`, with the roll record as an edit of
+  the main document in the same batch (one undo restores the frames and the roll status); the roll's shared
+  settings keyed by short names (`stock`, `baseT`) because the main document refuses dotted keys; the automatic
+  balance record is the lights layer's `source`.
+- apps/studio: first print meters `darkroom.H` and writes `main.params.time_s` and `lights.params.logH` through
+  `edit`; `bakeLights(doc)`; dust from decode → `dustGroup` in the first document (the boundary rule keeps ingest
+  out of non-host files, so the host injects `dustGroup`); export with `documentPayload`; Save Document (the
+  canonical document JSON); `mountLayout` adopts the old store's log on a layout switch; `resetStorage` + toast;
+  `host/lazy-chat.ts` loads the agent on first use (CB-H420 on failure); `window.chromobench` on document paths.
+- Core tests (12 files, 118 tests): bridge (mount, catalog, drag, Esc, coalescing on the manual clock, batches,
+  refusal, undo on another frame, history rows and jump, proposals in every mode, saved-edit round trip, reset),
+  history words, model/units/tools, controls, enlarger mode, kit handles against the compiler's cuts, messages,
+  selectors, open modes, strips; snapshots updated after checking the diffs (renames only).
+- My fixes after the reports: `strip` (shell) of a proxied document in `render-bridge.ts` `docOf` and
+  `handles.ts` `effectiveDoc` (a handle made in a cell holds the state's read-only proxy, and `edit()` on it
+  throws); the printer lights' control group "Printer lights" (it fell back to the op's area, "darkroom").
+
+### Why
+- Splitting by directory let four parts proceed at once without conflicts; the core's API was the contract.
+
+### What worked
+- `pnpm exec vitest run packages/studio-kit packages/output packages/ingest apps/studio` → 42 files, 1324 passed,
+  12 skipped after the snapshot update; studio-kit and apps/studio typecheck clean apart from packages/dsl and
+  packages/agent (P6a, not yet merged then); `pnpm lint` ok.
+
+### What didn't work
+- Forks, verbatim: `kits/finish/src/tools.ts(159,45): TS2339 Property 'createElementNS' does not exist on type
+  'Document'` (the contract's Document shadows the DOM's: imported as `Doc`); while the looks kit was mid-rewrite,
+  every test importing `src/index.ts` failed with `Cannot find module '../../../../src/model/enlarger.ts' imported
+  from …/kits/looks/src/engine/plan.ts` (cb.ts imports every kit); `E_PATH: the key "stages.scan.medium.scanner" in
+  roll.rolls.roll-1.fragment cannot be addressed by a path (it is empty or holds a dot)`; `'ownKeys' on proxy: trap
+  returned extra keys but proxy target is non-extensible` (`edit()` on a document read from `ctx.state`);
+  `E_ARG_TYPE: source.open needs argument "umPerPx"` in `worker-engine.test.ts`; `TS2307` on gpu's `?raw`
+  imports and `TS2304 GPUTextureFormat` under apps/studio's tsconfig (it now includes gpu's and output's env.d.ts
+  and `@webgpu/types`); `expect(sel.doc(s)).toBe(s.docs[f])` failed because `rt.state` is a read-only proxy.
+- The layouts snapshot: `- section "darkroom" + section "Printer lights"` after my group fix (updated with `-u`).
+
+### What I learned
+- Documents read through the store's read-only proxy are fine to read and compile but not to `edit()`: anything
+  that edits a document from state must `strip` it first.
+- The main document refuses object keys with dots, so the roll's fragment cannot be keyed by document paths.
+
+### What was tricky to build
+- Agent look batches with a partial decision: a batch approves or rejects as one, so "approve three of five" is a
+  reject of the batch and a new proposal of the chosen frames approved in the same change.
+
+### What warrants a second pair of eyes
+- The looks kit's stale agent frames stay on the card until Apply anyway; the roll's analysis is its own undo step.
+
+### What should be done in the future
+- P7: the roll record's `media`/`stacks` and the looks become links; the roll's fragment then disappears.
+
+### Code review instructions
+- `packages/studio-kit/kits/finish/src/state.ts`, `kits/looks/src/engine/plan.ts`, `kits/roll/src/engine/batch.ts`,
+  `apps/studio/src/host/first-print.ts`, `apps/studio/src/main.ts` (`makeHook`, `mountLayout`).
+
+### Technical details
+- Behaviour changes reported by the forks: deleting a spot removes its layer (and the group with the last one);
+  dust works on any negative scan; clarity must be added first; before/after hides every print-stage entry and the
+  Dust group; Heal Dust no longer changes pixels; the auto record of the first print is `lights.source`; the chat is
+  empty until a model connects; Save Document saves the document without its history; version-1 presets are
+  refused (E_FORMAT); a look body cannot return `f.print({…})`; roll membership comes from `roll.frames`;
+  Copy/Paste copies only set paths; Apply Print Settings onto a normalised frame also copies the enlarger mode (the
+  frame switches to the real enlarger and gets the time as a time).
+
+## Step 5: Merging P6a (the DSL and the agent on the log)
+
+The main agent merged P6a into the integration branch (b661c48) and asked me to merge it in, move the chat onto
+the agent's new `AgentDocs`, and add the type check that the agent's ChatSession fits the chat kit's
+ChatSessionLike (P6a removed it from the agent's tests).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Main agent's message: "merge the integration branch into your branch … FrameSource
+becomes AgentDocs ({ log, mode, change, subscribe, ids, get }) … add a check in the chat kit's own test that
+ChatSession fits ChatSessionLike … Record the merge in your diary."
+
+**Inferred user intent:** The studio and the agent meet on the one log before P6b and P5b-2 start.
+
+**Commit (code):** c2a9014 — merge of task/chb-037-unified-model; f08c09f — "CHB-037 P5b-1: the chat on AgentDocs
+over the studio (after the P6a merge); Studio.subscribe; a type test …"
+
+### What I did
+- Committed my work first (0f200ab, ec21bbd, d98c730), then `git merge --no-edit task/chb-037-unified-model`:
+  no conflicts (the changelog and the lockfile did not conflict this time); `pnpm install --frozen-lockfile
+  --prefer-offline` ok.
+- `apps/studio/src/host/chat.ts`: `AgentDocs` over the studio (`log`, `mode`, `change` → `studio.change`, `ids`
+  of open frames, `get` → `{ info, name }`, `subscribe` → `studio.subscribe`); `DslWorkerClient.create({ docs })`,
+  `ChatHost.docs`, `BridgePageClient({ docs })`.
+- `Studio.mode` is a getter/setter and `Studio.subscribe(fn)` is told after every log change (after the proposals
+  view) and on a mode change.
+- `packages/studio-kit/test/chat/types.test.ts`: type-only imports; `(s: ChatSession) => ChatSessionLike` and
+  `(p: LooksProviderShape) => LooksProvider` must typecheck. studio-kit's devDependencies take
+  `@chromobench/agent` and `@chromobench/dsl` again (tests only; the boundary rules cover src and kits).
+
+### Why
+- P6a's agent holds no log of its own: it submits into the page's log through the host's change, so the studio
+  must offer exactly that.
+
+### What worked
+- Whole-repo `pnpm typecheck`: errors only in e2e/ (the next step); `pnpm exec vitest run` → 124 files, 2935
+  passed, 19 skipped; `pnpm lint` ok; full `pnpm gen:check` → `gen:check ok (26 files)` (the DSL and agent targets
+  build again).
+
+### What didn't work
+- Before the adaptation: `apps/studio/src/host/chat.ts(14,130): error TS2305: Module '"@chromobench/agent"' has no
+  exported member 'FrameSource'` and three `'frames' does not exist in type 'DslWorkerOptions' | 'ChatHost' |
+  'BridgePageOptions'`.
+
+### What I learned
+- The looks provider already fitted the DSL's new `LooksProvider` (the looks fork wrote `resolve(id, { id, doc })`
+  with values mutations), so the type test passed at once.
+
+### What was tricky to build
+- N/A.
+
+### What warrants a second pair of eyes
+- `Studio.subscribe` fires once per log change in a microtask after the store's notify; the agent copies the log to
+  its worker on that signal.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- `apps/studio/src/host/chat.ts` (`docs`), `packages/studio-kit/src/studio.ts` (`subscribe`, `mode`).
+
+### Technical details
+- N/A.
