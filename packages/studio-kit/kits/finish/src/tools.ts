@@ -4,7 +4,8 @@
 import { setPath, type Box, type FrameRecipe, type FrameSettings, type RetouchSpot } from '@chromobench/contract';
 import { canvasToSource, centreOf, constrain, cropCorners, cropOf, fitsInside, rotate, roundBox, sensorTurn, shownContains, sourceToCanvas, swapsAxes, toShown, toSource, towards, type Pt } from './geometry.ts';
 import { suggestSource, type ProxyImage } from './suggest.ts';
-import { type DustSpot, plain, current, spotsOf, nextSpotId } from './state.ts';
+import { type DustSpot, plain, spotsOf, nextSpotId } from './state.ts';
+import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 
 const LOOK: Record<string, Record<string, string>> = {
@@ -162,7 +163,7 @@ export function createFinishTools(F: FinishContext) {
     return x;
   };
   const cropOverlay = (g: any, vp: any, s: any): void => {
-    const f = current(s);
+    const f = sel.current(s);
     const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
     const z = sizeIn(s) ?? (r && vp ? { W: swapsAxes(r.view.frame.orientation) ? vp.natural()[1] : vp.natural()[0], H: swapsAxes(r.view.frame.orientation) ? vp.natural()[0] : vp.natural()[1] } : null);
     if (!r || !z) return;
@@ -295,7 +296,7 @@ export function createFinishTools(F: FinishContext) {
     return { x: round2(p.x), y: round2(p.y) };
   };
   const spotOverlay = (g: any, vp: any, s: any, gs: any): void => {
-    const f = current(s);
+    const f = sel.current(s);
     const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
     const z = f ? sizes.get(f) : undefined;
     if (!r) return;

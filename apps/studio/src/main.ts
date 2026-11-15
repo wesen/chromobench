@@ -12,7 +12,7 @@ import { MockEngine } from '@chromobench/engine-mock';
 import { pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildVariant, createStudio, explainError, frameRef, isOffline, memoryKV, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
+import { buildVariant, createStudio, explainError, frameRef, memoryKV, sel, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
 import { mountStudio } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
@@ -561,7 +561,7 @@ async function main(): Promise<void> {
       const f = studio.current;
       if (f === lastSel) return;
       lastSel = f;
-      if (armed && f && isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
+      if (armed && f && sel.isOffline(rt.state, f) && performance.now() - rightAt > 500) void relink(f);
     });
   });
   // drop files anywhere on the window ("or drop them here"); Chrome hands file handles too
@@ -764,14 +764,14 @@ async function main(): Promise<void> {
   eachMount(() => hook(rt, studio, def.id, host, exportFrame, chat));
   // a selection restored from last time that is not open: cleared, so the first click on it opens its file
   function dropOfflineSelection(): void {
-    if (studio.current && isOffline(rt.state, studio.current)) {
+    if (studio.current && sel.isOffline(rt.state, studio.current)) {
       rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
       lastSel = null;
     }
   }
   dropOfflineSelection();
   armed = true;
-  const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => isOffline(rt.state, x)).length ?? 0;
+  const offlineCount = (rt.store.peek(['catalog', 'order']) as string[] | undefined)?.filter((x) => sel.isOffline(rt.state, x)).length ?? 0;
   status(offlineCount ? `ready: ${offlineCount} frame${offlineCount > 1 ? 's' : ''} in the library; select one to open its file again` : 'ready: open photos or negatives (File ▸ Open Files…, Ctrl+O, or drop them here)');
   for (const d of built.app.diagnostics.list) if (d.level === 'warning') console.warn(d.code, d.message);
   document.body.dataset['ready'] = '1';

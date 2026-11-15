@@ -6,7 +6,8 @@ import type { Ck } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { frameRef, type ImageHandle } from '../../../src/handles.ts';
 import { ASPECTS } from './geometry.ts';
-import { type SpotMode, FINISHING_PATHS, type SpotRef, current, spotsOf, cropProblem } from './state.ts';
+import { type SpotMode, FINISHING_PATHS, type SpotRef, spotsOf, cropProblem } from './state.ts';
+import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 
 export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
@@ -14,7 +15,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
   // ── builder calls ──
   /** the print as the finish module shows it: retouch and finishing dropped while finish.toggle is on */
   const shown = (s: any): ImageHandle | null => {
-    const h = cb.frame(s)?.print() ?? null;
+    const h = cb.sel.frame(s)?.print() ?? null;
     if (!h || !s.finish?.bypass || h.recipe === 'initial') return h;
     const r = setPath(setPath(h.recipe, 'retouch.spots', {}), 'finishing.values', {});
     return frameRef(h.frame, r, `${h.expr} /* before finishing */`).print();
@@ -27,7 +28,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.ui.select({ options: aspectOptions(o.aspects ?? ASPECTS), bind: (s: any) => s.finish.crop.aspect, set: 'crop.aspect', label: 'Aspect' } as any),
       ck.ui.checkbox({ label: 'Lock aspect', switch: true, bind: (s: any) => s.finish.crop.locked } as any),
       ck.text((s: any) => {
-        const r = s.recipes?.[current(s) ?? ''] as FrameRecipe | undefined;
+        const r = s.recipes?.[sel.current(s) ?? ''] as FrameRecipe | undefined;
         if (!r) return 'No frame';
         const f = r.view.frame;
         return `${f.crop ? `${f.crop.w} × ${f.crop.h} px` : 'Whole frame'} · ${f.angle_deg.toFixed(1)}° · ${f.orientation}`;
@@ -43,7 +44,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
         ck.ui.button({ run: 'orient.flipH', text: '⇋', small: true }), ck.ui.button({ run: 'orient.flipV', text: '⇵', small: true }),
         ck.ui.button({ run: 'crop.swap', text: 'Swap', small: true }), ck.ui.button({ run: 'crop.reset', text: 'Reset', small: true })),
       ck.text((s: any) => {
-        const f = current(s);
+        const f = sel.current(s);
         const z = f ? sizes.get(f) : undefined;
         const p = f && z && s.recipes?.[f] ? cropProblem(s.recipes[f], z.W, z.H) : null;
         return p ? `${p.code}: ${p.message}` : '';
@@ -56,7 +57,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.ui.slider({ min: 1, max: 200, bind: (s: any) => s.finish.spot.r, label: 'Size', step: 1, unit: 'px', decimals: 0 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.feather, label: 'Feather', step: 0.05, decimals: 2 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.opacity, label: 'Opacity', step: 0.05, decimals: 2 } as any),
-      ck.view.list((s: any) => spotsOf(s.recipes?.[current(s) ?? '']), {
+      ck.view.list((s: any) => spotsOf(s.recipes?.[sel.current(s) ?? '']), {
         id: 'finish-spots',
         key: (x: SpotRef) => x.id,
         row: (x: SpotRef) => ck.row({ class: 'cb-spot-row' },

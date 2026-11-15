@@ -19,10 +19,10 @@ export const toolsPanel = ck =>
 /** the Print module, shared with lab */
 export const printModule = (ck, cb, o = {}) =>
   ck
-    .module('print', { label: 'Print', key: 'D', txOpts: s => ({ channel: cb.current(s) }) })
+    .module('print', { label: 'Print', key: 'D', txOpts: s => ({ channel: cb.sel.current(s) }) })
     .left(ck.dock.column({ width: 236 }, cb.panel.navigator({ id: 'navigator-print' }), cb.panel.snapshots(), cb.panel.history()))
     .center(
-      cb.viewer(s => cb.frame(s)?.print() ?? null, {
+      cb.viewer(s => cb.sel.frame(s)?.print() ?? null, {
         id: 'main',
         views: true,
         compare: true,
@@ -75,7 +75,7 @@ export default {
       .module(
         ck
           .module('output', { label: 'Output', key: 'Mod+Shift+E' })
-          .center(cb.view.grid({ id: 'picks', source: st => cb.visible(st).filter(f => f.flag === 'pick') }))
+          .center(cb.view.grid({ id: 'picks', source: st => cb.sel.visible(st).filter(f => f.flag === 'pick') }))
           .right(ck.dock.column({ width: 260 }, cb.panel.output()))
           .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-output' }))),
       ),

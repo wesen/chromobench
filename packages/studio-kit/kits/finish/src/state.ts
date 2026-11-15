@@ -25,7 +25,6 @@ export interface DustSpot { id: string; x: number; y: number; r: number }
 export interface SpotRef { id: string; kind: 'retouch' | 'dust'; mode: SpotMode; x: number; y: number; r: number; src: Pt | null; enabled: boolean }
 
 export const plain = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
-export const current = (s: any): string | null => s?.ui?.selection?.primary ?? null;
 
 /** Every spot of a recipe (retouch and dust), in composite order. */
 export function spotsOf(r: FrameRecipe | undefined | null): SpotRef[] {

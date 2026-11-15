@@ -14,7 +14,8 @@
 import { getPath, type Diagnostic, type FrameRecipe, type Mutation, type Vec3 } from '@chromobench/contract';
 import type { Ck, NodeData } from '@chromobench/shell';
 import { slot, type FormSpec } from '@chromobench/shell';
-import type { Cb, CatalogFrame } from '../../../src/cb.ts';
+import type { Cb } from '../../../src/cb.ts';
+import { sel, type CatalogFrame } from '../../../src/sel.ts';
 import { frameRef } from '../../../src/handles.ts';
 import { stockName } from '../../../src/model/names.ts';
 import type { Studio } from '../../../src/studio.ts';
@@ -54,7 +55,7 @@ export const rollOf = (s: any, id?: string | null): Roll | null => {
   if (!d) return null;
   if (id) return d.rolls[id] ?? null;
   if (d.current && d.rolls[d.current]) return d.rolls[d.current]!;
-  const f = s?.ui?.selection?.primary;
+  const f = sel.current(s);
   const byFrame = f ? d.order.map((r) => d.rolls[r]!).find((r) => r?.frames.includes(f)) : null;
   return byFrame ?? (d.order.length ? d.rolls[d.order[0]!] ?? null : null);
 };
@@ -323,11 +324,11 @@ export function createRollKit(ck: Ck, cb: Cb) {
       },
       'roll.setReference': {
         label: 'Set as Roll Reference',
-        enabled: (s: any) => !!rollOf(s) && !!s.ui?.selection?.primary && rollOf(s)!.frames.includes(s.ui.selection.primary),
+        enabled: (s: any) => !!rollOf(s) && !!sel.current(s) && rollOf(s)!.frames.includes(sel.current(s)!),
         why: 'Select a frame of the roll',
         run: (ctx: any) => {
           const roll = rollOf(ctx.state)!;
-          const f = ctx.state.ui.selection.primary as string;
+          const f = sel.current(ctx.state)!;
           ctx.tx(`Reference: ${ctx.state.catalog?.frames?.[f]?.name ?? f}`, (t: any) => t.$set(['roll', 'rolls', roll.id, 'reference'], f));
         },
       },
@@ -410,7 +411,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
         palette: false,
         ...hasRoll,
         run: (ctx: any, path: string) => {
-          const f = ctx.state.ui?.selection?.primary;
+          const f = sel.current(ctx.state);
           const r = f ? recipeOf(ctx)(f) : undefined;
           if (r) ctx.run('roll.setShared', path, getPath(r, path));
         },

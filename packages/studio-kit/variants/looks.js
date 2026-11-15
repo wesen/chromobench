@@ -20,7 +20,7 @@ export default {
       .module(libraryModule(ck, cb))
       .module(
         ck
-          .module('print', { label: 'Print', key: 'D', txOpts: (st) => ({ channel: cb.current(st) }) })
+          .module('print', { label: 'Print', key: 'D', txOpts: (st) => ({ channel: cb.sel.current(st) }) })
           .left(ck.dock.column({ width: 300 }, looks.library({ size: 96 }), cb.panel.snapshots(), cb.panel.history()))
           .center(
             ck.match(

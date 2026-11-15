@@ -67,7 +67,7 @@ describe('frame handles and the render bridge', () => {
     expect(DSL_PRINT_OPTIONS).toBe(CONTRACT_PRINT_OPTIONS);
     expect(ACCESSORS).toBe(CONTRACT_ACCESSORS);
   });
-  it('vocabulary parity: cb.frame(s).print() names the node the DSL frame.print() names', async () => {
+  it('vocabulary parity: cb.sel.frame(s).print() names the node the DSL frame.print() names', async () => {
     const { rt, studio, f } = await started();
     const e = studio.frames.get(f)!;
     const host = new Host(e.graph, new Map());

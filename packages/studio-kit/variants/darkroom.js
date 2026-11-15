@@ -2,7 +2,7 @@
 // the enlarger is on the right. No library module: the roll's frames are the only choice that matters here.
 
 /** no open frame selected: the panels that only show a frame's settings are not drawn (CHB-031 8iv8) */
-const noFrame = cb => s => !cb.recipe(s);
+const noFrame = cb => s => !cb.sel.recipe(s);
 
 export default {
   id: 'darkroom',
@@ -18,9 +18,9 @@ export default {
           .module('main', { label: 'Chromobench' })
           .left(ck.dock.column({ width: 200 }, cb.view.strip({ vertical: true }), cb.panel.history().hidden(noFrame(cb))))
           .center(
-            cb.viewer(s => cb.frame(s)?.print() ?? null, {
+            cb.viewer(s => cb.sel.frame(s)?.print() ?? null, {
               tools: ['probe', 'test-strip', 'ring-around', 'mask-brush', 'mask-gradient'],
-              compare: { before: s => cb.frame(s)?.initial().print() ?? null },
+              compare: { before: s => cb.sel.frame(s)?.initial().print() ?? null },
               hud: cb.hud.readout(),
             }),
           )
@@ -35,7 +35,7 @@ export default {
                 'enlarger',
                 { title: 'Enlarger' },
                 ck.when(
-                  s => !!cb.recipe(s),
+                  s => !!cb.sel.recipe(s),
                   ck.column(
                     {},
                     cb.arg('print.enlarger.mode'),
@@ -44,7 +44,7 @@ export default {
                     cb.arg('print.enlarger.filtration'),
                     cb.arg('print.lights.logH').pad(),
                   ),
-                  ck.text(s => (cb.library(s).length ? 'Select a photo to print it.' : 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here.'), { dim: true, wrap: true }),
+                  ck.text(s => (cb.sel.library(s).length ? 'Select a photo to print it.' : 'No photos yet: File ▸ Open Files… (Ctrl+O), or drop them here.'), { dim: true, wrap: true }),
                 ),
               ),
               ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('print.paper'), cb.arg('print.grade'))).hidden(noFrame(cb)),

@@ -101,9 +101,9 @@ export function createChatKit(ck: Ck, cb: Cb) {
   /** the Assistant module: the print in the centre, the chat on the right */
   const module = (o: { id?: string; width?: number } = {}) =>
     ck
-      .module(o.id ?? 'assistant', { label: 'Assistant', txOpts: (s: any) => ({ channel: cb.current(s) }) })
+      .module(o.id ?? 'assistant', { label: 'Assistant', txOpts: (s: any) => ({ channel: cb.sel.current(s) }) })
       .left(ck.dock.column({ width: 220 }, cb.panel.navigator({ id: 'navigator-assistant' }), cb.panel.history({ id: 'history-assistant' })))
-      .center(cb.viewer((s: any) => cb.frame(s)?.print() ?? null, { id: 'assistant', views: true, compare: true, tools: ['probe'], hud: cb.hud.readout() }))
+      .center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { id: 'assistant', views: true, compare: true, tools: ['probe'], hud: cb.hud.readout() }))
       .right(ck.dock.column({ width: o.width ?? 400 }, panel({ id: 'chat' })))
       .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-assistant' })))
       .keys({ ...cb.keys.views });

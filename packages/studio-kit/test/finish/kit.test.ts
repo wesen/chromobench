@@ -218,7 +218,7 @@ describe('passes and agent edits (guide §9.4–9.5)', () => {
     expect(warn(bad, 'CB-F101')).toEqual(['warning move it to a Finish module (cb.kits.finish.tonesPanel()) or relabel the module']);
     const ok = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].tonesPanel())) });
     expect(warn(ok, 'CB-F101')).toEqual([]);
-    const nokit = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
+    const nokit = defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
     expect(warn(nokit, 'CB-F102')).toEqual(['error .use(cb.kits.finish.kit) on the studio']);
   });
   it('the worked example as the agent writes it: edits.crop → 1568 × 1960 at (716, 20); cropProblem fixes a bad crop', () => {

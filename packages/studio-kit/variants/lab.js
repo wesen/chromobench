@@ -17,9 +17,9 @@ export default {
       .module(cb.kits.chat.module())
       .module(
         ck
-          .module('lab', { label: 'Lab', key: 'L', txOpts: st => ({ channel: cb.current(st) }) })
+          .module('lab', { label: 'Lab', key: 'L', txOpts: st => ({ channel: cb.sel.current(st) }) })
           .left(ck.dock.column({ width: 280 }, cb.panel.controls('all', { title: 'All parameters' })))
-          .center(cb.viewer(st => cb.frame(st)?.print() ?? null, { id: 'lab', views: true, compare: true, tools: ['probe', 'test-strip', 'ring-around'], hud: cb.hud.readout() }))
+          .center(cb.viewer(st => cb.sel.frame(st)?.print() ?? null, { id: 'lab', views: true, compare: true, tools: ['probe', 'test-strip', 'ring-around'], hud: cb.hud.readout() }))
           .right(ck.dock.column({ width: 320 }, cb.panel.densitometer({ id: 'densitometer-lab' }), cb.panel.history({ id: 'history-lab' }), cb.panel.approvals({ id: 'approvals-lab' }), cb.panel.journal(), cb.panel.nodes(), cb.panel.explain()))
           .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-lab' })))
           .keys({ ...cb.keys.views, ...cb.keys.darkroom }),

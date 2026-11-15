@@ -2,7 +2,8 @@
 // CHB-032). What the commands, the panels and the kit's builder calls share; one instance per kit.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { canonicalJSON, CONTRACT_VERSION, defaultRecipe, getPath, type FrameRecipe, type Mutation } from '@chromobench/contract';
-import { type Cb, type CatalogFrame, visibleFrames } from '../../../src/cb.ts';
+import type { Cb } from '../../../src/cb.ts';
+import { sel, type CatalogFrame } from '../../../src/sel.ts';
 import { frameRef, type ImageHandle } from '../../../src/handles.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { BUILTIN_LOOKS } from './engine/builtin.ts';
@@ -44,14 +45,14 @@ export function createLooksModel(cb: Cb) {
   };
   /** a tile's print: the selected frame through the look at the current Amount */
   const tile = (s: any, l: Look): ImageHandle | null => {
-    const f = cb.current(s);
+    const f = sel.current(s);
     if (!f) return null;
     const r = lookedRecipe(s, f, l);
     return r ? frameRef(f, r, `frame.look('${l.name}')`).print() : null;
   };
   /** the caption under a tile: the diff summary, or why the look does not apply */
   const caption = (s: any, l: Look): string => {
-    const f = cb.current(s);
+    const f = sel.current(s);
     const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
     if (!f || !r) return '';
     const pf = planFrame(l, paramsOf(s, l), f, r, optsOf(s));
@@ -59,7 +60,7 @@ export function createLooksModel(cb: Cb) {
   };
   /** the main viewer's print: the picked look previewed (uncommitted) when preview is on */
   const print = (s: any): ImageHandle | null => {
-    const f = cb.frame(s);
+    const f = cb.sel.frame(s);
     if (!f) return null;
     const v = looksView(s);
     const l = v.preview && v.picked ? lookById(s, v.picked) : null;
@@ -68,7 +69,7 @@ export function createLooksModel(cb: Cb) {
   };
   /** the compare source as a recipe (guide §5.1) */
   const compareRecipe = (s: any, src: CompareSource = looksView(s).compare): { frame: string; recipe: FrameRecipe | 'initial' } | null => {
-    const f = cb.current(s);
+    const f = sel.current(s);
     const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
     if (!f || !r) return null;
     if (src === 'before') return { frame: f, recipe: 'initial' };
@@ -94,7 +95,7 @@ export function createLooksModel(cb: Cb) {
   };
   /** what the diff panel compares: the compare source → the current recipe (or the previewed look) */
   const diffAgainst = (s: any, against?: CompareSource, initial?: (f: string) => FrameRecipe | undefined): DiffEntry[] => {
-    const f = cb.current(s);
+    const f = sel.current(s);
     if (!f) return [];
     const cur = s.recipes?.[f] as FrameRecipe | undefined;
     if (!cur) return [];
@@ -111,16 +112,16 @@ export function createLooksModel(cb: Cb) {
   const committed = (ctx: any, f: string): FrameRecipe | undefined => studioOf(ctx).frames.get(f)?.log.committed;
   const selection = (s: any): string[] => {
     const ids: string[] = s?.ui?.selection?.ids ?? [];
-    return ids.length ? ids : [cb.current(s)].filter((x): x is string => !!x);
+    return ids.length ? ids : [sel.current(s)].filter((x): x is string => !!x);
   };
   const rollFrameIds = (s: any): string[] => (cb.kits['roll']?.of?.(s)?.frames as string[] | undefined) ?? [];
   function targets(ctx: any, to: unknown, where?: 'unedited' | ((f: { id: string; recipe: FrameRecipe; unedited: boolean }) => boolean)): string[] {
     const s = ctx.state;
     let ids: string[];
     if (to === undefined || to === 'selection') ids = selection(s);
-    else if (to === 'frame') ids = [cb.current(s)].filter((x): x is string => !!x);
+    else if (to === 'frame') ids = [sel.current(s)].filter((x): x is string => !!x);
     else if (to === 'roll') ids = rollFrameIds(s);
-    else if (to === 'library') ids = visibleFrames(s).map((x: CatalogFrame) => x.id);
+    else if (to === 'library') ids = sel.visible(s).map((x: CatalogFrame) => x.id);
     else if (typeof to === 'string') ids = [to];
     else if (Array.isArray(to)) ids = to.map(String);
     else if (to && typeof to === 'object' && 'roll' in (to as any)) ids = (cb.kits['roll']?.of?.(s, (to as any).roll)?.frames as string[] | undefined) ?? [];
@@ -166,7 +167,7 @@ export function createLooksModel(cb: Cb) {
   const showPending = (ctx: any, p: ApplyPlan | null): void =>
     ctx.rt.store.writeDoc([{ path: ['looksView', 'pending'], value: plain(p) }, { path: ['looksView', 'off'], value: [] }, { path: ['looksView', 'stale'], value: [] }], { tier: 'view' });
   const pickedLook = (s: any): Look | null => lookById(s, looksView(s).picked);
-  const needLook = { enabled: (s: any) => !!cb.current(s) && !!pickedLook(s), why: (s: any) => (!cb.current(s) ? 'Select a frame first' : 'Pick a look first') };
+  const needLook = { enabled: (s: any) => !!sel.current(s) && !!pickedLook(s), why: (s: any) => (!sel.current(s) ? 'Select a frame first' : 'Pick a look first') };
   const lookArg = (ctx: any, id?: string | Look | null): Look | null => (isLook(id) ? id : lookById(ctx.state, id ?? looksView(ctx.state).picked));
 
   /** copy: the chosen groups' paths of the selected frame, as set entries */

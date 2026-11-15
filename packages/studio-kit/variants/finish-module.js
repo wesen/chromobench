@@ -4,7 +4,7 @@
 export const finishModule = (ck, cb, o = {}) => {
   const fin = cb.kits.finish;
   return ck
-    .module('finish', { label: 'Finish', key: 'F', txOpts: s => ({ channel: cb.current(s) }) })
+    .module('finish', { label: 'Finish', key: 'F', txOpts: s => ({ channel: cb.sel.current(s) }) })
     .left(ck.dock.column({ width: 236 }, cb.panel.navigator({ id: 'navigator-finish' }), cb.panel.history({ id: 'history-finish' })))
     .center(fin.viewer({ hud: cb.hud.readout() }))
     .right(ck.dock.column({ width: 300 }, fin.cropPanel(), fin.retouchPanel(), ...(o.tones === false ? [] : [fin.tonesPanel()]), ...(o.extraRight ?? [])))

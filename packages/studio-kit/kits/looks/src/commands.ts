@@ -1,7 +1,8 @@
 // cb.kits.looks: the command table (split from kit.ts, CHB-032): pick, parameters, Amount, apply to the selection,
 // the roll or the library, planned and agent batches, survey, compare, snapshots, copy / paste / sync, presets.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { type Cb, visibleFrames } from '../../../src/cb.ts';
+import type { Cb } from '../../../src/cb.ts';
+import { sel } from '../../../src/sel.ts';
 import { presetToFile, readPresetFile } from './engine/files.ts';
 import { bake, fromPreset, lookFrame, type AmountBase, type Look, type Preset } from './engine/look.ts';
 import { changing, newBatchId } from './engine/plan.ts';
@@ -39,7 +40,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     'looks.apply': {
       label: 'Apply Look to Selection',
       ...needLook,
-      enabled: (s: any) => !!cb.current(s) && !!pickedLook(s),
+      enabled: (s: any) => !!sel.current(s) && !!pickedLook(s),
       run: (ctx: any, id?: string | Look, o: { to?: unknown; where?: any; params?: Record<string, unknown>; amount?: number; why?: string } = {}) => {
         const l = lookArg(ctx, id);
         if (!l) return null;
@@ -65,7 +66,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     },
     'looks.applyToLibrary': {
       label: 'Apply Look to the Library…',
-      enabled: (s: any) => !!pickedLook(s) && visibleFrames(s).length > 0,
+      enabled: (s: any) => !!pickedLook(s) && sel.visible(s).length > 0,
       why: 'Pick a look first',
       run: (ctx: any, where?: 'unedited') => {
         const p = plan(ctx, pickedLook(ctx.state)!, { to: 'library', ...(where ? { where } : {}) });
@@ -157,18 +158,18 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     },
     'looks.setReference': {
       label: 'Compare With This Frame',
-      enabled: (s: any) => !!cb.current(s),
+      enabled: (s: any) => !!sel.current(s),
       why: 'Select a frame first',
-      run: (ctx: any) => setView(ctx, 'compare', { frame: cb.current(ctx.state)! }),
+      run: (ctx: any) => setView(ctx, 'compare', { frame: sel.current(ctx.state)! }),
     },
-    'looks.snapshot': { label: 'Snapshot', enabled: (s: any) => !!cb.current(s), why: 'Select a frame first', run: (ctx: any, name?: string) => ctx.run('snapshot.new', name) },
+    'looks.snapshot': { label: 'Snapshot', enabled: (s: any) => !!sel.current(s), why: 'Select a frame first', run: (ctx: any, name?: string) => ctx.run('snapshot.new', name) },
     'looks.restoreSnapshot': { label: 'Restore Snapshot', palette: false, run: (ctx: any, id: string) => ctx.run('snapshot.restore', id) },
     'looks.copy': {
       label: 'Copy Settings',
-      enabled: (s: any) => !!cb.current(s),
+      enabled: (s: any) => !!sel.current(s),
       why: 'Select a frame first',
       run: (ctx: any) => {
-        const f = cb.current(ctx.state)!;
+        const f = sel.current(ctx.state)!;
         const r = committed(ctx, f);
         if (!r) return null;
         const groups = looksView(ctx.state).groups;
@@ -179,7 +180,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     },
     'looks.paste': {
       label: 'Paste Settings',
-      enabled: (s: any) => !!looksView(s).clipboard && !!cb.current(s),
+      enabled: (s: any) => !!looksView(s).clipboard && !!sel.current(s),
       why: 'Copy the settings of a frame first',
       run: (ctx: any) => {
         const clip = looksView(ctx.state).clipboard;
@@ -202,10 +203,10 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     },
     'looks.saveAsPreset': {
       label: 'Save Frame as Preset…',
-      enabled: (s: any) => !!cb.current(s),
+      enabled: (s: any) => !!sel.current(s),
       why: 'Select a frame first',
       run: (ctx: any, name?: string) => {
-        const f = cb.current(ctx.state)!;
+        const f = sel.current(ctx.state)!;
         const r = committed(ctx, f);
         if (!r) return null;
         const n = name ?? `${ctx.state.catalog?.frames?.[f]?.name ?? f} settings`;
@@ -220,7 +221,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       ...needLook,
       run: (ctx: any) => {
         const l = pickedLook(ctx.state)!;
-        const f = cb.current(ctx.state)!;
+        const f = sel.current(ctx.state)!;
         const p = bake(l, lookFrame(f, committed(ctx, f)!), paramsOf(ctx.state, l));
         ctx.tx(`Save preset "${p.name}"`, (t: any) => t.$set(['looks', 'presets', p.id], p));
         return p;

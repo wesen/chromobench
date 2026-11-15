@@ -15,7 +15,7 @@ import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
 import { explainError } from './kit/messages.ts';
 import { initialInMode, type EnlargerMode } from './model/enlarger.ts';
-import type { CatalogFrame } from './cb.ts';
+import type { CatalogFrame } from './sel.ts';
 
 /** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
 export const frameName = (f: Pick<FrameEntry, 'name' | 'strip'>): string => (f.strip ? `${f.name} · ${f.strip.index}/${f.strip.of}` : f.name);

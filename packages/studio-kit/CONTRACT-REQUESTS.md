@@ -49,7 +49,7 @@ and in `LogEvent`: `| { type: 'preview'; mutation: Mutation | null; mutations: M
 `@chromobench/vocab`), imported by `packages/dsl/src/host.ts` and `packages/studio-kit/src/handles.ts`.
 
 **Why.** Viewer and agent must name the same node for the same words. Today studio-kit keeps a copy;
-`test/kit.test.ts` compares `PRINT_OPTIONS` with the DSL's and `cb.frame(s).print()` with `Host.printOf` on the M1
+`test/kit.test.ts` compares `PRINT_OPTIONS` with the DSL's and `cb.sel.frame(s).print()` with `Host.printOf` on the M1
 fixture, so a drift fails a test, but the copy should go (guide §14 item 9; CHB-017/CHB-007 decide where).
 
 ---

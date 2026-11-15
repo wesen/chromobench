@@ -15,13 +15,13 @@ import { componentOf, withComponent } from '../model/controls.ts';
 import { exposureStep, isInert } from '../model/enlarger.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
+import { sel } from '../sel.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 /** The title of a printer-lights nudge along one colour axis (CHB-031 F25: two rows called "Printer lights" read alike). */
 const AXIS_LABEL: Record<string, string> = { 'yellow-blue': 'Warmth', 'magenta-green': 'Tint' };
 /** A time nudge in normalised mode moves the three lights together: its row is about brightness, not seconds (F25). */
 const NORMALISED_TIME = { label: 'Brightness', tip: 'Lighter and Darker move the three printer lights together: the enlarger is normalised, so the time does not change the print.' };
-const cur = (s: any): string | null => s?.ui?.selection?.primary ?? null;
 
 /**
  * The slider's own scale: stops for log2 time, display units otherwise. `hard` is the contract's hard range on the
@@ -55,7 +55,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const step = parseStep(p['step']);
   const rt = m.rt;
   const st = rt.store;
-  const frameOf = (s: any): string | null => (typeof p['frame'] === 'function' ? p['frame'](s) : (p['frame'] ?? cur(s)));
+  const frameOf = (s: any): string | null => (typeof p['frame'] === 'function' ? p['frame'](s) : (p['frame'] ?? sel.current(s)));
   const pathOf = (f: string): (string | number)[] => ['recipes', f, ...model.path.split('.')];
   const read = (s: any) => {
     const f = frameOf(s);

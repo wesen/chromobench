@@ -4,7 +4,8 @@
 import type { FrameRecipe, Mutation } from '@chromobench/contract';
 import { centreOf, constrain, cropOf, fitCrop, orientFrame, swapAspect } from './geometry.ts';
 import type { CommandTable } from '@chromobench/shell';
-import { type SpotMode, FINISHING_PATHS, type DustSpot, plain, current, spotsOf, cropProblem } from './state.ts';
+import { type SpotMode, FINISHING_PATHS, type DustSpot, plain, spotsOf, cropProblem } from './state.ts';
+import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 import type { FinishTools } from './tools.ts';
 
@@ -18,7 +19,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
     remember(fr);
     return run(ctx, fr, ...a);
   };
-  const spotCommandsEnabled = (s: any) => !!s.finish?.selected && spotsOf(s.recipes?.[current(s) ?? '']).some((x) => x.id === s.finish.selected);
+  const spotCommandsEnabled = (s: any) => !!s.finish?.selected && spotsOf(s.recipes?.[sel.current(s) ?? '']).some((x) => x.id === s.finish.selected);
   const deleteSpots = (ctx: any, fr: { f: string; r: FrameRecipe }, ids: string[], label: string): void => {
     const ms: Mutation[] = [];
     const dust = ((fr.r.scan?.dust.spots ?? []) as DustSpot[]);
@@ -30,7 +31,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
   };
 
   function cycle(ctx: any, dir: number): void {
-    const list = spotsOf(ctx.state.recipes?.[current(ctx.state) ?? '']);
+    const list = spotsOf(ctx.state.recipes?.[sel.current(ctx.state) ?? '']);
     if (!list.length) return;
     const i = list.findIndex((x) => x.id === ctx.state.finish?.selected);
     ctx.set({ finish: { selected: list[(i + dir + list.length) % list.length]!.id } });
@@ -71,7 +72,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
     },
     'crop.fix': {
       label: 'Fix Crop (Keep Inside)', enabled: (s: any) => {
-        const f = current(s);
+        const f = sel.current(s);
         const z = f ? sizes.get(f) : undefined;
         return !!(f && z && s.recipes?.[f] && cropProblem(s.recipes[f], z.W, z.H));
       },
@@ -96,7 +97,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
       run: withFrame((ctx, fr, id?: string) => deleteSpots(ctx, fr, [id ?? ctx.state.finish.selected], 'Delete Spot')),
     },
     'spot.clear': {
-      label: 'Clear All Spots', enabled: (s: any) => spotsOf(s.recipes?.[current(s) ?? '']).length > 0, why: 'No spots on this frame',
+      label: 'Clear All Spots', enabled: (s: any) => spotsOf(s.recipes?.[sel.current(s) ?? '']).length > 0, why: 'No spots on this frame',
       run: withFrame((ctx, fr) => deleteSpots(ctx, fr, spotsOf(fr.r).map((x) => x.id), 'Clear All Spots')),
     },
     'spot.show': { label: 'Show Spots', checked: (s: any) => s.finish?.show !== false, run: (ctx: any) => ctx.set({ finish: { show: !opts(ctx.state).show } }) },

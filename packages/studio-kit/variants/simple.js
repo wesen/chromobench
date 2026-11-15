@@ -22,7 +22,7 @@ export default {
                 pick: cb.view.grid({ id: 'pick-grid', size: 'large', keys: { P: 'frame.pick', X: 'frame.reject', Enter: ['step.go', 'print'] } }),
                 print: ck.row(
                   { grow: 1 },
-                  cb.viewer(s => cb.frame(s)?.print() ?? null, { id: 'main', tools: ['ring-around'] }),
+                  cb.viewer(s => cb.sel.frame(s)?.print() ?? null, { id: 'main', tools: ['ring-around'] }),
                   ck.column(
                     { width: 320, class: 'cb-simple-side' },
                     cb.arg('print.enlarger.time_s', { widget: 'nudge', labels: ['Lighter', 'Darker'], step: '1/3 st' }),
