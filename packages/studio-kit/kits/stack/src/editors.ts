@@ -1,7 +1,8 @@
 // cb.kits.stack, the editors (headless): what the params panel's per-op editors read and write, and what they
-// measure. An editor is `{ covers, node }`: the arguments it edits (the generic controls skip them) and a θ function
-// that makes its node when the panel shows a layer of its op. The built-in ones (curve, levels, hsl, grade, mixer)
-// are `stack.editors`; a new op adds one with `stack.panels.params({ editors: { ...stack.editors, op: editor } })`.
+// measure. An editor is data, `{ form, covers }`: the form the panel mounts for a layer of its op (props `entry` and
+// `stage`) and the arguments it edits (the generic controls skip them). The built-in ones (curve, levels, hsl, grade,
+// mixer) are `stack.editors`; a new op adds one with
+// `stack.panels.params({ editors: { ...stack.editors, myOp: stack.editor('my.form', ['a', 'b']) } })`.
 //
 // The numbers are core's, never re-derived here (studio-kit does not import core): a host injects the service
 // `editorMath` (core's `toneCurve`/`evalCurve`, `evalLevels`, `encodeTransform`/`applyEncode`), so the curve an
@@ -44,39 +45,28 @@ export const mathOf = (services: unknown): EditorMath | null => ((services as { 
 
 // ---- the editors mechanism -----------------------------------------------------------------------------------------
 
-/** What an editor is made for: the layer the params panel shows. */
-export interface EditorTarget {
-  id: Id;
-  stage: StageName;
-  op: string;
-}
+/**
+ * An op's editor, as data (a layout built in a sandbox carries it across): the form whose node the params panel
+ * mounts for a layer of the op (its props: `entry`, the layer id, and `stage`), and the op's arguments it edits (the
+ * panel's generic controls leave them out).
+ */
 export interface Editor {
-  /** the op's arguments the editor edits: the panel's generic controls leave them out */
+  form: string;
   covers: readonly string[];
-  /** θ: the editor's node for a layer */
-  node: (t: EditorTarget) => unknown;
 }
 /** Editors by op name. */
 export type Editors = Readonly<Record<string, Editor>>;
 
-/** The built-in editors' forms and what they cover (kit.ts makes them `Editor`s with the kit's ck). */
-export const EDITOR_FORMS: Readonly<Record<string, { form: string; covers: readonly string[] }>> = {
+/** The built-in editors: curve, levels, hsl, grade, mixer. */
+export const EDITOR_FORMS: Editors = {
   curve: { form: 'stack.curve', covers: ['channel', 'points'] },
   levels: { form: 'stack.levels', covers: ['channel'] },
   hsl: { form: 'stack.hsl', covers: ['bands'] },
   grade: { form: 'stack.grade', covers: ['shadowsHue_deg', 'shadowsChroma', 'shadowsLightness', 'midtonesHue_deg', 'midtonesChroma', 'midtonesLightness', 'highlightsHue_deg', 'highlightsChroma', 'highlightsLightness'] },
   mixer: { form: 'stack.mixer', covers: ['red', 'green', 'blue', 'monochrome', 'grey'] },
 };
-
-/** An editor of a form: its node gets the layer as `entry` and its stage as `stage`. */
-export const editorOf = (make: (form: string, props: Record<string, unknown>) => unknown, form: string, covers: readonly string[]): Editor => ({
-  covers: [...covers],
-  node: (t) => make(form, { entry: t.id, stage: t.stage }),
-});
-/** The built-in editors (curve, levels, hsl, grade, mixer), their nodes made by `make` (the kit's ck.node). */
-export function defaultEditors(make: (form: string, props: Record<string, unknown>) => unknown): Editors {
-  return Object.fromEntries(Object.entries(EDITOR_FORMS).map(([op, e]) => [op, editorOf(make, e.form, e.covers)]));
-}
+/** An editor of a form for an op's layers. */
+export const editorOf = (form: string, covers: readonly string[]): Editor => ({ form, covers: [...covers] });
 
 // ---- lists as Colls with per-layer ids -----------------------------------------------------------------------------
 

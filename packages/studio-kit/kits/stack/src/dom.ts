@@ -6,7 +6,7 @@
 //   mountStudio(app, el, studio)   // CB_RENDERERS includes STACK_RENDERERS: every layout has the stack kit
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
-import type { NodeData } from '@chromobench/shell';
+import { makeNode, type NodeData } from '@chromobench/shell';
 import { Coll, type Id, type Why } from '@chromobench/values';
 import { getOp, type ArgSpec, type Document, type Entry, type MaskCombine, type MaskComponent, type StageName } from '@chromobench/contract';
 import { findEntry, storePath, type Placed } from '../../../src/model/doc.ts';
@@ -21,7 +21,7 @@ import {
 import { selectedIn } from './state.ts';
 import { btn, frameOf, numAt, numberControl, parsePercent, peekDoc, readPath, run, words } from './controls/dom.ts';
 import { EDITOR_RENDERERS } from './editors/dom.ts';
-import { defaultEditors, mathOf, oklabCss, type Editors } from './editors.ts';
+import { EDITOR_FORMS, mathOf, oklabCss, type Editors } from './editors.ts';
 
 /** The one amount control: the law's range and unit hint ("Amount · opacity"). */
 function amountControl(m: MountCtx, frame: (s: any) => string | null, id: Id, stage: StageName, e: Pick<Entry, 'kind'> & { op?: string }, o: { compact?: boolean } = {}): HTMLElement {
@@ -440,14 +440,11 @@ function colourSample(m: MountCtx, frame: (s: any) => string | null, cid: Id): H
   return h('div', { class: 'cb-stack-num cb-ed-colour', 'data-path': `${cid}.params.colour` }, h('span', { class: 'cb-stack-num-l', text: 'Colour' }), sw, txt, b);
 }
 
-/** the editors of plain nodes (a stack.params node made without the kit's builder) */
-let PLAIN_EDITORS: Editors | null = null;
-const plainEditors = (): Editors => (PLAIN_EDITORS ??= defaultEditors((form, props) => ({ $: form, props, kids: [], at: null })));
 
 const params: Renderer = (n, m) => {
   const frame = (s: any) => frameOf(n, s);
   const el = h('div', { class: 'cb-panel cb-stack-params' });
-  const editors: Editors = n.props['editors'] === false ? {} : ((n.props['editors'] as Editors | undefined) ?? plainEditors());
+  const editors: Editors = n.props['editors'] === false ? {} : ((n.props['editors'] as Editors | undefined) ?? EDITOR_FORMS);
   let scope: MountCtx | null = null;
   m.cell((s) => {
     const f = frame(s);
@@ -485,7 +482,7 @@ const params: Renderer = (n, m) => {
       // controls of the arguments it does not cover
       const ed = editors[e.op];
       if (ed) {
-        const x = pm.child('editor').mount(ed.node({ id, stage: p.stage, op: e.op }));
+        const x = pm.child('editor').mount(makeNode(ed.form, { entry: id, stage: p.stage }));
         if (x) el.append(h('div', { class: 'cb-stack-editor', 'data-op': e.op }, x));
       }
       const basic = h('div', { class: 'cb-stack-args' });

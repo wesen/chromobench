@@ -25,7 +25,7 @@ import { stackCommands, maskTools, MASK_TOOLS } from './commands.ts';
 import { stagePolicy, stagesShown } from './passes.ts';
 import { selectedIn, STACK_STATE } from './state.ts';
 import * as model from './model.ts';
-import { defaultEditors, editorOf, EDITOR_FORMS, type Editor, type Editors } from './editors.ts';
+import { editorOf, EDITOR_FORMS, type Editor, type Editors } from './editors.ts';
 
 const { build: b, traced: t, item: i } = slot;
 const spec = (name: string, slots: FormSpec['slots'], doc: string, explain?: (n: NodeData) => string | null): FormSpec => ({ name, slots, doc, kind: 'cb', ...(explain ? { explain } : {}) });
@@ -53,7 +53,7 @@ export const STACK_FORMS: FormSpec[] = [
     'The one stack row: on/off, name, what it does, amount (the law\'s unit), blend where the law has one, mask chip, provenance chip'),
   spec('stack.params', {
     frame: t<string | null>(),
-    editors: b<Editors | false>('editors by op ({ covers, node }): the op\'s editor, then generic controls for what it does not cover (default stack.editors)'),
+    editors: b<Editors | false>('editors by op ({ form, covers }): the op\'s editor, then generic controls for what it does not cover (default stack.editors)'),
   }, "The selected entry's controls: name, amount, blend, mask, provenance, its op's editor and its arguments from the catalogue"),
   ...editorSpecs(),
   spec('stack.masks', { frame: t<string | null>() }, "The selected entry's mask: components with add / subtract / intersect, feather, invert, what it reads"),
@@ -130,9 +130,9 @@ export function createStackKit(ck: Ck, cb: Cb) {
   /** the one row component (θ: inside a custom row lambda) */
   const row = (r: Pick<model.StackRow, 'id' | 'stage'>, o: { density?: 'compact' | 'comfortable' } = {}): any => node('stack.row', { entry: r.id, stage: r.stage, ...o });
   /** an editor for an op's layers: a form whose node gets `entry` and `stage`, and the arguments it covers */
-  const editor = (form: string, covers: readonly string[]): Editor => editorOf((f, props) => node(f, props), form, covers);
+  const editor = (form: string, covers: readonly string[]): Editor => editorOf(form, covers);
   /** the built-in editors: curve, levels, hsl, grade, mixer */
-  const editors: Editors = defaultEditors((f, props) => node(f, props));
+  const editors: Editors = EDITOR_FORMS;
   /**
    * The selected entry's panel. `editors` maps an op to its editor (default `stack.editors`; false: only the generic
    * controls): `stack.panels.params({ editors: { ...stack.editors, myOp: stack.editor('my.form', ['a', 'b']) } })`.

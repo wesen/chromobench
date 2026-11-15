@@ -4,14 +4,14 @@
 // reads with core's encodeTransform, exactly as the compiler converts it.
 import { describe, expect, it } from 'vitest';
 import { Coll } from '@chromobench/values';
-import { compile, cutNode, DEFAULT_HSL_BANDS, validateDocument, type Document } from '@chromobench/contract';
+import { compile, cutNode, DEFAULT_HSL_BANDS, getOp, validateDocument, type Document } from '@chromobench/contract';
 import { applyEncode, encodeTransform, evalCurve, toneCurve } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { manualClock } from '@chromobench/shell/testing';
 import { buildLayout, createStudio, memoryKV, storePath } from '../../src/index.ts';
 import { LAYOUTS } from '../../layouts/index.js';
 import {
-  bandWord, defaultEditors, EDITOR_FORMS, eyedropper, freeItemId, gammaAt, gammaOf, histogramOf, pointsColl, pointsOf, sampleOklab, stageHistogram,
+  bandWord, EDITOR_FORMS, editorOf, eyedropper, freeItemId, gammaAt, gammaOf, histogramOf, pointsColl, pointsOf, sampleOklab, stageHistogram,
 } from '../../kits/stack/src/index.ts';
 import { editorMath } from '../../demo/editor-math.ts';
 
@@ -88,19 +88,15 @@ describe('levels: the gamma handle sits where the output is one half', () => {
 });
 
 describe('the editors mechanism', () => {
-  it('stack.editors has the five built-in editors; each covers its op\'s arguments; the params panel gets them', async () => {
+  it('stack.editors has the five built-in editors, as data; each covers its op\'s arguments; the params panels get them', async () => {
     const { rt } = await studio();
-    const made: [string, Record<string, unknown>][] = [];
-    const eds = defaultEditors((form, props) => (made.push([form, props]), { form }));
-    expect(Object.keys(eds)).toEqual(['curve', 'levels', 'hsl', 'grade', 'mixer']);
-    expect(eds['curve']!.covers).toEqual(['channel', 'points']);
-    expect(eds['mixer']!.node({ id: 'mixer1', stage: 'print', op: 'mixer' })).toEqual({ form: 'stack.mixer' });
-    expect(made).toEqual([['stack.mixer', { entry: 'mixer1', stage: 'print' }]]);
-    for (const [op, e] of Object.entries(EDITOR_FORMS)) {
-      const { getOp } = await import('@chromobench/contract');
-      for (const a of e.covers) expect(Object.keys(getOp(op).args)).toContain(a);
-    }
-    // the layouts' params panels carry the kit's editors (explain prints them)
+    expect(Object.keys(EDITOR_FORMS)).toEqual(['curve', 'levels', 'hsl', 'grade', 'mixer']);
+    expect(EDITOR_FORMS['curve']).toEqual({ form: 'stack.curve', covers: ['channel', 'points'] });
+    expect(editorOf('my.form', ['a'])).toEqual({ form: 'my.form', covers: ['a'] });
+    expect(JSON.parse(JSON.stringify(EDITOR_FORMS))).toEqual(EDITOR_FORMS);
+    for (const [op, e] of Object.entries(EDITOR_FORMS)) for (const a of e.covers) expect(Object.keys(getOp(op).args)).toContain(a);
+    // every built-in editor's form is registered by the kit; the layouts' params panels carry the editors
+    for (const e of Object.values(EDITOR_FORMS)) expect(rt.app.ir.forms.has(e.form)).toBe(true);
     expect(rt.explain()).toMatch(/stack\.params {2}editors \{curve, levels, hsl, grade, mixer\}/);
   });
 });
