@@ -164,8 +164,9 @@ export class FilmGpu {
    * the tile halo of an exact export).
    */
   reach(n: Node, ctx: ChainCtx): number {
+    if (n.op !== 'film.couple' && n.op !== 'film.halation') return 0;
     const a = n.args as Record<string, unknown>;
-    const um = filmUmPerPx(n.info as ImageInfo);
+    const um = filmUmPerPx(n.info as ImageInfo); // only the ops with a physical size need the pitch (as run())
     const g = (sig: number): number => {
       if (!(sig > 0)) return 0;
       const p = Math.max(1, Math.ceil((sig / MAX_PASS_SIGMA) ** 2));
