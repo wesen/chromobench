@@ -320,3 +320,62 @@ needs the planner to count the DAG's live textures, which is engine work beyond 
 
 ### Technical details
 - `bench:print {"w":4000,"h":2674,"rounds":8,"adapter":{"vendor":"apple","architecture":"metal-3"},"plain":{"previewMs":21.4,"exportMs":244.8,"plan":{"tile":1024,"halo":0,"tiles":12}},"darkroom":{"previewMs":107.3,"exportMs":1650,"plan":{"tile":512,"halo":64,"tiles":48}}}`
+
+## Step 5: Settings ▸ Copy / Paste / Sync Settings in the everyday arrangements; the persona session interrupted
+
+The walkthrough's roll test showed that Copy/Paste/Sync Settings — the Lightroom habit the persona brief names
+("sync settings across photos") — existed only in the separate Looks layout. Classic and Darkroom now install the
+looks kit for its commands and show Lightroom's **Settings** menu with its shortcuts. The persona session (run by a
+sub-agent on a preview build made before this change) stopped when the account's usage limit was reached; it was
+resumed after the reset with the instruction to write its diary and report first.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Fix what integration finds when it is cheap; keep the persona session going.
+
+**Inferred user intent:** The everyday screens do the everyday jobs.
+
+**Commit (code):** c0d8a78 — "CHB-037 P9: Settings ▸ Copy / Paste / Sync Settings in Classic and Darkroom; diary Step 4"
+
+### What I did
+- `packages/studio-kit/kits/looks/src/kit.ts`: kit keys `Mod+Shift+C/V/S` → `looks.copy/paste/sync`; a product menu
+  `menus.settings()` = Copy Settings, Paste Settings, Sync Settings to Selection, Sync Mode.
+- `layouts/classic.js`, `layouts/darkroom.js`: `.use(looks.kit)` and `looks.menus.settings()` after the standard menus.
+- Layout explain snapshots updated with `-u` and read: classic, darkroom and looks gain the kit's commands and keys;
+  0 errors, 0 warnings; the completeness tests (every command reachable from a menu/key is in `wb.commands()`) pass.
+- `e2e/walkthrough.spec.ts` roll test: sync now in Classic — the film strip's cells clicked with Mod (source last, so
+  it is the primary), Settings ▸ Sync Settings, frames 3 and 4 get frame 1's Time in one step.
+- Persona sub-agent: brief in its session folder's diary (when written); it had taken 38 screenshots and written no
+  documents when it stopped (`rate_limit`, HTTP 429). Resumed with "write diary and report first".
+
+### Why
+- Sync is one of the persona's listed expectations; having it only in a layout he would never pick is a gap, and the
+  command already existed.
+
+### What worked
+- The kit installs into any layout: the looks kit only needs `cb.core`; the roll-dependent commands answer "Make a
+  roll first" without the roll kit.
+
+### What didn't work
+- N/A
+
+### What I learned
+- Installing a kit brings all its commands into the palette; Classic's palette now lists look commands that need the
+  Looks layout's library to pick a look (disabled with their reason).
+
+### What was tricky to build
+- Selecting with the source as primary: the last Mod-clicked cell becomes the primary, so the source is clicked last.
+
+### What warrants a second pair of eyes
+- Whether the look commands that need a picked look should be hidden from the palette where no library is shown.
+
+### What should be done in the future
+- A "Sync…" dialog choosing the groups (the Looks layout has a Sync groups panel; Classic syncs the default groups).
+
+### Code review instructions
+- `packages/studio-kit/kits/looks/src/kit.ts`, the two layouts, `packages/studio-kit/test/__snapshots__/layouts.test.ts.snap`.
+
+### Technical details
+- vitest after the step: 137 files, 3382 passed, 19 skipped.
