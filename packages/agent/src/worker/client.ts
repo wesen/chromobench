@@ -1,8 +1,9 @@
 // The page side of the DSL worker (protocol.ts): one DslWorkerClient is one DSL session (one QuickJS VM with
-// its own `mem`) running in a Web Worker. It serves the worker's engine calls, keeps the worker's mirror logs
-// current, and replays the session's proposals on the real EditLogs (EditLog.propose: the agent's only door).
+// its own `mem`) running in a Web Worker. It serves the worker's engine calls, sends the worker a copy of the page's
+// document log when it changed, and makes the submission an eval made there again on the page's log, through the
+// agent's one door (agentSubmit inside the host's change): the page's log and mode decide.
 //
-//   const dsl = await DslWorkerClient.create({ spawn: createDslWorker, engine, frames: studioFrames(studio.frames) });
+//   const dsl = await DslWorkerClient.create({ spawn: createDslWorker, engine, docs });
 //   const r = await dsl.eval({ code: 'return 1', frame: 'f1' }, { signal });
 //
 // Host rules (CHB-008 guide §5.2): evals run one at a time in arrival order; one that waits more than busyMs
@@ -11,30 +12,68 @@
 // honour within `graceMs` (2 s), the worker is terminated and respawned, and the next eval is told E_SESSION_RESET.
 import {
   diag, toDiagnostic,
-  type AgentMode, type ContextBlock, type Diagnostic, type EditLog, type Engine, type EvalRequest, type EvalResult,
-  type LoggedMutation, type SourceInfo,
+  type AgentMode, type ContextBlock, type Diagnostic, type Engine, type EvalRequest, type EvalResult, type SourceInfo,
 } from '@chromobench/contract';
-import type { DslLimits } from '@chromobench/dsl';
-import type { FrameSnapshot, FromWorker, ImagePayload, ProposalCall, ToWorker, WorkerLike } from './protocol.ts';
+import { historyOf, type DslLimits, type LogHost, type Submission } from '@chromobench/dsl';
+import type { Log, LogEntry } from '@chromobench/values';
+import type { DocsSnapshot, FromWorker, ImagePayload, ToWorker, WorkerLike } from './protocol.ts';
 
+/** A frame the agent may open: its decoded source and display name (its document is the log's). */
 export interface FrameView {
-  log: EditLog;
   info: SourceInfo;
   name?: string;
 }
 
-/** The open frames as the session sees them (studio-kit's Frames fits through studioFrames()). */
-export interface FrameSource {
+/**
+ * What the agent works on (the studio's store, or memoryDocs): the document log, the photographer's mode, the one
+ * way to change the log, a change signal, and the frames the agent may open.
+ */
+export interface AgentDocs extends LogHost {
   ids(): string[];
   get(id: string): FrameView | undefined;
+  /** calls fn after every change of the log or the mode; returns the unsubscribe function */
+  subscribe(fn: () => void): () => void;
+}
+
+/** AgentDocs over a log held in memory (tests, a session without a studio). */
+export interface MemoryDocs extends AgentDocs {
+  setMode(m: AgentMode): void;
+}
+
+export function memoryDocs(o: { log: Log; frames: Record<string, FrameView>; mode?: AgentMode }): MemoryDocs {
+  let log = o.log;
+  let mode: AgentMode = o.mode ?? 'ask';
+  const frames = new Map(Object.entries(o.frames));
+  const subs = new Set<() => void>();
+  const tell = (): void => {
+    for (const f of [...subs]) f();
+  };
+  return {
+    ids: () => [...frames.keys()].filter((id) => log.has(id)),
+    get: (id) => frames.get(id),
+    log: () => log,
+    mode: () => mode,
+    change: (f) => {
+      log = f(log);
+      tell();
+    },
+    setMode: (m) => {
+      mode = m;
+      tell();
+    },
+    subscribe: (fn) => {
+      subs.add(fn);
+      return () => void subs.delete(fn);
+    },
+  };
 }
 
 export interface DslWorkerOptions {
   spawn: () => WorkerLike;
   engine: Engine;
-  frames: FrameSource;
+  docs: AgentDocs;
   limits?: Partial<DslLimits>;
-  /** Prefix of the edit-log transaction ids this session's evals propose under (unique per session). */
+  /** Prefix of the transaction ids this session's evals submit under (unique per session in one log). */
   txPrefix?: string;
   graceMs?: number;
   busyMs?: number;
@@ -58,7 +97,7 @@ const EMPTY_CONTEXT = (mode: AgentMode): ContextBlock => ({ mode, changed: [], p
 export function hostResult(error: Diagnostic, mode: AgentMode = 'ask', warnings: Diagnostic[] = []): EvalResult {
   const lines = [`error: ${error.code}`, `message: ${JSON.stringify(error.message)}`];
   if (error.hint) lines.push(`hint: ${JSON.stringify(error.hint)}`);
-  return { yaml: `${lines.join('\n')}\n`, looks: [], warnings, context: EMPTY_CONTEXT(mode), mutations: [], error };
+  return { yaml: `${lines.join('\n')}\n`, looks: [], warnings, context: EMPTY_CONTEXT(mode), transactions: [], error };
 }
 
 export class DslWorkerClient {
@@ -69,9 +108,7 @@ export class DslWorkerClient {
   private running: Running | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private readonly calls = new Map<number, AbortController>();
-  private readonly versions = new WeakMap<EditLog, number>();
-  private readonly watched = new WeakSet<EditLog>();
-  private sent = new Map<string, { log: EditLog; v: number }>();
+  private sent: { log: Log; mode: AgentMode; frames: string } | null = null;
   private resetNote: Diagnostic | null = null;
   private disposed = false;
   private readonly graceMs: number;
@@ -102,7 +139,7 @@ export class DslWorkerClient {
   private boot(): void {
     const w = this.o.spawn();
     this.worker = w;
-    this.sent = new Map();
+    this.sent = null;
     let onReady!: () => void;
     this.ready = new Promise<void>((r) => (onReady = r));
     w.addEventListener('message', (e: MessageEvent) => {
@@ -112,7 +149,7 @@ export class DslWorkerClient {
       else this.onMessage(m);
     });
     w.start?.();
-    const init: ToWorker = { t: 'init', engine: { id: this.o.engine.id, caps: this.o.engine.capabilities() }, ...(this.o.limits ? { limits: this.o.limits } : {}) };
+    const init: ToWorker = { t: 'init', engine: { id: this.o.engine.id, caps: this.o.engine.capabilities() }, ...(this.o.limits ? { limits: this.o.limits } : {}), txPrefix: this.txPrefix };
     w.postMessage(init);
   }
 
@@ -141,7 +178,7 @@ export class DslWorkerClient {
         const r = this.running;
         if (!r || r.id !== m.id || r.done) return;
         if (m.t === 'failed') return this.finish(r, hostResult(m.error));
-        return this.finish(r, this.replay(m.result, m.proposals));
+        return this.finish(r, this.replay(m.result, m.submission));
       }
       default:
         return;
@@ -169,30 +206,27 @@ export class DslWorkerClient {
     }
   }
 
-  /** The proposals the session made on its mirror logs, made again on the real logs. */
-  private replay(result: EvalResult, proposals: ProposalCall[]): EvalResult {
-    if (!proposals.length) return result;
-    const real: LoggedMutation[] = [];
+  /** The submission the session made on the worker's copy, made again on the page's log (the page decides). */
+  private replay(result: EvalResult, sub: Submission | undefined): EvalResult {
+    if (!sub) return result;
     const warnings = [...result.warnings];
     const notes: string[] = [];
-    for (const p of proposals) {
-      const f = this.o.frames.get(p.frame);
-      if (!f) {
-        warnings.push(diag('CONFLICT', `frame ${p.frame} was closed during the eval; its edits were not submitted`));
-        notes.push(`frame ${p.frame} was closed; edits not submitted`);
-        continue;
+    let entries: readonly LogEntry[] = [];
+    try {
+      const r = historyOf(this.o.docs).submit(sub);
+      entries = r.entries;
+      const said = new Set(result.transactions.map((e) => e.tx.status));
+      if (r.stale.length && !said.has('pending')) {
+        warnings.push(diag('CONFLICT', `${r.stale.join(', ')} changed while the eval ran: the edits wait for the photographer's approval`));
+        notes.push(`${r.stale.join(', ')} changed while the eval ran: the edits wait for approval`);
       }
-      const tx = `${this.txPrefix}-${p.meta.tx}`;
-      try {
-        real.push(...f.log.propose(p.ms, { ...p.meta, tx, label: p.meta.label ? p.meta.label.replace(p.meta.tx, tx) : `agent ${tx}` }));
-      } catch (e) {
-        const d = toDiagnostic(e);
-        warnings.push(diag('CONFLICT', `edits for ${p.frame} were not submitted: ${d.code} ${d.message}`, d.hint ? { hint: d.hint } : {}));
-        notes.push(`edits for ${p.frame} not submitted: ${d.code} ${d.message}`);
-      }
+    } catch (e) {
+      const d = toDiagnostic(e);
+      warnings.push(diag('CONFLICT', `the edits were not submitted: ${d.code} ${d.message}`, d.hint ? { hint: d.hint } : {}));
+      notes.push(`edits not submitted: ${d.code} ${d.message}`);
     }
     const yaml = notes.length ? `${result.yaml.replace(/\n?$/, '\n')}host:\n${notes.map((n) => `  - ${JSON.stringify(n)}`).join('\n')}\n` : result.yaml;
-    return { ...result, yaml, warnings, mutations: real };
+    return { ...result, yaml, warnings, transactions: [...entries] };
   }
 
   private finish(r: Running, res: EvalResult): void {
@@ -203,29 +237,20 @@ export class DslWorkerClient {
     r.resolve(res);
   }
 
-  /** Sends snapshots of frames whose log changed since the worker last saw them. */
-  private syncFrames(): void {
-    const set: Record<string, FrameSnapshot> = {};
-    for (const id of this.o.frames.ids()) {
-      const f = this.o.frames.get(id);
-      if (!f) continue;
-      this.watch(f.log);
-      const v = this.versions.get(f.log) ?? 0;
-      const last = this.sent.get(id);
-      if (last && last.log === f.log && last.v === v) continue;
-      set[id] = { data: f.log.toJSON(), mode: f.log.mode, source: f.info, ...(f.name !== undefined ? { name: f.name } : {}) };
-      this.sent.set(id, { log: f.log, v });
+  /** Sends the worker a copy of the documents when the log, the mode or the frames changed since it last saw them. */
+  private syncDocs(): void {
+    const d = this.o.docs;
+    const log = d.log();
+    const mode = d.mode();
+    const frames: DocsSnapshot['frames'] = {};
+    for (const id of d.ids()) {
+      const f = d.get(id);
+      if (f) frames[id] = { source: f.info, ...(f.name !== undefined ? { name: f.name } : {}) };
     }
-    if (Object.keys(set).length) this.post({ t: 'frames', set });
-  }
-
-  private watch(log: EditLog): void {
-    if (this.watched.has(log)) return;
-    this.watched.add(log);
-    this.versions.set(log, 0);
-    log.on((e) => {
-      if (e.type !== 'preview') this.versions.set(log, (this.versions.get(log) ?? 0) + 1);
-    });
+    const key = JSON.stringify(Object.entries(frames).map(([id, f]) => [id, f.source.sha256, f.name ?? '']));
+    if (this.sent && this.sent.log === log && this.sent.mode === mode && this.sent.frames === key) return;
+    this.post({ t: 'docs', snapshot: { log: log.toJSON(), mode, frames } });
+    this.sent = { log, mode, frames: key };
   }
 
   /** Runs one eval in the worker; never rejects (failures come back as EvalResult.error). */
@@ -236,19 +261,16 @@ export class DslWorkerClient {
     return run;
   }
 
-  private modeOf(frame: string | undefined): AgentMode {
-    return (frame ? this.o.frames.get(frame)?.log.mode : undefined) ?? 'ask';
-  }
 
   private async runOne(req: EvalRequest, o: EvalOptions, queued: number): Promise<EvalResult> {
-    const mode = this.modeOf(req.frame);
+    const mode = this.o.docs.mode();
     if (this.disposed) return hostResult(diag('E_SESSION', 'the DSL session is closed'), mode);
     if (Date.now() - queued > this.busyMs) return hostResult(diag('E_BUSY', `the session was busy for more than ${Math.round(this.busyMs / 1000)} s; this eval did not run`, { hint: 'run it again' }), mode);
     if (o.signal?.aborted) return hostResult(diag('E_CANCELLED', 'cancelled before it started'), mode);
     await this.ready;
     const note = this.resetNote; // a forced restart before this eval: say so in its result
     this.resetNote = null;
-    this.syncFrames();
+    this.syncDocs();
     const id = ++this.seq;
     const timeoutMs = Math.min(Math.max(1, req.timeoutMs ?? this.defaultTimeoutMs), this.maxTimeoutMs);
     let resolve!: (r: EvalResult) => void;

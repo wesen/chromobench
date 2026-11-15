@@ -3,16 +3,18 @@
 // supports Stop, and keeps the conversation append-only (system prompt and tools frozen per thread, a mode change
 // is an appended system message, per-turn context is a text block in the user message).
 //
-//   const chat = new ChatSession({ host: { evaluate, currentFrame, frames, mode, setMode }, model });
+//   const chat = new ChatSession({ host: { evaluate, currentFrame, docs, setMode }, model });
 //   chat.on((e) => …);            // ChatEvents; chat.state is the snapshot the panel renders
 //   await chat.send('the skin looks green');
 //   chat.decide(stepId, seqs, 'approve');   chat.stop();   chat.setMode('auto');   chat.revertStep(stepId);
 //
 // Safety (guide §5.3): the model reaches the darkroom only through `eval`, i.e. the DSL sandbox; its edits enter
-// the frames' EditLogs only through EditLog.propose (by: 'agent'); mode changes and approvals are methods the UI
-// calls, which nothing the model produces can reach.
-import type { AgentMode, Diagnostic, EvalRequest, EvalResult, LoggedMutation, Mutation } from '@chromobench/contract';
-import type { FrameSource } from '../worker/client.ts';
+// the document log only through the agent's door (agentSubmit: by 'agent', proposed in ask mode); mode changes,
+// approvals and reverts are methods the UI calls, which nothing the model produces can reach.
+import { toDiagnostic, type AgentMode, type Diagnostic, type EvalRequest, type EvalResult } from '@chromobench/contract';
+import { describeMutation } from '@chromobench/dsl';
+import { plan, transaction, type Edit, type Batch, type LogEntry, type Mutation } from '@chromobench/values';
+import type { AgentDocs } from '../worker/client.ts';
 import {
   ModelError, type ChatModel, type ContentBlockParam, type Effort, type MessageParam, type ModelReply, type ToolDef,
   type ToolResultBlockParam, type ToolUseBlock,
@@ -26,11 +28,9 @@ export interface ChatHost {
   evaluate(req: EvalRequest, signal: AbortSignal): Promise<EvalResult>;
   /** The frame the photographer has open. */
   currentFrame(): string | null;
-  /** The open frames' logs: approvals, reverts, names. */
-  frames: FrameSource;
-  /** The agent mode (the photographer's setting). */
-  mode(): AgentMode;
-  /** Sets the mode on every frame; called only from setMode(), i.e. by the UI. */
+  /** The documents, the log and the mode (approvals, reverts, names). */
+  docs: AgentDocs;
+  /** Sets the mode; called only from setMode(), i.e. by the UI. */
   setMode(m: AgentMode): void;
 }
 
@@ -98,7 +98,7 @@ export type ChatEvent =
   | { t: 'step.code'; step: string; partial: string }
   | { t: 'step.started'; step: string; code: string }
   | { t: 'step.done'; step: string; text: string; looks: LookView[]; ms: number; isError: boolean }
-  | { t: 'approval'; step: string; pending: LoggedMutation[] }
+  | { t: 'approval'; step: string; pending: LogEntry[] }
   | { t: 'notice'; kind: 'fallback' | 'mode' | 'info'; detail: string }
   | { t: 'error'; kind: string; message: string }
   | { t: 'done'; stopReason: string; usage: { input: number; output: number; cacheRead: number } }
@@ -119,39 +119,17 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-const fmt = (v: unknown): string => {
-  if (typeof v === 'number') return String(Math.round(v * 1e4) / 1e4);
-  if (Array.isArray(v)) return `[${v.map(fmt).join(', ')}]`;
-  return JSON.stringify(v);
-};
-
-/** One line per mutation, for approval cards and decision notes. */
-export function describeChange(m: Mutation): string {
-  switch (m.op) {
-    case 'set': {
-      const pts = /lights\.logH$/.test(m.path) && Array.isArray(m.value) ? ` (${(m.value as number[]).map((v) => `${v >= 0 ? '+' : ''}${Math.round((v / 0.025) * 10) / 10}`).join(' / ')} pt)` : '';
-      return `${m.path} ${m.expect !== undefined ? `${fmt(m.expect)} → ` : '= '}${fmt(m.value)}${pts}`;
-    }
-    case 'exposure.add':
-      return `add exposure ${m.exposure.id}`;
-    case 'exposure.remove':
-      return `remove exposure ${m.id}`;
-    case 'mask.set':
-      return `set mask ${m.id}`;
-    default:
-      return m.op;
-  }
+/** One line per mutation, for approval cards and decision notes; printer lights also in points. */
+export function describeChange(m: Mutation, inverse?: Mutation): string {
+  const text = describeMutation(m, inverse);
+  if (m.op !== 'set' || !/\.logH$/.test(m.path) || !Array.isArray(m.value)) return text;
+  return `${text} (${(m.value as number[]).map((v) => `${v >= 0 ? '+' : ''}${Math.round((v / 0.025) * 10) / 10}`).join(' / ')} pt)`;
 }
 
-/** The inverse of applied agent entries, as the photographer's own mutations (Revert). */
-export function inverseOf(entries: readonly LoggedMutation[]): Mutation[] {
-  const out: Mutation[] = [];
-  for (const e of [...entries].reverse()) {
-    const m = e.m;
-    if (m.op === 'set' && m.expect !== undefined) out.push({ op: 'set', path: m.path, value: structuredClone(m.expect) });
-    else if (m.op === 'exposure.add') out.push({ op: 'exposure.remove', id: m.exposure.id });
-  }
-  return out;
+/** The changes of log entries, one line each (prefixed with the frame when they span several). */
+export function changesOf(entries: readonly LogEntry[]): ChangeView[] {
+  const many = new Set(entries.map((e) => e.doc)).size > 1;
+  return entries.flatMap((e) => e.tx.mutations.map((m, i) => ({ seq: e.seq, text: `${many ? `${e.doc}: ` : ''}${describeChange(m, e.tx.inverses[i])}` })));
 }
 
 export class ChatSession {
@@ -178,11 +156,11 @@ export class ChatSession {
     this.model = o.model ?? null;
     this.maxSteps = o.maxSteps ?? MAX_STEPS;
     this.systemSource = o.system ?? (() => systemPrompt());
-    this.st = { status: 'idle', items: [], mode: o.host.mode(), effort: o.effort ?? 'medium', model: this.model?.label ?? null, usage: { input: 0, output: 0, cacheRead: 0 }, imagesSent: 0 };
+    this.st = { status: 'idle', items: [], mode: o.host.docs.mode(), effort: o.effort ?? 'medium', model: this.model?.label ?? null, usage: { input: 0, output: 0, cacheRead: 0 }, imagesSent: 0 };
   }
 
   get state(): Readonly<ChatState> {
-    this.st.mode = this.host.mode(); // the photographer may change it anywhere in the studio
+    this.st.mode = this.host.docs.mode(); // the photographer may change it anywhere in the studio
     return this.st;
   }
   get busy(): boolean {
@@ -239,12 +217,13 @@ export class ChatSession {
   /** The per-turn context block (data, not instructions). */
   private contextBlock(): string {
     const f = this.host.currentFrame();
-    const v = f ? this.host.frames.get(f) : undefined;
+    const docs = this.host.docs;
+    const v = f ? docs.get(f) : undefined;
     const lines = ['context:'];
-    lines.push(`  frame: ${f ? `${f}${v?.name && v.name !== f ? ` (${JSON.stringify(v.name)})` : ''}` : '(none open)'} · mode ${this.host.mode()}`);
-    const pending = f && v ? v.log.pending().length : 0;
+    lines.push(`  frame: ${f ? `${f}${v?.name && v.name !== f ? ` (${JSON.stringify(v.name)})` : ''}` : '(none open)'} · mode ${docs.mode()}`);
+    const pending = f && v && docs.log().has(f) ? docs.log().pending(f).length : 0;
     if (pending) lines.push(`  pending proposals: ${pending}`);
-    const others = this.host.frames.ids().filter((x) => x !== f);
+    const others = docs.ids().filter((x) => x !== f);
     if (others.length) lines.push(`  other open frames: ${others.slice(0, 12).join(', ')}${others.length > 12 ? ', …' : ''}`);
     if (this.sinceLast.length) lines.push(`  since your last turn: ${this.sinceLast.join('; ')}`);
     this.sinceLast = [];
@@ -271,7 +250,7 @@ export class ChatSession {
     const turnStart = this.messages.length;
     const carried = this.carry;
     this.carry = [];
-    const mode = this.host.mode();
+    const mode = this.host.docs.mode();
     this.messages.push({ role: 'user', content: [...carried, text(t), text(this.contextBlock())] });
     // a mode change since the model last heard: an appended system message (the frozen prompt is never edited)
     if (this.toldMode !== null && this.toldMode !== mode) this.messages.push({ role: 'system', content: MODE_TEXT[mode] } as MessageParam);
@@ -436,12 +415,11 @@ export class ChatSession {
       return { type: 'tool_result', tool_use_id: call.id, is_error: true, content: [text('Stopped by the photographer before this eval finished; nothing it asked to change was applied.')] };
     }
     let note = '';
-    const pending = res.mutations.filter((m) => m.status === 'pending');
-    const applied = res.mutations.filter((m) => m.status === 'applied');
-    if (applied.length) it.applied = { frame: applied[0]!.frame, seqs: applied.map((m) => m.seq) };
+    const pending = res.transactions.filter((e) => e.tx.status === 'pending');
+    const applied = res.transactions.filter((e) => e.tx.status === 'applied');
+    if (applied.length) it.applied = { frame: applied[0]!.doc, seqs: applied.map((e) => e.seq) };
     if (pending.length) {
-      const pf = pending[0]!.frame;
-      it.approval = { frame: pf, seqs: pending.map((m) => m.seq), changes: pending.map((m) => ({ seq: m.seq, text: describeChange(m.m) })) };
+      it.approval = { frame: pending[0]!.doc, seqs: pending.map((e) => e.seq), changes: changesOf(pending) };
       it.status = 'waiting';
       this.st.status = 'waiting';
       this.emit({ t: 'approval', step: call.id, pending });
@@ -455,12 +433,14 @@ export class ChatSession {
     return { type: 'tool_result', tool_use_id: call.id, ...(res.error ? { is_error: true } : {}), content: [text(res.yaml + note), ...images] };
   }
 
+  private status(seq: number): string {
+    return this.host.docs.log().entry(seq)?.tx.status ?? 'gone';
+  }
+
   private waitDecision(it: Extract<ChatItem, { kind: 'step' }>, signal: AbortSignal): Promise<'decided' | 'later' | 'stopped'> {
     const ap = it.approval!;
-    const log = this.host.frames.get(ap.frame)?.log;
-    if (!log) return Promise.resolve('decided');
     return new Promise((resolve) => {
-      const isOpen = (): boolean => ap.seqs.some((s) => log.entries[s - 1]?.status === 'pending');
+      const isOpen = (): boolean => ap.seqs.some((s) => this.status(s) === 'pending');
       let off = (): void => undefined;
       const w: Waiter = {
         step: it.id,
@@ -473,8 +453,8 @@ export class ChatSession {
       };
       const onAbort = (): void => w.resolve('stopped');
       // decided anywhere (this card, the approvals panel, Approve all): the step continues
-      off = log.on((e) => {
-        if ((e.type === 'approve' || e.type === 'reject') && !isOpen()) w.resolve('decided');
+      off = this.host.docs.subscribe(() => {
+        if (!isOpen()) w.resolve('decided');
       });
       signal.addEventListener('abort', onAbort, { once: true });
       this.waiters.add(w);
@@ -484,8 +464,7 @@ export class ChatSession {
 
   private decisionNote(it: Extract<ChatItem, { kind: 'step' }>, how: 'decided' | 'later' | 'stopped'): string {
     const ap = it.approval!;
-    const log = this.host.frames.get(ap.frame)?.log;
-    const status = (s: number): string => log?.entries[s - 1]?.status ?? 'pending';
+    const status = (s: number): string => this.status(s);
     const approved = ap.seqs.filter((s) => status(s) === 'applied');
     const rejected = ap.seqs.filter((s) => status(s) === 'rejected');
     const pending = ap.seqs.filter((s) => status(s) === 'pending');
@@ -501,37 +480,38 @@ export class ChatSession {
   }
 
   /**
-   * The photographer's decision on a step's proposals: approve the given seqs (the others of the step are rejected),
-   * reject them all, or decide later (they stay pending). Approve may be refused (E_STALE …): the problems are
-   * shown on the card, and `force` applies anyway.
+   * The photographer's decision on a step's proposals: approve the given seqs (the others of the step are rejected;
+   * an entry of a batch stands for the whole batch), reject them all, or decide later (they stay pending). Approve may
+   * be refused (E_STALE …): the problems are shown on the card, and `force` applies anyway.
    */
   decide(step: string, seqs: readonly number[], decision: 'approve' | 'reject' | 'later', o: { force?: boolean } = {}): void {
     const it = this.item<'step'>(step);
     const ap = it?.approval;
     if (!it || !ap) return;
-    const log = this.host.frames.get(ap.frame)?.log;
-    if (!log) return;
-    const open = ap.seqs.filter((s) => log.entries[s - 1]?.status === 'pending');
+    const docs = this.host.docs;
+    const open = (): number[] => ap.seqs.filter((s) => this.status(s) === 'pending');
     if (decision === 'later') {
       for (const w of this.waiters) if (w.step === step) w.resolve('later');
       return;
     }
     if (decision === 'reject') {
-      if (open.length) log.reject(open);
+      const sel = open();
+      if (sel.length) docs.change((l) => l.reject(sel));
       return;
     }
-    const chosen = seqs.filter((s) => open.includes(s));
-    const rest = open.filter((s) => !chosen.includes(s));
+    const chosen = seqs.filter((s) => open().includes(s));
     if (chosen.length) {
-      const r = log.approve(chosen, o.force ? { force: true } : {});
-      if (Array.isArray(r)) {
-        ap.problems = r;
+      try {
+        docs.change((l) => l.approve(chosen, { by: 'user', ...(o.force ? { force: true } : {}) }));
+      } catch (e) {
+        ap.problems = [toDiagnostic(e)];
         this.changed();
         return;
       }
       delete ap.problems;
     }
-    if (rest.length) log.reject(rest);
+    const rest = open();
+    if (rest.length) docs.change((l) => l.reject(rest));
     this.changed();
   }
 
@@ -539,19 +519,25 @@ export class ChatSession {
   revertStep(step: string): boolean {
     const it = this.item<'step'>(step);
     if (!it?.applied || it.reverted) return false;
-    const log = this.host.frames.get(it.applied.frame)?.log;
-    if (!log) return false;
-    const entries = it.applied.seqs.map((s) => log.entries[s - 1]).filter((e): e is LoggedMutation => !!e && e.status === 'applied');
-    const inv = inverseOf(entries);
-    if (!inv.length) return false;
+    const docs = this.host.docs;
+    const log = docs.log();
+    const entries = it.applied.seqs.map((s) => log.entry(s)).filter((e): e is LogEntry => !!e && e.tx.status === 'applied');
+    if (!entries.length) return false;
+    const undo = (e: LogEntry): Mutation[] => [...e.tx.inverses].reverse();
+    const id = `revert:${entries[0]!.tx.batch ?? entries[0]!.tx.id}`;
+    const meta = { id, label: 'revert agent step', by: 'user' as const, source: { kind: 'revert', of: entries[0]!.tx.batch ?? entries[0]!.tx.id } };
+    const x: Edit | Batch = entries.length === 1
+      ? { doc: entries[0]!.doc, tx: transaction({ ...meta, mutations: undo(entries[0]!) }) }
+      : plan(log.targets(entries.map((e) => e.doc)), (_d, doc) => undo(entries.find((e) => e.doc === doc)!), meta);
     try {
-      log.apply(inv, 'user', 'revert agent step');
+      if ('skipped' in x && x.skipped.length) throw x.skipped[0]!.error;
+      docs.change((l) => l.commit(x));
     } catch (e) {
-      this.notice('error', `Revert failed: ${(e as Error).message}`);
+      this.notice('error', `Revert failed: ${toDiagnostic(e).message}`);
       return false;
     }
     it.reverted = true;
-    this.sinceLast.push(`the photographer reverted eval ${step} (${entries.map((e) => describeChange(e.m)).join('; ')})`);
+    this.sinceLast.push(`the photographer reverted eval ${step} (${changesOf(entries).map((c) => c.text).join('; ')})`);
     this.changed();
     return true;
   }

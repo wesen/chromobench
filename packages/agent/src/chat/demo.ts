@@ -13,19 +13,20 @@ export interface DemoOptions {
 const measure = (x: number, y: number): string => `// what does the centre of the print read now?
 const at = [${x}, ${y}]
 const d = await frame.print().measure.densitometer({ at, aperture_px: 15 })
-frame.print().look('the print now')
-return { at, D: d.D, visual: d.visual, lights_pt: units.toPt(frame.recipe.print.lights.logH) }`;
+frame.print().show('the print now')
+return { at, D: d.D, visual: d.visual, lights_pt: units.toPt(frame.get('lights.params.logH')) }`;
 
 const balance = (x: number, y: number): string => `// printer lights that make the centre neutral: solve per layer in log exposure
 const at = [${x}, ${y}]
+const lights0 = frame.get('lights.params.logH')
 const now = await frame.print().measure.densitometer({ at, aperture_px: 15 })
-const probe = await frame.print({ lights: [0.05, 0.05, 0.05] }).measure.densitometer({ at, aperture_px: 15 })
+const probe = await frame.with(set('lights.params.logH', lights0.map((v) => v + 0.05))).print().measure.densitometer({ at, aperture_px: 15 })
 const slope = now.D.map((d, k) => (probe.D[k] - d) / 0.05)
 const mean = (now.D[0] + now.D[1] + now.D[2]) / 3
 const pts = units.toPt(now.D.map((d, k) => (mean - d) / slope[k])).map(p => Math.round(p * 2) / 2)
-const lights = units.pt(pts).map((v, k) => v + frame.recipe.print.lights.logH[k])
-const e = frame.edit({ 'print.lights.logH': lights }, { why: \`neutral centre: \${pts.join(' / ')} pt\` })
-const after = await e.preview.measure.densitometer({ at, aperture_px: 15 })
+const lights = units.pt(pts).map((v, k) => v + lights0[k])
+const e = frame.propose(set('lights.params.logH', lights), { why: \`neutral centre: \${pts.join(' / ')} pt\` })
+const after = await e.preview.print().measure.densitometer({ at, aperture_px: 15 })
 return { before: now.D, points: pts, after: after.D }`;
 
 /** Tool results since the last plain user message (how far this turn is). */

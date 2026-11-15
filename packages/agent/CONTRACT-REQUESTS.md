@@ -1,5 +1,11 @@
 # CHB-008 contract requests
 
+> **Status (CHB-037 P6a, contract 1.0):** both requests are settled without a contract change. The EditLog is gone;
+> the agent submits to the values document log through one door (`agentSubmit` in packages/dsl). **R1**: a
+> submission carries the inverses its transactions had on the documents the eval read; when they differ at the door,
+> the edit is proposed even in auto mode. **R2**: the transport stays in the transaction id prefix (`chat-eval-3`,
+> `mcp-eval-1`), and a transaction's `source` is `{ kind: 'agent', eval }`. Kept here as the record of the request.
+
 Requests for `@chromobench/contract`, for the orchestrator to apply at merge time. The agent works without them
 today; each says what it does locally in the meantime. Most of the guide's §9 list is already in contract 0.3
 (`LoggedMutation.seq` and `.frame`, `Look`, the diagnostic codes, `signal` on `evaluate`/`measure`, `EvalResult.trace`).

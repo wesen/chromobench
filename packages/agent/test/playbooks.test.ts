@@ -30,11 +30,12 @@ describe('playbooks', () => {
     const r = await p.dsl.eval({ code: 'return await mem.greyBalance([48, 32])', frame: FRAME });
     expect(r.error, r.yaml).toBeUndefined();
     expect(/points: \[(.*)\]/.exec(r.yaml)![1]).toBe('-4.5, -0.5, 5');
-    expect(r.mutations).toHaveLength(1);
-    expect(r.mutations[0]).toMatchObject({ by: 'agent', status: 'pending', why: 'neutral at [48,32]: -4.5 / -0.5 / 5 pt' });
-    expect(r.mutations[0]!.m).toMatchObject({ op: 'set', path: 'print.lights.logH', value: [-0.1125, -0.0125, 0.125] });
+    expect(r.transactions).toHaveLength(1);
+    expect(r.transactions[0]).toMatchObject({ why: 'neutral at [48,32]: -4.5 / -0.5 / 5 pt', tx: { by: 'agent', status: 'pending' } });
+    expect(r.transactions[0]!.tx.mutations).toEqual([{ op: 'set', path: 'lights.params.logH', value: [-0.1125, -0.0125, 0.125] }]);
     const dry = await p.dsl.eval({ code: 'return await mem.greyBalance([48, 32], { propose: false })', frame: FRAME });
-    expect(dry.mutations).toHaveLength(0);
+    expect(dry.transactions).toHaveLength(0);
+    expect(/after: \[(.*)\]/.exec(dry.yaml)![1]).toBe(/after: \[(.*)\]/.exec(r.yaml)![1]);
     p.dsl.dispose();
   });
 
@@ -47,6 +48,8 @@ describe('playbooks', () => {
     expect(r.looks).toHaveLength(1);
     const t = await p.dsl.eval({ code: 'return mem.stripTimes(12, 5, 1 / 3)', frame: FRAME });
     expect(first(t.yaml)).toBe('[7.56, 9.52, 12, 15.12, 19.05]');
+    const t0 = await p.dsl.eval({ code: 'return mem.stripTimes()', frame: FRAME }); // around the main exposure's 10 s
+    expect(first(t0.yaml)).toBe('[6.3, 7.94, 10, 12.6, 15.87]');
     // the units the playbook relies on: 1/3 stop = 0.1003 log H ≈ 4.0 points
     const u = await p.dsl.eval({ code: 'return units.toPt([Math.log10(2) / 3, 0, 0])[0]', frame: FRAME });
     expect(Number(first(u.yaml))).toBeCloseTo(4.01, 2);

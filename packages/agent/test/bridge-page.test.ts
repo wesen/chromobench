@@ -1,5 +1,5 @@
 // The page side of the bridge protocol against a fake socket: hello with frames and mode, an eval run in the
-// page's DSL worker session (in ask mode the edit comes back pending, nothing waits for approval), looks as base64,
+// page's DSL worker session (in ask mode the edit comes back pending, nothing waits for approval), images as base64,
 // cancellation from the bridge, sessions, focus updates and reconnection with backoff.
 import { describe, expect, it } from 'vitest';
 import { BridgePageClient, DslWorkerClient, inThreadWorker, type SocketLike } from '../src/index.ts';
@@ -46,13 +46,12 @@ describe('BridgePageClient', () => {
     const c = new BridgePageClient({
       url: 'ws://127.0.0.1:7341/ws/page',
       pageId: 'p-test',
-      frames: p.frames,
+      docs: p.docs,
       currentFrame: () => FRAME,
-      mode: () => p.log.mode,
       session: (id) => sessions.get(id) ?? null,
       createSession: () => {
         const id = `s-${++n}`;
-        sessions.set(id, DslWorkerClient.create({ spawn: inThreadWorker, engine: p.engine, frames: p.frames, txPrefix: `mcp-${id}` }));
+        sessions.set(id, DslWorkerClient.create({ spawn: inThreadWorker, engine: p.engine, docs: p.docs, txPrefix: `mcp-${id}` }));
         return id;
       },
       connect: () => {
@@ -68,17 +67,17 @@ describe('BridgePageClient', () => {
     ws.open();
     expect(ws.sent[0]).toEqual({ t: 'hello', page: 'p-test', app: 'chromobench-studio', catalogHash: '', focused: true, frame: FRAME, frames: [{ id: FRAME, name: 'M1 test negative', open: true }], mode: 'ask' });
 
-    ws.push({ t: 'eval', id: 'e-0001', session: 'default', req: { code: "frame.edit({ 'print.enlarger.time_s': 12.6 })\nframe.print().look('now')\nreturn 1", timeoutMs: 30000 } });
+    ws.push({ t: 'eval', id: 'e-0001', session: 'default', req: { code: "frame.propose(set('main.params.time_s', 12.6))\nframe.print().show('now')\nreturn 1", timeoutMs: 30000 } });
     await until(() => ws.sent.some((m) => m['t'] === 'eval.result'));
     const r = ws.sent.find((m) => m['t'] === 'eval.result') as { id: string; text: string; isError: boolean; looks: { mime: string; base64: string }[] };
     expect(r.id).toBe('e-0001');
     expect(r.isError).toBe(false);
     expect(r.text).toContain('pending');
     expect(r.looks[0]!.mime).toBe('image/png');
-    expect(p.log.pending()[0]).toMatchObject({ by: 'agent', tx: 'chat1-eval-1' });
+    expect(p.docs.log().pending()[0]).toMatchObject({ tx: { by: 'agent', id: 'chat1-eval-1' } });
 
     // cancellation from the bridge stops the eval; no result is sent for it
-    ws.push({ t: 'eval', id: 'e-0002', session: 'default', req: { code: 'for (let i = 0; ; i++) await frame.print({ time_s: 10 + (i % 3) }).measure.densitometer({ at: [48, 32] })', timeoutMs: 30000 } });
+    ws.push({ t: 'eval', id: 'e-0002', session: 'default', req: { code: "for (let i = 0; ; i++) await frame.with(set('main.params.time_s', 10 + (i % 3))).print().measure.densitometer({ at: [48, 32] })", timeoutMs: 30000 } });
     await new Promise((res) => setTimeout(res, 60));
     ws.push({ t: 'eval.cancel', id: 'e-0002', reason: 'client' });
     await new Promise((res) => setTimeout(res, 200));
@@ -95,7 +94,7 @@ describe('BridgePageClient', () => {
     expect(String(ws.sent.find((m) => m['id'] === 'e-0005')!['text'])).toContain('E_SESSION');
 
     // focus/mode updates
-    p.log.setMode('auto');
+    p.docs.setMode('auto');
     c.update();
     expect(ws.sent.at(-1)).toMatchObject({ t: 'focus', mode: 'auto', frame: FRAME });
 

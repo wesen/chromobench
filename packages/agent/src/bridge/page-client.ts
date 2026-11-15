@@ -3,11 +3,11 @@
 // clients (Claude Code, Claude Desktop) in DSL worker sessions. Approvals never block an MCP eval: in ask mode the
 // result lists the changes as pending and later context blocks report the photographer's decisions.
 //
-//   const bridge = new BridgePageClient({ url: 'ws://127.0.0.1:7341/ws/page', frames, currentFrame, mode, session });
+//   const bridge = new BridgePageClient({ url: 'ws://127.0.0.1:7341/ws/page', docs, currentFrame, session, createSession });
 //   bridge.start();   …   bridge.update();   // after the open frame or the mode changed
 import type { AgentMode, EvalResult } from '@chromobench/contract';
 import { toBase64 } from '../chat/session.ts';
-import type { FrameSource } from '../worker/client.ts';
+import type { AgentDocs } from '../worker/client.ts';
 
 /** What the bridge sends (bridge/internal/hub BridgeMsg). */
 export type BridgeToPage =
@@ -47,9 +47,9 @@ export interface EvalRunner {
 
 export interface BridgePageOptions {
   url: string;
-  frames: FrameSource;
+  /** the frames, the log and the mode */
+  docs: AgentDocs;
   currentFrame(): string | null;
-  mode(): AgentMode;
   /** The DSL session for a bridge session id ('default' or one created by createSession). */
   session(id: string): Promise<EvalRunner> | null;
   /** Creates a session and returns its id. */
@@ -104,7 +104,7 @@ export class BridgePageClient {
 
   private frames(): { id: string; name: string; open: boolean }[] {
     const cur = this.o.currentFrame();
-    return this.o.frames.ids().map((id) => ({ id, name: this.o.frames.get(id)?.name ?? id, open: id === cur }));
+    return this.o.docs.ids().map((id) => ({ id, name: this.o.docs.get(id)?.name ?? id, open: id === cur }));
   }
 
   private send(m: PageToBridge): void {
@@ -125,7 +125,7 @@ export class BridgePageClient {
     ws.onopen = () => {
       this.delay = this.o.backoff?.min ?? 500;
       const f = this.o.currentFrame();
-      this.send({ t: 'hello', page: this.pageId, app: this.o.app ?? 'chromobench-studio', catalogHash: '', focused: this.o.focused?.() ?? true, ...(f ? { frame: f } : {}), frames: this.frames(), mode: this.o.mode() });
+      this.send({ t: 'hello', page: this.pageId, app: this.o.app ?? 'chromobench-studio', catalogHash: '', focused: this.o.focused?.() ?? true, ...(f ? { frame: f } : {}), frames: this.frames(), mode: this.o.docs.mode() });
       this.setStatus('connected');
     };
     ws.onmessage = (ev) => {
@@ -160,7 +160,7 @@ export class BridgePageClient {
   /** Report focus, the open frame and the mode (call after they change). */
   update(): void {
     const f = this.o.currentFrame();
-    this.send({ t: 'focus', focused: this.o.focused?.() ?? true, ...(f ? { frame: f } : {}), frames: this.frames(), mode: this.o.mode() });
+    this.send({ t: 'focus', focused: this.o.focused?.() ?? true, ...(f ? { frame: f } : {}), frames: this.frames(), mode: this.o.docs.mode() });
   }
 
   private async handle(m: BridgeToPage): Promise<void> {

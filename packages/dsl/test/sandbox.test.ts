@@ -93,7 +93,7 @@ describe('the global surface (§5.5, §5.11)', () => {
 });
 
 describe('determinism', () => {
-  it('the same eval on the same recipe gives byte-identical text; Math.random is seeded and frozen', async () => {
+  it('the same eval on the same document gives byte-identical text; Math.random is seeded and frozen', async () => {
     const code = 'const xs = [Math.random(), Math.random()]\ntry { Math.random = () => 0 } catch (e) {}\nreturn { xs, still: Math.random() !== 0 }';
     const a = await setup();
     const b = await setup();
