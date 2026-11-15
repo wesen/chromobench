@@ -178,9 +178,9 @@ assert c.print.id = a.print.id                      -- the 10 s result is found 
    overflow and the duplicated traversal.
 7. **Cache every node, bound the cache by bytes, keep evaluation off it.** Interning makes reuse possible, not
    actual: the originating project caches only final images, so a drag on a late operation re-runs every earlier
-   stage. Cache every node, evict least-recently-used by bytes, and let each evaluation keep its own results; a
-   design that reads its inputs back from the cache breaks when an eviction lands in between. Key by `id | scale |
-   region | precision`, and hand out copies or read-only views so callers cannot change a cached result.
+   stage. Cache every materialised node (with fusion, Chapter 7 says which), evicting least recently used by bytes,
+   and let each evaluation keep its own results: a design that reads inputs back from the cache breaks when an
+   eviction lands in between. Key by `id | scale | region | precision`, and hand out copies or read-only views.
 8. **Hash width is a risk decision; prefer wide.** Editor lab (a browser photo editor) used a 52-bit key to fit a
    JavaScript number; by the birthday bound n²/2^(b+1), 10⁵ live keys give about a 10⁻⁶ chance of a collision.
    The running example and goja-cv use 256-bit SHA-256, cheap next to pixel work and needing no byte comparison
@@ -220,7 +220,7 @@ assert c.print.id = a.print.id                      -- the 10 s result is found 
 
 ## Known uses
 
-- **Git** names every object by a hash of its content; trees name their children by hash.
+- **Git** names every object by a hash of its content.
 - **Nix and Bazel** key build actions by a hash of the command and the hashes of its inputs.
 - **darktable** keys its pixelpipe cache by a hash of the image, the pipe type and every enabled module's
   parameters up to that module, plus the region.
