@@ -30,7 +30,7 @@ WhenToUse: ""
 
 ## Status
 
-Current status: **active**
+Current status: **complete** (2026-11-15, CHB-044 triage): merged into task/chb-037-unified-model with no open tasks; follow-ups are in the CHB-044 backlog.
 
 ## Topics
 

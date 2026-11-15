@@ -44,7 +44,7 @@ for about 2 s per preview).
 
 ## Status
 
-Current status: **active**
+Current status: **complete** (2026-11-15, CHB-044 triage): every task done or obsolete; the findings became CHB-027 and CHB-031, and persona sessions now follow each user-visible change.
 
 ## Topics
 
