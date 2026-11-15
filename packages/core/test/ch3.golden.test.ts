@@ -86,7 +86,9 @@ describe('chapter 3 goldens', () => {
       expect(Math.abs(active.atCap - cs.capActive)).toBeLessThanOrEqual(cs.capActiveTol ?? 0);
       expect(Math.abs(active.unreachable - cs.unreachable)).toBeLessThan(6e-4);
       expect(plain.meanIterations / active.meanIterations).toBeGreaterThan(4.4);
-    }, 30000);
+      // deterministic and compute-bound (two 33³ solve tables, ~2–3 s alone): no timeout, so a loaded machine (parallel
+      // suites) cannot fail it; a wrong count fails it as before (CHB-037 P3b)
+    }, 0);
   }
   it('flat wedge reads its density in every channel of every scanner (§3.7)', () => {
     for (const id of ['xt5-fitted', 'rgb-led-book', 'white-led', 'status-m']) {

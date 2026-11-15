@@ -1,7 +1,7 @@
 // Contract 1.0 on the GPU (CHB-037 P3): the light law, composite mix, mask algebra, heal / clone and clarity against
 // core's reference engine on documents compiled by the contract's compiler: end to end (RefEngine exact; tabulated for
 // the preview) and kernel by kernel (src/parity/reference.ts: core's functions on the GPU's own inputs).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -10,9 +10,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 // Every darkroom kind (main at amount 0.95, printer lights, two masked burns, a dodge, base and open flashes, a density

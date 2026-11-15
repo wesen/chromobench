@@ -1,6 +1,6 @@
 // Stage 4 in headless Chromium: chain and lookup parity on synthetic Gold 200 frames against core's
 // reference engine on the same graph (CHB-017): exact, and tabulated (core's f64 tables, look3).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -9,9 +9,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 test('export chain: film-dyes within 5e-6 of the exact f64 solve on reachable pixels, same classification', async ({ page }) => {

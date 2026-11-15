@@ -1,6 +1,6 @@
 // Stage 5 and the engine in headless Chromium: blur, halation, tiles and global fields, grain, SAT
 // probe, GpuEngine taps and CHB-002's conformance suite.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -9,9 +9,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 test('separable blur matches direct 2-D f64 convolution within one level; flat stays flat; 1.5σ truncation fails', async ({ page }) => {
