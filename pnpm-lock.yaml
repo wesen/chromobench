@@ -271,9 +271,15 @@ importers:
         specifier: workspace:*
         version: link:../values
     devDependencies:
+      '@chromobench/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@chromobench/core':
         specifier: workspace:*
         version: link:../core
+      '@chromobench/dsl':
+        specifier: workspace:*
+        version: link:../dsl
       '@chromobench/engine-mock':
         specifier: workspace:*
         version: link:../engine-mock

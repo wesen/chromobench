@@ -134,8 +134,31 @@ export class Studio {
   readonly kv: KV | null;
   readonly frames: Frames;
   readonly bridge: FrameRenderBridge;
+  #mode: AgentMode;
   /** the agent's mode: read-only refuses, ask proposes, auto commits (host policy; the log takes any author) */
-  mode: AgentMode;
+  get mode(): AgentMode {
+    return this.#mode;
+  }
+  set mode(m: AgentMode) {
+    if (m === this.#mode) return;
+    this.#mode = m;
+    this.tell();
+  }
+  private readonly subs = new Set<() => void>();
+  /** calls fn after every change of the log (once per change, after the proposals view) or of the mode */
+  subscribe(fn: () => void): () => void {
+    this.subs.add(fn);
+    return () => this.subs.delete(fn);
+  }
+  private tell(): void {
+    for (const f of [...this.subs]) {
+      try {
+        f();
+      } catch (e) {
+        this.rt?.diagnostics.warn('CB-H421', 'A subscriber of the studio threw', { runtime: true, facts: [String((e as Error)?.message ?? e)] });
+      }
+    }
+  }
   /** the first document of a new frame, in the layout's enlarger mode (setEnlarger) */
   initial: InitialDocument | undefined;
   rt: Runtime | null = null;
@@ -154,7 +177,7 @@ export class Studio {
   constructor(o: StudioOptions) {
     this.engine = o.engine;
     this.kv = o.kv ?? null;
-    this.mode = o.mode ?? 'ask';
+    this.#mode = o.mode ?? 'ask';
     this.hostInitial = o.initial;
     this.initial = o.enlarger ? initialInMode(o.initial, o.enlarger) : o.initial;
     this.frames = new Frames(o.engine, { kv: this.kv, ...(o.opener ? { opener: o.opener } : {}), known: sha => this.libraryKind(sha) });
@@ -308,6 +331,7 @@ export class Studio {
         }
       }
       rt.store.writeView([{ path: ['ui', 'log'], value: { v: ++this.logV, proposals } satisfies LogView }]);
+      this.tell();
     });
   }
 

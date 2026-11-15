@@ -31,7 +31,9 @@
     "@chromobench/values": "workspace:*"
   },
   "devDependencies": {
+    "@chromobench/agent": "workspace:*",
     "@chromobench/core": "workspace:*",
+    "@chromobench/dsl": "workspace:*",
     "@chromobench/engine-mock": "workspace:*",
     "@chromobench/ingest": "workspace:*",
     "happy-dom": "21.0.4"
