@@ -25,7 +25,8 @@ const panel = (page: Page, id: string) => page.locator(`.ck-panel[data-panel="${
 test('classic: the modules, each stage in its own screen with the same row component', async ({ page }) => {
   await open(page, 'classic');
   const tabs = await page.locator('.ck-module').allInnerTexts();
-  expect(tabs.map(t => t.trim())).toEqual(['Library', 'Roll', 'Print', 'Edit', 'Finish', 'Assistant', 'Output']);
+  // Scene: the catalogue has scene-stage ops (P8a), so the layout places the module
+  expect(tabs.map(t => t.trim())).toEqual(['Library', 'Roll', 'Scene', 'Print', 'Edit', 'Finish', 'Assistant', 'Output']);
   await page.locator('.ck-module[data-module="print"]').click();
   await expect(panel(page, 'exposures').locator('.cb-stack-row')).toHaveCount(2);
   await page.locator('.ck-module[data-module="edit"]').click();

@@ -416,3 +416,94 @@ spec waits for the new row; shell README on module stages; CONTRACT-REQUESTS not
 - New browser specs: `packages/studio-kit/test/browser/stack.spec.ts`, `arrangements.spec.ts`,
   `e2e/studio-stack.spec.ts`. Changed: `e2e/studio.spec.ts`, `e2e/studio-interface.spec.ts`,
   `packages/studio-kit/test/browser/roll.spec.ts`.
+
+## Step 5: Merging the integration branch (P8a's ops, P7's links); the stack kit on them
+
+The main agent merged P8a (the Editor lab ops, the 16 blend modes, radial and colour mask components, the scene
+stage, `OpDef.ui = { label, menu, order }`, `ArgSpec.ui.advanced`) and P7 (links: looks and presets as link
+entries, rolls linking the scan medium, sync) into the integration branch and asked me to merge it and adapt the
+stack kit: a link entry is one row (name, Amount, Bake, Remove), roll-linked medium fields get a follow/override
+badge read through `read(…, linksOf(state))`, "+ Layer" shows P8a's ops by their catalogue menus, `ui.advanced`
+behind "More"; rich widgets stay with P8b.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Main agent's message: "Please merge the integration branch into your branch before
+finishing (`git merge task/chb-037-unified-model`; the ticket changelog conflicts every time — keep both sides …)
+For the stack kit: show a link entry as one row (name, Amount, Bake, Remove); roll-linked medium fields get a
+follow/override badge …; the "+ Layer" menu now has P8a's ops via `opsForStage` and `OpDef.ui` …; `ui.advanced`
+behind "More" … Record the merge in your diary."
+
+**Inferred user intent:** The stack kit shows everything the model now holds, before P8b and P6b build on it.
+
+**Commit (code):** 8304266 — "Merge task/chb-037-unified-model (P8a ops and blend modes, P7 links) into P5b-2; the
+stack kit on them: …"
+
+### What I did
+- `git merge task/chb-037-unified-model` (a41d60d): conflicts only in the changelog (both sides kept) and the
+  layouts explain snapshot (taken from the integration branch, then regenerated and reviewed). P7's edits to
+  `model/doc.ts`, `render-bridge.ts`, `studio.ts`, `dom/arg.ts`, `frames.ts`, `history.ts`, the roll kit and its
+  tests merged without conflict beside mine; `pnpm install --frozen-lockfile --prefer-offline` ok.
+- "+ Layer": `addableOps` sorts by `LAYER_MENUS` and `ui.order`; `opWord` uses `ui.label`; `addMenu(stage, ops,
+  flat = 14)` gives one list with a separator between the catalogue's menus (print: tone, colour, detail, effect),
+  submenus past 14 ops; the Layer menu uses it.
+- Links: `rowsOf` already listed a link entry as a row; the row now shows Bake and Remove, no blend; its Amount goes
+  through `layer.amount`, which for a link is `setLinkAmount` over its siblings in every stage; `layer.delete` on a
+  link is `removeLink`; new commands `link.bake` (`bakeLink(doc, key, studio.links())`) and `link.remove`; the params
+  panel says what it links to. `linkKey(doc, id)` and `linkWords(entry)` in the model.
+- Masks: the radial tool writes P8a's `radial` component (feather 0.5) when the catalogue has it; the colour tool
+  enables itself (`MASK_COMPONENT_KINDS` has `colour`).
+- `ui.advanced` arguments under "More" (was "Advanced").
+- `dom/arg.ts`: a field of a linked medium shows "Roll" (follows) or "Override" (this frame's value; click: an
+  `unset` of the override, one step) — read through `storedPath` and `read`.
+- Tests: `catalogue.test.ts` rewritten on P8a's real ops (scene and print menus, the classic Scene module) plus a
+  print-only test op with an advanced argument; `kit.test.ts` adds a look link (Amount, Bake, undo, Remove);
+  `e2e/studio.spec.ts` expects the `radial` component; `arrangements.spec.ts` expects the Scene module.
+
+### Why
+- The panels read the catalogue and the laws; with P8a merged they only needed the catalogue's menu metadata and
+  the new link entry kind.
+
+### What worked
+- `pnpm typecheck` 0 errors; `pnpm lint` ok (469 file checks, 180 files colours); `pnpm gen:check` ok (26 files);
+  `pnpm exec vitest run` → 133 files, 3186 passed, 19 skipped.
+- Browser run 3 (after the merge): 123 passed, 2 skipped, 3 failed — my arrangements spec (Scene module now
+  present, fixed), `gpu-parity film.spec.ts:18` (beforeEach timeout under load; alone it passes), and
+  `tools/wgsl-check/check.spec.ts:45`: `packages/gpu/kernels/combine.wgsl 68:13 unresolved call target 'wkMix'`.
+  Re-run alone: arrangements and film pass, wgsl-check fails again.
+
+### What didn't work
+- `E_INVALID_OP_DEF: registerOp(tone): a linear op in the scene stage takes scene-rgb` and then `… print stage
+  takes print-rgb`: P8a's registry checks the domain of an op's encoding; the test op is print-only on `print-rgb`.
+- The wgsl-check failure is not in this branch's files (`git diff a41d60d -- packages/gpu tools` is empty):
+  `combine.wgsl` calls `wkMix`, defined in `kernels/working.wgsl`, and the check compiles each file alone. It comes
+  with the integration branch (P8a).
+
+### What I learned
+- A look link touches several stages with one key (`source.link`); its entries are siblings, so Amount, Bake and
+  Remove act on all of them.
+
+### What was tricky to build
+- A link row's Amount cannot preview by writing its own path (the siblings in other stages would lag): the number
+  control takes a `commit` option and writes through the command on release, typed values and keys.
+
+### What warrants a second pair of eyes
+- `addMenu`'s flat threshold (14): print has 10 ops today, so its menu is flat with separators.
+- The Override badge's click unsets the override (the frame follows the roll again); it is one step.
+
+### What should be done in the future
+- Main agent / P8a: `tools/wgsl-check` must compile `combine.wgsl` with `working.wgsl` (or the kernel must include
+  it): the check fails on the integration branch.
+- P8b: rich editors (curve points and HSL bands are Colls; colour wheels for grade) — the params panel skips list
+  arguments today.
+
+### Code review instructions
+- `git show 8304266 -- packages/studio-kit/kits/stack packages/studio-kit/src/dom/arg.ts`.
+- `pnpm exec vitest run packages/studio-kit/test/stack`.
+
+### Technical details
+- Snapshot changes after the merge (reviewed): the Scene module in classic (`stack.layers stage "scene" composite
+  law · + Layer 8 ops`), print stacks with `+ Layer 10 ops`, `link.bake`/`link.remove` and P7's `roll.followRoll`
+  in the command lists.
