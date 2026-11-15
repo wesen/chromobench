@@ -1,0 +1,275 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-negative",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "items": {},
+    "order": []
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "scan"
+    },
+    "kind": "file",
+    "name": "negative-96x64.tif",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ]
+            },
+            "source": {
+              "alpha": 1,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 3.969
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights"
+        ]
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "scan": {
+      "medium": {
+        "baseT": null,
+        "flare": 0,
+        "flat": null,
+        "format": "135",
+        "openGate": null,
+        "rebate": {
+          "h": 64,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "scanner": "xt5-rgb-led",
+        "stock": "kodak_portra_400",
+        "umPerPx": 6
+      },
+      "stack": {
+        "items": {
+          "dust": {
+            "amount": 1,
+            "blend": "pass",
+            "enabled": true,
+            "kind": "group",
+            "mask": null,
+            "name": "Dust",
+            "source": {
+              "kind": "user"
+            },
+            "stack": {
+              "items": {
+                "d1": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Dust d1",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "d1_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 2.5,
+                          "src": {
+                            "x": 24.5,
+                            "y": 31.5
+                          },
+                          "x": 30.5,
+                          "y": 31.5
+                        }
+                      },
+                      "order": [
+                        "d1_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                },
+                "d2": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Dust d2",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "d2_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 2.5,
+                          "src": {
+                            "x": 61.5,
+                            "y": 56.5
+                          },
+                          "x": 70.5,
+                          "y": 51.5
+                        }
+                      },
+                      "order": [
+                        "d2_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                },
+                "d3": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Dust d3",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "d3_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 2.5,
+                          "src": {
+                            "x": 84.5,
+                            "y": 15.5
+                          },
+                          "x": 84.5,
+                          "y": 9.5
+                        }
+                      },
+                      "order": [
+                        "d3_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                }
+              },
+              "order": [
+                "d1",
+                "d2",
+                "d3"
+              ]
+            }
+          }
+        },
+        "order": [
+          "dust"
+        ]
+      }
+    }
+  }
+}

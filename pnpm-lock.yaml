@@ -126,6 +126,9 @@ importers:
       '@chromobench/ingest':
         specifier: workspace:*
         version: link:../ingest
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:../values
     devDependencies:
       '@chromobench/conformance':
         specifier: workspace:*

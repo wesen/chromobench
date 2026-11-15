@@ -1,17 +1,22 @@
 // Op adapters for the reference engine (guide §5.7): one per catalog op CHB-003 owns, applying core's
 // pure functions to f64 images. Upstream context (stock, paper, viewing light) is found by walking the
 // node's inputs (`ctx.up`), because a pointwise op's own args do not name it.
-import { DOMAINS, fail, mulberry32, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type Point, type SourceInfo } from '@chromobench/contract';
+import {
+  DOMAINS, fail, lightH, maskCombine, mixPixel, mulberry32,
+  type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type LightSample, type LightTermSample, type Point, type SourceInfo,
+} from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { filtrationForLights } from '../print/balance.ts';
 import { makePrintChain, type Aim, type PrintChain } from '../print/chain.ts';
 import { adaptBradford, addFlare, D50, D65, observe, OUTPUT_SPACE_IDS, paperWhiteXYZ, reflectance, whiteXYZ, type OutputSpaceId, type Viewing } from '../print/colour.ts';
 import { displayPixel, displaySetup, type DisplaySetup, type KneeName } from '../print/gamut.ts';
 import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
-import { combinePixel, combineRatio, type CombineTerm } from '../print/exposures.ts';
-import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gradientAt, gridCentres, luminanceAt, paintMask, parseStrokes } from '../print/masks.ts';
+import { clarity, claritySigma } from '../print/clarity.ts';
+import { combineRatio } from '../print/combine.ts';
+import { frameImage } from '../print/geometry.ts';
+import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gridCentres, linearAt, luminanceAt, paintMask, type Stroke } from '../print/masks.ts';
 import { densityMaskSigma, maskDensityPolar } from '../print/densityMask.ts';
-import { parseSpots, retouch } from '../print/retouch.ts';
+import { retouch, type RepairMode, type Spot } from '../print/retouch.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
 import { CLASS_CODE, classify } from '../scan/classify.ts';
 import { makeScanner } from '../scan/scanner.ts';
@@ -92,7 +97,7 @@ export class PhysicsEnv {
     return this.cached(`chain:${JSON.stringify(k)}`, () => makePrintChain({
       data: this.data, conv: this.conv, film: this.stock(o.film), paper: this.stock(o.paper), lamp: o.lamp, filtrationShift: o.filtration,
       ...(o.capture ? { midgray: midgrayFilmDensity(this.film(o.film)) } : {}),
-      mode: o.mode, ...(o.mode === 'real' ? { optics: { time_s: o.time_s, fstop: o.fstop, ...(o.magnification !== null ? { magnification: o.magnification } : {}) } } : {}),
+      mode: o.mode, ...(o.mode === 'real' ? { optics: { time_s: o.time_s, fstop: o.fstop, magnification: o.magnification } } : {}),
       aim: o.aim, view: o.aimView,
     }));
   }
@@ -116,8 +121,8 @@ export class PhysicsEnv {
 /** print.expose's arguments plus the upstream film: everything its chain depends on. */
 export interface ExposeSettings {
   film: string; paper: string; lamp: string; mode: 'normalised' | 'real'; filtration: Cmy; time_s: number; fstop: number;
-  /** null: the calibration's reference magnification (the arg is optional in the contract). */
-  magnification: number | null;
+  /** Enlarger magnification (contract 1.0: always given; 8 is the calibration's reference). */
+  magnification: number;
   aim: Aim; aimView: string;
   /** A digital-raw frame (CHB-012): the print normalisation uses the capture path's mid-grey. */
   capture?: true;
@@ -283,64 +288,45 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       o[0] = x[0]; o[1] = x[1]; o[2] = x[2];
     });
   },
-  'print.lights': (ctx) => {
-    const l = A(ctx, 'logH') as Vec3;
-    return mapPx(recv(ctx), 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = px[k]! + l[k]!; });
-  },
-  'print.preflash': (ctx) => {
-    // φ as a fraction of the grey card's exposure; at the aim the grey card has x ≈ 0, i.e. H = 1.
-    const phi = num(ctx, 'amount');
-    return mapPx(recv(ctx), 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = Math.log10(10 ** px[k]! + phi); });
-  },
   'print.develop': (ctx) => {
     const { develop } = developerAt(ctx, A(ctx, 'paper') as string, num(ctx, 'grade'));
     return mapPx(recv(ctx), 3, (px, o) => { const c = develop(px); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; });
   },
-  'print.combine': (ctx) => {
-    // CHB-010 §6.5: exposures add in linear H on the main exposure (dodges withheld from it), one log at the end
-    const r = recv(ctx);
-    const ids = A(ctx, 'exposures') as string[];
-    const maskIds = A(ctx, 'masks') as string[];
-    const modes = A(ctx, 'modes') as string[];
-    if (ids.length === 0 && !((A(ctx, 'densityMasks') as string[] | undefined) ?? []).length) return r;
-    const main = ctx.up('print.expose')?.args;
-    const ex = ids.map((id) => ctx.image(id));
-    const ms = maskIds.map((id) => ctx.image(id));
-    const ratio = ids.map((id) => combineRatio(main, ctx.node(id)?.op === 'print.expose' ? ctx.node(id)!.args : undefined));
-    const flashX = ids.map((id, i) => flashExposure(ctx, id, modes[i]!));
-    const terms: CombineTerm[] = ids.map((_, i) => ({ x: [0, 0, 0], m: 0, sign: modes[i] === 'subtract' ? -1 : 1, ratio: ratio[i]!, flash: flashX[i] !== null }));
-    const dms = ((A(ctx, 'densityMasks') as string[] | undefined) ?? []).map((id) => ctx.image(id));
-    let clamped = 0;
-    const out = mapPx(r, 3, (px, o, i) => {
-      terms.forEach((t, j) => {
-        const e = ex[j]!;
-        t.x = flashX[j] ?? e.data.subarray(i * e.c, i * e.c + 3);
-        t.m = ms[j]!.data[i * ms[j]!.c]!;
-      });
-      let dm = 0;
-      for (const d of dms) dm += d.data[i * d.c]!;
-      if (combinePixel(px, terms, o, dm)) clamped++;
-    });
-    if (clamped) out.warnings = [{ code: 'W_DODGE_EXCEEDS_MAIN', message: `dodges hold back more than the main exposure at ${clamped} pixel(s); clamped at no light` }];
-    return out;
-  },
+  'print.combine': (ctx) => printCombine(ctx),
   'print.densityMask': (ctx) => {
-    // CHB-010 §6.6, contract 0.3: d_m of a neutral silver mask from the blurred transmittance 10^−PD of the
+    // CHB-010 §6.6, contract 0.3/1.0: d_m of a neutral silver mask from the blurred transmittance 10^−PD of the
     // negative, PD = x_clear − x recovered from the main print.expose's paper log exposure (x_clear = 0 without one)
     const r = recv(ctx);
+    const gamma = num(ctx, 'gamma');
+    if (gamma === 0) return { w: r.w, h: r.h, c: 1, data: new Float64Array(r.w * r.h) };
     const clear = clearExposure(ctx);
     const pd = new Float64Array(r.w * r.h * 3);
     for (let i = 0; i < r.w * r.h; i++) for (let k = 0; k < 3; k++) pd[i * 3 + k] = clear[k]! - r.data[i * r.c + Math.min(k, r.c - 1)]!;
     const sigma = densityMaskSigma(num(ctx, 'radius_um'), ctx.info?.umPerPx.film);
-    const amount = num(ctx, 'amount');
-    const data = amount === 0 ? new Float64Array(r.w * r.h) : maskDensityPolar(pd, r.w, r.h, 3, amount, sigma, A(ctx, 'polarity') === 'same' ? 'same' : 'positive');
-    return { w: r.w, h: r.h, c: 1, data };
+    return { w: r.w, h: r.h, c: 1, data: maskDensityPolar(pd, r.w, r.h, 3, gamma, sigma, A(ctx, 'polarity') === 'same' ? 'same' : 'positive') };
   },
-  'retouch.heal': (ctx) => {
-    // CHB-022: heal and clone spots on the print (print/retouch.ts), every source read from the receiver
+  heal: (ctx) => repairOp(ctx, 'heal'),
+  clone: (ctx) => repairOp(ctx, 'clone'),
+  clarity: (ctx) => {
+    // contract 1.0: local contrast on the print, radius in mm on the print (print/clarity.ts)
     const r = recv(ctx);
-    const spots = parseSpots(A(ctx, 'spots') as string | undefined);
-    return spots.length ? { w: r.w, h: r.h, c: r.c, data: retouch(r.data, r.w, r.h, r.c, spots) } : r;
+    const strength = num(ctx, 'strength');
+    if (strength === 0) return r;
+    const sigma = claritySigma(num(ctx, 'radius_mm'), ctx.info?.umPerPx.paper);
+    return { w: r.w, h: r.h, c: r.c, data: clarity(r.data, r.w, r.h, r.c, strength, sigma, whiteAt(ctx)[1]) };
+  },
+  'composite.mix': (ctx) => {
+    // the composite law per entry: back + a·m·(B(back, top) − back), B = normal (contract 1.0; mixPixel)
+    const back = recv(ctx);
+    const top = ctx.image(A(ctx, 'top') as string);
+    const mask = A(ctx, 'mask') === undefined ? undefined : ctx.image(A(ctx, 'mask') as string);
+    const amount = num(ctx, 'amount');
+    if (A(ctx, 'blend') !== 'normal') fail('E_NOT_IMPLEMENTED', `composite.mix blend ${String(A(ctx, 'blend'))} (phase 8)`);
+    const c = back.c;
+    return mapPx(back, c, (px, o, i) => {
+      const k = amount * (mask ? mask.data[i * mask.c]! : 1);
+      for (let q = 0; q < c; q++) o[q] = mixPixel(px[q]!, top.data[i * top.c + q]!, k);
+    });
   },
   'mask.luminance': (ctx) => {
     const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;
@@ -351,19 +337,28 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       o[0] = luminanceAt((L - lo) / (hi - lo), above, below, soft);
     });
   },
-  'mask.gradient': (ctx) => coordMask(ctx, (X, Y) => gradientAt(X, Y, A(ctx, 'from') as Point, A(ctx, 'to') as Point)),
+  'mask.linear': (ctx) => coordMask(ctx, (X, Y) => linearAt(X, Y, A(ctx, 'from') as Point, A(ctx, 'to') as Point)),
   'mask.ellipse': (ctx) => coordMask(ctx, (X, Y) => ellipseAt(X, Y, A(ctx, 'box') as Box, (A(ctx, 'angle_deg') as number | undefined) ?? 0)),
   'mask.paint': (ctx) => {
     const info = ctx.info!;
-    return { w: info.width, h: info.height, c: 1, data: paintMask(parseStrokes(A(ctx, 'strokes') as string), fullGrid(info.width, info.height)) };
+    return { w: info.width, h: info.height, c: 1, data: paintMask(A(ctx, 'strokes') as Stroke[], fullGrid(info.width, info.height)) };
   },
   'mask.feather': (ctx) => {
     const r = recv(ctx);
     return { w: r.w, h: r.h, c: 1, data: gaussianBlur1(r.data, r.w, r.h, featherSigma(num(ctx, 'radius_px'))) };
   },
-  'mask.and': (ctx) => maskPair(ctx, Math.min),
-  'mask.or': (ctx) => maskPair(ctx, Math.max),
-  'mask.not': (ctx) => mapPx(recv(ctx), 1, (px, o) => { o[0] = 1 - px[0]!; }),
+  'mask.constant': (ctx) => {
+    const info = ctx.info!;
+    return { w: info.width, h: info.height, c: 1, data: new Float64Array(info.width * info.height).fill(num(ctx, 'value')) };
+  },
+  'mask.combine': (ctx) => {
+    // the one mask algebra (contract 1.0, maskCombine): v ← v + a·(op(v, c) − v)
+    const o = ctx.image(A(ctx, 'other') as string);
+    const mode = A(ctx, 'mode') as 'add' | 'subtract' | 'intersect';
+    const amount = num(ctx, 'amount');
+    return mapPx(recv(ctx), 1, (px, out, i) => { out[0] = maskCombine(mode, px[0]!, o.data[i * o.c]!, amount); });
+  },
+  'mask.invert': (ctx) => mapPx(recv(ctx), 1, (px, o) => { o[0] = 1 - px[0]!; }),
   'view.reflect': (ctx) => {
     if (ctx.env.mode === 'tabulated') {
       const T = ctx.env.printTable(paperOf(ctx), A(ctx, 'illuminant') as string);
@@ -394,7 +389,77 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       o[0] = e[0]; o[1] = e[1]; o[2] = e[2];
     });
   },
+  'output.frame': (ctx) => {
+    // the document geometry (contract 1.0): crop, straighten, orientation (print/geometry.ts)
+    const r = recv(ctx);
+    const f = frameImage(r.data, r.w, r.h, r.c, { orientation: A(ctx, 'orientation') as string, angle_deg: num(ctx, 'angle_deg'), crop: A(ctx, 'crop') as Box | undefined });
+    return { w: f.width, h: f.height, c: r.c, data: f.data };
+  },
 };
+
+/** heal / clone: the spots in order on the receiver (print/retouch.ts); the seam is additive in scanner density. */
+function repairOp(ctx: OpCtx, mode: RepairMode): Img {
+  const r = recv(ctx);
+  const spots = A(ctx, 'spots') as Spot[];
+  if (!spots.length) return r;
+  return { w: r.w, h: r.h, c: r.c, data: retouch(r.data, r.w, r.h, r.c, spots, mode, ctx.recvDomain === 'scanner-density' ? 'log' : 'linear') };
+}
+
+/** A term's coverage: its mask image, or none (everywhere). */
+const coverOf = (ctx: OpCtx, v: unknown): Img | undefined => (typeof v === 'string' ? ctx.image(v) : undefined);
+const at1 = (m: Img | undefined, i: number): number => (m ? m.data[i * m.c]! : 1);
+
+/**
+ * print.combine (contract 1.0): the light law of the darkroom in one node, per pixel the contract's lightH. The
+ * receiver is the main exposure's print.expose; each term is its own print.expose (flashes evaluated uniformly
+ * through the base or an open gate); weights are amount · mask · (normalised mode) t_i / t_main.
+ */
+function printCombine(ctx: OpCtx): Img {
+  const r = recv(ctx);
+  const a = ctx.args;
+  type Arg = Record<string, unknown>;
+  const terms = (a['terms'] as Arg[] | undefined) ?? [];
+  const dens = (a['densities'] as Arg[] | undefined) ?? [];
+  const filters = (a['filters'] as Arg[] | undefined) ?? [];
+  const pre = (a['preflash'] as Arg[] | undefined) ?? [];
+  const mainAmount = (a['mainAmount'] as number | undefined) ?? 1;
+  const mainMask = coverOf(ctx, a['mainMask']);
+  const main = ctx.up('print.expose')?.args;
+  const tImg = terms.map((t) => (flashExposure(ctx, t['image'] as string, t['role'] as string) ?? ctx.image(t['image'] as string)));
+  const tMask = terms.map((t) => coverOf(ctx, t['mask']));
+  const tW = terms.map((t) => (t['amount'] as number) * combineRatio(main, ctx.node(t['image'] as string)?.args));
+  const dImg = dens.map((d) => ctx.image(d['image'] as string));
+  const dMask = dens.map((d) => coverOf(ctx, d['mask']));
+  const fMask = filters.map((f) => coverOf(ctx, f['mask']));
+  const pMask = pre.map((p) => coverOf(ctx, p['mask']));
+  // one sample, refilled per pixel
+  const s = {
+    xMain: [0, 0, 0] as ArrayLike<number>, wMain: mainAmount,
+    terms: terms.map((t): LightTermSample => ({ role: t['role'] as LightTermSample['role'], x: [0, 0, 0], w: 0 })),
+    densities: dens.map(() => ({ d: 0, w: 0 })),
+    filters: filters.map((f) => ({ logH: f['logH'] as number[], w: 0 })),
+    preflash: pre.map((p) => ({ fraction: p['fraction'] as number, w: 0 })),
+  } satisfies LightSample;
+  let clamped = 0;
+  const out = mapPx(r, 3, (px, o, i) => {
+    s.xMain = px;
+    s.wMain = mainAmount * at1(mainMask, i);
+    for (let j = 0; j < terms.length; j++) {
+      const e = tImg[j]!;
+      s.terms[j]!.x = 'data' in e ? e.data.subarray(i * e.c, i * e.c + 3) : e;
+      s.terms[j]!.w = tW[j]! * at1(tMask[j], i);
+    }
+    for (let j = 0; j < dens.length; j++) {
+      s.densities[j]!.d = dImg[j]!.data[i * dImg[j]!.c]!;
+      s.densities[j]!.w = (dens[j]!['amount'] as number) * at1(dMask[j], i);
+    }
+    for (let j = 0; j < filters.length; j++) s.filters[j]!.w = (filters[j]!['amount'] as number) * at1(fMask[j], i);
+    for (let j = 0; j < pre.length; j++) s.preflash[j]!.w = (pre[j]!['amount'] as number) * at1(pMask[j], i);
+    if (lightH(s, o)) clamped++;
+  });
+  if (clamped) out.warnings = [{ code: 'W_DODGE_EXCEEDS_MAIN', message: `dodges hold back more than the main exposure at ${clamped} pixel(s); clamped at no light` }];
+  return out;
+}
 
 /** A mask from frame coordinates (pixel centres, source px) at the node's size. */
 function coordMask(ctx: OpCtx, f: (X: number, Y: number) => number): Img {
@@ -405,18 +470,13 @@ function coordMask(ctx: OpCtx, f: (X: number, Y: number) => number): Img {
   return out;
 }
 
-function maskPair(ctx: OpCtx, f: (a: number, b: number) => number): Img {
-  const o = ctx.image(A(ctx, 'other') as string);
-  return mapPx(recv(ctx), 1, (px, out, i) => { out[0] = f(px[0]!, o.data[i * o.c]!); });
-}
-
 /** print.expose arguments → chain settings (shared with the tabulated mode and packages/gpu). */
 export function exposeSettings(a: Readonly<Record<string, unknown>>, film: string, capture = false): ExposeSettings {
   return {
     ...(capture ? { capture: true as const } : {}),
     film, paper: a['paper'] as string, lamp: a['lamp'] as string, mode: a['mode'] as 'normalised' | 'real',
     filtration: a['filtration'] as Cmy, time_s: a['time_s'] as number, fstop: a['fstop'] as number,
-    magnification: (a['magnification'] as number | undefined) ?? null,
+    magnification: a['magnification'] as number,
     aim: (a['aim'] as Aim | undefined) ?? 'grey-0.184', aimView: (a['aimView'] as string | undefined) ?? 'D50',
   };
 }
@@ -563,11 +623,11 @@ export const VALUE_OPS: Record<string, ValueOp> = {
     const a = ctx.args;
     const es = exposeSettings({
       paper: a['paper'] ?? DEFAULT_PAPER, mode: a['mode'] ?? 'real', lamp: a['lamp'] ?? 'TH-KG3', filtration: a['filtration'] ?? { c: 0, m: 0, y: 0 },
-      time_s: a['time_s'] ?? 10, fstop: a['fstop'] ?? 8, magnification: a['magnification'], aim: a['aim'], aimView: a['aimView'],
+      time_s: a['time_s'] ?? 10, fstop: a['fstop'] ?? 8, magnification: a['magnification'] ?? 8, aim: a['aim'], aimView: a['aimView'],
     }, filmOf(ctx), isCapture(ctx));
     const fit = filtrationForLights({
       data: ctx.env.data, conv: ctx.env.conv, film: ctx.env.stock(es.film), paper: ctx.env.stock(es.paper), lamp: es.lamp, filtrationShift: es.filtration, mode: es.mode,
-      optics: { time_s: es.time_s, fstop: es.fstop, ...(es.magnification !== null ? { magnification: es.magnification } : {}) }, aim: es.aim, view: es.aimView,
+      optics: { time_s: es.time_s, fstop: es.fstop, magnification: es.magnification }, aim: es.aim, view: es.aimView,
     }, A(ctx, 'logH') as Vec3);
     return {
       filtration: fit.shift, residual: Math.max(...fit.residual_pt.map(Math.abs)) * 0.025,

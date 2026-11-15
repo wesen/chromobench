@@ -1,10 +1,10 @@
 // CHB-010 laws (guide §9.1), each with the mutant it must catch: the calibration, the scalar κ, the
 // optics and the grade pivot.
+import { lightH } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { makePrintChain, type PrintChain, type PrintChainOptions } from '../print/chain.ts';
 import { opticsLogH, type EnlargerOptics } from '../print/enlarger.ts';
 import { gradeX } from '../print/paper.ts';
-import { combinePixel, type CombineTerm } from '../print/exposures.ts';
 import { maskExposure } from '../print/densityMask.ts';
 import { gaussianBlur1 } from '../print/masks.ts';
 import { SPEKTRAFILM } from '../spectral/conventions.ts';
@@ -86,7 +86,15 @@ export function chb010Laws(data: PhysicsData): CoreLaw[] {
   return [calibration, scalarKappa, optics, gradePivot, ...exposureLaws(ref)];
 }
 
+/** A burn (+1) or dodge (−1) of mask value m and seconds ratio r (the light law's weight w = m·r). */
+interface CombineTerm { x: ArrayLike<number>; m: number; sign: 1 | -1; ratio: number }
 type Combine = (xMain: ArrayLike<number>, terms: readonly CombineTerm[], out: number[]) => unknown;
+
+/** The contract's light law (lightH) for the main exposure with burns and dodges. */
+const combinePixel: Combine = (xMain, terms, out) => lightH({
+  xMain, wMain: 1, densities: [], filters: [], preflash: [],
+  terms: terms.map((t) => ({ role: t.sign < 0 ? 'dodge' : 'burn', x: t.x, w: t.m * t.ratio })),
+}, out);
 
 /** A log-domain burn/dodge: each exposure as x + m·log10(1 ± r·10^(x_i − x)), applied in order on the running x. */
 const logDomainCombine: Combine = (xMain, terms, out) => {
@@ -105,7 +113,7 @@ function exposureLaws(ref: PrintChain): CoreLaw[] {
     justifies: 'exposures add in linear H and the log is taken once: a burn of s stops at mask m adds log10(1 + m(2^s − 1)); two equal exposures add exactly 0.30103',
     section: 'CHB-010 §6.5 finding 1, §9.1',
   },
-  { combine: combinePixel as Combine },
+  { combine: combinePixel },
   (r) => ({ x: vec(r, -2, 1), m: r.range(0, 1), s: r.range(0.1, 2) }),
   (im) => ({ x, m, s }) => {
     const out = [0, 0, 0];
@@ -126,7 +134,7 @@ function exposureLaws(ref: PrintChain): CoreLaw[] {
     justifies: 'two exposures through one pack equal one exposure of the summed seconds, pixel by pixel (real mode: time is an exact log offset)',
     section: 'CHB-010 §6.5, §9.1',
   },
-  { combine: combinePixel as Combine },
+  { combine: combinePixel },
   (r) => ({ c: vec(r, 0, 2.5), t1: r.range(1, 30), t2: r.range(0.5, 30) }),
   (im) => ({ c, t1, t2 }) => {
     const x = (t: number): Vec3 => { const x0 = ref.xOfDyes(c); const o = opticsLogH({ time_s: t }); return [x0[0] + o, x0[1] + o, x0[2] + o]; };
@@ -142,7 +150,7 @@ function exposureLaws(ref: PrintChain): CoreLaw[] {
     justifies: 'dodging a region by t seconds and burning it by t through the same pack returns the original print (dodges withhold main light, they do not change the filter)',
     section: 'CHB-010 §6.5, §9.1',
   },
-  { combine: combinePixel as Combine },
+  { combine: combinePixel },
   (r) => ({ x: vec(r, -2, 1), q: r.range(0.01, 0.9), m: r.range(0, 1) }),
   (im) => ({ x, q, m }) => {
     const xe = x.map((v) => v + Math.log10(q));

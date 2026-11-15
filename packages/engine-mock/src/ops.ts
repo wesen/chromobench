@@ -1,7 +1,10 @@
 // Mock maths for every catalog op. f64, deterministic, deliberately simple, but each formula moves
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
-import { DOMAINS, fail, LOGH_PER_POINT, mulberry32, straighten, type Box, type Cmy, type Domain, type ImageInfo, type Point, type Vec3 } from '@chromobench/contract';
+import {
+  DOMAINS, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, straighten,
+  type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
+} from '@chromobench/contract';
 
 export interface Img {
   w: number;
@@ -21,7 +24,11 @@ export interface OpCtx {
   source(sha: string): Img;
   /** The definition of a node the engine knows (print.combine reads its flashes' print.expose args). */
   def?(id: string): { op: string; args: Readonly<Record<string, unknown>> } | undefined;
+  /** The image of any node the engine knows (print.combine's terms, composite.mix's top, mask.combine's other). */
+  image?(id: string): Img;
 }
+
+const imageOf = (ctx: OpCtx, id: string): Img => ctx.image?.(id) ?? fail('E_EVAL', `no image for node ${id.slice(0, 12)}…`);
 
 export type ImageOp = (ctx: OpCtx) => Img;
 export type ValueOp = (ctx: OpCtx) => Record<string, unknown>;
@@ -216,14 +223,50 @@ interface MockStroke { points: number[][]; radius: number; hardness?: number; mo
  * stroke covers the pixels within `radius` of its polyline, 1 inside hardness·radius with a smoothstep
  * edge at least one pixel wide; `add` takes the maximum, `erase` multiplies by 1 − coverage.
  */
-function paint(r: Img, json: string): Img {
-  let strokes: MockStroke[];
-  try {
-    strokes = JSON.parse(json) as MockStroke[];
-  } catch {
-    return fail('E_ARG_TYPE', 'mask.paint.strokes is not valid JSON');
+/** heal / clone: spots in order, each reading the image as the spots before it left it (contract 1.0). */
+function repair(ctx: OpCtx, mode: 'heal' | 'clone'): Img {
+  const spots = (A(ctx, 'spots') as { x: number; y: number; r: number; src: Point; feather: number; opacity: number }[]).filter((s) => s.r > 0 && s.opacity > 0);
+  const src = recv(ctx);
+  if (!spots.length) return src;
+  const { w: W, h: H, c } = src;
+  let cur = src.data;
+  for (const s of spots) {
+    const prev = cur;
+    cur = prev.slice();
+    const bil = (x: number, y: number, k: number): number => {
+      const fx = clamp(x, 0.5, W - 0.5) - 0.5, fy = clamp(y, 0.5, H - 0.5) - 0.5;
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+      const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
+      const at = (xx: number, yy: number): number => prev[(yy * W + xx) * c + k]!;
+      return (1 - ty) * ((1 - tx) * at(x0, y0) + tx * at(x1, y0)) + ty * ((1 - tx) * at(x0, y1) + tx * at(x1, y1));
+    };
+    const gain = Array.from({ length: c }, (_, k) => {
+      if (mode !== 'heal') return 1;
+      let t = 0, q = 0;
+      for (let i = 0; i < 32; i++) {
+        const th = (2 * Math.PI * i) / 32, rho = s.r + 1.5;
+        t += bil(s.x + rho * Math.cos(th), s.y + rho * Math.sin(th), k);
+        q += bil(s.src.x + rho * Math.cos(th), s.src.y + rho * Math.sin(th), k);
+      }
+      return q > 0 ? t / q : 1;
+    });
+    for (let y = Math.max(0, Math.floor(s.y - s.r)); y < Math.min(H, Math.ceil(s.y + s.r)); y++) {
+      for (let x = Math.max(0, Math.floor(s.x - s.r)); x < Math.min(W, Math.ceil(s.x + s.r)); x++) {
+        const dx = x + 0.5 - s.x, dy = y + 0.5 - s.y, d = Math.hypot(dx, dy), inner = s.r * (1 - s.feather);
+        if (d >= s.r) continue;
+        const t = d <= inner ? 0 : (d - inner) / (s.r - inner);
+        const a = s.opacity * (1 - t * t * (3 - 2 * t));
+        for (let k = 0; k < c; k++) {
+          const o = (y * W + x) * c + k;
+          cur[o] = (1 - a) * prev[o]! + a * gain[k]! * bil(s.src.x + dx, s.src.y + dy, k);
+        }
+      }
+    }
   }
-  if (!Array.isArray(strokes)) fail('E_ARG_TYPE', 'mask.paint.strokes must be a JSON array');
+  return { w: W, h: H, c, data: cur };
+}
+
+function paint(r: Img, strokes: readonly MockStroke[]): Img {
   const out = newImg(r.w, r.h, 1);
   for (const s of strokes) {
     const pts = s.points ?? [];
@@ -299,7 +342,6 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return [A(ctx, 'class') === 'below' ? (m < 0 ? 1 : 0) : Math.max(...rgb3(px).map(Math.abs)) < 0.02 ? 1 : 0];
   }),
   'scan.conditioning': (ctx) => map(recv(ctx), 1, () => [1]),
-  'scan.heal': (ctx) => recv(ctx),
   'invert.dyes': (ctx) => map(recv(ctx), 4, (px) => [...rgb3(px), 0]),
   'invert.classes': (ctx) => map(recv(ctx), 1, (px) => {
     const c = rgb3(px);
@@ -316,94 +358,75 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return map(r, r.c, (px, x, y) => px.map((v, k) => (k < 3 ? v + a * (hash01(x, y, seed * 3 + k) - 0.5) : v)));
   },
   'print.expose': (ctx) => map(recv(ctx), 3, (px) => exposeX(rgb3(px), { time_s: num(ctx, 'time_s'), fstop: num(ctx, 'fstop'), filtration: A(ctx, 'filtration') as Cmy })),
-  'print.lights': (ctx) => {
-    const l = A(ctx, 'logH') as Vec3;
-    return map(recv(ctx), 3, (px) => rgb3(px).map((v, k) => v + l[k]!));
-  },
-  'print.preflash': (ctx) => map(recv(ctx), 3, (px) => rgb3(px).map((v) => Math.log10(10 ** v + num(ctx, 'amount')))),
   'print.combine': (ctx) => {
-    // H = 10^−Σd·(10^x ± Σ m·10^x_i) + Σ_flash m·10^x_flash (contract 0.3: flashes and density masks)
-    const ids = A(ctx, 'exposures') as string[];
-    const exps = ids.length;
-    const modes = A(ctx, 'modes') as string[];
-    const dms = ctx.extra.slice(2 * exps);
-    // a flash is its print.expose evaluated uniformly at dye amounts 0 (the mock's film has no base: open = base)
-    const flash = ids.map((id, i) => {
-      if (!modes[i]!.startsWith('flash')) return null;
-      const d = ctx.def?.(id);
-      return d?.op === 'print.expose' ? exposeX([0, 0, 0], { time_s: d.args['time_s'] as number, fstop: d.args['fstop'] as number, filtration: d.args['filtration'] as Cmy }) : null;
+    // the light law (contract 1.0): the contract's lightH per pixel; a flash is its print.expose evaluated uniformly
+    // at dye amounts 0 (the mock's film has no base: open = base); the mock has no normalised-mode time ratio
+    type Arg = Record<string, unknown>;
+    const a = ctx.args;
+    const list = (k: string): Arg[] => (a[k] as Arg[] | undefined) ?? [];
+    const terms = list('terms'), dens = list('densities'), filters = list('filters'), pre = list('preflash');
+    const img = (id: unknown): Img | undefined => (typeof id === 'string' ? imageOf(ctx, id) : undefined);
+    const cover = (m: Img | undefined, i: number): number => (m ? m.data[i * m.c]! : 1);
+    const tX = terms.map((t): Img | number[] => {
+      const d = ctx.def?.(t['image'] as string);
+      if (String(t['role']).startsWith('flash') && d?.op === 'print.expose') return exposeX([0, 0, 0], { time_s: d.args['time_s'] as number, fstop: d.args['fstop'] as number, filtration: d.args['filtration'] as Cmy });
+      return img(t['image'])!;
     });
+    const tM = terms.map((t) => img(t['mask'])), dI = dens.map((d) => img(d['image'])!), dM = dens.map((d) => img(d['mask']));
+    const fM = filters.map((f) => img(f['mask'])), pM = pre.map((p) => img(p['mask']));
+    const mainMask = img(a['mainMask']);
     const r = recv(ctx);
-    return map(r, 3, (px, x, y) => rgb3(px).map((v, k) => {
-      let H = 10 ** v;
-      let F = 0;
-      for (let i = 0; i < exps; i++) {
-        const e = ctx.extra[i]!;
-        const m = ctx.extra[exps + i]!;
-        const w = m.data[y * m.w + x]!;
-        const fx = flash[i];
-        if (modes[i]!.startsWith('flash')) F += w * 10 ** (fx ? fx[k]! : e.data[(y * e.w + x) * e.c + k]!);
-        else H += (modes[i] === 'subtract' ? -1 : 1) * w * 10 ** e.data[(y * e.w + x) * e.c + k]!;
-      }
-      let d = 0;
-      for (const dm of dms) d += dm.data[(y * dm.w + x) * dm.c]!;
-      return Math.log10(Math.max(H * 10 ** -d + F, 1e-8));
-    }));
+    const out = newImg(r.w, r.h, 3);
+    const o = [0, 0, 0];
+    for (let i = 0; i < r.w * r.h; i++) {
+      lightH({
+        xMain: rgb3(Array.from(r.data.subarray(i * r.c, i * r.c + r.c))), wMain: ((a['mainAmount'] as number | undefined) ?? 1) * cover(mainMask, i),
+        terms: terms.map((t, j): LightTermSample => {
+          const e = tX[j]!;
+          return { role: t['role'] as LightTermSample['role'], x: Array.isArray(e) ? e : Array.from(e.data.subarray(i * e.c, i * e.c + 3)), w: (t['amount'] as number) * cover(tM[j], i) };
+        }),
+        densities: dens.map((d, j) => ({ d: dI[j]!.data[i * dI[j]!.c]!, w: (d['amount'] as number) * cover(dM[j], i) })),
+        filters: filters.map((f, j) => ({ logH: f['logH'] as number[], w: (f['amount'] as number) * cover(fM[j], i) })),
+        preflash: pre.map((p, j) => ({ fraction: p['fraction'] as number, w: (p['amount'] as number) * cover(pM[j], i) })),
+      }, o);
+      out.data.set(o, i * 3);
+    }
+    return out;
   },
   'print.develop': (ctx) => map(recv(ctx), 3, (px) => developA(rgb3(px), num(ctx, 'grade'))),
   'print.densityMask': (ctx) => {
-    // d_m from the blurred mean transmittance 10^−PD, PD = −x in the mock (its clear film is x = 0); box blur
+    // d_m from the blurred mean transmittance 10^−PD, PD = −x in the mock (its clear film is x = 0); box blur of
+    // radius_um over the film pitch (contract 1.0: the image must carry it, as in core)
     const r = recv(ctx);
-    const a = num(ctx, 'amount');
+    const a = num(ctx, 'gamma');
+    if (a === 0) return newImg(r.w, r.h, 1);
+    const pitch = ctx.info?.umPerPx.film ?? fail('E_EVAL', 'print.densityMask: the image has no film pitch (ImageInfo.umPerPx.film)');
     const T = map(r, 1, (px) => [rgb3(px).reduce((s, v) => s + 10 ** v, 0) / 3]);
-    const Hm = boxBlur(T, 4);
+    const Hm = boxBlur(T, num(ctx, 'radius_um') / pitch);
     let lo = Infinity, hi = -Infinity;
     for (const v of Hm.data) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     const same = A(ctx, 'polarity') === 'same';
-    return map(Hm, 1, (px) => [a === 0 ? 0 : same ? a * (Math.log10(hi) - Math.log10(px[0]!)) : a * (Math.log10(px[0]!) - Math.log10(lo))]);
+    return map(Hm, 1, (px) => [same ? a * (Math.log10(hi) - Math.log10(px[0]!)) : a * (Math.log10(px[0]!) - Math.log10(lo))]);
   },
-  // CHB-022, the mock's naive heal and clone (core print/retouch.ts is the reference): clone copies the source
-  // disc (bilinear at pixel centres); heal multiplies it by one gain per channel, the mean of the target's
-  // ring over the source's (core matches the seam with a harmonic offset instead)
-  'retouch.heal': (ctx) => {
-    const src = recv(ctx);
-    const rec = JSON.parse(String(A(ctx, 'spots') ?? '{}')) as Record<string, { mode: string; x: number; y: number; r: number; src: Point; feather: number; opacity: number; enabled: boolean }>;
-    const spots = Object.entries(rec).filter(([, s]) => s.enabled !== false && s.r > 0 && s.opacity > 0).sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true })).map(([, s]) => s);
-    if (!spots.length) return src;
-    const { w: W, h: H, c } = src;
-    const out = { w: W, h: H, c, data: src.data.slice() };
-    const bil = (x: number, y: number, k: number): number => {
-      const fx = clamp(x, 0.5, W - 0.5) - 0.5, fy = clamp(y, 0.5, H - 0.5) - 0.5;
-      const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
-      const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
-      const at = (xx: number, yy: number): number => src.data[(yy * W + xx) * c + k]!;
-      return (1 - ty) * ((1 - tx) * at(x0, y0) + tx * at(x1, y0)) + ty * ((1 - tx) * at(x0, y1) + tx * at(x1, y1));
-    };
-    for (const s of spots) {
-      const gain = Array.from({ length: c }, (_, k) => {
-        if (s.mode !== 'heal') return 1;
-        let t = 0, q = 0;
-        for (let i = 0; i < 32; i++) {
-          const th = (2 * Math.PI * i) / 32, rho = s.r + 1.5;
-          t += bil(s.x + rho * Math.cos(th), s.y + rho * Math.sin(th), k);
-          q += bil(s.src.x + rho * Math.cos(th), s.src.y + rho * Math.sin(th), k);
-        }
-        return q > 0 ? t / q : 1;
-      });
-      for (let y = Math.max(0, Math.floor(s.y - s.r)); y < Math.min(H, Math.ceil(s.y + s.r)); y++) {
-        for (let x = Math.max(0, Math.floor(s.x - s.r)); x < Math.min(W, Math.ceil(s.x + s.r)); x++) {
-          const dx = x + 0.5 - s.x, dy = y + 0.5 - s.y, d = Math.hypot(dx, dy), inner = s.r * (1 - s.feather);
-          if (d >= s.r) continue;
-          const t = d <= inner ? 0 : (d - inner) / (s.r - inner);
-          const a = s.opacity * (1 - t * t * (3 - 2 * t));
-          for (let k = 0; k < c; k++) {
-            const o = (y * W + x) * c + k;
-            out.data[o] = (1 - a) * out.data[o]! + a * gain[k]! * bil(s.src.x + dx, s.src.y + dy, k);
-          }
-        }
-      }
-    }
-    return out;
+  // CHB-022, contract 1.0: the mock's naive heal and clone (repair below; core print/retouch.ts is the reference)
+  heal: (ctx) => repair(ctx, 'heal'),
+  clone: (ctx) => repair(ctx, 'clone'),
+  clarity: (ctx) => {
+    // local contrast v + s·(v − blur(v)), box blur of radius_mm over the print pitch (core print/clarity.ts is the reference)
+    const r = recv(ctx);
+    const a = num(ctx, 'strength');
+    if (a === 0) return r;
+    const pitch = ctx.info?.umPerPx.paper ?? fail('E_EVAL', 'clarity: the image has no print pitch (ImageInfo.umPerPx.paper)');
+    const blur = boxBlur(r, (num(ctx, 'radius_mm') * 1000) / pitch);
+    return map(r, r.c, (px, x, y) => px.map((v, k) => v + a * (v - blur.data[(y * r.w + x) * r.c + k]!)));
+  },
+  'composite.mix': (ctx) => {
+    // the composite law per entry (contract 1.0): mixPixel(back, top, amount · mask), normal blend
+    const back = recv(ctx);
+    const top = imageOf(ctx, A(ctx, 'top') as string);
+    const m = A(ctx, 'mask') === undefined ? undefined : imageOf(ctx, A(ctx, 'mask') as string);
+    const amount = num(ctx, 'amount');
+    return map(back, back.c, (px, x, y) => px.map((v, k) => mixPixel(v, top.data[(y * top.w + x) * top.c + k]!, amount * (m ? m.data[y * m.w + x]! : 1))));
   },
   'view.reflect': (ctx) => map(recv(ctx), 3, (px) => reflectXYZ(rgb3(px))),
   'view.flare': (ctx) => {
@@ -438,7 +461,7 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     const down = num(ctx, 'below') >= 1 ? 1 : clamp((num(ctx, 'below') - L) / s + 0.5, 0, 1);
     return [Math.min(up, down)];
   }),
-  'mask.gradient': (ctx) => {
+  'mask.linear': (ctx) => {
     const f = A(ctx, 'from') as Point;
     const t = A(ctx, 'to') as Point;
     const dx = t.x - f.x, dy = t.y - f.y;
@@ -459,12 +482,16 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
       return [u * u + v * v <= 1 ? 1 : 0];
     });
   },
-  // strokes is canonical JSON (contract 0.2): round brushes along each polyline, as core's paintMask (CHB-010)
-  'mask.paint': (ctx) => paint(recv(ctx), String(A(ctx, 'strokes'))),
+  // structured strokes (contract 1.0): round brushes along each polyline, as core's paintMask (CHB-010)
+  'mask.paint': (ctx) => paint(recv(ctx), A(ctx, 'strokes') as MockStroke[]),
   'mask.feather': (ctx) => boxBlur(recv(ctx), num(ctx, 'radius_px') / 2),
-  'mask.and': (ctx) => map(recv(ctx), 1, (px, x, y) => [Math.min(px[0]!, ctx.extra[0]!.data[y * ctx.extra[0]!.w + x]!)]),
-  'mask.or': (ctx) => map(recv(ctx), 1, (px, x, y) => [Math.max(px[0]!, ctx.extra[0]!.data[y * ctx.extra[0]!.w + x]!)]),
-  'mask.not': (ctx) => map(recv(ctx), 1, (px) => [1 - px[0]!]),
+  'mask.constant': (ctx) => map(recv(ctx), 1, () => [num(ctx, 'value')]),
+  'mask.combine': (ctx) => {
+    const o = imageOf(ctx, A(ctx, 'other') as string);
+    const mode = A(ctx, 'mode') as 'add' | 'subtract' | 'intersect';
+    return map(recv(ctx), 1, (px, x, y) => [maskCombine(mode, px[0]!, o.data[y * o.w + x]!, num(ctx, 'amount'))]);
+  },
+  'mask.invert': (ctx) => map(recv(ctx), 1, (px) => [1 - px[0]!]),
   'darkroom.testStrip': (ctx) => {
     const r = recv(ctx);
     const steps = num(ctx, 'steps');
@@ -501,14 +528,6 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     out.data.fill(0.18);
     return out;
   },
-  'finishing.clarity': (ctx) => {
-    const r = recv(ctx);
-    const a = num(ctx, 'amount');
-    if (a === 0) return r;
-    const blur = boxBlur(r, num(ctx, 'radius_px') / 8);
-    return map(r, r.c, (px, x, y) => px.map((v, k) => v + a * (v - blur.data[(y * r.w + x) * r.c + k]!)));
-  },
-  'finishing.hue': (ctx) => recv(ctx),
 };
 
 function statsOf(img: Img, domain: Domain | undefined, box?: Box, mask?: Img): Record<string, unknown> {
@@ -621,7 +640,7 @@ export const VALUE_OPS: Record<string, ValueOp> = {
     const bps = f.endsWith('16') ? 2 : 1;
     return {
       format: f, name: `export.${f.replace(/\d+$/, '')}`, bytes: r.w * r.h * 3 * bps, sha256: '0'.repeat(64),
-      mime: f.startsWith('png') ? 'image/png' : f === 'jpeg' ? 'image/jpeg' : 'image/tiff', width: r.w, height: r.h, bits: 8 * bps, space: 'srgb', iccSha256: '', recipeSha256: '',
+      mime: f.startsWith('png') ? 'image/png' : f === 'jpeg' ? 'image/jpeg' : 'image/tiff', width: r.w, height: r.h, bits: 8 * bps, space: 'srgb', iccSha256: '', documentSha256: '',
     };
   },
 };

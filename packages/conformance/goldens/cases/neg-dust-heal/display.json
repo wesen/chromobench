@@ -1,0 +1,32 @@
+{
+  "case": "neg-dust-heal",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dust-heal/display.f32",
+  "sha256": "9b9aafbfbb0ee111c8f68abb140e74cdd8886735032535388670704fee28afd6",
+  "stats": {
+    "min": [
+      0.1153023,
+      0.1192615,
+      0.120278
+    ],
+    "max": [
+      0.9956023,
+      0.998253,
+      0.9992539
+    ],
+    "mean": [
+      0.5101468,
+      0.5231971,
+      0.526787
+    ]
+  },
+  "warnings": []
+}

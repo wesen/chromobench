@@ -10,7 +10,7 @@ Local contrast on the print (a large unsharp mask weighted to the midtones), in 
 - On: Image (print-xyz) → Image (print-xyz)
 - Class: spatial; binding: setting
 - Layer in: print; encoding: linear
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -24,7 +24,7 @@ The composite law per entry (design §4, §22): out = back + a·m·(B(back, top)
 - Owner: CHB-037
 - On: Image (scanner-density, scene-xyz, print-xyz) → Image (same)
 - Class: pointwise; binding: setting; not in the DSL
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|

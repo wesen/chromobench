@@ -1,8 +1,9 @@
-// Semantic cases (CHB-010, contract 0.3): what print.combine, the mask.* ops, scan.flare and scan.density's
-// baseT must compute, in any engine, on
-// seeded synthetic inputs. Values are read back from the engine under test (masks included), so the
-// cases hold for f64 and f32 engines alike; the tolerance is the f32 one.
-import type { Node } from '@chromobench/contract';
+// Semantic cases (CHB-010, contract 0.3, contract 1.0): what print.combine (the light law), composite.mix, heal and
+// clone, the mask algebra, output.frame, scan.flare and scan.density's baseT must compute, in any engine, on seeded
+// synthetic inputs. Values are read back from the engine under test (masks included), so the cases hold for f64 and
+// f32 engines alike; the tolerance is the f32 one. The expected values come from the contract's per-pixel formulas
+// (lightH, mixPixel, maskCombine) or from closed forms, never from an engine.
+import { lightH, maskCombine, mixPixel, type Node } from '@chromobench/contract';
 import type { Case, Env } from './generate.ts';
 
 const TOL = 2e-5;
@@ -23,68 +24,203 @@ function worst(a: ArrayLike<number>, c: number, f: (pixel: number, k: number) =>
   return w;
 }
 
+const widthOf = (n: Node): number => (n.info as { width: number }).width;
+const px3 = (a: ArrayLike<number>, i: number): number[] => [a[3 * i]!, a[3 * i + 1]!, a[3 * i + 2]!];
+
 interface SemanticCase { id: string; op: string; needs: string[]; run(env: Env): Promise<void> }
 
 const CASES: SemanticCase[] = [
   {
-    id: 'print.combine semantics: no exposures is the receiver', op: 'print.combine', needs: ['print.combine'],
+    id: 'print.combine semantics: no terms is the receiver', op: 'print.combine', needs: ['print.combine'],
     async run(env) {
       const x = env.input('paper-logH');
       const [a, b] = [await read(env, x), await read(env, env.build('print.combine', [x.id], {}))];
-      check(worst(b, 3, (i, k) => a[3 * i + k]!) <= TOL, 'print.combine without exposures changed the image');
+      check(worst(b, 3, (i, k) => a[3 * i + k]!) <= TOL, 'print.combine without terms changed the image');
     },
   },
   {
-    id: 'print.combine semantics: a burn adds in linear H (x + log10(1 + m) for the same exposure)', op: 'print.combine', needs: ['print.combine', 'mask.gradient'],
+    id: 'print.combine semantics: a burn adds in linear H (x + log10(1 + a·m) for the same exposure)', op: 'print.combine', needs: ['print.combine', 'mask.linear'],
     async run(env) {
       const x = env.input('paper-logH');
-      const m = env.build('mask.gradient', [x.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 10 } });
-      const out = env.build('print.combine', [x.id], { exposures: [x.id], masks: [m.id], modes: ['add'] });
+      const m = env.build('mask.linear', [x.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 10 } });
+      const out = env.build('print.combine', [x.id], { terms: [{ role: 'burn', image: x.id, amount: 0.5, mask: m.id }] });
       const [xa, ma, oa] = [await read(env, x), await read(env, m), await read(env, out)];
-      check(worst(oa, 3, (i, k) => xa[3 * i + k]! + Math.log10(1 + ma[i]!)) <= TOL, 'burn is not log10(1 + m) above the main exposure (summed in log H?)');
-      check(Math.abs(ma[0]! - (1 - (0.5 * 12 + 0.5 * 10) / 244)) <= 1e-6, `mask.gradient at the first pixel centre: ${ma[0]}`);
+      check(worst(oa, 3, (i, k) => xa[3 * i + k]! + Math.log10(1 + 0.5 * ma[i]!)) <= TOL, 'burn is not log10(1 + a·m) above the main exposure (summed in log H?)');
+      check(Math.abs(ma[0]! - (1 - (0.5 * 12 + 0.5 * 10) / 244)) <= 1e-6, `mask.linear at the first pixel centre: ${ma[0]}`);
     },
   },
   {
-    id: 'print.combine semantics: dodge and burn of one exposure and mask cancel', op: 'print.combine', needs: ['print.combine', 'print.lights', 'mask.ellipse'],
+    id: 'print.combine semantics: dodge and burn of one exposure and mask cancel', op: 'print.combine', needs: ['print.combine', 'print.expose', 'mask.ellipse'],
     async run(env) {
-      const x = env.input('paper-logH');
-      const e = env.build('print.lights', [x.id], { logH: [-0.3, -0.5, -0.2] });
+      const dyes = env.input('film-dyes');
+      const x = env.build('print.expose', [dyes.id], {});
+      const e = env.build('print.expose', [dyes.id], { time_s: 4 });
       const m = env.build('mask.ellipse', [x.id], { box: { x: 2, y: 1, w: 8, h: 7 }, angle_deg: 30 });
-      const out = env.build('print.combine', [x.id], { exposures: [e.id, e.id], masks: [m.id, m.id], modes: ['subtract', 'add'] });
+      const t = { image: e.id, amount: 1, mask: m.id };
+      const out = env.build('print.combine', [x.id], { terms: [{ role: 'dodge', ...t }, { role: 'burn', ...t }] });
       const [xa, oa] = [await read(env, x), await read(env, out)];
       check(worst(oa, 3, (i, k) => xa[3 * i + k]!) <= TOL, 'dodge and burn of the same exposure do not cancel');
     },
   },
   {
-    id: 'print.combine semantics: an unmasked base flash adds the same H to every pixel (contract 0.3)', op: 'print.combine', needs: ['print.combine', 'print.expose', 'mask.luminance'],
+    id: 'print.combine semantics: an unmasked flash adds the same H to every pixel and is not held back by density masks', op: 'print.combine', needs: ['print.combine', 'print.expose', 'print.densityMask'],
     async run(env) {
-      const dyes = env.input('film-dyes');
-      const x = env.build('print.expose', [dyes.id], {});
-      const f = env.build('print.expose', [dyes.id], { time_s: 1 });
-      const all = env.build('mask.luminance', [x.id], { above: 0, below: 1, softness: 0 });
-      for (const mode of ['flash-base', 'flash-open']) {
-        const out = env.build('print.combine', [x.id], { exposures: [f.id], masks: [all.id], modes: [mode] });
-        const [xa, oa] = [await read(env, x), await read(env, out)];
-        const added = (i: number, k: number): number => 10 ** oa[3 * i + k]! - 10 ** xa[3 * i + k]!;
+      const x = env.pitched('paper-logH');
+      const f = env.build('print.expose', [env.pitched('film-dyes').id], { time_s: 1 });
+      const d = env.build('print.densityMask', [x.id], { gamma: 0.5, radius_um: 30 });
+      for (const role of ['flash-base', 'flash-open']) {
+        const out = env.build('print.combine', [x.id], { terms: [{ role, image: f.id, amount: 1 }], densities: [{ image: d.id, amount: 1 }] });
+        const [xa, da, oa] = [await read(env, x), await read(env, d), await read(env, out)];
+        const added = (i: number, k: number): number => 10 ** oa[3 * i + k]! - 10 ** (xa[3 * i + k]! - da[i]!);
         let spread = 0;
         for (let i = 0; i < xa.length / 3; i++) for (let k = 0; k < 3; k++) spread = Math.max(spread, Math.abs(added(i, k) - added(0, k)) / Math.max(added(0, k), 1e-12));
-        check(added(0, 0) > 0 && spread <= 1e-3, `${mode}: the flash is not a uniform H (relative spread ${spread})`);
+        check(added(0, 0) > 0 && spread <= 1e-3, `${role}: the flash is not a uniform H outside the density masks (relative spread ${spread})`);
       }
     },
   },
   {
-    id: 'print.combine semantics: density masks hold back the exposures through the negative (x − Σd_m), flashes pass (contract 0.3)', op: 'print.combine', needs: ['print.combine', 'print.densityMask'],
+    id: 'print.combine semantics: density masks hold back the exposures through the negative (x − Σ a·d_m)', op: 'print.combine', needs: ['print.combine', 'print.densityMask'],
     async run(env) {
-      const x = env.input('paper-logH');
-      const d1 = env.build('print.densityMask', [x.id], { amount: 0.5, radius_um: 30 });
-      const d2 = env.build('print.densityMask', [x.id], { amount: 0.2, radius_um: 30, polarity: 'same' });
-      const out = env.build('print.combine', [x.id], { densityMasks: [d1.id, d2.id] });
+      const x = env.pitched('paper-logH');
+      const d1 = env.build('print.densityMask', [x.id], { gamma: 0.5, radius_um: 30 });
+      const d2 = env.build('print.densityMask', [x.id], { gamma: 0.2, radius_um: 30, polarity: 'same' });
+      const out = env.build('print.combine', [x.id], { densities: [{ image: d1.id, amount: 1 }, { image: d2.id, amount: 0.5 }] });
       const [xa, oa] = [await read(env, x), await read(env, out)];
       const [da, db] = [Array.from(await read(env, d1)), Array.from(await read(env, d2))];
       check(da.every((v) => v >= -1e-6) && db.every((v) => v >= -1e-6), 'a density mask is negative somewhere');
       check(Math.min(...da) <= 1e-6, 'a positive mask is not 0 at the densest area');
-      check(worst(oa, 3, (i, k) => xa[3 * i + k]! - da[i]! - db[i]!) <= TOL, 'print.combine with density masks is not x − Σd_m');
+      check(worst(oa, 3, (i, k) => xa[3 * i + k]! - da[i]! - 0.5 * db[i]!) <= TOL, 'print.combine with density masks is not x − Σ a·d_m');
+    },
+  },
+  {
+    id: 'print.combine semantics: filters multiply H by 10^(a·m·logH), the preflash adds a·φ after them, the main amount scales the main', op: 'print.combine', needs: ['print.combine', 'mask.linear'],
+    async run(env) {
+      const x = env.input('paper-logH');
+      const m = env.build('mask.linear', [x.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
+      const logH = [0.1, -0.05, 0.02];
+      const out = env.build('print.combine', [x.id], {
+        mainAmount: 0.8, filters: [{ logH, amount: 0.5 }, { logH: [0, 0.2, 0], amount: 1, mask: m.id }], preflash: [{ fraction: 0.03, amount: 2 }],
+      });
+      const [xa, ma, oa] = [await read(env, x), await read(env, m), await read(env, out)];
+      const want = [0, 0, 0];
+      check(worst(oa, 3, (i, k) => {
+        lightH({ xMain: px3(xa, i), wMain: 0.8, terms: [], densities: [], filters: [{ logH, w: 0.5 }, { logH: [0, 0.2, 0], w: ma[i]! }], preflash: [{ fraction: 0.03, w: 2 }] }, want);
+        return want[k]!;
+      }) <= TOL, 'filters, preflash or the main amount are not the light law (lightH)');
+    },
+  },
+  {
+    id: 'composite.mix semantics: back + a·m·(top − back); amount 1 without a mask is top, amount 0 is back', op: 'composite.mix', needs: ['composite.mix', 'mask.linear'],
+    async run(env) {
+      const back = env.input('print-xyz');
+      const top = env.build('source.pattern', [], { domain: 'print-xyz', width: 12, height: 10, seed: 99 });
+      const m = env.build('mask.linear', [back.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
+      const [ba, ta, ma] = [await read(env, back), await read(env, top), await read(env, m)];
+      const mixed = await read(env, env.build('composite.mix', [back.id], { top: top.id, amount: 0.6, mask: m.id }));
+      check(worst(mixed, 3, (i, k) => mixPixel(ba[3 * i + k]!, ta[3 * i + k]!, 0.6 * ma[i]!)) <= TOL, 'composite.mix is not back + a·m·(top − back)');
+      const one = await read(env, env.build('composite.mix', [back.id], { top: top.id, amount: 1 }));
+      check(worst(one, 3, (i, k) => ta[3 * i + k]!) === 0, 'composite.mix at amount 1 is not exactly top');
+      const zero = await read(env, env.build('composite.mix', [back.id], { top: top.id, amount: 0 }));
+      check(worst(zero, 3, (i, k) => ba[3 * i + k]!) === 0, 'composite.mix at amount 0 is not exactly the backdrop');
+    },
+  },
+  {
+    id: 'clone semantics: clone copies the source disc, nothing else changes, a region is the crop, opacity 0 is the identity', op: 'clone', needs: ['clone'],
+    async run(env) {
+      const x = env.input('print-xyz');
+      const spot = { x: 3, y: 5, r: 2, src: { x: 8, y: 5 }, feather: 0, opacity: 1 };
+      const out = env.build('clone', [x.id], { spots: [spot] });
+      const [xa, oa] = [await read(env, x), await read(env, out)];
+      const W = widthOf(x);
+      let inside = 0;
+      check(worst(oa, 3, (i, k) => {
+        const px = i % W, py = Math.floor(i / W);
+        const d = Math.hypot(px + 0.5 - spot.x, py + 0.5 - spot.y);
+        if (d < spot.r) inside++;
+        return d < spot.r ? xa[3 * (i + 5) + k]! : xa[3 * i + k]!;
+      }) <= TOL, 'clone: the disc is not the source disc moved, or pixels outside it changed');
+      check(inside === 12 * 3, `clone: ${inside / 3} pixel centres in the disc, expected 12`);
+      const reg = { x: 1, y: 3, w: 5, h: 4 };
+      const part = await (await env.engine.evaluate(out, { scale: 'full', precision: 'export', region: reg })).read();
+      let off = 0;
+      for (let y = 0; y < reg.h; y++) for (let i = 0; i < reg.w; i++) for (let k = 0; k < 3; k++) off = Math.max(off, Math.abs(part[3 * (y * reg.w + i) + k]! - oa[3 * ((reg.y + y) * W + reg.x + i) + k]!));
+      check(off <= TOL, `clone: a region differs from the crop of the full result by ${off}`);
+      const none = env.build('clone', [x.id], { spots: [{ ...spot, opacity: 0 }] });
+      check(worst(await read(env, none), 3, (i, k) => xa[3 * i + k]!) <= TOL, 'opacity 0 changed the image');
+    },
+  },
+  {
+    id: 'heal and clone semantics: heal from the target itself is the identity; spots apply in order, a later one reading what an earlier one left (contract 1.0)', op: 'heal', needs: ['heal', 'clone'],
+    async run(env) {
+      const x = env.input('print-xyz');
+      const xa = await read(env, x);
+      const self = env.build('heal', [x.id], { spots: [{ x: 6, y: 5, r: 3, src: { x: 6, y: 5 }, feather: 0.5, opacity: 1 }] });
+      check(worst(await read(env, self), 3, (i, k) => xa[3 * i + k]!) <= 1e-4 * 2, 'heal with the source on the target changed the image');
+      const W = widthOf(x);
+      // a moves (8, 4) onto (4, 4); b then copies (4, 4) onto (4, 8): b reads a's result
+      const a = { x: 4, y: 4, r: 1.5, src: { x: 8, y: 4 }, feather: 0, opacity: 1 };
+      const b = { x: 4, y: 8, r: 1.5, src: { x: 4, y: 4 }, feather: 0, opacity: 1 };
+      const two = await read(env, env.build('clone', [x.id], { spots: [a, b] }));
+      const i = 8 * W + 4; // pixel (4, 8): centre (4.5, 8.5), in b's disc
+      check(worst(px3(two, i), 3, (_, k) => xa[3 * (4 * W + 8) + k]!) <= TOL, 'the later spot did not read the image as the earlier spot left it');
+    },
+  },
+  {
+    id: 'mask semantics: combine is the one algebra (add = max, subtract = v·(1 − c), intersect = v·c, faded by amount); invert is 1 − m; constant is uniform', op: 'mask.combine', needs: ['mask.combine', 'mask.invert', 'mask.constant', 'mask.linear', 'mask.ellipse'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const a = env.build('mask.linear', [r.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
+      const b = env.build('mask.ellipse', [r.id], { box: { x: 1, y: 1, w: 9, h: 8 } });
+      const [ma, mb] = [await read(env, a), await read(env, b)];
+      for (const mode of ['add', 'subtract', 'intersect'] as const) {
+        for (const amount of [1, 0.4]) {
+          const mc = await read(env, env.build('mask.combine', [a.id], { other: b.id, mode, amount }));
+          check(worst(mc, 1, (i) => maskCombine(mode, ma[i]!, mb[i]!, amount)) <= 1e-6, `mask.combine ${mode} at amount ${amount} is not the algebra`);
+        }
+      }
+      check(worst(await read(env, env.build('mask.invert', [a.id], {})), 1, (i) => 1 - ma[i]!) <= 1e-6, 'mask.invert is not 1 − m');
+      check(worst(await read(env, env.build('mask.constant', [r.id], { value: 0.3 })), 1, () => 0.3) <= 1e-6, 'mask.constant is not uniform');
+      check(mb[4 * 12 + 5]! === 1 && mb[0]! === 0, 'mask.ellipse: centre not 1 or corner not 0');
+    },
+  },
+  {
+    id: 'mask semantics: a painted stroke covers its path and nothing far from it; erase removes', op: 'mask.paint', needs: ['mask.paint'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const add = { points: [[1, 5, 0.5], [11, 5, 0.5]], radius: 2, hardness: 0.5, mode: 'add' };
+      const m = await read(env, env.build('mask.paint', [r.id], { strokes: [add] }));
+      check(m[4 * 12 + 6]! === 1, `mask.paint on the path: ${m[4 * 12 + 6]}`);
+      check(m[0]! === 0 && m[9 * 12 + 6]! === 0, 'mask.paint covers pixels far from the stroke');
+      const erased = await read(env, env.build('mask.paint', [r.id], { strokes: [add, { points: [[6.5, 0, 0.5], [6.5, 10, 0.5]], radius: 1, hardness: 1, mode: 'erase' }] }));
+      check(erased[4 * 12 + 6]! === 0 && erased[4 * 12 + 2]! === 1, 'mask.paint erase does not remove coverage');
+    },
+  },
+  {
+    id: 'mask semantics: feather keeps a flat mask flat', op: 'mask.feather', needs: ['mask.feather', 'mask.constant'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const all = env.build('mask.constant', [r.id], { value: 1 });
+      const f = await read(env, env.build('mask.feather', [all.id], { radius_px: 6 }));
+      check(worst(f, 1, () => 1) <= 1e-6, 'mask.feather of the whole-frame mask is not 1 everywhere');
+    },
+  },
+  {
+    id: 'output.frame semantics: the crop box, then the orientation (cw90: output (x′, y′) reads (y′, h − 1 − x′))', op: 'output.frame', needs: ['output.frame'],
+    async run(env) {
+      const d = env.input('display-rgb');
+      const da = await read(env, d);
+      const W = widthOf(d);
+      const crop = { x: 2, y: 1, w: 6, h: 5 };
+      const c = env.build('output.frame', [d.id], { crop });
+      const ca = await read(env, c);
+      check(widthOf(c) === 6 && worst(ca, 3, (i, k) => da[3 * ((crop.y + Math.floor(i / 6)) * W + crop.x + (i % 6)) + k]!) === 0, 'output.frame crop is not the box');
+      const o = env.build('output.frame', [d.id], { crop, orientation: 'cw90' });
+      const oa = await read(env, o);
+      check(widthOf(o) === 5, `cw90 of a 6 × 5 crop is ${widthOf(o)} wide`);
+      check(worst(oa, 3, (i, k) => {
+        const x2 = i % 5, y2 = Math.floor(i / 5);
+        return ca[3 * ((5 - 1 - x2) * 6 + y2) + k]!;
+      }) === 0, 'output.frame cw90 is not the rotated crop');
     },
   },
   {
@@ -107,83 +243,6 @@ const CASES: SemanticCase[] = [
       const d = await read(env, env.build('scan.density', [r.id], { baseT, rebate: { x: 0, y: 0, w: 2, h: 2 } }));
       const ra = await read(env, r);
       check(worst(d, 3, (i, k) => -Math.log10(Math.max(ra[3 * i + k]!, 1e-8) / baseT[k]!)) <= 1e-4, 'scan.density with baseT is not −log10(T / baseT)');
-    },
-  },
-  {
-    id: 'retouch.heal semantics: clone copies the source disc, nothing else changes, a region is the crop (CHB-022)', op: 'retouch.heal', needs: ['retouch.heal'],
-    async run(env) {
-      const x = env.input('print-xyz');
-      const spot = { mode: 'clone', x: 3, y: 5, r: 2, src: { x: 8, y: 5 }, feather: 0, opacity: 1, enabled: true };
-      const out = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: spot }) });
-      const [xa, oa] = [await read(env, x), await read(env, out)];
-      const W = (x.info as { width: number }).width;
-      let inside = 0;
-      check(worst(oa, 3, (i, k) => {
-        const px = i % W, py = Math.floor(i / W);
-        const d = Math.hypot(px + 0.5 - spot.x, py + 0.5 - spot.y);
-        if (d < spot.r) inside++;
-        return d < spot.r ? xa[3 * (i + 5) + k]! : xa[3 * i + k]!;
-      }) <= TOL, 'clone: the disc is not the source disc moved, or pixels outside it changed');
-      check(inside === 12 * 3, `clone: ${inside / 3} pixel centres in the disc, expected 12`);
-      const reg = { x: 1, y: 3, w: 5, h: 4 };
-      const part = await (await env.engine.evaluate(out, { scale: 'full', precision: 'export', region: reg })).read();
-      let off = 0;
-      for (let y = 0; y < reg.h; y++) for (let i = 0; i < reg.w; i++) for (let k = 0; k < 3; k++) off = Math.max(off, Math.abs(part[3 * (y * reg.w + i) + k]! - oa[3 * ((reg.y + y) * W + reg.x + i) + k]!));
-      check(off <= TOL, `clone: a region differs from the crop of the full result by ${off}`);
-      const none = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: { ...spot, opacity: 0 } }) });
-      check(worst(await read(env, none), 3, (i, k) => xa[3 * i + k]!) <= TOL, 'opacity 0 changed the image');
-    },
-  },
-  {
-    id: 'retouch.heal semantics: heal from the target itself is the identity; a later spot (natural id order) covers an earlier (CHB-022)', op: 'retouch.heal', needs: ['retouch.heal'],
-    async run(env) {
-      const x = env.input('print-xyz');
-      const xa = await read(env, x);
-      const self = env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s1: { mode: 'heal', x: 6, y: 5, r: 3, src: { x: 6, y: 5 }, feather: 0.5, opacity: 1, enabled: true } }) });
-      check(worst(await read(env, self), 3, (i, k) => xa[3 * i + k]!) <= 1e-4 * 2, 'heal with the source on the target changed the image');
-      const W = (x.info as { width: number }).width;
-      const a = { mode: 'clone', x: 4, y: 4, r: 1.5, src: { x: 8, y: 4 }, feather: 0, opacity: 1, enabled: true };
-      const b = { ...a, src: { x: 4, y: 8 } };
-      const two = await read(env, env.build('retouch.heal', [x.id], { spots: JSON.stringify({ s2: a, s10: b }) }));
-      const i = 4 * W + 4; // pixel (4, 4): centre (4.5, 4.5) in both discs
-      check(worst([two[3 * i]!, two[3 * i + 1]!, two[3 * i + 2]!], 3, (_, k) => xa[3 * (8 * W + 4) + k]!) <= TOL, 'spot s10 (after s2 in natural order) does not cover s2');
-    },
-  },
-  {
-    id: 'mask semantics: and/or/not are min/max/1 − m', op: 'mask.and', needs: ['mask.and', 'mask.or', 'mask.not', 'mask.gradient', 'mask.ellipse'],
-    async run(env) {
-      const r = env.input('camera-linear');
-      const a = env.build('mask.gradient', [r.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
-      const b = env.build('mask.ellipse', [r.id], { box: { x: 1, y: 1, w: 9, h: 8 } });
-      const [ma, mb] = [await read(env, a), await read(env, b)];
-      const [mand, mor, mnot] = [
-        await read(env, env.build('mask.and', [a.id], { other: b.id })),
-        await read(env, env.build('mask.or', [a.id], { other: b.id })),
-        await read(env, env.build('mask.not', [a.id], {})),
-      ];
-      check(worst(mand, 1, (i) => Math.min(ma[i]!, mb[i]!)) <= 1e-6, 'mask.and is not the minimum');
-      check(worst(mor, 1, (i) => Math.max(ma[i]!, mb[i]!)) <= 1e-6, 'mask.or is not the maximum');
-      check(worst(mnot, 1, (i) => 1 - ma[i]!) <= 1e-6, 'mask.not is not 1 − m');
-      check(mb[4 * 12 + 5]! === 1 && mb[0]! === 0, 'mask.ellipse: centre not 1 or corner not 0');
-    },
-  },
-  {
-    id: 'mask semantics: a painted stroke covers its path and nothing far from it', op: 'mask.paint', needs: ['mask.paint'],
-    async run(env) {
-      const r = env.input('camera-linear');
-      const strokes = JSON.stringify([{ kind: 'stroke', points: [[1, 5, 0.5], [11, 5, 0.5]], radius: 2, hardness: 0.5, mode: 'add' }]);
-      const m = await read(env, env.build('mask.paint', [r.id], { strokes }));
-      check(m[4 * 12 + 6]! === 1, `mask.paint on the path: ${m[4 * 12 + 6]}`);
-      check(m[0]! === 0 && m[9 * 12 + 6]! === 0, 'mask.paint covers pixels far from the stroke');
-    },
-  },
-  {
-    id: 'mask semantics: feather keeps a flat mask flat', op: 'mask.feather', needs: ['mask.feather', 'mask.luminance'],
-    async run(env) {
-      const r = env.input('camera-linear');
-      const all = env.build('mask.luminance', [r.id], { above: 0, below: 1, softness: 0 });
-      const f = await read(env, env.build('mask.feather', [all.id], { radius_px: 6 }));
-      check(worst(f, 1, () => 1) <= 1e-6, 'mask.feather of the whole-frame mask is not 1 everywhere');
     },
   },
 ];

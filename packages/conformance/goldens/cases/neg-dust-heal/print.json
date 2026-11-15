@@ -1,0 +1,32 @@
+{
+  "case": "neg-dust-heal",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dust-heal/print.f32",
+  "sha256": "ca09274cca79d1655580cf2fc8cc792c81329b20898aff47631471c5a24e61a6",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.01067903,
+      0.01170197
+    ],
+    "max": [
+      0.7666905,
+      0.8086945,
+      0.8697692
+    ],
+    "mean": [
+      0.2418928,
+      0.2542108,
+      0.285266
+    ]
+  },
+  "warnings": []
+}

@@ -2,7 +2,8 @@
 // A preview at scale < 1 computes only the pixels it samples where the chain is pointwise, and must equal the
 // full-resolution path bit for bit; a cancel lands between stages; a print-only change recomputes print stages only.
 import { describe, expect, it } from 'vitest';
-import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo } from '@chromobench/contract';
+import { compile, edit, Graph, newDocument, type Document, type SourceInfo } from '@chromobench/contract';
+import { set } from '@chromobench/values';
 import { nodePacksData, RefEngine } from '../src/index.ts';
 
 const W = 60, H = 40;
@@ -30,18 +31,17 @@ function setup(kind: 'negative-scan' | 'digital-raw', o: Omit<ConstructorParamet
     e.openDecoded(info, data);
     return e;
   };
-  const r0 = defaultRecipe(kind, { sha256: info.sha256, name: 's' });
-  const recipe: FrameRecipe = { ...r0, print: { ...r0.print, enlarger: { ...r0.print.enlarger, mode: 'real' } } };
-  const node = (r: FrameRecipe) => {
-    // the display chain below output.frame (the studio's host op: crop and orientation)
-    let top = compile(r, g);
-    if (top.op === 'output.frame') top = g.get(top.inputs[0]!)!;
+  const recipe: Document = newDocument(kind, { sha256: info.sha256, name: 's' }, kind === 'negative-scan' ? { umPerPx: 6 } : {});
+  const node = (r: Document) => {
+    // the display chain below output.frame (geometric: it runs at full resolution, so it is left out here)
+    const top = g.get(compile(r, g).display.inputs[0]!)!;
     return { id: top.id, info: top.info, defs: g.closure(top.id) };
   };
   return { mk, recipe, node, g };
 }
 
-const withTime = (r: FrameRecipe, t: number): FrameRecipe => ({ ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, time_s: t } } });
+const mainTime = (r: Document): number => (r.stages.darkroom.stack.items['main'] as unknown as { params: { time_s: number } }).params.time_s;
+const withTime = (r: Document, t: number): Document => edit(r, [set('main.params.time_s', t)]).doc;
 
 describe('RefEngine sampled previews (CHB-027)', () => {
   for (const kind of ['negative-scan', 'digital-raw'] as const) {
@@ -76,7 +76,7 @@ describe('RefEngine sampled previews (CHB-027)', () => {
     e.adopt(n1.defs);
     await e.evaluate(n1, t);
     const before = { ...e.computed };
-    const n2 = node(withTime(recipe, recipe.print.enlarger.time_s * 1.12));
+    const n2 = node(withTime(recipe, mainTime(recipe) * 1.12));
     e.adopt(n2.defs);
     await e.evaluate(n2, t);
     const after = e.computed;

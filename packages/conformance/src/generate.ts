@@ -1,5 +1,7 @@
 // Generates conformance cases from the registry: a new op is tested the moment it is registered.
-// Each case runs against a fresh engine from `makeEngine` and throws on failure.
+// Each case runs against a fresh engine from `makeEngine` and throws on failure. Contract 1.0: the darkroom's layer
+// ops (returns 'Term') are terms of the light law, never nodes, so engines neither implement nor are tested on them;
+// spatial ops whose sizes are physical (µm on the film, mm on the print) get a receiver that carries the pitches.
 import {
   acceptsDomain, allOps, ChromobenchError, DOMAINS, DOMAIN_NAMES, Graph, nodeArgs, outputChannels, sha256Hex,
   type ArgSpec, type Diagnostic, type Domain, type Engine, type ImageInfo, type Node, type OpDef,
@@ -22,8 +24,13 @@ export interface Env {
   engine: Engine;
   graph: Graph;
   makeEngine: () => Engine | Promise<Engine>;
-  /** A seeded receiver of the given domain, adopted into the engine. */
+  /** A seeded receiver of the given domain, adopted into the engine (no pitch: ImageInfo.umPerPx is empty). */
   input(domain: Domain): Node;
+  /**
+   * A receiver of the given domain that carries the film and print pitches (ImageInfo.umPerPx): built from the
+   * opened source (source.open with umPerPx PITCH_UM) through the fixed chain to that domain.
+   */
+  pitched(domain: Domain): Node;
   sourceSha: string;
   /** Builds node(s) in env.graph and adopts the closure into the engine. */
   build(op: string, inputs: string[], args: Record<string, unknown>): Node;
@@ -38,6 +45,20 @@ export interface Case {
 
 const W = 12;
 const H = 10;
+/** Film µm per pixel of the conformance source (the print's is × print.expose's magnification, 8). */
+export const PITCH_UM = 6;
+
+/** The fixed chain from source.open (camera-linear) to a domain, for pitched receivers. */
+const PITCHED_PATH: Partial<Record<Domain, readonly [string, Record<string, unknown>][]>> = {
+  'camera-linear': [],
+  'scanner-density': [['scan.density', {}]],
+  'scene-xyz': [['source.xyz', {}]],
+  'film-logH': [['source.xyz', {}], ['capture.expose', {}]],
+  'film-dyes': [['source.xyz', {}], ['capture.expose', {}], ['film.develop', {}]],
+  'paper-logH': [['scan.density', {}], ['invert.dyes', {}], ['print.expose', {}]],
+  'paper-dyes': [['scan.density', {}], ['invert.dyes', {}], ['print.expose', {}], ['print.develop', {}]],
+  'print-xyz': [['scan.density', {}], ['invert.dyes', {}], ['print.expose', {}], ['print.develop', {}], ['view.reflect', {}]],
+};
 
 class CaseFailure extends Error {}
 function assert(cond: unknown, msg: string): asserts cond {
@@ -73,8 +94,31 @@ export async function makeEnv(makeEngine: () => Engine | Promise<Engine>, opts: 
     input(domain) {
       return env.build('source.pattern', [], { domain, width: W, height: H, seed: 7 });
     },
+    pitched(domain) {
+      const path = PITCHED_PATH[domain] ?? fail(`no pitched receiver of ${domain}`);
+      let n = env.build('source.open', [], { source: info.sha256, umPerPx: PITCH_UM });
+      for (const [op, args] of path) n = env.build(op, [n.id], args);
+      return n;
+    },
   };
   return env;
+}
+
+function fail(msg: string): never {
+  throw new CaseFailure(msg);
+}
+
+/** Every ArgSpec of an op at any depth (list items' fields included). */
+function specsOf(op: OpDef): ArgSpec[] {
+  return Object.values(op.args).flatMap((s) => [s, ...Object.values(s.of ?? {})]);
+}
+
+/**
+ * A spatial op whose sizes are physical, not document pixels (film.couple, film.halation, film.grain,
+ * print.densityMask, clarity): it converts them with ImageInfo.umPerPx, so its receiver must carry the pitches.
+ */
+export function needsPitch(op: OpDef): boolean {
+  return op.class === 'spatial' && !specsOf(op).some((s) => s.unit === 'px');
 }
 
 function receiverDomain(op: OpDef): Domain | undefined {
@@ -85,24 +129,31 @@ function receiverDomain(op: OpDef): Domain | undefined {
   return Array.isArray(d) ? d[0] : d;
 }
 
-/** Required arguments without defaults get a generic valid value. */
+/** Required arguments without defaults get a generic valid value (an image argument: one like the receiver). */
 function requiredArgs(op: OpDef, env: Env): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [n, s] of Object.entries(op.args)) {
     if (s.default !== undefined || s.optional) continue;
     if (op.name === 'source.open' && n === 'source') out[n] = env.sourceSha;
+    else if (op.name === 'source.open' && n === 'umPerPx') out[n] = PITCH_UM;
     else if (s.type === 'Mask') out[n] = env.input('mask').id;
-    else if (s.type === 'Image') out[n] = env.input('camera-linear').id;
+    else if (s.type === 'Image') out[n] = env.input(receiverDomain(op) ?? 'camera-linear').id;
     else if (s.type === 'string' || s.type === 'stockId') out[n] = 'x';
+    else if (s.type === 'enum' && s.values?.length) out[n] = s.values[0];
+    else if (s.type === 'number') out[n] = Math.min(s.max ?? 1, Math.max(s.min ?? 1, 1));
     else throw new CaseFailure(`conformance cannot synthesise required argument ${op.name}.${n}`);
   }
   return out;
 }
 
-function buildDefault(op: OpDef, env: Env, extra: Record<string, unknown> = {}): Node {
+/** The receiver an op's default cases are built on: seeded, or pitched when the op needs the pitches. */
+function receiverOf(op: OpDef, env: Env): string[] {
   const d = receiverDomain(op);
-  const inputs = d ? [env.input(d).id] : [];
-  return env.build(op.name, inputs, { ...requiredArgs(op, env), ...extra });
+  return d ? [(needsPitch(op) ? env.pitched(d) : env.input(d)).id] : [];
+}
+
+function buildDefault(op: OpDef, env: Env, extra: Record<string, unknown> = {}): Node {
+  return env.build(op.name, receiverOf(op, env), { ...requiredArgs(op, env), ...extra });
 }
 
 function isNumeric(s: ArgSpec): boolean {
@@ -153,6 +204,7 @@ export function generateCases(implemented: readonly string[]): Case[] {
     cases.push({ id: `${op.name} ${kind}${suffix ? ` ${suffix}` : ''}`, op: op.name, kind, run });
   };
   for (const op of allOps({ includeInternal: true })) {
+    if (op.returns === 'Term') continue; // a darkroom layer: the light law compiles it into print.expose and print.combine
     if (!impl.has(op.name)) {
       add(op, 'not-implemented', '', async (env) => {
         const n = buildDefault(op, env);

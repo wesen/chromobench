@@ -16,12 +16,12 @@ import type { Mat3 } from '../spectral/linalg.ts';
 import type { StockData } from '../spectral/stock.ts';
 import { filmOf, type ChainCtx, type Img, type OpCtx } from './ops.ts';
 
-/** Long edge of the simulated format when ImageInfo.umPerPx.film is unset (135 film). */
-export const DEFAULT_FORMAT_MM = 36;
-
-/** Film µm per pixel of an image: ImageInfo.umPerPx.film, else a 36 mm long edge over the long side. */
-export function filmUmPerPx(info: Pick<ImageInfo, 'width' | 'height' | 'umPerPx'> | undefined, w: number, h: number): number {
-  return info?.umPerPx.film ?? (DEFAULT_FORMAT_MM * 1000) / Math.max(w, h, 1);
+/**
+ * Film µm per pixel of an image: ImageInfo.umPerPx.film, which source.open sets (contract 1.0: the camera file's film
+ * long edge over its long side, compile's `pitches`). There is no default pitch: an image without one is refused.
+ */
+export function filmUmPerPx(info: Pick<ImageInfo, 'umPerPx'> | undefined): number {
+  return info?.umPerPx.film ?? fail('E_EVAL', 'film ops need the film pitch (ImageInfo.umPerPx.film)', { hint: 'build the chain from source.open with its umPerPx (compile does)' });
 }
 
 /** The film of film.* ops: capture.expose's stock (core's default film without one, as filmOf). */
@@ -132,12 +132,12 @@ export const FILM_IMAGE_OPS: Record<string, (ctx: OpCtx) => Img> = {
     const stock = filmStock(ctx);
     const dir = dirAt(ctx, stock, ctx.args);
     if (dir.amount === 0) return r;
-    return { w: r.w, h: r.h, c: 3, data: coupleImage(rgb(r), r.w, r.h, filmUmPerPx(ctx.info, r.w, r.h), coupleCurvesAt(ctx), dir) };
+    return { w: r.w, h: r.h, c: 3, data: coupleImage(rgb(r), r.w, r.h, filmUmPerPx(ctx.info), coupleCurvesAt(ctx), dir) };
   },
   'film.halation': (ctx) => {
     const r = recv(ctx);
     const s = halationAt(ctx, ctx.args);
-    return { w: r.w, h: r.h, c: 3, data: applyHalation(rgb(r), r.w, r.h, filmUmPerPx(ctx.info, r.w, r.h), s) };
+    return { w: r.w, h: r.h, c: 3, data: applyHalation(rgb(r), r.w, r.h, filmUmPerPx(ctx.info), s) };
   },
   'film.develop': (ctx) => {
     const r = recv(ctx);
@@ -151,6 +151,6 @@ export const FILM_IMAGE_OPS: Record<string, (ctx: OpCtx) => Img> = {
     const r = recv(ctx);
     const { spec, sub } = grainAt(ctx, ctx.args);
     if (spec.amount === 0) return r;
-    return { w: r.w, h: r.h, c: 3, data: grainImage(rgb(r), r.w, r.h, { umPerPx: filmUmPerPx(ctx.info, r.w, r.h) }, sub, spec) };
+    return { w: r.w, h: r.h, c: 3, data: grainImage(rgb(r), r.w, r.h, { umPerPx: filmUmPerPx(ctx.info) }, sub, spec) };
   },
 };

@@ -1,0 +1,156 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-m1",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "items": {},
+    "order": []
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "scan"
+    },
+    "kind": "file",
+    "name": "m1-negative-96x64.tif",
+    "sha256": "29ffc4d574382d06cb2717894b65c6274256d4e802cd17d151893625049cb0a2"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                0.04503,
+                0.01748,
+                -0.008689
+              ]
+            },
+            "source": {
+              "alpha": 1,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                0.04503,
+                0.01748,
+                -0.008689
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 5.612
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights"
+        ]
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "scan": {
+      "medium": {
+        "baseT": null,
+        "flare": 0,
+        "flat": null,
+        "format": "135",
+        "openGate": null,
+        "rebate": {
+          "h": 64,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "scanner": "xt5-rgb-led",
+        "stock": "kodak_portra_400",
+        "umPerPx": 6
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    }
+  }
+}
