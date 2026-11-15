@@ -329,3 +329,64 @@ Consumer breakage (repository typecheck: 850 error lines; vitest: 48 of 117 file
 | packages/agent | 45 | 6 | `Mutation`, `LoggedMutation`, `defaultRecipe`; `EvalResult.mutations` → `transactions` | P6 |
 | tools/scripts | 6 | 0 | `defaultRecipe` (m1-headless) | P2b/P6 |
 | tools/gen-docs (dsl/agent targets) | — | — | generated from packages/dsl and packages/agent | P6 |
+
+## Step 3: Review pass — the laws read params with their defaults; final checks
+
+Reading my own light law again against the validation rules, I found a gap between them: validation accepts a
+stored layer that omits an argument with a default (the main exposure stored as `params: {}` is valid), but the law
+read `time_s` straight from the stored params, so a burn given in stops would have computed `t_main·(2^s − 1)` from
+`undefined`. The same gap hit coalescing, which multiplies each spot's `opacity` (defaulted to 1 in the schema). The
+law context's `args` now binds the params through `bindArgs` (list Colls to arrays, defaults filled, checked), so
+the laws always see complete arguments; a test stores the main as `{}` and spots without opacity or feather.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Finish P2a: review, fix, run the checks, report.
+
+**Inferred user intent:** A contract the next phases can rely on without surprises.
+
+**Commit (code):** b7a973f — "CHB-037 P2a: the laws read layer params with their defaults (a stored layer may omit a
+defaulted argument); stale recipe comments"
+
+### What I did
+- `compile.ts`: `LawContext.args` = `bindArgs(op, paramsToArgs(op, params))` (warnings collected in
+  `Compiled.warnings`); `cut(doc, g, name)` added for readers (commit 9ac785e).
+- New test "stored params may omit defaulted arguments" in `compile.test.ts`.
+- Fixed three stale comments that still said "recipe" (`source.ts`, `spec.ts`, `graph-types.ts`).
+
+### Why
+- One rule for what a stored value means: what validation accepts, the compiler must compile identically.
+
+### What worked
+- `npx vitest run packages/contract` → 7 files, 62 tests passed; `npx vitest run packages/values` → 51 passed.
+- `pnpm exec tsc -p packages/contract/tsconfig.json --noEmit` → clean.
+- `node tools/gen-docs/main.ts --contract-only --check` → `gen:check ok (15 files)`; `pnpm lint` → ok.
+- `docmgr doctor --ticket CHB-037` → all checks passed.
+
+### What didn't work
+- N/A (the gap was found by reading, before a test failed).
+
+### What I learned
+- Binding the params once, at the law boundary, also normalises shapes (boxes, points, polylines) the same way the
+  graph does, so the coalescing key (`canonicalJSON` of the non-list args) compares like with like.
+
+### What was tricky to build
+- Nothing new; the fix is one function. The subtlety is that validation and compilation read the same stored value
+  through different code (schema.ts's `checkParams` vs the law), so both must apply the op's defaults.
+
+### What warrants a second pair of eyes
+- That every law reads params only through `ctx.args` (light: `expose` and each term; composite/repair: each layer).
+
+### What should be done in the future
+- P2b: a conformance case per new or changed op; the "mask at scale s equals the full-scale mask resampled" law of
+  design §37 belongs to the engines (core and gpu), not to the contract.
+
+### Code review instructions
+- `packages/contract/src/compile.ts` (`Compiler.stack`, the `args` of the law context).
+- `npx vitest run packages/contract/test/compile.test.ts`.
+
+### Technical details
+- Contract tests per file: light-law 4, compile 18, document 11, links-bindings 5, registry-graph 9,
+  editlog-builders 5, units-laws (kept) 10.
