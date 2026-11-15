@@ -343,3 +343,106 @@ after the stars).
 
 ### Technical details
 - Link check: for each `](x.md)` in both chapters, `[ -f x.md ]` from `docs/patterns/modular/`.
+
+## Step 5: Revision after review
+
+A reviewer playing a second-year CS student with no image or GPU background read chapter 3 and sent nine findings,
+plus general lessons for every chapter. I applied the findings to chapter 3 by rewriting it, and the general lessons
+to chapters 3 and 4. The most serious error was mathematical: the chapter called coverage 0 "the identity" of every
+operator, but 0 is the zero of intersect, whose identity is 1, and "amount 0" is a setting that changes nothing,
+not an identity.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Revision round: a fresh reader (playing a second-year CS student with no image/GPU
+knowledge) reviewed chapter 3. Apply these findings to chapter 3, then apply the GENERAL lessons at the end to both
+your chapters (3 and 4). Edit only your two chapters and your diary (add a "Revision after review" step). Do not
+commit. Report changes and word counts before/after." (followed by nine chapter-3 findings and a list of general
+lessons, as sent by the coordinator)
+
+**Assistant interpretation:** Fix the listed errors in chapter 3. In both chapters, gloss or cut jargon, make the
+Solution general, cut 15–20 % of the implementation-note prose, define every name the sketches use, name the
+participants in a system that is not about images, and make the exercises doable without a GPU.
+
+**Inferred user intent:** Chapters that a student can read without the project's vocabulary and that are correct
+about the mathematics they teach.
+
+### What I did
+- Chapter 3:
+  - Solution: each operator has an identity and a zero. The laws and "grid" are now parenthesised as the mask case.
+    The solution adds that a panel can still open a description, which resolves the "uniform readers" force.
+  - Structure: separate Identity (0 for add, 0 on the right for subtract, 1 for intersect) and Start value rows.
+    Added a paragraph naming the readers in a search system and in a spreadsheet.
+  - Note 1: rewritten in terms of identity and zero.
+  - Note 3: the rounding came from the fade formula, not from the product. Lists the candidate laws and points to
+    property-based testing. "Compiler" became "renderer".
+  - Note 4: no longer claims that both programs use products; Editor lab's selections still use a minimum.
+  - Cuts: notes 6 and 7 merged into one, which points to chapters 1 and 2. Note 8 lost two sentences, note 11 moved
+    into Variations, and note 10 became a self-contained note (now 9) backed by a sketch rule. Also cut: Motivation
+    2's second bug, the golden-case count, and the "optimisation" sentence.
+  - Variations: algebra over stored images is now labelled "a weaker form".
+  - Vocabulary: "amount" became "strength" throughout this chapter. Glossed or removed: luminance (now
+    "brightness"), feather, antialiased, golden, parity, WGSL, opcodes, kernel, compiled document, frame operation,
+    software GPU, Lightroom.
+  - Sketch: `Mask` is now a `type` of function, called as `m(p, image)`, which removes the mix of `value` and lambda.
+    Added comments on why the image is passed, on `below`, on `prev`, on exactness at strength 1, and on the infix
+    shorthand. Feather is now an evaluator rule (`blur(rasterise(…))`).
+  - Exercises: ex 1 is a weighted ranked search; ex 2 makes a law test fail and then pass; ex 4 names cycles,
+    evaluation order, sharing and tree display. The crease exercise and the Unix-pipelines known use were dropped
+    for length.
+- Chapter 4:
+  - Solution generalised, with compositing in parentheses.
+  - Structure: one paragraph names the sort and ODE-solver participants.
+  - Sketch: defines `Colour`, straight colour, `lightness`, `withLightness`, `children`, `transparent`, `below`,
+    `mask`, `layer.pixel`, and says that pass-through mixes α as a fourth channel. The closing `}` of `modes` was
+    lost in one edit and restored.
+  - Notes: cut 16 % and glossed: "linear RGB" became "numbers proportional to light", "OkLCh" became "a
+    lightness–chroma–hue space", fusion became "the same pass, no extra image", and "gamut" became "colours the
+    screen cannot show". Platform names (WGSL, software GPU, kernels) and the book quotation were cut.
+  - Note 8 now says why its numbers matter: 1.1 × 10⁻⁴ on every mode (most within 5.3 × 10⁻⁶) against one 8-bit
+    step, 1/255 ≈ 0.004.
+  - Note 6 now names luminosity rather than "the whole-colour modes", matching the CHB-037 P8a diary (381-382).
+  - Note 11 now names the readers I found instead of "every part of the program".
+  - Exercises 1 and 2 now come with concrete data (a three-item list to sort; a 19.99 base price, 20 % tax, two
+    discounts).
+
+### Why
+- The identity and zero confusion would mislead any student who did exercise 1, which asks for exactly those terms.
+
+### What worked
+- I checked the new exercise 2 with Python. With `v + 1·(v·c − v)`, 160 of the 441 ordered pairs from i/20 fail to
+  commute, and the first failing pair, (0.05, 0.15), gives 0.0075 against 0.007500000000000007, the number from the
+  CHB-037 diary. With `v·c`, none fail.
+
+### What didn't work
+- One scripted edit to chapter 4's sketch dropped the closing `}` of `modes`; I saw it when printing the sketch and
+  restored it.
+
+### What I learned
+- "Exact laws" needs the vocabulary named precisely: identity, zero, left and right versions for operators like
+  subtract that are not symmetric.
+
+### What was tricky to build
+- Keeping both chapters within 2,800 words, code included, after the additions (the transfer paragraph, the law
+  list, the sketch comments). It took several rounds of cuts in Motivation, Variations, Known uses and Exercises.
+
+### What warrants a second pair of eyes
+- Chapter 3 says "strength" where chromobench's field is `amount`. The rename is deliberate (chapter 4 uses
+  "amount"/`k` for opacity × mask), but a reviewer may want one word across the volume.
+- The claim in note 9 of chapter 4 is that an unmasked per-pixel layer is blended in the same pass as the work
+  before it. The source is CHB-037 `11-phase-p8a-ops.md:201-203, 404-406` and `CB/packages/gpu/src/engine/dag.ts:12-39`.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- Check chapter 3's Structure, Solution and notes 1 and 3 for the identity and zero wording; then read chapter 4's
+  sketch for undefined names.
+
+### Technical details
+- Word counts (`wc -w` total / prose outside code blocks / implementation notes):
+
+| Chapter | Before | After |
+| --- | --- | --- |
+| 3 | 2,821 / 2,489 / 777 | 2,808 / 2,382 / 586 (notes −25 %) |
+| 4 | 2,688 / 2,348 / 714 | 2,798 / 2,354 / 597 (notes −16 %) |
