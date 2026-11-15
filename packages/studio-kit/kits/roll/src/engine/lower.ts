@@ -13,6 +13,10 @@ import { ALPHA, LIGHTS_PATHS, ROLL_CONSISTENCY, ROLL_TX, TIME_MAX_S, TIME_MIN_S,
 import { changedSets, setWithExpect, type MutationBatch } from './batch.ts';
 import { meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
 
+/** A batch id suffix: the clock in base 36 plus a counter, so two batches made in one millisecond differ. */
+let batchSeq = 0;
+const batchStamp = (): string => `${Date.now().toString(36)}.${(batchSeq++).toString(36)}`;
+
 /** Time on the time slider's grid: 10 s · 2^(k/6), clamped to 2…120 s. */
 export function gridTime(t: number): number {
   const k = Math.min(Math.floor(6 * Math.log2(TIME_MAX_S / TIME_REF_S)), Math.max(Math.ceil(6 * Math.log2(TIME_MIN_S / TIME_REF_S)), Math.round(6 * Math.log2(t / TIME_REF_S))));
@@ -158,7 +162,7 @@ export function matchBatch(roll: Roll, ref: FrameId, recipeOf: (f: FrameId) => F
   }
   const label = `Print the roll like ${ref}`;
   return {
-    id: o.id ?? `${ROLL_TX}match-${ref}-${Date.now().toString(36)}`, kind: 'match', by: 'user', frames, skipped, label,
+    id: o.id ?? `${ROLL_TX}match-${ref}-${batchStamp()}`, kind: 'match', by: 'user', frames, skipped, label,
     why: `${frames.length} frame${frames.length === 1 ? '' : 's'} printed like ${ref}: its lights and time as the aim, exposure corrected in full, colour by α = ${r6(alpha)}`,
     meta: { reference: ref, alpha },
   };
@@ -177,6 +181,6 @@ export function clearMatchBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecip
     ms.push(setWithExpect(rec, 'print.lights.auto', { ...rec.print.lights.auto, method: 'roll', matchFrame: null, matchAmount: null, rollConsistency: o.consistency ?? ROLL_CONSISTENCY, logH: r6v(total) }));
     frames.push({ frame: f, mutations: ms });
   }
-  return { id: o.id ?? `${ROLL_TX}clear-${Date.now().toString(36)}`, kind: 'clear-match', by: 'user', frames, skipped: [], label: 'Clear roll match', why: 'Frames back to their own roll-consistent first print' };
+  return { id: o.id ?? `${ROLL_TX}clear-${batchStamp()}`, kind: 'clear-match', by: 'user', frames, skipped: [], label: 'Clear roll match', why: 'Frames back to their own roll-consistent first print' };
 }
 
