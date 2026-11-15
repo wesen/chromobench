@@ -930,3 +930,59 @@ A persona session recommends Classic as the default for now. The integration bra
 
 ### Technical details
 - Integration branch `task/chb-037-unified-model` at b13cf3c (plus this step), not pushed.
+
+## Step 17: Editor lab parity inventory
+
+The owner asked which features of Editor lab (the programmable Photoshop-style editor shared as a claude.ai artifact)
+made it into chromobench. The artifact renders client-side (a read returns only "Loading the workbench…"), so the
+inventory came from the source archive, read-only, by an Explore agent; I checked uncertain chromobench features in
+the code and wrote `reference/03-editor-lab-parity-…md`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "in the imported claude.ai artifact for the phosothop programmable agent, which has a full
+set of tools, what are all the features that have and haven't made it into our chromobench project?"
+
+**Assistant interpretation:** An itemised have / have-not comparison between Editor lab and chromobench.
+
+**Inferred user intent:** Know what remains to port, and what was left out on purpose.
+
+**Commit (code):** (this step's commit) — reference document, diary
+
+### What I did
+- Artifact list → "Editor lab" (shared); `Artifact read` returned only the loading shell; its one published file is a
+  786 KB `index.html`. Unzipped `~/Downloads/editor-lab-work.zip` (14 Nov, 16:04) into its own scratch folder.
+- Explore agent inventory (14 groups, file:line, status tags; none of its code run).
+- Checked in chromobench: looks commands (`looks.saveAsPreset`, `saveLookAsPreset`, `importPreset`, `exportPreset`,
+  `bake`, `sync`…), compare views (`view.beforeAfter`, `view.sideBySide`, survey, ring-around, test strips,
+  navigator), histograms (only in the stack kit's editors), brush hardness (catalogue `mask.paint`), component
+  `amount`, no blur/grain/threshold/posterize/temperature ops in the catalogue.
+
+### Why
+- The comparison decides what to port next.
+
+### What worked
+- Editor lab's `src/` is small (~4,400 lines), so a line-by-line inventory was feasible.
+
+### What didn't work
+- `Artifact read` of the shared artifact: "The artifact contains almost no content … a loading message" (client-side
+  rendering).
+
+### What I learned
+- Editor lab has things chromobench lacks for daily use: selections, a standalone histogram, mask density and
+  per-component invert, on-stage mask handles, drag-to-redock.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- On-stage mask handle editing in chromobench: not verified in the browser.
+
+### What should be done in the future
+- Owner picks from the candidates list; selections remain an owner decision.
+
+### Code review instructions
+- `reference/03-editor-lab-parity-what-made-it-into-chromobench.md`.
+
+### Technical details
+- Editor lab source (untrusted, read-only): `<scratchpad>/editor-lab-src/editor-lab-work/editor-lab/`.
