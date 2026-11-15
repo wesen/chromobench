@@ -930,3 +930,119 @@ A persona session recommends Classic as the default for now. The integration bra
 
 ### Technical details
 - Integration branch `task/chb-037-unified-model` at b13cf3c (plus this step), not pushed.
+
+## Step 17: Editor lab parity inventory
+
+The owner asked which features of Editor lab (the programmable Photoshop-style editor shared as a claude.ai artifact)
+made it into chromobench. The artifact renders client-side (a read returns only "Loading the workbench…"), so the
+inventory came from the source archive, read-only, by an Explore agent; I checked uncertain chromobench features in
+the code and wrote `reference/03-editor-lab-parity-…md`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "in the imported claude.ai artifact for the phosothop programmable agent, which has a full
+set of tools, what are all the features that have and haven't made it into our chromobench project?"
+
+**Assistant interpretation:** An itemised have / have-not comparison between Editor lab and chromobench.
+
+**Inferred user intent:** Know what remains to port, and what was left out on purpose.
+
+**Commit (code):** (this step's commit) — reference document, diary
+
+### What I did
+- Artifact list → "Editor lab" (shared); `Artifact read` returned only the loading shell; its one published file is a
+  786 KB `index.html`. Unzipped `~/Downloads/editor-lab-work.zip` (14 Nov, 16:04) into its own scratch folder.
+- Explore agent inventory (14 groups, file:line, status tags; none of its code run).
+- Checked in chromobench: looks commands (`looks.saveAsPreset`, `saveLookAsPreset`, `importPreset`, `exportPreset`,
+  `bake`, `sync`…), compare views (`view.beforeAfter`, `view.sideBySide`, survey, ring-around, test strips,
+  navigator), histograms (only in the stack kit's editors), brush hardness (catalogue `mask.paint`), component
+  `amount`, no blur/grain/threshold/posterize/temperature ops in the catalogue.
+
+### Why
+- The comparison decides what to port next.
+
+### What worked
+- Editor lab's `src/` is small (~4,400 lines), so a line-by-line inventory was feasible.
+
+### What didn't work
+- `Artifact read` of the shared artifact: "The artifact contains almost no content … a loading message" (client-side
+  rendering).
+
+### What I learned
+- Editor lab has things chromobench lacks for daily use: selections, a standalone histogram, mask density and
+  per-component invert, on-stage mask handles, drag-to-redock.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- On-stage mask handle editing in chromobench: not verified in the browser.
+
+### What should be done in the future
+- Owner picks from the candidates list; selections remain an owner decision.
+
+### Code review instructions
+- `reference/03-editor-lab-parity-what-made-it-into-chromobench.md`.
+
+### Technical details
+- Editor lab source (untrusted, read-only): `<scratchpad>/editor-lab-src/editor-lab-work/editor-lab/`.
+
+## Step 18: CHB-039 merged — the mask overlay; CHB-040 opened; the owner's WebGPU error routed
+
+The mask overlay (CHB-039) is on the integration branch: O shows the selected layer's mask over the picture (tint,
+inverse, or the mask alone), evaluated from the same coverage node the stage laws apply. CHB-040 collects the Editor
+lab parity gaps the owner wants tracked (items 1–5). The owner's WebGPU error went to the CHB-038 agent.
+
+### Prompt Context
+
+**User prompt (verbatim):** "see i got the webgpu error loading DSC_8538.NEF after loading DSC_8535 and editing 8535 a
+bunch. I get Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit. - While
+calling [Queue].Submit([[CommandBuffer]]) in the console. Do we have a ticket for: 1. 2. 3. 4. 5. 6. ?" — then "not 6
+actually"
+
+**Assistant interpretation:** Fix the WebGPU error; say which parity gaps have tickets, and track the rest.
+
+**Inferred user intent:** A stable studio for testing, and a backlog he can steer.
+
+**Commit (code):** 83a3993 — "CHB-040: ticket for the Editor lab parity gaps (…)"; 0efacab — "Merge CHB-039 mask overlay
+(…)"
+
+### What I did
+- Routed the error to the CHB-038 agent (its spec includes fixing the WebGPU errors once capture exists): label every
+  GPU resource, reproduce locally with the owner's two NEFs (local only; console text only), a synthetic regression
+  test, fix texture lifetime against submission order. 160×107 is a 3:2 thumbnail size: a thumbnail render racing a
+  destroyed texture is the first suspect.
+- CHB-040 with five tasks (selections; simple adjustments; mask controls; a histogram panel; workspace
+  conveniences), linking CHB-035's selection decision and CHB-037's P9-12 (white balance) and P9-13 (multi-select).
+- Merged CHB-039: the scratchpad's `merge-phase.sh` had been lost in the session crash (first attempt: "no such file
+  or directory"); recreated, merged, checks: typecheck 0, lint, gen:check (26), vitest 139 files / 3397 passed / 19
+  skipped, goldens 66/66, contract 1.4.0 (CC-023). Told CHB-038 to merge and number its note CC-024.
+
+### Why
+- The owner tests on the integration branch's dev server; merging gives him the overlay at once.
+
+### What worked
+- CHB-039 needed no engine change: all three engines already evaluate `output.frame` on any channel count.
+
+### What didn't work
+- The first merge command ran the checks on the unmerged branch because the script was missing; the checks' counts
+  (137 files) gave it away.
+
+### What I learned
+- Keep coordination scripts in the repository's tools, not only in the scratchpad.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- CHB-039: while drawing with a mask tool the overlay shows the mask before the stroke (the new stroke appears on
+  release); a live draft preview is future work.
+
+### What should be done in the future
+- Merge CHB-038 with its WebGPU fix; restart the dev server if Vite does not pick up worker changes.
+
+### Code review instructions
+- `e2e/studio-mask-overlay.spec.ts`; `packages/contract/test/coverage.test.ts`.
+
+### Technical details
+- Keys: O show/hide, Shift+O colour, Alt+O mode; masks panel Overlay section; chip Shift-click/Alt-click.

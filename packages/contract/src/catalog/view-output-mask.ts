@@ -45,14 +45,14 @@ export const outputOps: OpDef[] = [
     see: ['output.encode', 'view.adapt'],
   }),
   defineOp({
-    name: 'output.frame', area: 'output', owner: 'CHB-011', on: 'Image', returns: 'Image', domainIn: 'display-rgb', domainOut: 'display-rgb',
+    name: 'output.frame', area: 'output', owner: 'CHB-011', on: 'Image', returns: 'Image', domainIn: ['display-rgb', 'mask'], domainOut: 'same',
     class: 'geometric', binding: 'setting',
     args: {
       orientation: { type: 'enum', values: [...ORIENTATIONS], default: 'none', doc: 'Orientation applied for display.', ui: { widget: 'select', label: 'Orientation', group: 'Frame' } },
       angle_deg: { type: 'number', unit: 'deg', min: -45, max: 45, default: 0, doc: 'Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0.', ui: { widget: 'slider', step: 0.1, detents: [0], label: 'Straighten', group: 'Frame' } },
       crop: { type: 'box', unit: 'px', optional: true, doc: 'Crop in document pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented.', ui: { widget: 'box', label: 'Crop', group: 'Frame' } },
     },
-    doc: 'Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).',
+    doc: 'Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels). On a mask (contract 1.4, CHB-039) it puts the mask where the display cut shows the picture: the viewer\'s mask overlay.',
   }),
   defineOp({
     name: 'output.encode', area: 'output', owner: 'CHB-011', on: 'Image', returns: 'Value', domainIn: 'display-rgb',

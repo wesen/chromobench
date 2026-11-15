@@ -201,6 +201,12 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
         }
         break;
       }
+      case 'mask': {
+        // the mask overlay (CHB-039): the entry's coverage node, put where the picture is by the display's geometry
+        const n = c.coverage(h.args['entry'] as string) ?? fail('E_ARG_RANGE', `${String(h.args['entry'])} acts through no mask`);
+        out = { named: n, shown: I('output.frame', [n.id], top.args) };
+        break;
+      }
       case 'testStrip': {
         const a = h.args as { vary: StripVary; step: number; count: number };
         const values = stripValues(a.vary, stripBase(a.vary, d), a.step, a.count);
@@ -243,7 +249,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     if (t.signal.aborted) throw new DOMException('aborted', 'AbortError');
     const image: PresentImage = { width: res.width, height: res.height, channels: res.info.channels, data, region: res.region, scale: res.scale };
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    if (!bands) this.measured(res.width * res.height, now - t0);
+    if (!bands && h.what !== 'mask') this.measured(res.width * res.height, now - t0);
     return { image, srcW: W, srcH: H, ms: now - t0 };
   }
 }

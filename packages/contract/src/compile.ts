@@ -44,6 +44,14 @@ export interface Compiled {
   /** The nodes each entry compiled to (a coalesced run shares one). */
   readonly entries: Readonly<Record<Id, readonly string[]>>;
   readonly warnings: readonly Diagnostic[];
+  /**
+   * The coverage an entry acts through (contract 1.4, CHB-039): its mask times the masks of the groups around it
+   * (`mask.combine` intersect, outermost first: the light law's product, so the same nodes), compiled for its stage;
+   * a group's is its own mask times its parents'. Null when neither it nor a group around it has a mask, or when no
+   * stage holds the id. A disabled entry's mask compiles too (the overlay shows it). In document pixels, like every
+   * mask: `output.frame` with the display cut's geometry puts it where the picture is.
+   */
+  coverage(entry: Id): Node | null;
 }
 
 /** The media fields that set the pitches: literals, never bound (every stage converts physical sizes with them). */
@@ -196,6 +204,38 @@ class Compiler {
     return v;
   }
 
+  /** Compiled.coverage: the entry's mask chain (outer group first) as one node, or null. */
+  coverage(entry: Id): Node | null {
+    const find = (stack: Coll<Entry>, masks: Id[]): Id[] | null => {
+      for (const [id, e] of Coll.entries(stack)) {
+        const ms = e.mask ? [...masks, e.mask] : masks;
+        if (id === entry) return ms;
+        if (e.kind === 'group') {
+          const hit = find(e.stack, ms);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    for (const s of Object.keys(STAGES) as StageName[]) {
+      const st = this.doc.stages[s];
+      const chain = st ? find(st.stack, []) : null;
+      if (!chain) continue;
+      if (!chain.length) return null;
+      let v: string | undefined;
+      for (const id of chain) {
+        const m = Coll.get(this.doc.masks, id);
+        if (m && m.reads !== 'stage-input' && !readableCuts(s, this.kind, 'mask').includes(m.reads)) {
+          fail('E_CUT', `mask ${id} reads ${m.reads}, which is not compiled before the ${s} stage`, { path: `${id}.reads`, valid: readableCuts(s, this.kind, 'mask') });
+        }
+        const n = this.mask(id, s);
+        v = v === undefined ? n : this.I('mask.combine', [v], { other: n, mode: 'intersect', amount: 1 });
+      }
+      return this.g.get(v!)!;
+    }
+    return null;
+  }
+
   /** A colour component measures OkLab: the cut it reads (a composite stage's XYZ) in that stage's OkLab encoding. */
   private colourInput(cut: string, reads: CutName, at: string): string {
     const d = this.g.get(cut)!.info;
@@ -296,7 +336,10 @@ class Compiler {
     const geo = d.geometry;
     const top = I('output.frame', [disp], { orientation: geo.orientation, angle_deg: geo.angle_deg, ...(geo.crop ? { crop: geo.crop } : {}) });
     this.setCut('display', top);
-    return Object.freeze({ doc: d, cuts: Object.freeze({ ...this.cuts }), display: this.cuts.display!, entries: Object.freeze({ ...this.entries }), warnings: this.warnings });
+    return Object.freeze({
+      doc: d, cuts: Object.freeze({ ...this.cuts }), display: this.cuts.display!, entries: Object.freeze({ ...this.entries }), warnings: this.warnings,
+      coverage: (entry: Id) => this.coverage(entry),
+    });
   }
 }
 

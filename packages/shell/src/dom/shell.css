@@ -281,6 +281,8 @@ textarea.ck-field-i { height: 64px; padding: 4px 6px; resize: vertical; }
 /* ── the viewport ────────────────────────────────────────────────────── */
 .ck-vp { position: relative; overflow: hidden; background: var(--canvas); outline: none; touch-action: none; min-height: 0; min-width: 0; flex: 1; }
 .ck-vp-c { position: absolute; inset: 0; display: block; }
+.ck-vp-cover { position: absolute; inset: 0; display: block; pointer-events: none; }
+.ck-vp-cover[hidden] { display: none; }
 .ck-vp:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--line2); }
 .ck-vp-o { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .ck-vp.is-drop { box-shadow: inset 0 0 0 3px var(--accent); }

@@ -35,6 +35,7 @@ import { createChatKit } from '../kits/chat/src/kit.ts';
 import { createStackKit } from '../kits/stack/src/kit.ts';
 import { createDiagnosticsKit } from '../kits/diagnostics/src/kit.ts';
 import { MASK_TOOLS } from '../kits/stack/src/commands.ts';
+import { maskCover } from '../kits/stack/src/overlay.ts';
 
 // layouts' lines, not studio-kit's, are the call sites of their nodes
 libraryRoot(new URL('.', import.meta.url).href);
@@ -154,6 +155,8 @@ export function createCb(ck: Ck) {
     overlays?: unknown[];
     hud?: NodeData;
     label?: (s: any) => string;
+    /** the mask overlay over the print (CHB-039; default on): the selected entry's mask as a tint or alone */
+    cover?: boolean;
   }
   const withProposal = (h: ImageHandle | null, s: any): ImageHandle | null => {
     const tx = s.ui?.showProposal;
@@ -170,14 +173,16 @@ export function createCb(ck: Ck) {
     const id = o.id ?? 'main';
     const views = o.views === true ? [...VIEW_MODES] : o.views || null;
     const before = o.compare ? (typeof o.compare === 'object' && o.compare.before ? o.compare.before : (s: any) => sel.frame(s)?.initial().print() ?? null) : null;
+    const shown = (s: any): ImageHandle | null => {
+      let h = fn(s);
+      if (views) h = withView(h, s);
+      return withProposal(h, s);
+    };
     const vp = ck.viewport(
-      (s: any) => {
-        let h = fn(s);
-        if (views) h = withView(h, s);
-        return withProposal(h, s);
-      },
+      shown,
       {
         id,
+        ...(o.cover === false ? {} : { cover: (s: any) => maskCover(s, shown(s)) }),
         ...(o.tools ? { tools: o.tools.filter(t => t !== 'ring-around') } : {}),
         ...(before ? { compare: true, before: (s: any) => (views ? withView(before(s), s) : before(s)) } : { compare: false }),
         overlays: o.overlays ?? [],

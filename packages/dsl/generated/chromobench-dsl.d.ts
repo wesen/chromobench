@@ -407,6 +407,9 @@ export interface MaskHandle extends ImageHandleBase {
     patches(args?: Partial<OpArgs["measure.patches"]>): ValueHandle<{ cells: unknown }>;
     stats(args?: Partial<OpArgs["measure.stats"]>): ValueHandle<{ mean: unknown; p01: unknown; p99: unknown; clipLow: unknown; clipHigh: unknown }>;
   };
+  readonly output: {
+    frame(args?: Partial<OpArgs["output.frame"]>): MaskHandle;
+  };
   readonly view: {
     inspect(args?: Partial<OpArgs["view.inspect"]>): DisplayRgbHandle;
   };
