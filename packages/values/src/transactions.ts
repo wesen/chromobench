@@ -3,7 +3,7 @@
 // immutable, so a failure simply returns nothing). The applied transaction holds the mutations in normal form and
 // `inverses[i]`, the exact inverse of `mutations[i]`; undo applies the inverses from the last to the first.
 import { fail } from './errors.ts';
-import type { JsonObject } from './json.ts';
+import { deepFreeze, type JsonObject } from './json.ts';
 import { applyMutation, type ApplyOptions, type Mutation } from './mutations.ts';
 
 export type Author = 'user' | 'agent' | 'auto';
@@ -33,18 +33,18 @@ export interface TransactionInit {
   mutations: readonly Mutation[];
 }
 
-/** A new transaction (pending, no inverses yet). */
+/** A new transaction (pending, no inverses yet), deep-frozen (its source and items are frozen in place). */
 export function transaction(init: TransactionInit): Transaction {
-  return Object.freeze({
+  return deepFreeze<unknown>({
     id: init.id,
     label: init.label,
     by: init.by,
     source: init.source ?? {},
     ...(init.batch === undefined ? {} : { batch: init.batch }),
     status: init.status ?? 'pending',
-    mutations: Object.freeze(init.mutations.slice()),
-    inverses: Object.freeze([]),
-  });
+    mutations: init.mutations.slice(),
+    inverses: [],
+  }) as Transaction;
 }
 
 export interface TxOptions<W = unknown, D extends object = object> extends ApplyOptions<W, D> {

@@ -21,7 +21,8 @@ E_INTERNAL).
 
 ## Immutable values
 
-Everything this package returns is frozen. `deepFreeze(v)` freezes plain objects and arrays in place, all the way
+The values, modifiers, collections, documents and transactions this package builds are frozen (the `Coll` helpers
+freeze the containers they make, not the items you put in; the mutations freeze what they insert). `deepFreeze(v)` freezes plain objects and arrays in place, all the way
 down; `document(d)` freezes a document and checks it. `equal(a, b)` is JSON equality (key order and undefined keys do
 not count; `0` equals `−0`) and holds exactly when `canonicalJSON(a) === canonicalJSON(b)`.
 

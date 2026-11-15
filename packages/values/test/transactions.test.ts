@@ -70,3 +70,14 @@ describe('transactions', () => {
     expect(() => invertTransaction(tx)).toThrow(/apply it first/);
   });
 });
+
+describe('transaction values', () => {
+  it('are deep-frozen plain JSON', async () => {
+    const { isDeepFrozen } = await import('../src/index.ts');
+    const tx = transaction({ id: 't7', label: 'x', by: 'user', source: { kind: 'gesture', control: 'amount' }, mutations: [insert('stack', 'n', { a: [1] })] });
+    expect(isDeepFrozen(tx)).toBe(true);
+    const a = applyTransaction(doc(), tx);
+    expect(isDeepFrozen(a.tx)).toBe(true);
+    expect(JSON.parse(JSON.stringify(a.tx))).toEqual(a.tx);
+  });
+});
