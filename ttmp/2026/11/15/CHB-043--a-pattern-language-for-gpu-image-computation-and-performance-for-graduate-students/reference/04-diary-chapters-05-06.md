@@ -254,3 +254,92 @@ after its read was awaited).
 - None required. Optional: the overview's notation table could add `barrier()` and "over workgroups of G × G" for
   kernels that cooperate within a workgroup (chapter 6's sketch uses both, defined in comments).
 
+## Step 5: Revision after review
+
+A first-year PhD reader reviewed chapter 6; the coordinator relayed twelve findings and general lessons for both
+chapters. Chapter 6 was rewritten around a stated cost model and precise device semantics; chapter 5 gained a cost
+model for the interpreter and lost its task IDs and its out-of-scope Solution sentences. Final counts: chapter 5
+2,996 prose words (3,731 raw), chapter 6 2,989 prose words (4,057 raw). I did not run mermaid-cli (the coordinator
+renders the diagram).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1; the revision request came from the coordinator, relayed findings 1–12 and
+"GENERAL LESSONS")
+
+**Assistant interpretation:** Apply the findings to chapter 6 and the general lessons to both; edit only the two
+chapters and this diary; report changes and word counts.
+
+**Inferred user intent:** Chapters a graduate reader can check line by line: numbers recomputed, semantics portable.
+
+### What I did (chapter 6)
+- Finding 1: `Partial` identity is now `EMPTY = (0, 0, 0, 0)` with `combine` ignoring operands of count 0; no
+  infinity literal.
+- Finding 2: Motivation no longer says what a read waits for; note 2 states the spec guarantee (earlier commands
+  using the buffer) and common implementation behaviour (whole queue), MAP_READ only with COPY_DST, copy recorded in
+  the producing batch, unmap before submit, 256-byte row padding (chromobench pads/unpads: `CB/packages/gpu/src/
+  chain/run.ts:155, 163-166`). The sketch now has `mappable`, `copyOut`, `mapped`, `unmap`; export uses two device
+  stages and two mappable buffers, unmapped after `encodeRows`.
+- Finding 3: note 7 rewritten. Enumeration (Python/numpy, my script, not kept): over all 8,388,608 f32 values in
+  [0.5, 1), floor(0.5 + fl32(65535·v)) and floor(fl32(65535·v + 0.5)) (FMA) each differ from the exact rule in
+  16,384 values = 2⁻⁹ exactly, always +1 code, and agree with each other; first case v = 0.5000152587890625 (exact
+  32768, f32 32769). Over f32 values in [2⁻¹⁵, 0.5): 1.4 × 10⁻⁴. NaN: host `toU16` maps NaN to 0
+  (`CB/packages/output/src/encode/quantise.ts:9`); WGSL's result is indeterminate.
+- Finding 4: histogram sketch guards w ≤ 0 (constant image → bin 0), `clear(bins)` in the batch, range computed on
+  the device by `rangeOf` from the partials (one wait). Note 5: 16 KiB default workgroup storage; 4,096 u32 = 16 KiB;
+  chromobench's moments use 3 × 4 KiB + 1 KiB = 13 KiB (`CB/packages/gpu/kernels/reduce.wgsl:15-18`; only the arrays
+  an entry point uses count).
+- Finding 5: Motivation says there is no bus on the M1 Max; the 3 GB/s is the browser's wait/copy/hand-over path.
+  Note 1 gives T = Σ(L + b/β) + idle; probe rates (my arithmetic): readback 24e6 B/6.5 ms = 3.7, 96e6/26 = 3.7,
+  171.1e6/56.3 = 3.0 GB/s; upload 4.1, 4.4, 4.5 GB/s; no visible intercept. PCIe 4.0 × 16: 31.5 GB/s per direction
+  theoretical; ≈ 25 GB/s pinned, less pageable (general knowledge, stated as "about"). Forces break-even (MiB/KiB,
+  my arithmetic): 39L > (40 MiB − 40 × 40 KiB)/3 GB/s → L > 0.34 ms.
+- Finding 6: working image verified: GPU engine long side 4000 by default (`CB/apps/studio/src/host/engines.ts:34,
+  112`), decode area-averages to it (`CB/apps/studio/src/host/decode.ts:3`); CHB-041's "164 MB" is 4000 × 2686 ×
+  16 B = 163.9 MiB (the journal's MB are MiB: `engine-gpu.ts` formats with 2²⁰). Staging 4000 × 2686 × 12 B =
+  122.9 MiB ("123 MiB"). measure()'s upload is three-channel: 4000 × 2674 × 12 B = 122.4 MiB, ≈ 29 ms at 4.5 GB/s.
+  All sizes now MiB/KiB; bandwidths stay GB/s (10⁹ B/s), times computed in bytes.
+- Finding 7: Forces says "reproducible", not "exact"; note 4 gives first-order (n − 1)u = 0.638 and rigorous
+  γₙ₋₁ = 1.76; same bits across devices only with the same subnormal handling.
+- Finding 8: diagram has the fourth crossing (windows down "once per edit, cached", 54 numbers up); text says "only
+  the labelled arrows". Sketch: every buffer retired after its fence; `present`, `render`, `T` defined; the `seam`
+  function removed (note 10 points to chapter 9); `uploadCompact` always retires staging (no pool branch).
+- Finding 9: Solution replaced by the reviewer's text, adapted (five sentences).
+- Finding 10: measure() debt folded into note 9 (one sentence); staging bug reduced to one sentence in note 8 with a
+  link to chapter 7; double-copy remark dropped; OpenGL PBO and GPUDirect dropped; task IDs removed.
+- Finding 11: note 3 lists hidden waits (cudaMemcpy, pageable cudaMemcpyAsync, cudaFree; .item(), .cpu(), .tolist(),
+  nonzero(), boolean-mask indexing; stream/event/device synchronise). Glosses added: staging buffer, mappable buffer,
+  pinned memory, unorm, atomic adds, workgroup and workgroup memory, copy engine, external texture, indirect
+  dispatch, presenter, print chain, exposure time, parity tests, software adapter. (receiver/nodeKey no longer used.)
+- Finding 12: exercises rewritten: Ex 1 gives β = 3 and 25 GB/s, L from 10 µs to 20 ms, and the break-even
+  6L > 163 MiB/β (9.5 ms and 1.1 ms, my arithmetic); Ex 2 is a double-buffering throughput bound plus reproducing
+  2⁻⁹; Ex 3 models the drain bubble L + H and asks for the asynchronous copy with an event.
+
+### What I did (chapter 5)
+- Units: 163 MiB per image, 326 MiB per pass, 3.8 GiB for twelve passes, 30 KiB of WGSL (30,422 B = 29.7 KiB).
+- Task ID P10-8 removed.
+- Solution reduced to the invariant (five sentences); pipeline keys and op-table generation stay in the notes.
+- New note 2: cost model. Fusion pays while c < 2B·F/β = 32 × 5e12 / 4e11 = 400 instructions (my arithmetic, F ≈
+  5 × 10¹² lane instructions/s: 32 cores × 128 ALUs × ≈ 1.3 GHz, nominal); specialisation saves P·k·c/F =
+  10.7e6 × 12 × 10 / 5e12 = 0.26 ms per evaluation, paying after C·F/(P·k·c) ≈ 308 evaluations at C = 79 ms
+  ("about 300"); also wins above the ridge or when registers cut occupancy.
+- Note 1: why divergence is nil (dynamically uniform condition from one uniform buffer), plus a CUDA line (constant
+  memory broadcast). Note 9: WebGPU's 16 KiB default workgroup storage.
+- Sketch: per-program uniform and data buffers are uploaded explicitly and retired after the fence.
+- Glosses added: SIMD group, dispatch, materialised, backdrop, parity suite, Metal, M1 Max, film-model terms.
+- Exercise 2 now extends note 2 with an occupancy factor α instead of repeating it.
+- Trimmed: Collaborations 4–5 merged, note 3 shortened, Known uses tightened, Variations shortened.
+
+### What warrants a second pair of eyes
+- WebGPU `mapAsync` wording: I state the guarantee as "earlier commands using that buffer have finished"; please
+  check against the current spec text.
+- CUDA default static shared memory 48 KiB per block, `cudaFree` synchronising, PyTorch synchronising calls: general
+  knowledge, not from the example programs.
+- The mermaid diagram (now 9 nodes, 9 edges, one cycle C → H4 → C) is unrendered by me.
+
+### Consistency fix (after Step 5)
+- On the chapter 7–8 writer's check (relayed by the coordinator): the working image is 4000 × 2674 (`engines.ts:112`;
+  CHB-034 diary line 303), so one rgba32float source is 171,136,000 B = 163 MiB and the f32 RGB staging buffer
+  4000 × 2674 × 12 B = 122.4 MiB. CHB-041's "4000 × 2686" figure is superseded. Chapter 6 note 8 now says
+  "4,000 × 2,674 working image, 163 MiB … 122 MiB staging … 512 MiB budget" in one sentence and links to chapter 7,
+  which carries the staging story. Chapter 6: 2,989 prose words, 4,058 raw.

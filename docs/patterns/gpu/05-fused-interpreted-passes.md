@@ -16,16 +16,17 @@ Uber-shader; interpreted pipeline; stage list; bytecode kernel; fusion by interp
 
 ## Motivation
 
-The running example, chromobench, prints a photograph through about thirty operations, most of them pointwise (each
-output pixel depends only on the same input pixel: density, dye inversion, paper exposure, display encoding), and,
-above the print, up to a dozen digital layers (exposure, curves, hue bands, a channel mixer). A full-size image of
-4,000 × 2,674 pixels stored as `rgba32float` (four 32-bit floats per pixel) is 171 MB, so every pass that reads one
-image and writes another moves 342 MB. Three ways of running such a chain on the GPU fail.
+The running example, chromobench, prints a photograph through a numerical film and paper model of about thirty
+operations, most of them pointwise: each output pixel depends only on the same input pixel (the film's density, the
+dyes that formed it, the light reaching the paper, the encoding for the screen). Above the print sit up to a dozen
+digital layers (exposure, curves, hue bands, a channel mixer). A 4,000 × 2,674 image stored as `rgba32float` (four
+32-bit floats per pixel) is 163 MiB, so a pass that reads one image and writes another moves 326 MiB. Three ways of
+running such a chain on the GPU fail.
 
 1. **One kernel per operation.** A kernel is the function the GPU runs once per pixel. An exposure change reads 16
    bytes, writes 16 and does about a dozen arithmetic operations, under half an operation per byte. Twelve such
-   steps as twelve passes move 4.1 GB; at an M1 Max's nominal 400 GB/s that is 10 ms of memory traffic, against
-   under 1 ms for one pass doing all twelve. The arithmetic is nearly free; the trips through memory are not.
+   steps as twelve passes move 3.8 GiB; at the nominal 400 GB/s of an M1 Max (Apple's laptop chip) that is 10 ms of
+   memory traffic, against under 1 ms for one pass doing all twelve.
 2. **One generated kernel with the values written in.** Editor lab, the teaching editor, generated one shader per
    fused run of layers and wrote every parameter into the source as a literal, so the compiler could fold it. Every
    slider step changed the text, and every new text was a new compile: 79 ms in its textbook's measurement, nearly
@@ -60,15 +61,13 @@ without compiling a GPU program per value or per combination?**
 
 ## Solution
 
-**Therefore: compile one kernel that interprets a program, so that every edit changes data and never code.** Encode
-each pointwise operation as an operation code with a fixed number of parameter slots and an offset into a side buffer
-for variable-sized data (matrices, curve knots), and give the kernel a bounded loop with one case per code; because
-the program is the same for every pixel, every invocation takes the same branch. Lower each run of pointwise
-operations into such programs, and start a new pass only where an operation reads neighbours or several images, where
-the program's slots or resource bindings run out, or where a value must be kept. Key compiled pipelines by everything
-that decides the machine code (source text, entry point, constants, layout), compile them asynchronously before first
-use, and generate the operation table for both languages from one declaration. Specialise only where a measurement
-shows that the interpreter costs more than the bandwidth it saves.
+**Therefore: compile one kernel that interprets a program, so that every edit changes data and never code.** Each
+pointwise operation is an operation code with fixed parameter slots and an offset into a side buffer for variable-sized
+data (matrices, curve knots); the kernel loops over a bounded program with one case per code. The program is the same
+for every element, so every invocation takes the same branch and nothing diverges. A run of pointwise operations
+becomes one program; a new pass starts only where an operation reads neighbours or several images, or where the
+program's slots or resource bindings run out. Specialise a kernel only where the cost model and a measurement show
+that the interpreter costs more than the compiles it avoids.
 
 ## Applicability
 
@@ -108,10 +107,8 @@ bytecode, the column vectors, the primitive loop over a vector, the query-plan c
    nodes between materialised images.
 3. The lowerer turns each node into one operation (a fused blend into a span of several), with parameters prepared
    on the host, and cuts a new program when slots or bindings run out.
-4. For each program the engine packs the parameter block, writes the side data, binds the program's tables and
-   dispatches the interpreter over the output grid; the next program reads the previous one's output.
-5. The cache returns the same pipeline every time: an edit changes bytes in buffers only, and parity tests compare
-   each code and each program with the reference engine.
+4. For each program the engine uploads the parameter block and side data and dispatches (launches) the interpreter
+   over the output grid; the next program reads the previous one's output. An edit changes bytes in buffers only.
 
 ## Sketch
 
@@ -176,9 +173,9 @@ run(programs, src, grid) → image:
   pipe ← await cache.get(INTERPRETER)
   input ← src ; temps ← []
   for prog in programs:
-    out ← allocate(grid)
-    dispatch(pipe, grid, { prog: pack(prog), data: prog.data, tables: prog.tables, src: input, dst: out })
-    if input ≠ src: temps ← temps ++ [input]
+    out ← allocate(grid) ; u ← upload(pack(prog)) ; d ← upload(prog.data)
+    dispatch(pipe, grid, { prog: u, data: d, tables: prog.tables, src: input, dst: out })
+    temps ← temps ++ [u, d] ++ ([input] if input ≠ src else [])
     input ← out
   fence ← submit(batch)                          -- batch: the dispatches recorded above, one submission
   for t in temps: retire(t, after: fence)        -- Chapter 8: free only after the device is done
@@ -191,65 +188,72 @@ shown ← run(programs, source, screenGrid)        -- same pipeline as the previ
 
 ## Implementation notes
 
-1. **A uniform switch does not diverge; measure what remains.** GPUs run invocations (one per pixel) in groups that
-   share an instruction stream; a branch costs extra only when lanes of a group disagree (divergence). The
-   interpreter's branch depends on the program alone, so all lanes agree. What remains is a few scalar instructions
-   per operation per pixel, registers allocated for the costliest case, and no folding across operations. On the
-   M1 Max, chromobench compiled unused digital operations and blend modes out with override constants: nothing
-   changed measurably. Six unmasked digital layers added about 1 ms to a preview and 15–20 ms to a full-size export;
-   one masked layer added 30 ms and 120 ms (three materialised textures and a combine pass). The barriers cost; the
-   interpreter did not.
-2. **A cache cannot rescue baked constants.** A pipeline cache keyed by source text is useless when values are in
-   the text: each slider position is a new key, the hit rate during a drag is zero, and the cache grows with the
-   user's history. Moving values into a block makes the cache work; making the program data makes it hold one entry.
-   chromobench's block (twelve op slots, twenty-four parameter slots, the chain's matrices) is about 0.9 KiB, far
-   below WebGPU's 64 KiB default for a uniform buffer (a small read-only parameter block). Curves, hue bands and
-   mixer matrices travel beside it in a storage buffer (a larger read-only array), each at an offset its operation
-   names, so the block's layout never changes.
-3. **Cut where bindings run out, not only where neighbours are read.** chromobench's lowerer starts a new program when
-   twelve operations are used, when two operations need different tables in the same binding slot (one dye-solve
-   table, one printing-density table and one print table per dispatch), or when a second display transform arrives.
-   Each cut costs an intermediate written and read: 342 MB at full size, about 0.9 ms at 400 GB/s. Report cuts and
-   their reasons with the plan, so an engineer sees why a chain took three passes instead of one.
-4. **A register turns a diamond into a line.** A blend reads two images and looks like a barrier. When its top is a
-   short pointwise chain applied to its own backdrop, both inputs are functions of the same pixel. chromobench fuses
+1. **A uniform switch does not diverge; measure what remains.** GPUs run invocations (one per pixel) in SIMD groups,
+   lanes that execute one instruction stream together; a branch costs extra only when lanes disagree (divergence).
+   Every lane reads the same op code from the same uniform buffer (a small read-only parameter block), so the
+   condition is dynamically uniform and all lanes take the same case. What remains is a few instructions per
+   operation per pixel, registers allocated for the costliest case, and no folding across operations. On the M1 Max,
+   chromobench compiled unused digital operations and blend modes out with override constants (values fixed when a
+   pipeline is created): nothing changed measurably. Six unmasked digital layers added about 1 ms to a preview and
+   15–20 ms to a full-size export; one masked layer added 30 ms and 120 ms (three materialised, that is fully stored,
+   textures and a combine pass). The barriers cost; the interpreter did not. In CUDA the program would sit in
+   constant memory, which broadcasts a value read by every thread of a warp in one access.
+2. **A cost model says when to fuse and when to specialise.** Per pixel and fused step, fusion saves an intermediate
+   write and read, 2B bytes (32 for `rgba32float`), worth 2B/β at bandwidth β; the interpreter spends c instructions
+   (load the op, branch, loop), worth c/F at a per-lane instruction rate F. Fusion pays while c < 2B·F/β. With
+   β = 400 GB/s and F ≈ 5 × 10¹² per second (nominal figures for the M1 Max), the right side is about 400, far above
+   the ten or so instructions of a switch. A specialised kernel removes c and folds across steps, saving about
+   P·k·c/F per evaluation: 0.25 ms for k = 12 steps of c = 10 over P = 10.7 million pixels. A compile of C then pays
+   after C·F/(P·k·c) evaluations of one structure, about 300 at C = 79 ms; a drag never gets there, an inference
+   graph run a million times does. Specialisation also wins above the roofline's ridge (F/β operations per byte),
+   where arithmetic, not memory, bounds the kernel, or when the worst case's registers cut occupancy: measure both.
+3. **A cache cannot rescue baked constants.** A pipeline cache keyed by source text is useless when values are in
+   the text: each slider position is a new key, and the hit rate during a drag is zero. Making the program data
+   leaves one entry. chromobench's block (twelve op slots, twenty-four parameter slots, the chain's matrices) is
+   about 0.9 KiB, far below WebGPU's 64 KiB default for a uniform buffer; curves
+   and matrices go beside it in a storage buffer (a larger read-only array), so the block's layout never changes.
+4. **Cut where bindings run out, not only where neighbours are read.** chromobench's lowerer starts a new program when
+   twelve operations are used, when two operations need different tables of the film model in the same binding slot
+   (three slots per dispatch), or when a second display transform arrives. Each cut costs an intermediate written
+   and read: 326 MiB at full size, about 0.9 ms at 400 GB/s. Report cuts and their reasons with the plan.
+5. **A register turns a diamond into a line.** A blend reads two images, a top and a backdrop (the image beneath),
+   and looks like a barrier. When its top is a short pointwise chain applied to its own backdrop, both inputs are
+   functions of the same pixel. chromobench fuses
    such a blend with two codes: `SAVE` copies the pixel into a backdrop register, the top's operations run, and `MIX`
    blends the register with the result. The register lives only within one dispatch, so the lowerer keeps the span
    whole, and the planner makes a blend whose top exceeds ten operations a barrier instead. All 32 unmasked blends
-   in its parity suite fused.
-5. **Generate the operation table for both languages; this is chromobench's open debt (task P10-8).** Its operation
-   codes are written three times: in the host table, as named constants in the kernel that nothing uses, and as bare
-   case labels such as `case 19u`. The program length, 12, appears in the host, in a kernel constant and as the
-   length of the kernel's operation array. The default case does nothing, so a code the kernel lacks is silently
-   the identity. The kernel linker already generates colour matrices from the host's numbers ("one definition for
-   both engines"); generate the codes too, and make the default case write NaN.
-6. **Key pipelines by what decides the machine code, and make the key cheap.** chromobench hashes the source text,
-   entry point, override constants and layout. The linked interpreter is about 30 kB of WGSL (the WebGPU shading
+   in its parity suite (comparisons with the 64-bit reference engine) fused.
+6. **Generate the operation table for both languages; this is chromobench's open debt.** Its operation codes are
+   written three times: in the host table, as unused named constants in the kernel, and as bare case labels such as
+   `case 19u`; the program length, 12, three times too. The default case does nothing, so a code the kernel lacks is
+   silently the identity. The kernel linker already generates colour matrices from the host's numbers; generate the
+   codes too, and make the default case write NaN.
+7. **Key pipelines by what decides the machine code, and make the key cheap.** chromobench hashes the source text,
+   entry point, override constants and layout. The linked interpreter is about 30 KiB of WGSL (the WebGPU shading
    language), and every program and combine pass hashed it to find its pipeline. When the kernels grew by a third, a
    tiled export became 3–6 % slower; memoising the hash by the string fixed it. The lookup is on the hot path.
-7. **Compile before the gesture, and know what it cost.** Pipelines compile asynchronously; concurrent requests
+8. **Compile before the gesture, and know what it cost.** Pipelines compile asynchronously; concurrent requests
    share one compile, and a failed compile leaves the cache so that a retry can succeed. The engine prewarms the
    interpreter, the reductions and the combine kernel at creation. The debt: compile times are recorded and never
    read, so nobody knows what the prewarm saves ([Chapter 10](10-measure-completion-gate-percentiles.md)).
-8. **The interpreter reserves for its costliest case.** chromobench's kernel declares 3.5 KiB of workgroup memory
-   (on-chip memory shared by one group of invocations) to stage spectra for the exact export solve. Every dispatch
-   reserves it, even for an exposure and a curve. Where workgroup memory limits how many groups run at once, this
-   lowers occupancy (resident groups that hide memory latency). It is unmeasured; if it shows, one override constant
-   pays here: two pipelines, not one per structure.
-9. **Test per code, then per program.** A program of one operation compared with the reference isolates that code's
-   error; random programs catch interactions, such as an operation that leaves the backdrop register stale.
-   chromobench compares every code and encoding with its 64-bit reference (within 5.8 × 10⁻⁶ on Metal) and six
-   fixed stacks of layers; it does not generate random programs.
+9. **The interpreter reserves for its costliest case.** chromobench's kernel declares 3.5 KiB of workgroup memory
+   (on-chip memory shared by one group of invocations; WebGPU guarantees 16 KiB) to stage spectra for the exact
+   export solve. Every dispatch reserves it, even for an exposure and a curve. Where workgroup memory limits how many
+   groups run at once, this lowers occupancy (resident groups that hide memory latency). It is unmeasured; if it
+   shows, one override constant pays here: two pipelines, not one per structure.
+10. **Test per code, then per program.** A program of one operation compared with the reference isolates that
+    code's error; random programs catch interactions, such as an operation that leaves the backdrop register stale.
+    chromobench compares every code with its 64-bit reference (within 5.8 × 10⁻⁶ on Metal, Apple's GPU interface)
+    and six fixed stacks of layers; it does not generate random programs.
 
 ## Variations
 
 - **A generated kernel per structure.** Compile once per sequence of operation kinds, values in a block: the fastest
-  steady state, a compile per new structure. Right for machine-learning graphs, compiled once and run millions of
-  times.
-- **Interpret now, specialise in the background.** Serve every frame from the interpreter while a kernel specialised
-  to the current structure compiles off the critical path, then switch to it. Best of both, at the price of two
-  implementations that must agree; Dolphin's hybrid ubershaders and tiered just-in-time compilers work this way.
-- **Specialisation by a few switches.** Override constants (values fixed when a pipeline is created) remove whole
+  steady state, a compile per new structure. Right past note 2's break-even (graphs run millions of times).
+- **Interpret now, specialise in the background.** Serve frames from the interpreter while a specialised kernel
+  compiles off the critical path, then switch. Best of both, at the price of two implementations that must agree;
+  Dolphin's hybrid ubershaders and tiered just-in-time compilers work this way.
+- **Specialisation by a few switches.** Override constants (WebGPU) or specialisation constants (Vulkan) remove whole
   families of operations a program does not use. Pipelines number 2ᵏ for k switches; in the running example two
   switches gained nothing measurable (note 1).
 - **A stage list on the CPU.** The same program, interpreted by function pointers over SIMD batches of pixels, so
@@ -272,21 +276,19 @@ shown ← run(programs, source, screenGrid)        -- same pipeline as the previ
   serves every chain. **Editor lab**'s GPU probe compiled a shader per parameter change (79 ms).
 - **Skia's SkRasterPipeline** builds, per draw, a list of stages (load, convert, blend, store) that fixed SIMD routines
   execute over runs of pixels: an interpreted program of pointwise steps on the CPU.
-- **Dolphin**, the GameCube and Wii emulator, described in a 2017 post on its blog ("Ubershaders: A Ridiculous Solution
-  to an Impossible Problem") how it interprets the console's pixel pipeline configuration in one large shader to
-  remove compile stutter, while specialised shaders compile in the background.
+- **Dolphin**, the GameCube and Wii emulator, described in a 2017 blog post ("Ubershaders: A Ridiculous Solution to
+  an Impossible Problem") how one large shader interprets the console's pixel pipeline configuration, removing
+  compile stutter while specialised shaders compile in the background.
 - **Halide** (Ragan-Kelley et al., PLDI 2013) makes fusion a scheduling choice: an inlined stage is fused, a
   `compute_root` stage is materialised.
-- **XLA** and **TVM** (Chen et al., OSDI 2018) fuse element-wise operators of machine-learning graphs into single
-  generated kernels; TVM classifies operators as injective, reduction, complex-out-fusable or opaque, close to this
-  chapter's pointwise-or-barrier rule.
+- **XLA** and **TVM** (Chen et al., OSDI 2018) fuse element-wise operators into generated kernels; TVM's operator
+  classes (injective, reduction, complex-out-fusable, opaque) resemble the pointwise-or-barrier rule.
 - **Vulkan** (`VkPipelineCache`, specialisation constants) and **WebGPU** (asynchronous pipeline creation, override
   constants) provide the cache and the switches; **Unity**'s shader variants show the cost of compiling per
   combination.
 - **Vectorised and compiled query engines**: MonetDB/X100 interprets primitives over vectors (Boncz, Zukowski and Nes,
   CIDR 2005), HyPer compiles each query (Neumann, VLDB 2011), and Kersten et al. compare the two (PVLDB 2018).
-- The **Roofline model** (Williams, Waterman and Patterson, *CACM* 2009): below the ridge point, time is bytes over
-  bandwidth.
+- The **Roofline model** (Williams, Waterman and Patterson, *CACM* 2009) underlies note 2.
 
 ## Related chapters
 
@@ -311,11 +313,11 @@ shown ← run(programs, source, screenGrid)        -- same pipeline as the previ
    over a 4,000 × 2,674 × 4 array of 32-bit floats: one pass per operation, an interpreter looping over a program
    per pixel, and a hand-fused loop. Time k = 1 … 12, measure bandwidth with a copy loop, and plot all three against
    a roofline. Then let the interpreter run each operation over a whole row before the next, and explain the change.
-2. **Analyse a cost model.** For P pixels of B bytes, k operations of f flops each, bandwidth β, peak arithmetic F,
-   program length m and interpreter overhead c flops per operation per pixel, write the time of one pass per
-   operation, of ⌈k/m⌉ interpreted passes and of one specialised pass. Add a compile time C for the specialised
-   kernel and find the number of evaluations N after which it pays. Evaluate with C = 79 ms, β = 400 GB/s,
-   F = 10 TFLOP/s, B = 16, f = 12, c = 4, P = 10.7 × 10⁶: is a drag of sixty evaluations enough?
+2. **Analyse a cost model.** Extend note 2's model to whole evaluations: k operations of f instructions each, program
+   length m (so ⌈k/m⌉ passes), and a specialised kernel compiled once per structure in time C. Then add occupancy:
+   suppose the interpreter's worst-case registers lower its achieved bandwidth to αβ. For a drag of sixty
+   evaluations with C = 79 ms, P = 10.7 × 10⁶, B = 16, β = 400 GB/s and F = 5 × 10¹² per second, find the α below
+   which the specialised kernel wins, and say how you would measure α.
 3. **Another domain.** Interpret arithmetic expressions over columns of 10⁸ rows, per row and per vector of 1,024
    rows, and compare both with generated code. Relate your numbers to Kersten et al. (PVLDB 2018).
 4. **Read a system.** Read Dolphin's 2017 ubershader post. Which forces did the hybrid resolve, which did it create,
