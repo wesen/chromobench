@@ -312,3 +312,118 @@ aborted) decided at request time, …"
 ### Technical details
 - Present rule after the change: `fate ≠ aborted` → assert `gen > shownGen`, present, then release the old shown
   result; `fate = aborted` → release; failure → report unless aborted.
+
+## Step 4: Chapter 8, Reach-Declared Tiling
+
+Chapter 8 is the one chapter whose runs were measurably better (9/9 against 6/9 and 7/9 on the hidden tests), and
+also the one whose text was most GPU-shaped. The rewrite keeps the heart (declared reach in physical units, paths
+add, branches take the maximum, smooth wide kernels as reduced-resolution fields with variance bookkeeping) and
+changes the planner's order of preference: exact routes first (whole frame if it fits, haloed tiles on the grid that
+minimises total reads, streaming of separable passes through small row buffers), approximation only for what none of
+them can carry, and then by splitting a wide kernel into a local part plus a field rather than moving all of it.
+Fields become inputs of tiles instead of replacements of the image, so an operation needing its neighbourhood and its
+own centre (the reviewers' sharpen) can be expressed. The planner completes and reports; it refuses only when no
+route exists.
+
+The star stays ★. The six runs fell into three clusters (B/D/F per-kernel fields, A/E exact streaming tiers, C one
+global switch; tiling-r1 `cross.clusters`) and the reviewer called C's single switch a partial worse-is-better
+result. That is a good form among several, which is what ★ claims; the Variations now name the other forms (GPU
+tiling, demand-driven regions, one reduced image for the whole chain).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Fix chapter 8's defects (refuse vs complete, GPU habits, neighbourhood plus centre, one
+frame) and add the listed ideas (read-minimising grid, exact streaming, border handling, local plus residual split,
+pre-blur, cost model, chunked fields, whole-frame route), keeping the chapter portable.
+
+**Inferred user intent:** The chapter that already worked should also stop teaching the GPU's habits to CPU code and
+should not refuse where the contract says "complete".
+
+**Commit (code):** b6df001 — "Chapter 8 rev1: exact routes first (whole frame, read-minimising tiles, streaming), …"
+
+### What I did
+- Tagline, Intent, Problem and Solution rewritten around route choice: exact routes first, approximation last,
+  report instead of refuse; fields as tile inputs.
+- Forces: "Exact wide kernels against fields" became "Exact against bounded"; "Device limits against generality"
+  became "Device habits against portability".
+- Applicability: a third "do not use it when" for grid-changing operations, pointing to demand-driven regions.
+- Structure: Kernel declaration now includes region evaluation; Budget replaces Device caps; Field has pre-blur and
+  border ring.
+- Sketch rewritten: `plan` (whole → tiled → streamed → fields loop with local/residual split), `minReads`, `run`
+  (fields in dependency order from full-resolution inputs), a sharpen line showing a tile reading its centre and a
+  field.
+- Notes: v1 1 kept; new 2 (neighbourhood in the declaration); v1 2 extended to graphs (3); new 4 (exact routes);
+  new 5 (read-minimising grid; v1 9 on workload-dependent tile size folded in); new 6 (field as input, computed
+  from full-resolution input); v1 4 + 5 merged with the local/residual split and the pre-blur (7); new 8 (borders);
+  new 9 (integer scales, chunked fields); v1 7 rewritten (10: complete, report, cost model, refuse only when nothing
+  fits); new 11 (independent reference, laws, a negative control). v1 3 (+1 px, align to 8) moved into the "GPU
+  tiling" variation; v1 6 (statistical fields) and v1 8 (pyramid vs apron) moved into Variations.
+- Variations: new "GPU tiling", "One reduced image for the whole chain", "Statistical fields"; "Mipmap fields"
+  absorbs the pyramid note; "Two tile grids" dropped (no run or review touched it, and the word budget was needed).
+- Validation paragraph; Chapter 3 added to Related chapters.
+
+### Why (evidence per change)
+- Refuse vs complete: tiling-r1 `yardstick_problems` 1 ("no implementation refuses"; impl-D, chapter-1, reuses the
+  T/4 rule as a classification threshold, `src/index.ts:615-618`).
+- GPU habits moved: problems 2 (halo +1 and multiple of 8 would raise reads against the 3× limit), 3 (half the
+  budget, power-of-two tiles), 4 (power-of-two downsample; impl-E `:338-349`, impl-C `:461`, impl-F `:344`).
+- Field as input: problems 5 and every change request 1 analysis ("A wide sharpen cannot be a field, because the
+  field replaces the source", impl-A, B, C, F).
+- One frame: problems 6 and change request 2 analyses (W/H global in A, B, D, E; A's backward ROI propagation the
+  closest seam).
+- Read-minimising grid: tiling-r1 `ideas_the_yardstick_lacks` 1, impl-C (control-2) `:259`, impl-E (control-1)
+  `:856`, impl-F (chapter-2) `:249`.
+- Exact streaming: ideas 2, impl-A (chapter-3) `:716`, impl-E `:725`, impl-F `:589`.
+- Borders: ideas 3, edge corrections in impl-A `:583-693`, impl-D `:309-336`, impl-E `:292-310`; padded ring in
+  impl-B `:510`, impl-C `:448-457`, impl-F `:103-109`.
+- Local plus residual split: ideas 4, impl-A `:877-886`.
+- Pre-blur in the variance budget: ideas 5, impl-C `:463-466`, impl-F `:318-321`.
+- Cost model: ideas 6, impl-B `:378-398`, impl-D `:559-584`. Chunked fields: ideas 7, impl-B `:179-199`.
+  Whole-frame route: ideas 8, impl-F `:703-711`, impl-B `:320-328`.
+- Neighbourhood in the declaration: change request 1 analyses (shotgun surgery: "blur" kind checks across planner,
+  streaming tier and compiler in A; the predicate repeated across five helpers in B).
+- Field computed from full-resolution input: my reading of change request 1 together with C's weakness ("in a mixed
+  chain the narrow blurs and interior gammas are also approximated", `cross.worse_is_better`).
+- Tests: per-implementation `tests_as_laws` (independent references in B, C, D, E; the constant-image invariant in
+  B and D; "no negative controls" in all six).
+
+### What worked
+- Writing the sketch as a preference order made the Solution and Collaborations short: each is the same list.
+
+### What didn't work
+- First draft 2,771 words; cut to 2,500 by compressing Motivation (GPU limits), Intent, Variations and notes.
+- First draft contradicted itself on the decimation scale: the sketch said "coarsest integer scale with σf / s ≥ 2"
+  (v1's rule) while note 9 said "finest affordable". The reviewers' runs (E's binary search for the finest scale,
+  F trying 1..64) support "finest affordable"; the sketch now says `s ← finest affordable integer scale, s ≤ σf / 2`.
+- The first rewrite of note 5 said Editor lab's two workloads were "about four times faster" at their best size; the
+  v1 numbers are 5.8× and 3.5×, so it now says "several times faster".
+
+### What I learned
+- The local/residual split makes the field loop terminate naturally: each step either fits the halo with a smaller
+  local σ or moves one kernel wholly into a field, so the loop runs at most once per wide kernel.
+
+### What was tricky to build
+- Saying where a field's input comes from without a long passage: a field of `gamma(v)` must be decimated from
+  full-resolution `gamma(v)`, not computed by running gamma on decimated `v`. The sketch's `run` says "input
+  evaluated piecewise at full size", note 6 says why.
+
+### What warrants a second pair of eyes
+- The sketch abstracts `tileFits`, `streamable`, `bound(fields)` and "the largest local σ the halo can carry"; check
+  that these are concepts an agent can implement and not hidden difficulty.
+- The "one reduced image" variation is presented as a legitimate simpler form; the reviewers judged it "the most
+  habitable" but weaker on mixed chains.
+
+### What should be done in the future
+- Rerun the tiling task with this version, and add the reviewers' change requests (sharpen, downsample2) as hidden
+  tests in a second tiling task, since this chapter now claims to handle the first.
+
+### Code review instructions
+- `git diff a98d31c b6df001 -- docs/patterns/08-reach-declared-tiling.md`; check the sketch's route order against
+  `docs/patterns/experiments/tasks/tiling/TASK.md` requirements 1–4.
+
+### Technical details
+- Variance terms in the sketch: `var(decimate, s)` (box of s: (s² − 1)/12 per axis), `var(upsample, s)` (bilinear),
+  `var(preblur)`; residual in reduced pixels `/ s`. Constraint `s ≤ σf / 2` keeps the reduced kernel at least two
+  reduced pixels wide.
