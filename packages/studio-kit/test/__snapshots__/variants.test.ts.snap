@@ -235,6 +235,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -246,19 +248,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -266,8 +261,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -400,6 +400,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -411,19 +413,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -431,8 +426,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
 commands 81 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
@@ -635,6 +635,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -646,19 +648,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -666,8 +661,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   crop.reset "Reset Crop" (Finish) ← cb.finish
   crop.aspect "Crop Aspect" ← cb.finish
   crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
@@ -965,6 +965,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -976,19 +978,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -996,8 +991,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
 commands 84 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
@@ -1143,6 +1143,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1154,19 +1156,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1174,8 +1169,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   roll.fromFrames "New Roll from Open Frames" ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" ← cb.roll
@@ -1360,6 +1360,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1371,19 +1373,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1391,8 +1386,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1490,6 +1490,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1501,19 +1503,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) ← cb.core
-  frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) ← cb.core
   view.sideBySide "Side by Side" (View) ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1521,8 +1516,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
 commands 81 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
@@ -1576,6 +1576,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1587,19 +1589,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) ← cb.core
-  frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) ← cb.core
   view.sideBySide "Side by Side" (View) ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1607,8 +1602,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
 commands 81 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;

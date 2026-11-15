@@ -203,6 +203,21 @@ describe('build checks', () => {
     expect(pick({ mode: 'b' } as any)).toBe(2);
     expect(() => ck.pick('a' as any, { a: 1 })).toThrow(/CK-L121/);
   });
+  it('host capabilities: a command that requires one is hidden and refused without it, and runs with it', () => {
+    const calls: string[] = [];
+    const kit = ck.kit('host').commands({ 'file.open': { label: 'Open…', requires: 'host.openFiles', run: (ctx: any) => ctx.host.openFiles() } });
+    const app = ck.shell('x').use(kit).menus(ck.menu('File', ['file.open'])).module(main(ck, ck.text('x'))).build();
+    const bare = app.start({ clock: manualClock() });
+    expect(bare.commands.hidden('file.open', bare.state)).toBe(true);
+    expect(bare.run('file.open')).toBe(false);
+    expect((bare.chrome as any).toasts.at(-1)).toEqual({ text: 'Not available in this window', kind: 'why', title: 'Open…' });
+    const rt = app.start({ clock: manualClock(), host: { openFiles: () => calls.push('open') } });
+    expect(rt.commands.hidden('file.open', rt.state)).toBe(false);
+    rt.run('file.open');
+    expect(calls).toEqual(['open']);
+    rt.setHost(null);
+    expect(rt.commands.hidden('file.open', rt.state)).toBe(true);
+  });
   it('builders are immutable values: every chain method returns a new one; unknown methods throw CK-X120', () => {
     const ck = createCk();
     const s0 = ck.shell('x');

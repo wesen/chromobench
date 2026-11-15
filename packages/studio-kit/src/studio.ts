@@ -38,9 +38,10 @@ export interface StudioOptions {
 }
 
 /**
- * What the host page contributes to the studio's menus (CHB-027: the host's top bar folded into File and View).
- * Each action is a command (file.open, file.export, …) that is hidden while the host does not offer it, so a
- * variant's menus name them and a host without them (the dev host, tests) shows nothing.
+ * The host's capabilities (CHB-029 item 1), typed: what the host page contributes to the studio's menus (CHB-027:
+ * the host's top bar folded into File and View). The studio hands them to its runtime as services.host; each action
+ * is a command that requires it (file.open requires 'host.openFiles', …), so a layout's menus name them and a host
+ * without them (the dev host, tests) shows none of them.
  */
 export interface StudioHost {
   /** File ▸ Open Files… (Mod+O) */
@@ -64,9 +65,9 @@ export interface StudioHost {
   relink?(id: string): unknown;
 }
 
-/** The state flags the host commands read (ui.host): which actions exist, the folder, the layouts. */
+/** What the host publishes into the state (ui.host) for labels and menus: the folder, the layouts. Its actions are
+ *  capabilities (services.host), not state. */
 export interface HostFlags {
-  actions: string[];
   folder: string | null;
   layouts: { id: string; label: string }[];
   layout: string | null;
@@ -105,6 +106,7 @@ export class Studio {
       bridges: [this.bridge],
       persistence: this.kv ? kvPersistence(this.kv) : memoryPersistence(),
       engine: this.engine,
+      host: this.host,
       ...extra,
       studio: this,
     };
@@ -123,7 +125,10 @@ export class Studio {
       this.frames.onAdded(f => this.catalogue(f)),
       this.frames.onRemoved(f => this.uncatalogue(f.id)),
     );
-    if (this.host) this.publishHost();
+    if (this.host) {
+      rt.setHost(this.host);
+      this.publishHost();
+    }
     return this;
   }
 
@@ -135,16 +140,16 @@ export class Studio {
     this.initial = initialInMode(this.hostInitial, mode);
   }
 
-  /** the host page's actions: commands in File and View (hidden while absent) */
+  /** the host's capabilities (commands in File and View require them) and what it publishes (folder, layouts) */
   setHost(host: StudioHost | null): void {
     this.host = host;
+    this.rt?.setHost(host);
     this.publishHost();
   }
   /** the host flags in ui.host, after the host changed (a folder picked) */
   publishHost(): void {
     const h = this.host;
     const flags: HostFlags = {
-      actions: h ? Object.keys(h).filter(k => typeof (h as Record<string, unknown>)[k] === 'function') : [],
       folder: h?.folder ?? null,
       layouts: h?.layouts ?? [],
       layout: h?.layout ?? null,
