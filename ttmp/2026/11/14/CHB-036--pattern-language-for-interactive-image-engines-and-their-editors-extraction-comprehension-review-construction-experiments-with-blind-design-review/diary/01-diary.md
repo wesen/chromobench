@@ -740,3 +740,71 @@ tiling budget) under CHB-036, test them, commit in steps, record them here, and 
 ### Technical details
 - v2 runs root: the session scratchpad's `pattern-runs-v2/` (`batch.log`, `_failed/`); per run `run.json`,
   `watchdog.log`.
+
+## Step 11: v2 results — tiling separates chapter from control; harness fixes confirmed; blind Opus reviews launched
+
+The v2 rerun (tiling and slots, all six runs each, harness v2) finished at 21:36: 12 of 12 runs answered, no provider
+retries, one watchdog kill that the agent survived. Scoring both roots gives the experiment's first discriminating
+result, and the transcripts confirm the harness fixes. The four blind design reviews now run on Opus subagents.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 7: "Check scratchpad/pattern-runs/batch.log progress; …, then score (score.py),
+run go-minitrace analysis, and start blind design reviews per the playbook." and "you should review with opus
+subagents")
+
+**Assistant interpretation:** Score, analyse and review now that all four tasks have complete run sets (graph and
+document from v1, tiling and slots from v2).
+
+**Inferred user intent:** Evidence on whether the chapters help, judged by tests and by design.
+
+**Commit (code):** (this step's commit) — analysis SQL run label, review-design.py implementation count, diary
+
+### What I did
+- `score.py` on `pattern-runs-v2` (tiling, slots) and on `pattern-runs` (graph, document).
+- `analyze.py` on both roots; fixed the SQL run label (`instr(…, '/pattern-runs') + 1`, so `pattern-runs-v2` paths
+  read as `pattern-runs-v2 slots chapter-1`).
+- `review-design.py` workspaces (seed 1): graph from v1 (5 runs, `--allow-partial`; control-1 failed at the provider
+  in v1), document from v1, slots and tiling from v2; the prompt now states the number of implementations (it said
+  "six" for graph's five). Redactions per implementation 0–3. Four Opus subagents (model opus, read-only, confined to
+  their review directory) run the reviews.
+
+### Why
+- Only complete run sets can be compared; v1 tiling and slots were lost to the harness.
+
+### What worked
+- **Tiling discriminates.** Hidden tests: chapter-1..4 9/9 each; control-1 6/9 (fails "exact: chained blurs with
+  pointwise steps between them" and both wide-blur tests), control-2 7/9 (fails "wide: a blur far wider than any
+  tile, within budget and tolerance" and "wide: a wide blur followed by a narrow one"). The chapter's hard part
+  (wide kernels computed once at reduced resolution) is exactly what the controls miss.
+- **Graph, document, slots do not discriminate:** every run passes every hidden test (graph 19/19 ×5, document 16/16
+  ×6, slots 17/17 ×6). Own tests all pass (slots 32–45, tiling 20–56, document 39–58, graph 30–48).
+- **Harness v2 confirmed:** first diary write at turn 4–5 (v1: 21–34); no 429 stalls in v2 (v1: 9 in 8 runs);
+  `tmp_use` 0 in 11 of 12 runs; no outside attempts; slots runs took 7–8 min (v1: 30+); tiling 27–51 min within the
+  2-hour budget.
+
+### What didn't work
+- N/A in this step.
+
+### What I learned
+- Wide kernels are where the chapter's knowledge is not in the model's default design sense; the other three tasks'
+  difficulties are solved by the model unaided, so their value (if any) has to show in the design review.
+
+### What was tricky to build
+- Comparing across harness versions: graph and document ran under v1 (broken test command, late diaries), tiling and
+  slots under v2. Within each task all six runs share one harness, which is what matters for chapter vs control.
+
+### What warrants a second pair of eyes
+- Tiling's controls failing may partly reflect the task's tolerance choice (max 0.025, mean 0.005); the feasibility
+  check (Step 4) showed a sound field approach reaches it, and all four chapter runs did.
+
+### What should be done in the future
+- Collect the four reviews, unblind with `keys/`, combine with tests, transcripts and diaries (playbook §7), revise
+  chapters 1, 4, 8, 9.
+
+### Code review instructions
+- `docs/patterns/experiments/analysis/*.sql`, `review-design.py`.
+
+### Technical details
+- Scores: `<scratchpad>/pattern-eval-v2/results.json`, `<scratchpad>/pattern-eval/results.json`; analysis
+  `<scratchpad>/pattern-analysis-v2/`; review workspaces and prompts `<scratchpad>/pattern-review/`.

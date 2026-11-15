@@ -8,7 +8,7 @@ WITH c AS (
 -- pi records no exit codes (exit_code is always null), so a failing test run is read from its output text;
 -- outside_attempts: the hidden suite, home paths, ../.. climbs, or absolute file paths outside the run directory
 SELECT s.session_id,
-       replace(substr(s.working_directory, instr(s.working_directory, 'pattern-runs/') + 13), '/', ' ') AS run,
+       replace(substr(s.working_directory, instr(s.working_directory, '/pattern-runs') + 1), '/', ' ') AS run,
        SUM(fp LIKE '%CHAPTER.md' OR cmd LIKE '%CHAPTER.md%') AS chapter_reads,
        MIN(CASE WHEN fp LIKE '%CHAPTER.md' OR cmd LIKE '%CHAPTER.md%' THEN t END) AS first_chapter_turn,
        MIN(CASE WHEN fp LIKE '%src/index.ts' AND operation_type IN ('NEW', 'MODIFY') THEN t END) AS first_src_write_turn,

@@ -144,7 +144,7 @@ prompt = f"""# Role and task
 You are a senior software designer doing a design review in the spirit of Christopher Alexander (forces, wholeness,
 generativity), Richard Gabriel (habitability, piecemeal growth, worse is better) and Martin Fowler (code smells).
 
-The review directory `{ws}` holds six independent implementations of one task: {impls}. Each has `src/` and `test/`. `TASK.md` is
+The review directory `{ws}` holds {len(letters)} independent implementations of one task: {impls}. Each has `src/` and `test/`. `TASK.md` is
 the task they were given. `CHAPTER.md` is a design-pattern chapter for this kind of problem: use it as the yardstick
 for what forces exist and what a good structure resolves, not as a checklist to tick. `FACTS.md` gives sizes. Some
 words were replaced by "[ref]" in the code; ignore that.
