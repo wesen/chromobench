@@ -1,0 +1,32 @@
+{
+  "case": "neg-auto-lights",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-auto-lights/display.f32",
+  "sha256": "e95dfce8ac6d1ae7c57c110bdcb69976f8d213991d2051a8a348f5fc9f4ca695",
+  "stats": {
+    "min": [
+      0.1153023,
+      0.1192615,
+      0.120278
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5109392,
+      0.5241621,
+      0.527925
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "neg-time-half",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-time-half/print.f32",
+  "sha256": "01eb9835de380e1b243a6c6eb33e41f0cdc78114d098fa5639bf10967c800f70",
+  "stats": {
+    "min": [
+      0.0649521,
+      0.06700806,
+      0.07393396
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.4852552,
+      0.5122337,
+      0.5535988
+    ]
+  },
+  "warnings": []
+}

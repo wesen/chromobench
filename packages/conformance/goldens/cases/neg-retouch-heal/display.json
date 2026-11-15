@@ -1,0 +1,32 @@
+{
+  "case": "neg-retouch-heal",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-retouch-heal/display.f32",
+  "sha256": "19b9a87afe38ba5deaf38eaf4089ebd538ad93f90844f5d52250519b6550c950",
+  "stats": {
+    "min": [
+      0.1153023,
+      0.1192615,
+      0.120278
+    ],
+    "max": [
+      1,
+      1,
+      1
+    ],
+    "mean": [
+      0.5102299,
+      0.5233474,
+      0.526884
+    ]
+  },
+  "warnings": []
+}

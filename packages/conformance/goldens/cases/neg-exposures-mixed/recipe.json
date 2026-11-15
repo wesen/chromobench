@@ -1,0 +1,236 @@
+{
+  "version": 2,
+  "frame": "golden-negative",
+  "kind": "negative-scan",
+  "source": {
+    "kind": "file",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+    "name": "negative-96x64.tif",
+    "decode": {
+      "mode": "scan",
+      "encoding": "linear"
+    }
+  },
+  "data": null,
+  "print": {
+    "paper": "kodak_portra_endura",
+    "aim": "grey-0.184",
+    "enlarger": {
+      "mode": "real",
+      "lamp": "TH-KG3",
+      "filtration": {
+        "c": 0,
+        "m": 0,
+        "y": 0
+      },
+      "time_s": 3.969,
+      "fstop": 8,
+      "magnification": null
+    },
+    "lights": {
+      "logH": [
+        0.062267,
+        0.022869,
+        -0.025007
+      ],
+      "auto": {
+        "method": "integrate",
+        "alpha": 1,
+        "analysisLongSide_px": 548,
+        "rollConsistency": null,
+        "matchFrame": null,
+        "matchAmount": null,
+        "applied": true,
+        "logH": [
+          0.062267,
+          0.022869,
+          -0.025007
+        ]
+      }
+    },
+    "exposures": [
+      {
+        "id": "dodge1",
+        "kind": "dodge",
+        "enabled": true,
+        "mask": "face",
+        "time_s": null,
+        "stops": 0.5,
+        "filtration": null,
+        "through": null
+      },
+      {
+        "id": "burn1",
+        "kind": "burn",
+        "enabled": true,
+        "mask": "sky",
+        "time_s": null,
+        "stops": 1,
+        "filtration": {
+          "c": 0,
+          "m": 10,
+          "y": 0
+        },
+        "through": null
+      },
+      {
+        "id": "flash1",
+        "kind": "flash",
+        "enabled": true,
+        "mask": "sky",
+        "time_s": 0.2,
+        "stops": null,
+        "filtration": null,
+        "through": "base"
+      },
+      {
+        "id": "burn2",
+        "kind": "burn",
+        "enabled": false,
+        "mask": null,
+        "time_s": null,
+        "stops": 2,
+        "filtration": null,
+        "through": null
+      }
+    ],
+    "densityMasks": {},
+    "grade": 2,
+    "preflash": 0
+  },
+  "view": {
+    "illuminant": "D50",
+    "flare": 0.48,
+    "output": {
+      "rendering": "scan-of-print",
+      "white": "D65",
+      "display": {
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "proof": null
+      },
+      "export": {
+        "format": "tiff16",
+        "space": "prophoto",
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "scale": "full",
+        "dpi": 300,
+        "compression": "deflate",
+        "signal": "icc",
+        "recipe": "sidecar"
+      },
+      "printer": null
+    },
+    "frame": {
+      "orientation": "none",
+      "angle_deg": 0,
+      "crop": null
+    }
+  },
+  "masks": {
+    "face": {
+      "version": 1,
+      "nodes": [
+        {
+          "op": "source.open",
+          "inputs": [],
+          "args": {
+            "source": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+            "encoding": "linear"
+          }
+        },
+        {
+          "op": "mask.ellipse",
+          "inputs": [
+            "cc4cae248e1144719de278fd6bc783d6d6e6d60dae422596654ec51d525699ea"
+          ],
+          "args": {
+            "box": {
+              "x": 28,
+              "y": 18,
+              "w": 44,
+              "h": 28
+            },
+            "angle_deg": 0
+          }
+        },
+        {
+          "op": "mask.feather",
+          "inputs": [
+            "fbddd188d44216ea8b93aa48f1803b729b627b7b0e7c6d3b08a8d0d597615b12"
+          ],
+          "args": {
+            "radius_px": 4
+          }
+        }
+      ]
+    },
+    "sky": {
+      "version": 1,
+      "nodes": [
+        {
+          "op": "source.open",
+          "inputs": [],
+          "args": {
+            "source": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+            "encoding": "linear"
+          }
+        },
+        {
+          "op": "mask.gradient",
+          "inputs": [
+            "cc4cae248e1144719de278fd6bc783d6d6e6d60dae422596654ec51d525699ea"
+          ],
+          "args": {
+            "from": {
+              "x": 48,
+              "y": 0
+            },
+            "to": {
+              "x": 48,
+              "y": 30
+            }
+          }
+        }
+      ]
+    }
+  },
+  "probes": {},
+  "retouch": {
+    "spots": {}
+  },
+  "finishing": {
+    "look": 0,
+    "values": {
+      "clarity": 0,
+      "clarity_radius_px": 40
+    },
+    "hues": {}
+  },
+  "roll": null,
+  "scan": {
+    "scanner": "xt5-rgb-led",
+    "stock": "kodak_portra_400",
+    "format": "135",
+    "rebate": {
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 64
+    },
+    "baseT": null,
+    "flat": null,
+    "openGate": null,
+    "flare": 0,
+    "dust": {
+      "spots": [],
+      "method": "patch",
+      "marginPx": 2
+    }
+  }
+}

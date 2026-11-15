@@ -1,0 +1,32 @@
+{
+  "case": "neg-fstop",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-fstop/print.f32",
+  "sha256": "2e5b4a91760129d2990e229d56645a051b71c4932d829f038b6058fde98ca9ec",
+  "stats": {
+    "min": [
+      0.05477035,
+      0.05657367,
+      0.0621505
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.4654109,
+      0.4913406,
+      0.5315803
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "neg-lights-manual",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-lights-manual/display.f32",
+  "sha256": "ad905c0cbf7dc24897707b1d853303db75f04814e74f2e490f00432181fc54ee",
+  "stats": {
+    "min": [
+      0.07946327,
+      0.1162314,
+      0.1333892
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.3935092,
+      0.5099927,
+      0.5610664
+    ]
+  },
+  "warnings": []
+}

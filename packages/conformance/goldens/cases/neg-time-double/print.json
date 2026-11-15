@@ -1,0 +1,32 @@
+{
+  "case": "neg-time-double",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-time-double/print.f32",
+  "sha256": "bf0d2f87a761ffeef9b29539b75c23f64b2d5e33428ffb17b909ea40fea6b8ce",
+  "stats": {
+    "min": [
+      0.004467967,
+      0.004702045,
+      0.006182267
+    ],
+    "max": [
+      0.7714491,
+      0.8128238,
+      0.8715445
+    ],
+    "mean": [
+      0.08793085,
+      0.09246765,
+      0.1123832
+    ]
+  },
+  "warnings": []
+}

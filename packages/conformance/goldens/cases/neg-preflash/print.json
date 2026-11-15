@@ -1,0 +1,32 @@
+{
+  "case": "neg-preflash",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-preflash/print.f32",
+  "sha256": "fd44b4ecb6fe9414563478778d36f47ade2fb1786f7ce99d6e3ac717077937e8",
+  "stats": {
+    "min": [
+      0.009830615,
+      0.01047285,
+      0.01149488
+    ],
+    "max": [
+      0.7714475,
+      0.8128223,
+      0.8715438
+    ],
+    "mean": [
+      0.2305266,
+      0.2423175,
+      0.2731295
+    ]
+  },
+  "warnings": []
+}

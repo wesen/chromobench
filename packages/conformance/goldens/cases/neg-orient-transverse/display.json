@@ -1,0 +1,32 @@
+{
+  "case": "neg-orient-transverse",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 64,
+  "height": 96,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-orient-transverse/display.f32",
+  "sha256": "823154dcf2fa6a145e1c4618bb71eef1cab81fb0af53e531541394e5fba0cc2f",
+  "stats": {
+    "min": [
+      0.1153023,
+      0.1192615,
+      0.120278
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5109392,
+      0.5241621,
+      0.527925
+    ]
+  },
+  "warnings": []
+}

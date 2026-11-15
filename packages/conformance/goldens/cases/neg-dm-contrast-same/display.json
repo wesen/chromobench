@@ -1,0 +1,32 @@
+{
+  "case": "neg-dm-contrast-same",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dm-contrast-same/display.f32",
+  "sha256": "72a123458cc98501d6d586ed82817cc3f41150f214741d4b79b0bc2217f5ea7e",
+  "stats": {
+    "min": [
+      0.09818751,
+      0.1040664,
+      0.1064507
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5137062,
+      0.5278339,
+      0.5305165
+    ]
+  },
+  "warnings": []
+}

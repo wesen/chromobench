@@ -1,0 +1,32 @@
+{
+  "case": "neg-filtration-cyan-yellow",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-filtration-cyan-yellow/print.f32",
+  "sha256": "043924c544e5d15b1cf395c6bd138a37221ea972b16ae7d1acbcd7600cc04a4c",
+  "stats": {
+    "min": [
+      0.01265366,
+      0.01194913,
+      0.008731104
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2581883,
+      0.2576311,
+      0.2039048
+    ]
+  },
+  "warnings": []
+}

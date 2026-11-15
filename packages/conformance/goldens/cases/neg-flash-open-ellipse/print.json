@@ -1,0 +1,32 @@
+{
+  "case": "neg-flash-open-ellipse",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-flash-open-ellipse/print.f32",
+  "sha256": "99e002ef42660a8b09887685c69af393a5b61a73bba2acdeeec16b2291b2e123",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.009801433,
+      0.008085172
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2126929,
+      0.2205496,
+      0.2396351
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "cam-grade-lights",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-grade-lights/display.f32",
+  "sha256": "09e01c4d876f44cd60b00f310f13480c19a21bdc9d181f5d3f905a004b9a48f7",
+  "stats": {
+    "min": [
+      0.05248829,
+      0.0603544,
+      0.07597769
+    ],
+    "max": [
+      0.9973914,
+      0.9974578,
+      0.9936846
+    ],
+    "mean": [
+      0.5135546,
+      0.5212524,
+      0.3705277
+    ]
+  },
+  "warnings": []
+}

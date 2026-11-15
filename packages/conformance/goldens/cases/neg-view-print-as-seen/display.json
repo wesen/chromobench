@@ -1,0 +1,32 @@
+{
+  "case": "neg-view-print-as-seen",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-view-print-as-seen/display.f32",
+  "sha256": "e155cfd4ea98dde1bfece381e1eb84f9e44d066d0d6de9148d6cab43f74e71b7",
+  "stats": {
+    "min": [
+      0.1428631,
+      0.1479938,
+      0.1455412
+    ],
+    "max": [
+      0.9181885,
+      0.9170856,
+      0.9090536
+    ],
+    "mean": [
+      0.4807446,
+      0.4902807,
+      0.4895179
+    ]
+  },
+  "warnings": []
+}

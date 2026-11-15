@@ -1,0 +1,32 @@
+{
+  "case": "neg-dm-two-with-burn-flash",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dm-two-with-burn-flash/print.f32",
+  "sha256": "887c2d0f4a92215157fc16b5310e7c051017622603b61024fe3ecf89a51782f1",
+  "stats": {
+    "min": [
+      0.01021646,
+      0.01089601,
+      0.01189015
+    ],
+    "max": [
+      0.7677859,
+      0.8090554,
+      0.8685524
+    ],
+    "mean": [
+      0.2098066,
+      0.2209847,
+      0.2523934
+    ]
+  },
+  "warnings": []
+}

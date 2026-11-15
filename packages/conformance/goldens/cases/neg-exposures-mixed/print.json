@@ -1,0 +1,32 @@
+{
+  "case": "neg-exposures-mixed",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-exposures-mixed/print.f32",
+  "sha256": "b5d791a0caa91a2f9940657a5dc92b26a797eefed192a6e4a00c5cea7b28058c",
+  "stats": {
+    "min": [
+      0.004520841,
+      0.004843999,
+      0.006232678
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2124323,
+      0.2259154,
+      0.2545765
+    ]
+  },
+  "warnings": []
+}

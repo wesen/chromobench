@@ -1,0 +1,32 @@
+{
+  "case": "neg-burn-and",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-burn-and/display.f32",
+  "sha256": "74cc935972374e81f5a3869ed9be794c2df34c71e14b0713174a05dbeac5f567",
+  "stats": {
+    "min": [
+      0.08358465,
+      0.0911456,
+      0.09605885
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.4206257,
+      0.4354764,
+      0.4398595
+    ]
+  },
+  "warnings": []
+}

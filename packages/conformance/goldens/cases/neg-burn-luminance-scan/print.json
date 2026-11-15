@@ -1,0 +1,32 @@
+{
+  "case": "neg-burn-luminance-scan",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-burn-luminance-scan/print.f32",
+  "sha256": "e3b8fc4c94df0bd0fee7e22b7f1c29cd3fdd543bfba5ffe3d150eaa05f40a950",
+  "stats": {
+    "min": [
+      0.006008053,
+      0.006415278,
+      0.007568961
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.1613763,
+      0.1687276,
+      0.1936596
+    ]
+  },
+  "warnings": []
+}

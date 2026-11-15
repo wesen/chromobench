@@ -1,0 +1,32 @@
+{
+  "case": "neg-burn-luminance-scan",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-burn-luminance-scan/display.f32",
+  "sha256": "f942c72923fc581d2bddf60e8ab9ed12dab4276975e5fbaf407083cf968d28a4",
+  "stats": {
+    "min": [
+      0.07963368,
+      0.08627568,
+      0.0918119
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.382519,
+      0.3980143,
+      0.4046132
+    ]
+  },
+  "warnings": []
+}

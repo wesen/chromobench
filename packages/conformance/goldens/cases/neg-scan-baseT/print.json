@@ -1,0 +1,32 @@
+{
+  "case": "neg-scan-baseT",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-scan-baseT/print.f32",
+  "sha256": "5155c28c2192bc775f8fd19a178d123d7dedae8ca072e8b02ba88034e13ac420",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.01067903,
+      0.01170197
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2369775,
+      0.2491201,
+      0.2814087
+    ]
+  },
+  "warnings": []
+}

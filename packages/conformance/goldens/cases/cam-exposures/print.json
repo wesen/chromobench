@@ -1,0 +1,32 @@
+{
+  "case": "cam-exposures",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-exposures/print.f32",
+  "sha256": "831fa5a7607c468849d5079d14fd880491982a0ade0ad800096a9a9bfe48c663",
+  "stats": {
+    "min": [
+      0.003523052,
+      0.003566536,
+      0.005420181
+    ],
+    "max": [
+      0.7133893,
+      0.7568894,
+      0.7648767
+    ],
+    "mean": [
+      0.1808632,
+      0.1871614,
+      0.1509133
+    ]
+  },
+  "warnings": []
+}

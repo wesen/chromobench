@@ -1,0 +1,192 @@
+{
+  "version": 2,
+  "frame": "golden-negative",
+  "kind": "negative-scan",
+  "source": {
+    "kind": "file",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+    "name": "negative-96x64.tif",
+    "decode": {
+      "mode": "scan",
+      "encoding": "linear"
+    }
+  },
+  "data": null,
+  "print": {
+    "paper": "kodak_portra_endura",
+    "aim": "grey-0.184",
+    "enlarger": {
+      "mode": "real",
+      "lamp": "TH-KG3",
+      "filtration": {
+        "c": 0,
+        "m": 0,
+        "y": 0
+      },
+      "time_s": 3.969,
+      "fstop": 8,
+      "magnification": null
+    },
+    "lights": {
+      "logH": [
+        0.062267,
+        0.022869,
+        -0.025007
+      ],
+      "auto": {
+        "method": "integrate",
+        "alpha": 1,
+        "analysisLongSide_px": 548,
+        "rollConsistency": null,
+        "matchFrame": null,
+        "matchAmount": null,
+        "applied": true,
+        "logH": [
+          0.062267,
+          0.022869,
+          -0.025007
+        ]
+      }
+    },
+    "exposures": [
+      {
+        "id": "dodge1",
+        "kind": "dodge",
+        "enabled": true,
+        "mask": "mix",
+        "time_s": null,
+        "stops": 0.6666666666666666,
+        "filtration": null,
+        "through": null
+      }
+    ],
+    "densityMasks": {},
+    "grade": 2,
+    "preflash": 0
+  },
+  "view": {
+    "illuminant": "D50",
+    "flare": 0.48,
+    "output": {
+      "rendering": "scan-of-print",
+      "white": "D65",
+      "display": {
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "proof": null
+      },
+      "export": {
+        "format": "tiff16",
+        "space": "prophoto",
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "scale": "full",
+        "dpi": 300,
+        "compression": "deflate",
+        "signal": "icc",
+        "recipe": "sidecar"
+      },
+      "printer": null
+    },
+    "frame": {
+      "orientation": "none",
+      "angle_deg": 0,
+      "crop": null
+    }
+  },
+  "masks": {
+    "mix": {
+      "version": 1,
+      "nodes": [
+        {
+          "op": "source.open",
+          "inputs": [],
+          "args": {
+            "source": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+            "encoding": "linear"
+          }
+        },
+        {
+          "op": "mask.ellipse",
+          "inputs": [
+            "cc4cae248e1144719de278fd6bc783d6d6e6d60dae422596654ec51d525699ea"
+          ],
+          "args": {
+            "box": {
+              "x": 66,
+              "y": 2,
+              "w": 24,
+              "h": 16
+            },
+            "angle_deg": 0
+          }
+        },
+        {
+          "op": "mask.paint",
+          "inputs": [
+            "cc4cae248e1144719de278fd6bc783d6d6e6d60dae422596654ec51d525699ea"
+          ],
+          "args": {
+            "strokes": "[{\"kind\":\"stroke\",\"points\":[[12,50,0.5],[36,56,0.6],[60,48,0.5]],\"radius\":6,\"hardness\":0.6,\"mode\":\"add\"},{\"kind\":\"stroke\",\"points\":[[34,44,0.5],[38,62,0.5]],\"radius\":2.5,\"hardness\":1,\"mode\":\"erase\"}]"
+          }
+        },
+        {
+          "op": "mask.or",
+          "inputs": [
+            "861cde932ec003e8920a04c4dedd2baa28a94dade004872ab0b9eb768f8d154f",
+            "35df5c979fc84f515cec25ad886477b8fccbf259c30566810bc8406c260b02fd"
+          ],
+          "args": {
+            "other": "35df5c979fc84f515cec25ad886477b8fccbf259c30566810bc8406c260b02fd"
+          }
+        },
+        {
+          "op": "mask.feather",
+          "inputs": [
+            "9e58d76e48c16258907bb516f113a41dc6c9bf96ebf4cf8892484b43e9143a16"
+          ],
+          "args": {
+            "radius_px": 3
+          }
+        }
+      ]
+    }
+  },
+  "probes": {},
+  "retouch": {
+    "spots": {}
+  },
+  "finishing": {
+    "look": 0,
+    "values": {
+      "clarity": 0,
+      "clarity_radius_px": 40
+    },
+    "hues": {}
+  },
+  "roll": null,
+  "scan": {
+    "scanner": "xt5-rgb-led",
+    "stock": "kodak_portra_400",
+    "format": "135",
+    "rebate": {
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 64
+    },
+    "baseT": null,
+    "flat": null,
+    "openGate": null,
+    "flare": 0,
+    "dust": {
+      "spots": [],
+      "method": "patch",
+      "marginPx": 2
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "case": "cam-development",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-development/display.f32",
+  "sha256": "4f4ad4307e6052604e7b740284ac69aefd487724dbeb138cbdbaf5e0c3a5a6b0",
+  "stats": {
+    "min": [
+      0.07016719,
+      0.07232751,
+      0.08113119
+    ],
+    "max": [
+      0.9949977,
+      0.9914259,
+      0.9921825
+    ],
+    "mean": [
+      0.4800721,
+      0.4548872,
+      0.3953761
+    ]
+  },
+  "warnings": []
+}

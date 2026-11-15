@@ -1,0 +1,32 @@
+{
+  "case": "cam-wb-custom",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-wb-custom/print.f32",
+  "sha256": "87505b194387b7e208f47f01666d8209fa4d36e676e360979b824322fb963235",
+  "stats": {
+    "min": [
+      0.004885178,
+      0.00509407,
+      0.006275326
+    ],
+    "max": [
+      0.7035015,
+      0.7556524,
+      0.8537948
+    ],
+    "mean": [
+      0.2112157,
+      0.233816,
+      0.3026731
+    ]
+  },
+  "warnings": []
+}

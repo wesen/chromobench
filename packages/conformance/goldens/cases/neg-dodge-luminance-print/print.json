@@ -1,0 +1,32 @@
+{
+  "case": "neg-dodge-luminance-print",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dodge-luminance-print/print.f32",
+  "sha256": "cc27ccc4ee901ca1e8ccab28812a8376d3c50c48cb8b013c3717b6dc639430ce",
+  "stats": {
+    "min": [
+      0.0151849,
+      0.01602415,
+      0.01729379
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.245196,
+      0.2576553,
+      0.2890075
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "cam-retouch",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-auto/print.f32",
+  "sha256": "8edb7253814db0169bee55a1a2649ca11cbb5a70dc9d9b6930990142fc6c8b3a",
+  "stats": {
+    "min": [
+      0.004884585,
+      0.005091532,
+      0.006267835
+    ],
+    "max": [
+      0.7194232,
+      0.7591181,
+      0.8104651
+    ],
+    "mean": [
+      0.2117823,
+      0.2190451,
+      0.1829352
+    ]
+  },
+  "warnings": []
+}

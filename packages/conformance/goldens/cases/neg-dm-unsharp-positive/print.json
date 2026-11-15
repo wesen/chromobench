@@ -1,0 +1,32 @@
+{
+  "case": "neg-dm-unsharp-positive",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dm-unsharp-positive/print.f32",
+  "sha256": "b244c43269dab3ce87144b40fe0edbe87c36bc6c2a6e50fc98e6d6a6845534af",
+  "stats": {
+    "min": [
+      0.02239953,
+      0.02342366,
+      0.02515643
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2023627,
+      0.2128293,
+      0.2483361
+    ]
+  },
+  "warnings": []
+}
