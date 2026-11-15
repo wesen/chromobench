@@ -1,7 +1,8 @@
 // @chromobench/contract — the shared vocabulary every ticket codes against.
 // Contract 1.0 (CHB-037, CHB-035 design 01 v2): document format 3 (stages with media and stacks of layers and groups,
 // masks, links, bindings), the op catalogue with stages and encodings, the stage laws (light, composite, repair), the
-// one compiler with named cuts, validation through the values hooks. Importing this module registers the catalogue.
+// one compiler with named cuts, validation through the values hooks (a frame's history is the values document log
+// with LOG_RULES). Importing this module registers the catalogue.
 export const CONTRACT_VERSION = '1.0.0';
 
 export * from './errors.ts';
@@ -25,7 +26,6 @@ export * from './schema.ts';
 export * from './compile.ts';
 export * from './validate.ts';
 export * from './builders.ts';
-export * from './editlog.ts';
 export * from './engine.ts';
 export * from './eval.ts';
 export * from './laws.ts';

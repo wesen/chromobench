@@ -1,23 +1,24 @@
-// The draft a transaction (ctx.tx) hands to its lambda: writes go to a copy of the document and are recorded
-// per path with their before value; patches() collapses them for the history entry.
+// The writer a transaction (ctx.tx) hands to its lambda: writes go to a copy of the committed state and are
+// recorded by path; writes() collapses them (an ancestor's write covers its descendants) for the commit, which
+// turns them into the net change of each document.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { isObj, pathStr, parsePath, getIn, setIn, prefixOf, type Key, type Path } from '../util.ts';
 import type { Store } from '../store.ts';
 import { strip } from './readonly.ts';
-import type { Patch } from './types.ts';
+import type { Write } from './types.ts';
 
-// ── drafts: what ctx.tx hands to its lambda ──────────────────────────────
+// ── the writer: what ctx.tx hands to its lambda ──────────────────────────
 // t.develop.light.exposure = 0.3 · t.catalog.photos[3].flag = 'pick' · t.$set(path, v) · t.$update(path, f)
 // t.$merge(path, obj) · t.$push(path, ...items) · t.$remove(path, pred) · array methods on draft arrays
 const MUTATING = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
-export class Draft {
+export class Writer {
   next: any;
-  writes = new Map<string, { path: Key[]; before: unknown }>();
+  written = new Map<string, Key[]>();
   readonly store: Store;
   constructor(store: Store) {
     this.store = store;
-    this.next = store.doc;
+    this.next = store.committed;
   }
   read(path: Key[]): any {
     const d = this.store.derivedAt(path);
@@ -27,16 +28,15 @@ export class Draft {
   write(path: Key[], value: unknown): void {
     value = strip(value);
     const k = pathStr(path);
-    // a write inside a path written earlier, or above it, is fine: keep the earliest 'before' per exact path
-    if (!this.writes.has(k)) this.writes.set(k, { path, before: getIn(this.store.doc, path) });
+    if (!this.written.has(k)) this.written.set(k, path);
     this.next = setIn(this.next, path, value);
   }
-  patches(): Patch[] {
-    // collapse: if both a path and its ancestor were written, keep the ancestor's write only
-    const list = [...this.writes.values()].sort((a, b) => a.path.length - b.path.length);
-    const kept: typeof list = [];
-    for (const w of list) if (!kept.some(k => prefixOf(k.path, w.path))) kept.push(w);
-    return kept.map(w => ({ path: w.path, before: w.before, after: getIn(this.next, w.path) })).filter(p => p.before !== p.after);
+  /** what changed: if both a path and its ancestor were written, the ancestor's write only */
+  writes(): Write[] {
+    const list = [...this.written.values()].sort((a, b) => a.length - b.length);
+    const kept: Key[][] = [];
+    for (const p of list) if (!kept.some(k => prefixOf(k, p))) kept.push(p);
+    return kept.map(path => ({ path, value: getIn(this.next, path) })).filter(w => w.value !== getIn(this.store.committed, w.path));
   }
   proxy(path: Key[] = []): any {
     const d = this;

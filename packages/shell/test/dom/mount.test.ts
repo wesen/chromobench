@@ -63,18 +63,18 @@ describe('gestures', () => {
     const { rt, root } = setup();
     rt.go('develop');
     rt.flush();
-    const before = rt.history.entries.length;
+    const before = rt.store.log.cursor;
     const track = trackOf(root, 'Exposure');
     track.dispatchEvent(ptr('pointerdown', { clientX: 100 }));
     track.dispatchEvent(ptr('pointermove', { clientX: 110 }));
     track.dispatchEvent(ptr('pointermove', { clientX: 120 }));
     expect(rt.store.previewing).toBe(true);
-    expect(rt.history.entries.length).toBe(before);
+    expect(rt.store.log.cursor).toBe(before);
     track.dispatchEvent(ptr('pointerup', { clientX: 120 }));
     rt.flush();
     expect(rt.store.previewing).toBe(false);
-    expect(rt.history.entries.length).toBe(before + 1);
-    expect(rt.history.entries.at(-1)!.label).toBe('Exposure');
+    expect(rt.store.log.cursor).toBe(before + 1);
+    expect(rt.store.log.undoStep!.label).toBe('Exposure');
     expect(rt.state.dev['p0']!.light.exposure).toBeCloseTo(1, 5);
     rt.undo();
     rt.flush();
@@ -85,7 +85,7 @@ describe('gestures', () => {
     const { rt, root } = setup();
     rt.go('develop');
     rt.flush();
-    const before = rt.history.entries.length;
+    const before = rt.store.log.cursor;
     const track = trackOf(root, 'Contrast');
     track.dispatchEvent(ptr('pointerdown', { clientX: 100 }));
     track.dispatchEvent(ptr('pointermove', { clientX: 180 }));
@@ -94,7 +94,7 @@ describe('gestures', () => {
     rt.flush();
     expect(rt.store.previewing).toBe(false);
     expect(rt.state.dev['p0']!.light.contrast).toBe(0);
-    expect(rt.history.entries.length).toBe(before);
+    expect(rt.store.log.cursor).toBe(before);
   });
 
   it('a disabled command button shows why, and says it when clicked', () => {
@@ -123,13 +123,13 @@ describe('gestures', () => {
       t.dev['p0']!.color.tint = 5;
     });
     rt.flush();
-    const n = rt.history.entries.length;
+    const n = rt.store.log.cursor;
     const title = [...root.querySelectorAll<HTMLElement>('.ck-section-t')].find(t => t.textContent === 'Light')!;
     title.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     rt.flush();
     expect(rt.state.dev['p0']!.light).toEqual({ exposure: 0, contrast: 0, highlights: 0, shadows: 0 });
     expect(rt.state.dev['p0']!.color.tint).toBe(5);
-    expect(rt.history.entries.length).toBe(n + 1);
+    expect(rt.store.log.cursor).toBe(n + 1);
   });
 });
 

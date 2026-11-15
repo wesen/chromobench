@@ -1,7 +1,8 @@
 // Persistence behind an async interface (CraftKit saved to localStorage directly). Autosave is debounced 700 ms on
 // the idle lane, and runs on page hide and visibilitychange to hidden (IndexedDB writes on pagehide may not
 // finish). The document tier goes through `persist`; the view tier less `transient`, and of `ui` only `keepUi`.
-// Routed prefixes are never saved by the shell (studio-kit persists EditLogs).
+// The document tier is every document of the log where it shows (a host that saves its mounted documents itself
+// drops them in `persist`).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Runtime } from './runtime.ts';
@@ -126,9 +127,8 @@ export function startAutosave(rt: Runtime<any>, adapter: PersistenceAdapter, key
     return chain;
   };
   const off = rt.store.on((paths, info) => {
-    if (info && (info.preview || info.init || info.tier === 'route')) return;
+    if (info && (info.preview || info.init)) return;
     for (const p of paths) {
-      if (rt.store.isRouted(p)) continue;
       if (rt.store.tierOf(p) === 'document') dirtyDoc = true;
       else if (p[0] === 'workspace' || p[0] === 'prefs' || (p[0] === 'view' && !transient.includes(String(p[1]))) || (p[0] === 'ui' && keepUi.includes(String(p[1]))) || (p[0] !== 'ui' && p[0] !== 'view')) dirtyView = true;
     }

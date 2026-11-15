@@ -9,6 +9,7 @@ export const VALUE_ERROR_CODES = {
   E_ARG_TYPE: 'A value is not JSON (a function, a class instance, undefined in an array, a typed array).',
   E_ARG_RANGE: 'A number is not finite.',
   E_INTERNAL: 'A value cannot be canonicalised (a typed array).',
+  E_STALE: 'A pending transaction no longer applies as proposed (its inverses changed).',
 } as const;
 
 export type ValueErrorCode = keyof typeof VALUE_ERROR_CODES;

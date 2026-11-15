@@ -23,7 +23,7 @@ describe('the counter (guide §5.2)', () => {
     expect(rt.state.count).toBe(1);
     expect(rt.press('Mod+ArrowUp')).toBe(true);
     expect(rt.state.count).toBe(2);
-    rt.history.undo();
+    rt.undo();
     expect(rt.state.count).toBe(1);
     expect(rt.press('Mod+Z')).toBe(true);
     expect(rt.state.count).toBe(0);
@@ -69,15 +69,15 @@ describe('the mini studio', () => {
     expect(rt.state.catalog.photos[0]!.rating).toBe(3);
     rt.press('D'); // module key
     expect(rt.module).toBe('develop');
-    // a slider drag: many previews, one commit, one undo step with the photo as channel
+    // a slider drag: many previews, one commit, one undo step on the photo's document
     const ctx = rt.ctx();
     for (const v of [0.1, 0.2, 0.35]) ctx.preview((s: MiniState) => s.dev['p0']!.light.exposure, v);
-    expect(rt.store.doc.dev.p0.light.exposure).toBe(0);
+    expect(rt.store.committed.dev.p0.light.exposure).toBe(0);
     expect(rt.state.dev['p0']!.light.exposure).toBe(0.35);
     ctx.commit('Exposure');
-    expect(rt.history.entries.length).toBe(3);
-    expect(rt.history.entries[2]!.channel).toBe('p0');
-    expect(rt.history.channel('p0').list.map(x => x.label)).toEqual(['Import', 'Exposure']);
+    expect(rt.store.log.cursor).toBe(3);
+    expect(rt.store.log.docsOf(rt.store.log.undoStep!)).toEqual(['p0']);
+    expect(rt.store.log.inEffect('p0').map(e => e.tx.label)).toEqual(['Exposure']);
     rt.press('Mod+Z');
     expect(rt.state.dev['p0']!.light.exposure).toBe(0);
   });

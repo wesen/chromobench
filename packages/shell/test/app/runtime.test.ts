@@ -1,8 +1,9 @@
-// The headless runtime: persistence, route adapters at start, inspect, effect loops, every file imports in Node.
+// The headless runtime: persistence, document rules at start, inspect, effect loops, every file imports in Node.
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { ValueError } from '@chromobench/values';
 import { createCk } from '../../src/index.ts';
 import { manualClock, memoryPersistence } from '../../src/testing/index.ts';
 import { miniStudio, type MiniState } from '../fixtures/mini-studio.ts';
@@ -42,9 +43,9 @@ describe('persistence', () => {
 });
 
 describe('runtime', () => {
-  it('a route adapter supplied at start: a refusal is a toast and a runtime diagnostic', () => {
+  it("a document's rules supplied at start: a refusal is a toast and a runtime diagnostic", () => {
     const ck = createCk();
-    const kit = ck.kit('cb').state('recipes', { init: { f1: { t: 1 } } }).route('recipes', { keyDepth: 1 });
+    const kit = ck.kit('cb').state('recipes', { init: { f1: { t: 1 } } }).mount('recipes', { keyDepth: 1, kind: 'frame' });
     const app = ck
       .shell('x')
       .use(kit)
@@ -52,14 +53,15 @@ describe('runtime', () => {
       .build();
     const rt = app.start({
       clock: manualClock(),
-      adapters: {
-        recipes: {
-          apply(ps: any) {
-            if ((ps[0]!.after as number) > 9) throw Object.assign(new Error('t must be at most 9'), { code: 'E_ARG_RANGE' });
+      rules: {
+        frame: {
+          validate: (c: any) => {
+            if (c.after.t > 9) throw new ValueError({ code: 'E_ARG_RANGE', message: 't must be at most 9' });
           },
         },
       },
     });
+    expect(rt.store.log.ids()).toEqual(['main', 'f1']);
     rt.ctx().tx('T', (t: any) => void (t.recipes.f1.t = 5));
     expect(rt.state.recipes.f1.t).toBe(5);
     rt.ctx().tx('T', (t: any) => void (t.recipes.f1.t = 50));
@@ -67,8 +69,9 @@ describe('runtime', () => {
     expect((rt.chrome as any).lastToast).toBe('t must be at most 9');
     const d = rt.diagnostics.list.find(x => x.code === 'CK-T430')!;
     expect(d.facts).toContain('code E_ARG_RANGE');
-    rt.history.undo();
-    expect(rt.state.recipes.f1.t).toBe(1); // no part: the store undid the routed patch itself
+    rt.undo();
+    expect(rt.state.recipes.f1.t).toBe(1);
+    expect(rt.store.log.canRedo).toBe(true);
   });
   it('a handler writing outside a transaction is CK-T410', () => {
     const ck = createCk();
@@ -87,8 +90,8 @@ describe('runtime', () => {
     const ck = createCk();
     const rt = ck.shell('x').state({ n: 0, view: { m: 0 } }).module(ck.module('main').center(ck.text('x'))).build().start({ clock: manualClock() });
     rt.cell(s => s.n, v => rt.store.set('view.m', v));
-    rt.cell(s => s.view.m, v => rt.store.writeDoc([{ path: ['n'], value: (v as number) + 1 }]));
-    rt.store.writeDoc([{ path: ['n'], value: 1 }]);
+    rt.cell(s => s.view.m, v => rt.store.tx('n', (t: any) => void (t.n = (v as number) + 1)));
+    rt.store.tx('n', (t: any) => void (t.n = 1));
     rt.flush();
     expect(rt.diagnostics.codes()).toContain('CK-P510');
   });

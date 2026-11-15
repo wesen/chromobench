@@ -1,15 +1,15 @@
-// Kits: what a layout installs with .use(kit): a state slice, routes, forms, fragments, commands, keys, tools,
+// Kits: what a layout installs with .use(kit): a state slice, mounts, forms, fragments, commands, keys, tools,
 // passes, IRs, themes, icons and docs. A kit is an immutable value (builder.ts): `ck.kit(name)` is empty and every
 // chain method returns a new kit, so a kit can be explained, parameterised by a function and installed into several
 // builds. Dependencies install first, each once; a missing one is CK-X130, a cycle CK-X131. The same command, tool,
-// route or state key from two kits is CK-X101 naming both. A kit's keys bind in scope kit:<name> (every module).
+// mount or state key from two kits is CK-X101 naming both. A kit's keys bind in scope kit:<name> (every module).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { modifier, site, type CallSite, type Modifier } from '@chromobench/values';
 import type { Diagnostics } from '../core/diag.ts';
 import { deepMerge, isPlainObject } from '../core/util.ts';
 import type { CommandSpec } from '../core/commands.ts';
-import type { RouteDecl } from '../core/store.ts';
+import type { MountDecl } from '../core/store.ts';
 import type { KeyTarget, Spring } from '../core/keys.ts';
 import type { FormSpec } from '../ir/forms.ts';
 import type { Ctx } from '../app/runtime.ts';
@@ -30,7 +30,8 @@ export interface KitValue<St = unknown> extends Kit<St>, Built<KitDef> {
   /** a state slice: document tier unless listed in view (relative sub-paths, or true for the whole slice) */
   state<K extends string, T>(key: K, o: { init: T; view?: string[] | boolean }): KitValue<St & { [P in K]: T }>;
   derive(path: string, fn: (s: any) => unknown): KitValue<St>;
-  route(prefix: string, decl?: Omit<RouteDecl, 'prefix'>): KitValue<St>;
+  /** documents of the log appear under prefix (+ keyDepth keys): the host opens them there; bindings are checked */
+  mount(prefix: string, decl?: Omit<MountDecl, 'prefix'>): KitValue<St>;
   forms(...specs: FormSpec[]): KitValue<St>;
   fragments(...frags: Fragment[]): KitValue<St>;
   /** a command table (id → spec); type the state the handlers read with .commands<S>({ … }) */
@@ -61,7 +62,7 @@ export const kitMods = {
     const at = site();
     return add('derive', 'derived', () => [{ path, fn, at }]);
   },
-  route: (prefix: string, decl: Omit<RouteDecl, 'prefix'> = {}): M => add('route', 'routes', d => [{ ...decl, prefix, source: d.name }]),
+  mount: (prefix: string, decl: Omit<MountDecl, 'prefix'> = {}): M => add('mount', 'mounts', d => [{ ...decl, prefix, source: d.name }]),
   forms: (...specs: FormSpec[]): M => add('forms', 'forms', d => specs.map(f => ({ ...f, source: d.name }))),
   fragments: (...frags: Fragment[]): M => add('fragments', 'fragments', d => frags.map(f => (f.source ? f : Object.freeze({ ...f, source: d.name })))),
   commands: (table: CommandTable): M => {
@@ -100,7 +101,7 @@ const emptyDef = (name: string): KitDef => ({
   requires: [],
   state: [],
   derived: [],
-  routes: [],
+  mounts: [],
   forms: [],
   fragments: [],
   commands: [],
@@ -193,7 +194,7 @@ const loc = (at: CallSite | null | undefined): string => (at ? ` (${at.file}:${a
 /** Merge installed kits into the IR, in dependency order. Kit items come before the program's own. */
 export function installKits(ir: UiIR, kits: Kit[], D: Diagnostics, programInit: Record<string, unknown>): void {
   const stateOwner = new Map<string, Kit>();
-  const routeOwner = new Map<string, string>();
+  const mountOwner = new Map<string, string>();
   const kitCommands: typeof ir.commands = [];
   const kitKeys: typeof ir.keys = [];
   for (const k of kits) {
@@ -212,14 +213,14 @@ export function installKits(ir: UiIR, kits: Kit[], D: Diagnostics, programInit: 
       else if (Array.isArray(s.view)) for (const v of s.view) ir.view.push(`${s.key}.${v}`);
     }
     ir.derived.push(...d.derived);
-    for (const r of d.routes) {
-      const prev = routeOwner.get(r.prefix);
+    for (const r of d.mounts) {
+      const prev = mountOwner.get(r.prefix);
       if (prev) {
-        D.error('CK-X101', `Two kits route '${r.prefix}'`, { facts: [`first: kit ${prev}`, `again: kit ${k.name}`], source: k.name });
+        D.error('CK-X101', `Two kits mount documents at '${r.prefix}'`, { facts: [`first: kit ${prev}`, `again: kit ${k.name}`], source: k.name });
         continue;
       }
-      routeOwner.set(r.prefix, k.name);
-      ir.routes.push(r);
+      mountOwner.set(r.prefix, k.name);
+      ir.mounts.push(r);
     }
     for (const f of d.forms) {
       const prev = ir.forms.get(f.name);

@@ -10,10 +10,8 @@ export const ck = createCk();
 export default ck;
 
 // core
-export { Store, Draft, PathIndex, strip, TxRefused } from './core/store.ts';
-export type { Patch, Write, Mirror, TxOpts, WriteInfo, RouteAdapter, RouteApi, RouteDecl, RouteResult, Layer, StoreOpts } from './core/store.ts';
-export { History } from './core/history.ts';
-export type { HistoryEntry, HistoryPart, Channel, ChannelItem } from './core/history.ts';
+export { Store, Draft, Writer, MAIN, PathIndex, strip, TxRefused } from './core/store.ts';
+export type { Write, TxOpts, WriteInfo, MountDecl, StoreOpts } from './core/store.ts';
 export { Cell, Scope, Scheduler } from './core/cells.ts';
 export type { CellOpts, SchedulerStats } from './core/cells.ts';
 export { browserClock } from './core/clock.ts';
@@ -51,7 +49,7 @@ export type { UiIR, Kit, KitDef, Fragment, FragmentSpec, PassDef, PassCtx, IrSpe
 // app
 export { BuiltApp } from './app/built-app.ts';
 export { Runtime } from './app/runtime.ts';
-export type { Services, Ctx, Explained, Draft as DraftOf, ViewportApi, Inspect } from './app/runtime.ts';
+export type { Services, Ctx, Explained, WriterOf, ViewportApi, Inspect } from './app/runtime.ts';
 export { RecordingChrome, resolveMenu, menuBar, paletteEntries, searchPalette } from './app/chrome.ts';
 export type { ChromeApi, DialogSpec, ToastOpts, MenuRow, PaletteEntry } from './app/chrome.ts';
 export { Workspace, SIDES } from './app/workspace.ts';

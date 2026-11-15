@@ -1,112 +1,227 @@
-// The store (port of CraftKit core/store.js): one immutable state tree in tiers.
+// The store: one immutable state tree in three tiers (design §26).
 //
-//   document  what the user makes. Every change is a transaction with an inverse, so it can be undone, and it is
-//             what autosave writes.
-//   view      how the user looks at it (zoom, the open module, panel sizes, the selection). Changed freely, saved
-//             with the workspace, never undone.
-//   preview   transient layers over both: named layers (agent proposals) and the gesture layer (a slider drag).
-//             Readers see them; the document does not change until the gesture commits, which makes one
-//             transaction — one undo step — of the whole drag.
+//   document  what the user makes. It *is* the document log of @chromobench/values: the program's own document
+//             state is the log's `main` document, and documents the host opens (a frame) are mounted at a path.
+//             Every change is a transaction of the log; undo and redo walk the log's steps; autosave writes the
+//             main document.
+//   view      how the user looks at it (zoom, the open module, panel sizes, the selection), by path prefix ('ui',
+//             'roll.contact': the longest listed prefix wins). Changed freely, saved with the workspace, never undone.
+//   preview   drafts over both: named drafts (proposals shown before they are decided) and the gesture (a slider
+//             drag). Readers see them; the document does not change until a draft commits, which makes one
+//             transaction — one undo step — of its net change.
 //
-// New in the port:
-//   - tiers by path prefix ('ui', 'roll.contact'): the longest listed prefix wins;
-//   - named preview layers: current = doc ⊕ named layers ⊕ gesture;
-//   - routes: writes under a declared prefix (recipes.<frameId>) go to an adapter first. If it throws, the whole
-//     transaction is aborted and reported; otherwise the plain patches and the adapter's mirror values are written
-//     in one writeDoc, so cells see one change.
-//
+// A transaction's writes (ctx.tx's lambda, a draft's commit, set/setMany on document paths) are split by document:
+// each document's net change (values `diff`) is one edit, and edits to several documents commit as one batch, one
+// step. A refusal (the document's rules, a value that is not JSON) aborts the whole transaction and is reported.
 // Writes notify a path index; cells whose read sets touch a written path are marked dirty and re-run on the next
 // frame, all against the same state, so no reader ever sees half a transaction.
 //
-// The parts live in core/store/: types.ts (Patch, Write, TxOpts, WriteInfo), routes.ts (route types, TxRefused,
-// attachRoute), readonly.ts (strip, the handlers' read-only view), path-index.ts (the subscriber trie),
-// derived.ts (derived paths), layers.ts (named preview layers), snapshot.ts (a tier's committed state) and
-// draft.ts (what ctx.tx hands to its lambda). This file keeps the Store class and re-exports the public names.
+// The parts live in core/store/: types.ts (Write, TxOpts, WriteInfo, MountDecl), project.ts (the log's documents
+// in the tree), drafts.ts (the preview tier), writer.ts (what ctx.tx hands to its lambda), readonly.ts (strip, the
+// handlers' read-only view), path-index.ts (the subscriber trie), derived.ts (derived paths), snapshot.ts (a tier's
+// committed state). This file keeps the Store class and re-exports the public names.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { isObj, pathStr, parsePath, getIn, setIn, prefixOf, deepEq, type Key, type Path } from './util.ts';
+import { Log, type Author, type Batch, type Edit, type JsonObject, type OpenOptions, type Rules, type Step } from '@chromobench/values';
+import { isObj, pathStr, parsePath, getIn, setIn, prefixOf, type Key, type Path } from './util.ts';
 import type { DerivedSource } from './track.ts';
-import type { History, HistoryPart } from './history.ts';
-import type { Patch, Write, TxOpts, WriteInfo } from './store/types.ts';
-import { attachRoute, TxRefused, type Route, type RouteAdapter, type RouteDecl, type RouteResult } from './store/routes.ts';
+import type { Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
 import { strip, readonlyView } from './store/readonly.ts';
 import { PathIndex } from './store/path-index.ts';
 import { Derived } from './store/derived.ts';
-import { namedLayer, type Layer } from './store/layers.ts';
+import { Draft } from './store/drafts.ts';
 import { snapshotOf } from './store/snapshot.ts';
-import { Draft } from './store/draft.ts';
+import { Writer } from './store/writer.ts';
+import { MAIN, changedPaths, project } from './store/project.ts';
 
-export type { Patch, Write, Mirror, TxOpts, WriteInfo } from './store/types.ts';
-export type { RouteResult, RouteAdapter, RouteApi, RouteDecl } from './store/routes.ts';
-export { TxRefused } from './store/routes.ts';
+export type { Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
 export { strip } from './store/readonly.ts';
 export { PathIndex } from './store/path-index.ts';
-export type { Layer } from './store/layers.ts';
-export { Draft } from './store/draft.ts';
+export { Draft } from './store/drafts.ts';
+export { Writer } from './store/writer.ts';
+export { MAIN } from './store/project.ts';
 
 export interface StoreOpts {
   /** view-tier prefixes ('ui', 'view', 'prefs', 'workspace', 'roll.contact'); the rest is document */
   view?: string[];
-  routes?: RouteDecl[];
+  /** the log's rules by document kind (a studio passes the contract's LOG_RULES) */
+  rules?: Rules;
+  /** where documents are mounted (kits declare them; the host opens the documents) */
+  mounts?: MountDecl[];
+  /** the clock for log entries and coalescing (default Date.now) */
+  now?: () => number;
+  /** consecutive transactions with one coalesce key within this many ms are one step (default 1500) */
+  coalesceMs?: number;
 }
 
 const DEFAULT_VIEW = ['ui', 'view', 'prefs', 'workspace'];
 type Listener = (paths: Key[][], info: WriteInfo) => void;
 
+/** A transaction the log refused: nothing changed (the open gesture is dropped). */
+export class TxRefused extends Error {
+  readonly label: string;
+  /** the documents it would have changed */
+  readonly docs: string[];
+  readonly cause2: unknown;
+  constructor(label: string, docs: string[], cause: unknown) {
+    super(`${label} was refused${docs.length ? ` (${docs.join(', ')})` : ''}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'TxRefused';
+    this.label = label;
+    this.docs = docs;
+    this.cause2 = cause;
+  }
+}
+
+/** One target of a write: a document (and the path in it), or the view tier. */
+type Routed = { doc: string; rel: Key[]; value: unknown } | { doc: null; path: Key[]; value: unknown };
+
 export class Store implements DerivedSource {
-  doc: any;
+  /** every tier, committed (no drafts) */
+  committed: any;
+  /** what readers see: committed ⊕ named drafts ⊕ the gesture */
   current: any;
-  /** the gesture layer: pathStr → { path, value } */
-  previewPatches = new Map<string, Write>();
-  /** named layers, in creation order, under the gesture layer */
-  layers = new Map<string, Map<string, Write>>();
+  /** the document tier */
+  log: Log;
+  /** the gesture: ctx.preview / commit / cancel */
+  readonly gesture: Draft;
+  /** named drafts, in creation order, under the gesture */
+  readonly drafts = new Map<string, Draft>();
   viewPrefixes: Key[][];
-  routes: Route[] = [];
+  readonly mountDecls: MountDecl[];
+  /** mounted documents: id → path */
+  readonly mounts = new Map<string, Key[]>();
   index = new PathIndex();
   derived = new Map<string, Derived>();
   listeners = new Set<Listener>();
   refusals = new Set<(e: TxRefused) => void>();
-  history: History | null = null;
   version = 0;
   /** subscribers marked dirty, waiting for a flush */
   pending = new Set<unknown>();
   /** the scheduler asks to be told */
   onDirty: (() => void) | null = null;
   private cellSeq = 0;
+  private txSeq = 0;
+  private readonly now: () => number;
+  private readonly coalesceMs: number;
+  /** the step the last coalescing transaction made, and when */
+  private lastCoalesce: { key: string; at: number; step: Step } | null = null;
 
   constructor(init: object = {}, opts: StoreOpts = {}) {
-    this.doc = init;
-    this.current = init;
     this.viewPrefixes = (opts.view || DEFAULT_VIEW).map(p => parsePath(p));
-    for (const r of opts.routes || []) this.declareRoute(r);
+    this.mountDecls = (opts.mounts ?? []).slice();
+    this.now = opts.now ?? Date.now;
+    this.coalesceMs = opts.coalesceMs ?? 1500;
+    this.gesture = new Draft(this, 'gesture');
+    // the initial state under a declared mount is one document per key; the rest (less the view tier) is main
+    let main: unknown = init;
+    for (const p of this.viewPrefixes) main = setIn(main, p, undefined);
+    const docs: [string, Key[], object, string][] = [];
+    for (const m of this.mountDecls) {
+      const pre = parsePath(m.prefix);
+      const visit = (v: unknown, at: Key[], depth: number): void => {
+        if (depth === (m.keyDepth ?? 0)) {
+          if (isObj(v) && !Array.isArray(v)) docs.push([at.slice(pre.length).join('.') || m.prefix, at, v, m.kind ?? 'plain']);
+          return;
+        }
+        if (isObj(v)) for (const [k, x] of Object.entries(v)) visit(x, [...at, k], depth + 1);
+      };
+      visit(getIn(init, pre), pre, 0);
+    }
+    for (const [, at] of docs) main = setIn(main, at, undefined);
+    let log = Log.create({ rules: opts.rules ?? {}, now: this.now }).open(MAIN, (main ?? {}) as object, { by: 'user', source: { kind: 'init' } });
+    for (const [id, at, doc, kind] of docs) {
+      log = log.open(id, doc, { kind, by: 'user', source: { kind: 'init' } });
+      this.mounts.set(id, at);
+    }
+    this.log = log;
+    this.committed = init;
+    this.current = init;
+    this.rebase();
   }
   nextCellId(): number {
     return ++this.cellSeq;
   }
 
   tierOf(path: Path): 'document' | 'view' {
+    if (this.mountOf(path)) return 'document';
     let best = -1;
     for (const p of this.viewPrefixes) if (p.length > best && prefixOf(p, path)) best = p.length;
     return best >= 0 ? 'view' : 'document';
   }
 
-  // ── routes ──
-  declareRoute(decl: RouteDecl): void {
-    const prefix = parsePath(decl.prefix);
-    const prev = this.routes.find(r => pathStr(r.prefix) === pathStr(prefix));
-    if (prev) prev.decl = decl;
-    else this.routes.push({ decl, prefix, adapter: null });
+  // ── documents ──
+  /** the mounted document a path is in (the longest mount), and the path inside it */
+  mountOf(path: Path): { doc: string; rel: Key[] } | null {
+    let best: { doc: string; rel: Key[] } | null = null;
+    let len = -1;
+    for (const [doc, at] of this.mounts) if (at.length > len && prefixOf(at, path)) [best, len] = [{ doc, rel: path.slice(at.length) }, at.length];
+    return best;
   }
-  /** attach the host's adapter to a declared (or new) route */
-  route(prefix: string, adapter: RouteAdapter): () => void {
-    return attachRoute(this, prefix, adapter);
+  /** open a document of the log at a path (a frame at recipes.<id>); it shows there, and edits under it go to it */
+  open(id: string, doc: object, o: OpenOptions & { at: string | Path }): void {
+    const at = parsePath(o.at);
+    if (!at.length) throw new TypeError(`store.open('${id}'): a document is mounted at a path, not at the root`);
+    if (this.viewPrefixes.some(p => prefixOf(p, at) || prefixOf(at, p))) throw new TypeError(`store.open('${id}'): ${pathStr(at)} is in the view tier`);
+    for (const [other, p] of this.mounts) if (prefixOf(p, at) || prefixOf(at, p)) throw new TypeError(`store.open('${id}'): ${pathStr(at)} overlaps the document '${other}' at ${pathStr(p)}`);
+    if (getIn(this.log.doc(MAIN), at) !== undefined) throw new TypeError(`store.open('${id}'): the main document holds a value at ${pathStr(at)}`);
+    const { at: _at, ...opts } = o;
+    const log = this.log.open(id, doc, opts);
+    this.mounts.set(id, at);
+    this.replace(log, { label: `Open ${id}` });
   }
-  routeOf(path: Path): Route | null {
-    for (const r of this.routes) if (prefixOf(r.prefix, path) || prefixOf(path, r.prefix)) return r;
-    return null;
+  /** close a mounted document: it leaves the state and the log with its history */
+  close(id: string): void {
+    const at = this.mounts.get(id);
+    if (!at) return;
+    this.cancel();
+    this.mounts.delete(id);
+    this.log = this.log.close(id);
+    this.committed = setIn(this.committed, at, undefined);
+    this.rebase();
+    this.notify([at], { tier: 'document', label: `Close ${id}` });
   }
-  isRouted(path: Path): boolean {
-    return !!this.routeOf(path);
+  /**
+   * Replace the log (an operation of the host: approve, reject, a batch the agent proposed, a load) and show what
+   * changed. Every document of the new log must be the main document or mounted.
+   */
+  change(f: (log: Log) => Log, info: WriteInfo = {}): Log {
+    const next = f(this.log);
+    if (next !== this.log) this.replace(next, info);
+    return next;
+  }
+  private replace(next: Log, info: WriteInfo, also: Write[] = []): void {
+    const prev = this.log;
+    this.log = next;
+    const keep: Key[][] = [...this.viewPrefixes, ...this.mounts.values()];
+    const paths: Key[][] = [];
+    let tree = this.committed;
+    for (const id of next.ids()) {
+      const b = next.doc(id);
+      const a = prev.has(id) ? prev.doc(id) : undefined;
+      if (a === b) continue;
+      const base = id === MAIN ? [] : this.mounts.get(id);
+      if (!base) throw new TypeError(`the log's document '${id}' is not mounted in the store`);
+      const changed = a === undefined ? [[]] : changedPaths(a, b);
+      tree = project(tree, base, changed, b, id === MAIN ? keep : []);
+      for (const p of changed) paths.push([...base, ...p]);
+    }
+    for (const w of also) {
+      tree = setIn(tree, w.path, strip(w.value));
+      paths.push(w.path);
+    }
+    this.committed = tree;
+    this.rebase();
+    this.notify(paths, { tier: 'document', ...info });
+  }
+  /**
+   * Take over another store's log and mounts: a host that replaces its program in place keeps one history
+   * (CHB-031 F24, View ▸ Layout). The documents show as the log holds them.
+   */
+  adopt(from: Store): void {
+    if (from === this) return;
+    this.cancel();
+    for (const [id, at] of from.mounts) this.mounts.set(id, at);
+    this.replace(from.log, { label: 'Adopt' });
   }
 
   // ── reads ──
@@ -161,37 +276,42 @@ export class Store implements DerivedSource {
   }
 
   // ── writes ──
-  /** the lowest-level write: straight into the committed state (used by transactions, undo and view writes) */
-  writeDoc(writes: Write[], info: WriteInfo = {}): void {
-    let doc = this.doc;
-    for (const { path, value } of writes) doc = setIn(doc, path, strip(value));
-    this.doc = doc;
+  /** write view-tier state directly (no undo); a document path is refused (it changes only through the log) */
+  writeView(writes: Write[], info: WriteInfo = {}): void {
+    let tree = this.committed;
+    for (const { path, value } of writes) {
+      if (this.tierOf(path) === 'document') throw new TypeError(`writeView: ${pathStr(path)} is in the document tier; write it in a transaction`);
+      tree = setIn(tree, path, strip(value));
+    }
+    this.committed = tree;
     this.rebase();
     this.notify(
       writes.map(p => p.path),
-      info,
+      { tier: 'view', ...info },
     );
   }
   rebase(): void {
-    let cur = this.doc;
-    for (const layer of this.layers.values()) for (const { path, value } of layer.values()) cur = setIn(cur, path, value);
-    for (const { path, value } of this.previewPatches.values()) cur = setIn(cur, path, value);
+    let cur = this.committed;
+    for (const d of this.drafts.values()) for (const { path, value } of d.writes()) cur = setIn(cur, path, value);
+    for (const { path, value } of this.gesture.writes()) cur = setIn(cur, path, value);
     this.current = cur;
   }
 
   /** set view-tier state directly (no undo); document paths go through a transaction */
-  set(p: string | Path, value: unknown, info?: WriteInfo & TxOpts): unknown {
+  set(p: string | Path, value: unknown, opts: TxOpts & { label?: string } = {}): unknown {
     const path = parsePath(p);
-    if (this.tierOf(path) === 'document') return this.tx((info && info.label) || 'Change', t => t.$set(path, value), info);
-    this.writeDoc([{ path, value }], Object.assign({ tier: 'view' as const }, info));
+    const { label, ...tx } = opts;
+    if (this.tierOf(path) === 'document') return this.tx(label || 'Change', t => t.$set(path, value), tx);
+    this.writeView([{ path, value }], label ? { label } : {});
     return null;
   }
   /** merge a nested object of state: ctx.set({ view: { mode: 'loupe' } }); document paths become a transaction */
-  setMany(obj: Record<string, unknown>, info?: WriteInfo & TxOpts): void {
+  setMany(obj: Record<string, unknown>, opts: TxOpts & { label?: string } = {}): void {
+    const { label, ...txo } = opts;
     const writes: Write[] = [];
     const walk = (v: unknown, path: Key[]): void => {
       const plain = isObj(v) && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
-      const there = getIn(this.doc, path);
+      const there = getIn(this.committed, path);
       if (plain && (path.length < 1 || (isObj(there) && !Array.isArray(there)))) {
         for (const [k, x] of Object.entries(v as object)) walk(x, path.concat([k]));
         return;
@@ -201,112 +321,168 @@ export class Store implements DerivedSource {
     walk(obj, []);
     const doc = writes.filter(p => this.tierOf(p.path) === 'document');
     const view = writes.filter(p => this.tierOf(p.path) === 'view');
-    if (view.length) this.writeDoc(view, Object.assign({ tier: 'view' as const }, info));
+    if (view.length) this.writeView(view, label ? { label } : {});
     if (doc.length)
       this.tx(
-        (info && info.label) || 'Change',
+        label || 'Change',
         t => {
           for (const p of doc) t.$set(p.path, p.value);
         },
-        info,
+        txo,
       );
   }
 
-  /** A transaction: fn(t) writes through a draft; the result is one history entry with the inverse of every write. */
+  /** A transaction: fn(t) writes through a writer; the result is one step of the log (the net change). */
   tx(label: string, fn: (t: any) => unknown, opts: TxOpts = {}): unknown {
-    const draft = new Draft(this);
-    const ret = fn(draft.proxy());
+    const w = new Writer(this);
+    const ret = fn(w.proxy());
     if (ret && typeof (ret as Promise<unknown>).then === 'function')
       throw new TypeError(`ctx.tx('${label}') got an async function: compute first, then write in one synchronous transaction`);
-    const patches = draft.patches();
-    if (!patches.length) return null;
+    const writes = w.writes();
+    if (!writes.length) return null;
     // an open gesture survives a transaction elsewhere (a background job finishing); one that touches what it
     // previews is cancelled, so its commit cannot overwrite the transaction
-    if (this.previewPatches.size && !opts.keepPreview) {
-      const overlap = [...this.previewPatches.values()].some(pp => patches.some(q => prefixOf(pp.path, q.path) || prefixOf(q.path, pp.path)));
+    if (this.gesture.size && !opts.keepPreview) {
+      const overlap = this.gesture.writes().some(g => writes.some(q => prefixOf(g.path, q.path) || prefixOf(q.path, g.path)));
       if (overlap) this.cancel();
     }
-    return this.commitPatches(label, patches, opts);
+    return this.commitWrites(label, writes, { ...opts, source: { kind: 'tx', ...opts.source } });
   }
 
-  commitPatches(label: string, patches: Patch[], opts: TxOpts = {}): unknown {
-    if (opts.snapPath && opts.snapBefore === undefined) opts = Object.assign({}, opts, { snapBefore: getIn(this.doc, opts.snapPath) });
-    // routes first: an adapter may refuse, which aborts everything
-    const plain: Patch[] = [];
-    const byRoute = new Map<Route, Patch[]>();
-    for (const p of patches) {
-      const r = this.routeOf(p.path);
-      if (r && r.adapter) (byRoute.get(r) || byRoute.set(r, []).get(r)!).push(p);
-      else plain.push(p);
+  /** where a write lands: one document (or several, when it holds a mounted document or a view prefix), or the view */
+  private route(w: Write): Routed[] {
+    const m = this.mountOf(w.path);
+    if (m) return [{ doc: m.doc, rel: m.rel, value: w.value }];
+    if (this.tierOf(w.path) === 'view') return [{ doc: null, path: w.path, value: w.value }];
+    for (const d of this.mountDecls) {
+      const root = parsePath(d.prefix).length + (d.keyDepth ?? 0);
+      if (w.path.length >= root && prefixOf(parsePath(d.prefix), w.path))
+        throw new TypeError(`no document is open at ${pathStr(w.path.slice(0, root))}: documents under '${d.prefix}' are opened by the host`);
     }
-    const writes: Write[] = plain.map(p => ({ path: p.path, value: p.after }));
-    const undoable: Patch[] = plain.filter(p => this.tierOf(p.path) === 'document');
-    const parts: HistoryPart[] = [];
-    for (const [r, ps] of byRoute) {
-      let res: RouteResult | void;
-      try {
-        res = r.adapter!.apply(ps, { label, opts });
-      } catch (e) {
-        const err = new TxRefused(label, r.adapter!.id || pathStr(r.prefix), e);
-        if (this.previewPatches.size) this.cancel();
-        for (const f of this.refusals) f(err);
-        if (!this.refusals.size) throw err;
-        return null;
+    // a main-document write; what it holds for other tiers below it goes there
+    const out: Routed[] = [];
+    let main = w.value;
+    for (const p of this.viewPrefixes) {
+      if (p.length <= w.path.length || !prefixOf(w.path, p)) continue;
+      const rel = p.slice(w.path.length);
+      const v = getIn(w.value, rel);
+      main = setIn(main, rel, undefined);
+      if (v !== undefined) out.push({ doc: null, path: p, value: v });
+    }
+    for (const [doc, at] of this.mounts) {
+      if (at.length <= w.path.length || !prefixOf(w.path, at)) continue;
+      const rel = at.slice(w.path.length);
+      const v = getIn(w.value, rel);
+      main = setIn(main, rel, undefined);
+      if (v !== undefined) out.push({ doc, rel: [], value: v });
+    }
+    for (const d of this.mountDecls) {
+      const pre = parsePath(d.prefix);
+      if (pre.length + (d.keyDepth ?? 0) <= w.path.length || !prefixOf(w.path, pre)) continue;
+      // what is left at a declared document root is a document nobody opened
+      const left = (v: unknown, depth: number, at: Key[]): void => {
+        if (!isObj(v)) return;
+        if (depth === 0) throw new TypeError(`no document is open at ${pathStr(at)}: documents under '${d.prefix}' are opened by the host`);
+        for (const [k, x] of Object.entries(v)) left(x, depth - 1, [...at, k]);
+      };
+      const rel = pre.slice(w.path.length);
+      left(getIn(main, rel), d.keyDepth ?? 0, pre);
+    }
+    out.unshift({ doc: MAIN, rel: w.path, value: main });
+    return out;
+  }
+
+  /**
+   * Commit writes (in the committed state's paths) as one step: each document's net change is one edit, several
+   * documents' edits one batch; view-tier writes land in the same notify. Refused: nothing changes.
+   */
+  commitWrites(label: string, writes: Write[], opts: TxOpts = {}): Step | null {
+    const id = `s${++this.txSeq}`;
+    const drafts = new Map<string, ReturnType<Log['draft']>>();
+    const view: Write[] = [];
+    const by: Author = opts.by ?? 'user';
+    const source: JsonObject = { ...opts.source, ...(opts.detail !== undefined ? { detail: opts.detail } : {}) };
+    let next = this.log;
+    try {
+      for (const w of writes) {
+        for (const r of this.route(w)) {
+          if (r.doc === null) {
+            view.push({ path: r.path, value: r.value });
+            continue;
+          }
+          const d = drafts.get(r.doc) ?? this.log.draft(r.doc);
+          drafts.set(r.doc, d.update(x => setIn(x, r.rel, strip(r.value))));
+        }
       }
-      const ownParts = res ? (res.parts || (res.part ? [res.part] : [])) : [];
-      parts.push(...ownParts);
-      if (res && res.mirror) writes.push(...res.mirror);
-      else writes.push(...ps.map(p => ({ path: p.path, value: p.after })));
-      if (!ownParts.length) undoable.push(...ps);
-    }
-    const tier = undoable.length || parts.length ? 'document' : 'view';
-    this.writeDoc(writes, { label, tier, tx: true });
-    if ((undoable.length || parts.length) && this.history && opts.record !== false) return this.history.record(label, undoable, opts, parts);
-    return null;
-  }
-
-  // ── the gesture layer ──
-  preview(p: string | Path, value: unknown): void {
-    const path = parsePath(p);
-    value = strip(value);
-    this.previewPatches.set(pathStr(path), { path, value });
-    this.current = setIn(this.current, path, value);
-    const r = this.routeOf(path);
-    if (r && r.adapter && r.adapter.preview) r.adapter.preview([{ path, value }]);
-    this.notify([path], { preview: true });
-  }
-  get previewing(): boolean {
-    return this.previewPatches.size > 0;
-  }
-  /** turn the gesture layer into one transaction */
-  commit(label: string, opts: TxOpts = {}): unknown {
-    if (!this.previewPatches.size) return null;
-    const patches: Patch[] = [];
-    for (const { path, value } of this.previewPatches.values()) {
-      const before = getIn(this.doc, path);
-      if (before !== value && !deepEq(before, value)) patches.push({ path, before, after: value });
-    }
-    this.previewPatches.clear();
-    if (!patches.length) {
-      this.rebase();
-      this.notify([], { preview: true });
+      const edits: Edit[] = [...drafts.values()].filter(d => d.changed).map(d => d.edit({ id: `${id}:${d.doc}`, label, by, source, ...(drafts.size > 1 ? { batch: id } : {}) }));
+      if (edits.length) {
+        const x: Edit | Batch = edits.length === 1 && drafts.size === 1 ? edits[0]! : { id, label, by, source, edits, skipped: [] };
+        const key = opts.coalesce ?? null;
+        const c = this.lastCoalesce;
+        const merge = !!key && !!c && c.key === key && this.now() - c.at < this.coalesceMs && this.log.undoStep === c.step;
+        next = this.log.commit(x, { merge });
+        this.lastCoalesce = key && next.undoStep ? { key, at: this.now(), step: next.undoStep } : null;
+      }
+    } catch (e) {
+      const err = new TxRefused(label, [...drafts.keys()], e);
+      if (this.gesture.size) this.cancel();
+      for (const f of this.refusals) f(err);
+      if (!this.refusals.size) throw err;
       return null;
     }
-    return this.commitPatches(label, patches, opts);
-  }
-  cancel(): void {
-    if (!this.previewPatches.size) return;
-    const paths = [...this.previewPatches.values()].map(p => p.path);
-    const routes = new Set(paths.map(p => this.routeOf(p)).filter(Boolean) as Route[]);
-    this.previewPatches.clear();
-    this.rebase();
-    for (const r of routes) r.adapter?.cancel?.();
-    this.notify(paths, { preview: true, cancel: true });
+    if (next === this.log && !view.length) return null;
+    this.replace(next, { label, tx: true, tier: next === this.log ? 'view' : 'document' }, view);
+    return next === this.log ? null : next.undoStep;
   }
 
-  // ── named layers ──
-  layer(name: string): Layer {
-    return namedLayer(this, name);
+  // ── undo / redo ──
+  /** revert the newest step (the open gesture is cancelled first); null when there is nothing to undo */
+  undo(): Step | null {
+    this.cancel();
+    const st = this.log.undoStep;
+    if (!st) return null;
+    this.lastCoalesce = null;
+    this.replace(this.log.undo(), { undo: true, label: st.label });
+    return st;
+  }
+  redo(): Step | null {
+    this.cancel();
+    const st = this.log.redoStep;
+    if (!st) return null;
+    this.lastCoalesce = null;
+    this.replace(this.log.redo(), { redo: true, label: st.label });
+    return st;
+  }
+
+  // ── the gesture ──
+  preview(p: string | Path, value: unknown): void {
+    this.gesture.set(p, value);
+  }
+  get previewing(): boolean {
+    return this.gesture.size > 0;
+  }
+  /** turn the gesture into one transaction */
+  commit(label: string, opts: TxOpts = {}): unknown {
+    return this.gesture.commit(label, opts);
+  }
+  cancel(): void {
+    this.gesture.drop();
+  }
+
+  // ── named drafts ──
+  draft(name: string): Draft {
+    if (name === 'gesture') return this.gesture;
+    let d = this.drafts.get(name);
+    if (!d) {
+      d = new Draft(this, name);
+      this.drafts.set(name, d);
+    }
+    return d;
+  }
+  /** @internal a draft emptied itself */
+  forget(d: Draft): void {
+    if (d !== this.gesture) this.drafts.delete(d.name);
+    this.rebase();
   }
 
   /** drain the dirty set (the scheduler calls this once per frame) */
@@ -316,7 +492,7 @@ export class Store implements DerivedSource {
     return p;
   }
 
-  /** The committed state of one tier; routed prefixes are never part of the document snapshot. */
+  /** The committed state of one tier (the document tier: main and the mounted documents, where they show). */
   snapshot(tier: 'document' | 'view' = 'document'): Record<string, unknown> {
     return snapshotOf(this, tier);
   }

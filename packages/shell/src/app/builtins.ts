@@ -40,17 +40,23 @@ export function builtinCommands(get: () => Runtime<any> | null, themes: Iterable
   const noVp = { enabled: () => !!get()?.viewport(), why: 'No picture is shown' };
   return {
     'edit.undo': {
-      // an undo that lands on another frame (channel) than the one on screen says which (CHB-027 F12)
-      label: () => (get()?.history.last ? `Undo ${get()!.history.last}${get()!.whereOf(get()!.history.entries.at(-1) ?? null)}` : 'Undo'),
+      // an undo that lands on another document (frame) than the one on screen says which (CHB-027 F12)
+      label: () => {
+        const st = get()?.store.log.undoStep;
+        return st ? `Undo ${st.label}${get()!.whereOf(st)}` : 'Undo';
+      },
       group: 'Edit',
-      enabled: () => !!get()?.history.canUndo,
+      enabled: () => !!get()?.store.log.canUndo,
       why: 'Nothing to undo yet',
       run: () => rt().undo(),
     },
     'edit.redo': {
-      label: () => (get()?.history.next ? `Redo ${get()!.history.next}${get()!.whereOf(get()!.history.redoStack.at(-1) ?? null)}` : 'Redo'),
+      label: () => {
+        const st = get()?.store.log.redoStep;
+        return st ? `Redo ${st.label}${get()!.whereOf(st)}` : 'Redo';
+      },
       group: 'Edit',
-      enabled: () => !!get()?.history.canRedo,
+      enabled: () => !!get()?.store.log.canRedo,
       why: 'Nothing to redo',
       run: () => rt().redo(),
     },

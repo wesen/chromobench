@@ -1,37 +1,29 @@
 // The committed state of one tier (what autosave and the workspace write). snapshotOf is Store.snapshot.
 
-import { getIn, setIn, prefixOf } from '../util.ts';
+import { getIn, setIn } from '../util.ts';
 import type { Store } from '../store.ts';
 
-/** The committed state of one tier; routed prefixes are never part of the document snapshot. */
+/** The committed state of one tier: the document tier is the log's documents where they show (main and mounted). */
 export function snapshotOf(store: Store, tier: 'document' | 'view'): Record<string, unknown> {
+  if (tier === 'document') {
+    let doc: unknown = store.committed;
+    for (const p of store.viewPrefixes) doc = setIn(doc, p, undefined);
+    return (doc ?? {}) as Record<string, unknown>;
+  }
   const out: Record<string, unknown> = {};
-  const doc = store.doc as Record<string, unknown>;
-  const nestedView = store.viewPrefixes.filter(p => p.length > 1);
-  for (const [k, v] of Object.entries(doc)) {
-    const top = [k];
-    if (store.routes.some(r => prefixOf(r.prefix, top))) continue;
-    const t = store.tierOf(top);
-    if (t === 'view') {
-      if (tier === 'view') out[k] = v;
+  for (const [k, v] of Object.entries(store.committed as Record<string, unknown>)) {
+    if (store.tierOf([k]) === 'view') {
+      out[k] = v;
       continue;
     }
-    const nested = nestedView.filter(p => String(p[0]) === k);
-    let routedInside = store.routes.filter(r => r.prefix.length > 1 && String(r.prefix[0]) === k);
-    if (tier === 'document') {
-      let x: unknown = v;
-      for (const p of nested) x = setIn(x, p.slice(1), undefined);
-      for (const r of routedInside) x = setIn(x, r.prefix.slice(1), undefined);
-      out[k] = x;
-    } else if (nested.length) {
-      let x: unknown = {};
-      for (const p of nested) {
-        const val = getIn(v, p.slice(1));
-        if (val !== undefined) x = setIn(x, p.slice(1), val);
-      }
-      out[k] = x;
+    const nested = store.viewPrefixes.filter(p => p.length > 1 && String(p[0]) === k);
+    if (!nested.length) continue;
+    let x: unknown = {};
+    for (const p of nested) {
+      const val = getIn(v, p.slice(1));
+      if (val !== undefined) x = setIn(x, p.slice(1), val);
     }
-    routedInside = [];
+    out[k] = x;
   }
   return out;
 }

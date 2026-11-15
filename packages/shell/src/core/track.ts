@@ -8,10 +8,10 @@
 //
 // New in the port: probe mode. At build, s => s.recipes[s.ui.frame].print.time_s reads a missing key; in probe
 // mode a missing value is a recording proxy, so the whole path is still recorded and can be checked against a
-// route's checkPath (with the key segment as a wildcard).
+// mount's checkPath (with the key segment as a wildcard).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { isObj, pathStr, getIn, type Key, type Path } from './util.ts';
+import { isObj, overProxy, pathStr, getIn, type Key, type Path } from './util.ts';
 
 const TARGET = Symbol('ck.target');
 const PATH = Symbol('ck.path');
@@ -74,7 +74,7 @@ export class Tracker {
     }
     const t = this;
     const entry: Entry = { paths: [path], keys: new Set([pathStr(path)]), proxy: null };
-    entry.proxy = new Proxy(value, {
+    entry.proxy = overProxy(value, {
       get(target: any, k, recv) {
         if (k === TARGET) return target;
         if (k === PATH) return entry.paths[0];
@@ -108,9 +108,6 @@ export class Tracker {
           t.record(p);
         }
         return Reflect.ownKeys(target);
-      },
-      getOwnPropertyDescriptor(target, k) {
-        return Reflect.getOwnPropertyDescriptor(target, k);
       },
       set() {
         throw new TypeError('State is read-only here: change it with ctx.tx(label, t => …) or a binding');

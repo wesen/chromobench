@@ -26,7 +26,7 @@ test('develop: the viewport shows the picture; a slider drag is one undo step (d
   const passes: string[] = [];
   await page.exposeFunction('notePass', (p: string) => passes.push(p));
   await page.evaluate(() => window.demo!.rt.on('rendered', (e: { pass: string }) => (window as unknown as { notePass(p: string): void }).notePass(e.pass)));
-  const before = await page.evaluate(() => window.demo!.rt.history.entries.length);
+  const before = await page.evaluate(() => window.demo!.rt.store.log.cursor);
   const track = page.locator('.ck-slider', { hasText: 'Exposure' }).locator('.ck-slider-t');
   const box = (await track.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -35,7 +35,7 @@ test('develop: the viewport shows the picture; a slider drag is one undo step (d
   await page.mouse.up();
   await expect(vp).toHaveAttribute('data-pass', 'screen');
   if (process.env['SHELL_DEMO_SHOT']) await page.screenshot({ path: process.env['SHELL_DEMO_SHOT'] + '-develop.png' });
-  const after = await page.evaluate(() => ({ n: window.demo!.rt.history.entries.length, label: window.demo!.rt.history.entries.at(-1)?.label, ev: window.demo!.rt.state.dev['p0']!.light.exposure }));
+  const after = await page.evaluate(() => ({ n: window.demo!.rt.store.log.cursor, label: window.demo!.rt.store.log.undoStep?.label, ev: window.demo!.rt.state.dev['p0']!.light.exposure }));
   expect(after.n).toBe(before + 1);
   expect(after.label).toBe('Exposure');
   expect(after.ev).toBeGreaterThan(0);

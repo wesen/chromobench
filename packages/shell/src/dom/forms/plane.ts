@@ -25,7 +25,7 @@ defineRenderer('curve', (n, m) => {
   const channels: Record<string, string> = p['channels'] || { RGB: 'master' };
   const names = Object.keys(channels);
   const modePath: Key[] = (p['mode'] ? bindingPath(m.store, p['mode']).path : null) || ['workspace', 'curveMode', String(p['id'] || 'curve')];
-  if (m.store.peek(modePath) === undefined) m.store.writeDoc([{ path: modePath, value: p['parametric'] ? 'Parametric' : names[0] }], { tier: 'view', init: true });
+  if (m.store.peek(modePath) === undefined) m.store.writeView([{ path: modePath, value: p['parametric'] ? 'Parametric' : names[0] }], { init: true });
   const el = h('div', { class: 'ck-curve' });
   const tabs = h('div', { class: 'ck-seg is-small ck-curve-tabs' });
   const tabNames = (p['parametric'] ? ['Parametric'] : []).concat(names);

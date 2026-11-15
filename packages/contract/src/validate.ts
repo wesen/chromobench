@@ -6,7 +6,7 @@
 // the end (rules a transaction may break midway: exactly one main, mask references).
 import {
   applyTransaction, Coll, indexOf, isId, isPlainObject, transaction, ValueError,
-  type Change, type DocIndex, type Id, type JsonObject, type Mutation, type TransactionInit, type TxApplied, type TxOptions,
+  type Change, type DocIndex, type Id, type JsonObject, type Mutation, type Rules, type TransactionInit, type TxApplied, type TxOptions,
 } from '@chromobench/values';
 import { isBindingRef } from './bindings.ts';
 import { PITCH_FIELDS } from './compile.ts';
@@ -387,6 +387,13 @@ export function validateFinal(c: { after: Document }): readonly Diagnostic[] {
 
 /** The contract's rules as values transaction options (pass to applyTransaction / tryTransaction). */
 export const DOCUMENT_RULES: TxOptions<Diagnostic, Document> = Object.freeze({ validate: validateChange, validateTransaction: validateFinal });
+
+/**
+ * The document log's rules (design §26): a frame's document is opened with kind 'frame', so every commit, proposal,
+ * approval and draft of it is checked by DOCUMENT_RULES. `Log.create({ rules: LOG_RULES })`,
+ * `log.open(doc.frame, doc, { kind: 'frame', by: 'auto' })`.
+ */
+export const LOG_RULES: Rules = Object.freeze({ frame: DOCUMENT_RULES });
 
 /** Applies mutations to a document as one transaction under the contract's rules (all or nothing). */
 export function edit(doc: Document, mutations: readonly Mutation[], meta: Partial<Omit<TransactionInit, 'mutations'>> = {}): TxApplied<Document, Diagnostic> {

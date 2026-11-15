@@ -66,3 +66,9 @@ P2b: reference engine, mock and conformance on contract 1.0; goldens as format-3
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p2b/tools/goldens/translate.ts — The golden translation
 
+||||||| cc246ef
+
+## 2026-11-14
+
+P4 one history: values Log/Draft/plan/diff (102a455, 98af7e8), contract EditLog deleted + LOG_RULES (e4cde19), shell store document tier = the log, Layer -> Draft, routes -> mounts (e236dba); diary 08-phase-p4-history.md
+

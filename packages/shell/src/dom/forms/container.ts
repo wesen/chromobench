@@ -169,7 +169,7 @@ defineRenderer('panel', (n, m) => {
   if (!p['fixed']) {
     const path = ['workspace', 'panels', id, 'open'];
     if (!rt.workspace.defaults.has(id)) rt.workspace.defaults.set(id, p['open'] !== false);
-    if (m.store.peek(path) === undefined) m.store.writeDoc([{ path, value: p['open'] !== false }], { tier: 'view', init: true });
+    if (m.store.peek(path) === undefined) m.store.writeView([{ path, value: p['open'] !== false }], { init: true });
     pm.cell(
       s => {
         const w = s.workspace?.panels?.[id];
@@ -225,7 +225,7 @@ defineRenderer('tabs', (n, m) => {
   const body = h('div', { class: 'ck-tabs-b' });
   el.append(strip, body);
   const statePath: Key[] = (p['bind'] ? bindingPath(m.store, p['bind']).path : null) || ['workspace', 'tabs', String(p['id'] || names.join('|'))];
-  if (m.store.peek(statePath) === undefined) m.store.writeDoc([{ path: statePath, value: names[0] }], { tier: 'view', init: true });
+  if (m.store.peek(statePath) === undefined) m.store.writeView([{ path: statePath, value: names[0] }], { init: true });
   const btns = names.map(name => {
     const b = h('button', { type: 'button', role: 'tab', class: 'ck-tab', text: name });
     listen(m.scope, b, 'click', () => m.store.set(statePath, name));
@@ -359,7 +359,7 @@ defineRenderer('panelref', (n, m) => {
 defineRenderer('docktabs', (n, m) => {
   const ids = (n.props['panels'] as string[]) || [];
   const path = ['workspace', 'tabs', 'dock:' + ids.join('|')];
-  if (m.store.peek(path) === undefined) m.store.writeDoc([{ path, value: ids[0] }], { tier: 'view', init: true });
+  if (m.store.peek(path) === undefined) m.store.writeView([{ path, value: ids[0] }], { init: true });
   const el = h('section', { class: 'ck-docktabs' });
   const strip = h('div', { class: 'ck-docktabs-s', role: 'tablist' });
   const body = h('div', { class: 'ck-docktabs-b' });
