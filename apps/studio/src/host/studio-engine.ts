@@ -302,6 +302,11 @@ export class StudioEngine implements Engine {
     this.primary.adopt(defs);
   }
 
+  /** The frames on screen (CHB-041), for a physics engine that keeps textures per frame (the GPU engine's residency). */
+  resident(o: { pinned: readonly string[]; dropped?: readonly string[] }): void {
+    (this.primary as Engine & { resident?(x: typeof o): void }).resident?.(o);
+  }
+
   async prepare(keys: TableKey[]): Promise<void> {
     await this.primary.prepare(keys);
   }

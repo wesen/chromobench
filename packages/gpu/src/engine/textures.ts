@@ -15,6 +15,13 @@ export function syntheticSource(root: Node): SourceImg {
   return { w: info.width, h: info.height, c: info.channels, data };
 }
 
+/**
+ * Staging objects of an upload larger than this are let go after it (discard: destroyed once the GPU is done), not kept
+ * for reuse (CHB-041): a 4000-px source's f32 staging buffer is 128 MB, and kept in the pool's free list it stayed in
+ * the budget (the owner's E_GPU_OOM: 160 MB of free buffers next to two 164 MB source textures). Reuse pays for small ones.
+ */
+export const STAGING_KEPT_BYTES = 16 * 2 ** 20;
+
 /** A rectangle of a 16-bit source → rgba16uint upload → rgba32float by kernels/pack16.wgsl `unpack`. */
 export async function uploadU16(rt: GpuRuntime, img: SourceImg, rect: Box, label: string, luts: Map<number, GPUBuffer>): Promise<GPUTexture> {
   const src = img.u16!;
@@ -56,7 +63,8 @@ export async function uploadU16(rt: GpuRuntime, img: SourceImg, rect: Box, label
   pass.end();
   rt.device.queue.submit([enc.finish()]);
   rt.buffers.release(ub);
-  rt.textures.release(t16);
+  if (rect.w * rect.h * 8 > STAGING_KEPT_BYTES) rt.textures.discard(t16);
+  else rt.textures.release(t16);
   return out;
 }
 
@@ -83,7 +91,8 @@ export async function uploadF32(rt: GpuRuntime, data: Float32Array, w: number, h
   pass.end();
   rt.device.queue.submit([enc.finish()]);
   rt.buffers.release(ub);
-  rt.buffers.release(sb);
+  if (bytes > STAGING_KEPT_BYTES) rt.buffers.discard(sb);
+  else rt.buffers.release(sb);
   return out;
 }
 

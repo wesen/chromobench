@@ -25,13 +25,67 @@ export function texBytes(d: TexDesc): number {
   return d.w * d.h * (d.d ?? 1) * b;
 }
 
+/**
+ * The engine's own count of GPU bytes (WebGPU cannot report free memory), shared by the texture and buffer pools.
+ * CHB-041: it keeps the high-water mark (`peak`, and per window: `watch`), and when an allocation does not fit it makes
+ * room in order — the free lists of both pools, least recently released first, then `onShort` (the runtime's reclaimers:
+ * textures of frames not on screen) — before the pool refuses with E_GPU_OOM.
+ */
 export class Budget {
-  live = 0;
+  private bytes = 0;
   limit: number;
+  /** the most bytes live at once since resetPeak() */
+  peak = 0;
+  /** asked for room when an allocation does not fit after the free lists are trimmed; frees what it can (CHB-041) */
+  onShort: ((need: number) => void) | null = null;
+  private readonly pools: { freeEntries(): { at: number; drop(): void }[] }[] = [];
+  private readonly windows = new Set<{ peak: number }>();
+  private failing = 0;
+  private tick = 0;
   constructor(limit: number) {
     this.limit = limit;
   }
-  fits(bytes: number): boolean { return this.live + bytes <= this.limit; }
+  get live(): number { return this.bytes; }
+  set live(v: number) {
+    this.bytes = v;
+    if (v > this.peak) this.peak = v;
+    for (const w of this.windows) if (v > w.peak) w.peak = v;
+  }
+  fits(bytes: number): boolean { return this.bytes + bytes <= this.limit; }
+  resetPeak(): void { this.peak = this.bytes; }
+  /** A window over which the high-water mark is kept (one render); end() returns it. */
+  watch(): { end(): number } {
+    const w = { peak: this.bytes };
+    this.windows.add(w);
+    return { end: () => { this.windows.delete(w); return w.peak; } };
+  }
+  /** the shared clock of releases (the pools trim least recently released first, across both) */
+  clock(): number { return ++this.tick; }
+  register(pool: { freeEntries(): { at: number; drop(): void }[] }): void { this.pools.push(pool); }
+  /** Tests (CHB-041): the next `count` acquisitions (reused or new) fail as if the budget were full. */
+  inject(count: number): void { this.failing = count; }
+  /** One injected failure taken, if any (the pools ask before every acquisition). */
+  injected(): boolean {
+    if (this.failing <= 0) return false;
+    this.failing--;
+    return true;
+  }
+  /** Makes room for `bytes`: the free lists of every pool, then onShort. True when they fit. */
+  makeRoom(bytes: number): boolean {
+    if (this.fits(bytes)) return true;
+    this.trimFree(this.limit - bytes);
+    if (!this.fits(bytes)) this.onShort?.(this.bytes + bytes - this.limit);
+    if (!this.fits(bytes)) this.trimFree(this.limit - bytes);
+    return this.fits(bytes);
+  }
+  /** Destroys released objects of every pool, least recently released first, until live bytes ≤ target. */
+  trimFree(target: number): void {
+    const all = this.pools.flatMap((p) => p.freeEntries()).sort((a, b) => a.at - b.at);
+    for (const e of all) {
+      if (this.bytes <= target) break;
+      e.drop();
+    }
+  }
 }
 
 function oom(message: string): ChromobenchError {
@@ -44,12 +98,13 @@ abstract class Pool<T extends { destroy(): void }, D> {
   protected readonly free = new Map<string, Entry<T>[]>();
   protected readonly live = new Map<T, Entry<T>>();
   private readonly pins = new Map<T, string>();
-  private clock = 0;
   protected readonly device: PoolDevice;
   readonly budget: Budget;
+  /** registers with the budget, which trims the free lists of all its pools together, oldest release first */
   constructor(device: PoolDevice, budget: Budget) {
     this.device = device;
     this.budget = budget;
+    budget.register(this);
   }
 
   protected abstract keyOf(d: D): string;
@@ -58,6 +113,7 @@ abstract class Pool<T extends { destroy(): void }, D> {
 
   /** Reuse a released object with the same descriptor, else create one inside the budget. */
   acquire(d: D, label: string): T {
+    if (this.budget.injected()) throw oom(`${label}: ${this.bytesOf(d)} bytes do not fit the budget (an injected failure; ${this.budget.live} of ${this.budget.limit} live)`);
     const key = this.keyOf(d);
     const list = this.free.get(key);
     const hit = list?.pop();
@@ -66,8 +122,7 @@ abstract class Pool<T extends { destroy(): void }, D> {
       return hit.obj;
     }
     const bytes = this.bytesOf(d);
-    if (!this.budget.fits(bytes)) this.trimAll(this.budget.limit - bytes);
-    if (!this.budget.fits(bytes)) throw oom(`${label}: ${bytes} bytes do not fit the budget (${this.budget.live} of ${this.budget.limit} live)`);
+    if (!this.budget.makeRoom(bytes)) throw oom(`${label}: ${bytes} bytes do not fit the budget (${this.budget.live} of ${this.budget.limit} live)`);
     const obj = this.create(d, label);
     this.budget.live += bytes;
     const e: Entry<T> = { obj, key, bytes, releasedAt: 0 };
@@ -104,7 +159,7 @@ abstract class Pool<T extends { destroy(): void }, D> {
     if (!e) return;
     if (this.pins.has(obj)) return; // pinned objects stay live until their owner unpins
     this.live.delete(obj);
-    e.releasedAt = ++this.clock;
+    e.releasedAt = this.budget.clock();
     const list = this.free.get(e.key) ?? [];
     list.push(e);
     this.free.set(e.key, list);
@@ -123,17 +178,42 @@ abstract class Pool<T extends { destroy(): void }, D> {
    */
   retire: ((obj: T) => void) | null = null;
 
-  /** Destroys least-recently released objects until live bytes ≤ targetBytes or the free lists are empty. */
+  /** Destroys least-recently released objects until live bytes ≤ targetBytes or the free lists are empty (every pool on the budget). */
   trimAll(targetBytes: number): void {
-    const all = [...this.free.values()].flat().sort((a, b) => a.releasedAt - b.releasedAt);
-    for (const e of all) {
-      if (this.budget.live <= targetBytes) break;
-      const list = this.free.get(e.key)!;
-      list.splice(list.indexOf(e), 1);
-      if (this.retire) this.retire(e.obj);
-      else e.obj.destroy();
-      this.budget.live -= e.bytes;
-    }
+    this.budget.trimFree(targetBytes);
+  }
+
+  /** This pool's released objects for Budget.trimFree: when each was released, and how to destroy it. */
+  freeEntries(): { at: number; drop(): void }[] {
+    return [...this.free.values()].flat().map((e) => ({
+      at: e.releasedAt,
+      drop: () => {
+        const list = this.free.get(e.key)!;
+        list.splice(list.indexOf(e), 1);
+        if (this.retire) this.retire(e.obj);
+        else e.obj.destroy();
+        this.budget.live -= e.bytes;
+      },
+    }));
+  }
+
+  /**
+   * Lets go of a live object for good (CHB-041: a resident texture evicted): out of the budget now, destroyed when no
+   * GPU work is in flight (retire), since a pass that has not been submitted may still bind it.
+   */
+  discard(obj: T): void {
+    const e = this.live.get(obj);
+    if (!e) return;
+    this.live.delete(obj);
+    this.pins.delete(obj);
+    if (this.retire) this.retire(obj);
+    else obj.destroy();
+    this.budget.live -= e.bytes;
+  }
+
+  /** The bytes of a live object (0 when the pool does not hold it). */
+  bytesOfLive(obj: T): number {
+    return this.live.get(obj)?.bytes ?? 0;
   }
 
   /** Forget an object entirely (destroyed). */

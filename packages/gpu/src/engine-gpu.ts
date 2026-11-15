@@ -10,7 +10,7 @@
 // combine and blur passes), engine/reduce.ts (measure reductions), engine/results.ts (result cache policy).
 // This file keeps the Engine surface, device-loss handling, sources, and execute() (one materialised node).
 import {
-  ChromobenchError, fail, getOp, Graph, quantizeScale, sha256Hex,
+  ChromobenchError, fail, getOp, isChromobenchError, Graph, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
@@ -18,6 +18,7 @@ import { readTiffCodes } from '@chromobench/ingest';
 import { ChainRunner, POINTWISE_WGSL, type RunTarget } from './chain/run.ts';
 import type { Segment } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
+import { Residency, sampleSource, type ResidentStats } from './residency.ts';
 import { REDUCE_WGSL, Reducer } from './measure.ts';
 import { claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigma, paintMask, rebateBox, seedFallbackSpectra, whiteAt, type PhysicsData, type Stroke } from '@chromobench/core';
 import { Blur } from './spatial.ts';
@@ -63,7 +64,31 @@ export interface GpuEngineOptions extends RuntimeOptions {
   cacheLimit?: number;
   /** Side (px, about) of the frame boxes an exact export builds whole-frame fields and extremes from (default 512: they render while the tile's own textures are live; tests set it). */
   exactBox?: number;
+  /**
+   * Renders smaller than their region read the source sampled on their grid (a proxy of their own size, CHB-041)
+   * instead of the frame's full-size texture (default true; the parity tests compare both).
+   */
+  proxies?: boolean;
 }
+
+/** The engine's GPU memory (CHB-041): its budget, what is live, the high-water mark, and what is kept per frame. */
+export interface GpuMemory {
+  limit: number;
+  live: number;
+  /** the most live at once since the last call with reset (or since the engine started) */
+  peak: number;
+  /** how the budget was chosen */
+  rule: string;
+  /** textures and buffers allocated and in use, and released (kept for reuse until room is needed) */
+  textures: { live: number; free: number };
+  buffers: { live: number; free: number };
+  /** source textures kept between renders, per frame */
+  resident: ResidentStats;
+  /** the frames on screen (source hashes) */
+  pinned: string[];
+}
+
+const isOom = (e: unknown): boolean => (e as { code?: unknown })?.code === 'E_GPU_OOM';
 
 export class GpuEngine implements Engine {
   readonly id = 'gpu' as const;
@@ -84,7 +109,12 @@ export class GpuEngine implements Engine {
   /** core's physics for this engine's data and conventions. */
   readonly physics: CorePhysics;
   private readonly sources = new Map<string, SourceImg>();
-  private readonly srcTex = new Map<string, GPUTexture>();
+  /** Source textures kept between renders, per frame: full size, and proxies on render grids (CHB-041). Per runtime. */
+  private residency: Residency;
+  /** the frames on screen (source hashes), kept across a device made again */
+  private pinned: string[] = [];
+  /** removes this engine's reclaimer from its runtime (dispose on a shared runtime) */
+  private unreclaim: (() => void) | null = null;
   /** code → code/max as f32 (the f64 quotient rounded once, as the f32 path), per max; see uploadU16. */
   private readonly unpackLut = new Map<number, GPUBuffer>();
   private readonly results = new Map<string, Cached>();
@@ -109,7 +139,47 @@ export class GpuEngine implements Engine {
     this.reducer = new Reducer(rt);
     this.blur = new Blur(rt);
     this.film = new FilmGpu(rt, this.blur);
+    this.residency = this.residencyOn(rt);
     rt.onLost(() => this.dropDeviceState());
+  }
+
+  /**
+   * The residency of a runtime: its textures go back to the runtime's pool (discard: out of the budget at once,
+   * destroyed after the work in flight), and the runtime asks it for room when an allocation does not fit — frames not on
+   * screen first, least recently used first (CHB-041).
+   */
+  private residencyOn(rt: GpuRuntime): Residency {
+    const r = new Residency((t) => rt.textures.discard(t));
+    r.pin(this.pinned);
+    this.unreclaim?.();
+    this.unreclaim = rt.addReclaimer((need, all) => {
+      const ev = r.evict(need, { all });
+      if (ev.bytes > 0 && !all) rt.events?.({ kind: 'memory', what: 'evict', freed: ev.bytes, frames: ev.frames.length, live: rt.budget.live, limit: rt.budget.limit, during: rt.activity });
+      return ev.bytes;
+    });
+    return r;
+  }
+
+  /**
+   * The frames on screen (CHB-041; source hashes: the viewer's frame, the thumbnails being drawn): their textures are let
+   * go last. `dropped`: frames closed, whose textures go now.
+   */
+  resident(o: { pinned: readonly string[]; dropped?: readonly string[] }): void {
+    this.pinned = [...o.pinned];
+    this.residency.pin(this.pinned);
+    for (const sha of o.dropped ?? []) this.residency.forget(sha);
+  }
+
+  /** The engine's GPU memory now (CHB-041); `reset` starts a new high-water mark. */
+  memory(o: { reset?: boolean } = {}): GpuMemory {
+    const rt = this.rt;
+    const out: GpuMemory = {
+      limit: rt.budget.limit, live: rt.budget.live, peak: rt.budget.peak, rule: rt.caps.budgetRule,
+      textures: { live: rt.textures.bytesLive, free: rt.textures.bytesFree }, buffers: { live: rt.buffers.bytesLive, free: rt.buffers.bytesFree },
+      resident: this.residency.stats(), pinned: [...this.pinned],
+    };
+    if (o.reset) rt.budget.resetPeak();
+    return out;
   }
 
   static async create(opts: GpuEngineOptions = {}): Promise<GpuEngine> {
@@ -144,7 +214,7 @@ export class GpuEngine implements Engine {
   // ---- device loss: drop GPU state, keep CPU state; recreate on the next call ----
   private dropDeviceState(): void {
     this.fields.clear();
-    this.srcTex.clear();
+    this.residency.clear(false);
     this.dummyTex = null;
     this.unpackLut.clear();
   }
@@ -161,6 +231,7 @@ export class GpuEngine implements Engine {
       this.reducer = new Reducer(rt);
       this.blur = new Blur(rt);
       this.film = new FilmGpu(rt, this.blur);
+      this.residency = this.residencyOn(rt);
       rt.onLost(() => this.dropDeviceState());
     })().finally(() => { this.recreating = null; });
     await this.recreating;
@@ -228,8 +299,7 @@ export class GpuEngine implements Engine {
     this.rebateT.clear();
     this.dropFields();
     // a render of the old decode may be between taking its source texture and submitting (CHB-038): retired, not destroyed
-    for (const t of this.srcTex.values()) this.rt.retire(t);
-    this.srcTex.clear();
+    this.residency.forget(sha);
     this.graph = new Graph();
     for (const k of this.sources.keys()) {
       const info = old.source(k);
@@ -272,8 +342,8 @@ export class GpuEngine implements Engine {
     this.results.clear();
     this.dropFields();
     this.pool?.terminate();
-    for (const t of this.srcTex.values()) t.destroy();
-    this.srcTex.clear();
+    this.residency.clear();
+    this.unreclaim?.();
     this.dummyTex?.destroy();
     for (const b of this.unpackLut.values()) b.destroy();
     this.unpackLut.clear();
@@ -340,24 +410,57 @@ export class GpuEngine implements Engine {
     return data instanceof Float32Array ? uploadF32(this.rt, data, w, h, c, 'measure', cpu) : Promise.resolve(cpu());
   }
 
-  private async sourceTexture(root: Node, rect: Box): Promise<{ tex: GPUTexture; owned: boolean }> {
+  /**
+   * The source a tail on grid t reads (CHB-041), and how: the frame's full-size texture (kept per frame, read at the
+   * frame position), a proxy (the source sampled on this grid, kept per frame and grid, read at the output pixel:
+   * renders smaller than their region — thumbnails, screen-size previews — never need the full-size texture), or a
+   * sub-rectangle uploaded for this call (a tile of an export, a region at full scale; CHB-011). `done` ends the
+   * render's lease (a texture in use is not evicted to make room).
+   */
+  private async sourceTexture(root: Node, t: GridTarget): Promise<{ tex: GPUTexture; origin: [number, number]; onGrid: boolean; done: () => void }> {
     const img = this.sourceImage(root);
+    const rect = t.region;
+    const frame = root.op === 'source.open' ? String(root.args['source']) : root.id;
     const full = rect.x === 0 && rect.y === 0 && rect.w === img.w && rect.h === img.h;
-    if (full) {
-      const t = this.srcTex.get(root.id);
-      if (t) return { tex: t, owned: false };
-    }
+    // a kept texture: the full-size one is read at the frame position (its texel 0,0 is the frame's), a proxy at the pixel
+    const kept = (key: string, tex: GPUTexture, onGrid: boolean) => {
+      this.residency.lease(key);
+      return { tex, origin: [0, 0] as [number, number], onGrid, done: () => this.residency.unlease(key) };
+    };
+    const fullKey = `full|${root.id}`;
+    const resident = this.residency.get(fullKey);
+    // a frame whose full-size texture is kept reads it, for any region and size: no new memory, no upload
+    if (resident) return kept(fullKey, resident, false);
     const label = `source.${root.id.slice(0, 8)}`;
+    if (this.opts.proxies !== false && t.outW * t.outH < rect.w * rect.h) {
+      const key = `proxy|${root.id}|${rect.x},${rect.y},${rect.w}x${rect.h}|${t.outW}x${t.outH}`;
+      const hit = this.residency.get(key);
+      if (hit) return kept(key, hit, true);
+      const tex = await this.upload(sampleSource(img, rect, t.outW, t.outH), `${label}.proxy ${t.outW}x${t.outH}`);
+      this.residency.put(frame, key, tex, this.rt.textures.bytesOfLive(tex), { proxy: true, cap: img.w * img.h * 16 });
+      return kept(key, tex, true);
+    }
+    if (full) {
+      const tex = await this.upload(img, label);
+      this.residency.put(frame, fullKey, tex, this.rt.textures.bytesOfLive(tex));
+      return kept(fullKey, tex, false);
+    }
     let tex: GPUTexture;
     if (img.u16) tex = await this.uploadU16(img, rect, label);
     else {
       const d = img.data!;
-      const sub = full ? d : new Float32Array(rect.w * rect.h * img.c);
-      if (!full) for (let y = 0; y < rect.h; y++) sub.set(d.subarray(((rect.y + y) * img.w + rect.x) * img.c, ((rect.y + y) * img.w + rect.x + rect.w) * img.c), y * rect.w * img.c);
+      const sub = new Float32Array(rect.w * rect.h * img.c);
+      for (let y = 0; y < rect.h; y++) sub.set(d.subarray(((rect.y + y) * img.w + rect.x) * img.c, ((rect.y + y) * img.w + rect.x + rect.w) * img.c), y * rect.w * img.c);
       tex = await uploadF32(this.rt, sub, rect.w, rect.h, img.c, label, () => this.chain.upload(sub, rect.w, rect.h, img.c, label));
     }
-    if (full) this.srcTex.set(root.id, tex);
-    return { tex, owned: !full };
+    return { tex, origin: [rect.x, rect.y], onGrid: false, done: () => this.rt.textures.release(tex) };
+  }
+
+  /** A whole source image (or a proxy) as an rgba32float texture. */
+  private upload(img: SourceImg, label: string): Promise<GPUTexture> {
+    if (img.u16) return this.uploadU16(img, { x: 0, y: 0, w: img.w, h: img.h }, label);
+    const d = img.data!;
+    return uploadF32(this.rt, d, img.w, img.h, img.c, label, () => this.chain.upload(d, img.w, img.h, img.c, label));
   }
 
   private uploadU16(img: SourceImg, rect: Box, label: string): Promise<GPUTexture> {
@@ -490,12 +593,13 @@ export class GpuEngine implements Engine {
       fillGrain(low.segments, p.nodes, t.region.w / t.outW);
       const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
       if (p.root === 'source') {
-        // pointwise tails read only their own pixels: the source is uploaded for the region alone (CHB-011)
-        const { tex: st, owned } = await this.sourceTexture(p.nodes[0]!, t.region);
+        // pointwise tails read only their own pixels: the source for the region alone (CHB-011), on this grid when the
+        // render is smaller than its region (a proxy, CHB-041)
+        const src = await this.sourceTexture(p.nodes[0]!, t);
         try {
-          return await this.chain.run(segs, st, [t.region.x, t.region.y], run);
+          return await this.chain.run(segs, src.tex, src.origin, run, src.onGrid ? { srcOnGrid: true } : {});
         } finally {
-          if (owned) this.rt.textures.release(st);
+          src.done();
         }
       }
       return this.chain.run(segs, p.root === 'texture' ? tex(p.rootId!) : this.dummy(), [0, 0], run, { srcOnGrid: true });
@@ -788,16 +892,50 @@ export class GpuEngine implements Engine {
     const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision, ...(precision === 'export' && scale === 1 ? { exact: true } : {}) };
     // fields serve the tiles of an exact export; any other render (a preview) means that export is over: free them
     if (!grid.exact && this.fields.size) this.dropFields();
-    const r = await this.gpu(async () => {
+    const during = `${n.op} ${n.id.slice(0, 8)} ${width}×${height}${grid.exact ? ' exact' : ''}`;
+    const once = () => this.gpu(async () => {
       // the work the runtime names in the errors it reports (CHB-038)
-      this.rt.activity = `${n.op} ${n.id.slice(0, 8)} ${width}×${height}${grid.exact ? ' exact' : ''}`;
-      const g = await this.renderRegion(n.id, grid);
+      this.rt.activity = during;
+      const rt = this.rt;
+      const mark = rt.budget.watch();
       try {
-        return { px: await read(g.tex, width, height), warnings: g.warnings };
+        const g = await this.renderRegion(n.id, grid);
+        try {
+          return { px: await read(g.tex, width, height), warnings: g.warnings };
+        } finally {
+          this.rt.textures.release(g.tex);
+        }
       } finally {
-        this.rt.textures.release(g.tex);
+        // the render's high-water mark (CHB-041), for the journal
+        rt.events?.({ kind: 'memory', what: 'render', during, peak: mark.end(), live: rt.budget.live, limit: rt.budget.limit, resident: this.residency.stats().bytes });
       }
     });
+    let r: Awaited<ReturnType<typeof once>>;
+    try {
+      r = await once();
+    } catch (e) {
+      if (!isOom(e)) throw e;
+      // recovery (CHB-041): let go of everything not needed for this render (every frame's kept textures, the fields,
+      // the released objects) and try once more; a second E_GPU_OOM says so, plainly
+      const rt = this.rt;
+      this.dropFields();
+      const freed = rt.relieve();
+      try {
+        r = await once();
+      } catch (e2) {
+        const text = (x: unknown): string => (isChromobenchError(x) ? x.diag.message : x instanceof Error ? x.message : String(x));
+        const first = text(e);
+        rt.events?.({ kind: 'memory', what: 'recover', ok: false, freed, live: rt.budget.live, limit: rt.budget.limit, during, message: first });
+        if (!isOom(e2)) throw e2;
+        const MB = (x: number): string => `${Math.round(x / 2 ** 20)} MB`;
+        throw new ChromobenchError({
+          code: 'E_GPU_OOM',
+          message: `not enough GPU memory for ${during}: ${text(e2)} — after letting go of ${MB(freed)} (other frames' textures, cached and released ones) and trying again`,
+          hint: `the engine's budget is ${MB(rt.budget.limit)} (${rt.caps.budgetRule}); close other pictures or open at a smaller working size`,
+        });
+      }
+      rt.events?.({ kind: 'memory', what: 'recover', ok: true, freed, live: rt.budget.live, limit: rt.budget.limit, during, message: isChromobenchError(e) ? e.diag.message : String(e) });
+    }
     return { px: r.px, width, height, warnings: r.warnings };
   }
 

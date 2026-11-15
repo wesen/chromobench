@@ -434,10 +434,35 @@ Ticket `ttmp/2026/11/15/CHB-038--…/` (spec `design-doc/01-…`, implementation
   use-after-destroy in the film grain (a thumbnail and the viewer rendering a camera file's grain in lockstep); fixed
   by `GpuRuntime.busy/retire` (destruction deferred while engine work is in flight) and a texture of ones per size;
   regression tests in `e2e/diagnostics.spec.ts`. Every GPU object is labelled now, so the next such error names its
-  owner. Open: E_GPU_OOM with two 24 MP camera files at 4000 px (the source textures fill the 512 MB budget).
+  owner. The E_GPU_OOM the journal found next (two 24 MP camera files at 4000 px) is CHB-041 (below).
 - **Capturing an error in your own Chrome:** reproduce it, then Help ▸ Report a Problem… (tick the originals if the
   files may matter) and send the zip, or `node tools/scripts/console-capture.ts <url> --sequence --files a.NEF b.NEF`
-  headless.
+  headless (with `--sequence` it also prints the GPU engine's memory and the time of each open and frame switch).
+
+## 9c. GPU memory (CHB-041)
+
+Ticket `ttmp/2026/11/15/CHB-041--…/` (spec `design-doc/01-…`, diary `diary/01-diary.md`).
+
+- **One budget** (`packages/gpu/src/pool.ts` `Budget`) counts the texture and buffer pools together; when an allocation
+  does not fit it trims both pools' released objects (oldest first), then asks the runtime's reclaimers, then refuses
+  with `E_GPU_OOM`. Its size comes from the adapter (`device.ts` `budgetFor`): an eighth of `navigator.deviceMemory`, at
+  most the adapter's `maxBufferSize`, within 512 MiB … 2 GiB (a software adapter such as SwiftShader: … 1 GiB; no device
+  memory reported: 4 GiB assumed → 512 MiB). The rule and the result are in the journal's `GPU_DEVICE` row;
+  `?gpuBudget=MB` overrides it (try a smaller machine's).
+- **Residency per frame** (`residency.ts`): the engine keeps source textures per frame — the full-size one only when a
+  render needs the whole frame at full scale, otherwise a *proxy*: the source sampled on the render's grid exactly as
+  the pointwise kernel samples it (f32, bit-identical; `residency.spec.ts`), so thumbnails and screen previews hold
+  textures of their own size. The render bridge pins the viewer's frame and the thumbnails being drawn
+  (`engine.resident`); frames not on screen are let go first, least recently used first; a closed frame's textures go
+  at once. Large upload staging buffers are let go after the upload; the grain's textures of ones are in the budget.
+- **Recovery:** a render that hits `E_GPU_OOM` lets go of everything not needed (every frame's kept textures, fields,
+  released objects) and tries once more; a second failure is an `E_GPU_OOM` saying what was tried, and the viewer shows
+  "Not enough graphics memory…" for that frame — when the failed render is of another frame than the picture on screen,
+  the picture is taken down (never the previous frame's picture under the new name). Tests inject failures with
+  `runtime.budget.inject(n)`.
+- **The journal:** `GPU_MEMORY` (one row; count = renders; the latest render's high-water mark and the page's highest),
+  `GPU_MEMORY_HIGH` (each 32 MB step of the highest), `GPU_EVICT`, `GPU_OOM_RECOVERED`, `GPU_OOM`. The engine's
+  `memory()` (through `window.chromobench.engine.primary`) answers the same numbers.
 
 ## 10. Things that live outside the repository
 

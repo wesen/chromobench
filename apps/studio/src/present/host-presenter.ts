@@ -78,6 +78,11 @@ class HostPresenter implements Presenter {
     else this.inner.setImages(main, before);
   }
 
+  clear(): void {
+    this.last = null;
+    this.inner.clear?.();
+  }
+
   draw(view: ViewTransform, colours: Colours): void {
     this.view = { v: view, c: colours };
     if (this.canvas !== this.laidOut) {

@@ -13,7 +13,7 @@ type Id = string;
 const coll = <V>(entries: readonly (readonly [Id, V])[]) => ({ order: entries.map(([id]) => id), items: Object.fromEntries(entries) as Record<Id, V> });
 const C = (kind: MaskComponent['kind'], params: Record<string, unknown>): MaskComponent => ({ kind, params: params as MaskComponent['params'], combine: 'add', amount: 1, enabled: true });
 
-function doc(sha: string, w: number, h: number, kind: 'plain' | 'darkroom', lights: number): Document {
+export function benchDoc(sha: string, w: number, h: number, kind: 'plain' | 'darkroom', lights: number): Document {
   const S = gold();
   const d = newDocument('negative-scan', { sha256: sha, width: w, height: h }, { umPerPx: 6 });
   const items: Record<Id, Entry> = { ...d.stages.darkroom!.stack.items, lights: layerEntry('filter', { logH: [lights, 0, -lights / 2] }) };
@@ -54,7 +54,7 @@ export const BENCH_TESTS: Record<string, (o: Record<string, unknown>) => Promise
       const ms = { preview: [] as number[], export: [] as number[] };
       let plan = { tile: 0, halo: 0, tiles: 0 };
       for (let i = 0; i < warmup + rounds; i++) {
-        const disp: Node = g.get(compile(doc(f.sha, w, h, kind, 0.01 + i * 1e-3), g).display.inputs[0]!)!; // output.display
+        const disp: Node = g.get(compile(benchDoc(f.sha, w, h, kind, 0.01 + i * 1e-3), g).display.inputs[0]!)!; // output.display
         f.gpu.adopt(g.closure(disp.id));
         let t0 = performance.now();
         await (await f.gpu.evaluate(disp, { scale: 0.4, precision: 'preview' })).read();

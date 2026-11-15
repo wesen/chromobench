@@ -15,7 +15,7 @@ import { runtime } from './page-shared.ts';
 type T = (o: Record<string, unknown>) => Promise<unknown>;
 
 /** A smooth synthetic RAW (camera-linear) with a few hard edges: gradients, a bright window and a red patch. */
-function syntheticRaw(w: number, h: number): { info: SourceInfo; data: Float32Array } {
+export function syntheticRaw(w: number, h: number): { info: SourceInfo; data: Float32Array } {
   const data = new Float32Array(w * h * 3);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const o = (y * w + x) * 3;

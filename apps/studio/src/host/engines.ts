@@ -54,6 +54,8 @@ export interface HostOptions {
   journal: Journal;
   /** ?debug: GPU error scopes around every queue submit */
   debug?: boolean;
+  /** ?gpuBudget=MB: the GPU engine's budget, instead of the one sized from the adapter (CHB-041 budgetFor) */
+  gpuBudgetBytes?: number;
 }
 
 /**
@@ -206,7 +208,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   if (o.want !== 'reference') {
     say('starting WebGPU…');
     try {
-      const g = await GpuEngine.create({ data, cacheLimit: 24, events: gpuEvents(journal), ...(o.debug ? { debug: true } : {}) });
+      const g = await GpuEngine.create({ data, cacheLimit: 24, events: gpuEvents(journal), ...(o.debug ? { debug: true } : {}), ...(o.gpuBudgetBytes ? { budgetBytes: o.gpuBudgetBytes } : {}) });
       const caps = g.capabilities();
       if (caps.available) {
         primary = g;

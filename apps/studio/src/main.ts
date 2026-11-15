@@ -5,7 +5,8 @@
 //
 // URL options: ?layout=classic|darkroom|simple|lab|tiny; ?engine=auto (GPU when WebGPU works, else the reference
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
-// reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
+// reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?gpuBudget=MB (the GPU
+// engine's memory budget instead of the one sized from the adapter, CHB-041: try a smaller machine's); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
 //
 // CHB-037 P5b-1: a frame's edit is its format-3 document in the store's log (docs.<frame>); the first print, dust
@@ -154,7 +155,9 @@ async function startEngine(): Promise<Host> {
   const long = q.get('long');
   const refLong = q.get('refLong');
   const refMode = q.get('refMode');
+  const gpuBudget = Number(q.get('gpuBudget'));
   const h = await createHostEngine({
+    ...(gpuBudget > 0 ? { gpuBudgetBytes: Math.round(gpuBudget * 2 ** 20) } : {}),
     ...(refMode === 'exact' || refMode === 'tabulated' ? { refMode } : {}),
     want: want === 'gpu' || want === 'reference' ? want : 'auto', ...(long !== null ? { long: Number(long) } : {}), ...(refLong !== null ? { refLong: Number(refLong) } : {}),
     worker: q.get('worker') !== '0', onStatus: (s) => status(s), journal, debug: q.has('debug'),
