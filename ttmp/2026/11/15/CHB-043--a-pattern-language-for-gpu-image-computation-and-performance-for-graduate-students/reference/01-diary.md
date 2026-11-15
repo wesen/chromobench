@@ -85,3 +85,64 @@ CHB-042, published as an artifact.
 
 ### Technical details
 - Overview commit ed1eb5c.
+
+## Step 2: Ten chapters, a graduate-level review, revisions, publication
+
+The five writers delivered the ten chapters; each verified its claims against chromobench and the Editor lab and
+kept a diary (02–06). A fresh reviewer, reading as a first-year PhD student with numerics background, reviewed
+chapters 2 and 6 and checked their floating-point figures in Python. It found real technical errors, and its general
+lessons (recompute every number, bounds versus measured maxima, precise device semantics, MiB, no internal IDs) went
+to all five writers. All ten chapters were revised and the volume published as an artifact.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Same process as CHB-042, including the artifact with direct section jumps.
+
+**Inferred user intent:** A graduate-level companion volume, published and shareable.
+
+### What I did
+- Committed each pair as delivered; checked template order, links, ratings, privacy and leftover task IDs.
+- Review of chapters 2 and 6 → specific findings to those writers, general lessons to all; coordinated the working
+  image size across chapters (4000 × 2674, 163 MiB; the CHB-041 diary's 2686 was a slip).
+- Added CHB-037 tasks P10-10…P10-27 for chromobench debts found while writing (pool reuse before the last reader
+  submits, grid-rule ties, three different Gaussians, readback costs, stopping test below f32 noise, and others);
+  updated P10-15 with the re-derived figures.
+- Built with build-artifact.py (`--dir gpu --title "Fast and Checkable"`, green accent) and published
+  https://claude.ai/artifact/VbvkgS8uwaRhrpDk3ZghFV.
+
+### Why
+- The review's errors were of the kind graduate readers would catch first (a degenerate constant input hiding
+  summation error, ±∞ sentinels WGSL does not allow, buffers that cannot be mapped, 24 MP vs 10.7 MP textures).
+
+### What worked
+- Writers recomputing their own numbers found further errors on their own (grid mismatches that are not only ties;
+  the test-suite explanation used inputs the tests do not have; a 6 % three-box figure measured against the wrong
+  Gaussian; a 1.1e-4 error called "a third of an 8-bit level" in a chromobench comment).
+
+### What didn't work
+- mermaid-cli was refused by the permission classifier for three writers and for me; the five diagrams were not
+  rendered locally. A script for the owner: scratchpad/render-gpu-mermaid.sh. The artifact renders them natively.
+
+### What I learned
+- Putting the CHB-042 review lessons in the brief did not remove the need for a review at this level: the graduate
+  review found numerical and API-semantics errors, a different class.
+
+### What was tricky to build
+- Keeping one set of figures across ten chapters written in parallel (working size, MiB vs MB).
+
+### What warrants a second pair of eyes
+- WGSL/Vulkan accuracy and semantics stated from memory (f32 division to 2.5 ulp, subnormal flushing, no infinities,
+  mapAsync guarantees), and several known uses, as each writer's diary lists.
+- Raw word counts 3,450–4,060 (sketches); prose is ≤ ~3,000 in every chapter.
+
+### What should be done in the future
+- Render the diagrams locally once permitted; check the artifact's diagrams on the page.
+- Fix the correctness debts P10-10 and P10-15 in chromobench.
+
+### Code review instructions
+- docs/patterns/gpu/*.md; writer diaries 02–06; CHB-037 tasks P10-10…27.
+
+### Technical details
+- Commits ed1eb5c … 26cadf7 on task/chb-043-gpu-patterns.
