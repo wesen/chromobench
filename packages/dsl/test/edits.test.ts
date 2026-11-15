@@ -3,7 +3,7 @@
 // document while an eval runs, batches over frames (plan), and the cache identity of cuts with the one compiler.
 import { describe, expect, it, vi } from 'vitest';
 import { compile, edit, Graph, type Document } from '@chromobench/contract';
-import { insert, set, transaction, type Mutation } from '@chromobench/values';
+import { set, transaction, type Mutation } from '@chromobench/values';
 import { DslSession, memoryHistory } from '../src/index.ts';
 import { FRAME, frameLog, m1Doc, setup, type Setup } from './helpers.ts';
 

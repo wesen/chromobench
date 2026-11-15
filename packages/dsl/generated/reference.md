@@ -186,16 +186,6 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
   - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
   - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
 
-## Receiver-less ops
-
-- `h.darkroom.contactSheet({ frames, cell_px }) → print-xyz — A contact sheet of several frames.`
-  - frames: string[], default [] — Frame ids.
-  - cell_px: number, px, [64, 1024], default 256 — Cell size.
-- `h.source.open({ source, encoding, umPerPx }) → camera-linear — Opens a decoded source as linear sensor values (T = signal / flat after scan.flatField), with its pitch on the film.`
-  - source: string — SHA-256 of the source file (Document.source.sha256); the engine must have opened it.
-  - encoding: enum linear|srgb|gamma22, default "linear" — Transfer encoding of the stored samples (Document.source.decode.encoding).
-  - umPerPx: number, um, [0.01, 100000] — Film µm per document pixel: the scan medium's umPerPx, or a camera file's film format over its long side. Sets ImageInfo.umPerPx.film, which every physical size (µm on the film, mm on the print) is converted with.
-
 ## Handles in camera-linear
 
 - **mask**

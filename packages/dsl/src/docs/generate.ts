@@ -75,8 +75,6 @@ export function genReference(): string {
     out.push(`- \`${k}\` { ${Object.keys(o.args).join(', ')} } — ${o.doc.split(/(?<=\.)\s/)[0]}`);
     for (const l of argLines(o)) out.push(`  - ${l.trim()}`);
   }
-  out.push('', '## Receiver-less ops', '');
-  for (const o of dslOps().filter((x) => x.on === 'none')) out.push(`- \`${opLine(o)}\``, ...argLines(o).map((l) => `  - ${l.trim()}`));
   for (const d of DOMAIN_NAMES) {
     const ops = opsForDomain(d);
     if (!ops.length) continue;

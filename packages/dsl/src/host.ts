@@ -8,7 +8,7 @@
 // builders and frame.propose), show.ts (show, explain), named-looks.ts (cb.looks.*), errors.ts (the prelude's
 // traps); words.ts and types.ts hold the shared helpers and records. Each native is a function of the Host.
 import {
-  AREAS, ChromobenchError, CONTRACT_VERSION, CUTS, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind,
+  AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind,
   type Compiled, type Diagnostic, type Document, type Domain, type Graph, type Node,
 } from '@chromobench/contract';
 import { getPath as getPathOf, type Log } from '@chromobench/values';
@@ -272,8 +272,6 @@ export class Host {
 
   /** Units constants for docs. */
   static readonly DOMAIN_UNITS = Object.fromEntries(Object.entries(DOMAINS).map(([d, i]) => [d, i.unit]));
-  /** The cut names (docs). */
-  static readonly CUTS = CUTS.map((c) => c.name);
 }
 
 /** getPath with a did-you-mean on the failing segment. */

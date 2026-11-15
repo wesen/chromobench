@@ -24,6 +24,8 @@ const ROWS: { what: string; code: string; error: string; fix?: string; hint?: Re
   { what: 'a node as a literal value', code: "const p = frame.print()\nreturn frame.with(set('main.params.time_s', p.measure.stats()))", error: 'E_ARG_TYPE', fix: '(await frame.print().measure.stats()).mean' },
   { what: 'misspelt document path', code: "frame.propose(set('main.param.time_s', 12))", error: 'E_PATH', fix: "frame.propose(set('main.params.time_s', 12))", hint: /did you mean params\?/ },
   { what: 'misspelt param in a path', code: "frame.propose(set('main.params.time', 12))", error: 'E_UNKNOWN_OPTION', fix: "frame.propose(set('main.params.time_s', 12))" },
+  { what: 'a function in a layer\'s params', code: "return layer('burn', { stops: () => 1 })", error: 'E_ARG_TYPE', hint: /compute the value in your code/ },
+  { what: 'a function as a set value', code: "frame.propose(set('main.params.time_s', (t) => t * 2))", error: 'E_ARG_TYPE' },
   { what: 'misspelt layer param', code: "return layer('burn', { stop: 1 })", error: 'E_UNKNOWN_OPTION', fix: "layer('burn', {stops: 1})" },
   { what: 'unknown layer op', code: "return layer('brun', { stops: 1 })", error: 'E_UNKNOWN_OP', fix: "layer('burn', …)" },
   { what: 'an id that is taken', code: "frame.propose(insert('stages.darkroom.stack', 'main', layer('burn', { stops: 1 })))", error: 'E_MUTATION', fix: "insert('stages.darkroom.stack', 'main1', …)" },
