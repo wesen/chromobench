@@ -2,8 +2,8 @@
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
 import {
-  DOMAINS, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, straighten,
-  type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
+  DOMAINS, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
+  type BlendMode, type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
 } from '@chromobench/contract';
 
 export interface Img {
@@ -298,6 +298,71 @@ const norm = (v: number, d: Domain | undefined): number => {
   return (v - lo) / (hi - lo);
 };
 
+// ---- the digital layers (contract 1.1; CHB-037 P3b): the mock's own closed forms (core composite/*.ts is the
+// reference). Working encodings of the mock: its stage XYZ (mul(M, rgb)), linear RGB, OkLab over that RGB.
+const OK1 = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]];
+const OK2 = [[0.2104542553, 0.793617785, -0.0040720468], [1.9779984951, -2.428592205, 0.4505937099], [0.0259040371, 0.7827717662, -0.808675766]];
+const OK1I = inv3(OK1), OK2I = inv3(OK2);
+const toOklab = (rgb: number[]): number[] => mul(OK2, mul(OK1, rgb).map(Math.cbrt));
+const fromOklab = (lab: number[]): number[] => mul(OK1I, mul(OK2I, lab).map((v) => v * v * v));
+type Enc = 'stage' | 'linear' | 'oklab';
+const encOf = (d: Domain | undefined): Enc => (d ? encodingOfDomain(d)?.encoding : undefined) ?? 'stage';
+const toLinear = (v: number[], e: Enc): number[] => (e === 'stage' ? mul(MINV, v) : e === 'oklab' ? fromOklab(v) : v);
+const fromLinear = (v: number[], e: Enc): number[] => (e === 'stage' ? mul(M, v) : e === 'oklab' ? toOklab(v) : v);
+
+/** A tone function on one channel: L of OkLab (0), or R, G, B of linear RGB on their cube roots (1–3). */
+const tone = (px: number[], ch: string, f: (v: number) => number): number[] => {
+  const k = ['L', 'R', 'G', 'B'].indexOf(ch);
+  const o = rgb3(px);
+  if (k <= 0) o[0] = f(o[0]!);
+  else o[k - 1] = f(Math.cbrt(o[k - 1]!)) ** 3;
+  return o;
+};
+/** The mock's curve: straight segments through the points (core's is a monotone cubic through the same points). */
+function polyline(points: readonly { x: number; y: number }[]): (v: number) => number {
+  const p = [...points].sort((a, b) => a.x - b.x);
+  return (v) => {
+    if (!p.length) return v;
+    if (v <= p[0]!.x) return p[0]!.y + (v - p[0]!.x) * (p.length > 1 ? (p[1]!.y - p[0]!.y) / (p[1]!.x - p[0]!.x || 1) : 1);
+    for (let i = 1; i < p.length; i++) if (v <= p[i]!.x) return p[i - 1]!.y + ((v - p[i - 1]!.x) * (p[i]!.y - p[i - 1]!.y)) / (p[i]!.x - p[i - 1]!.x || 1);
+    const n = p.length;
+    return p[n - 1]!.y + (v - p[n - 1]!.x) * (n > 1 ? (p[n - 1]!.y - p[n - 2]!.y) / (p[n - 1]!.x - p[n - 2]!.x || 1) : 1);
+  };
+}
+const smoothstep = (e0: number, e1: number, x: number): number => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+/** The W3C separable blend of one channel. */
+function blendChannel(mode: BlendMode, b: number, s: number): number {
+  switch (mode) {
+    case 'multiply': return b * s;
+    case 'screen': return b + s - b * s;
+    case 'overlay': return b <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
+    case 'darken': return Math.min(b, s);
+    case 'lighten': return Math.max(b, s);
+    case 'colour-dodge': return b <= 0 ? 0 : s >= 1 ? 1 : Math.min(1, b / (1 - s));
+    case 'colour-burn': return b >= 1 ? 1 : s <= 0 ? 0 : 1 - Math.min(1, (1 - b) / s);
+    case 'hard-light': return s <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
+    case 'soft-light': return s <= 0.5 ? b - (1 - 2 * s) * b * (1 - b) : b + (2 * s - 1) * ((b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b)) - b);
+    case 'difference': return Math.abs(b - s);
+    case 'exclusion': return b + s - 2 * b * s;
+    default: return s;
+  }
+}
+/** B(b, s) of one pixel in encoding e: separable modes per channel in linear RGB, the others on OkLab's L and chroma. */
+function blend(mode: BlendMode, b: number[], s: number[], e: Enc): number[] {
+  if (mode === 'normal') return s;
+  if (NON_SEPARABLE_BLENDS.includes(mode)) {
+    const [lb, ls] = e === 'oklab' ? [b, s] : [toOklab(toLinear(b, e)), toOklab(toLinear(s, e))];
+    const Cb = Math.hypot(lb[1]!, lb[2]!), Cs = Math.hypot(ls[1]!, ls[2]!);
+    const r = mode === 'luminosity' ? [ls[0]!, lb[1]!, lb[2]!]
+      : mode === 'colour' ? [lb[0]!, ls[1]!, ls[2]!]
+      : mode === 'hue' ? (Cs > 0 ? [lb[0]!, (Cb * ls[1]!) / Cs, (Cb * ls[2]!) / Cs] : lb)
+      : (Cb > 0 ? [lb[0]!, (Cs * lb[1]!) / Cb, (Cs * lb[2]!) / Cb] : lb);
+    return e === 'oklab' ? r : fromLinear(fromOklab(r), e);
+  }
+  const bl = toLinear(b, e), sl = toLinear(s, e);
+  return fromLinear([0, 1, 2].map((k) => blendChannel(mode, bl[k]!, sl[k]!)), e);
+}
+
 export const IMAGE_OPS: Record<string, ImageOp> = {
   'source.open': (ctx) => {
     const img = ctx.source(A(ctx, 'source') as string);
@@ -421,12 +486,73 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return map(r, r.c, (px, x, y) => px.map((v, k) => v + a * (v - blur.data[(y * r.w + x) * r.c + k]!)));
   },
   'composite.mix': (ctx) => {
-    // the composite law per entry (contract 1.0): mixPixel(back, top, amount · mask), normal blend
+    // the composite law per entry (contract 1.1): mixPixel(back, B(back, top), amount · mask) in the shared encoding
     const back = recv(ctx);
     const top = imageOf(ctx, A(ctx, 'top') as string);
     const m = A(ctx, 'mask') === undefined ? undefined : imageOf(ctx, A(ctx, 'mask') as string);
     const amount = num(ctx, 'amount');
-    return map(back, back.c, (px, x, y) => px.map((v, k) => mixPixel(v, top.data[(y * top.w + x) * top.c + k]!, amount * (m ? m.data[y * m.w + x]! : 1))));
+    const mode = ((A(ctx, 'blend') as BlendMode | undefined) ?? 'normal');
+    const e = encOf(ctx.recvDomain);
+    if (mode !== 'normal' && e === 'stage') fail('E_DOMAIN', `composite.mix: the blend ${mode} needs a working encoding (rgb or oklab), not ${ctx.recvDomain}`);
+    return map(back, back.c, (px, x, y) => {
+      const t = Array.from({ length: back.c }, (_, k) => top.data[(y * top.w + x) * top.c + k]!);
+      const B = mode === 'normal' ? t : [...blend(mode, rgb3(px), rgb3(t), e), ...t.slice(3)];
+      return px.map((v, k) => mixPixel(v, B[k]!, amount * (m ? m.data[y * m.w + x]! : 1)));
+    });
+  },
+  'composite.encode': (ctx) => {
+    const from = encOf(ctx.recvDomain), to = encOf(A(ctx, 'to') as Domain);
+    return map(recv(ctx), 3, (px) => fromLinear(toLinear(rgb3(px), from), to));
+  },
+  exposure: (ctx) => {
+    const g = 2 ** num(ctx, 'stops'), off = num(ctx, 'offset');
+    return map(recv(ctx), 3, (px) => rgb3(px).map((v) => v * g + off));
+  },
+  curve: (ctx) => {
+    const f = polyline(A(ctx, 'points') as { x: number; y: number }[]);
+    return map(recv(ctx), 3, (px) => tone(px, A(ctx, 'channel') as string, f));
+  },
+  levels: (ctx) => {
+    const [b, w, g, ob, ow] = ['black', 'white', 'gamma', 'outBlack', 'outWhite'].map((k) => num(ctx, k)) as [number, number, number, number, number];
+    const f = (v: number): number => { const t = (v - b) / (w - b); return ob + (ow - ob) * (t <= 0 || t >= 1 ? t : t ** (1 / g)); };
+    return map(recv(ctx), 3, (px) => tone(px, A(ctx, 'channel') as string, f));
+  },
+  // hsl and grade: pass-throughs (the mock does not model hue bands or wheels; at their identity params they are exact)
+  hsl: (ctx) => map(recv(ctx), 3, rgb3),
+  grade: (ctx) => map(recv(ctx), 3, rgb3),
+  vibrance: (ctx) => {
+    // chroma gain: vibrance weighted towards low chroma, saturation uniform (core vibranceGain)
+    const v = num(ctx, 'vibrance'), sat = num(ctx, 'saturation');
+    return map(recv(ctx), 3, (px) => {
+      const C = Math.hypot(px[1]!, px[2]!), u = 1 - C / 0.3;
+      const g = (C < 0.3 ? 1 + v * u * u : 1) * (1 + sat);
+      return [px[0]!, px[1]! * g, px[2]! * g];
+    });
+  },
+  mixer: (ctx) => {
+    const g = A(ctx, 'grey') as number[] | undefined;
+    const Mx = A(ctx, 'monochrome') && g ? [g, g, g] : [A(ctx, 'red'), A(ctx, 'green'), A(ctx, 'blue')] as number[][];
+    return map(recv(ctx), 3, (px) => mul(Mx, rgb3(px)));
+  },
+  vignette: (ctx) => {
+    const r = recv(ctx);
+    const stops = num(ctx, 'stops'), size = num(ctx, 'size'), feather = num(ctx, 'feather');
+    const e1 = size + feather * (1 - size);
+    return map(r, 3, (px, x, y) => {
+      const dx = (x + 0.5 - r.w / 2) / (r.w / 2), dy = (y + 0.5 - r.h / 2) / (r.h / 2);
+      const rho = Math.sqrt((dx * dx + dy * dy) / 2);
+      const t = e1 - size > 1e-6 ? smoothstep(size, e1, rho) : rho >= size ? 1 : 0;
+      return rgb3(px).map((v) => v * 2 ** (stops * t));
+    });
+  },
+  sharpen: (ctx) => {
+    // the mock's clarity (an unsharp mask with a box blur) at the sharpen radius
+    const r = recv(ctx);
+    const a = num(ctx, 'strength');
+    if (a === 0) return r;
+    const pitch = ctx.info?.umPerPx.paper ?? fail('E_EVAL', 'sharpen: the image has no print pitch (ImageInfo.umPerPx.paper)');
+    const blur = boxBlur(r, (num(ctx, 'radius_mm') * 1000) / pitch);
+    return map(r, r.c, (px, x, y) => px.map((v, k) => v + a * (v - blur.data[(y * r.w + x) * r.c + k]!)));
   },
   'view.reflect': (ctx) => map(recv(ctx), 3, (px) => reflectXYZ(rgb3(px))),
   'view.flare': (ctx) => {
@@ -483,6 +609,26 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     });
   },
   // structured strokes (contract 1.0): round brushes along each polyline, as core's paintMask (CHB-010)
+  'mask.radial': (ctx) => {
+    // the rotated ellipse inscribed in the box: 1 inside 1 − feather, smoothstep down to 0 at its edge
+    const b = A(ctx, 'box') as Box;
+    const t = num(ctx, 'angle_deg') * (Math.PI / 180), f = num(ctx, 'feather');
+    const [cos, sin] = [Math.cos(t), Math.sin(t)];
+    return map(recv(ctx), 1, (_, x, y) => {
+      const dx = x + 0.5 - (b.x + b.w / 2), dy = y + 0.5 - (b.y + b.h / 2);
+      const d = Math.hypot((cos * dx + sin * dy) / Math.max(b.w / 2, 1e-9), (-sin * dx + cos * dy) / Math.max(b.h / 2, 1e-9));
+      return [d <= 1 - f ? 1 : 1 - smoothstep(1 - f, 1 - f + Math.max(1e-4, f), d)];
+    });
+  },
+  'mask.colour': (ctx) => {
+    // OkLab distance from the sample: 1 within the tolerance, smoothstep to 0 over the softness
+    const ref = A(ctx, 'colour') as number[];
+    const tol = num(ctx, 'tolerance'), soft = num(ctx, 'softness');
+    return map(recv(ctx), 1, (px) => {
+      const d = Math.hypot(px[0]! - ref[0]!, px[1]! - ref[1]!, px[2]! - ref[2]!);
+      return [d <= tol ? 1 : soft > 0 ? 1 - smoothstep(tol, tol + soft, d) : 0];
+    });
+  },
   'mask.paint': (ctx) => paint(recv(ctx), A(ctx, 'strokes') as MockStroke[]),
   'mask.feather': (ctx) => boxBlur(recv(ctx), num(ctx, 'radius_px') / 2),
   'mask.constant': (ctx) => map(recv(ctx), 1, () => [num(ctx, 'value')]),

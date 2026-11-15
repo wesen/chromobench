@@ -242,7 +242,7 @@ export const DIGITAL_TESTS: Record<string, T> = {
         await (await gpu.evaluate(disp, { scale: 0.4, precision: 'preview' })).read();
         const tp = performance.now() - t0;
         t0 = performance.now();
-        for (const tile of gpu.planFor(disp.info as ImageInfo).tiles) await gpu.evaluateU16(disp, { scale: 'full', region: tile.core });
+        for (const tile of gpu.planFor(disp.info as ImageInfo, disp.id).tiles) await gpu.evaluateU16(disp, { scale: 'full', region: tile.core });
         const te = performance.now() - t0;
         if (i >= warmup) { ms.preview.push(tp); ms.export.push(te); }
       }

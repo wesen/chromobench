@@ -1,7 +1,7 @@
 // Contract 1.0 on the GPU (CHB-037 P3): the light law, composite mix, mask algebra, heal / clone and clarity against
 // core's reference engine on documents compiled by the contract's compiler: end to end (RefEngine exact; tabulated for
 // the preview) and kernel by kernel (src/parity/reference.ts: core's functions on the GPU's own inputs).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -10,9 +10,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 // Every darkroom kind (main at amount 0.95, printer lights, two masked burns, a dodge, base and open flashes, a density
@@ -136,4 +134,32 @@ test('whole documents (every darkroom kind; fused lights; heal and clarity on th
   const r = await run(page, 'law:core');
   expect(r.error).toBeUndefined();
   for (const k of ['combine', 'fused', 'print']) expect(r[k].max8bit, k).toBeLessThanOrEqual(1);
+});
+
+test('output.frame: crop and the eight orientations are a pixel permutation of output.display (full, half, region); straightening is core\'s', async ({ page }) => {
+  const r = await run(page, 'law:frame');
+  expect(r.error).toBeUndefined();
+  for (const o of ['none', 'flipH', 'flipV', 'rot180', 'cw90', 'ccw90', 'transpose', 'transverse']) {
+    expect(r[o].size, o).toEqual(r[o].want);
+    expect([r[o].full, r[o].half, r[o].region], o).toEqual([0, 0, 0]);
+  }
+  expect(r.straighten.size).toEqual(r.straighten.want);
+  expect(r.straighten.maxAbs).toBeLessThan(1e-5);
+  expect(r.straighten.core8bit).toBeLessThanOrEqual(1);
+});
+
+test('an export tile by tile equals the whole-frame export for every spatial op (halos, whole-frame fields and extremes)', async ({ page }) => {
+  test.setTimeout(600_000);
+  const r = await run(page, 'law:tiles');
+  expect(r.error).toBeUndefined();
+  const want: Record<string, string[]> = {
+    densityNarrow: ['print.densityMask'], densityWide: ['print.densityMask'], featherNarrow: ['mask.feather'], featherWide: ['mask.feather'],
+    clarity: ['clarity'], sharpen: ['sharpen'], heal: ['heal'],
+  };
+  for (const [k, ops] of Object.entries(want)) for (const op of ops) expect(r[k].ops, k).toContain(op);
+  for (const k of [...Object.keys(want), 'stack']) {
+    expect(r[k].codes, k).toBe(0);
+    // the check can fail: the preview path, every texture on the tile's own grid, differs at the tile borders
+    if (k !== 'heal') expect(r[k].before, k).toBeGreaterThan(0);
+  }
 });

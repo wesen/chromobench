@@ -23,6 +23,7 @@ import { claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigm
 import { Blur } from './spatial.ts';
 import { Retouch, type RepairSpot } from './retouch.ts';
 import { FILM_OPS, FilmGpu } from './film.ts';
+import { framePass, frameSource, type FrameArgs } from './frame.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
@@ -31,14 +32,14 @@ import type { SpectraJob, SpectraReply } from './tables/spectra-worker.ts';
 import { OpfsStore, TableCache } from './tables/cache.ts';
 import { TableManager } from './tables/manager.ts';
 import type { Vec3 } from './tables/inputs.ts';
-import { planGraph } from './engine/dag.ts';
-import { cancelled, COMBINE_WGSL, GPU_OPS, type Cached, type GridTarget, type Lowered, type Plan, type SourceImg, type U16Result } from './engine/defs.ts';
+import { planGraph, readsOf } from './engine/dag.ts';
+import { cancelled, COMBINE_WGSL, GPU_OPS, MAX_PASS_SIGMA, type Cached, type GridTarget, type Lowered, type Plan, type SourceImg, type U16Result } from './engine/defs.ts';
 import { FLAG, MODE, combineArgs, lightPasses } from './engine/light.ts';
 import { fillGrain, lightContext, lowerChain } from './engine/lower.ts';
 import { blendCode, encodingCode } from './chain/working.ts';
 import { reduceMeasure } from './engine/reduce.ts';
 import { addResult } from './engine/results.ts';
-import { combinePass, gaussianBlur, readU16, syntheticSource, uploadF32, uploadU16 } from './engine/textures.ts';
+import { combinePass, fieldSigma, gaussianBlur, readU16, syntheticSource, uploadF32, uploadU16 } from './engine/textures.ts';
 
 export { COMBINE_WGSL, GPU_OPS, type U16Result } from './engine/defs.ts';
 
@@ -60,6 +61,8 @@ export interface GpuEngineOptions extends RuntimeOptions {
    * interactive host sets it: every slider step makes new nodes and a new cached result (CHB-023).
    */
   cacheLimit?: number;
+  /** Side (px, about) of the frame boxes an exact export builds whole-frame fields and extremes from (default 512: they render while the tile's own textures are live; tests set it). */
+  exactBox?: number;
 }
 
 export class GpuEngine implements Engine {
@@ -89,6 +92,10 @@ export class GpuEngine implements Engine {
   private readonly rebateT = new Map<string, Vec3>();
   private disposed = false;
   private recreating: Promise<void> | null = null;
+  /** Whole-frame blur fields of exact (tiled) exports, by node, purpose and σ; the newest few within a quarter of the budget (CHB-037 P3b). */
+  private readonly fields = new Map<string, { tex: GPUTexture; s: number; pad: number }>();
+  /** Whole-frame reference extremes of density masks in exact exports, by node. */
+  private readonly extremes = new Map<string, { min: number; max: number }>();
 
   private constructor(rt: GpuRuntime, opts: GpuEngineOptions, owns: boolean, data: PhysicsData) {
     this.rt = rt;
@@ -136,6 +143,7 @@ export class GpuEngine implements Engine {
 
   // ---- device loss: drop GPU state, keep CPU state; recreate on the next call ----
   private dropDeviceState(): void {
+    this.fields.clear();
     this.srcTex.clear();
     this.dummyTex = null;
     this.unpackLut.clear();
@@ -216,6 +224,7 @@ export class GpuEngine implements Engine {
     this.sources.delete(sha);
     this.results.clear();
     this.rebateT.clear();
+    this.dropFields();
     for (const t of this.srcTex.values()) t.destroy();
     this.srcTex.clear();
     this.graph = new Graph();
@@ -237,20 +246,28 @@ export class GpuEngine implements Engine {
 
   async plan(ref: NodeRef, target: EvalTarget): Promise<TilePlan> {
     const n = this.node(ref);
-    const info = n.info as ImageInfo;
     void target;
-    return this.planFor(info);
+    return this.planFor(n.info as ImageInfo, n.id);
   }
 
-  planFor(info: ImageInfo): GpuTilePlan {
-    // no spatial kernels are declared, so the pitch only labels the plan (an image without one, a pattern, plans at 1)
-    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? 1 }, [], this.rt.caps);
+  /**
+   * The export's tiles. With a node, its halo (haloOf: the reach an exact export renders around each tile) is declared
+   * as one local kernel, so the planner shrinks the tile until tile plus halo fits the budget; wide blurs need no halo
+   * (whole-frame fields). The pitch only labels the plan (an image without one, a pattern, plans at 1).
+   */
+  planFor(info: ImageInfo, node?: string): GpuTilePlan {
+    const halo = node ? this.haloOf(node) : 0;
+    const kernels = halo > 0 ? [{ id: 'halo', radiusPx: halo, fieldOk: false }] : [];
+    // a haloed tile holds a darkroom DAG's textures (terms, masks, the density mask's passes) at once, not the planner's
+    // default five: plan with 20 rgba32float textures per pixel then (12 ran out of memory on the darkroom bench at 4000 px, CHB-037 P3b)
+    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? 1 }, kernels, this.rt.caps, halo > 0 ? { bytesPerPixel: 320 } : {});
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.results.clear();
+    this.dropFields();
     this.pool?.terminate();
     for (const t of this.srcTex.values()) t.destroy();
     this.srcTex.clear();
@@ -399,7 +416,33 @@ export class GpuEngine implements Engine {
   // they equal the reference engine's sampled full-resolution result; spatial steps (feather, the
   // density mask's blur) run on the grid with σ scaled to it and clamp at its edge.
 
+  /**
+   * The node on grid t. output.frame (the document geometry, the display cut's last step) renders its receiver on the
+   * grid the output grid maps to and reorients it, or straightens the receiver's footprint (src/frame.ts); everything
+   * else is a DAG evaluation (renderDag).
+   */
   private async renderGraph(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
+    const n = this.graph.get(id);
+    if (n?.op !== 'output.frame') return this.renderDag(id, t);
+    const inner = this.graph.get(n.inputs[0]!) ?? fail('E_NO_NODE', 'output.frame without its receiver');
+    const inInfo = inner.info as ImageInfo;
+    const a = n.args as Record<string, unknown>;
+    const f: FrameArgs = { orientation: a['orientation'] ?? 'none', angle_deg: (a['angle_deg'] as number | undefined) ?? 0, crop: (a['crop'] as Box | undefined) ?? { x: 0, y: 0, w: inInfo.width, h: inInfo.height } };
+    const s = frameSource(f, t.region, t.outW, t.outH, inInfo.width, inInfo.height);
+    const sub: GridTarget = { ...t, frameW: inInfo.width, frameH: inInfo.height, region: s.region, outW: s.full ? s.region.w : s.outW, outH: s.full ? s.region.h : s.outH };
+    const r = await this.renderRegion(inner.id, sub);
+    if (!s.full && f.orientation === 'none') return r;
+    try {
+      const tex = s.full
+        ? await framePass(this.rt, 'straighten', r.tex, t.outW, t.outH, f, t.region, s.region, inInfo.width, inInfo.height)
+        : await framePass(this.rt, 'orient', r.tex, t.outW, t.outH, f, t.region, { x: 0, y: 0 }, inInfo.width, inInfo.height);
+      return { tex, warnings: r.warnings };
+    } finally {
+      this.rt.textures.release(r.tex);
+    }
+  }
+
+  private async renderDag(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
     const { order, plans, refs } = planGraph(this.graph, id, (n) => this.check(n), (nid) => this.chainOf(nid));
     const texs = new Map<string, GPUTexture>();
     const warnings: Diagnostic[] = [];
@@ -483,7 +526,7 @@ export class GpuEngine implements Engine {
         const mode = ['add', 'subtract', 'intersect'].indexOf(a['mode'] as string);
         return this.mix(MODE.MASK, recv, tex(a['other'] as string), null, 0, [a['amount'] as number, mode]);
       }
-      case 'mask.feather': return this.gaussian(recv, featherSigma(a['radius_px'] as number) * scale);
+      case 'mask.feather': return this.blurAt(`${nid}|feather`, recv, featherSigma(a['radius_px'] as number) * scale, t, (g) => this.texOf(n.inputs[0]!, g));
       case 'print.densityMask': {
         // core maskDensityPolar: PD = x_clear − x from the main print.expose, blur the mean transmittance,
         // d = ±γ·(log10 H_m − log10 ref), ref the smallest (positive) or largest (same) H_m
@@ -493,11 +536,17 @@ export class GpuEngine implements Engine {
         const chain = this.chainOf(nid);
         const clear = clearExposure(this.physics.ctx(chain, chain.length - 1));
         const T = await this.mix(MODE.TRANSMITTANCE, recv, null, null, 0, [...clear]);
-        const Hm = await this.gaussian(T, densityMaskSigma(a['radius_um'] as number, info.umPerPx.film) * scale);
+        const sigma = densityMaskSigma(a['radius_um'] as number, info.umPerPx.film) * scale;
+        const produceT = async (g: GridTarget): Promise<GPUTexture> => {
+          const r = await this.texOf(n.inputs[0]!, g);
+          try { return await this.mix(MODE.TRANSMITTANCE, r, null, null, 0, [...clear]); } finally { this.rt.textures.release(r); }
+        };
+        const Hm = await this.blurAt(`${nid}|density`, T, sigma, t, produceT);
         this.rt.textures.release(T);
-        const mo = await this.reducer.moments(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
+        // the reference is the whole frame's extreme: in an exact export of a part, from the whole frame (extremesOf)
+        const mo = t.exact && !this.whole(t) ? await this.extremesOf(nid, sigma, t, produceT) : await this.extremes1(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
         const same = a['polarity'] === 'same';
-        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(same ? mo.max[0]! : mo.min[0]!)]);
+        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(same ? mo.max : mo.min)]);
         this.rt.textures.release(Hm);
         return out;
       }
@@ -507,7 +556,7 @@ export class GpuEngine implements Engine {
         const info = n.info as ImageInfo;
         const chain = this.chainOf(nid);
         const Yw = whiteAt(this.physics.ctx(chain, chain.length - 1))[1];
-        const low = await this.gaussian(recv, claritySigma(a['radius_mm'] as number, info.umPerPx.paper, n.op) * scale, 1);
+        const low = await this.blurAt(`${nid}|low`, recv, claritySigma(a['radius_mm'] as number, info.umPerPx.paper, n.op) * scale, t, (g) => this.texOf(n.inputs[0]!, g), 1);
         try {
           return await this.mix(MODE.CLARITY, recv, low, null, 0, [a['strength'] as number, Yw, n.op === 'clarity' ? 1 : 0]);
         } finally {
@@ -518,16 +567,183 @@ export class GpuEngine implements Engine {
         // spots in order, each reading the image the spots before it left (src/retouch.ts, kernels/retouch.wgsl)
         if (this.retouchK?.rt !== this.rt) this.retouchK = { rt: this.rt, k: new Retouch(this.rt, (tx, w, h) => this.chain.readTexture(tx, w, h)) };
         const info = n.info as ImageInfo;
-        const win = async (box: Box): Promise<GPUTexture> => (await this.renderGraph(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box })).tex;
+        const win = async (box: Box): Promise<GPUTexture> => (await this.renderRegion(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box })).tex;
         return this.retouchK.k.apply(recv, n.op, a['spots'] as readonly RepairSpot[], info.domain === 'scanner-density' ? 'density' : 'linear', { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
       }
       default: {
+        if (n.op === 'output.frame') return fail('E_NOT_IMPLEMENTED', 'output.frame is the display cut\'s last step on the GPU: nothing may read it');
         if (!FILM_OPS.has(n.op)) return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
         // CHB-012 film ops (src/film.ts): bindings from core, on the output grid
         const chain = this.chainOf(nid);
         return this.film.run(n, recv, this.physics.ctx(chain, chain.length - 1), t, (sha) => this.graph.source(sha));
       }
     }
+  }
+
+  // ---- exact exports of a part of the frame (CHB-037 P3b) --------------------------------------------------------
+
+  /** True when grid t covers its whole frame at full resolution. */
+  private whole(t: GridTarget): boolean {
+    return t.region.x === 0 && t.region.y === 0 && t.region.w === t.frameW && t.region.h === t.frameH && t.outW === t.frameW && t.outH === t.frameH;
+  }
+
+  /** The node's texture on grid t (renderRegion), for a field or an extreme built box by box. */
+  private async texOf(id: string, t: GridTarget): Promise<GPUTexture> {
+    return (await this.renderRegion(id, t)).tex;
+  }
+
+  /**
+   * How far (full-resolution px) the node's result reads its inputs' grids around a pixel, along its deepest path:
+   * a blur of σ ≤ MAX_PASS_SIGMA reads ⌈3σ⌉ (≤ 96, spatial.ts), the film ops their blurs' reach; a wider blur reads a
+   * whole-frame field and adds nothing; pointwise ops, masks, heal and clone (their windows are their own renders)
+   * add nothing.
+   */
+  private haloOf(id: string, memo = new Map<string, number>()): number {
+    const known = memo.get(id);
+    if (known !== undefined) return known;
+    const n = this.graph.get(id);
+    if (!n) return 0;
+    const a = n.args as Record<string, unknown>;
+    const info = n.info as ImageInfo;
+    const local = (sigma: number): number => (sigma > 0 && sigma <= MAX_PASS_SIGMA ? Math.min(96, Math.ceil(3 * sigma)) : 0);
+    let own = 0;
+    if (n.op === 'mask.feather') own = local(featherSigma(a['radius_px'] as number));
+    else if (n.op === 'print.densityMask' && (a['gamma'] as number) !== 0) own = local(densityMaskSigma(a['radius_um'] as number, info.umPerPx.film));
+    else if ((n.op === 'clarity' || n.op === 'sharpen') && (a['strength'] as number) !== 0) own = local(claritySigma(a['radius_mm'] as number, info.umPerPx.paper, n.op));
+    else if (FILM_OPS.has(n.op)) {
+      const chain = this.chainOf(id);
+      own = this.film.reach(n, this.physics.ctx(chain, chain.length - 1));
+    }
+    let below = 0;
+    for (const i of n.op === 'output.frame' ? [n.inputs[0]!] : readsOf(n, this.graph)) below = Math.max(below, this.haloOf(i, memo));
+    memo.set(id, own + below);
+    return own + below;
+  }
+
+  /**
+   * The node over grid t. In an exact export of a part of the frame, the node renders over the part grown by its
+   * halo (haloOf; clipped to the frame, where every op clamps as on the whole frame) and the part is cut out, so the
+   * result is the crop of the whole frame's.
+   */
+  private async renderRegion(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
+    if (!t.exact || this.whole(t)) return this.renderGraph(id, t);
+    const h = this.graph.get(id)?.op === 'output.frame' ? 0 : this.haloOf(id);
+    if (h === 0) return this.renderGraph(id, t);
+    const x0 = Math.max(0, t.region.x - h), y0 = Math.max(0, t.region.y - h);
+    const x1 = Math.min(t.frameW, t.region.x + t.region.w + h), y1 = Math.min(t.frameH, t.region.y + t.region.h + h);
+    const big = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    const r = await this.renderGraph(id, { ...t, region: big, outW: big.w, outH: big.h });
+    try {
+      const f: FrameArgs = { orientation: 'none', angle_deg: 0, crop: big };
+      const tex = await framePass(this.rt, 'crop', r.tex, t.outW, t.outH, f, { x: t.region.x - x0, y: t.region.y - y0, w: t.outW, h: t.outH }, { x: 0, y: 0 }, t.frameW, t.frameH);
+      return { tex, warnings: r.warnings };
+    } finally {
+      this.rt.textures.release(r.tex);
+    }
+  }
+
+  /** Frame boxes of about exactBox px whose sides are multiples of s (a field's blocks never straddle two). */
+  private boxes(t: GridTarget, s: number): Box[] {
+    const B = s * Math.max(1, Math.floor((this.opts.exactBox ?? 512) / s));
+    const out: Box[] = [];
+    for (let y = 0; y < t.frameH; y += B) for (let x = 0; x < t.frameW; x += B) out.push({ x, y, w: Math.min(B, t.frameW - x), h: Math.min(B, t.frameH - y) });
+    return out;
+  }
+
+  /**
+   * A Gaussian blur of σ px of `src` on grid t. In an exact export of a part, a blur wider than one pass reads the
+   * whole frame's field (built once from `produce`, the blurred image over boxes of the frame) at the part's frame
+   * position: the whole frame's blur, cut to the part. Otherwise gaussian() on the grid.
+   */
+  private async blurAt(key: string, src: GPUTexture, sigma: number, t: GridTarget, produce: (g: GridTarget) => Promise<GPUTexture>, channel?: number): Promise<GPUTexture> {
+    if (!t.exact || this.whole(t) || !(sigma > MAX_PASS_SIGMA)) return this.gaussian(src, sigma, channel);
+    const F = await this.fieldOf(key, sigma, t, produce, channel);
+    return this.blur.upsampleAt(F.tex, F.s, F.pad, t.outW, t.outH, [t.region.x, t.region.y]);
+  }
+
+  /** The whole frame's padded, blurred field of a wide blur (engine/textures.ts gaussianBlur's), built box by box. */
+  private async fieldOf(key: string, sigma: number, t: GridTarget, produce: (g: GridTarget) => Promise<GPUTexture>, channel?: number): Promise<{ tex: GPUTexture; s: number; pad: number }> {
+    const k = `${key}|${sigma}|${channel ?? 'all'}`;
+    const hit = this.fields.get(k);
+    if (hit) return hit;
+    const s = Math.ceil(sigma / MAX_PASS_SIGMA);
+    const fs = fieldSigma(sigma, s);
+    const pad = Math.ceil(3 * fs) + 1;
+    const down = this.blur.fieldTexture(Math.ceil(t.frameW / s) + 2 * pad, Math.ceil(t.frameH / s) + 2 * pad);
+    try {
+      for (const box of this.boxes(t, s)) {
+        const src = await produce({ ...t, region: box, outW: box.w, outH: box.h });
+        try {
+          await this.blur.fieldDownAt(down, src, s, pad, box, t.frameW, t.frameH);
+        } finally {
+          this.rt.textures.release(src);
+        }
+      }
+      const sig = [0, 1, 2, 3].map((c) => (channel === undefined || c === channel ? fs : 0));
+      const F = { tex: await this.blur.gaussian(down, sig), s, pad };
+      this.fields.set(k, F);
+      // a field at s = 2 of a 4000-px frame is ~40 MB: keep the newest few, within a quarter of the budget
+      const bytes = (): number => [...this.fields.values()].reduce((b, f) => b + f.tex.width * f.tex.height * 16, 0);
+      while (this.fields.size > 1 && (this.fields.size > 4 || bytes() > this.rt.caps.budgetBytes / 4)) {
+        const [old, v] = this.fields.entries().next().value as [string, { tex: GPUTexture }];
+        this.rt.textures.release(v.tex);
+        this.fields.delete(old);
+      }
+      return F;
+    } finally {
+      this.rt.textures.release(down);
+    }
+  }
+
+  private dropFields(): void {
+    for (const f of this.fields.values()) this.rt.textures.release(f.tex);
+    this.fields.clear();
+    this.extremes.clear();
+  }
+
+  /** Channel 0's extremes of a texture over a box. */
+  private async extremes1(tex: GPUTexture, box: Box): Promise<{ min: number; max: number }> {
+    const m = await this.reducer.moments(tex, box);
+    return { min: m.min[0]!, max: m.max[0]! };
+  }
+
+  /**
+   * The extremes of a density mask's blurred transmittance over the whole frame (its reference), box by box: a wide
+   * blur reads the field; a narrow one blurs each box grown by its reach and reduces the box. Min and max do not
+   * depend on the order, so they are the whole frame's.
+   */
+  private async extremesOf(nid: string, sigma: number, t: GridTarget, produceT: (g: GridTarget) => Promise<GPUTexture>): Promise<{ min: number; max: number }> {
+    const hit = this.extremes.get(nid);
+    if (hit) return hit;
+    let min = Infinity, max = -Infinity;
+    const wide = sigma > MAX_PASS_SIGMA;
+    const F = wide ? await this.fieldOf(`${nid}|density`, sigma, t, produceT) : null;
+    const reach = wide ? 0 : Math.min(96, Math.ceil(3 * sigma));
+    for (const box of this.boxes(t, F?.s ?? 1)) {
+      let tex: GPUTexture;
+      let core: Box;
+      if (F) {
+        tex = await this.blur.upsampleAt(F.tex, F.s, F.pad, box.w, box.h, [box.x, box.y]);
+        core = { x: 0, y: 0, w: box.w, h: box.h };
+      } else {
+        const x0 = Math.max(0, box.x - reach), y0 = Math.max(0, box.y - reach);
+        const big = { x: x0, y: y0, w: Math.min(t.frameW, box.x + box.w + reach) - x0, h: Math.min(t.frameH, box.y + box.h + reach) - y0 };
+        const T = await produceT({ ...t, region: big, outW: big.w, outH: big.h });
+        tex = await this.gaussian(T, sigma);
+        this.rt.textures.release(T);
+        core = { x: box.x - x0, y: box.y - y0, w: box.w, h: box.h };
+      }
+      try {
+        const m = await this.extremes1(tex, core);
+        min = Math.min(min, m.min);
+        max = Math.max(max, m.max);
+      } finally {
+        this.rt.textures.release(tex);
+      }
+    }
+    const out = { min, max };
+    this.extremes.set(nid, out);
+    return out;
   }
 
   /** A Gaussian blur of σ output px, one channel or all (engine/textures.ts); a new texture. */
@@ -566,9 +782,11 @@ export class GpuEngine implements Engine {
   private async render<T>(n: Node, info: ImageInfo, region: Box, scale: number, precision: EvalTarget['precision'], read: (tex: GPUTexture, w: number, h: number) => Promise<T>): Promise<{ px: T; width: number; height: number; warnings: Diagnostic[] }> {
     const width = Math.max(1, Math.round(region.w * scale));
     const height = Math.max(1, Math.round(region.h * scale));
-    const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision };
+    const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision, ...(precision === 'export' && scale === 1 ? { exact: true } : {}) };
+    // fields serve the tiles of an exact export; any other render (a preview) means that export is over: free them
+    if (!grid.exact && this.fields.size) this.dropFields();
     const r = await this.gpu(async () => {
-      const g = await this.renderGraph(n.id, grid);
+      const g = await this.renderRegion(n.id, grid);
       try {
         return { px: await read(g.tex, width, height), warnings: g.warnings };
       } finally {

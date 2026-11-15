@@ -1,6 +1,6 @@
 // Contract 1.1 on the GPU (CHB-037 P8a): the digital layers of the composite stages, their encodings, the blend modes
 // fused and masked, and documents with print stacks, against core's reference engine (src/parity/digital-tests.ts).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -9,9 +9,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 // Every op (exposure, mixer, vignette, curve and levels on L and on a channel, hsl, vibrance, grade, the colour and

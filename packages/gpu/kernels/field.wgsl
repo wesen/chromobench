@@ -93,3 +93,45 @@ fn combine(@builtin(global_invocation_id) g: vec3<u32>) {
   if (U.mode == 0u) { o = o / (1.0 + a); }
   textureStore(dst, vec2<i32>(g.xy), vec4<f32>(o, E.yzw));
 }
+
+// ---- whole-frame fields for tiled exports (CHB-037 P3b) -----------------------------------------------------------
+// The same padded field as downPad, built box by box: src is the image over a box of the frame whose corner is
+// tileOrigin (frame px) and whose sides are multiples of s (except at the frame's end); the dispatch covers the
+// field cells whose clamp-extended block lies in that box, from cell pad.xy on (U.wts.xy cells), and writes them into
+// the whole field. mode = the field's pad. A block's s² pixels are summed in downPad's order, so a field built from
+// boxes is bit for bit the field of the whole frame.
+@compute @workgroup_size(8, 8)
+fn downPadAt(@builtin(global_invocation_id) g: vec3<u32>) {
+  if (f32(g.x) >= U.wts.x || f32(g.y) >= U.wts.y) { return; }
+  let cell = vec2<i32>(g.xy) + vec2<i32>(U.pad);
+  let sd = vec2<i32>(textureDimensions(src));
+  let s = i32(U.s);
+  let o = (cell - vec2<i32>(i32(U.mode))) * s;
+  let fmax = vec2<i32>(U.frameSize) - 1;
+  var acc = vec4<f32>(0.0);
+  for (var j = 0; j < s; j++) {
+    for (var i = 0; i < s; i++) {
+      let q = clamp(o + vec2<i32>(i, j), vec2<i32>(0), fmax) - U.tileOrigin;
+      acc += textureLoad(src, clamp(q, vec2<i32>(0), sd - 1), 0);
+    }
+  }
+  textureStore(dst, cell, acc / f32(s * s));
+}
+
+// upsample at frame position tileOrigin + pixel (a tile of the frame); mode = the field's pad
+@compute @workgroup_size(8, 8)
+fn upsampleAt(@builtin(global_invocation_id) g: vec3<u32>) {
+  let od = textureDimensions(dst);
+  if (g.x >= od.x || g.y >= od.y) { return; }
+  let fd = vec2<i32>(textureDimensions(field));
+  let u = (vec2<f32>(vec2<i32>(g.xy) + U.tileOrigin) + 0.5) / f32(U.s) - 0.5 + f32(U.mode);
+  let f0 = floor(u);
+  let t = u - f0;
+  let i0 = clamp(vec2<i32>(f0), vec2<i32>(0), fd - 1);
+  let i1 = clamp(vec2<i32>(f0) + 1, vec2<i32>(0), fd - 1);
+  let a = textureLoad(field, vec2<i32>(i0.x, i0.y), 0);
+  let b = textureLoad(field, vec2<i32>(i1.x, i0.y), 0);
+  let c = textureLoad(field, vec2<i32>(i0.x, i1.y), 0);
+  let d = textureLoad(field, vec2<i32>(i1.x, i1.y), 0);
+  textureStore(dst, vec2<i32>(g.xy), mix(mix(a, b, t.x), mix(c, d, t.x), t.y));
+}

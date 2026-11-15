@@ -71,22 +71,31 @@ export function buildPrintTable(chain: { viewing: Viewing }, o: { N?: number; ra
   return { N, lo, hi, channels: 4, data };
 }
 
-/** Trilinear lookup with the GPU's clamp-to-edge texel-centre mapping. */
+/** Texel-centre position of v on a table axis (look3), clamped to [0, N − 1]. */
+const axisPos = (v: number, N: number, lo: number, hi: number): number => {
+  const u = (v - lo) / (hi - lo);
+  const tc = (u * (N - 1) + 0.5) / N; // texture coordinate of the GPU sampler
+  return Math.min(Math.max(tc * N - 0.5, 0), N - 1);
+};
+
+/**
+ * Trilinear lookup with the GPU's clamp-to-edge texel-centre mapping. Allocation-free (P3b: the tabulated preview
+ * calls it per pixel and per stage); the weights and the sum run in the same order as before, so values are unchanged.
+ */
 export function look3(t: Table3, v: ArrayLike<number>, out = new Float64Array(4)): Float64Array {
   const { N, lo, hi, data } = t;
-  const f = [0, 1, 2].map((k) => {
-    const u = (v[k]! - lo) / (hi - lo);
-    const tc = (u * (N - 1) + 0.5) / N; // texture coordinate of the GPU sampler
-    const p = Math.min(Math.max(tc * N - 0.5, 0), N - 1);
-    return p;
-  });
-  const i = f.map((p) => Math.min(Math.floor(p), N - 2));
-  const w = f.map((p, k) => p - i[k]!);
-  out.fill(0);
+  const p0 = axisPos(v[0]!, N, lo, hi), p1 = axisPos(v[1]!, N, lo, hi), p2 = axisPos(v[2]!, N, lo, hi);
+  const i0 = Math.min(Math.floor(p0), N - 2), i1 = Math.min(Math.floor(p1), N - 2), i2 = Math.min(Math.floor(p2), N - 2);
+  const w0 = p0 - i0, w1 = p1 - i1, w2 = p2 - i2;
+  let o0 = 0, o1 = 0, o2 = 0, o3 = 0;
   for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-    const wt = (dx ? w[0]! : 1 - w[0]!) * (dy ? w[1]! : 1 - w[1]!) * (dz ? w[2]! : 1 - w[2]!);
-    const q = (i[0]! + dx) + N * (i[1]! + dy) + N * N * (i[2]! + dz);
-    for (let c = 0; c < 4; c++) out[c] = out[c]! + wt * data[4 * q + c]!;
+    const wt = (dx ? w0 : 1 - w0) * (dy ? w1 : 1 - w1) * (dz ? w2 : 1 - w2);
+    const q = 4 * ((i0 + dx) + N * (i1 + dy) + N * N * (i2 + dz));
+    o0 = o0 + wt * data[q]!;
+    o1 = o1 + wt * data[q + 1]!;
+    o2 = o2 + wt * data[q + 2]!;
+    o3 = o3 + wt * data[q + 3]!;
   }
+  out[0] = o0; out[1] = o1; out[2] = o2; out[3] = o3;
   return out;
 }

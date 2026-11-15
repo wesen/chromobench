@@ -2,7 +2,7 @@
 // crop, view.inspect, P3 re-encode) against the mock engine's own implementations, the automatic first
 // print on core's RefEngine (the frame integrates to grey), the test-strip bands and the time grid.
 import {
-  compile, cutNode, edit, Graph, newDocument, ORIENTATIONS, sha256Hex,
+  compile, cutNode, edit, Graph, newDocument, sha256Hex,
   type Box, type Document, type Engine, type EngineCaps, type EvalTarget, type Geometry, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
 import { set } from '@chromobench/values';
@@ -11,7 +11,7 @@ import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { conditionScan, plantedFrames, plantedStrip, stripFrames } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
 import { firstPrint, gridTime, integratedExposure, measureExposure, withMeasured, withRebate } from '../src/host/first-print.ts';
-import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
+import { HOST_OPS, srgbToP3, StudioEngine, type HostServices } from '../src/host/studio-engine.ts';
 import { bandBoxes, evaluateBands, layerOf, lightsOf, mainExposure, stripMutation, stripValues } from '@chromobench/studio-kit';
 
 const bytes = makeM1Tiff();
@@ -73,39 +73,12 @@ const read = async (e: Engine, g: Graph, id: string, t: EvalTarget): Promise<{ w
 };
 
 describe('StudioEngine host ops', () => {
-  it('output.frame: a straightened crop (contract 0.3) equals the mock engine, every orientation, with a region', async () => {
-    const { wrap, mock, g, info: src } = await both(['output.frame']);
-    const r = neg(sha, src.width, src.height);
-    for (const o of ORIENTATIONS) {
-      const n = compile(withGeometry(r, { orientation: o, angle_deg: 3.5, crop: { x: 10, y: 6, w: 70, h: 50 } }), g).display;
-      const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
-      expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
-      const info = n.info as { width: number; height: number };
-      const region = { x: 3, y: 5, w: info.width - 9, h: info.height - 11 };
-      const part = await read(wrap, g, n.id, { scale: 0.5, precision: 'preview', region });
-      expect(part, `${o} region`).toEqual(await read(mock, g, n.id, { scale: 0.5, precision: 'preview', region }));
-    }
-  });
-
-  it('output.frame: every orientation, with a crop and a region, equals the mock engine', async () => {
-    const { wrap, mock, g, info: src } = await both(['output.frame']);
-    const r = neg(sha, src.width, src.height);
-    for (const o of ORIENTATIONS) {
-      const n = compile(withGeometry(r, { orientation: o, angle_deg: 0, crop: { x: 10, y: 6, w: 70, h: 50 } }), g).display;
-      const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
-      expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
-      const info = n.info as { width: number; height: number };
-      const region = { x: 3, y: 5, w: info.width - 9, h: info.height - 11 };
-      const part = await read(wrap, g, n.id, { scale: 'full', precision: 'preview', region });
-      expect(part, `${o} region`).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview', region }));
-    }
-  });
-
-  it('unorientBox maps the whole oriented frame onto the whole receiver', () => {
-    for (const o of ORIENTATIONS) {
-      const swap = ['cw90', 'ccw90', 'transpose', 'transverse'].includes(o);
-      expect(unorientBox(o, { x: 0, y: 0, w: swap ? 40 : 60, h: swap ? 60 : 40 }, 60, 40), o).toEqual({ x: 0, y: 0, w: 60, h: 40 });
-    }
+  it('output.frame is the engines\' own (CHB-037 P3b): the host neither lists nor computes it', async () => {
+    expect(HOST_OPS as readonly string[]).not.toContain('output.frame');
+    const { wrap, g, info: src } = await both(['output.frame']);
+    expect(wrap.capabilities().ops).not.toContain('output.frame');
+    const n = compile(withGeometry(neg(sha, src.width, src.height), { orientation: 'cw90', angle_deg: 0, crop: { x: 10, y: 6, w: 70, h: 50 } }), g).display;
+    await expect(read(wrap, g, n.id, { scale: 'full', precision: 'preview' })).rejects.toMatchObject({ code: 'E_NOT_IMPLEMENTED' });
   });
 
   it('view.inspect: every inspection view renders as display RGB in [0, 1]', async () => {

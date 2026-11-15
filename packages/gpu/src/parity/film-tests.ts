@@ -223,3 +223,45 @@ export const FILM_TESTS: Record<string, T> = {
     return { scene: diff(sc.a, sc.b, 3, f.info.width, f.info.height, 0), display: diff(a, b, c, f.info.width, f.info.height, 6), changed };
   },
 };
+
+/**
+ * CHB-037 P3b: a camera file's export tile by tile equals the whole-frame export (16-bit codes) through the forward
+ * film path's spatial ops (film.couple's inhibitor blur, film.halation's scatter and bounces; the tile halo is their
+ * reach), with grain off and on. The preview path on each tile's own grid is the broken comparison.
+ */
+FILM_TESTS['film:tiles'] = async () => {
+  const TW = 320, TH = 224, T = 64;
+  const gpu = await GpuEngine.create({ runtime: await runtime(), opfs: false });
+  const { info, data } = syntheticRaw(TW, TH);
+  gpu.openDecoded(info, data);
+  const g = new Graph();
+  g.registerSource(info);
+  const d = newDocument('digital-raw', { sha256: info.sha256, name: 'synthetic.dng', width: TW, height: TH });
+  const film = d.stages.film!;
+  const fm = film.medium as FilmMedium;
+  const docs: Record<string, Document> = {
+    film: { ...d, stages: { ...d.stages, film: { ...film, medium: { ...fm, grain: { ...fm.grain, amount: 0 } } } } },
+    grain: d,
+  };
+  const out: Record<string, unknown> = {};
+  for (const [name, doc] of Object.entries(docs)) {
+    const top = cutNode(compile(doc, g), 'display');
+    gpu.adopt(g.closure(top.id));
+    const whole = await gpu.evaluateU16(top, { scale: 'full' });
+    const pw = await (await gpu.evaluate(top, { scale: 'full', precision: 'preview' })).read();
+    let codes = 0, before = 0;
+    for (let y = 0; y < TH; y += T) for (let x = 0; x < TW; x += T) {
+      const region = { x, y, w: Math.min(T, TW - x), h: Math.min(T, TH - y) };
+      const t = await gpu.evaluateU16(top, { scale: 'full', region });
+      const p = await (await gpu.evaluate(top, { scale: 'full', precision: 'preview', region })).read();
+      for (let r = 0; r < region.h; r++) for (let q = 0; q < region.w * 3; q++) {
+        const i = ((y + r) * TW + x) * 3 + q, j = r * region.w * 3 + q;
+        if (t.data[j] !== whole.data[i]) codes++;
+        if (Math.abs(p[j]! - pw[i]!) > 1 / 65535) before++;
+      }
+    }
+    out[name] = { ops: [...new Set(g.closure(top.id).map((m) => m.op))].filter((op) => op.startsWith('film.')), codes, before };
+  }
+  gpu.dispose();
+  return out;
+};

@@ -10,7 +10,7 @@ Mask component 'colour': how close the image's colour is to a sample, 1 − smoo
 - On: Image (scene-oklab, print-oklab) → Mask (mask)
 - Class: pointwise; binding: setting
 - UI: "Colour range" in the mask menu (order 60)
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -136,7 +136,7 @@ Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial g
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
 - UI: "Radial gradient" in the mask menu (order 20)
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|

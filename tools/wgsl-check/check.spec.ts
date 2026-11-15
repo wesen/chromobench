@@ -1,13 +1,16 @@
 /// <reference types="@webgpu/types" />
 // WebGPU smoke test and WGSL compile check (CHB-002 stage 1).
 // 1. request an adapter and a device in headless Chromium;
-// 2. compile every *.wgsl under packages/gpu/kernels/ (none yet; CHB-005 adds them) plus the smoke kernel;
+// 2. compile every *.wgsl under packages/gpu/kernels/ plus the smoke kernel, each linked with the modules it includes
+//    (`//! include <name>`) by the engine's own linker (packages/gpu/src/chain/wgsl-link.ts, CHB-037 P3b), so a kernel
+//    compiles here exactly as the engine compiles it, and an include that is missing fails here;
 // 3. fail on any compilation message of type 'error';
 // 4. run the smoke kernel on [0,1,2,3] and read back [1,2,3,4].
 import { test, expect } from '@playwright/test';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { includesOf, linkWgsl } from '../../packages/gpu/src/chain/wgsl-link.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
@@ -17,7 +20,7 @@ function wgslFiles(): { name: string; code: string }[] {
   const kernels = join(root, 'packages', 'gpu', 'kernels');
   if (existsSync(kernels)) {
     for (const f of readdirSync(kernels, { recursive: true }) as string[]) {
-      if (f.endsWith('.wgsl')) out.push({ name: `packages/gpu/kernels/${f}`, code: readFileSync(join(kernels, f), 'utf8') });
+      if (f.endsWith('.wgsl')) out.push({ name: `packages/gpu/kernels/${f}`, code: linkWgsl(readFileSync(join(kernels, f), 'utf8'), (n) => readFileSync(join(kernels, n), 'utf8')) });
     }
   }
   return out;
@@ -57,6 +60,13 @@ test('every WGSL file compiles without errors', async ({ page }) => {
     return out;
   }, files);
   for (const r of results) expect(r.errors, r.name).toEqual([]);
+});
+
+test('the kernels that use the working encodings include them (the module system is explicit)', () => {
+  const kernels = join(root, 'packages', 'gpu', 'kernels');
+  for (const f of ['combine.wgsl', 'pointwise.wgsl']) expect(includesOf(readFileSync(join(kernels, f), 'utf8')), f).toContain('working.wgsl');
+  // a kernel without its include does not compile alone: the linker is what makes it whole
+  expect(readFileSync(join(kernels, 'combine.wgsl'), 'utf8')).toContain('wkMix(');
 });
 
 test('broken WGSL is reported (the check can fail)', async ({ page }) => {

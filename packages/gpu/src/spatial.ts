@@ -1,6 +1,7 @@
 // Spatial kernels (guide §5.6): separable Gaussian blur with per-channel weights, global fields read
 // through frame coordinates, and the halation combine. Sizes of physical effects are given in µm
 // and converted with the frame's µm per pixel.
+import type { Box } from '@chromobench/contract';
 import blurCode from '../kernels/blur.wgsl?raw';
 import fieldCode from '../kernels/field.wgsl?raw';
 import type { GpuRuntime } from './device.ts';
@@ -77,31 +78,53 @@ export class Blur {
     return out;
   }
 
-  private async field(entry: 'down' | 'downPad' | 'sampleField' | 'upsample' | 'combine', outW: number, outH: number, src: GPUTexture, field: GPUTexture | null, p: Record<string, unknown>): Promise<GPUTexture> {
+  private async field(entry: 'down' | 'downPad' | 'sampleField' | 'upsample' | 'upsampleAt' | 'combine' | 'downPadAt', outW: number, outH: number, src: GPUTexture, field: GPUTexture | null, p: Record<string, unknown>, into?: GPUTexture, cells?: [number, number]): Promise<GPUTexture> {
     const rt = this.rt;
     rt.check();
     const dev = rt.device;
     this.sampler ??= dev.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
     const pipe = await rt.pipelines.get({ name: `field.${entry}`, code: fieldCode, entryPoint: entry });
-    const out = this.tex(outW, outH, `field.${entry}`);
+    const out = into ?? this.tex(outW, outH, `field.${entry}`);
     const u = FIELD_PARAMS.pack(p);
     const ub = rt.buffers.acquire({ size: u.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'field.u');
     dev.queue.writeBuffer(ub, 0, u);
     const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer: ub, size: u.byteLength } }, { binding: 2, resource: out.createView() }];
-    if (entry !== 'sampleField' && entry !== 'upsample') entries.push({ binding: 1, resource: src.createView() });
-    if (entry !== 'down' && entry !== 'downPad') entries.push({ binding: 3, resource: field!.createView() });
+    if (entry !== 'sampleField' && entry !== 'upsample' && entry !== 'upsampleAt') entries.push({ binding: 1, resource: src.createView() });
+    if (entry !== 'down' && entry !== 'downPad' && entry !== 'downPadAt') entries.push({ binding: 3, resource: field!.createView() });
     if (entry === 'sampleField') entries.push({ binding: 4, resource: this.sampler });
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
     const enc = dev.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(pipe);
     pass.setBindGroup(0, bg);
-    pass.dispatchWorkgroups(Math.ceil(outW / 8), Math.ceil(outH / 8));
+    const [dw, dh] = cells ?? [outW, outH];
+    pass.dispatchWorkgroups(Math.ceil(dw / 8), Math.ceil(dh / 8));
     pass.end();
     dev.queue.submit([enc.finish()]);
     await dev.queue.onSubmittedWorkDone();
     rt.buffers.release(ub);
     return out;
+  }
+
+  /** An empty padded field of w × h cells (fieldDownAt fills it box by box). */
+  fieldTexture(w: number, h: number): GPUTexture {
+    return this.tex(w, h, 'field.global');
+  }
+
+  /**
+   * Writes into `field` (padded by `pad`, block s) the cells whose clamp-extended block lies in `box` of a frameW ×
+   * frameH frame; `src` is the image over the box. Box sides are multiples of s except at the frame's end.
+   */
+  async fieldDownAt(field: GPUTexture, src: GPUTexture, s: number, pad: number, box: Box, frameW: number, frameH: number): Promise<void> {
+    const range = (b0: number, b1: number, n: number, fn: number): [number, number] => [b0 === 0 ? 0 : pad + b0 / s, b1 >= n ? fn : pad + b1 / s];
+    const [x0, x1] = range(box.x, box.x + box.w, frameW, field.width);
+    const [y0, y1] = range(box.y, box.y + box.h, frameH, field.height);
+    await this.field('downPadAt', field.width, field.height, src, null, { s, mode: pad, tileOrigin: [box.x, box.y], frameSize: [frameW, frameH], pad: [x0, y0], wts: [x1 - x0, y1 - y0, 0, 0] }, field, [x1 - x0, y1 - y0]);
+  }
+
+  /** A whole-frame padded field read back over the frame box at `origin` (w × h pixels; field.wgsl upsampleAt). */
+  upsampleAt(field: GPUTexture, s: number, pad: number, w: number, h: number, origin: [number, number]): Promise<GPUTexture> {
+    return this.field('upsampleAt', w, h, field, field, { s, mode: pad, tileOrigin: origin });
   }
 
   /** s × s area average. */

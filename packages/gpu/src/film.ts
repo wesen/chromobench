@@ -159,6 +159,37 @@ export class FilmGpu {
   }
 
   /**
+   * How far (px at full resolution) film op `n` reads around a pixel: its blurs' reach as gauss() and mixture() run
+   * them (passes of σ/√p, each truncated at ⌈3σ⌉ ≤ 96); the halation's scatter and bounce mixtures add (CHB-037 P3b:
+   * the tile halo of an exact export).
+   */
+  reach(n: Node, ctx: ChainCtx): number {
+    if (n.op !== 'film.couple' && n.op !== 'film.halation') return 0;
+    const a = n.args as Record<string, unknown>;
+    const um = filmUmPerPx(n.info as ImageInfo); // only the ops with a physical size need the pitch (as run())
+    const g = (sig: number): number => {
+      if (!(sig > 0)) return 0;
+      const p = Math.max(1, Math.ceil((sig / MAX_PASS_SIGMA) ** 2));
+      return p * Math.min(96, Math.ceil((3 * sig) / Math.sqrt(p)));
+    };
+    const max = (v: readonly number[]): number => Math.max(0, ...v);
+    if (n.op === 'film.couple') {
+      const dir = dirAt(ctx, filmOf(ctx), a);
+      return dir.amount === 0 ? 0 : max(inhibitorKernel(dir).map((k) => g(k.sigma_um / um)));
+    }
+    if (n.op === 'film.halation') {
+      const s = halationAt(ctx, a);
+      const sc = s.scatter, hp = s.halation;
+      const ch = [0, 1, 2] as const;
+      const scatter = sc.amount > 0 ? max([g(max(ch.map((k) => (sc.core_um[k] * sc.scale) / um))), ...EXP_GAUSSIANS.map(([, r]) => g(max(ch.map((k) => (r * sc.tail_um[k] * sc.scale) / um))))]) : 0;
+      const amt = ch.map((k) => hp.strength[k] * hp.amount);
+      const bounce = hp.bounces >= 1 && amt.some((v) => v > 0) ? max(Array.from({ length: hp.bounces }, (_, i) => g(max(ch.map((k) => (hp.sigma_um[k] * hp.scale * Math.sqrt(i + 1)) / um))))) : 0;
+      return scatter + bounce;
+    }
+    return 0;
+  }
+
+  /**
    * Runs film op `n` on its materialised receiver `recv` (output grid `t`), with `ctx` the node's
    * upstream context and `source` the graph's decoded-source facts.
    */

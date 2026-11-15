@@ -68,6 +68,45 @@ describe('RefEngine sampled previews (CHB-027)', () => {
     });
   }
 
+  it('the display cut (output.frame: crop and every orientation) runs on the sample grid, bit for bit the full path (P3b)', async () => {
+    const { mk, recipe, g } = setup('negative-scan');
+    const fast = setup('negative-scan', { sampled: true }).mk();
+    const plain = mk();
+    for (const orientation of ['none', 'flipH', 'flipV', 'rot180', 'cw90', 'ccw90', 'transpose', 'transverse'] as const) {
+      const doc = edit(recipe, [set('geometry', { orientation, angle_deg: 0, crop: { x: 5, y: 3, w: 41, h: 29 } })]).doc;
+      const top = g.get(compile(doc, g).display.id)!;
+      expect(top.op).toBe('output.frame');
+      const defs = g.closure(top.id);
+      plain.adopt(defs);
+      fast.adopt(defs);
+      const before = fast.computed.full;
+      for (const t of [
+        { scale: 0.37, precision: 'preview' as const },
+        { scale: 0.5, precision: 'preview' as const, region: { x: 3, y: 2, w: 17, h: 11 } },
+      ]) {
+        const [a, b] = [await plain.evaluate(top, t), await fast.evaluate(top, t)];
+        expect([b.width, b.height], orientation).toEqual([a.width, a.height]);
+        expect(Array.from(await b.read()), orientation).toEqual(Array.from(await a.read()));
+      }
+      // no stage of the print side ran at full resolution (the negative's stages are cached from the first one)
+      if (orientation !== 'none') expect(fast.computed.full, orientation).toBe(before);
+    }
+    expect(fast.computed.pixels).toBeLessThan(plain.computed.pixels);
+  });
+
+  it('a straightened display cut falls back to full resolution and still equals the full path', async () => {
+    const { mk, recipe, g } = setup('negative-scan');
+    const fast = setup('negative-scan', { sampled: true }).mk();
+    const plain = mk();
+    const doc = edit(recipe, [set('geometry', { orientation: 'cw90', angle_deg: 2.5, crop: { x: 6, y: 4, w: 40, h: 28 } })]).doc;
+    const top = g.get(compile(doc, g).display.id)!;
+    const defs = g.closure(top.id);
+    plain.adopt(defs);
+    fast.adopt(defs);
+    const t = { scale: 0.5, precision: 'preview' as const };
+    expect(Array.from(await (await fast.evaluate(top, t)).read())).toEqual(Array.from(await (await plain.evaluate(top, t)).read()));
+  });
+
   it('a print-only change recomputes the print stages only, on the sample grid', async () => {
     const { mk, recipe, node, g } = setup('negative-scan', { sampled: true, cacheLimit: 48 });
     const e = mk();

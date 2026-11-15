@@ -1,6 +1,6 @@
 // CHB-011 in headless Chromium: output.display on the GPU (space matrix, OkLCh knee, TRC) against
 // core's f64 output path, for the five output spaces and both renderings.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -11,9 +11,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 // Guide §8: WGSL against f64 within 2e-6 in linear RGB (stated for the knee); every pixel in [0, 1]³;

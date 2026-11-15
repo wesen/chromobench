@@ -2,13 +2,13 @@
 import { ChromobenchError, type Box, type Diagnostic, type Node } from '@chromobench/contract';
 import pack16Code from '../../kernels/pack16.wgsl?raw';
 import combineCode from '../../kernels/combine.wgsl?raw';
-import { WORKING_WGSL } from '../chain/working.ts';
+import { linkKernel } from '../chain/working.ts';
 import type { Segment } from '../chain/program.ts';
 import { FILM_OPS } from '../film.ts';
 
 export const GPU_OPS = [
   'source.open', 'source.pattern', 'scan.flare', 'scan.density', 'invert.dyes', 'print.expose', 'print.develop',
-  'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
+  'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'output.frame', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
   // the darkroom's light law (contract 1.0: one print.combine with terms, densities, filters, preflash) and masks
   'print.combine', 'print.densityMask',
@@ -25,17 +25,25 @@ export const GPU_OPS = [
  * Multi-input or spatial ops: materialised, computed from materialised inputs (combine.wgsl, blur.wgsl, retouch.wgsl).
  * print.combine is one only when a term reads a texture (engine/light.ts combineIsPointwise); otherwise it fuses.
  */
-export const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
+export const BARRIER_OPS: ReadonlySet<string> = new Set(['output.frame', 'print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
 /** Masks from coordinates, strokes or a constant: their receiver's values are never read. */
 export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.radial', 'mask.ellipse', 'mask.paint', 'mask.constant']);
 /** Pointwise ops a fused composite.mix may run between SAVE and MIX (one program op each; engine/dag.ts fusedMixTop). */
 export const FUSIBLE_TOP_OPS: ReadonlySet<string> = new Set(['composite.encode', 'exposure', 'curve', 'levels', 'hsl', 'vibrance', 'grade', 'mixer', 'vignette']);
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run on a downsampled field (engine/textures.ts gaussianBlur). */
 export const MAX_PASS_SIGMA = 32;
-export const COMBINE_WGSL = `${WORKING_WGSL}\n${combineCode}`;
+export const COMBINE_WGSL = linkKernel(combineCode);
 
 /** The output grid every materialised texture of one evaluation shares. */
-export interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export' }
+export interface GridTarget {
+  outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export';
+  /**
+   * Exact at full resolution (an export at scale 1, CHB-037 P3b): a region is the crop of the whole frame's result —
+   * spatial ops read their reach from a haloed render, wide blurs read a whole-frame field, the density mask's
+   * reference comes from the whole frame. Absent: every texture lives on the grid alone (previews).
+   */
+  exact?: boolean;
+}
 /** How one materialised node is computed: a barrier from its inputs, or a pointwise tail from a root. */
 export type Plan =
   | { kind: 'barrier'; reads: string[] }

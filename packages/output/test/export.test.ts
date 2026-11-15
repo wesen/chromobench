@@ -86,7 +86,8 @@ describe('tiled export (stage 5)', () => {
     // the Studio's way (render 8-bit, multiply by 257) has at most 256 values per channel, all multiples of 257
     const studio = d.map((v) => Math.round(v / 257) * 257);
     expect(new Set(studio).size).toBeLessThanOrEqual(256);
-  }, 30_000); // a 512 × 256 frame through the f64 reference chain: ~2 s alone, ~12 s in the full parallel suite
+  }, 0); // a 512 × 256 frame through the f64 reference chain: ~2 s alone, over 30 s under parallel suites; deterministic, so no
+  // timeout (CHB-037 P3b): a wrong value fails it, slowness does not
 
   it('cancellation after tile 3 of 12: rejects with E_CANCELLED, no file remains in OPFS; the next export succeeds', async () => {
     const { e, display } = await setup();

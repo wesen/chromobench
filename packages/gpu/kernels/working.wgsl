@@ -1,5 +1,6 @@
+//! include working-constants
 // The working encodings and the blend modes of the composite law (contract 1.1), shared by kernels/pointwise.wgsl
-// (fused layers) and kernels/combine.wgsl (masked mixes). src/chain/working.ts prepends the matrices from core
+// (fused layers) and kernels/combine.wgsl (masked mixes), which include it. The generated module working-constants holds the matrices from core
 // (composite/working.ts): WK_M1, WK_M1I (working RGB ↔ OkLab LMS, rows normalised) and OK_M2, OK_M2I (Ottosson's M2
 // and its f64 inverse), so the numbers are core's. The formulas are core's composite/blend.ts, branch for branch.
 

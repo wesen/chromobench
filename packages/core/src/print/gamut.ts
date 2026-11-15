@@ -24,6 +24,7 @@ export const M2: Mat3 = [[0.2104542553, 0.793617785, -0.0040720468], [1.97799849
 export const M2_INV: Mat3 = inv3(M2);
 
 const inCube = (rgb: ArrayLike<number>, eps = 1e-9): boolean => rgb[0]! >= -eps && rgb[0]! <= 1 + eps && rgb[1]! >= -eps && rgb[1]! <= 1 + eps && rgb[2]! >= -eps && rgb[2]! <= 1 + eps;
+const inCube3 = (r: number, g: number, b: number, eps = 1e-9): boolean => r >= -eps && r <= 1 + eps && g >= -eps && g <= 1 + eps && b >= -eps && b <= 1 + eps;
 
 // ---- perceptual models per output space ---------------------------------------------------------
 
@@ -38,6 +39,11 @@ export interface Perceptual {
   white: number;
   /** Initial upper bound for the chroma bisection. */
   cHi: number;
+  /**
+   * True when inv(L, C·cos h, C·sin h) is finite and inside the RGB cube (to 1e-9): maxChromaOf's test, the same
+   * arithmetic as inv without its arrays (P3b: the bisection runs ~50 times per pixel of output.display).
+   */
+  inGamut(L: number, a: number, b: number): boolean;
 }
 
 /**
@@ -167,10 +173,19 @@ export function perceptual(kind: 'oklch' | 'cam16-ucs', space: OutputSpaceId = '
   if (p) return p;
   if (kind === 'oklch') {
     const { M1s, M1sInv } = oklabFor(space);
+    const [[m00, m01, m02], [m10, m11, m12], [m20, m21, m22]] = M2_INV;
+    const [[n00, n01, n02], [n10, n11, n12], [n20, n21, n22]] = M1sInv;
     p = {
       kind, white: 1, cHi: 0.5,
       fwd: (rgb) => mulMV(M2, mulMV(M1s, rgb).map(Math.cbrt)),
       inv: (lab) => mulMV(M1sInv, mulMV(M2_INV, lab).map((v) => v * v * v)),
+      inGamut: (L, a, b) => {
+        // inv's arithmetic in inv's order (mulMV, the cube as v·v·v), so the result is bit for bit inv's
+        let l = m00 * L + m01 * a + m02 * b, m = m10 * L + m11 * a + m12 * b, s = m20 * L + m21 * a + m22 * b;
+        l = l * l * l; m = m * m * m; s = s * s * s;
+        const r = n00 * l + n01 * m + n02 * s, g = n10 * l + n11 * m + n12 * s, bl = n20 * l + n21 * m + n22 * s;
+        return Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(bl) && inCube3(r, g, bl);
+      },
     };
   } else {
     const S = outputSpace(space);
@@ -178,10 +193,12 @@ export function perceptual(kind: 'oklch' | 'cam16-ucs', space: OutputSpaceId = '
     const toXYZ100 = mulMM([[100, 0, 0], [0, 100, 0], [0, 0, 100]], S.toXYZ);
     const fromXYZ100 = inv3(toXYZ100);
     const toUcs = (rgb: ArrayLike<number>): Vec3 => jmhToUcs(cam.fwd(mulMV(toXYZ100, rgb)));
+    const inv = (ucs: ArrayLike<number>): Vec3 => mulMV(fromXYZ100, cam.inv(ucsToJmh(ucs)));
     p = {
       kind, white: toUcs([1, 1, 1])[0], cHi: 150,
       fwd: toUcs,
-      inv: (ucs) => mulMV(fromXYZ100, cam.inv(ucsToJmh(ucs))),
+      inv,
+      inGamut: (L, a, b) => { const rgb = inv([L, a, b]); return Number.isFinite(rgb[0]) && Number.isFinite(rgb[1]) && Number.isFinite(rgb[2]) && inCube(rgb); },
     };
   }
   PERCEPTUAL.set(key, p);
@@ -192,7 +209,7 @@ export function perceptual(kind: 'oklch' | 'cam16-ucs', space: OutputSpaceId = '
 export function maxChromaOf(P: Perceptual, L: number, h: number, iterations = 40): number {
   const ca = Math.cos(h);
   const sa = Math.sin(h);
-  const ok = (C: number): boolean => { const rgb = P.inv([L, C * ca, C * sa]); return Number.isFinite(rgb[0]) && Number.isFinite(rgb[1]) && Number.isFinite(rgb[2]) && inCube(rgb); };
+  const ok = (C: number): boolean => P.inGamut(L, C * ca, C * sa);
   let lo = 0;
   let hi = P.cHi;
   for (let i = 0; i < 8 && ok(hi); i++) { lo = hi; hi *= 2; }

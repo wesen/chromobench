@@ -1,7 +1,7 @@
 // CHB-012 in headless Chromium: the forward film path (digital RAW → film) on the GPU against core's
 // reference engine on the same graph, the pcg4d uniforms bit for bit, grain statistics, and a
 // digital-raw recipe end to end (guide §5.6 kernel table).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openParity, test, type Page } from './parity.ts';
 
 async function run<T = Record<string, any>>(page: Page, name: string, opts: Record<string, unknown> = {}): Promise<T> {
   const r = await page.evaluate(([n, o]) => window.parity.run(n as string, o as Record<string, unknown>), [name, opts] as const);
@@ -10,9 +10,7 @@ async function run<T = Record<string, any>>(page: Page, name: string, opts: Reco
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto('/parity-page/index.html');
-  await page.waitForFunction(() => document.body.dataset['ready'] === '1');
+  await openParity(page);
 });
 
 test('pcg4d uniforms are bit-identical to core (JS Math.imul and WGSL u32)', async ({ page }) => {
@@ -55,4 +53,15 @@ test('a digital-raw recipe renders on the GPU like the reference engine', async 
   expect(r.finite).toBe(true);
   for (const op of ['source.xyz', 'capture.expose', 'film.couple', 'film.halation', 'film.develop', 'film.grain']) expect(r.ops).toContain(op);
   expect(r.max).toBeLessThan(2e-4);
+});
+
+test('a camera file exports tile by tile exactly as whole: film.couple and film.halation read their reach from the halo', async ({ page }) => {
+  test.setTimeout(600_000);
+  const r = await run(page, 'film:tiles');
+  expect(r.error).toBeUndefined();
+  for (const k of ['film', 'grain']) {
+    expect(r[k].ops, k).toEqual(expect.arrayContaining(['film.couple', 'film.halation']));
+    expect(r[k].codes, k).toBe(0);
+    expect(r[k].before, k).toBeGreaterThan(0);
+  }
 });
