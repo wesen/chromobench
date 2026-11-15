@@ -1154,3 +1154,65 @@ picture taken down. Metal, the owner's two files: peak 512 MB → ~215 MB, textu
 
 ### Technical details
 - Journal rows GPU_MEMORY, GPU_MEMORY_HIGH, GPU_EVICT, GPU_OOM_RECOVERED, GPU_OOM.
+
+## Step 21: Pattern volumes aside; triage of every open ticket (CHB-044); decisions D1–D13; a roadmap; Phase 1 starts
+
+Between Step 20 and now, three pattern volumes were written on separate branches (CHB-036 image engine, CHB-042
+modular software for undergraduates, CHB-043 GPU image computation for graduate students; see their diaries). Their
+writers verified claims against this branch and found 27 debts, filed here as P10-1…P10-27. Then the owner asked
+where the work stood; I read the older design documents and active tickets, and a triage agent (CHB-044) checked all
+200 open tasks in 19 tickets against the code: 23 done, 8 superseded, 1 obsolete, 4 duplicates, 164 still open,
+consolidated into one backlog grouped by functionality. The owner delegated every open decision ("it's an internal
+tool that will never be published") and said he will test with the photographer once all features are built.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Ok, where were we before that, in terms of masks and tools and all that?" — then "read older design docs / open tickets, for example", "ok, mark stale things, consolidate funcitonality from tickets.", "what is big picture / the big phases?", "Ok, you chose the best for the decisions, i'm leaving it up to you, it's an internal tool that will never be published.", "I'll test with my dad once all the features are built, so the additional features like output module, all of C are good.", "Keep a detailed diary as you work (see skill for the diary format), all subagents should have their own diaries too. COmmit at appropriate intervals."
+
+**Assistant interpretation:** Reconstruct the state, clean the tickets, decide the open questions, order the work so
+that every feature is built before the beta, and start.
+
+**Inferred user intent:** A complete, coherent tool for the photographer, built without further owner round-trips
+on product questions.
+
+### What I did
+- Triage agent (CHB-044): tickets marked in place with evidence; CHB-026, 038, 039, 041 closed; backlog
+  `ttmp/2026/11/15/CHB-044*/reference/01-consolidated-backlog.md` (14 groups, item ids MASK-, LAY-, DARK-, …).
+- Decisions D1–D13 and T1–T3 in `CHB-044 reference/03-decisions-d1-d13.md`: Classic default now (open into Print),
+  scene white balance before the film, selections as mask components, sync copies by default, darkroom stack in his
+  order, stocks as medium presets, contrast blend modes in the display encoding, one first-print aim (neutralise
+  75 %), no licence work, B&W after the beta, our RAW colour unless a chart says otherwise, key in the browser,
+  merge to main at the end of Phase 1.
+- Roadmap in the backlog: Phase 1 correctness and blockers → Phase 2 feature completion (output, before-the-film,
+  masks and selections, layers, darkroom, finish, looks, roll, interface) with Phase 3 performance beside it →
+  Phase 4 beta → Phase 5 assistant → later.
+- Commits: 4227ad7 … 18f0e20 (triage), 499ffef (decisions, roadmap).
+
+### Why
+- Many tasks predated the cut-off; without the triage, work would be chosen from stale lists.
+
+### What worked
+- Annotating tasks in place (done / superseded / now: …) kept every ticket honest without moving work around.
+
+### What didn't work
+- N/A
+
+### What I learned
+- Most older tickets are genuinely unfinished (164 of 200 open), not stale; the cut-off removed less work than
+  expected.
+
+### What was tricky to build
+- Decisions that change pictures (D7 blend modes, D8 first-print aim) also change goldens; they are scheduled in
+  Phase 1 so the merge to main carries the final look.
+
+### What warrants a second pair of eyes
+- D7 (contrast modes in the display encoding) and D8 (neutralise 75 %) are taste decisions taken for the owner.
+
+### What should be done in the future
+- Phase 1: CHB-045 (GPU correctness and D7) and CHB-046 (editing blockers and decision work) in parallel.
+
+### Code review instructions
+- CHB-044 backlog and decisions; tasks annotated with "decided: Dn".
+
+### Technical details
+- Item ids for Phase 1: GPUC-1…4, LAY-3, MASK-1, DARK-2, DARK-3, DARK-5, NEW-1…3, SCAN-5.
