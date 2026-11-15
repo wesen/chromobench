@@ -1,18 +1,21 @@
 // Import boundaries (guide §5.1), enforced in CI:
-// - packages/contract imports nothing from the workspace (only @noble/hashes and relative files);
+// - packages/values/src imports nothing (the builder core is a leaf: no dependencies, only its own files);
+// - packages/contract imports from the workspace only @chromobench/values (besides @noble/hashes and its own files);
 // - apps/studio and packages/dsl may import @chromobench/contract (and engines through injection),
 //   never @chromobench/core, gpu or ingest directly — except one host file per app, which builds the
 //   engines and the decoder and hands them to the UI as contract objects (CHB-019 guide §7.1, CHB-023);
-// - packages/shell/src imports only its own files (no @chromobench/*, no dependencies), and its headless half
-//   (core, ir, build, app, themes, testing, index.ts) never imports the DOM half (dom/).
+// - packages/shell/src imports only its own files and @chromobench/values (no other @chromobench/*, no
+//   dependencies), and its headless half (core, ir, build, app, themes, testing, index.ts) never imports the DOM
+//   half (dom/).
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?: string[] }[] = [
-  { dir: 'packages/contract/src', forbid: /^@chromobench\//, why: 'the contract imports nothing from the workspace' },
-  { dir: 'packages/contract/src', forbid: /^(?!@noble\/hashes|\.\.?\/)/, why: 'the contract depends only on @noble/hashes' },
+  { dir: 'packages/values/src', forbid: /^(?!\.\.?\/)/, why: 'the builder core imports nothing (a leaf package, no dependencies)' },
+  { dir: 'packages/contract/src', forbid: /^@chromobench\/(?!values$)/, why: 'the contract imports nothing from the workspace but the builder core (@chromobench/values)' },
+  { dir: 'packages/contract/src', forbid: /^(?!@noble\/hashes|@chromobench\/values$|\.\.?\/)/, why: 'the contract depends only on @noble/hashes and @chromobench/values' },
   {
     dir: 'apps/studio/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the UI never calls physics code directly',
     except: ['apps/studio/src/host/engines.ts', 'apps/studio/src/host/decode.ts', 'apps/studio/src/host/engine-serve.ts'],
@@ -20,7 +23,7 @@ const RULES: { dir: string; forbid: RegExp; why: string; skip?: RegExp; except?:
   { dir: 'packages/dsl/src', forbid: /^@chromobench\/(core|gpu|ingest)(\/|$)/, why: 'the DSL never calls physics code directly' },
   // CHB-008: the agent reaches physics only through the injected Engine, and the UI kits never import it
   { dir: 'packages/agent/src', forbid: /^@chromobench\/(core|gpu|ingest|studio-kit|shell)(\/|$)/, why: 'the agent reaches the engine by injection and knows no UI' },
-  { dir: 'packages/shell/src', forbid: /^(?!\.\.?\/)/, why: 'the shell imports only its own files (generic, no dependencies)' },
+  { dir: 'packages/shell/src', forbid: /^(?!\.\.?\/|@chromobench\/values$)/, why: 'the shell imports only its own files and the builder core (@chromobench/values)' },
   ...['core', 'ir', 'build', 'app', 'themes', 'testing'].map(d => ({ dir: `packages/shell/src/${d}`, forbid: /(^|\/)dom\//, why: 'the headless half of the shell never imports the DOM half' })),
   { dir: 'packages/shell/src', forbid: /^\.\/dom\//, why: 'the shell entry point is headless; the DOM half is @chromobench/shell/dom' },
   // CHB-019 studio-kit: engines arrive by injection; only the shell and the contract are imported; the headless

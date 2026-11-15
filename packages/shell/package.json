@@ -9,6 +9,9 @@
     "./testing": "./src/testing/index.ts",
     "./shell.css": "./src/dom/shell.css"
   },
+  "dependencies": {
+    "@chromobench/values": "workspace:*"
+  },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"
   },

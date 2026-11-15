@@ -23,6 +23,9 @@ importers:
       '@chromobench/ingest':
         specifier: workspace:*
         version: link:packages/ingest
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:packages/values
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -105,6 +108,9 @@ importers:
 
   packages/contract:
     dependencies:
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:../values
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -229,6 +235,10 @@ importers:
         version: 3.1.0
 
   packages/shell:
+    dependencies:
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:../values
     devDependencies:
       happy-dom:
         specifier: 21.0.4
@@ -258,6 +268,8 @@ importers:
       happy-dom:
         specifier: 21.0.4
         version: 21.0.4
+
+  packages/values: {}
 
 packages:
 
