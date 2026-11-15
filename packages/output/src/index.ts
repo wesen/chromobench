@@ -11,7 +11,7 @@ export {
   type ByteSink, type DirHandleLike, type FileHandleLike, type FileSink,
 } from './encode/sinks.ts';
 export { Tiff16Writer, tiffDateTime, tiffTags, type TiffOptions } from './encode/tiff16.ts';
-export { zip } from './encode/zip.ts';
+export { unzip, zip } from './encode/zip.ts';
 export { ProfileLibrary, validatePrinterProfile, type PrinterProfileEntry } from './icc/library.ts';
 export { createLcms, lcmsInWorker, PIXEL_TYPE, type Intent, type Lcms, type PixelFormat, type ProfileHandle, type TransformHandle } from './icc/lcms/api.ts';
 export { curveDecode, curveEncode, matrixTrc, parseIcc, type Curve, type IccHeader, type IccProfile, type MatrixTrc } from './icc/parse.ts';

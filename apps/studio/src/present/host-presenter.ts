@@ -7,7 +7,9 @@
 import { Canvas2DPresenter } from '@chromobench/shell/dom';
 import type { Colours, PresentImage, Presenter, ViewTransform } from '@chromobench/shell';
 import type { CanvasSpace } from '@chromobench/output';
+import type { Journal } from '@chromobench/shell';
 import { WebGpuPresenter } from './presenter-webgpu.ts';
+import { watchDevice } from '../host/capture.ts';
 import type { PresentImage as GpuImage } from './presenter.ts';
 
 export interface PresenterHost {
@@ -17,14 +19,18 @@ export interface PresenterHost {
   onSpace(space: CanvasSpace, why: string): void;
 }
 
-/** A WebGPU device for presentation, or null (no adapter, or refused). */
-export async function presentDevice(): Promise<GPUDevice | null> {
+/** A WebGPU device for presentation, or null (no adapter, or refused); its errors and its loss go to the journal. */
+export async function presentDevice(journal: Journal): Promise<GPUDevice | null> {
   const gpu = (navigator as Navigator & { gpu?: GPU }).gpu;
   if (!gpu) return null;
   try {
     const adapter = await gpu.requestAdapter();
-    return adapter ? await adapter.requestDevice() : null;
-  } catch {
+    const device = adapter ? await adapter.requestDevice() : null;
+    if (device) watchDevice(journal, device, adapter, 'presenter');
+    else journal.warn('gpu', 'no WebGPU adapter for the viewer: it draws with Canvas2D', { code: 'PRESENTER_NO_ADAPTER' });
+    return device;
+  } catch (e) {
+    journal.warn('gpu', `the viewer's WebGPU device was refused: ${(e as Error)?.message ?? e}`, { code: 'PRESENTER_NO_DEVICE', data: e });
     return null;
   }
 }

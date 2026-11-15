@@ -153,6 +153,7 @@ export class GpuEngine implements Engine {
     if (this.disposed) fail('E_INTERNAL', 'engine disposed');
     if (!this.rt.lost) return;
     this.recreating ??= (async () => {
+      this.opts.events?.({ kind: 'recreate', why: `${this.rt.lost?.reason ?? 'lost'}: ${this.rt.lost?.message ?? ''}` });
       const rt = await GpuRuntime.create(this.opts);
       this.rt = rt;
       this.tables = new TableManager(rt, { accel: this.opts.accel ?? 'auto', workers: this.pool, cache: this.cache, conventions: this.physics.conventions });
@@ -786,6 +787,8 @@ export class GpuEngine implements Engine {
     // fields serve the tiles of an exact export; any other render (a preview) means that export is over: free them
     if (!grid.exact && this.fields.size) this.dropFields();
     const r = await this.gpu(async () => {
+      // the work the runtime names in the errors it reports (CHB-038)
+      this.rt.activity = `${n.op} ${n.id.slice(0, 8)} ${width}×${height}${grid.exact ? ' exact' : ''}`;
       const g = await this.renderRegion(n.id, grid);
       try {
         return { px: await read(g.tex, width, height), warnings: g.warnings };

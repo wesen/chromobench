@@ -9,7 +9,7 @@
 //   cb.arg / cb.viewer    a control from ArgSpec; the viewer      cb.panels.*   history, approvals, why, snapshots, …
 //   cb.modules.*          library, print                          cb.views.*    grid, strip, loupe, compare, survey, ring
 //   cb.menus.*            file … help, standard()                 cb.keys.*     cull, libraryModes, views, darkroom
-//   cb.kits.*             roll, finish, looks, chat, stack: each { kit, panels, views, modules, menus, keys, sel, lib, … }
+//   cb.kits.*             roll, finish, looks, chat, stack, diagnostics: each { kit, panels, views, modules, menus, keys, sel, lib, … }
 //   cb.cell.frame         a θ cell: a print thumbnail (bg lane, cached by node id) + name, flag, stars
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -33,6 +33,7 @@ import { createFinishKit } from '../kits/finish/src/kit.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
 import { createStackKit } from '../kits/stack/src/kit.ts';
+import { createDiagnosticsKit } from '../kits/diagnostics/src/kit.ts';
 import { MASK_TOOLS } from '../kits/stack/src/commands.ts';
 
 // layouts' lines, not studio-kit's, are the call sites of their nodes
@@ -304,7 +305,9 @@ export function createCb(ck: Ck) {
         } as any)
         .use(core)
         // every studio has the stack kit: the darkroom's exposures are its view of the darkroom stage
-        .use(cb.kits['stack'].kit),
+        .use(cb.kits['stack'].kit)
+        // and the diagnostics kit: Help ▸ Report a Problem… wherever he is (CHB-038)
+        .use(cb.kits['diagnostics'].kit),
     arg,
     viewer,
     /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
@@ -392,7 +395,7 @@ export function createCb(ck: Ck) {
           // the host's actions (CHB-027); hidden where the host has none (the dev host, tests)
           'file.open', 'file.openFolder', 'file.reopenFolder',
           { label: 'Open As', items: ['file.openAs.auto', 'file.openAs.photo', 'file.openAs.negative', 'file.openAs.keep', '-', 'file.dust'] },
-          '-', 'file.export', 'file.saveDocument', '-', 'app.palette',
+          '-', 'file.export', 'file.saveDocument', '-', 'diagnostics.openReport', '-', 'app.palette',
         ]),
       edit: () => ck.menu('Edit', ['edit.undo', 'edit.redo', '-', 'proposal.approveAll']),
       frame: () =>
@@ -402,7 +405,7 @@ export function createCb(ck: Ck) {
         ]),
       view: () => ck.menu('View', ['view.beforeAfter', 'view.sideBySide', '-', 'view.fit', 'view.actual', 'view.zoomIn', 'view.zoomOut', '-', 'view.layout', 'app.theme']),
       window: () => ck.menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'workspace.reset']),
-      help: () => ck.menu('Help', ['app.shortcuts', 'app.diagnostics']),
+      help: () => ck.menu('Help', ['app.shortcuts', '-', ...cb.kits['diagnostics'].menus.help(), '-', 'app.diagnostics']),
       /** the stack kit's Layer menu (add from the catalogue, duplicate, delete, group, order, masks) */
       layer: () => cb.kits['stack'].menus.layer(),
       /** File, Edit, Frame, Layer, View, Window, Help */
@@ -419,6 +422,8 @@ export function createCb(ck: Ck) {
   cb.kits['chat'] = createChatKit(ck, cb as any); // CHB-008: the assistant chat
   // CHB-035 §33: one stack kit for every stage (layers, params, masks; the darkroom's exposures and enlarger views)
   cb.kits['stack'] = createStackKit(ck, cb as any);
+  // CHB-038: the diagnostics journal's panel and problem reports (every studio installs it)
+  cb.kits['diagnostics'] = createDiagnosticsKit(ck, cb as any);
   // the kits' fragment methods (cb.arg(…).pad(), .testStrip(), .rollScope()) on the nodes layouts build with this ck
   ck.extend(core, ...Object.values(cb.kits).map(k => k.kit));
   return cb;

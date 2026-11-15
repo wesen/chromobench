@@ -16,12 +16,14 @@ import { RefEngine, type RefEngineOptions } from '@chromobench/core';
 import { loadDefaultPhysicsData } from '@chromobench/gpu';
 import { LibRawDecoder, setLibRawWasm, type FrameBase, type RawDecoder } from '@chromobench/ingest';
 import { decodeFile } from './decode.ts';
-import type { FromWorker, InitReply, ToWorker, WireDecoded, WireResult } from './worker-protocol.ts';
+import type { FromWorker, InitReply, ToWorker, WireDecoded, WireResult, WorkerLog } from './worker-protocol.ts';
 
 /** A worker's global scope, or a MessagePort. */
 export interface EngineScope {
   postMessage(m: unknown, transfer?: Transferable[]): void;
   addEventListener(t: 'message', f: (e: MessageEvent) => void): void;
+  /** the worker's uncaught errors and rejections (CHB-038: they go to the page's journal) */
+  addEventListener(t: 'error' | 'unhandledrejection', f: (e: Event) => void): void;
 }
 
 /** A macrotask yield (MessageChannel: no 4 ms timer clamp), so queued messages (cancel, adopt) run between stages. */
@@ -109,6 +111,20 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
   let busy = false;
 
   const reply = (m: FromWorker, transfer: Transferable[] = []): void => scope.postMessage(m, transfer);
+  /** an event for the page's diagnostics journal (the worker has no journal of its own; CHB-038) */
+  const log = (level: WorkerLog['level'], message: string, o: { code?: string; data?: unknown } = {}): void => {
+    const data = o.data instanceof Error ? { name: o.data.name, message: o.data.message, stack: o.data.stack } : o.data;
+    try {
+      scope.postMessage({ id: 0, log: { level, message, ...(o.code ? { code: o.code } : {}), ...(data !== undefined ? { data } : {}) } } satisfies FromWorker);
+    } catch {
+      scope.postMessage({ id: 0, log: { level, message } } satisfies FromWorker);
+    }
+  };
+  scope.addEventListener('error', (e: Event) => log('error', `Uncaught in the engine worker: ${(e as ErrorEvent).message ?? 'error'}`, { code: 'UNCAUGHT', data: (e as ErrorEvent).error }));
+  scope.addEventListener('unhandledrejection', (e: Event) => {
+    const r = (e as PromiseRejectionEvent).reason as { message?: string } | undefined;
+    log('error', `Unhandled rejection in the engine worker: ${r?.message ?? String(r)}`, { code: 'UNHANDLED_REJECTION', data: r });
+  });
   const need = (): RefLike => {
     if (!engine) throw new Error('the engine worker hosts no engine (init with engine: "reference")');
     return engine;
@@ -200,7 +216,7 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
           need().adopt(m.defs);
         } catch (e) {
           // an unknown source and the like: the evaluation that needs the node reports it
-          console.warn('engine worker: adopt failed', e);
+          log('warn', `adopt failed: ${(e as Error)?.message ?? String(e)}`, { code: (e as { code?: string })?.code ?? 'E_ADOPT', data: e });
         }
         return;
       case 'register': {
@@ -210,7 +226,7 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
           need().openDecoded(d.info, d.data);
           // the first print's analysis image (CHB-034 fusz) goes with it
           if (d.analysis?.data) need().openDecoded(d.analysis.info, d.analysis.data);
-        } else console.warn(`engine worker: no decode of ${m.sha256.slice(0, 12)}… to register`);
+        } else log('warn', `no decode of ${m.sha256.slice(0, 12)}… to register`, { code: 'E_NO_DECODE' });
         return;
       }
       case 'forget':

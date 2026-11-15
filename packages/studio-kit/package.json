@@ -23,7 +23,10 @@
     "./kits/chat/chat.css": "./kits/chat/src/chat.css",
     "./kits/stack": "./kits/stack/src/index.ts",
     "./kits/stack/dom": "./kits/stack/src/dom.ts",
-    "./kits/stack/stack.css": "./kits/stack/src/stack.css"
+    "./kits/stack/stack.css": "./kits/stack/src/stack.css",
+    "./kits/diagnostics": "./kits/diagnostics/src/index.ts",
+    "./kits/diagnostics/dom": "./kits/diagnostics/src/dom.ts",
+    "./kits/diagnostics/diagnostics.css": "./kits/diagnostics/src/diagnostics.css"
   },
   "scripts": {
     "demo": "vite --config demo/vite.config.ts"

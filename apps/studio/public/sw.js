@@ -6,6 +6,12 @@
 const CACHE = 'chromobench-shell-v1';
 const PACKS = 'chromobench-packs-v1';
 
+// CHB-038: the page asks which service worker serves it (its diagnostics journal and bug reports name the version;
+// a worker that does not answer is an older build)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'version' && event.ports[0]) event.ports[0].postMessage({ version: CACHE });
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);

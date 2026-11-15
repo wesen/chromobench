@@ -8,7 +8,7 @@ import { inflateAll } from '../src/encode/deflate.ts';
 import { Png16Writer, pngChunk, pngChunks } from '../src/encode/png16.ts';
 import { CountingSink, MemorySink } from '../src/encode/sinks.ts';
 import { Tiff16Writer, tiffTags } from '../src/encode/tiff16.ts';
-import { zip } from '../src/encode/zip.ts';
+import { unzip, zip } from '../src/encode/zip.ts';
 
 /** 256 × 256 holding all 65,536 values in every channel (G and B permuted). */
 function gradient(): Uint16Array {
@@ -209,4 +209,21 @@ describe('streaming memory', () => {
       console.log(`${fmt} ${MP} MP: ${(sink.size / 2 ** 20).toFixed(1)} MiB written, peak growth ${(peak / 2 ** 20).toFixed(1)} MiB`);
     }, 600_000);
   }
+});
+
+describe('unzip (CHB-038: problem reports)', () => {
+  it('reads back what zip wrote, names in UTF-8, and refuses a damaged file', () => {
+    const a = new TextEncoder().encode('{"format":"chromobench-report"}');
+    const b = new Uint8Array(70_000).map((_, i) => i % 251);
+    const z = zip([['report.json', a], ['originals/ab12cd34-Négatif 1.tif', b], ['empty', new Uint8Array(0)]]);
+    const m = unzip(z);
+    expect([...m.keys()]).toEqual(['report.json', 'originals/ab12cd34-Négatif 1.tif', 'empty']);
+    expect(new TextDecoder().decode(m.get('report.json'))).toBe('{"format":"chromobench-report"}');
+    expect(m.get('originals/ab12cd34-Négatif 1.tif')).toEqual(b);
+    expect(m.get('empty')!.length).toBe(0);
+    const bad = z.slice();
+    bad[44] = bad[44]! ^ 0xff; // a byte of report.json's data (after its 30-byte header and 11-byte name)
+    expect(() => unzip(bad)).toThrow(/CRC/);
+    expect(() => unzip(new Uint8Array(100))).toThrow(/not a zip/);
+  });
 });

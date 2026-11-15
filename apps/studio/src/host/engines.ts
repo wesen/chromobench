@@ -19,6 +19,8 @@ import {
   classifyImage, dustGroup, filmLayout, openPrior, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
+import type { Journal } from '@chromobench/shell';
+import { gpuEvents, watchWorker, workerLog } from './capture.ts';
 import { decodeFile } from './decode.ts';
 import { referenceEngine, type RefLike } from './engine-serve.ts';
 import type { IntegrateToGrey } from './first-print.ts';
@@ -48,6 +50,10 @@ export interface HostOptions {
   worker?: boolean;
   /** Status callback while the engine starts. */
   onStatus?: (s: string) => void;
+  /** The diagnostics journal (CHB-038): the GPU device's events, the workers' errors, the engine chosen and why. */
+  journal: Journal;
+  /** ?debug: GPU error scopes around every queue submit */
+  debug?: boolean;
 }
 
 /**
@@ -109,22 +115,23 @@ const REF_CACHE = { cacheLimit: 48, cacheBytes: 768 * 2 ** 20 };
 
 let rawDecoder: RawDecoder | null = null;
 /** LibRaw in a module worker, started on the first camera RAW file (?worker=0: decoding on this thread). */
-function libraw(): RawDecoder {
+function libraw(journal: Journal): RawDecoder {
   if (!rawDecoder) {
     const w = new Worker(new URL('../../../../packages/ingest/src/libraw/worker-entry.ts', import.meta.url), { type: 'module' });
+    watchWorker(journal, w, 'LibRaw');
     rawDecoder = workerRawDecoder(w as never, { wasmUrl: librawWasmUrl });
   }
   return rawDecoder;
 }
 
-const LAZY_LIBRAW: RawDecoder = { name: 'libraw', decode: (b, o) => libraw().decode(b, o) };
-
 /** The engine worker, or null when it cannot start (the caller falls back to this thread). */
-function startWorker(): WorkerClient | null {
+function startWorker(journal: Journal): WorkerClient | null {
   try {
-    return new WorkerClient(new Worker(new URL('./engine-worker.ts', import.meta.url), { type: 'module' }) as never);
+    const c = new WorkerClient(new Worker(new URL('./engine-worker.ts', import.meta.url), { type: 'module' }) as never);
+    c.onLog = workerLog(journal);
+    return c;
   } catch (e) {
-    console.warn('engine worker unavailable; decoding on the main thread', e);
+    journal.warn('worker', 'the engine worker is unavailable: decoding on the main thread', { code: 'E_WORKER', data: e });
     return null;
   }
 }
@@ -185,6 +192,8 @@ function catalogOf(data: PhysicsData): Record<string, string[]> {
 /** Builds the studio's physics engine. Throws only when no engine at all can start. */
 export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const say = o.onStatus ?? (() => undefined);
+  const journal = o.journal;
+  const LAZY_LIBRAW: RawDecoder = { name: 'libraw', decode: (b, x) => libraw(journal).decode(b, x) };
   say('loading data packs…');
   const data = await loadDefaultPhysicsData();
   const settings: HostSettings = { dust: false };
@@ -197,7 +206,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   if (o.want !== 'reference') {
     say('starting WebGPU…');
     try {
-      const g = await GpuEngine.create({ data, cacheLimit: 24 });
+      const g = await GpuEngine.create({ data, cacheLimit: 24, events: gpuEvents(journal), ...(o.debug ? { debug: true } : {}) });
       const caps = g.capabilities();
       if (caps.available) {
         primary = g;
@@ -212,14 +221,15 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     if (!primary && o.want === 'gpu') throw new Error(`WebGPU engine requested but unavailable: ${why}`);
   }
   // the engine worker: decoding for both engines, and the reference engine when there is no GPU
-  let client = o.worker === false ? null : startWorker();
+  if (why) journal.warn('engine', `no WebGPU: ${why}`, { code: 'NO_WEBGPU' });
+  let client = o.worker === false ? null : startWorker(journal);
   if (client) {
     say('starting the engine worker…');
     try {
       const init = await client.init({ engine: primary ? 'none' : 'reference', librawWasmUrl, packsBase: new URL('/packs/', location.href).href, sampled: true, mode: refMode, ...REF_CACHE });
       if (!primary) primary = new WorkerEngine(client, init.caps!);
     } catch (e) {
-      console.warn('engine worker failed to start; running on the main thread', e);
+      journal.warn('worker', 'the engine worker failed to start: running on the main thread', { code: 'E_WORKER', data: e });
       client.terminate();
       client = null;
     }
@@ -252,6 +262,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
     // Since CHB-011 GpuEngine encodes every output space itself (nativeSpaces stays unset).
   };
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
+  journal.info('engine', `engine: ${engine.label}`, { code: 'ENGINE', data: { id: primary.id, long, worker: client !== null, ...(why ? { why } : {}) } });
   return {
     engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []), editorMath: buildEditorMath(),
     bake: (d) => bakeLights(d, data, DEFAULT_CONVENTIONS).mutations,

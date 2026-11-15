@@ -1,6 +1,6 @@
 // @chromobench/gpu — the WebGPU engine (CHB-005).
 export { GpuEngine, GPU_OPS, type GpuEngineOptions } from './engine-gpu.ts';
-export { GpuRuntime, backendOrder, unavailableCaps, DEFAULT_BUDGET, type GpuCaps, type Backend, type AccelChoice, type RuntimeOptions } from './device.ts';
+export { GpuRuntime, backendOrder, unavailableCaps, gpuErrorType, DEFAULT_BUDGET, type GpuEvent, type GpuCaps, type Backend, type AccelChoice, type RuntimeOptions } from './device.ts';
 export { negotiate, WANT_LIMITS, OPTIONAL_FEATURES } from './limits.ts';
 export { BufferPool, TexturePool, Budget, texBytes, type TexDesc, type BufDesc } from './pool.ts';
 export { PipelineCache, compileDiagnostic, kernelKey, type KernelSpec } from './pipelines.ts';

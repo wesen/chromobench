@@ -158,6 +158,8 @@ export class Frames {
   private readonly known: FramesOptions['known'];
   private readonly map = new Map<string, FrameEntry>();
   private readonly readers = new Map<string, () => Promise<Uint8Array>>();
+  /** the source files' sizes, by hash (a problem report says what its originals weigh; CHB-038) */
+  private readonly sizes = new Map<string, number>();
   /** the files decoded now, by hash (their frames may be fewer: one removed) */
   private readonly decoded = new Map<string, Decoded>();
   private readonly listeners = new Set<(e: FrameEntry) => void>();
@@ -198,6 +200,17 @@ export class Frames {
     this.removedListeners.add(f);
     return () => this.removedListeners.delete(f);
   }
+  /** the size of a frame's source file in bytes (undefined when the frame is not open) */
+  sourceSize(id: string): number | undefined {
+    const e = this.map.get(id);
+    return e ? this.sizes.get(e.sha) : undefined;
+  }
+  /** a frame's source file read again (a problem report's original), or null when it is not at hand */
+  async sourceBytes(id: string): Promise<Uint8Array | null> {
+    const e = this.map.get(id);
+    const read = e ? this.readers.get(e.sha) : undefined;
+    return read ? read().catch(() => null) : null;
+  }
   /** true when the frame's bytes can be read again (re-open in the other mode) */
   canReread(id: string): boolean {
     const e = this.map.get(id);
@@ -217,6 +230,7 @@ export class Frames {
     // no reader from the host: a copy (an engine may transfer the bytes it decodes to a worker)
     const copy = o.read ? null : bytes.slice();
     this.readers.set(sha, o.read ?? (async () => copy!));
+    this.sizes.set(sha, bytes.byteLength);
     const pending = this.opening.get(sha);
     const same = (k: FrameKind): boolean => as === 'auto' || kindOf(as) === k;
     if (pending) {
@@ -335,6 +349,7 @@ export class Frames {
     this.drop(e);
     if (!this.bySha(e.sha)) {
       this.readers.delete(e.sha);
+      this.sizes.delete(e.sha);
       this.decoded.delete(e.sha);
     }
     return e;

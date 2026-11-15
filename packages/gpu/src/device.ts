@@ -54,11 +54,33 @@ export function backendOrder(choice: AccelChoice, caps: Pick<GpuCaps, 'available
   return out;
 }
 
+/**
+ * What a runtime reports about its device (CHB-038), for a host's diagnostics journal: the device it made (adapter,
+ * features, limits), every error nobody caught (WebGPU's uncapturederror: validation, out-of-memory, internal), the
+ * device's loss, and — with `debug` — the errors of each queue submit, caught in error scopes. `during` is the work
+ * the engine started last (a node's op and id): with renders in flight it is a hint, not a proof.
+ */
+export type GpuEvent =
+  | { kind: 'device'; name: string; adapter: GpuCaps['adapter']; features: string[]; limits: Record<string, number>; requested: { features: string[]; limits: Record<string, number> } }
+  | { kind: 'error'; type: 'validation' | 'out-of-memory' | 'internal' | 'unknown'; message: string; during: string | null; scope?: 'submit' }
+  | { kind: 'lost'; reason: string; message: string }
+  | { kind: 'recreate'; why: string };
+
 export interface RuntimeOptions {
   forceFallback?: boolean;
   budgetBytes?: number;
   /** Injected navigator.gpu (tests). */
   gpu?: GPU;
+  /** Receives the device's events (a host's diagnostics journal); kept for a device made again after a loss. */
+  events?: (e: GpuEvent) => void;
+  /** Wraps every queue submit in validation and out-of-memory error scopes (slower; the host's ?debug). */
+  debug?: boolean;
+}
+
+/** The kind of a GPUError, by its class (each browser names the classes alike). */
+export function gpuErrorType(e: GPUError): 'validation' | 'out-of-memory' | 'internal' | 'unknown' {
+  const n = e?.constructor?.name ?? '';
+  return n === 'GPUValidationError' ? 'validation' : n === 'GPUOutOfMemoryError' ? 'out-of-memory' : n === 'GPUInternalError' ? 'internal' : 'unknown';
 }
 
 export class GpuRuntime {
@@ -73,9 +95,20 @@ export class GpuRuntime {
 
   readonly device: GPUDevice;
   readonly caps: GpuCaps;
-  private constructor(device: GPUDevice, caps: GpuCaps) {
+  /** the work started last (the engine sets it: a node's op and id), named in the errors this runtime reports */
+  activity: string | null = null;
+  private constructor(device: GPUDevice, caps: GpuCaps, opts: RuntimeOptions = {}) {
     this.device = device;
     this.caps = caps;
+    const events = opts.events;
+    if (events) {
+      device.addEventListener('uncapturederror', (ev) => {
+        const err = (ev as GPUUncapturedErrorEvent).error;
+        events({ kind: 'error', type: gpuErrorType(err), message: err.message, during: this.activity });
+      });
+      device.lost.then((info) => events({ kind: 'lost', reason: String(info.reason), message: info.message }));
+      if (opts.debug) this.scopeSubmits(events);
+    }
     this.budget = new Budget(caps.budgetBytes);
     this.buffers = new BufferPool(device, this.budget);
     this.textures = new TexturePool(device, this.budget);
@@ -120,7 +153,41 @@ export class GpuRuntime {
       },
       budgetBytes,
     };
-    return new GpuRuntime(device, caps);
+    if (opts.events) {
+      const lim: Record<string, number> = {};
+      for (const k in L) {
+        const v = (L as unknown as Record<string, unknown>)[k];
+        if (typeof v === 'number') lim[k] = v;
+      }
+      opts.events({
+        kind: 'device', name: [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') || 'GPU', adapter: caps.adapter,
+        features: [...device.features].map(String).sort(), limits: lim,
+        requested: { features: [...requiredFeatures].map(String), limits: { ...(requiredLimits as Record<string, number>) } },
+      });
+    }
+    return new GpuRuntime(device, caps, opts);
+  }
+
+  /** ?debug: every queue submit inside validation and out-of-memory error scopes, its errors reported with `during` */
+  private scopeSubmits(events: (e: GpuEvent) => void): void {
+    const device = this.device;
+    const queue = device.queue;
+    const submit = queue.submit.bind(queue);
+    const report = (err: GPUError | null, during: string | null): void => {
+      if (err) events({ kind: 'error', type: gpuErrorType(err), message: err.message, during, scope: 'submit' });
+    };
+    queue.submit = (buffers: Iterable<GPUCommandBuffer>): undefined => {
+      device.pushErrorScope('validation');
+      device.pushErrorScope('out-of-memory');
+      const during = this.activity;
+      try {
+        submit(buffers);
+      } finally {
+        void device.popErrorScope().then((e) => report(e, during), () => undefined);
+        void device.popErrorScope().then((e) => report(e, during), () => undefined);
+      }
+      return undefined;
+    };
   }
 
   get name(): string {

@@ -101,4 +101,14 @@ export interface InitReply {
 
 export type FromWorker =
   | { id: number; ok: true; value: unknown }
-  | { id: number; ok: false; error: Diagnostic };
+  | { id: number; ok: false; error: Diagnostic }
+  /** CHB-038: what the worker would have written to its console, for the page's diagnostics journal */
+  | { id: 0; log: WorkerLog };
+
+/** One event of the worker for the journal (source 'worker'). */
+export interface WorkerLog {
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  code?: string;
+  data?: unknown;
+}
