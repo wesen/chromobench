@@ -11,3 +11,8 @@ Implementation (task/chb-004-data): tools/spektrafilm-export exports spektrafilm
 ## 2026-11-12
 
 Owner decision: this version is not public (family use); licence questions of Section 12.4 deferred to a public release; attribution kept
+
+## 2026-11-15
+
+Triage after the CHB-037 cut-off (CHB-044): 6 open → 5 open; done: spah (openPack, hashes and data error codes, loader tests). Open items reworded with their current state and consolidated into the CHB-044 backlog.
+

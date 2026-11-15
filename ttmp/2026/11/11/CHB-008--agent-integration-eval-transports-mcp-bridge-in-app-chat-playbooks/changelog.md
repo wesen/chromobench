@@ -11,3 +11,8 @@ Implementation (task/chb-008-agent): DSL session in a Web Worker with mirror log
 ## 2026-11-12
 
 CHB-032 audit: 12 open tasks checked against the code; 9 partly done ticked with their remaining part moved to follow-up tasks (saxi, 7v7v, kbxw, 3hb1, kd8u, qur1, 5yyv, eqyx, vg50); erratum lzad corrected in the intern guide (lines 118, 968); ch9a and u7mw stay open. Evidence table in CHB-032 diary Step 2.
+
+## 2026-11-15
+
+Triage after the CHB-037 cut-off (CHB-044): 11 open → 9 open; done: 7v7v (stale reads propose in auto mode, dsl/src/history.ts); superseded: saxi (transaction source { kind: 'agent', eval }, CHB-037 P6a). Open items consolidated into the CHB-044 backlog (Agent and assistant).
+
