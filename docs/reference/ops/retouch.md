@@ -10,7 +10,7 @@ Clones circular spots: the source patch replaces the target as it is. Adjacent c
 - On: Image (scanner-density, print-xyz) → Image (same)
 - Class: spatial; binding: setting
 - Layer in: scan, print; encoding: stage; coalesces (spots)
-- Implementation: stub
+- Implementation: mock
 - See: `heal`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -25,7 +25,7 @@ Heals circular spots: the source patch, matched to the target's surroundings, re
 - On: Image (scanner-density, print-xyz) → Image (same)
 - Class: spatial; binding: setting
 - Layer in: scan, print; encoding: stage; coalesces (spots)
-- Implementation: stub
+- Implementation: mock
 - See: `clone`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |

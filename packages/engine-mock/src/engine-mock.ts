@@ -2,7 +2,7 @@
 // Full-resolution results are cached per node id; previews and regions are sampled from them,
 // so a region result is bit-identical to the crop of the full result.
 import {
-  allOps, ChromobenchError, fail, getOp, Graph, nodeArgs, quantizeScale, sha256Hex,
+  allOps, ChromobenchError, fail, getOp, Graph, nodeSlots, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
@@ -92,10 +92,7 @@ export class MockEngine implements Engine {
     const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
     this.check(n);
     const op = getOp(n.op);
-    const nArgs = new Set(nodeArgs(op).flatMap((a) => {
-      const v = n.args[a];
-      return v === undefined ? [] : ((Array.isArray(v) ? v : [v]) as string[]);
-    }));
+    const nArgs = new Set(nodeSlots(op, n.args).map((s) => s.id));
     const recvId = op.on === 'none' ? undefined : n.inputs[0];
     const recvNode = recvId ? this.graph.get(recvId) : undefined;
     const extra = n.inputs.slice(recvId ? 1 : 0).filter((i) => nArgs.has(i)).map((i) => this.compute(i));
@@ -110,6 +107,7 @@ export class MockEngine implements Engine {
         const d = this.graph.get(nid);
         return d ? { op: d.op, args: d.args } : undefined;
       },
+      image: (nid) => this.compute(nid),
     };
     const f = IMAGE_OPS[n.op] ?? fail('E_NOT_IMPLEMENTED', `${n.op} has no mock image implementation`);
     const img = f(ctx);
@@ -165,10 +163,7 @@ export class MockEngine implements Engine {
     const op = getOp(n.op);
     const recvId = n.inputs[0]!;
     const recvNode = this.graph.get(recvId)!;
-    const nArgs = new Set(nodeArgs(op).flatMap((a) => {
-      const v = n.args[a];
-      return v === undefined ? [] : ((Array.isArray(v) ? v : [v]) as string[]);
-    }));
+    const nArgs = new Set(nodeSlots(op, n.args).map((s) => s.id));
     let sourceSha = '';
     for (const d of this.graph.closure(n.id)) if (d.op === 'source.open') sourceSha = d.args['source'] as string;
     const ctx: OpCtx = {

@@ -1,18 +1,19 @@
-# Golden pictures (CHB-037 P0)
+# Golden pictures (CHB-037 P0, P2b)
 
-The oracle for the CHB-037 hard cut-off: pictures of **today's** pipeline (recipe v2, `compile()` in
-`packages/contract/src/graph.ts`) rendered on core's f64 reference engine for a fixed set of synthetic frames and
-recipes, made before anything is deleted. Phase P2 (contract 1.0, document format 3, the light law) must reproduce
-them from equivalent documents (design CHB-035 §35–37).
+The oracle for the CHB-037 hard cut-off: pictures of the recipe-v2 pipeline (P0) rendered on core's f64 reference
+engine for a fixed set of synthetic frames and recipes, made before anything was deleted. Since P2b every case is a
+format-3 document (contract 1.0), compiled by the one compiler and rendered on the reference engine alone; it
+reproduces the P0 pictures except where the plan named a change (below). The documents are the cases now.
 
-## What is stored (`packages/conformance/goldens/`, about 8 MB)
+## What is stored (`packages/conformance/goldens/`, about 8.6 MB)
 
 ```
-index.json                    format, engine, cuts, tolerance, fixtures, cases[], skipped[]
+index.json                    format chromobench-goldens/2: engine, cuts, tolerance, fixtures, cases[]
 fixtures/negative-96x64.tif   synthetic colour negative (16-bit TIFF, RefEngine.open)
 fixtures/camera-96x64.f32     synthetic camera file: linear camera RGB, float32 LE, 96 × 64 × 3 (RefEngine.openDecoded)
 fixtures/camera-96x64.json    its SourceInfo (camera matrix, as-shot neutral); sha256 = SHA-256 of the .f32 bytes
-cases/<id>/recipe.json        the FrameRecipe (version 2) that was rendered
+cases/<id>/document.json      the format-3 document the check compiles (translate.ts made it from recipe.json)
+cases/<id>/recipe.json        the P0 recipe (version 2) the pictures were first rendered from: provenance only
 cases/<id>/print.json         header of the cut `print`   (the view.adapt node, domain print-xyz)
 cases/<id>/display.json       header of the cut `display` (the output.frame node, domain display-rgb, sRGB)
 cases/<id>/print.f32          pixels (absent when an identical picture is stored elsewhere: follow the header's `file`)
@@ -33,11 +34,11 @@ A cut header:
 
 `file` is relative to the data directory; identical pictures (the print cut of a crop or a retouch case equals its
 base's) share one file. Pixels are the engine's f64 results rounded to float32. Each case in `index.json` also lists
-what it `exercises` and the compiled chain's `ops` (closure of the display node, inputs first).
+what it `exercises` (P0's recipe fields) and the compiled chain's `ops` (closure of the display node, inputs first).
 
 ## The cases
 
-58 cases, named by what they exercise (`index.json` has the titles):
+60 cases, named by what they exercise (`index.json` has the titles):
 
 | Group | Cases |
 |---|---|
@@ -50,68 +51,73 @@ what it `exercises` and the compiled chain's `ops` (closure of the display node,
 | retouch | `neg-retouch-heal` (three spots and a disabled one), `neg-retouch-clone`, `cam-retouch` |
 | crop, orientation | `neg-crop`, `neg-orient-cw90-crop`, `neg-orient-flipH`, `neg-orient-transverse`, `neg-straighten` (4° in a crop, rot180), `cam-crop-ccw90` |
 | scan, view, capture | `neg-scan-flare`, `neg-scan-baseT`, `neg-view-print-as-seen`, `neg-knee-clip`, `cam-exposure-plus1`, `cam-wb-as-shot`, `cam-wb-custom`, `cam-development`, `cam-grade-lights` |
+| new in P2b | `neg-dust-heal` (a scan-stage group `dust` of three one-spot heal layers, coalesced into one `heal` node on scanner density), `neg-finishing-clarity` (a print-stage `clarity` layer, strength 0.4, radius 0.576 mm = P0's 12 px × 48 µm) |
 
-**Skipped** (recipe stored, no pictures; listed under `skipped` with the missing ops): `neg-dust-heal`
-(`scan.heal`) and `neg-finishing-clarity` (`finishing.clarity`). No physics engine implements these two ops today
-(only engine-mock does, `scan.heal` as identity), so the studio cannot show them on real physics either. The check
-reports when one starts rendering: then remove its `skip` in `cases.ts` and re-render.
-
-Recipes are built the way the studio builds them (`cases.ts`): `defaultRecipe`, the studio's first print
-(`apps/studio/src/host/first-print.ts` with core's integrate-to-grey, as `host/engines.ts` injects it), then the
-closed mutation set (`set`, `exposure.add`, `mask.set`). Masks come from the studio's mask editor (`maskSpec` in
-`packages/studio-kit/src/model/tools.ts`: shapes or-ed, feather, invert) or, for `mask.and` and `mask.luminance`,
-from interned `mask.*` nodes as the agent DSL makes them. Coordinate masks hang off the `source.open` node.
+P0 built the recipes the way the studio built them then (`defaultRecipe`, the studio's first print with core's
+integrate-to-grey, the closed mutation set, the studio's mask editor); the auto balance is frozen in the numbers.
+P2b translated each recipe once into a document (`translate.ts`, below); `cases.ts` (the P0 builders, on the deleted
+recipe model) is gone.
 
 ## The engine
 
-`engine.ts`: `RefEngine` (exact mode, `nodePacksData()`) wrapped in the studio's `StudioEngine`, which computes
-`output.frame` (crop, straighten, orientation) as the studio does on real physics. The recipe is compiled with
-`compile()` into the wrapper's graph; the cut nodes are found by walking the receiver chain up from the display
-node. Everything is evaluated at `{ scale: 'full', precision: 'export' }`. No evaluation code of its own.
+`engine.ts`: `RefEngine` (exact mode, `nodePacksData()`) alone. A case's document is compiled with `compile()` into the
+engine's graph; the cuts are the compiler's named cuts `print` (view.adapt) and `display` (output.frame, which core
+implements since contract 1.0). Everything is evaluated at `{ scale: 'full', precision: 'export' }`. No evaluation code
+of its own.
 
 ## Commands
 
 ```sh
-node tools/goldens/render.ts --check               # re-render the stored recipes, compare, print per-case max/mean |Δ|
+node tools/goldens/render.ts --check               # re-render the stored documents, compare, print per-case max/mean |Δ|
 node tools/goldens/render.ts --check --tol 1e-4    # another tolerance
 node tools/goldens/render.ts --check --only neg-split,cam-auto
-node tools/goldens/render.ts                       # regenerate every case from cases.ts (rewrites the data directory)
-node tools/goldens/render.ts --only neg-split      # regenerate some cases (index entries of the others are kept)
+node tools/goldens/render.ts --only neg-split      # re-render some cases' pictures (a deliberate oracle change: say why)
+node tools/goldens/render.ts                       # re-render every case's pictures
 node tools/goldens/render.ts --fixtures            # also rewrite the fixtures first (changes every golden)
+node tools/goldens/translate.ts                    # the one-off P2b translation: recipe.json → document.json, index format 2
 ```
 
 The check passes when, for every case and both cuts, the shape and domain match and the largest absolute difference
-of any float32 sample is ≤ the tolerance (default `1e-5`, `TOLERANCE` in `golden.ts`). Today it reproduces every
-file exactly (max |Δ| = 0): the reference engine is deterministic (grain is seeded) and no case depends on timing,
-caching or the machine. `goldens.test.ts` runs the same check in vitest (about 5 s).
+of any float32 sample is ≤ the tolerance (default `1e-5`, `TOLERANCE` in `golden.ts`). It reproduces every file
+exactly (max |Δ| = 0): the reference engine is deterministic (grain is seeded) and no case depends on timing, caching
+or the machine. `goldens.test.ts` runs the same check in vitest, and checks that every document is the translation
+of its recipe (about 9 s).
 
-## How P2 uses it
+## The P2b translation (`translate.ts`) and what changed
 
-1. Translate each `recipe.json` into a format-3 document (by hand or with a one-off script in P2), using the mapping
-   of design §23: `print.enlarger` → light layer `expose` id `main`; `print.exposures` → `dodge` / `burn` / `flash`
-   (with `through`) / `split` layers with the same masks; `print.densityMasks` → `densityMask` modulators;
-   `print.lights`, `print.grade` → `filter` layers; `retouch.spots` → print-stage `heal` / `clone`; `view.frame` →
-   document geometry; `masks` (node closures) → the document's `Coll<Mask>`. Scan, capture, paper and view
-   settings become the media. Skipped cases need no translation until their op exists.
-2. Replace the compile step in `engine.ts` (`compile(r, g)` and the walk to `view.adapt` / `output.frame`) with
-   the new compiler's cuts `print` and `display`, keep the comparison (`golden.ts` `compareCut`, `checkAll`), and
-   run `--check`. The pictures and headers stay as they are: they are the oracle.
-3. Expected tolerance: the light law is today's `combinePixel` for today's kinds, so a faithful translation
-   should reproduce the files to float32 rounding; a summation-order change in f64 stays far below `1e-5`. A
-   larger difference is a semantic change to explain, not a tolerance to widen.
+Each `recipe.json` was translated into a format-3 document by design §23's mapping and the plan's rules (design-doc
+01, "Amendments after P2a"); the stored pictures stayed the oracle and only the compile step changed:
+
+- media: scan `umPerPx` 6 (the fixtures had none; P0's density masks used `DEFAULT_FILM_UM_PER_PX` = 6), darkroom
+  `magnification` 8 (P0's null was the calibration's 8), a camera file's film format from `capture.format`;
+- darkroom: `main` (expose: time, f-stop, filtration), `lights` (filter: logH; the AutoBalance record in its
+  `source`), exposures as `dodge` / `burn` (split = a burn with its pack) / `flash` (with `through`; one without time
+  or stops gets the main time), density masks as `densityMask` (amount → gamma), preflash as a `preflash` layer;
+- masks (P0's node closures) as mask values: gradient → `linear`, or-ed shapes → `add` components, `mask.and` →
+  an `intersect` component, not → `invert`, feather px → `feather_mm` = px × the print's µm/px / 1000 (48 for the
+  scans, 3000 for the camera file), luminance of the scan → `reads: 'source'`, of the main exposure →
+  `reads: 'darkroom.main'`;
+- retouch spots → a print-stage group `retouch` of one heal or clone layer per spot (natural id order; a disabled
+  spot is a disabled layer); P0's unrendered `scan.dust.spots` → a scan-stage group `dust` of heal layers (sources
+  chosen beside each speck); finishing clarity (preview px) → a `clarity` layer in mm;
+- `view.frame` → `geometry`, `view.output` → `output`.
+
+56 of P0's 58 pictures are reproduced bit for bit (max |Δ| = 0, both cuts). Two were re-rendered deliberately
+(`render.ts --only`), with the physics reason (P2b diary, Step 3):
+
+| Case | P0 → P2b max / mean \|Δ\| (print; display) | Why |
+|---|---|---|
+| `neg-burn-and` | 1.03e-1 / 5.59e-4; 9.23e-2 / 7.37e-4 | The one mask algebra (design D4): intersect is the product, P0's `mask.and` the minimum |
+| `cam-dm-unsharp` | 3.75e-1 / 3.24e-2; 2.65e-1 / 3.05e-2 | One film pitch per document: P0 blurred a camera file's density mask at 6 µm/px (the hidden default) while its film ops used 375 µm/px (36 mm over 96 px); the 30 µm mask is now σ = 0.08 px |
+
+The H < 1e-8 floor (now after the lights, P0 before them) changed no stored pixel.
 
 Things to know:
 
-- **Auto balance is frozen.** The first print ran when the goldens were made; its result is in each recipe
-  (`print.enlarger.time_s`, `print.lights.logH`, `print.lights.auto`). The check re-renders those numbers; it does
-  not re-run the metering.
-- **Masks reference node ids.** Mask closures in `recipe.json` contain `source.open` with the fixture's sha256 and
-  (for `neg-dodge-luminance-print`) the main `print.expose` chain; a luminance mask normalises to its receiver's
-  domain range (`camera-linear` 0…1, `paper-logH` −4…3).
-- **`print` is before retouch**: `view.adapt` precedes `retouch.heal`, so retouch cases differ from their base
-  only in the `display` cut.
+- **Auto balance is frozen.** The first print ran when the goldens were made; its result is in each document (main
+  time, the lights' logH, the AutoBalance record). The check re-renders those numbers; it does not re-run metering.
+- **`print` is before the print stage**: `view.adapt` precedes heal, clone and clarity, so retouch and clarity cases
+  differ from their base only in the `display` cut.
 - **Density masks lighten the print.** A positive mask is 0 at the densest area (here the ramp's highlight end,
   pixel (95, 6)) and adds density everywhere else (γ 0.6 at 25 µm: mean 0.46 D), so the print gets much lighter;
   `neg-dm-unmetered` keeps that, the other density-mask cases are re-metered with the first print.
-- **No µm per pixel.** The fixtures' nodes carry `umPerPx: {}`, so `radius_um` of the density masks is converted
-  with the engine's default pitch (`DEFAULT_FILM_UM_PER_PX` = 6 in core: 300 µm and 25 µm are σ = 50 px and 4.2 px here); a document format that records the film's pitch must keep that default to match.

@@ -18,8 +18,6 @@ RelatedFiles:
       Note: compile(), the pipeline the goldens record
     - Path: repo://tools/goldens/README.md
       Note: format and how P2 uses the goldens
-    - Path: repo://tools/goldens/cases.ts
-      Note: the 60 case builders (coverage)
     - Path: repo://tools/goldens/engine.ts
       Note: RefEngine in StudioEngine; compile and the two cuts
     - Path: repo://tools/goldens/fixtures.ts
@@ -34,6 +32,7 @@ LastUpdated: 2026-11-14T21:13:51.780731-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary

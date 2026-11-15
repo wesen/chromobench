@@ -10,7 +10,7 @@
   "endian": "little",
   "layout": "interleaved, row-major, top row first",
   "file": "cases/neg-burn-and/display.f32",
-  "sha256": "74cc935972374e81f5a3869ed9be794c2df34c71e14b0713174a05dbeac5f567",
+  "sha256": "cc0cdc2531b0419810c3dbc96031a8ceae50ba7f3fc54abf01b26ab69c9eb019",
   "stats": {
     "min": [
       0.08358465,
@@ -23,9 +23,9 @@
       1
     ],
     "mean": [
-      0.4206257,
-      0.4354764,
-      0.4398595
+      0.4213901,
+      0.4362071,
+      0.4405744
     ]
   },
   "warnings": []

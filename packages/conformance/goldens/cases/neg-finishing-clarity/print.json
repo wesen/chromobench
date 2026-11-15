@@ -1,0 +1,32 @@
+{
+  "case": "neg-finishing-clarity",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-auto-lights/print.f32",
+  "sha256": "1ec9782a736b565ff16166d84d4550aa38cc3b204d1ab378bc168fc166a01c7d",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.01067903,
+      0.01170197
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2430752,
+      0.2554732,
+      0.2866795
+    ]
+  },
+  "warnings": []
+}

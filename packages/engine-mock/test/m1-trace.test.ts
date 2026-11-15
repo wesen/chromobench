@@ -1,7 +1,9 @@
-// The guide §6 trace: "+4 points red", then undo, against the mock engine and the M1 fixture.
+// The guide §6 trace: "+4 points red", then undo, against the mock engine and the M1 fixture (contract 1.0: a
+// format-3 document whose printer lights are the filter layer `lights`).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { check, compile, defaultRecipe, EditLog, Graph, law, sha256Hex, type FrameRecipe, type Node } from '@chromobench/contract';
+import { check, compile, cutNode, edit, EditLog, Graph, law, newDocument, sha256Hex, type Compiled, type Node } from '@chromobench/contract';
+import { set } from '@chromobench/values';
 import { M1, makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { readTiffCodes } from '@chromobench/ingest';
 
@@ -25,10 +27,13 @@ async function pixelOf(engine: MockEngine, g: Graph, node: Node, at = M1.patchCe
   return Array.from(await r.read()).slice(0, ch);
 }
 
-function nodeAt(g: Graph, top: Node, op: string): Node {
-  const d = g.closure(top.id).find((x) => x.op === op)!;
+function nodeAt(g: Graph, top: Compiled, op: string): Node {
+  const d = g.closure(top.display.id).find((x) => x.op === op)!;
   return g.adopt([d]).at(-1) ?? (() => { throw new Error(op); })();
 }
+
+const doc0 = (sha256: string) => newDocument('negative-scan', { sha256 }, { umPerPx: 6 });
+const display = (c: Compiled): Node => c.display;
 
 const close = (a: number[], b: number[], tol = 1e-4): void => {
   a.slice(0, b.length).forEach((v, i) => expect(Math.abs(v - b[i]!), `component ${i}: ${v} vs ${b[i]}`).toBeLessThanOrEqual(tol));
@@ -48,25 +53,26 @@ describe('M1 fixture', () => {
 describe('§6 trace on the mock engine', () => {
   it('reproduces every stage to 1e-4, reuses upper nodes, and undo restores pixel and hash', async () => {
     const { engine, g, info } = await setup();
-    const log = EditLog.create(defaultRecipe('negative-scan', { sha256: info.sha256 }), { mode: 'ask' });
+    const log = EditLog.create(doc0(info.sha256), { mode: 'ask' });
     const s0 = log.stateHash;
     const top0 = compile(log.state, g);
     close(await pixelOf(engine, g, nodeAt(g, top0, 'scan.density')), golden.scannerDensity);
     close(await pixelOf(engine, g, nodeAt(g, top0, 'invert.dyes')), golden.scannerDensity);
-    close(await pixelOf(engine, g, nodeAt(g, top0, 'print.lights')), golden.before.x);
+    close(await pixelOf(engine, g, cutNode(top0, 'darkroom.H')), golden.before.x);
     close(await pixelOf(engine, g, nodeAt(g, top0, 'print.develop')), golden.before.paperDyes);
-    const p0 = await pixelOf(engine, g, top0);
+    const p0 = await pixelOf(engine, g, display(top0));
     close(p0, golden.before.display);
 
-    log.apply([{ op: 'set', path: 'print.lights.logH', value: golden.after.lightsLogH }], 'user', 'Printer lights');
+    log.apply([set('lights.params.logH', golden.after.lightsLogH)], 'user', 'Printer lights');
     const s1 = log.stateHash;
     expect(s1).not.toBe(s0);
     const top1 = compile(log.state, g);
-    const upper = g.closure(top1.id).slice(0, 4);
+    const upper = g.closure(top1.display.id).slice(0, 4);
     expect(upper.map((d) => d.op)).toEqual(['source.open', 'scan.density', 'invert.dyes', 'print.expose']);
-    close(await pixelOf(engine, g, nodeAt(g, top1, 'print.lights')), golden.after.x);
+    expect(cutNode(top1, 'darkroom.H').op).toBe('print.combine');
+    close(await pixelOf(engine, g, cutNode(top1, 'darkroom.H')), golden.after.x);
     close(await pixelOf(engine, g, nodeAt(g, top1, 'print.develop')), golden.after.paperDyes);
-    const p1 = await pixelOf(engine, g, top1);
+    const p1 = await pixelOf(engine, g, display(top1));
     close(p1, golden.after.display);
     // upper nodes were computed once and served from cache for the new chain
     for (const d of upper) expect(engine.runs(g.adopt([d]).at(-1)!.id), d.op).toBe(1);
@@ -74,37 +80,37 @@ describe('§6 trace on the mock engine', () => {
     log.undo();
     expect(log.stateHash).toBe(s0);
     const top2 = compile(log.state, g);
-    expect(top2.id).toBe(top0.id);
-    expect(await pixelOf(engine, g, top2)).toEqual(p0);
+    expect(top2.display.id).toBe(top0.display.id);
+    expect(await pixelOf(engine, g, display(top2))).toEqual(p0);
   });
 
   it('agent proposal in ask mode: pending leaves the pixel, approval matches the user edit', async () => {
     const { engine, g, info } = await setup();
-    const log = EditLog.create(defaultRecipe('negative-scan', { sha256: info.sha256 }), { mode: 'ask' });
-    const p0 = await pixelOf(engine, g, compile(log.state, g));
-    const prop = log.propose([{ op: 'set', path: 'print.lights.logH', value: [0.1, 0, 0] }], { tx: 'eval-1', why: '+4 pt red' });
-    expect(await pixelOf(engine, g, compile(log.state, g))).toEqual(p0);
-    log.approve(prop.map((e) => e.seq));
-    close(await pixelOf(engine, g, compile(log.state, g)), golden.after.display);
-    expect(log.why('print.lights.logH').at(-1)).toMatchObject({ by: 'agent', approvedBy: 'user' });
+    const log = EditLog.create(doc0(info.sha256), { mode: 'ask' });
+    const p0 = await pixelOf(engine, g, display(compile(log.state, g)));
+    const prop = log.propose([set('lights.params.logH', [0.1, 0, 0])], { tx: 'eval-1', why: '+4 pt red' });
+    expect(await pixelOf(engine, g, display(compile(log.state, g)))).toEqual(p0);
+    log.approve([prop.seq]);
+    close(await pixelOf(engine, g, display(compile(log.state, g))), golden.after.display);
+    expect(log.why('lights.params.logH').at(-1)).toMatchObject({ by: 'agent', approvedBy: 'user' });
   });
 
   it('mock print directions: more red light → less red reflectance; longer time → darker', async () => {
     const { engine, g, info } = await setup();
-    const r0 = defaultRecipe('negative-scan', { sha256: info.sha256 });
-    const p0 = await pixelOf(engine, g, compile(r0, g));
-    const longer: FrameRecipe = { ...r0, print: { ...r0.print, enlarger: { ...r0.print.enlarger, time_s: 20 } } };
-    const p1 = await pixelOf(engine, g, compile(longer, g));
+    const r0 = doc0(info.sha256);
+    const p0 = await pixelOf(engine, g, display(compile(r0, g)));
+    const longer = edit(r0, [set('main.params.time_s', 20)]).doc;
+    const p1 = await pixelOf(engine, g, display(compile(longer, g)));
     for (let k = 0; k < 3; k++) expect(p1[k]!).toBeLessThan(p0[k]!);
   });
 
-  it('lights.compose: lights(lights(x, a), b) = lights(x, a + b) on the mock (exact)', async () => {
+  it('lights.compose: two filters of a and b = one filter of a + b on the mock (to rounding)', async () => {
     const { engine, g } = await setup();
     const x = g.intern('source.pattern', [], { domain: 'paper-logH', width: 8, height: 6, seed: 3 }).node;
     const results: string[] = [];
     const l = law('lights.compose', (r) => [[r.range(-0.4, 0.4), r.range(-0.4, 0.4), r.range(-0.4, 0.4)], [r.range(-0.4, 0.4), r.range(-0.4, 0.4), r.range(-0.4, 0.4)]] as const, ([a, b]) => {
-      const two = g.intern('print.lights', [g.intern('print.lights', [x.id], { logH: a }).node.id], { logH: b }).node;
-      const one = g.intern('print.lights', [x.id], { logH: a.map((v, k) => v + b[k]!) }).node;
+      const two = g.intern('print.combine', [x.id], { filters: [{ logH: a, amount: 1 }, { logH: b, amount: 1 }] }).node;
+      const one = g.intern('print.combine', [x.id], { filters: [{ logH: a.map((v, k) => v + b[k]!), amount: 1 }] }).node;
       results.push(two.id, one.id);
       return true;
     }, { justifies: 'printer lights add (textbook §2.8 row 1)', source: 'textbook §2.8' });

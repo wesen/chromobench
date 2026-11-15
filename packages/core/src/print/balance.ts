@@ -5,8 +5,9 @@
 // 05-inline.js 1810–1840, 2087–2193, 4047–4054, 4222–4257; filtration from the CHB-010 guide §6.4.
 //
 // Every tool works in printer lights (log H per paper layer), on top of the aim lights that
-// print.expose adds: recipe lights 0 print the stock's grey card as the aim.
-import { fail, type Cmy, type FrameRecipe, type Mutation } from '@chromobench/contract';
+// print.expose adds: a printer-lights filter of 0 prints the stock's grey card as the aim.
+import { bindArgs, fail, getOp, isLinked, paramsToArgs, type Cmy, type Document, type Entry, type Layer } from '@chromobench/contract';
+import { Coll, type Mutation } from '@chromobench/values';
 import type { PhysicsData } from '../data/provider.ts';
 import type { Conventions } from '../spectral/conventions.ts';
 import { solve3, type Mat3, type Vec3 } from '../spectral/linalg.ts';
@@ -320,31 +321,55 @@ export function filtrationForLights(o: PrintChainOptions, dL: ArrayLike<number>,
   };
 }
 
+/** The layer `id` of a stack, at any depth of groups. */
+function findLayer(stack: Coll<Entry>, id: string): Layer | undefined {
+  for (const [k, e] of Coll.entries(stack)) {
+    if (k === id && e.kind === 'layer') return e;
+    if (e.kind === 'group') {
+      const m = findLayer(e.stack, id);
+      if (m) return m;
+    }
+  }
+  return undefined;
+}
+
 /**
- * Bake (CHB-010 guide §6.4): move printer lights into the enlarger. The mutations set the filtration
- * shift and the time (real mode) and replace the lights by what the dials cannot carry; apply them as
- * one EditLog transaction so a single undo restores the old state.
+ * Bake (CHB-010 guide §6.4): move printer lights into the enlarger. The mutations set the main exposure's filtration
+ * shift and time (real mode) and replace the lights layer's logH by what the dials cannot carry; apply them as one
+ * transaction so a single undo restores the old state.
  */
-export function bakeMutations(fit: FiltrationFit, mode: 'real' | 'normalised'): Mutation[] {
-  const ms: Mutation[] = [{ op: 'set', path: 'print.enlarger.filtration', value: { ...fit.shift } }];
-  if (mode === 'real') ms.push({ op: 'set', path: 'print.enlarger.time_s', value: fit.time_s });
-  ms.push({ op: 'set', path: 'print.lights.logH', value: [...fit.lights] });
+export function bakeMutations(fit: FiltrationFit, mode: 'real' | 'normalised', lightsId = 'lights'): Mutation[] {
+  const ms: Mutation[] = [{ op: 'set', path: 'main.params.filtration', value: { ...fit.shift } }];
+  if (mode === 'real') ms.push({ op: 'set', path: 'main.params.time_s', value: fit.time_s });
+  ms.push({ op: 'set', path: `${lightsId}.params.logH`, value: [...fit.lights] });
   return ms;
 }
 
-/** The print chain a recipe's print.expose node evaluates (as compile and the engines read it): film, paper, pack, optics, aim. */
-export function chainOptionsOf(r: FrameRecipe, data: PhysicsData, conv: Conventions): PrintChainOptions {
-  const e = r.print.enlarger;
-  const film = r.scan?.stock ?? r.capture?.stock ?? fail('E_RECIPE', 'recipe has neither scan nor capture settings');
+/**
+ * The print chain of a document's main exposure (as compile and the engines read it): film, paper, pack, optics, aim.
+ * The document's media must be plain (links resolved: compile's Compiled.doc).
+ */
+export function chainOptionsOf(doc: Document, data: PhysicsData, conv: Conventions): PrintChainOptions {
+  const st = doc.stages;
+  const plain = <M>(m: M | object, s: string): M => (isLinked(m) ? fail('E_DOCUMENT', `stages.${s}.medium is a link: resolve links first (compile(doc).doc)`) : (m as M));
+  const film = st.scan ? plain<{ stock: string }>(st.scan.medium, 'scan').stock : plain<{ stock: string }>(st.film!.medium, 'film').stock;
+  const dm = plain<{ paper: string; lamp: string; mode: 'real' | 'normalised'; magnification: number; aim: 'grey-0.184' | 'midgray-normalised' }>(st.darkroom.medium, 'darkroom');
+  const pm = plain<{ illuminant: string }>(st.print.medium, 'print');
+  const main = findLayer(st.darkroom.stack, 'main') ?? fail('E_DOCUMENT', 'the darkroom has no main exposure (id main)', { path: 'stages.darkroom.stack' });
+  const e = bindArgs(getOp('expose'), paramsToArgs(getOp('expose'), main.params)).args as { time_s: number; fstop: number; filtration: Cmy };
   return {
-    data, conv, film, paper: r.print.paper, lamp: e.lamp, filtrationShift: e.filtration, mode: e.mode,
-    optics: { time_s: e.time_s, fstop: e.fstop, ...(e.magnification !== null ? { magnification: e.magnification } : {}) },
-    aim: r.print.aim, view: r.view.illuminant,
+    data, conv, film, paper: dm.paper, lamp: dm.lamp, filtrationShift: e.filtration, mode: dm.mode,
+    optics: { time_s: e.time_s, fstop: e.fstop, magnification: dm.magnification },
+    aim: dm.aim, view: pm.illuminant,
   };
 }
 
-/** Bake a recipe's printer lights into its enlarger: the fit and the mutations (apply as one EditLog transaction). */
-export function bakeRecipe(r: FrameRecipe, data: PhysicsData, conv: Conventions): { fit: FiltrationFit; mutations: Mutation[] } {
-  const fit = filtrationForLights(chainOptionsOf(r, data, conv), r.print.lights.logH);
-  return { fit, mutations: bakeMutations(fit, r.print.enlarger.mode) };
+/** Bake a document's printer lights (the filter layer `lightsId`) into its main exposure: the fit and the mutations. */
+export function bakeLights(doc: Document, data: PhysicsData, conv: Conventions, lightsId = 'lights'): { fit: FiltrationFit; mutations: Mutation[] } {
+  const lights = findLayer(doc.stages.darkroom.stack, lightsId);
+  if (!lights || lights.op !== 'filter') fail('E_DOCUMENT', `no printer-lights filter layer ${lightsId} in the darkroom`, { path: 'stages.darkroom.stack' });
+  const logH = bindArgs(getOp('filter'), paramsToArgs(getOp('filter'), lights.params)).args['logH'] as Vec3;
+  const o = chainOptionsOf(doc, data, conv);
+  const fit = filtrationForLights(o, logH);
+  return { fit, mutations: bakeMutations(fit, o.mode ?? 'real', lightsId) };
 }

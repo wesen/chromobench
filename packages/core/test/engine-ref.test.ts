@@ -28,9 +28,12 @@ describe('reference engine', () => {
   it('claims only catalog ops, including every CHB-003 op', () => {
     const all = new Set(allOps({ includeInternal: true }).map((o) => o.name));
     for (const op of REFERENCE_OPS) expect(all.has(op), op).toBe(true);
-    for (const op of ['invert.dyes', 'invert.classify', 'invert.classes', 'print.expose', 'print.lights', 'print.preflash', 'print.develop', 'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'measure.stats', 'measure.densitometer']) {
+    for (const op of ['invert.dyes', 'invert.classify', 'invert.classes', 'print.expose', 'print.combine', 'print.densityMask', 'print.develop', 'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'output.frame', 'measure.stats', 'measure.densitometer',
+      'heal', 'clone', 'clarity', 'composite.mix', 'mask.linear', 'mask.ellipse', 'mask.paint', 'mask.luminance', 'mask.constant', 'mask.combine', 'mask.feather', 'mask.invert']) {
       expect(REFERENCE_OPS).toContain(op);
     }
+    // the darkroom's layer ops are terms of the light law, never nodes
+    for (const op of ['expose', 'burn', 'dodge', 'flash', 'preflash', 'densityMask', 'filter']) expect(REFERENCE_OPS).not.toContain(op);
     expect(new RefEngine({ data: nodePacksData() }).capabilities().conventions).toMatch(/^core-v1:opaque/);
   });
 
@@ -52,7 +55,7 @@ describe('reference engine', () => {
   it('the print chain ops reproduce makePrintChain + display on the same dye pixels', async () => {
     const { I, read } = await setup();
     const pat = I('source.pattern', [], { domain: 'film-dyes', width: 4, height: 3, seed: 5 });
-    const x = I('print.lights', [I('print.expose', [pat])], { logH: [0.05, 0, -0.025] });
+    const x = I('print.combine', [I('print.expose', [pat])], { filters: [{ logH: [0.05, 0, -0.025], amount: 1 }] });
     const xyz = I('view.reflect', [I('print.develop', [x], { grade: 2 })], { illuminant: 'D50' });
     const out = I('output.display', [I('view.adapt', [I('view.flare', [xyz], { flare: 0 })])], { rendering: 'print-as-seen', knee: 'oklch' });
     const [dyes, rgb] = [await read(pat), await read(out)];

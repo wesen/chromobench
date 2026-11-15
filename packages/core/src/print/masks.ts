@@ -1,12 +1,13 @@
-// Mask rasterisation (CHB-010 guide §6.5 "Masks", contract 0.2 mask.* ops). A mask is a one-channel
-// image in 0..1 in source (sensor) pixels (DR-3). Masks are vector specs (the mask.* node closure in
-// FrameRecipe.masks), rasterised on demand on the evaluation grid, so preview and export agree.
+// Mask rasterisation (CHB-010 guide §6.5 "Masks"; contract 1.0 mask components, design §25). A mask is a
+// one-channel image in 0..1 in document pixels (DR-3). Masks are vector values (Document.masks, compiled to mask.*
+// nodes), rasterised on demand on the evaluation grid, so preview and export agree. The algebra that folds
+// components (add = max, subtract = v·(1 − c), intersect = v·c) is the contract's maskCombine (pixel.ts).
 //
 // The grid: output pixel p of a w × h result covers the frame region `region`; it reads frame pixel
 // fp = region.x + ⌊(p + ½)·region.w / w⌋ (the engines' nearest-sample rule) and coordinate-based masks
 // are evaluated at that pixel's centre, fp + ½. At full resolution the grid is the frame itself.
 // packages/gpu evaluates the same formulas in WGSL (pointwise.wgsl ops 12–15) and uploads paintMask.
-import { fail, type Box, type Point } from '@chromobench/contract';
+import type { Box, Point } from '@chromobench/contract';
 
 export interface MaskGrid { w: number; h: number; region: Box }
 
@@ -24,8 +25,8 @@ export function gridCentres(g: MaskGrid): { xs: Float64Array; ys: Float64Array }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-/** Linear gradient: 1 at `from`, 0 at `to`, constant beyond (a graduated burn). */
-export function gradientAt(X: number, Y: number, from: Point, to: Point): number {
+/** mask.linear: 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn). */
+export function linearAt(X: number, Y: number, from: Point, to: Point): number {
   const dx = to.x - from.x, dy = to.y - from.y;
   const len2 = dx * dx + dy * dy;
   if (len2 === 0) return 1;
@@ -51,33 +52,10 @@ export function ellipseAt(X: number, Y: number, box: Box, angle_deg: number): nu
   return clamp01(0.5 - (rho - 1) / Math.max(Math.hypot(gx, gy), 1e-12));
 }
 
-// ---- painted masks (mask.paint.strokes, canonical JSON) ---------------------------------------
+// ---- painted masks (mask.paint.strokes: structured, contract 1.0) ---------------------------------
 
-export interface Stroke { points: [number, number, number][]; radius: number; hardness: number; mode: 'add' | 'erase' }
-
-/** Parses mask.paint's `strokes` (contract 0.2): [{kind: 'stroke', points: [[x, y, pressure]…], radius, hardness, mode}]. */
-export function parseStrokes(json: string): Stroke[] {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch {
-    return fail('E_ARG_TYPE', 'mask.paint.strokes is not valid JSON', { hint: 'canonical JSON of [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode}]' });
-  }
-  if (!Array.isArray(raw)) fail('E_ARG_TYPE', 'mask.paint.strokes must be a JSON array');
-  const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-  return raw.map((s, i): Stroke => {
-    const o = s as Record<string, unknown>;
-    const pts = o['points'];
-    if (typeof o !== 'object' || o === null || !Array.isArray(pts) || !pts.every((p) => Array.isArray(p) && p.length >= 2 && fin(p[0]) && fin(p[1]))) {
-      return fail('E_ARG_TYPE', `mask.paint stroke ${i}: points must be [[x, y, pressure]…]`);
-    }
-    const radius = o['radius'], hardness = o['hardness'] ?? 0.5, mode = o['mode'] ?? 'add';
-    if (!fin(radius) || radius <= 0) fail('E_ARG_TYPE', `mask.paint stroke ${i}: radius must be a positive number of source px`);
-    if (!fin(hardness) || hardness < 0 || hardness > 1) fail('E_ARG_TYPE', `mask.paint stroke ${i}: hardness must be in 0..1`);
-    if (mode !== 'add' && mode !== 'erase') fail('E_ARG_TYPE', `mask.paint stroke ${i}: mode must be "add" or "erase"`);
-    return { points: (pts as number[][]).map((p) => [p[0]!, p[1]!, fin(p[2]) ? p[2] : 1]), radius, hardness, mode: mode as 'add' | 'erase' };
-  });
-}
+/** One brush stroke as mask.paint's bound `strokes` items hold it (points [x, y, pressure] in document px). */
+export interface Stroke { points: readonly (readonly [number, number, number])[]; radius: number; hardness: number; mode: 'add' | 'erase' }
 
 /** Distance from (X, Y) to the segment a–b. */
 function segDist(X: number, Y: number, ax: number, ay: number, bx: number, by: number): number {

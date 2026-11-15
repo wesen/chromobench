@@ -63,7 +63,7 @@ describe('reference engine, tabulated mode', () => {
         return node.id;
       };
       const pat = I('source.pattern', [], { domain: 'film-dyes', width: 8, height: 6, seed: 4 });
-      const xyz = I('view.reflect', [I('print.develop', [I('print.lights', [I('print.expose', [pat])], { logH: [0, 0, 0] })])], { illuminant: 'D50' });
+      const xyz = I('view.reflect', [I('print.develop', [I('print.combine', [I('print.expose', [pat])], { filters: [{ logH: [0, 0, 0], amount: 1 }] })])], { illuminant: 'D50' });
       const read = async (id: string) => (await e.evaluate({ id, info: g.get(id)!.info }, { scale: 'full', precision: 'export' })).read();
       return { xyz: await read(xyz), dyes: await read(pat) };
     };

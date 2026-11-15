@@ -1,25 +1,45 @@
-// retouch.heal (CHB-022 guide §7): circular heal and clone spots on the print (print-xyz), the f64 reference.
-// The GPU (packages/gpu kernels/retouch.wgsl) runs the same per-pixel formula on f32 and takes the per-spot
-// seam coefficients from healCoefficients() below, so both engines share every number that is not per pixel.
+// heal and clone (contract 1.0, design §23; CHB-022 guide §7): circular spots on the scan (scanner density) and on
+// the print (print-xyz), the f64 reference. The GPU (packages/gpu kernels/retouch.wgsl) runs the same per-pixel
+// formula on f32 and takes the per-spot seam coefficients from healCoefficients() below, so both engines share every
+// number that is not per pixel.
 //
-// Per spot, at full-resolution pixel centres p (sensor px of the un-oriented source):
+// Per spot, at full-resolution pixel centres p (document px):
 //   d = p − target, q = source + d                      (the source disc is the target disc moved)
 //   alpha = opacity · (1 − smoothstep(r(1 − feather), r, |d|))
-//   clone:  patch = S(q)                                (S: bilinear in the receiver, pixel-centre convention)
-//   heal:   patch = S(q) · exp(u(d))                    per channel
-//   out     = mix(out, patch, alpha)                    spots in id order (natural sort); a later one covers
+//   clone:  patch = S(q)                                (S: bilinear in the image, pixel-centre convention)
+//   heal:   patch = S(q) · exp(u(d))   in a linear encoding (print-xyz)
+//           patch = S(q) + u(d)        in a log encoding (scanner density: the same seam, since d = −log10 T)
+//   out     = mix(out, patch, alpha)
 //
-// u is the seam correction: the harmonic function on the disc whose boundary values are the log ratio of the
-// target's surroundings to the source's, f(θ) = log T(target + ρ e_θ) − log S(source + ρ e_θ), averaged over
-// three rings ρ = r + ½, r + 1½, r + 2½. Instead of an iterative Laplace solve (CHB-006's harmonic() on a
-// pixel grid), the disc's exact solution is used: the Poisson integral, i.e. the boundary's Fourier series
-// damped by (|d| / R)^n, R = r + 1½, with M harmonics and Lanczos σ-factors against ringing. It is closed
-// form, so the result does not depend on tiles, the order of evaluation or the engine; the multiplicative
-// (log XYZ) offset keeps the source's texture and matches brightness and colour (guide §7.2). Near paper
-// black XYZ stays positive (a print's Y is ≥ ~0.003), and values are floored at EPS before the log.
+// u is the seam correction: the harmonic function on the disc whose boundary values are the log ratio (linear) or
+// the difference (log encoding) of the target's surroundings and the source's, f(θ) = g(T(target + ρ e_θ)) −
+// g(S(source + ρ e_θ)), averaged over three rings ρ = r + ½, r + 1½, r + 2½. Instead of an iterative Laplace solve,
+// the disc's exact solution is used: the Poisson integral, i.e. the boundary's Fourier series damped by (|d| / R)^n,
+// R = r + 1½, with M harmonics and Lanczos σ-factors against ringing. It is closed form, so the result does not
+// depend on tiles, the order of evaluation or the engine; the multiplicative (log XYZ) offset keeps the source's
+// texture and matches brightness and colour (guide §7.2). Near paper black XYZ stays positive (a print's Y is
+// ≥ ~0.003), and linear values are floored at EPS before the log.
 //
-// Every spot reads the receiver (the image before retouching), never another spot's result (guide §6.2).
-import type { RetouchSpot } from '@chromobench/contract';
+// Spots apply in order, each reading the image as the spots before it left it (contract 1.0, CC-019): a run of
+// single-spot layers and the coalesced node are the same pixels by definition. Within one spot every read (the seam
+// rings and the source disc) sees the image before that spot.
+
+/** One spot of the heal and clone ops (contract 1.0 `spots` items, document px). */
+export interface Spot {
+  x: number;
+  y: number;
+  r: number;
+  src: { x: number; y: number };
+  /** Soft edge as a fraction of r. */
+  feather: number;
+  opacity: number;
+}
+
+/** heal matches the seam; clone copies. */
+export type RepairMode = 'heal' | 'clone';
+
+/** How the seam correction combines: multiplicative in a linear encoding, additive in a log encoding (density). */
+export type SeamEncoding = 'linear' | 'log';
 
 /** Angles on the ring. */
 export const HEAL_N = 32;
@@ -32,22 +52,6 @@ export const HEAL_R_OFFSET = 1.5;
 const EPS = 1e-6;
 /** Pixels a spot's window extends beyond r (rings, bilinear neighbour, margin). */
 export const HEAL_WINDOW_MARGIN = 4;
-
-export interface Spot extends RetouchSpot { id: string }
-
-/** Natural order of spot ids (s2 before s10), the order spots are composited in. */
-export function spotOrder(a: string, b: string): number {
-  return a.localeCompare(b, 'en', { numeric: true });
-}
-
-/** The enabled spots of retouch.heal's `spots` argument (canonical JSON of the record), in composite order. */
-export function parseSpots(json: string | undefined | null): Spot[] {
-  const rec = JSON.parse(json || '{}') as Record<string, RetouchSpot>;
-  return Object.entries(rec)
-    .filter(([, s]) => s && s.enabled !== false && s.r > 0 && s.opacity > 0)
-    .sort(([a], [b]) => spotOrder(a, b))
-    .map(([id, s]) => ({ ...s, id }));
-}
 
 /** A sampler of integer pixel coordinates inside the frame (the caller's image, any layout). */
 export type PixelAt = (x: number, y: number, k: number) => number;
@@ -71,11 +75,12 @@ export function spotAlpha(dist: number, r: number, feather: number, opacity: num
 }
 
 /**
- * The seam correction's coefficients for `channels` channels: for n = 0 … M, a_n then b_n, each a
+ * The seam correction's coefficients for `channels` channels (`encoding`: what the boundary values are, see the
+ * header): for n = 0 … M, a_n then b_n, each a
  * `channels`-vector (b_0 = 0), already multiplied by the Lanczos σ-factor and with a_0 halved.
  * Layout: c[(2n + j) · channels + k], j = 0 (cos) or 1 (sin).
  */
-export function healCoefficients(at: PixelAt, W: number, H: number, spot: Pick<RetouchSpot, 'x' | 'y' | 'r' | 'src'>, channels: number): Float64Array {
+export function healCoefficients(at: PixelAt, W: number, H: number, spot: Pick<Spot, 'x' | 'y' | 'r' | 'src'>, channels: number, encoding: SeamEncoding = 'linear'): Float64Array {
   const N = HEAL_N, M = HEAL_M;
   const f = new Float64Array(N * channels);
   for (let i = 0; i < N; i++) {
@@ -87,7 +92,7 @@ export function healCoefficients(at: PixelAt, W: number, H: number, spot: Pick<R
         const rho = spot.r + dr;
         const t = bilinearAt(at, W, H, spot.x + rho * cx, spot.y + rho * sy, k);
         const q = bilinearAt(at, W, H, spot.src.x + rho * cx, spot.src.y + rho * sy, k);
-        s += Math.log(Math.max(t, EPS)) - Math.log(Math.max(q, EPS));
+        s += encoding === 'log' ? t - q : Math.log(Math.max(t, EPS)) - Math.log(Math.max(q, EPS));
       }
       f[i * channels + k] = s / HEAL_RINGS.length;
     }
@@ -130,7 +135,7 @@ export function healOffset(c: ArrayLike<number>, channels: number, k: number, dx
 }
 
 /** The sensor-pixel box a spot changes (its target disc), clamped to the frame; null when outside. */
-export function spotBox(s: Pick<RetouchSpot, 'x' | 'y' | 'r'>, W: number, H: number): { x0: number; y0: number; x1: number; y1: number } | null {
+export function spotBox(s: Pick<Spot, 'x' | 'y' | 'r'>, W: number, H: number): { x0: number; y0: number; x1: number; y1: number } | null {
   const x0 = Math.max(0, Math.floor(s.x - s.r)), y0 = Math.max(0, Math.floor(s.y - s.r));
   const x1 = Math.min(W, Math.ceil(s.x + s.r)), y1 = Math.min(H, Math.ceil(s.y + s.r));
   return x1 > x0 && y1 > y0 ? { x0, y0, x1, y1 } : null;
@@ -145,29 +150,47 @@ export function spotWindow(cx: number, cy: number, r: number, W: number, H: numb
 }
 
 /**
- * Heals and clones `spots` on an interleaved c-channel image (W × H, the whole frame). Returns a new array;
- * `src` is not modified. Channels beyond the first three are cloned without the seam gain.
+ * Heals or clones `spots` in order on an interleaved c-channel image (W × H, the whole frame): each spot reads the
+ * image as the spots before it left it. Returns a new array; `src` is not modified. Channels beyond the first three
+ * are copied without the seam correction. Spots with r ≤ 0 or opacity ≤ 0 change nothing.
  */
-export function retouch(src: Float64Array, W: number, H: number, c: number, spots: readonly Spot[]): Float64Array {
+export function retouch(src: Float64Array, W: number, H: number, c: number, spots: readonly Spot[], mode: RepairMode, encoding: SeamEncoding = 'linear'): Float64Array {
   const out = src.slice();
-  const at: PixelAt = (x, y, k) => src[(y * W + x) * c + k]!;
+  const at: PixelAt = (x, y, k) => out[(y * W + x) * c + k]!;
   const nc = Math.min(3, c);
   for (const s of spots) {
+    if (!(s.r > 0 && s.opacity > 0)) continue;
     const box = spotBox(s, W, H);
     if (!box) continue;
-    const coef = s.mode === 'heal' ? healCoefficients(at, W, H, s, nc) : null;
+    const coef = mode === 'heal' ? healCoefficients(at, W, H, s, nc, encoding) : null;
+    // every value of this spot is computed from the image before it, then written
+    const bw = box.x1 - box.x0;
+    const patch = new Float64Array(bw * (box.y1 - box.y0) * (c + 1));
     for (let y = box.y0; y < box.y1; y++) {
       for (let x = box.x0; x < box.x1; x++) {
         const dx = x + 0.5 - s.x, dy = y + 0.5 - s.y;
+        const j = ((y - box.y0) * bw + (x - box.x0)) * (c + 1);
         const a = spotAlpha(Math.hypot(dx, dy), s.r, s.feather, s.opacity);
+        patch[j + c] = a;
         if (a <= 0) continue;
         const qx = s.src.x + dx, qy = s.src.y + dy;
-        const o = (y * W + x) * c;
         for (let k = 0; k < c; k++) {
           let p = bilinearAt(at, W, H, qx, qy, k);
-          if (coef && k < nc) p *= Math.exp(healOffset(coef, nc, k, dx, dy, s.r));
-          out[o + k] = (1 - a) * out[o + k]! + a * p;
+          if (coef && k < nc) {
+            const u = healOffset(coef, nc, k, dx, dy, s.r);
+            p = encoding === 'log' ? p + u : p * Math.exp(u);
+          }
+          patch[j + k] = p;
         }
+      }
+    }
+    for (let y = box.y0; y < box.y1; y++) {
+      for (let x = box.x0; x < box.x1; x++) {
+        const j = ((y - box.y0) * bw + (x - box.x0)) * (c + 1);
+        const a = patch[j + c]!;
+        if (a <= 0) continue;
+        const o = (y * W + x) * c;
+        for (let k = 0; k < c; k++) out[o + k] = (1 - a) * out[o + k]! + a * patch[j + k]!;
       }
     }
   }
