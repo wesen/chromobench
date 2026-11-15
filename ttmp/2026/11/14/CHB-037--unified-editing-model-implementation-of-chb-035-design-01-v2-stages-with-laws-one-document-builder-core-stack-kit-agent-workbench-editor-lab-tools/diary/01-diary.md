@@ -429,3 +429,54 @@ deleted `EditLog` (two tests, one demo script) were moved onto the log by me.
 
 ### Technical details
 - P3 diary `07-phase-p3-gpu.md`, P4 diary `08-phase-p4-history.md`.
+
+## Step 8: P6a merged — the agent's DSL on the unified model
+
+The DSL and the agent now speak documents, cuts and the log: cuts are handles, what-ifs go through the one compiler
+(`printChain`, the drifted third copy of the exposure semantics, is deleted), edits are built with the contract's
+builders and proposed through the log as one submission per eval, and `h.look()` is `h.show()`. The full generated
+docs check passes again.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P6a, route its follow-ups, keep P5b-1 informed.
+
+**Inferred user intent:** An agent with only `eval` on the same core as the studio.
+
+**Commit (code):** b661c48 — "Merge P6a DSL and agent on contract 1.0 (…)"
+
+### What I did
+- Merged with `merge-phase.sh` (changelog only); `pnpm install --frozen-lockfile --prefer-offline` rc=0 (P6a added
+  the values dependency to dsl and agent).
+- Sent P5b-1 the API changes it must absorb (chat host `AgentDocs`, worker `{ docs }`, looks provider, two tests).
+- Routed P6a's requests outside its packages (the "look" → "show" renames in the contract, `log.commit` with `why`)
+  to P6b instead of doing them now: the renames reach the chat kit that P5b-1 is rewriting.
+
+### Why
+- Avoid editing files a running phase agent owns.
+
+### What worked
+- P6a's §7 grey-card trace gives identical numbers through the new path.
+
+### What didn't work
+- N/A
+
+### What I learned
+- A value with a `then` method is a thenable inside an async eval body; P6a made "several changes" an array.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- One log submission per eval removes partial approval of one eval's changes (a behaviour change, by design).
+
+### What should be done in the future
+- Merge P5b-1 when it reports; then P5b-2, P6b, P7, P8.
+
+### Code review instructions
+- `diary/10-phase-p6a-dsl.md`; `packages/dsl/src/prelude/`, `packages/dsl/src/host/`.
+
+### Technical details
+- Checks after the merge are in this step's commit message.

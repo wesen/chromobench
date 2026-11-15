@@ -393,3 +393,18 @@ and proposed (`log.propose`, batches via `plan`); `EvalResult.transactions`; `h.
 (`pnpm gen`; the full run works once dsl and agent compile). Acceptance: dsl and agent typecheck and vitest green;
 `pnpm gen:check` green; the agent examples rewritten. The workbench surface `wb` (commands, state, layouts, screen) is
 P6b, after P5b.
+
+### Amendments after P6a (main agent)
+
+- The DSL (diary `10-phase-p6a-dsl.md`): cuts as handles (`frame.print()`, `frame.cut(name)`, …), what-ifs
+  `frame.with(change).print()`, builders `layer/group/mask/coll`, changes `set/insert/remove/move` (several = an
+  array), `frame.propose(changes, { why })` → one log submission per eval (ask proposes, auto commits, read-only
+  refused; an auto edit whose document changed during the eval becomes a proposal with a CONFLICT warning),
+  `h.show()`. The session's host is a log (`DslSessionOptions.history`).
+- **For P6b**: rename the contract's eval `Look`, `EvalResult.looks`, `EVAL_LIMITS.looks` and the `LOOKS` warning to
+  "show" words (contract + dsl + agent + chat consumers); add `log.commit(x, { why })` in values (today `source.why`);
+  consider a lighter worker snapshot than `Log.load` per change for long sessions; `wb` as one more prelude global
+  with natives in `host/`, layouts crossing the sandbox as data (`mkValue` pattern).
+- **For P7**: the DSL compiles without a LinkContext (roll/look links fail with E_LINK there); measuring bindings need
+  the async `compileMeasured` while DSL cuts are synchronous; named looks should become link inserts and
+  `LooksProvider` go.
