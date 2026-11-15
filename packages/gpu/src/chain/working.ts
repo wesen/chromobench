@@ -1,22 +1,27 @@
 // The WGSL of the working encodings and blend modes (kernels/working.wgsl) with core's matrices as constants
-// (core composite/working.ts): one definition of OkLab and the working RGB for both engines. Prepended to the
-// pointwise and combine kernels.
+// (core composite/working.ts): one definition of OkLab and the working RGB for both engines. The pointwise and
+// combine kernels include it (`//! include working.wgsl`, linked by linkKernel).
 import { BLEND_MODES, encodingOfDomain, type BlendMode, type Domain } from '@chromobench/contract';
-import { OK_M1, OK_M1_INV, OK_M2, OK_M2_INV } from '@chromobench/core';
 import workingCode from '../../kernels/working.wgsl?raw';
 import type { Mat3 } from '../tables/inputs.ts';
+import { linkWgsl } from './wgsl-link.ts';
 
-/** A WGSL mat3x3<f32> literal of a row-major matrix (WGSL constructs column by column). */
-export const wgslMat3 = (M: readonly (readonly number[])[]): string =>
-  `mat3x3<f32>(${[0, 1, 2].map((c) => `vec3<f32>(${M[0]![c]}, ${M[1]![c]}, ${M[2]![c]})`).join(', ')})`;
+export { wgslMat3 } from './wgsl-link.ts';
 
-export const WORKING_WGSL: string = [
-  `const WK_M1 = ${wgslMat3(OK_M1)};`,
-  `const WK_M1I = ${wgslMat3(OK_M1_INV)};`,
-  `const OK_M2 = ${wgslMat3(OK_M2)};`,
-  `const OK_M2I = ${wgslMat3(OK_M2_INV)};`,
-  workingCode,
-].join('\n');
+/** The kernel files other kernels include (`//! include <file>`, chain/wgsl-link.ts). */
+const KERNEL_FILES: Readonly<Record<string, string>> = { 'working.wgsl': workingCode };
+
+/** A kernel's WGSL with the modules it includes prepended (the engine's pipelines compile this). */
+export function linkKernel(code: string): string {
+  return linkWgsl(code, (name) => {
+    const f = KERNEL_FILES[name];
+    if (f === undefined) throw new Error(`WGSL include ${name}: not a kernel module (chain/working.ts KERNEL_FILES)`);
+    return f;
+  });
+}
+
+/** kernels/working.wgsl linked with its constants (tests). */
+export const WORKING_WGSL: string = linkKernel(workingCode);
 
 /** The blend code of kernels/working.wgsl: the mode's index in BLEND_MODES. */
 export const blendCode = (b: unknown): number => {

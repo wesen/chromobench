@@ -1,3 +1,4 @@
+//! include working.wgsl
 // Multi-input steps of the GPU engine (contract 1.0), one pass each on output-grid textures a, b and a mask m:
 // the light law of print.combine as passes in linear H (src/engine/light.ts plans them; the formula is the
 // contract's lightH), print.densityMask's transmittance and density, composite.mix (mixPixel), mask.combine

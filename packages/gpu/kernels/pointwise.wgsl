@@ -1,3 +1,4 @@
+//! include working.wgsl
 // Pointwise chain kernel (guide §5.5, decision D2 adapted): one compute kernel evaluates a *program*
 // of up to 12 pointwise ops held in a uniform, so every run of pointwise ops between two
 // neighbourhood operators is one dispatch, and stopping the program early gives any tap. Branches

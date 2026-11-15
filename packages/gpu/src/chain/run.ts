@@ -5,9 +5,9 @@ import type { GpuRuntime } from '../device.ts';
 import type { CurveRow } from '../physics/core.ts';
 import type { TableManager } from '../tables/manager.ts';
 import { exactBits, LOOKUP, packOpData, packProgram, packSpectra, type Segment } from './program.ts';
-import { WORKING_WGSL } from './working.ts';
+import { linkKernel } from './working.ts';
 
-export const POINTWISE_WGSL = `${WORKING_WGSL}\n${pointwiseCode}`;
+export const POINTWISE_WGSL = linkKernel(pointwiseCode);
 
 export interface RunTarget {
   /** Output size. */

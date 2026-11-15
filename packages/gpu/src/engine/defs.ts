@@ -2,7 +2,7 @@
 import { ChromobenchError, type Box, type Diagnostic, type Node } from '@chromobench/contract';
 import pack16Code from '../../kernels/pack16.wgsl?raw';
 import combineCode from '../../kernels/combine.wgsl?raw';
-import { WORKING_WGSL } from '../chain/working.ts';
+import { linkKernel } from '../chain/working.ts';
 import type { Segment } from '../chain/program.ts';
 import { FILM_OPS } from '../film.ts';
 
@@ -32,7 +32,7 @@ export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.
 export const FUSIBLE_TOP_OPS: ReadonlySet<string> = new Set(['composite.encode', 'exposure', 'curve', 'levels', 'hsl', 'vibrance', 'grade', 'mixer', 'vignette']);
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run on a downsampled field (engine/textures.ts gaussianBlur). */
 export const MAX_PASS_SIGMA = 32;
-export const COMBINE_WGSL = `${WORKING_WGSL}\n${combineCode}`;
+export const COMBINE_WGSL = linkKernel(combineCode);
 
 /** The output grid every materialised texture of one evaluation shares. */
 export interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export' }
