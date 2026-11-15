@@ -3,21 +3,26 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo, type Vec3 } from '@chromobench/contract';
+import { compile, edit, Graph, newDocument, type Document, type FrameKind, type SourceInfo, type Vec3 } from '@chromobench/contract';
+import { set } from '@chromobench/values';
+import { darkroomMedium, layerOf, lightsOf, mainExposure, MODE_PATH } from '@chromobench/studio-kit';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { LibRawDecoder } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
 import { decodePhoto } from '../src/host/decode.ts';
-import { FIRST_PRINT_AIM, firstPrint, firstPrintAim, integratedExposure, LAB_SUBJECT_FAILURE, measureExposure, photoRecipe } from '../src/host/first-print.ts';
+import { FIRST_PRINT_AIM, firstPrint, firstPrintAim, integratedExposure, LAB_SUBJECT_FAILURE, measureExposure, photoDocument } from '../src/host/first-print.ts';
 
 const integrate = (latd: Vec3, alpha: number): Vec3 => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3;
 const W = 64, H = 40;
 const mean3 = (v: ArrayLike<number>): number => (v[0]! + v[1]! + v[2]!) / 3;
 const colourOf = (v: ArrayLike<number>): Vec3 => [0, 1, 2].map((k) => v[k]! - mean3(v)) as Vec3;
 const spread = (v: ArrayLike<number>): number => Math.max(v[0]!, v[1]!, v[2]!) - Math.min(v[0]!, v[1]!, v[2]!);
+const timeOf = (d: Document): number => mainExposure(d).time_s;
+const modeOf = (d: Document): string => darkroomMedium(d).mode;
+const autoOf = (d: Document): Record<string, unknown> => layerOf(d, 'lights')!.source;
 
 /** A synthetic source: `pixel(x, y)` gives linear RGB (a photo's scene light, or a negative scan's transmittance). */
-function source(kind: FrameRecipe['kind'], pixel: (x: number, y: number) => readonly number[]): { e: RefEngine; g: Graph; r0: FrameRecipe } {
+function source(kind: FrameKind, pixel: (x: number, y: number) => readonly number[]): { e: RefEngine; g: Graph; r0: Document } {
   const data = new Float32Array(W * H * 3);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) data.set(pixel(x, y), (y * W + x) * 3);
   const sha = (kind === 'digital-raw' ? 'c' : 'e').repeat(64);
@@ -29,8 +34,8 @@ function source(kind: FrameRecipe['kind'], pixel: (x: number, y: number) => read
   e.openDecoded(info, data);
   const g = new Graph();
   g.registerSource(info);
-  const d = defaultRecipe(kind, { sha256: sha, name: kind });
-  return { e, g, r0: kind === 'digital-raw' ? photoRecipe(d, false) : d };
+  const d = newDocument(kind, { sha256: sha, name: kind, width: W, height: H });
+  return { e, g, r0: kind === 'digital-raw' ? photoDocument(d, false) : d };
 }
 
 /** a dim, warm daylight photo: a smooth scene, red above blue (a camera's as-shot colour the print must keep) */
@@ -39,7 +44,7 @@ const warmPhoto = (x: number, y: number): number[] => {
   return [1.3 * m, m, 0.7 * m];
 };
 
-const withMode = (r: FrameRecipe, mode: 'real' | 'normalised'): FrameRecipe => ({ ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, mode } } });
+const withMode = (d: Document, mode: 'real' | 'normalised'): Document => edit(d, [set(MODE_PATH, mode)]).doc;
 
 describe('the first print\'s aim (CHB-031 F30): one setting', () => {
   it('FIRST_PRINT_AIM: a negative integrates to grey; a photo keeps its colour and half its exposure; no subject-failure rule', () => {
@@ -88,14 +93,14 @@ describe('the first print\'s aim (CHB-031 F30): one setting', () => {
       const x = await measureExposure(e, g, r);
       expect(Math.abs(mean3(x))).toBeLessThan(0.01);
       colourOf(x).forEach((c, k) => expect(Math.abs(c - 0.5 * c0[k]!)).toBeLessThan(0.01));
-      expect(r.print.lights.auto.alpha).toBe(0.5);
+      expect(autoOf(r)['alpha']).toBe(0.5);
     }
   });
 
   it('LAB_SUBJECT_FAILURE: a large strong colour does not pull the grey; the grey half of the frame prints grey', async () => {
     // left half a neutral grey, right half a strong green (a lawn): alpha 1 over the whole frame turns the grey magenta
     const { e, g, r0 } = source('digital-raw', (x) => (x < W / 2 ? [0.12, 0.12, 0.12] : [0.03, 0.2, 0.03]));
-    const greyHalf = (r: FrameRecipe): FrameRecipe => ({ ...r, view: { ...r.view, frame: { ...r.view.frame, crop: { x: 2, y: 2, w: W / 2 - 6, h: H - 4 } } } });
+    const greyHalf = (d: Document): Document => ({ ...d, geometry: { ...d.geometry, crop: { x: 2, y: 2, w: W / 2 - 6, h: H - 4 } } });
     const whole = await firstPrint(e, g, r0, { integrate, aim: { density: 1, alpha: 1 } });
     const lab = await firstPrint(e, g, r0, { integrate, aim: { density: 1, alpha: 1, subjectFailure: LAB_SUBJECT_FAILURE } });
     const greyWhole = colourOf(await measureExposure(e, g, greyHalf(whole)));
@@ -106,13 +111,14 @@ describe('the first print\'s aim (CHB-031 F30): one setting', () => {
 });
 
 describe('a photo\'s first print (CHB-031 F31): density from the frame, colour from the camera', () => {
-  it('photoRecipe keeps the layout\'s enlarger mode and takes the as-shot white balance when the camera has one', () => {
-    const d = withMode(defaultRecipe('digital-raw', { sha256: 'f'.repeat(64), name: 'DSC_0001.NEF' }), 'normalised');
-    const r = photoRecipe(d, true);
-    expect(r.print.enlarger.mode).toBe('normalised');
-    expect(r.capture!.whiteBalance.mode).toBe('as-shot');
-    expect(r.source.decode?.mode).toBe('photo');
-    expect(photoRecipe(withMode(d, 'real'), false).capture!.whiteBalance.mode).toBe('daylight');
+  it('photoDocument keeps the layout\'s enlarger mode and takes the as-shot white balance when the camera has one', () => {
+    const d = withMode(newDocument('digital-raw', { sha256: 'f'.repeat(64), name: 'DSC_0001.NEF' }), 'normalised');
+    const r = photoDocument(d, true);
+    const wb = (x: Document): string => (x.stages.scene!.medium as { whiteBalance: { mode: string } }).whiteBalance.mode;
+    expect(modeOf(r)).toBe('normalised');
+    expect(wb(r)).toBe('as-shot');
+    expect(r.source.decode.mode).toBe('photo');
+    expect(wb(photoDocument(withMode(d, 'real'), false))).toBe('daylight');
   });
 
   it('real mode: the density goes into the time, the lights stay equal (the colour untouched), half way to the aim', async () => {
@@ -121,12 +127,12 @@ describe('a photo\'s first print (CHB-031 F31): density from the frame, colour f
     const c0 = colourOf(x0);
     expect(Math.abs(mean3(x0))).toBeGreaterThan(0.2);
     const r = await firstPrint(e, g, r0, { integrate });
-    expect(r.print.enlarger.mode).toBe('real');
-    expect(r.print.enlarger.time_s).not.toBe(10);
-    expect(r.print.lights.auto).toMatchObject({ method: 'integrate', alpha: 0, applied: true });
-    expect(spread(r.print.lights.logH)).toBeLessThan(1e-5);
+    expect(modeOf(r)).toBe('real');
+    expect(timeOf(r)).not.toBe(10);
+    expect(autoOf(r)).toMatchObject({ kind: 'auto', method: 'integrate', alpha: 0, applied: true });
+    expect(spread(lightsOf(r))).toBeLessThan(1e-5);
     // the time carries the density to within half a 1/6-stop grid step
-    expect(Math.abs(mean3(r.print.lights.logH))).toBeLessThanOrEqual(Math.log10(2) / 12 + 1e-9);
+    expect(Math.abs(mean3(lightsOf(r)))).toBeLessThanOrEqual(Math.log10(2) / 12 + 1e-9);
     const x = await measureExposure(e, g, r);
     expect(Math.abs(mean3(x) - 0.5 * mean3(x0))).toBeLessThan(0.01);
     colourOf(x).forEach((c, k) => expect(Math.abs(c - c0[k]!)).toBeLessThan(0.005));
@@ -135,16 +141,16 @@ describe('a photo\'s first print (CHB-031 F31): density from the frame, colour f
     const xf = await measureExposure(e, g, full);
     expect(Math.abs(mean3(xf))).toBeLessThan(0.01);
     colourOf(xf).forEach((c, k) => expect(Math.abs(c - c0[k]!)).toBeLessThan(0.005));
-    expect(Math.log2(10 / full.print.enlarger.time_s)).toBeGreaterThan(Math.log2(10 / r.print.enlarger.time_s) * 1.7);
+    expect(Math.log2(10 / timeOf(full))).toBeGreaterThan(Math.log2(10 / timeOf(r)) * 1.7);
   });
 
   it('normalised mode: the time stays, the three lights move together by the density share', async () => {
     const { e, g, r0 } = source('digital-raw', warmPhoto);
     const x0 = await measureExposure(e, g, withMode(r0, 'normalised'));
     const r = await firstPrint(e, g, withMode(r0, 'normalised'), { integrate });
-    expect(r.print.enlarger.time_s).toBe(10);
-    expect(spread(r.print.lights.logH)).toBeLessThan(1e-5);
-    expect(mean3(r.print.lights.logH)).toBeCloseTo(-0.5 * mean3(x0), 2);
+    expect(timeOf(r)).toBe(10);
+    expect(spread(lightsOf(r))).toBeLessThan(1e-5);
+    expect(mean3(lightsOf(r))).toBeCloseTo(-0.5 * mean3(x0), 2);
     expect(Math.abs(mean3(await measureExposure(e, g, r)) - 0.5 * mean3(x0))).toBeLessThan(0.01);
   });
 });
@@ -161,9 +167,9 @@ describe.skipIf(!existsSync(NEF))('local: a daylight NEF opens near the aim, not
     e.openDecoded(d.info, d.data);
     const g = new Graph();
     g.registerSource(d.info);
-    const before = photoRecipe(defaultRecipe('digital-raw', { sha256: sha, name: 'DSC_8559.NEF' }), d.info.camera?.asShotNeutral !== undefined);
-    const luma = async (r: FrameRecipe): Promise<{ luma: number; rgb: number[] }> => {
-      const top = compile(r, g);
+    const before = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'DSC_8559.NEF' }), d.info.camera?.asShotNeutral !== undefined);
+    const luma = async (r: Document): Promise<{ luma: number; rgb: number[] }> => {
+      const top = compile(r, g).display;
       const n = top.op === 'output.frame' ? g.get(top.inputs[0]!)! : top;
       e.adopt(g.closure(n.id));
       const res = await e.evaluate(n, { scale: 'full', precision: 'preview' });
@@ -176,12 +182,12 @@ describe.skipIf(!existsSync(NEF))('local: a daylight NEF opens near the aim, not
     const a = await luma(before);
     const after = await firstPrint(e, g, before, { integrate });
     const b = await luma(after);
-    console.log(`DSC_8559.NEF ${d.info.width}×${d.info.height}: before ${before.print.enlarger.time_s} s, luma ${a.luma.toFixed(1)} (RGB ${a.rgb.map((v) => v.toFixed(1)).join('/')}, B/R ${(a.rgb[2]! / a.rgb[0]!).toFixed(3)}); after ${after.print.enlarger.time_s} s, lights ${after.print.lights.logH.join(' ')}, luma ${b.luma.toFixed(1)} (RGB ${b.rgb.map((v) => v.toFixed(1)).join('/')}, B/R ${(b.rgb[2]! / b.rgb[0]!).toFixed(3)})`);
-    expect(after.print.enlarger.time_s).toBeLessThan(before.print.enlarger.time_s);
+    console.log(`DSC_8559.NEF ${d.info.width}×${d.info.height}: before ${timeOf(before)} s, luma ${a.luma.toFixed(1)} (RGB ${a.rgb.map((v) => v.toFixed(1)).join('/')}, B/R ${(a.rgb[2]! / a.rgb[0]!).toFixed(3)}); after ${timeOf(after)} s, lights ${lightsOf(after).join(' ')}, luma ${b.luma.toFixed(1)} (RGB ${b.rgb.map((v) => v.toFixed(1)).join('/')}, B/R ${(b.rgb[2]! / b.rgb[0]!).toFixed(3)})`);
+    expect(timeOf(after)).toBeLessThan(timeOf(before));
     expect(b.luma).toBeGreaterThan(a.luma + 15);
     // a daylight street prints light and not washed out (session 03's tester asked for about 2/3 stop: 6.3 s, luma 98)
     expect(b.luma).toBeGreaterThan(80);
     expect(b.luma).toBeLessThan(140);
-    expect(spread(after.print.lights.logH)).toBeLessThan(1e-5);
+    expect(spread(lightsOf(after))).toBeLessThan(1e-5);
   }, 120_000);
 });

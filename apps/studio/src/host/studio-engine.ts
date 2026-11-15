@@ -16,6 +16,9 @@ import {
   type SourceRef, type TableKey, type Vec3,
 } from '@chromobench/contract';
 
+/** A heal spot as ingest's dust detection finds it (ingest's HealSpot, structurally): document px, its source explicit. */
+export interface HealSpot { x: number; y: number; r: number; src: { x: number; y: number }; feather: number; opacity: number }
+
 /** A decoded scan, reduced to the working image the engines compute on. */
 export interface Decoded {
   info: SourceInfo;
@@ -29,11 +32,13 @@ export interface Decoded {
   full: { width: number; height: number };
   /** One line per conditioning step taken on open (for the status line and the diary). */
   notes: string[];
-  /** Rebate box in working-image px from the film layout (CHB-020), for the new recipe's scan.rebate; null = scan.density's own rule. */
+  /** Rebate box in working-image px from the film layout (CHB-020), for the new document's scan medium rebate; null = scan.density's own rule. */
   rebate?: Box | null;
-  /** The holder's veil as scan.flare (percent per channel), and the base as scan.baseT (flare-corrected), from conditionScan (contract 0.3). */
+  /** The holder's veil as the scan medium's flare (percent per channel), and the base as its baseT (flare-corrected), from conditionScan. */
   flare?: Vec3 | null;
   baseT?: Vec3 | null;
+  /** Dust specks found on open (Heal Dust; ingest dustSpots): heal spots in working-image px with their sources. */
+  dust?: HealSpot[] | null;
   /** 'digital-raw': opened as a photo (CHB-012): shot on film by the forward path, no negative conditioning. */
   kind?: 'negative-scan' | 'digital-raw';
   /** What the pixels look like (CHB-027: ingest's guessOpenMode on the working image), whatever the decode mode. */

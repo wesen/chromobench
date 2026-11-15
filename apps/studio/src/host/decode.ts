@@ -1,12 +1,14 @@
 // Decoding a file into the studio's working image (CHB-023, moved out of engines.ts by CHB-027 so the engine
 // worker runs it): packages/ingest decodes (TIFF, PNG, DNG, camera RAW through LibRaw), linearises and
-// area-averages to the working size; a negative scan is then conditioned (film layout, rebate, veil, dust).
+// area-averages to the working size; a negative scan is then conditioned (film layout, rebate, veil) and, with
+// Heal Dust on, its dust specks are found (ingest dustSpots): they become scan-stage heal layers of the frame's
+// first document (a Dust group), so the pixels stay as scanned.
 // A host file (tools/scripts/check-boundaries.ts names it): it imports core and ingest. Runs in the engine
 // worker (host/engine-worker.ts) and, with ?worker=0, on the main thread (host/engines.ts).
 import type { Box, Orientation, SourceInfo, Vec3 } from '@chromobench/contract';
-import { DEFAULT_SIGMA_D, rebateBox } from '@chromobench/core';
+import { rebateBox } from '@chromobench/core';
 import {
-  conditionScan, decodeAsync, detectSpecks, guessOpenMode, heal, linearise, region, rollBase, sigmaD, sourceInfo, spotsMask, stripFrames,
+  conditionScan, decodeAsync, dustSpots, guessOpenMode, linearise, region, rollBase, sourceInfo, stripFrames,
   type FilmLayout, type FrameBase, type RawDecoder, type RawImage,
 } from '@chromobench/ingest';
 import { analysisSha, orientPixels, type Decoded as DecodedMeta, type OpenGuess } from './studio-engine.ts';
@@ -19,7 +21,7 @@ type Decoded = DecodedMeta & { data: Float32Array };
 export interface DecodeOptions {
   /** Working image long side (0 = the file's own size). */
   long: number;
-  /** Detect and heal dust specks in a scan (slow on big scans). */
+  /** Find dust specks in a scan (slow on big scans): Decoded.dust, heal spots in working-image px. */
   dust: boolean;
   /** The bases of the roll opened so far (conditioning reads the roll's veil; the new frame is added). */
   roll: Map<string, FrameBase>;
@@ -36,22 +38,6 @@ function guessOf(raw: RawImage, data: Float32Array, w: number, h: number, name: 
   const wb = mode === 'scan' && raw.meta.format === 'raw' ? raw.meta.camera?.daylightMultipliers ?? null : null;
   const g = guessOpenMode(data, w, h, { name, format: raw.meta.format, wb, layout });
   return { kind: g.kind, confident: g.confident, why: g.why };
-}
-
-/** Dust in scanner density: detect (ingest detectSpecks), heal (patch), back to transmittance. */
-export function healDust(rgb: Float32Array, w: number, h: number, Treb: Vec3): number {
-  const n = w * h;
-  const D = [0, 1, 2].map((k) => {
-    const p = new Float32Array(n);
-    for (let i = 0; i < n; i++) p[i] = -Math.log10(Math.max(rgb[i * 3 + k]!, 1e-6) / Treb[k]!);
-    return p;
-  });
-  const sigma = sigmaD(rgb, w, h, Treb) ?? DEFAULT_SIGMA_D;
-  const found = detectSpecks(D, w, h, sigma).spots.filter((s) => s.score >= 0.5);
-  if (!found.length) return 0;
-  const healed = heal(D, w, h, spotsMask(found, w, h), { marginPx: 1, method: 'patch' }).planes;
-  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) rgb[i * 3 + k] = Treb[k]! * 10 ** -healed[k]![i]!;
-  return found.length;
 }
 
 /**
@@ -165,16 +151,16 @@ export async function decodeScan(bytes: Uint8Array, sha256: string, name: string
   const d = scanWorking(raw, lin, sha256, name, o);
   if (!o.analysisLong || o.long === o.analysisLong) return d;
   // the first print's analysis image (CHB-034 fusz): the working image a decode at the analysis size makes, so it is
-  // the CPU engine's. One frame without dust healing: the file area-averaged to that size (what that decode's pixels
-  // are). A strip (sized for its frames, F20) or healed dust: that decode's conditioning runs again at that size, on a
-  // copy of the roll (≈ 0.25 s more in the worker for a 6 MP strip)
-  if (!d.frames && !o.dust) {
+  // the CPU engine's. One frame: the file area-averaged to that size (what that decode's pixels are; dust is a layer
+  // of the document, not in the pixels). A strip (sized for its frames, F20): that decode's conditioning runs again
+  // at that size, on a copy of the roll (≈ 0.25 s more in the worker for a 6 MP strip)
+  if (!d.frames) {
     const sa = Math.min(1, o.analysisLong / Math.max(lin.width, lin.height));
     const aw = Math.max(1, Math.round(lin.width * sa)), ah = Math.max(1, Math.round(lin.height * sa));
     const data = region(lin, { x: 0, y: 0, w: lin.width, h: lin.height }, aw, ah, { channels: 3 });
     return withAnalysis(d, sha256, { ...d, info: { ...d.info, width: aw, height: ah }, data, frames: null });
   }
-  const a = scanWorking(raw, lin, sha256, name, { ...o, long: o.analysisLong, roll: new Map(o.roll) });
+  const a = scanWorking(raw, lin, sha256, name, { ...o, dust: false, long: o.analysisLong, roll: new Map(o.roll) });
   return withAnalysis(d, sha256, a);
 }
 
@@ -190,10 +176,10 @@ function scanWorking(raw: RawImage, lin: ReturnType<typeof linearise>, sha256: s
     ? `camera RAW${cam} via LibRaw, scan mode, CFA-binned to ${W}×${H}`
     : `${raw.meta.format.toUpperCase()} ${W}×${H}, ${raw.bits}-bit`];
   if (s < 1) notes.push(`working image ${w}×${h}`);
-  // Film layout (CHB-020, contract 0.3): the pixels stay as scanned. The holder's veil goes into the recipe as
-  // scan.flare (per channel, percent) and the measured base as scan.baseT, so the engine removes the flare and
-  // the preview, the export and the roll analysis all see the same chain; the rebate box (film outside the image
-  // frame, never a sprocket hole or the holder) goes into scan.rebate. A frame with no holder gets the veil of
+  // Film layout (CHB-020, contract 0.3): the pixels stay as scanned. The holder's veil goes into the document as
+  // the scan medium's flare (per channel, percent) and the measured base as its baseT, so the engine removes the
+  // flare and the preview, the export and the roll analysis all see the same chain; the rebate box (film outside the
+  // image frame, never a sprocket hole or the holder) goes into its rebate. A frame with no holder gets the veil of
   // the roll opened so far.
   const rollVeil = rollBase([...roll.values()].filter((f) => f.id !== sha256)).veil;
   const c = conditionScan(data, w, h, { id: sha256, rollVeil, subtract: false });
@@ -202,7 +188,7 @@ function scanWorking(raw: RawImage, lin: ReturnType<typeof linearise>, sha256: s
   if (guess.kind === 'negative' || !guess.confident) roll.set(sha256, c.frame);
   else roll.delete(sha256);
   const rb: Box = c.rebate ?? rebateBox(w, h, 3, data);
-  // the base as scanned (veil still in): the dust healer measures density against it
+  // the base as scanned (veil still in): the dust detection measures density against it
   const Treb: Vec3 = c.layout.rebate?.Traw ?? ([0, 1, 2].map((k) => {
     let t = 0, m = 0;
     for (let y = rb.y; y < rb.y + rb.h; y++) for (let x = rb.x; x < rb.x + rb.w; x++) { t += data[(y * w + x) * 3 + k]!; m++; }
@@ -246,13 +232,14 @@ function scanWorking(raw: RawImage, lin: ReturnType<typeof linearise>, sha256: s
     w = w2;
     h = h2;
   }
-  if (o.dust) notes.push(`dust: ${healDust(data, w, h, Treb)} specks healed`);
+  const dust = o.dust ? dustSpots(data, w, h, Treb) : null;
+  if (dust) notes.push(`dust: ${dust.length} specks found (heal layers in the scan stage)`);
   const info0 = sourceInfo(sha256, raw, lin);
   const info: SourceInfo = {
     ...info0, width: w, height: h, channels: 3,
     notes: [...info0.notes, { code: 'W_DECODE_NOTE', message: notes.join('; ') }],
   };
-  return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT, kind: 'negative-scan', guess, frames: boxes };
+  return { info, data, full: { width: W, height: H }, notes, rebate, flare: c.flare, baseT, kind: 'negative-scan', guess, frames: boxes, ...(dust ? { dust } : {}) };
 }
 
 /**

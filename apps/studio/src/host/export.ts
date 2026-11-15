@@ -1,10 +1,11 @@
-// Export (CHB-023, on CHB-011's packages/output since the CHB-019 migration): the committed print of a frame,
-// compiled for the export space (exportNode), evaluated tile by tile at export precision and encoded as a 16-bit
-// TIFF, a 16-bit PNG or an 8-bit PNG with its ICC profile (exportFrame). The file goes to the browser's save
-// picker where there is one (Chrome, Edge), else it is downloaded. Sizes are the working image's (the engine's
-// source); `?long=0` makes that the file's own size on the GPU.
-import { sha256Hex, type Engine, type ExportSettings, type FrameRecipe, type Graph, type OutputSpaceId } from '@chromobench/contract';
-import { exportFrame, exportNode, MemorySink, pickerAvailable, pickerSink, type ByteSink, type EncodedFile, type ExportProgress } from '@chromobench/output';
+// Export (CHB-023, on CHB-011's packages/output since the CHB-019 migration; CHB-037: on documents): the committed
+// document of a frame, compiled for the export space (exportNode: the display cut), evaluated tile by tile at export
+// precision and encoded as a 16-bit TIFF, a 16-bit PNG or an 8-bit PNG with its ICC profile (exportFrame). The file
+// carries the document's hash (documentSha256) in its metadata. The file goes to the
+// browser's save picker where there is one (Chrome, Edge), else it is downloaded. Sizes are the working image's
+// (the engine's source); `?long=0` makes that the file's own size on the GPU.
+import type { Document, Engine, ExportSettings, Graph, OutputSpaceId } from '@chromobench/contract';
+import { documentPayload, exportFrame, exportNode, MemorySink, pickerAvailable, pickerSink, type ByteSink, type EncodedFile, type ExportProgress } from '@chromobench/output';
 
 export type ExportFormat = Extract<ExportSettings['format'], 'tiff16' | 'png16' | 'png8'>;
 
@@ -24,7 +25,7 @@ export const EXPORT_SPACES: { id: OutputSpaceId; label: string }[] = [
 export interface ExportJob {
   engine: Engine;
   graph: Graph;
-  recipe: FrameRecipe;
+  doc: Document;
   /** the scan's file name (the export is named after it) */
   name: string;
   format: ExportFormat;
@@ -45,9 +46,9 @@ export function exportName(name: string, format: ExportFormat, space: OutputSpac
   return `${base}-print${space === 'srgb' ? '' : `-${space}`}.${format === 'tiff16' ? 'tif' : 'png'}`;
 }
 
-/** The recipe with the export's format and space (the rest of view.output.export as the recipe has it). */
-function withExport(r: FrameRecipe, format: ExportFormat, space: OutputSpaceId): FrameRecipe {
-  return { ...r, view: { ...r.view, output: { ...r.view.output, export: { ...r.view.output.export, format, space } } } };
+/** The document with the export's format and space (the rest of output.export as the document has it). */
+function withExport(d: Document, format: ExportFormat, space: OutputSpaceId): Document {
+  return { ...d, output: { ...d.output, export: { ...d.output.export, format, space } } };
 }
 
 export async function exportPrint(job: ExportJob): Promise<Exported> {
@@ -57,18 +58,19 @@ export async function exportPrint(job: ExportJob): Promise<Exported> {
   const sink: ByteSink = job.to === 'picker' && pickerAvailable()
     ? await pickerSink(fileName, [{ description: job.format === 'tiff16' ? 'TIFF image' : 'PNG image', accept: { [mime]: [job.format === 'tiff16' ? '.tif' : '.png'] } }])
     : new MemorySink();
-  const r = withExport(job.recipe, job.format, job.space);
-  const node = exportNode(r, job.graph);
+  const d = withExport(job.doc, job.format, job.space);
+  const node = exportNode(d, job.graph);
   job.engine.adopt(job.graph.closure(node.id));
-  const json = JSON.stringify(job.recipe);
-  const ex = r.view.output.export;
+  const ex = d.output.export;
   const file = await exportFrame(job.engine, {
     node,
-    settings: { format: job.format, space: job.space, scale: 'full', dpi: ex.dpi, compression: ex.compression, signal: ex.signal === 'none' ? 'none' : 'icc', recipe: 'none' },
+    // the file's metadata names the document by its hash (documentSha256), as it named the recipe; the document
+    // itself is saved with File ▸ Save Document
+    settings: { format: job.format, space: job.space, scale: 'full', dpi: ex.dpi, compression: ex.compression, signal: ex.signal === 'none' ? 'none' : 'icc', document: 'none' },
     sink,
     name: fileName,
-    recipe: { json, sha256: sha256Hex(new TextEncoder().encode(json)) },
-    rendering: r.view.output.rendering,
+    document: documentPayload(job.doc),
+    rendering: d.output.rendering,
     ...(job.signal ? { signal: job.signal } : {}),
     ...(job.onProgress ? { onProgress: job.onProgress } : {}),
   });

@@ -7,14 +7,22 @@
 // engine) | gpu | reference | mock; ?long=N (GPU working image long side, 0 = the file's own size); ?refLong=N (the
 // reference engine's, default 640); ?refMode=exact|tabulated (the reference engine's physics: tabulated previews by default); ?worker=0 (decode and the reference engine on the main thread); ?canvas2d
 // (present without WebGPU); ?nosw (no service worker); ?fresh (a KV in memory: nothing saved).
-import { closest, type Engine, type FrameRecipe, type LoggedMutation, type Mutation } from '@chromobench/contract';
+//
+// CHB-037 P5b-1: a frame's edit is its format-3 document in the store's log (docs.<frame>); the first print, dust
+// and export work on documents; the stored data of earlier versions is cleared once at start (resetStorage).
+import { closest, edit, type Document, type Engine } from '@chromobench/contract';
+import { insert, type Mutation } from '@chromobench/values';
 import { MockEngine } from '@chromobench/engine-mock';
-import { pickerAvailable } from '@chromobench/output';
+import { documentPayload, pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
-import { buildLayout, createStudio, explainError, frameRef, memoryKV, sel, setKnownValues, type CatalogFrame, type FrameEntry, type InitialRecipe, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost } from '@chromobench/studio-kit';
-import { Canvas2DPresenter, type DomViewport } from '@chromobench/shell/dom';
-import { mountStudio } from '@chromobench/studio-kit/dom';
+import {
+  buildLayout, createStudio, DOCS, DUST, explainError, frameRef, mainExposure, memoryKV, read, resetStorage, sel, setKnownValues,
+  STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
+  type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost,
+} from '@chromobench/studio-kit';
+import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
+import { CB_RENDERERS } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
 import '@chromobench/studio-kit/kits/roll/roll.css';
 import '@chromobench/studio-kit/studio-kit.css';
@@ -25,11 +33,10 @@ import '@chromobench/studio-kit/kits/looks/looks.css';
 import { chromogen, craftkit, resolveTheme, type Runtime as ShellRuntime } from '@chromobench/shell';
 import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/layouts';
-import type { BridgePageClient } from '@chromobench/agent';
-import { createStudioChat, type StudioChat } from './host/chat.ts';
+import { lazyChat, type BridgeLike, type LazyChat } from './host/lazy-chat.ts';
 import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
-import { firstPrint, firstPrintAim, photoRecipe, withMeasured } from './host/first-print.ts';
+import { firstPrint, firstPrintAim, photoDocument, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -113,7 +120,7 @@ function report(title: string, lines: string[], html?: string): void {
 interface Host {
   engine: Engine;
   label: string;
-  initial?: InitialRecipe;
+  initial?: InitialDocument;
   notes(sha: string): string[];
   settings: HostSettings | null;
   /** The roll kit's physics service; the mock engine has none (the Roll panels say so). */
@@ -148,11 +155,17 @@ async function startEngine(): Promise<Host> {
     // the first print of a negative and (F31) of a photo, its colour from the camera's white balance (FIRST_PRINT_AIM;
     // ?alpha, ?subjectFailure try another aim for negatives, ?photoDensity for photos). ?filtration=1: the colour goes
     // into the enlarger's filtration and time (CHB-010 bake), not the printer lights
-    initial: (d, g) => {
+    initial: async (d, g) => {
       const n = se.notes.get(d.source.sha256);
-      const r = n?.kind === 'digital-raw' ? photoRecipe(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
+      const doc = n?.kind === 'digital-raw' ? photoDocument(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
       // CHB-034 fusz: metered on the file's analysis image, so both engines propose the same Time
-      return firstPrint(se, g, r, { integrate: h.integrate, aim: firstPrintAim(r.kind, (k) => q.get(k)), analysis: se.analysisOf(r.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
+      const kind = doc.stages.scan ? 'negative-scan' : 'digital-raw';
+      const fp = await firstPrint(se, g, doc, { integrate: h.integrate, aim: firstPrintAim(kind, (k) => q.get(k)), analysis: se.analysisOf(doc.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
+      // Heal Dust: the specks the decode found are scan-stage heal layers in a Dust group (a strip frame takes the
+      // specks on its own frame), so the photographer sees them, turns them off and undoes them
+      const crop = fp.geometry.crop;
+      const spots = (n?.dust ?? []).filter((p) => !crop || (p.x >= crop.x - p.r && p.y >= crop.y - p.r && p.x <= crop.x + crop.w + p.r && p.y <= crop.y + crop.h + p.r));
+      return spots.length && fp.stages.scan ? edit(fp, [insert('stages.scan.stack', DUST, h.dustGroup(spots))]).doc : fp;
     },
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
@@ -200,10 +213,17 @@ async function main(): Promise<void> {
   } catch {
     kv = memoryKV();
   }
+  // the hard cut-off (CHB-037, design D8): edits saved by an earlier studio are cleared once, and he is told
+  const storageReset = await resetStorage(kv).catch(() => false);
   const device = q.has('canvas2d') ? null : await presentDevice();
-  // the layout's enlarger mode for new recipes (CHB-031: real by default, normalised in simple and tiny)
+  // the layout's enlarger mode for new documents (CHB-031: real by default, normalised in simple and tiny)
   const studio: Studio = createStudio({ engine: host.engine, kv, displaySpace: 'srgb', enlarger: def.enlarger ?? 'real', ...(host.initial ? { initial: host.initial } : {}), ...(host.opener ? { opener: host.opener } : {}) });
-  const chat = createStudioChat(studio);
+  let rtNow: Runtime | null = null;
+  const chat: LazyChat = lazyChat(studio, (message, err) => {
+    console.warn(message, err);
+    rtNow?.diagnostics.warn('CB-H420', message, { runtime: true, facts: err ? [msgOf(err)] : [] });
+    rtNow?.chrome.toast(message, { kind: 'warn', ms: 5000, ...(err ? { detail: `Technical: ${msgOf(err)}` } : {}) });
+  });
   const presenter = hostPresenter({
     device,
     onSpace: (space, why) => {
@@ -217,10 +237,25 @@ async function main(): Promise<void> {
   root.innerHTML = '';
   bootTheme.dispose();
   const mountOpts = { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) };
-  let mounted = await mountStudio(built.app, root, studio, mountOpts);
+  /**
+   * Mounts a built layout with the studio's services and renderers, then attaches the studio (studio-kit's
+   * mountStudio, in two halves): `adopt` takes over the log and the mounted documents of the runtime before (View ▸
+   * Layout), before the studio attaches, so the open frames are not opened again in the new runtime.
+   */
+  const mountLayout = async (app: typeof built.app, adopt?: Runtime): Promise<Mounted<unknown>> => {
+    const services = studio.services(mountOpts) as DomServices;
+    services.renderers = { ...CB_RENDERERS, ...(mountOpts.renderers ?? {}) };
+    const m = await mount(app, root, services);
+    if (adopt) m.rt.store.adopt(adopt.store);
+    studio.attach(m.rt);
+    return m;
+  };
+  let mounted = await mountLayout(built.app);
   // the runtime of the layout on screen: View ▸ Layout replaces it (switchLayout), and everything below that is
   // wired to a runtime is registered with eachMount, which runs it now and again for the next runtime (F24)
   let rt = mounted.rt;
+  rtNow = rt;
+  if (storageReset) rt.chrome.toast(STORAGE_RESET_MESSAGE, { kind: 'info', ms: 12000 });
   const perMount: (() => void)[] = [];
   const eachMount = (f: () => void): void => {
     perMount.push(f);
@@ -263,7 +298,7 @@ async function main(): Promise<void> {
   });
   let lastFrame: string | null = null;
   let lastEntry: FrameEntry | undefined;
-  let lastMode = studio.frames.mode;
+  let lastMode = studio.mode;
   let lastLog: unknown = null;
   eachMount(() => {
     lastFrame = null;
@@ -273,8 +308,8 @@ async function main(): Promise<void> {
   function onStore(): void {
     const f = studio.current;
     const e = f ? studio.frames.get(f) : undefined;
-    if (bridge && (f !== lastFrame || studio.frames.mode !== lastMode)) {
-      lastMode = studio.frames.mode;
+    if (bridge && (f !== lastFrame || studio.mode !== lastMode)) {
+      lastMode = studio.mode;
       bridge.update();
     }
     if (f !== lastFrame || e !== lastEntry) {
@@ -288,10 +323,10 @@ async function main(): Promise<void> {
     // a refusal (E_STALE, …) stays in the status line until the frame's log changes
     const a = rt.store.peek(['ui', 'approvals']) as Record<string, { stale?: { code: string; message: string }[] }> | undefined;
     const stale = Object.values(a ?? {}).flatMap((x) => x.stale ?? []);
-    const recipe = f ? rt.store.peek(['recipes', f]) : null;
+    const doc = f ? rt.store.peek([DOCS, f]) : null;
     if (stale.length && !sticky) status(explainError({ diag: stale[0] })?.text ?? stale[0]!.message, { sticky: true, error: true, detail: `Technical: ${stale.map((d) => `${d.code}: ${d.message}`).join('; ')}` });
-    else if (sticky && recipe !== lastLog) sticky = false;
-    lastLog = recipe;
+    else if (sticky && doc !== lastLog) sticky = false;
+    lastLog = doc;
   }
 
   // ── the frame's mode in the status line (CHB-027): Photo / Negative, a click re-opens it the other way (F3, F6);
@@ -452,7 +487,7 @@ async function main(): Promise<void> {
     clearTimeout(thumbTimers.get(id));
     thumbTimers.set(id, setTimeout(() => {
       thumbTimers.delete(id);
-      const r = rt.store.peek(['recipes', id]) as FrameRecipe | undefined;
+      const r = rt.store.peek([DOCS, id]) as Document | undefined;
       if (!r) return;
       // the filmstrip's own thumbnail from the shell's thumbnail cache (same key and size). Only a cache hit: asking
       // for a render here as well made a second evaluation of the same node race the filmstrip's, and idle() then
@@ -473,13 +508,17 @@ async function main(): Promise<void> {
     const ids = (rt.store.peek(['catalog', 'order']) as string[] | undefined) ?? [];
     const got = await Promise.all(ids.map((id) => kv.get<string>('frames', `thumb:${id}`).catch(() => undefined)));
     const writes = ids.flatMap((id, i) => (got[i] && (rt.store.peek(['catalog', 'frames', id]) as CatalogFrame | undefined)?.thumb !== got[i] ? [{ path: ['catalog', 'frames', id, 'thumb'], value: got[i] }] : []));
-    if (writes.length) rt.store.writeDoc(writes, { tier: 'document' });
+    // the library is the view tier (studio-kit cb.studio): no undo step for a thumbnail
+    if (writes.length) rt.store.writeView(writes);
   }
   await savedThumbs();
-  studio.frames.onAdded((e) => {
-    scheduleThumb(e.id, 500);
-    e.log.on((ev) => {
-      if (ev.type !== 'preview' && studio.frames.get(e.id) === e) scheduleThumb(e.id);
+  studio.frames.onAdded((e) => scheduleThumb(e.id, 500));
+  // a frame's document changed (an edit, an undo): its thumbnail again, later
+  eachMount(() => {
+    rt.store.on((paths, info) => {
+      if (info.tier !== 'document' || info.preview) return;
+      const ids = new Set(paths.filter((p) => p[0] === DOCS && p.length > 1).map((p) => String(p[1])));
+      for (const id of ids) if (studio.frames.get(id)) scheduleThumb(id);
     });
   });
   const relinking = new Set<string>();
@@ -503,7 +542,7 @@ async function main(): Promise<void> {
       const file = c.file ?? c.name;
       const d = rt.chrome.dialog({
         title: `Where is ${file}?`,
-        body: el('p', { text: `The library keeps ${c.name} and its recipe, but the browser needs the file again to show it.` }),
+        body: el('p', { text: `The library keeps ${c.name} and its edits, but the browser needs the file again to show it.` }),
         buttons: [{ label: 'Remove from library', value: 'remove' }, { label: 'Not now', value: 'later' }, { label: `Locate ${file}…`, value: 'locate', primary: true }],
       });
       // answered another way (F26): the file opened through File ▸ Open or a drop while the dialog was up. The
@@ -623,8 +662,8 @@ async function main(): Promise<void> {
     },
     folder: lastDir?.name ?? null,
     exportPrint: () => exportDialog(),
-    saveRecipe: () => {
-      const r = recipeJson();
+    saveDocument: () => {
+      const r = documentJson();
       if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
     },
     ...(host.settings ? { dust: (on: boolean) => void (host.settings!.dust = on) } : {}),
@@ -637,9 +676,9 @@ async function main(): Promise<void> {
 
   /**
    * View ▸ Layout (CHB-031 F24): builds the other layout and mounts it in place of this one. The engine, its decoded
-   * sources and the frames' EditLogs stay; the new runtime restores the library, the selection and the workspace
-   * from what this one saved, and the frames are published into it again (Frames.onAdded replays them). A reload
-   * lost every frame whose file the browser could not read again without asking.
+   * sources and the store's log (the frames' documents and the one undo history) stay: the new runtime restores the
+   * library, the selection and the workspace from what this one saved, and adopts the old store's log and mounts
+   * before the studio attaches. A reload lost every frame whose file the browser could not read again without asking.
    */
   let switching = false;
   async function switchLayout(v: string): Promise<void> {
@@ -656,10 +695,10 @@ async function main(): Promise<void> {
       }
       status(`switching to ${def2.label}…`);
       whereIs?.close();
-      studio.route.endBurst();
+      rt.store.commit('Change');
       await studio.flush();
       await rt.save();
-      const past = rt.history;
+      const past = rt;
       mounted.dispose();
       studio.detach();
       def = def2;
@@ -670,7 +709,8 @@ async function main(): Promise<void> {
       const u = new URL(location.href);
       u.searchParams.set('layout', def.id);
       try {
-        mounted = await mountStudio(built.app, root, studio, mountOpts);
+        // one undo history across layouts: Mod+Z after the switch undoes the step made before it
+        mounted = await mountLayout(built.app, past);
       } catch (e) {
         // the old interface is gone: start the new layout the old way (a reload; frames without a file handle close)
         console.error(e);
@@ -678,8 +718,7 @@ async function main(): Promise<void> {
         return;
       }
       rt = mounted.rt;
-      // one undo history across layouts: Mod+Z after the switch undoes the step made before it
-      rt.history.adopt(past);
+      rtNow = rt;
       for (const f of perMount) f();
       await savedThumbs();
       dropOfflineSelection();
@@ -714,23 +753,25 @@ async function main(): Promise<void> {
   const offline = el('span', { id: 'offline-state', class: 'small', title: 'Whether the studio starts without a network connection' });
   statusBarEl.insertBefore(offline, statusEl);
 
-  // ── export and the recipe ──
-  function recipeJson(): { json: string; fileName: string } | null {
+  // ── export and the document ──
+  /** File ▸ Save Document: the selected frame's document (format 3), as JSON beside the scan's name */
+  function documentJson(): { json: string; fileName: string } | null {
     const f = studio.current;
     const e = f ? studio.frames.get(f) : undefined;
-    if (!e) return null;
-    return { json: JSON.stringify(e.log.toJSON(), null, 2), fileName: `${e.name.replace(/\.[^.]+$/, '')}.chromobench.json` };
+    const d = f ? studio.doc(f) : undefined;
+    if (!e || !d) return null;
+    return { json: documentPayload(d).json, fileName: `${e.name.replace(/\.[^.]+$/, '')}.chromobench.json` };
   }
   async function exportFrame(f: string, to: 'picker' | 'memory', o: { format?: ExportFormat; space?: typeof exportState.space } = {}) {
     const e = studio.frames.get(f);
-    if (!e) return null;
-    studio.route.endBurst();
+    const doc = studio.doc(f);
+    if (!e || !doc) return null;
     const format = o.format ?? exportState.format;
     const sp = o.space ?? exportState.space;
     try {
       status('exporting…', { sticky: true });
       const x = await exportPrint({
-        engine: studio.engine, graph: e.graph, recipe: e.log.committed, name: e.name, format, space: sp, to,
+        engine: studio.engine, graph: e.graph, doc, name: e.name, format, space: sp, to,
         onProgress: (p) => status(`exporting: ${p.phase}${p.tilesTotal > 1 ? ` ${p.tilesDone}/${p.tilesTotal}` : ''}`, { sticky: true }),
       });
       status(`exported ${x.name} · ${x.width}×${x.height} · ${x.bits}-bit ${EXPORT_SPACES.find((s) => s.id === sp)?.label ?? sp}`, { sticky: true });
@@ -765,7 +806,7 @@ async function main(): Promise<void> {
   // a selection restored from last time that is not open: cleared, so the first click on it opens its file
   function dropOfflineSelection(): void {
     if (studio.current && sel.isOffline(rt.state, studio.current)) {
-      rt.store.writeDoc([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }], { tier: 'view' });
+      rt.store.writeView([{ path: ['ui', 'selection'], value: { ids: [], primary: null, anchor: null } }]);
       lastSel = null;
     }
   }
@@ -794,8 +835,8 @@ function thumbUrl(image: PresentImage): string | null {
   }
 }
 
-/** Connects to a bridge when one serves this page, or when ?bridge[=ws-url] asks for it. */
-async function startBridge(chat: StudioChat, onStatus: (s: string) => void): Promise<BridgePageClient | null> {
+/** Connects to a bridge when one serves this page, or when ?bridge[=ws-url] asks for it (loads the assistant). */
+async function startBridge(chat: LazyChat, onStatus: (s: string) => void): Promise<BridgeLike | null> {
   const want = q.get('bridge');
   const sameOrigin = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/page`;
   if (want !== null) return chat.connectBridge(want || sameOrigin, onStatus);
@@ -816,14 +857,45 @@ function viewports(rt: Runtime): DomViewport[] {
 
 type ExportFn = (f: string, to: 'picker' | 'memory', o?: { format?: ExportFormat; space?: 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' }) => Promise<{ width: number; height: number; bytes: number; mime: string; name: string; bits: number } | null>;
 
-function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: StudioChat): void {
+function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat): void {
   window.chromobench = makeHook(rt, studio, layout, host, exportFrame, chat);
 }
 
-/** The test and agent hook (CHB-009's surface on studio-kit; CHB-007/008 replace propose with a real DSL eval). */
-function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: StudioChat) {
+/** A frame's entry in the log, as the hook reports it. */
+interface HookEntry {
+  seq: number;
+  by: 'user' | 'agent' | 'auto';
+  approvedBy?: 'user' | 'agent' | 'auto';
+  label: string;
+  why?: string;
+  status: string;
+  batch?: string;
+  mutations: readonly Mutation[];
+}
+
+/**
+ * The test and agent hook, window.chromobench (CHB-009's surface on studio-kit; CHB-037: on documents and the log).
+ * Paths are document paths of the selected frame's document: an entry's params by its id (`main.params.time_s`,
+ * `lights.params.logH`), a medium by its stage (`stages.darkroom.medium.grade`), `geometry.crop`, `output.…`.
+ *
+ *   doc                 the selected frame's document (committed; format 3), or null
+ *   get(path)           a value of it (undefined when the document has no such path)
+ *   set(path, v, label) one transaction by the user (written where the path sits in the document's tree)
+ *   propose(edits, why) an agent's change under the studio's mode: { path: value } or values mutations; the seq
+ *   log                 the store's document log (values Log: every frame, one cursor)
+ *   entries()           the selected frame's entries in effect, oldest first: { seq, by, approvedBy, label, why, status, batch, mutations }
+ *   pending()           its pending proposals, in the same shape
+ *   units()             the number of steps in effect that changed the selected frame
+ *   paths()             the paths of the sets in effect on the selected frame, in order (what its History recorded)
+ *   idle()              waits for renders, saves and queued frames
+ *   app, rt, studio, layout, engine, engineLabel, size(), explain(), run(cmd, …), state(), tool(id), printNode(),
+ *   pixel(x, y), canvasPixel(x, y), presenter(), chainRuns(), chainRunsByShown(), measure(x, y), exportPng(space, format),
+ *   bench(steps), chat (the session), chatService, eval(code)
+ */
+function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat) {
   const cur = (): string => studio.current ?? '';
   const vp = (): DomViewport | null => viewports(rt)[0] ?? null;
+  const docNow = (): Document | null => studio.doc(cur()) ?? null;
   const idle = async (): Promise<void> => {
     for (let i = 0; i < 3; i++) {
       await rt.settle();
@@ -837,7 +909,11 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       await new Promise((r) => setTimeout(r, 0));
     }
   };
-  const recipePath = (f: string, path: string): string[] => ['recipes', f, ...path.split('.')];
+  const entry = (e: ReturnType<Studio['log']['inEffect']>[number]): HookEntry => ({
+    seq: e.seq, by: e.tx.by, label: e.tx.label, status: e.tx.status, mutations: e.tx.mutations,
+    ...(e.approvedBy !== undefined ? { approvedBy: e.approvedBy } : {}), ...(e.why !== undefined ? { why: e.why } : {}), ...(e.tx.batch !== undefined ? { batch: e.tx.batch } : {}),
+  });
+  const has = (): boolean => !!studio.rt && studio.log.has(cur());
   const h = {
     app: rt.app,
     rt,
@@ -850,10 +926,28 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
     get engineLabel(): string {
       return host.label;
     },
-    /** the selected frame's EditLog */
+    /** the store's document log (every frame's document and history) */
     get log() {
-      return studio.frames.get(cur())?.log ?? null;
+      return studio.log;
     },
+    /** the selected frame's document (committed), or null */
+    get doc(): Document | null {
+      return docNow();
+    },
+    /** a value of the selected frame's document at a document path */
+    get: (path: string): unknown => read(docNow(), path),
+    /** the selected frame's entries in effect, oldest first */
+    entries: (): HookEntry[] => (has() ? studio.log.inEffect(cur()).map(entry) : []),
+    /** the selected frame's pending proposals */
+    pending: (): HookEntry[] => (has() ? studio.log.pending(cur()).map(entry) : []),
+    /** the number of steps in effect that changed the selected frame */
+    units: (): number => {
+      if (!has()) return 0;
+      const log = studio.log;
+      return log.steps.slice(0, log.cursor).filter((st) => log.docsOf(st).includes(cur())).length;
+    },
+    /** the paths the selected frame's sets in effect wrote, in order (inserts and removes as their op) */
+    paths: (): string[] => (has() ? studio.log.inEffect(cur()).flatMap((e) => e.tx.mutations.map((m) => (m.op === 'set' ? m.path : m.op))) : []),
     /** the selected frame's source size */
     size: () => {
       const e = studio.frames.get(cur());
@@ -862,19 +956,22 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
     explain: () => rt.explain({ live: true }),
     run: (cmd: string, ...a: unknown[]) => rt.runCommand(cmd, null, ...a),
     state: () => rt.store.peek([]),
-    /** waits for renders, log writes and queued frames */
+    /** waits for renders, saves and queued frames */
     idle,
-    /** one transaction by the user: set(path, value) on the selected frame */
+    /** one transaction by the user: set(path, value) on the selected frame's document */
     set(path: string, value: unknown, label = path): void {
-      rt.ctx().tx(label, (t: { $set(p: string[], v: unknown): void }) => t.$set(recipePath(cur(), path), value));
+      const f = cur();
+      const d = studio.doc(f);
+      if (!d) throw new Error('set: no frame is open');
+      rt.ctx().tx(label, (t: { $set(p: (string | number)[], v: unknown): void }) => t.$set(storePath(f, d, path), value));
     },
     /** select a tool on the viewer ('test-strip', 'ring-around', 'probe', …; null: none) */
     tool: (id: string | null) => rt.selectTool(id),
     /** the node id the main viewer shows for the selected frame's print (the ring-around centre tile is this node) */
     printNode(): string | null {
       const f = cur();
-      const r = rt.store.peek(['recipes', f]);
-      return r ? studio.bridge.key(frameRef(f, r as never).print()) : null;
+      const d = rt.store.peek([DOCS, f]) as Document | undefined;
+      return d ? studio.bridge.key(frameRef(f, d).print()) : null;
     },
     /** display-encoded value of a document pixel in the main viewer's last presented render */
     pixel(x: number, y: number): number[] | null {
@@ -897,16 +994,16 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       const f = cur();
       const e = studio.frames.get(f);
       const runs = (studio.engine as Engine & { runs?: (id: string) => number }).runs;
-      const r = rt.store.peek(['recipes', f]);
-      if (!e || !runs || !r) return [];
-      const top = studio.bridge.lower(frameRef(f, r as never).print()).shown;
-      return e.graph.closure(top.id).map((d) => ({ op: d.op, runs: runs.call(studio.engine, e.graph.adopt([d]).at(-1)!.id) }));
+      const d = rt.store.peek([DOCS, f]) as Document | undefined;
+      if (!e || !runs || !d) return [];
+      const top = studio.bridge.lower(frameRef(f, d).print()).shown;
+      return e.graph.closure(top.id).map((x) => ({ op: x.op, runs: runs.call(studio.engine, e.graph.adopt([x]).at(-1)!.id) }));
     },
     /** densitometer readings at a source pixel of the selected frame's print */
     measure: (x: number, y: number) => {
       const f = cur();
-      const r = rt.store.peek(['recipes', f]);
-      return r ? studio.measure(f, r as never, x, y) : Promise.resolve(null);
+      const d = rt.store.peek([DOCS, f]) as Document | undefined;
+      return d ? studio.measure(f, d, x, y) : Promise.resolve(null);
     },
     /** exports the selected frame's print into memory; returns its description, not the bytes */
     async exportPng(space: 'srgb' | 'display-p3' = 'srgb', format: ExportFormat = 'png8') {
@@ -914,16 +1011,17 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       return x ? { width: x.width, height: x.height, bytes: x.bytes, type: x.mime, fileName: x.name, bits: x.bits } : null;
     },
     /**
-     * Frame times on this machine (CHB-023 stage 5): `steps` drag previews of the enlarger time (draft pass), one
-     * screen pass after release, and an export at the working size. With a scan open: `await chromobench.bench()`.
+     * Frame times on this machine (CHB-023 stage 5): `steps` drag previews of the main exposure's time (draft pass),
+     * one screen pass after release, and an export at the working size. With a scan open: `await chromobench.bench()`.
      */
     async bench(steps = 12) {
       const f = cur();
       const e = studio.frames.get(f);
-      if (!e) return null;
+      const d = studio.doc(f);
+      if (!e || !d) return null;
       await idle();
-      const t0 = e.log.state.print.enlarger.time_s;
-      const path = recipePath(f, 'print.enlarger.time_s');
+      const t0 = mainExposure(d).time_s;
+      const path = storePath(f, d, TIME_PATH);
       const drafts: number[] = [];
       for (let i = 0; i < steps; i++) {
         const a = performance.now();
@@ -944,16 +1042,16 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
         screenMs: Math.round(screen), exportMs: Math.round(exportMs), exported: x ? `${x.width}×${x.height}` : null,
       };
     },
-    /** frame.edit({path: value}) or mutations from an eval: one tx, by 'agent' */
-    propose(edits: Record<string, unknown> | Mutation[], why?: string): LoggedMutation[] {
-      const ms: Mutation[] = Array.isArray(edits) ? edits : Object.entries(edits).map(([path, value]) => ({ op: 'set', path, value }));
+    /** an agent's change on the selected frame: { path: value } (sets) or values mutations; one transaction; its seq */
+    propose(edits: Record<string, unknown> | Mutation[], why?: string): number {
+      const ms: Mutation[] = Array.isArray(edits) ? edits : Object.entries(edits).map(([path, value]) => ({ op: 'set' as const, path, value }));
       return studio.propose(ms, why ? { why } : {});
     },
     chainRunsByShown: () => Object.fromEntries(studio.bridge.runs),
-    /** the assistant's chat session (CHB-008) and its service (connect('demo'), …) */
+    /** the assistant's chat session (CHB-008; empty until the assistant is loaded) and its service */
     chat: chat.session,
     chatService: chat,
-    /** dev entry point: run DSL code in its own worker session on the selected frame (edits are proposals) */
+    /** dev entry point: run DSL code in its own worker session on the selected frame (loads the assistant) */
     eval: (code: string, o: { frame?: string; timeoutMs?: number; signal?: AbortSignal } = {}) => chat.devEval(code, o),
   };
   return h;

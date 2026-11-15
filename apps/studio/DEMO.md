@@ -36,7 +36,7 @@ plus every parameter, the raw journal and the node list.
 - Scans are reduced to a working image (4000 px on the long side on the GPU, 640 px on the reference
   engine, each frame of a strip about as much) on open; the status line shows what was read and the film base it
   found.
-- Each frame's recipe and history are saved in the browser by the file's hash: reopening the same
+- Each frame's document and history are saved in the browser by the file's hash: reopening the same
   file (even renamed or moved) brings its print back. After a reload the strip shows only the frames
   opened again in this session.
 
@@ -60,7 +60,7 @@ plus every parameter, the raw journal and the node list.
   Clipping (blank film, below base, out of gamut; the base and gamut view) — keys 1–4. **Before /
   after** (Tools panel, or `\`) splits the print against the first print.
 - **Densitometer** (Tools panel, or `i`): hover the print (visual density and R G B densities under the
-  cursor, and in the Densitometer panel); `p` pins a probe into the recipe.
+  cursor, and in the Densitometer panel); `p` pins a probe into the document.
 - **History**: every change is one undo step (Ctrl+Z / Shift+Ctrl+Z, Undo/Redo in the top bar); click
   an entry to go back to it; snapshots and restore.
 - **Test strip** (Tools panel, or `t`): five strips of the frame, each printed with its own time
@@ -69,7 +69,7 @@ plus every parameter, the raw journal and the node list.
   direction plus lighter/darker; click the one that looks best.
 - **Export** (top bar): TIFF 16-bit, PNG 16-bit or PNG 8-bit in sRGB, Display P3, Adobe RGB or ProPhoto
   RGB with its ICC profile (packages/output), at the working size; Chrome asks where to save.
-  **Save recipe** downloads the recipe and history as JSON.
+  **Save Document** downloads the frame's document (format 3) as JSON.
 - Flags and stars in the Library module; apply the current print settings to selected frames
   (Frame ▸ Apply Print Settings to Selection).
 

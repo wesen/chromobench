@@ -8,13 +8,14 @@
 // CHB-027 (F4): decoding, linearising, the working-image resample and conditioning run in the engine worker for
 // both engines, and so does the reference engine (WorkerEngine proxies it); GpuEngine stays on this thread and gets
 // the decoded pixels back as a transferable. ?worker=0 (HostOptions.worker false) runs everything on this thread.
-import type { Engine, FrameRecipe, Mutation, Vec3, Box } from '@chromobench/contract';
+import type { Box, Document, Engine, Group, Vec3 } from '@chromobench/contract';
+import type { Mutation } from '@chromobench/values';
 import {
-  bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, SCANNER_IDS, scannerForward, type PhysicsData,
+  bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, SCANNER_IDS, scannerForward, type PhysicsData,
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
-  classifyImage, filmLayout, openPrior, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
+  classifyImage, dustGroup, filmLayout, openPrior, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
 } from '@chromobench/ingest';
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import { decodeFile } from './decode.ts';
@@ -53,7 +54,7 @@ export interface HostOptions {
  * (CHB-027): it is chosen per file (HostServices.decode's mode), guessed by ingest's guessOpenMode on 'auto'.
  */
 export interface HostSettings {
-  /** Detect dust specks in scanner density and heal them on open (ingest; off by default, slow on big scans). */
+  /** Find dust specks in scanner density on open (ingest; off by default, slow on big scans): a Dust group of heal layers. */
   dust: boolean;
 }
 
@@ -67,8 +68,10 @@ export interface HostEngine {
   /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
   catalog: Record<string, string[]>;
   integrate: IntegrateToGrey;
-  /** CHB-010: a recipe's printer lights as filtration and time (core's bakeRecipe), for the first print's `bake` option. */
-  bake: (r: FrameRecipe) => Mutation[];
+  /** CHB-010: a document's printer lights as filtration and time (core's bakeLights), for the first print's `bake` option. */
+  bake: (d: Document) => Mutation[];
+  /** The Dust group of heal layers for the specks a decode found (ingest's dustGroup), for the scan stage at id 'dust'. */
+  dustGroup: (spots: Parameters<typeof dustGroup>[0]) => Group;
   settings: HostSettings;
   /** File extensions the decoder accepts. */
   extensions: string[];
@@ -229,7 +232,8 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
   return {
     engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []),
-    bake: (r) => bakeRecipe(r, data, DEFAULT_CONVENTIONS).mutations,
+    bake: (d) => bakeLights(d, data, DEFAULT_CONVENTIONS).mutations,
+    dustGroup: (spots) => dustGroup(spots),
     integrate: (latd, alpha) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3,
     extensions: ['tif', 'tiff', 'dng', 'png', 'jpg', 'jpeg', ...RAW_EXTENSIONS],
     worker: inWorker,

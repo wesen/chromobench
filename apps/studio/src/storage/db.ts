@@ -1,6 +1,6 @@
 // IndexedDB for the studio (CHB-009 guide §5.5; the KV studio-kit's frames, persistence and the host need),
-// through a tiny promise wrapper instead of the idb library. A frame's edit log is one EditLogData record keyed by
-// the source hash; the shell's document and workspace tiers go to 'workspace' (version 2, CHB-019).
+// through a tiny promise wrapper instead of the idb library. A frame's saved edit is one FrameSave record keyed by
+// the source hash and mode (studio-kit bridge/saved.ts); the shell's document and workspace tiers go to 'workspace'.
 import { KV_STORES, type KV, type KvStore } from '@chromobench/studio-kit';
 
 export const DB_NAME = 'chromobench-studio';
@@ -37,5 +37,6 @@ export async function openIdb(name = DB_NAME): Promise<KV> {
       await req(tx(s, 'readwrite').delete(k));
     },
     all: <T>(s: KvStore) => req(tx(s, 'readonly').getAll()) as Promise<T[]>,
+    keys: async (s: KvStore) => ((await req(tx(s, 'readonly').getAllKeys())) as IDBValidKey[]).map(String),
   };
 }

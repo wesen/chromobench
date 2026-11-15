@@ -2,19 +2,28 @@
 // crop, view.inspect, P3 re-encode) against the mock engine's own implementations, the automatic first
 // print on core's RefEngine (the frame integrates to grey), the test-strip bands and the time grid.
 import {
-  compile, defaultRecipe, Graph, ORIENTATIONS, sha256Hex,
-  type Engine, type EngineCaps, type EvalTarget, type FrameRecipe, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
+  compile, cutNode, edit, Graph, newDocument, ORIENTATIONS, sha256Hex,
+  type Box, type Document, type Engine, type EngineCaps, type EvalTarget, type Geometry, type ImageResult, type Measurement, type NodeDef, type NodeRef, type SourceInfo, type SourceRef,
 } from '@chromobench/contract';
-import { bakeRecipe, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, nodePacksData, Lights, RefEngine } from '@chromobench/core';
+import { set } from '@chromobench/values';
+import { bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, nodePacksData, Lights, RefEngine } from '@chromobench/core';
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { conditionScan, plantedFrames, plantedStrip, stripFrames } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
 import { firstPrint, gridTime, integratedExposure, measureExposure, withMeasured, withRebate } from '../src/host/first-print.ts';
 import { srgbToP3, StudioEngine, unorientBox, type HostServices } from '../src/host/studio-engine.ts';
-import { bandBoxes, evaluateBands, stripRecipe, stripValues } from '@chromobench/studio-kit';
+import { bandBoxes, evaluateBands, layerOf, lightsOf, mainExposure, stripMutation, stripValues } from '@chromobench/studio-kit';
 
 const bytes = makeM1Tiff();
 const sha = sha256Hex(bytes);
+
+/** A negative's neutral document for a source of w × h px (the studio's frames start from it). */
+const neg = (s: string, w: number, h: number): Document => newDocument('negative-scan', { sha256: s, name: 'm1', width: w, height: h });
+const withGeometry = (d: Document, g: Geometry): Document => ({ ...d, geometry: g });
+const withCrop = (d: Document, crop: Box): Document => ({ ...d, geometry: { ...d.geometry, crop } });
+const timeOf = (d: Document): number => mainExposure(d).time_s;
+const autoOf = (d: Document): Record<string, unknown> => layerOf(d, 'lights')!.source;
+const scanOf = (d: Document) => d.stages.scan!.medium as { rebate: Box | null; flare: unknown; baseT: unknown };
 
 /** The mock engine without the ops the StudioEngine provides, so the wrapper must compute them. */
 class Without implements Engine {
@@ -65,11 +74,10 @@ const read = async (e: Engine, g: Graph, id: string, t: EvalTarget): Promise<{ w
 
 describe('StudioEngine host ops', () => {
   it('output.frame: a straightened crop (contract 0.3) equals the mock engine, every orientation, with a region', async () => {
-    const { wrap, mock, g } = await both(['output.frame']);
-    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const { wrap, mock, g, info: src } = await both(['output.frame']);
+    const r = neg(sha, src.width, src.height);
     for (const o of ORIENTATIONS) {
-      const rr: FrameRecipe = { ...r, view: { ...r.view, frame: { orientation: o, angle_deg: 3.5, crop: { x: 10, y: 6, w: 70, h: 50 } } } };
-      const n = compile(rr, g);
+      const n = compile(withGeometry(r, { orientation: o, angle_deg: 3.5, crop: { x: 10, y: 6, w: 70, h: 50 } }), g).display;
       const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
       expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
       const info = n.info as { width: number; height: number };
@@ -80,11 +88,10 @@ describe('StudioEngine host ops', () => {
   });
 
   it('output.frame: every orientation, with a crop and a region, equals the mock engine', async () => {
-    const { wrap, mock, g } = await both(['output.frame']);
-    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const { wrap, mock, g, info: src } = await both(['output.frame']);
+    const r = neg(sha, src.width, src.height);
     for (const o of ORIENTATIONS) {
-      const rr: FrameRecipe = { ...r, view: { ...r.view, frame: { orientation: o, angle_deg: 0, crop: { x: 10, y: 6, w: 70, h: 50 } } } };
-      const n = compile(rr, g);
+      const n = compile(withGeometry(r, { orientation: o, angle_deg: 0, crop: { x: 10, y: 6, w: 70, h: 50 } }), g).display;
       const full = await read(wrap, g, n.id, { scale: 'full', precision: 'preview' });
       expect(full, o).toEqual(await read(mock, g, n.id, { scale: 'full', precision: 'preview' }));
       const info = n.info as { width: number; height: number };
@@ -102,12 +109,10 @@ describe('StudioEngine host ops', () => {
   });
 
   it('view.inspect: every inspection view renders as display RGB in [0, 1]', async () => {
-    const { wrap, g } = await both(['view.inspect']);
-    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
-    const top = compile(r, g);
-    const def = (op: string) => g.closure(top.id).find((x) => x.op === op)!;
-    const src = g.intern(def('source.open').op, def('source.open').inputs, def('source.open').args).node;
-    const dyes = g.intern(def('invert.dyes').op, def('invert.dyes').inputs, def('invert.dyes').args).node;
+    const { wrap, g, info } = await both(['view.inspect']);
+    const c = compile(neg(sha, info.width, info.height), g);
+    const src = cutNode(c, 'source');
+    const dyes = cutNode(c, 'negative');
     const classes = g.intern('invert.classes', [dyes.id], {}).node;
     for (const [inner, mode] of [[src, 'negative'], [dyes, 'dyes'], [classes, 'classes']] as const) {
       const n = g.intern('view.inspect', [inner.id], { mode }).node;
@@ -131,7 +136,7 @@ describe('StudioEngine host ops', () => {
 
   it('a node the engine cannot compute names the missing ops', async () => {
     const { wrap, g } = await both(['mask.paint']);
-    const n = g.intern('mask.paint', [g.intern('source.open', [], { source: sha, encoding: 'linear' }).node.id], { strokes: '[]' }).node;
+    const n = g.intern('mask.paint', [g.intern('source.open', [], { source: sha, encoding: 'linear', umPerPx: 6 }).node.id], { strokes: [] }).node;
     wrap.adopt(g.closure(n.id));
     await expect(wrap.evaluate(n, { scale: 'full', precision: 'preview' })).rejects.toMatchObject({ code: 'E_NOT_IMPLEMENTED', message: expect.stringContaining('mask.paint') });
   });
@@ -145,15 +150,16 @@ describe('first print (core RefEngine)', () => {
     const info = await e.open({ kind: 'file', sha256: sha, bytes });
     const g = new Graph();
     g.registerSource(info);
-    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const r0 = neg(sha, info.width, info.height);
     const r = await firstPrint(e, g, r0, { integrate });
-    expect(r.print.enlarger.mode).toBe('real');
-    expect(gridTime(r.print.enlarger.time_s)).toBe(r.print.enlarger.time_s);
-    expect(r.print.lights.auto).toMatchObject({ method: 'integrate', alpha: 1, applied: true, logH: r.print.lights.logH });
+    expect((r.stages.darkroom.medium as { mode: string }).mode).toBe('real');
+    expect(gridTime(timeOf(r))).toBe(timeOf(r));
+    expect(autoOf(r)).toMatchObject({ kind: 'auto', method: 'integrate', alpha: 1, applied: true, logH: lightsOf(r) });
     const x = await measureExposure(e, g, r);
     for (const v of x) expect(Math.abs(v)).toBeLessThan(0.01);
     // the colour remainder is in the lights, the density in the time: the lights' mean is within half a grid step
-    const m = (r.print.lights.logH[0] + r.print.lights.logH[1] + r.print.lights.logH[2]) / 3;
+    const l = lightsOf(r);
+    const m = (l[0] + l[1] + l[2]) / 3;
     expect(Math.abs(m)).toBeLessThanOrEqual(Math.log10(2) / 12 + 1e-9);
   });
 
@@ -173,12 +179,11 @@ describe('first print (core RefEngine)', () => {
     e.openDecoded(info, Float32Array.from(strip.rgb));
     const g = new Graph();
     g.registerSource(info);
-    const base = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
+    const base = withMeasured(neg(sha, strip.w, strip.h), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
     const times: number[] = [];
     for (const f of boxes.frames) {
-      const r0 = { ...base, view: { ...base.view, frame: { ...base.view.frame, crop: f.box } } };
-      const r = await firstPrint(e, g, r0, { integrate });
-      times.push(r.print.enlarger.time_s);
+      const r = await firstPrint(e, g, withCrop(base, f.box), { integrate });
+      times.push(timeOf(r));
       const x = await measureExposure(e, g, r);
       for (const v of x) expect(Math.abs(v)).toBeLessThan(0.05);
     }
@@ -208,12 +213,13 @@ describe('test strip bands', () => {
     const info = await e.open({ kind: 'file', sha256: sha, bytes });
     const g = new Graph();
     g.registerSource(info);
-    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
-    const values = stripValues('time', r.print.enlarger.time_s, 1 / 3, 5);
+    const r = neg(sha, info.width, info.height);
+    const values = stripValues('time', timeOf(r), 1 / 3, 5);
     const boxes = bandBoxes(5, info.width, info.height);
     expect(boxes.reduce((s, b) => s + b.w, 0)).toBe(info.width);
     const bands = values.map((v, i) => {
-      const n = compile(stripRecipe('time', r, v), g);
+      const mu = stripMutation('time', r, v);
+      const n = compile(edit(r, [set(mu.path, mu.value)]).doc, g).display;
       e.adopt(g.closure(n.id));
       return { node: n, box: boxes[i]! };
     });
@@ -228,11 +234,11 @@ describe('test strip bands', () => {
     }
   });
 
-  it('stripRecipe changes only the varied quantity', () => {
-    const r = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
-    expect(stripRecipe('time', r, 12.3).print.enlarger.time_s).toBe(12.3);
-    const f = stripRecipe('filtration.m', r, 5).print.enlarger.filtration;
-    expect(f).toEqual({ ...r.print.enlarger.filtration, m: 5 });
+  it('stripMutation changes only the varied quantity', () => {
+    const r = neg(sha, 96, 64);
+    expect(stripMutation('time', r, 12.3)).toEqual({ path: 'main.params.time_s', value: 12.3 });
+    const f = stripMutation('filtration.m', r, 5);
+    expect(f).toEqual({ path: 'main.params.filtration', value: { ...mainExposure(r).filtration, m: 5 } });
   });
 });
 
@@ -258,11 +264,11 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     e.openDecoded(info, data);
     const g = new Graph();
     g.registerSource(info);
-    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'strip' });
+    const r0 = neg(sha, strip.w, strip.h);
     // total paper exposure the first print settles on: time and lights together, per channel
     const total = async (box: { x: number; y: number; w: number; h: number } | null | undefined): Promise<number[]> => {
       const r = await firstPrint(e, g, withRebate(r0, box), { integrate });
-      return r.print.lights.logH.map((l) => l + Math.log10(r.print.enlarger.time_s));
+      return lightsOf(r).map((l) => l + Math.log10(timeOf(r)));
     };
     const measured = await total(c.rebate);
     const truth = await total(strip.truth.rebate[0]);
@@ -270,8 +276,8 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     const dist = (a: number[], b: number[]): number => Math.max(...a.map((v, k) => Math.abs(v - b[k]!)));
     expect(dist(measured, truth)).toBeLessThan(0.1);
     expect(dist(hole, truth)).toBeGreaterThan(0.3);
-    expect(withRebate(r0, null).scan?.rebate).toBeNull();
-    expect(withRebate(r0, c.rebate).scan?.rebate).toEqual(c.rebate);
+    expect(scanOf(withRebate(r0, null)).rebate).toBeNull();
+    expect(scanOf(withRebate(r0, c.rebate)).rebate).toEqual(c.rebate);
   }, 60_000);
 
   it('CHB-010 bake: the first print can carry its colour in the filtration dials; the print stays within the dials\' rounding', async () => {
@@ -287,18 +293,18 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     e.openDecoded(info, Float32Array.from(strip.rgb));
     const g = new Graph();
     g.registerSource(info);
-    const r0 = withMeasured(defaultRecipe('negative-scan', { sha256: sha, name: 'strip' }), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
+    const r0 = withMeasured(neg(sha, strip.w, strip.h), { rebate: c.rebate, flare: c.flare, baseT: c.scanBaseT });
     const plain = await firstPrint(e, g, r0, { integrate });
-    const baked = await firstPrint(e, g, r0, { integrate, bake: (r) => bakeRecipe(r, nodePacksData(), DEFAULT_CONVENTIONS).mutations });
-    expect(baked.print.enlarger.filtration).not.toEqual(plain.print.enlarger.filtration);
-    expect(Math.max(...baked.print.lights.logH.map(Math.abs))).toBeLessThan(Math.max(...plain.print.lights.logH.map(Math.abs)) + 1e-9);
-    expect(baked.print.lights.auto.logH).toEqual(plain.print.lights.auto.logH);
+    const baked = await firstPrint(e, g, r0, { integrate, bake: (d) => bakeLights(d, nodePacksData(), DEFAULT_CONVENTIONS).mutations });
+    expect(mainExposure(baked).filtration).not.toEqual(mainExposure(plain).filtration);
+    expect(Math.max(...lightsOf(baked).map(Math.abs))).toBeLessThan(Math.max(...lightsOf(plain).map(Math.abs)) + 1e-9);
+    expect(autoOf(baked)['logH']).toEqual(autoOf(plain)['logH']);
     const x = async (r: typeof plain): Promise<number[]> => [...(await measureExposure(e, g, r))];
     const [xp, xb] = [await x(plain), await x(baked)];
     expect(Math.max(...xp.map((v, k) => Math.abs(v - xb[k]!)))).toBeLessThan(0.05);
   }, 60_000);
 
-  it('the veil goes into the recipe (scan.flare, scan.baseT), not out of the pixels: same print as subtracting it', async () => {
+  it('the veil goes into the document (the scan medium\'s flare and baseT), not out of the pixels: same print as subtracting it', async () => {
     const strip = plantedStrip();
     const sha = 'e'.repeat(64);
     const info: SourceInfo = {
@@ -312,21 +318,21 @@ describe('first print on a roll scan (CHB-020 host wiring)', () => {
     expect(kept.flare!.every((f) => f > 0 && f <= 20)).toBe(true);
     const gone = Float32Array.from(strip.rgb);
     const sub = conditionScan(gone, strip.w, strip.h, { id: sha });
-    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'strip' });
+    const r0 = neg(sha, strip.w, strip.h);
     const printed = async (px: Float32Array, m: Parameters<typeof withMeasured>[1]): Promise<number[]> => {
       const e = new RefEngine({ data: nodePacksData() });
       e.openDecoded(info, px);
       const g = new Graph();
       g.registerSource(info);
       const r = await firstPrint(e, g, withMeasured(r0, m), { integrate });
-      return r.print.lights.logH.map((l) => l + Math.log10(r.print.enlarger.time_s));
+      return lightsOf(r).map((l) => l + Math.log10(timeOf(r)));
     };
     const measured = { rebate: kept.rebate, flare: kept.flare, baseT: kept.scanBaseT };
     const viaRecipe = await printed(raw, measured);
     const viaPixels = await printed(gone, { rebate: sub.rebate });
     expect(Math.max(...viaRecipe.map((v, k) => Math.abs(v - viaPixels[k]!)))).toBeLessThan(0.05);
     const r = withMeasured(r0, measured);
-    expect(r.scan?.flare).toEqual(kept.flare);
-    expect(r.scan?.baseT).toEqual(kept.scanBaseT);
+    expect(scanOf(r).flare).toEqual(kept.flare);
+    expect(scanOf(r).baseT).toEqual(kept.scanBaseT);
   }, 60_000);
 });
