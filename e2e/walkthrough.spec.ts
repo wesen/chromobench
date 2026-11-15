@@ -162,7 +162,10 @@ test('a negative scan from import to export: darkroom, a look, the print stack, 
   await module(page, 'finish');
   await page.keyboard.press('r');
   await expect(page.locator('.cb-crop-frame')).toHaveCount(1);
-  const hb = (await page.locator('[data-handle="1,1"]').boundingBox())!;
+  // the handles are drawn after the crop frame: wait for the corner before reading its box (raced on Metal)
+  const corner = page.locator('[data-handle="1,1"]');
+  await expect(corner).toBeVisible();
+  const hb = (await corner.boundingBox())!;
   await page.mouse.move(hb.x + 4, hb.y + 4);
   await page.mouse.down();
   await page.mouse.move(hb.x - 60, hb.y - 40, { steps: 4 });
