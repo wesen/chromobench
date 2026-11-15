@@ -14,6 +14,32 @@ Method: `go-go-parc/Research/playbooks/pattern-extraction-with-agent-validation.
   (field approach: max 0.016–0.024, mean 0.003–0.006), and the requirement set to max 0.025, mean 0.005 at a
   128 × 128 budget.
 
+## Harness v2 (2026-11-14 evening, CHB-036 Steps 9–10)
+
+The first batch (harness v1) lost 8 of 24 runs: three provider failures (`upstream_stream_failed`), four tiling runs
+and one slots run at the 60-minute limit. The causes were in the harness more than in the task: agent-written tests
+that never returned (an endless loop in one planner, a promise that never settled in a scheduler test) while pi's bash
+tool has no default timeout; a runner timeout that killed pi but not the commands it had started (pi runs each
+command detached, in its own process group), leaving a test spinning as an orphan for 37 min; a prescribed test
+command that fails on Node 24; diaries and notes left to the end; and 5-minute stalls on `429
+CONCURRENT_REQUEST_LIMIT_EXCEEDED` while 26 pi agents shared the provider account.
+
+v2 changes:
+
+- `supervise.py` (tested by `test_supervise.py` with a pi-like fake agent): the run is a new session; a watchdog kills
+  the process group of any command running longer than `--watchdog-min` (default 5), so the agent gets the output so
+  far and continues; at the budget every descendant group and the agent's own group are killed. Kills go to
+  `watchdog.log`; `run.json` records the settings and how the run ended.
+- `run-impl.py` prompt: the budget with start and stop times, the watchdog, `node --test --test-timeout=60000
+  project/test/*.test.ts`, scratch files in `project/scratch/` (not `/tmp`), the first diary step before the first
+  source write, notes kept current, and stop adding features 15 minutes before the end. Exit code 3 marks a provider
+  failure (the last model call ended in an error).
+- `batch.py`: `--tasks`, per-task budgets (`--budget-min tiling=120,default=60`), `--par` (default 4), longest tasks
+  first, provider failures retried up to `--retries` times after a pause (the failed attempt is kept under `_failed/`).
+
+v1 and v2 runs are not mixed within a task: v2 reruns whole tasks (tiling and slots, all six runs each) into a new runs
+root; graph and document keep their v1 runs.
+
 ## After the batch
 
 0. Retry failures: runs that end with `rc=1 … no answer found` in `batch.log` (seen: provider error
