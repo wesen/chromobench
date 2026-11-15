@@ -9,13 +9,30 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://packages/contract/src/validate.ts
+      Note: LOG_RULES; EditLog deleted (commit e4cde19)
+    - Path: repo://packages/shell/src/core/store.ts
+      Note: Document tier = the log; mounts; drafts (commit e236dba)
+    - Path: repo://packages/shell/src/core/store/drafts.ts
+      Note: Draft (was Layer) (commit e236dba)
+    - Path: repo://packages/shell/src/core/store/project.ts
+      Note: The log's documents in the state tree (commit e236dba)
+    - Path: repo://packages/values/README.md
+      Note: API and examples (gesture, proposal, look over a roll)
+    - Path: repo://packages/values/src/diff.ts
+      Note: The net change between two versions (commit 102a455)
+    - Path: repo://packages/values/src/log.ts
+      Note: The document log and Draft (commits 102a455, 98af7e8)
+    - Path: repo://packages/values/src/plan.ts
+      Note: The one batch builder (commit 102a455)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-14T22:44:31.680706-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Diary
 
@@ -405,3 +422,165 @@ is made of `Draft`s (the renamed `Layer`): the gesture is the store's own draft,
 - Sources the store writes: `ctx.tx` → `{ kind: 'tx', …opts.source }`, a gesture → `{ kind: 'gesture' }`, a named
   draft → `{ kind: 'draft', draft: name }`; `detail` is added as `source.detail`. Edit ids `s<n>:<doc>`, batch id
   `s<n>` when several documents change.
+
+## Step 5: README, final checks, consumer breakage, and the API P5b and P6 use
+
+The values README documents `diff`, the log and `plan` with the three examples the spec asks for (a gesture in the
+studio, an agent's proposal, a look over a roll); the shell README has a section on the three tiers. A last change
+makes a transaction without mutations no edit (commit and propose skip it), so an empty gesture never becomes an
+empty undo step.
+
+I compared the whole vitest run against the phase's base commit (a temporary worktree at `cc246ef`, removed after):
+the same 49 test files fail on both (the consumers P2a broke); per file, the only changes are mine and three
+consumer files that now fail to load because they extend `EditLog` (listed below).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Finish P4: document the API, run the acceptance checks, hand P5b and P6 the API.
+
+**Inferred user intent:** The next phases build on a stable, written-down history API.
+
+**Commit (code):** 98af7e8 — "CHB-037 P4: a transaction without mutations is no edit (commit and propose skip it)"
+(README: the commit before it)
+
+### What I did
+- `packages/values/README.md`: sections "The net change: diff" and "The document log: one history" with the
+  examples; module table and error codes updated.
+- Checks: `pnpm exec tsc -p packages/{values,contract,shell}/tsconfig.json --noEmit` green; `pnpm exec vitest run
+  packages/values packages/contract packages/shell` → 26 files, 238 passed (values 68, contract 62, shell 108);
+  `pnpm lint` green; `node tools/gen-docs/main.ts --contract-only --check` → ok; shell-demo browser project 3 passed.
+- Whole-suite comparison: base `cc246ef` 49 failed files / 2320 passed tests; P4 49 failed files (the same set) /
+  2319 passed; per-file differences (passed tests, base → P4): contract `editlog-builders` 5 → (renamed)
+  `history-builders` 5; shell `store-ext` 9 → 7 (rewritten); values `diff` + 5, `log` + 12; agent `anthropic` 2 → 0,
+  studio-kit `looks/engine` 4 → 0, `model-units-tools` 10 → 0 (all three: `TypeError: Class extends value undefined
+  is not a constructor or null` — `class MirrorLog extends EditLog` in `packages/agent/src/worker/server.ts:16`,
+  `class StudioLog extends EditLog` in `packages/studio-kit/src/model/enlarger.ts:105`).
+
+### Why
+- The spec's acceptance is per package; the comparison makes sure nothing outside P5b's and P6's scope broke.
+
+### What worked
+- No file outside studio-kit, apps/studio and agent changed status.
+
+### What didn't work
+- `grep -rn … --include=*.ts` under zsh: `no matches found: --include=*.ts` (the glob is expanded by zsh); quoting or
+  plain `grep -rn` works.
+
+### What I learned
+- Consumers that still name the removed API (for P5b, P6 and P2b): studio-kit 29 files (`bridge/editlog-route.ts`,
+  `model/enlarger.ts` `StudioLog`, `model/history.ts`, looks `plan.ts`, roll `buildBatch`, …), apps/studio 3
+  (`main.ts` `rt.history.adopt`, …), agent 7 (`worker/server.ts` `MirrorLog`), dsl 4, core 1 test
+  (`chb010.balance.test.ts` uses `EditLog.create`), engine-mock 1 test (`m1-trace.test.ts`), tools/scripts
+  `m1-headless.ts`; all also use the recipe API P2a removed.
+
+### What was tricky to build
+- N/A (documentation and checks).
+
+### What warrants a second pair of eyes
+- The decisions the spec did not make (Technical details).
+
+### What should be done in the future
+- P5b: rewire studio-kit onto mounts and the log (below); delete `bridge/editlog-route.ts`, `StudioLog`, the
+  roll kit's `buildBatch` and the looks kit's `planApply` batching in favour of `plan`.
+- P6: the agent host holds no log of its own; it proposes into the store's log (below); `MirrorLog` goes.
+- P2b: `chb010.balance.test.ts` and `m1-trace.test.ts` can use `edit()` or `Log` + `LOG_RULES`.
+- Later: the journal grows without bound (the old History kept 500 entries); if long sessions need it, a log could
+  fold its oldest steps into the initial documents (`compact(n)`), which keeps every invariant.
+
+### Code review instructions
+- Read `packages/values/README.md` (the last two sections) against `src/log.ts`, `src/plan.ts`, `src/diff.ts`.
+
+### Technical details
+
+**The API P5b (studio) uses**
+
+- Store options and services: `app.start({ rules: LOG_RULES, … })` (contract `LOG_RULES = { frame: DOCUMENT_RULES }`);
+  a kit declares `k.mount('recipes', { keyDepth: 1, kind: 'frame', checkPath })` (replaces `k.route`).
+- Frames: `rt.store.open(frameId, doc, { at: ['recipes', frameId], kind: 'frame', by: 'auto', source: { kind:
+  'ingest' } })`, `rt.store.close(frameId)`. Initial or restored state under a declared mount opens by itself (one
+  document per key). Reads: `s.recipes[f]` is the frame's current document (frozen); `rt.store.log.doc<Document>(f)`.
+- Edits: unchanged call sites — `ctx.tx(label, t => { t.recipes.f.stages… = … })`, `ctx.set`, `ctx.preview(path, v)` /
+  `ctx.commit(label, { detail, coalesce, source })` / `ctx.cancel()`; each frame's net change is one edit, several
+  frames one batch. Paths into a frame are physical in the state (`recipes.f1.stages.darkroom.stack.items.L1.amount`);
+  the log records id-anchored paths (`L1.amount`).
+- A direct log operation (approve, reject, a planned batch, a load): `rt.store.change(log => log.commit(batch))`,
+  `rt.store.change(log => log.approve(seq))`; undo/redo `rt.undo()` / `rt.redo()` (return the `Step`), labels from
+  `rt.store.log.undoStep/redoStep`; "(on Frame 12)" from `stateOpts.docName(doc, s)` / `currentDoc(s)`.
+- Named drafts (a proposal shown before approval): `ctx.draft('proposal:<seq>').set(path, v)` … `.drop()`; or
+  compute the what-if as a values draft: `rt.store.log.draft<Document>(f).apply(...entry.tx.mutations).value`.
+- Batches: `plan(rt.store.log.targets<Document>(frameIds), (doc, id) => mutations | transaction | null, { id, label,
+  by, source })` → `{ edits, skipped }`; commit with `store.change(l => l.commit(b))` (user) or propose (agent).
+- Provenance chips: `rt.store.log.why(frameId, 'L1.params.ev')` → `{ by, source, label, tx, at, approvedBy, value }`.
+- Per-frame history panel: `log.inEffect(frameId)` (entries in effect), `log.entries` (journal with pending and
+  rejected), `log.steps`/`log.cursor`.
+- Persistence: `store.snapshot('document')` is main ⊕ mounted documents; drop `recipes` in `stateOpts.persist` if the
+  studio saves frames itself; the log itself serialises with `log.toJSON()` / `Log.load(data, { rules: LOG_RULES })`.
+- Adopting across a layout switch: `newRt.store.adopt(oldRt.store)` (replaces `rt.history.adopt`).
+
+**The API P6 (agent) uses**
+
+- Read: `log.doc<Document>(f)`, `log.pending(f?)`, `log.inEffect(f?)`, `log.why(f, path)`, `log.trail(f, path)`.
+- What-if: `log.draft<Document>(f).apply(...mutations).value` (compile it with the one compiler).
+- Write: build `transaction({ id, label, by: 'agent', source: { kind: 'agent', turn, step }, mutations })`;
+  ask mode → `log.propose({ doc: f, tx }, { why })`; auto mode → `log.commit({ doc: f, tx })`; read-only → refuse
+  (E_READONLY, the host's policy). Across frames: `plan(log.targets(ids), build, { id, label, by: 'agent', source })`
+  then `propose(batch, { why })`. Approval: `approve(seq | seqs | { batch }, { by: 'user', force? })` (E_STALE when
+  stale), `reject(sel)`. `EvalResult.transactions` holds the `LogEntry`s an eval made; `AgentMode` is in
+  `contract/eval.ts`.
+
+**Signatures (values)**
+
+```ts
+class Log {
+  static create(o?: { rules?: Rules; now?: () => number }): Log;
+  static load(data: LogData, o?: LogOptions): Log;
+  open(id: string, doc: object, o?: { kind?: string; by?: Author; source?: JsonObject }): Log;
+  close(id: string): Log;
+  ids(): string[]; has(id: string): boolean; doc<D>(id): D; initial<D>(id): D; kind(id): string;
+  targets<D>(ids?: readonly string[]): Target<D>[];
+  draft<D>(id: string): Draft<D>;
+  readonly entries: readonly LogEntry[]; entry(seq): LogEntry | undefined; readonly last: LogEntry | undefined;
+  readonly steps: readonly Step[]; readonly cursor: number; inEffect(doc?): LogEntry[]; pending(doc?): LogEntry[];
+  readonly canUndo: boolean; readonly canRedo: boolean; readonly undoStep: Step | null; readonly redoStep: Step | null;
+  docsOf(step: Step): string[];
+  commit(x: Edit | Batch, o?: { merge?: boolean }): Log;
+  propose(x: Edit | Batch, o?: { why?: string }): Log;
+  approve(sel: Selector, o?: { by?: Author; force?: boolean }): Log;   // E_STALE
+  reject(sel: Selector): Log;
+  undo(): Log; redo(): Log;
+  trail(doc: string, path: string): Why[]; why(doc: string, path: string): Why;
+  toJSON(): LogData;
+}
+class Draft<D> { readonly doc: string; readonly base: D; readonly value: D;
+  static of(doc, base, validate?): Draft<D>; apply(...ms): Draft<D>; set(path, v): Draft<D>; update(f): Draft<D>;
+  reset(): Draft<D>; mutations(): readonly Mutation[]; readonly changed: boolean; edit(meta): Edit }
+function plan<D>(targets: Iterable<Target<D>>, build: (value: D, doc: string) => Transaction | readonly Mutation[] | null | undefined,
+  meta: { id: string; label: string; by: Author; source?: JsonObject }): Batch;
+function diff(before: object, after: object): Mutation[];
+type Edit = { doc: string; tx: Transaction };
+type Batch = { id; label; by; source; edits: readonly Edit[]; skipped: readonly { doc: string; error: unknown }[] };
+type LogEntry = { seq; doc; tx; at; why?; approvedBy? };  type Step = { seqs: readonly number[]; label; batch? };
+type Selector = number | readonly number[] | { batch: string };
+type Target<D> = { doc: string; value: D; rules?: TxOptions };
+```
+
+**Decisions the spec did not make**
+
+1. The log is an immutable value holding all documents of a session with **one cursor** (not one log per document):
+   a batch is one step, and nothing is ever skipped.
+2. A step is "the entries of one commit or one approval"; a commit after undo removes the redo tail from the journal
+   (pending and rejected entries are never dropped).
+3. Selecting one entry of a batch selects the whole batch (approve/reject never split a batch).
+4. Undo/redo do not re-run the rules (the states they restore were valid); approve and merge do.
+5. `why(doc, path)` is by value change (folding the entries in effect), not by matching mutation paths.
+6. The net change is computed (`diff`), not accumulated; drafts apply only the per-mutation rule while they move.
+7. The agent mode (read-only/ask/auto) is host policy; the log accepts commits by any author.
+8. `merge` (coalescing) lives in the log as "replace the newest step by the net change"; the store decides when
+   (same key, inside 1.5 s on its clock, the step still newest).
+9. Shell: routes become **mounts**; documents under a kit's declared mount open from initial state; a write under a
+   declared prefix where no document is open is refused; the document snapshot includes mounted documents;
+   channels are gone (a step's documents say where it happened: `docName`/`currentDoc`).
+10. `store.doc` is renamed `store.committed` (the committed tree of all tiers, beside `log.doc(id)`), the tx
+    lambda's draft is `Writer` (`WriterOf<S>`), and `writeDoc` is `writeView` (document paths refused).

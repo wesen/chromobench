@@ -56,3 +56,8 @@ P2a Step 3: laws read params with defaults; final checks (commit b7a973f)
 
 P5a: the UI DSL made consistent on @chromobench/values (commits 4afeb8d..aec7c5f on task/chb-037-p5a-ui-dsl)
 
+
+## 2026-11-14
+
+P4 one history: values Log/Draft/plan/diff (102a455, 98af7e8), contract EditLog deleted + LOG_RULES (e4cde19), shell store document tier = the log, Layer -> Draft, routes -> mounts (e236dba); diary 08-phase-p4-history.md
+
