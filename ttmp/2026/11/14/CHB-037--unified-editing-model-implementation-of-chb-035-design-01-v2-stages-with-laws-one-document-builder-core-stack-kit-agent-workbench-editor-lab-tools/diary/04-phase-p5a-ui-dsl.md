@@ -9,13 +9,38 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://packages/shell/README.md
+      Note: The UI DSL's rules (aec7c5f)
+    - Path: repo://packages/shell/src/build/builder.ts
+      Note: 'BuilderKind: shell, module, menu and kit values (3585c1f)'
+    - Path: repo://packages/shell/src/build/ck.ts
+      Note: Uniform signatures, when/pick, extend (03bdaa4)
+    - Path: repo://packages/shell/src/build/kits.ts
+      Note: Kit values, command and tool tables, ck.product (3585c1f, 2242c12)
+    - Path: repo://packages/shell/src/build/shell.ts
+      Note: Shell, Module, Menu values; scopes by declaration site (3585c1f)
+    - Path: repo://packages/shell/src/core/commands.ts
+      Note: requires and host capabilities (a5177d8)
+    - Path: repo://packages/shell/src/ir/node.ts
+      Note: Nodes as immutable values; ck.extend vocabulary; CK-X120 guard (4afeb8d)
+    - Path: repo://packages/studio-kit/layouts/classic.js
+      Note: Layouts compose kits only (2242c12, e317b43)
+    - Path: repo://packages/studio-kit/src/cb.ts
+      Note: cb.core kit, cb.panels/views/modules/menus (2242c12)
+    - Path: repo://packages/studio-kit/src/commands/host.ts
+      Note: Host command table on requires (a5177d8)
+    - Path: repo://packages/studio-kit/src/sel.ts
+      Note: CbState and the typed selectors (6ec19b0)
+    - Path: repo://tools/scripts/check-boundaries.ts
+      Note: studio-kit may import values; layouts import nothing (e317b43)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-14T21:36:49.65011-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary
@@ -494,3 +519,189 @@ kit.commands, kit.docs" and "layouts compose kits only"; CHB-029 item 4 (`cb.mod
 - Explain snapshot change: classic and lab list `cb.chat@1 (requires cb.core)` among their kits (only that line).
 - Layout before → after (roll): `import { menus, printModule, rollMenu, rollModule } from './classic.js'` …
   `s.module('roll', m => rollModule(ck, cb)(m).key('G'))` → no import; `.module(roll.modules.roll().key('G'))`.
+
+## Step 7: Host capabilities typed at mount; one command table per area
+
+Rule 8 and CHB-029 items 1 and 3. The host's actions were string lookups through state (`hidden: s =>
+!hostHas(s, 'openFiles')`, `run: ctx => hostRun(ctx, 'openFiles')`) with the list of action names published into
+`ui.host.actions`. Now a command declares `requires: 'host.openFiles'`; the runtime answers from its services, and
+without the capability the command is hidden and refuses to run. In the same step cb.core's one 300-line command
+table became one declarative table per area under `packages/studio-kit/src/commands/`.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** §32 "Host capabilities typed at mount; commands declare `requires`" and CHB-029 item 3
+("split createCb() by area … each exporting a declarative command table").
+
+**Inferred user intent:** A host offers what it can, typed; the DSL decides what shows, in one place.
+
+**Commit (code):** a5177d8 — "CHB-037 P5a step 6: host capabilities typed at mount; one command table per area"
+
+### What I did
+- Shell: `CommandSpec.requires?: string | string[]` ('<service>.<member>'); `Commands.capable` (the runtime's
+  `capable(req)`: a function at `services[service][member]`, `host` read from the runtime's current host);
+  `hidden()` and `status()` fail without it ("Not available in this window", the old `hostRun` toast);
+  `Services.host`, `rt.setHost(host)`, `ctx.host`.
+- studio-kit: `StudioHost` documented as the typed capability set; `Studio.services()` passes `host`; `attach` and
+  `setHost` hand it to the runtime; `HostFlags` lost `actions` (ui.host keeps folder, layouts, layout: what labels
+  and menus read). `hostHas`/`hostRun` deleted.
+- `src/commands/{env,frame,host,view,print,agent,tools}.ts`: the shared helpers and six tables; cb.core is
+  `.commands(frameCommands()).commands(hostCommands())…tools(coreTools())`. The split was done by a script that cut
+  the table by command id (and checked that every id landed in exactly one area); `host.ts` was then rewritten by
+  hand to `requires`.
+- Test: "host capabilities" in build.test (hidden, refused with the toast, runs with a host, hidden after
+  `setHost(null)`).
+
+### Why
+- Capabilities are not state: they were mirrored into the store only so `hidden` lambdas could read them.
+
+### What worked
+- 114 files, 2856 passed; browser at 2242c12 (steps 3–5): 108 passed (4.3 min).
+
+### What didn't work
+- First typecheck after the split: `Cannot find name 'needFrame'` in frame/print/view — my import scan used
+  `(?<![\w.])needFrame`, which misses `...needFrame`; added the imports.
+
+### What I learned
+- Only menus and the palette ask `commands.hidden` (when they open), so capabilities need no reactivity in the store.
+
+### What was tricky to build
+- `file.export` does not require `host.exportPrint` (it falls back to `output.save`); it asks `ctx.rt.capable(…)`.
+
+### What warrants a second pair of eyes
+- The first mount of apps/studio still calls `studio.setHost(hostActions)` just after `mountStudio` (its actions
+  close over the runtime); later mounts (layout switch) receive the host in their services at mount.
+
+### What should be done in the future
+- Build apps/studio's host actions before the first mount so every mount gets `services.host` up front.
+
+### Code review instructions
+- `packages/shell/src/core/commands.ts` (`supplied`), `app/runtime.ts` (`capable`, `setHost`, `ctx.host`);
+  `packages/studio-kit/src/commands/host.ts`, `src/studio.ts` (`services`, `attach`, `setHost`).
+
+### Technical details
+- Explain snapshot change: the commands section lists cb.core's commands by area (frame, file/host, view, print,
+  agent) instead of the old interleaved order; no command, label, menu or key changed.
+- Before → after: `'file.open': { label: 'Open Files…', menu: 'File', hidden: s => !hostHas(s, 'openFiles'), run:
+  ctx => hostRun(ctx, 'openFiles') }` → `'file.open': { label: 'Open Files…', requires: 'host.openFiles', run: ctx =>
+  host(ctx).openFiles!() }`.
+
+## Step 8: variant → layout
+
+Rule 9 and CHB-029 item 9: the UI said "Layout", the code said "variant". Hard cut-off: one name, no alias.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Rename the API, the folder, the boundary script, tests, demos, e2e and the URL option
+(`?layout=` is the one name; the task says to keep it working as the one name).
+
+**Inferred user intent:** The code speaks the photographer's word.
+
+**Commit (code):** e317b43 — "CHB-037 P5a step 7: variant is called layout everywhere"
+
+### What I did
+- `git mv packages/studio-kit/variants packages/studio-kit/layouts`, `src/variant.ts → src/layout.ts`,
+  `test/variants.test.ts → layouts.test.ts` (and its snapshot file).
+- perl over every file in scope that mentions it: `VariantDef/Env/Id`, `BuiltVariant`, `defineVariant`,
+  `buildVariant`, `VARIANTS`, `DEFAULT_VARIANT`, and the words (not `font-variant`, not first-print.ts's "the
+  comparison script's variant"). The package export is `./layouts`; `?layout=`, `body[data-layout]`,
+  `window.chromobench.layout`. `apps/studio/DEMO.md` follows the URL option.
+- One identifier was renamed wrongly and restored: e2e/studio.spec.ts's `variant(n)` makes a variant of a file.
+
+### Why
+- §32 last row.
+
+### What worked
+- `git show HEAD:…/variants.test.ts.snap | sed 's/variants build headless/layouts build headless/' | diff - …/layouts.test.ts.snap`
+  → identical: the rename changed no explain output.
+- 114 files, 2856 passed.
+
+### What didn't work
+- N/A
+
+### What I learned
+- There was no saved layout preference to migrate (the layout is a URL option), so the cut-off costs nothing.
+
+### What was tricky to build
+- Blanket word renames catch other senses of the word; I read the e2e and app diffs line by line.
+
+### What warrants a second pair of eyes
+- Bookmarks with `?variant=` now open the default layout (no alias, by the owner's rule).
+- `docs/HANDOFF.md` (outside my scope) still mentions `?variant=`.
+
+### What should be done in the future
+- Update `docs/HANDOFF.md` (`?variant=` → `?layout=`).
+
+### Code review instructions
+- `git show e317b43 --stat`; `grep -rni variant packages/shell packages/studio-kit apps/studio e2e` finds only
+  `font-variant` and first-print.ts.
+
+### Technical details
+- Before → after: `import { DEFAULT_VARIANT, VARIANTS, type VariantId } from '@chromobench/studio-kit/variants'` →
+  `import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/layouts'`.
+
+## Step 9: The rules written down; final checks
+
+The last step documents the language in `packages/shell/README.md` (the rules a layout or kit author follows: values
+and modifiers, the forms, binding times, `ck.extend`, kits declare and layouts place, the product shape, scopes,
+host capabilities, diagnostics) and runs every check once more. The README's examples were run headless in a scratch
+vitest file (outside the repo) before committing.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Acceptance: "Document the rules in the shell's README or docs"; all checks and the
+browser suite green.
+
+**Inferred user intent:** The next agent (P5b, the stack kit) can write kits and layouts from the README alone.
+
+**Commit (code):** aec7c5f — "CHB-037 P5a: packages/shell/README.md states the UI DSL's rules"
+
+### What I did
+- Wrote `packages/shell/README.md`; ran its kit/shell/host example in a scratch test (1 passed).
+- Final: `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test` → green, 114 files, 2856 passed, 19 skipped
+  (baseline 113 / 2850; new: sel.test.ts and tests for builder values, signatures and host capabilities).
+- Browser at e317b43, side worktree, `STUDIO_PORT=5551 STUDIO_KIT_PORT=5552 SHELL_DEMO_PORT=5553 GPU_PARITY_PORT=5554
+  CI=1 pnpm test:browser` → 108 passed (4.1 min).
+
+### Why
+- §6 P5a acceptance.
+
+### What worked
+- Every browser run on a committed step was green or had only load flakes that passed when rerun (Steps 2, 4).
+
+### What didn't work
+- N/A
+
+### What I learned
+- Running the browser suite in a detached side worktree (`git worktree add --detach`) let me keep editing while it ran.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- Decisions the design did not make (also in the final report): shell-level regions removed (a single-screen
+  layout declares `ck.module('main', …)`); shell `.commands/.tools/.panels/.passes/.fragments` removed (a program's own
+  commands live in a kit); kit keys bind in `kit:<name>` = every module; a kit product holds its Kit (`roll.kit`)
+  because `kit.tools`/`kit.commands`/`kit.docs` collide with the kit's chain methods; chat became a kit that owns the
+  `cb.chat` form; `cb.panel`/`cb.view` became `cb.panels`/`cb.views`; darkroom, simple and tiny place the standard
+  menus (their menu bars were generated from `menu:` fields); `ck.ir`/`ck.run` (standalone IR passes) kept.
+
+### What should be done in the future
+- CHB-029 items 5 (status bar and dialogs in the DSL) and 6 (jobs) are not done; item 8 belongs to the contract.
+- Layout type checking (`allowJs` + `// @ts-check` on `layouts/*.js`), a hand-written type for `cb.kits`.
+- `docs/HANDOFF.md`: `?variant=` → `?layout=`.
+
+### Code review instructions
+- Read `packages/shell/README.md`, then the commits in order: 4afeb8d, 3585c1f, 03bdaa4, 6ec19b0, 2242c12, a5177d8,
+  e317b43, aec7c5f.
+
+### Technical details
+- Kinds of explain snapshot change over the phase (layouts): commands show the menu that places them; one more key
+  scope (`kit:cb.core`); two passes fewer (`cb.kits`); classic and lab install `cb.chat`; commands listed by area.
+  Elsewhere: the mini studio's commands come from the kit `mini`; `controls("darkroom")` shows each control's words.

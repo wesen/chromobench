@@ -32,3 +32,8 @@ P1 Step 3: transactions deep-frozen; README immutability wording (commit 2c680b9
 
 - /Users/manuel/code/wesen/chromobench/packages/values/src/transactions.ts — transaction() deep-freezes
 
+
+## 2026-11-14
+
+P5a: the UI DSL made consistent on @chromobench/values (commits 4afeb8d..aec7c5f on task/chb-037-p5a-ui-dsl)
+
