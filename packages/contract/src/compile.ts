@@ -1,7 +1,7 @@
 // The one compiler (contract 1.0, design §29). compile(doc) builds the hash-consed graph of a document and names its
 // cuts; the viewer, the export, the first print and the agent's what-if (compile(doc ⊕ draft)) all use it.
 //
-//   1. resolve links (rolls; looks and presets in phase 7) → plain media and stacks
+//   1. resolve links (rolls, looks, presets) → plain media, stacks and masks
 //   2. stage by stage, in pipeline order: resolve the stage's bindings (they read only cuts already compiled), run
 //      the medium's fixed chain (scan.density, film.develop, view.adapt, …), then the stage law on its stack
 //   3. output: output.display and the document geometry (output.frame)
@@ -25,7 +25,7 @@ import { getLaw, type LawContext } from './stage-laws.ts';
 export interface CompileOptions {
   /** Display space of the viewer (output.display.space); default srgb. */
   displaySpace?: OutputSpaceId;
-  /** Link resolution: the rolls (and, from phase 7, looks and presets). */
+  /** Link resolution: the rolls and presets (looks are registered); the image size comes from the graph. */
   links?: LinkContext;
   /** Facts for bindings (EXIF via the source info, the roll). */
   facts?: FrameFacts;
@@ -257,7 +257,14 @@ class Compiler {
 
 /** Compiles a document into `g` (hash-consed: unchanged parts are the same nodes after every edit). */
 export function compile(doc: Document, g: Graph, opts: CompileOptions = {}): Compiled {
-  return new Compiler(resolveLinks(doc, opts.links), g, opts).run();
+  return new Compiler(resolveLinks(doc, linkContext(doc, g, opts)), g, opts).run();
+}
+
+/** What link resolution sees in a compile: the host's context, the facts, and the source's size from the graph. */
+export function linkContext(doc: Document, g: Graph, opts: CompileOptions = {}): LinkContext {
+  const s = g.source(doc.source.sha256);
+  const facts = opts.links?.facts ?? opts.facts;
+  return { ...opts.links, ...(facts ? { facts } : {}), ...(s && !opts.links?.size ? { size: [s.width, s.height] as const } : {}) };
 }
 
 /** The node of a named cut; E_CUT when the name is unknown or the document's kind has no such cut. */

@@ -39,7 +39,7 @@ describe('links', () => {
   it('resolving a baked link equals resolving the link', () => {
     const d = linked();
     const g = graph();
-    const baked = edit(d, [bakeLink(d, 'shared', 'darkroom', { rolls })]).doc;
+    const baked = edit(d, bakeLink(d, 'shared', { rolls })).doc;
     expect(baked.stages.darkroom.stack.items['shared']!.kind).toBe('group');
     expect(compile(baked, g, { links: { rolls } }).display.id).toBe(compile(d, g, { links: { rolls } }).display.id);
   });
@@ -48,8 +48,8 @@ describe('links', () => {
     const d = linked();
     expect(diagOf(() => compile(d, graph(), { links: { rolls: () => undefined } })).code).toBe('E_LINK');
     expect(diagOf(() => compile(d, graph())).code).toBe('E_LINK');
-    const look = edit(scanDoc(), [push('darkroom', 'warm', link({ ref: { look: 'warm-print', version: 2 } }))]).doc;
-    expect(diagOf(() => compile(look, graph())).message).toMatch(/no resolver for look links/);
+    const look = edit(scanDoc(), [push('darkroom', 'warm', link({ ref: { look: 'warm-print', version: 99 } }))]).doc;
+    expect(diagOf(() => compile(look, graph())).message).toMatch(/unknown look warm-print@99/);
     const bad = edit(scanDoc(), [push('darkroom', 'shared', link({ overrides: { 'zz.amount': 1 } }))]).doc;
     expect(diagOf(() => compile(bad, graph(), { links: { rolls } })).code).toBe('E_LINK');
     expect(validateRoll(roll)).toEqual([]);
