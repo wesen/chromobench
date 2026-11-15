@@ -50,6 +50,45 @@ Items without a task come from a diary or report, named as such.
 
 ---
 
+## Roadmap (2026-11-15)
+
+The owner delegated the open decisions (D1–D13, in `03-decisions-d1-d13.md`) and will test with the photographer
+once all features are built, so feature work comes before the beta. Phases run in this order; 3 runs beside 2.
+
+**Phase 1 — Correctness and editing blockers (now).** GPUC-1 (field textures reused mid-export), GPUC-2 (grid-rule
+ties), GPUC-3 (unfloored log in density-mask mode 7), GPUC-4 (uncounted retired memory); MASK-1 (mask tool stays
+armed), DARK-2 (Apply Print Settings source), DARK-3 (Real ↔ Normalised darkens), DARK-5 (coarse sliders); the work
+the decisions create: D1 open a file into Print (NEW-1), D4 label sync as copy with Link as a choice (NEW-2), D5 the
+darkroom stack in his order with kind badges (NEW-3), D7 contrast blend modes in the display encoding (LAY-3), D8 one
+first-print aim, neutralise 75 % as an amount (SCAN-5). Exit: browser suite (SwiftShader and Metal) and goldens pass;
+merge `task/chb-037-unified-model` into main and push (D13).
+
+**Phase 2 — Feature completion before the beta.** Output: OUT-1 (a working Output module), OUT-2 (export at the
+file's size, size choice, JPEG) and the rest of group 7. Before the film: LAY-1 (white balance in scene light, D2),
+LOOK-6 (stocks and grades as medium presets, D6). Masks and layers: MASK-3 (mask controls and handles), MASK-2
+(selections as components, D3), MASK-4, LAY-2 (simple adjustment layers), LAY-4 (multi-select), LAY-5 (wording) and
+the rest of group 2. Darkroom: DARK-1 (Finish and before-the-film palettes in Darkroom first), the rest of group 3.
+Finish (group 4), looks and library (group 6), roll workflow and scan conditioning (group 5; SCAN-1 and DARK-4
+checked on real scans first), interface (group 10). Then switch the default arrangement per D1.
+
+**Phase 3 — Performance (beside phase 2).** PERF-1 (open-loop bench with requirements as numbers, a gate) first, then
+PERF-2 (present from GPU textures, T1), the pyramid (T2), checkpoints (T3), early cutoff, and the GPU debts of
+group 9.
+
+**Phase 4 — Beta with the photographer.** Calibration and setup (group 13: CAL-1 questionnaire, CAL-8 ColorChecker
+shots for D11), his bug reports through Report a Problem, fixes from his sessions.
+
+**Phase 5 — Assistant (group 11)**, with the key in the browser (D12). **Later (group 14):** black and white after the
+beta (D10), extensions; no licence work (D9).
+
+New items created by the decisions (not in the triage):
+
+| # | Item | Severity | Sources | Depends on |
+|---|---|---|---|---|
+| NEW-1 | Opening a file goes to Print in Classic (not Library) | major | D1 | — |
+| NEW-2 | The sync dialog says it copies values; "Link" is an explicit option (and Auto Sync while held) | minor | D4 | — |
+| NEW-3 | The darkroom stack lists layers in his order with kind badges; the Enlarger keeps a by-kind summary | major | D5 | — |
+
 ## 1. Masks, selections and local tools
 
 | # | Item | Severity | Sources | Depends on |
@@ -265,6 +304,8 @@ Items without a task come from a diary or report, named as such.
 ---
 
 ## Owner decisions
+
+All decided on 2026-11-15: see `03-decisions-d1-d13.md`. The table below is the state before.
 
 Every open decision once; where several tickets ask the same question, all are named.
 

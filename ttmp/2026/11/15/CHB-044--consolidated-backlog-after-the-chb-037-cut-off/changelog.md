@@ -14,3 +14,8 @@ Triage of 200 open tasks in 19 tickets (commits 4227ad7, 7830b12, 29c0783): 23 d
 
 Diary (survey, three triage groups, backlog, verification); the decisions file and the apply script kept in various/ and scripts/.
 
+
+## 2026-11-15
+
+Decisions D1–D13 and T1–T3 taken (owner delegated); roadmap in five phases added to the backlog; decision tasks annotated in CHB-004, 008, 014, 028, 033, 035, 037, 040
+

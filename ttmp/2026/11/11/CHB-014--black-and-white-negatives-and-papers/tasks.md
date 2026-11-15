@@ -3,7 +3,7 @@
 ## TODO
 - [ ] [stage 1] Read and note textbook §1.2, §2.2–2.6, §3.5, §3.7, James ch. 17, Hunt §§14.13–14.20 and §18.4, Tuttle, Streiffert, Nelson and Cline; record notes in the diary <!-- t:z31q -->
 - [ ] [stage 1] Collect B&W film and paper datasheets with editions and page numbers (Tri-X F-4017, T-MAX 400 F-4043, HP5 Plus, FP4 Plus, Delta, Multigrade IV RC and RC Deluxe, Contrast control) <!-- t:kwm4 -->
-- [ ] [stage 1] Ask the photographer which films, developers, papers and enlarger head they use and whether B&W is in the first beta <!-- t:nkhw -->
+- [ ] [stage 1] Ask the photographer which films, developers, papers and enlarger head they use and whether B&W is in the first beta — decided D10: B&W after the first beta unless he asks <!-- t:nkhw -->
 - [ ] [stage 2] Digitise film spectral sensitivity (Ilford spectrograms divided by a 2,850 K blackbody), curve families and contrast-index curves with provenance and uncertainty <!-- t:ljur -->
 - [ ] [stage 2] Digitise Multigrade spectral sensitivity at three densities, ISO R and P tables and the colour-head filtration tables <!-- t:pwkk -->
 - [ ] [stage 2] With CHB-013, measure Q(d) of the photographer's film, silver tone, MG filter transmittances and paper image tone <!-- t:jd32 -->
