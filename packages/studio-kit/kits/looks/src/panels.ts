@@ -18,7 +18,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
   // each form node carries its model (a τ function of the state and the services), so the renderers stay dumb
   const panel = (form: string, id: string, title: string, model: (s: any, o: Record<string, unknown>, services: any) => unknown) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
-    return ck.panel(pid ?? id, { title: t ?? title }, node(form, { ...rest, model: (s: any, services?: any) => model(s, rest, services) }));
+    return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, { ...rest, model: (s: any, services?: any) => model(s, rest, services) }));
   };
   const nameOf = (s: any, f: string): string => s?.catalog?.frames?.[f]?.name ?? f;
   const paramsModel = (s: any) => {
@@ -116,7 +116,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       ),
     );
   const library = (o: { groups?: string[]; size?: number; id?: string; title?: string } = {}) =>
-    ck.panel(
+    ck.panel.define(
       o.id ?? 'looks-library',
       { title: o.title ?? 'Looks' },
       ck.ui.segmented([{ value: null, label: 'All' }, ...(o.groups ?? ['Print', 'Contrast', 'Film', 'Mine']).map((g) => ({ value: g, label: g }))], { bind: (s: any) => s.looksView.group, label: 'Group', small: true } as any),

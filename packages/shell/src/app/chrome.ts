@@ -7,6 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MenuItem } from '../build/types.ts';
 import type { Runtime } from './runtime.ts';
+import { menuIndex } from './assemble.ts';
 import { GRAY_GROUP, THEME_GROUP } from './builtins.ts';
 
 export interface ToastOpts {
@@ -178,20 +179,10 @@ export const THEME_MENU: MenuItem[] = [
   { label: 'Interface Gray', items: [{ label: 'Interface Gray', group: GRAY_GROUP }] },
 ];
 
-/** The menu bar: the program's menus (kits' merged in) or menus generated from the commands' `menu` field. Help stays last. */
+/** The menu bar: the menus the program placed (.menus(ck.menu(…))), File and Edit first, Help last. */
 export function menuBar(rt: Runtime<any>): { label: string; items: MenuItem[] }[] {
   const ir = rt.app.ir;
-  let menus: { label: string; items: MenuItem[] }[];
-  if (ir.menus.length) menus = ir.menus.map(m => ({ label: m.label, items: m.items }));
-  else {
-    const byMenu = new Map<string, string[]>();
-    for (const c of rt.commands.all()) {
-      if (!c.menu) continue;
-      if (!byMenu.has(c.menu)) byMenu.set(c.menu, []);
-      byMenu.get(c.menu)!.push(c.id);
-    }
-    menus = [...byMenu.entries()].map(([label, items]) => ({ label, items }));
-  }
+  let menus: { label: string; items: MenuItem[] }[] = ir.menus.map(m => ({ label: m.label, items: m.items }));
   // 'app.theme' in a menu stands for the View ▸ Theme and View ▸ Interface Gray submenus (CHB-025)
   menus = menus.map(m => (m.items.includes('app.theme') ? { ...m, items: m.items.flatMap(it => (it === 'app.theme' ? THEME_MENU : [it])) } : m));
   const order = ['File', 'Edit'];
@@ -216,11 +207,12 @@ export interface PaletteEntry {
 export function paletteEntries(rt: Runtime<any>): PaletteEntry[] {
   const st = rt.store.readonly();
   const out: PaletteEntry[] = [];
+  const menus = menuIndex(rt.app.ir.menus);
   for (const c of rt.commands.all()) {
     if (c.palette === false) continue;
     if (rt.commands.hidden(c.id, st)) continue;
     const s = rt.commands.status(c.id, st);
-    out.push({ kind: 'command', id: c.id, label: rt.commands.label(c.id, st), group: c.menu || c.group || '', chord: rt.keymap.chordsFor(c.id, rt.liveScopes())[0], disabled: !s.ok, why: s.why });
+    out.push({ kind: 'command', id: c.id, label: rt.commands.label(c.id, st), group: menus.get(c.id) ?? c.group ?? '', chord: rt.keymap.chordsFor(c.id, rt.liveScopes())[0], disabled: !s.ok, why: s.why });
   }
   for (const mod of rt.modules.values()) out.push({ kind: 'module', id: 'module:' + mod.id, label: `Go to ${mod.label}`, group: 'Modules', chord: rt.keymap.chordsFor('module.' + mod.id)[0] ?? null, run: () => rt.go(mod.id) });
   for (const id of rt.panels.keys()) out.push({ kind: 'panel', id: 'panel:' + id, label: `Show ${rt.panelTitle(id)} panel`, group: 'Panels', run: () => rt.workspace.reveal(id) });

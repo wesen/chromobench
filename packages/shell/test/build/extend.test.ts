@@ -12,30 +12,31 @@ declare module '../../src/index.ts' {
 
 /** the ratings kit of guide §5.2: a state slice, a command, keys, a slider fragment, a pass, docs */
 const ratingsKit = (ck: ReturnType<typeof createCk>) =>
-  ck.kit<{ ratings: { stars: Record<string, number> } }>('ratings', k =>
-    k
-      .version('0.1')
-      .state('ratings', { init: { stars: {} as Record<string, number> }, view: ['shown'] })
-      .commands(c =>
-        c.add('rate.set', {
-          label: 'Set Rating',
-          run: (ctx: any, n: number) => ctx.tx(`Rate ${n}`, (t: any) => void (t.ratings.stars[ctx.state.ui.photo] = n)),
-        }),
-      )
-      .keys('module:*', ck.digits(0, 5, 'rate.set'))
-      .fragments(
-        ck.fragment('slider', {
-          methods: { stepped: (n: number) => ({ step: n }) },
-          explain: n => (n.props['step'] ? `stepped ${n.props['step']}` : null),
-        }),
-      )
-      .passes(
-        ck.pass('ratings.reachable', { on: 'ui', after: 'keys' }, (ui: any, p) => {
-          if (!ui.menus.some((m: any) => m.items.includes('rate.set'))) p.diag('RT-001', 'rate.set is in no menu', { level: 'info' });
-        }),
-      )
-      .docs('## Ratings\nPress 0–5 to rate the current photo.'),
-  );
+  ck
+    .kit('ratings')
+    .version('0.1')
+    .state('ratings', { init: { stars: {} as Record<string, number> }, view: ['shown'] })
+    .commands({
+      'rate.set': {
+        label: 'Set Rating',
+        run: (ctx: any, n: number) => ctx.tx(`Rate ${n}`, (t: any) => void (t.ratings.stars[ctx.state.ui.photo] = n)),
+      },
+    })
+    // a kit's keys bind in every module (scope kit:ratings)
+    .keys(ck.digits(0, 5, 'rate.set'))
+    .fragments(
+      ck.fragment('slider', {
+        methods: { stepped: (n: number) => ({ step: n }) },
+        explain: n => (n.props['step'] ? `stepped ${n.props['step']}` : null),
+      }),
+    )
+    .passes(
+      ck.pass('ratings.reachable', { on: 'ui', after: 'keys' }, (ui: any, p) => {
+        if (!ui.menus.some((m: any) => m.items.includes('rate.set'))) p.diag('RT-001', 'rate.set is in no menu', { level: 'info' });
+      }),
+    )
+    .docs('## Ratings\nPress 0–5 to rate the current photo.');
+const one = (ck: ReturnType<typeof createCk>, n: unknown) => ck.module('main').center(n as any);
 
 describe('kits and fragments', () => {
   it('a kit adds a slice, a command, keys, a fragment method and a pass to a shell', () => {
@@ -50,7 +51,7 @@ describe('kits and fragments', () => {
       .shell('Studio')
       .state({ dev: { vibrance: 0 }, ui: { photo: 'a' } })
       .use(ratings)
-      .module('m', m => m.center(ck.panel('basic', {}, slider)))
+      .module(ck.module('m').center(ck.panel.define('basic', {}, slider)))
       .build();
     expect(app.errors).toEqual([]);
     expect(app.codes('info')).toContain('RT-001');
@@ -67,13 +68,11 @@ describe('kits and fragments', () => {
   });
   it('X120: an unknown method throws where it is called, with a suggestion from the receiver; X121 when `when` refuses', () => {
     const ck = createCk();
-    const kit = ck.kit('strip', k =>
-      k.fragments(
-        ck.fragment('slider', {
-          when: n => n.props['unit'] === 's',
-          methods: { testStrip: () => ({ aside: ck.text('strip') }) },
-        }),
-      ),
+    const kit = ck.kit('strip').fragments(
+      ck.fragment('slider', {
+        when: n => n.props['unit'] === 's',
+        methods: { testStrip: () => ({ aside: ck.text('strip') }) },
+      }),
     );
     ck.extend(kit);
     const thrown = (f: () => unknown): Diag => {
@@ -97,61 +96,60 @@ describe('kits and fragments', () => {
   });
   it('X110: two kits adding the same method, naming both', () => {
     const ck = createCk();
-    const f = (name: string) => ck.kit(name, k => k.fragments(ck.fragment('slider', { methods: { stepped: (n: number) => ({ step: n }) } })));
-    const app = ck.shell('x').use(f('a')).use(f('b')).center(ck.text('x')).build();
+    const f = (name: string) => ck.kit(name).fragments(ck.fragment('slider', { methods: { stepped: (n: number) => ({ step: n }) } }));
+    const app = ck.shell('x').use(f('a')).use(f('b')).module(one(ck, ck.text('x'))).build();
     const d = app.diagnostics.list.find(x => x.code === 'CK-X110')!;
     expect(d.facts!.join(' ')).toMatch(/kit a.*kit b/);
   });
-  it('dependencies install first, each once; X130 missing, X131 cycle; X101 conflicts; X102 override', () => {
+  it('dependencies install first, each once; X130 missing, X131 cycle; X101 conflicts; replace: true wins', () => {
     const ck = createCk();
-    const base = ck.kit('base', k => k.commands(c => c.add('base.x', { run: () => 1 })));
-    const feat = ck.kit('feat', k => k.requires(base).commands(c => c.add('feat.y', { run: () => 2 })));
-    const app = ck.shell('x').use(feat).use(base).center(ck.text('x')).build();
+    const x = one(ck, ck.text('x'));
+    const base = ck.kit('base').commands({ 'base.x': { run: () => 1 } });
+    const feat = ck.kit('feat').requires(base).commands({ 'feat.y': { run: () => 2 } });
+    const app = ck.shell('x').use(feat).use(base).module(x).build();
     expect(app.ir.kits.map(k => k.name)).toEqual(['base', 'feat']);
     expect(app.errors).toEqual([]);
-    const lonely = ck.kit('lonely', k => k.requires('nothere'));
-    expect(ck.shell('x').use(lonely).center(ck.text('x')).build().codes()).toContain('CK-X130');
-    const a = ck.kit('a', k => k.requires('b'));
-    const b = ck.kit('b', k => k.requires('a'));
-    expect(ck.shell('x').use(a).use(b).center(ck.text('x')).build().codes()).toContain('CK-X131');
-    const c1 = ck.kit('c1', k => k.commands(c => c.add('same', { run: () => 1 })));
-    const c2 = ck.kit('c2', k => k.commands(c => c.add('same', { run: () => 2 })));
-    expect(ck.shell('x').use(c1).use(c2).center(ck.text('x')).build().codes()).toContain('CK-X101');
-    const over = ck.shell('x').use(c1).commands(c => c.add('same', { run: () => 3 })).center(ck.text('x')).build();
-    expect(over.codes()).toContain('CK-X102');
-    const ok = ck.shell('x').use(c1).commands(c => c.add('same', { run: () => 3, replace: true })).center(ck.text('x')).build();
-    expect(ok.codes()).not.toContain('CK-X102');
+    const lonely = ck.kit('lonely').requires('nothere');
+    expect(ck.shell('x').use(lonely).module(x).build().codes()).toContain('CK-X130');
+    const a = ck.kit('a').requires('b');
+    const b = ck.kit('b').requires('a');
+    expect(ck.shell('x').use(a).use(b).module(x).build().codes()).toContain('CK-X131');
+    const c1 = ck.kit('c1').commands({ same: { run: () => 1 } });
+    const c2 = ck.kit('c2').commands({ same: { run: () => 2 } });
+    expect(ck.shell('x').use(c1).use(c2).module(x).build().codes()).toContain('CK-X101');
+    const c3 = ck.kit('c3').commands({ same: { run: () => 3, replace: true } });
+    const ok = ck.shell('x').use(c1).use(c3).module(x).build();
+    expect(ok.codes()).not.toContain('CK-X101');
+    expect(ok.start({ clock: manualClock() }).run('same')).toBe(3);
   });
-  it('builder fragments: a kit offers a whole module as one call, before or after .use()', () => {
+  it('builder fragments: a kit offers a whole module as one call, once it is registered with ck.extend', () => {
     const ck = createCk();
-    const kit = ck.kit('mods', k =>
-      k.fragments(
-        ck.fragment('shell', {
-          methods: { simpleModule: (id: string) => (b: any) => b.module(id, (m: any) => m.center(ck.text(id))) },
-        }),
-      ),
+    const kit = ck.kit('mods').fragments(
+      ck.fragment('shell', {
+        methods: { simpleModule: (id: string) => (s: any) => s.module(ck.module(id).center(ck.text(id))) },
+      }),
     );
-    const before = (ck.shell('x') as any).simpleModule('early').use(kit).build();
-    expect(before.ir.modules.map((m: any) => m.id)).toEqual(['early']);
-    const after = (ck.shell('x').use(kit) as any).simpleModule('late').build();
-    expect(after.ir.modules.map((m: any) => m.id)).toEqual(['late']);
-    const missing = (ck.shell('x') as any).nope().center(ck.text('x')).build();
-    expect(missing.codes()).toContain('CK-X120');
+    expect(() => (ck.shell('x') as any).simpleModule('early')).toThrow(/CK-X120/);
+    ck.extend(kit);
+    const app = (ck.shell('x') as any).simpleModule('late').use(kit).build();
+    expect(app.ir.modules.map((m: any) => m.id)).toEqual(['late']);
+    expect(() => (ck.shell('x') as any).nope()).toThrow(/No method \.nope\(\) on the shell/);
   });
   it('routes declared by a kit check bindings under them with the key as a wildcard', () => {
     const ck = createCk();
     const FIELDS = ['print.time_s', 'print.grade'];
-    const kit = ck.kit('cb', k =>
-      k.state('recipes', { init: {} }).route('recipes', {
+    const kit = ck
+      .kit('cb')
+      .state('recipes', { init: {} })
+      .route('recipes', {
         keyDepth: 1,
         checkPath: rest => (FIELDS.includes(rest.join('.')) ? null : { message: `no recipe field ${rest.join('.')}`, fix: `Did you mean ${FIELDS[0]}?` }),
-      }),
-    );
+      });
     const app = ck
       .shell('x')
       .state({ ui: { frame: null as string | null } })
       .use(kit)
-      .center(ck.column({}, ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time_s }), ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time })))
+      .module(one(ck, ck.column({}, ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time_s }), ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time }))))
       .build();
     const d = app.diagnostics.list.filter(x => x.code === 'CK-B114');
     expect(d.length).toBe(1);

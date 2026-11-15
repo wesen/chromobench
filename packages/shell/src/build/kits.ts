@@ -1,18 +1,99 @@
-// Kits: a bundle a variant installs with .use(kit) — forms, fragments, commands, menus, keys, tools, panels,
-// passes, IRs, a state slice, routes, themes, icons and docs. A kit is a recorded value: it can be explained and
-// installed into several builds. Dependencies install first, each once; a missing one is CK-X130, a cycle CK-X131.
-// The same command, panel, tool, route or state key from two kits is CK-X101 naming both; a variant that replaces
-// a kit's command without `replace: true` gets CK-X102.
+// Kits: what a layout installs with .use(kit): a state slice, routes, forms, fragments, commands, keys, tools,
+// passes, IRs, themes, icons and docs. A kit is an immutable value (builder.ts): `ck.kit(name)` is empty and every
+// chain method returns a new kit, so a kit can be explained, parameterised by a function and installed into several
+// builds. Dependencies install first, each once; a missing one is CK-X130, a cycle CK-X131. The same command, tool,
+// route or state key from two kits is CK-X101 naming both. A kit's keys bind in scope kit:<name> (every module).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { site, type CallSite, type Diagnostics } from '../core/diag.ts';
+import { modifier, site, type CallSite, type Modifier } from '@chromobench/values';
+import type { Diagnostics } from '../core/diag.ts';
 import { deepMerge, isPlainObject } from '../core/util.ts';
+import type { CommandSpec } from '../core/commands.ts';
 import type { RouteDecl } from '../core/store.ts';
-import type { KeyTarget } from '../core/keys.ts';
+import type { KeyTarget, Spring } from '../core/keys.ts';
 import type { FormSpec } from '../ir/forms.ts';
-import type { NodeData } from '../ir/node.ts';
-import { CommandsBuilder, MenusBuilder, ToolsBuilder } from './recorders.ts';
-import type { Fragment, IrSpec, Kit, KitDef, PassDef, Theme, UiIR } from './types.ts';
+import type { Ctx } from '../app/runtime.ts';
+import { BuilderKind, type Built, type BuilderWith } from './builder.ts';
+import type { CommandDef, Fragment, IrSpec, Kit, KitDef, PassDef, Theme, ToolSpec, UiIR } from './types.ts';
+
+/** A command table: id → spec, in order (CHB-029 item 3: declarative, one per area). */
+export type CommandTable<S = any> = Record<string, CommandSpec<S, Ctx<S>>>;
+/** A tool table: id → spec, in order. */
+export type ToolTable<S = any> = Record<string, Omit<ToolSpec<S>, 'id'>>;
+
+/** A kit value: its data (def), its chain methods, and (for kits that offer one) its product. */
+export interface KitValue<St = unknown> extends Kit<St>, Built<KitDef> {
+  readonly kind: 'kit';
+  with(x: BuilderWith<KitDef, KitValue<St>>): KitValue<St>;
+  version(v: string): KitValue<St>;
+  requires(...kits: (string | Kit)[]): KitValue<St>;
+  /** a state slice: document tier unless listed in view (relative sub-paths, or true for the whole slice) */
+  state<K extends string, T>(key: K, o: { init: T; view?: string[] | boolean }): KitValue<St & { [P in K]: T }>;
+  derive(path: string, fn: (s: any) => unknown): KitValue<St>;
+  route(prefix: string, decl?: Omit<RouteDecl, 'prefix'>): KitValue<St>;
+  forms(...specs: FormSpec[]): KitValue<St>;
+  fragments(...frags: Fragment[]): KitValue<St>;
+  /** a command table (id → spec); type the state the handlers read with .commands<S>({ … }) */
+  commands<S = any>(table: CommandTable<S>): KitValue<St>;
+  /** keys in scope kit:<name>: active in every module (a module's own key for the same chord wins) */
+  keys(map: Record<string, KeyTarget>): KitValue<St>;
+  spring(chord: string, tool: Spring['tool'], opts?: Spring['opts']): KitValue<St>;
+  tools<S = any>(table: ToolTable<S>): KitValue<St>;
+  passes(...p: PassDef[]): KitValue<St>;
+  ir(name: string, spec: Omit<IrSpec, 'name'>): KitValue<St>;
+  theme(t: Theme): KitValue<St>;
+  icons(map: Record<string, string>): KitValue<St>;
+  docs(md: string): KitValue<St>;
+}
+
+type M = Modifier<KitDef>;
+const add = (name: string, key: keyof KitDef, items: (d: KitDef) => unknown[]): M => modifier<KitDef>(name, d => ({ ...d, [key]: [...(d[key] as unknown[]), ...items(d)] }));
+
+/** the kit modifiers (the chain methods of a kit) */
+export const kitMods = {
+  version: (v: string): M => modifier<KitDef>('version', d => ({ ...d, version: v }), [v]),
+  requires: (...kits: (string | Kit)[]): M => add('requires', 'requires', () => kits),
+  state: (key: string, o: { init: unknown; view?: string[] | boolean }): M => {
+    const at = site();
+    return add('state', 'state', () => [{ key, init: o.init, at, ...(o.view !== undefined ? { view: o.view } : {}) }]);
+  },
+  derive: (path: string, fn: (s: any) => unknown): M => {
+    const at = site();
+    return add('derive', 'derived', () => [{ path, fn, at }]);
+  },
+  route: (prefix: string, decl: Omit<RouteDecl, 'prefix'> = {}): M => add('route', 'routes', d => [{ ...decl, prefix, source: d.name }]),
+  forms: (...specs: FormSpec[]): M => add('forms', 'forms', d => specs.map(f => ({ ...f, source: d.name }))),
+  fragments: (...frags: Fragment[]): M => add('fragments', 'fragments', d => frags.map(f => (f.source ? f : Object.freeze({ ...f, source: d.name })))),
+  commands: (table: CommandTable): M => {
+    const at = site();
+    return add('commands', 'commands', d =>
+      Object.entries(table).map(([id, spec]): CommandDef => ({ id, spec: { ...spec, at, source: d.name }, at, source: d.name })),
+    );
+  },
+  keys: (map: Record<string, KeyTarget>): M => {
+    const at = site();
+    return add('keys', 'keys', d => [{ scope: 'kit:' + d.name, map, at, source: d.name }]);
+  },
+  spring: (chord: string, tool: Spring['tool'], opts: Spring['opts'] = {}): M => {
+    const at = site();
+    return add('spring', 'springs', () => [{ chord, tool, opts, at }]);
+  },
+  tools: (table: ToolTable): M => {
+    const at = site();
+    return add('tools', 'tools', d => Object.entries(table).map(([id, spec]): ToolSpec => ({ ...(spec as ToolSpec), id, at, source: d.name })));
+  },
+  passes: (...p: PassDef[]): M => add('passes', 'passes', d => p.map(x => (x.source ? x : Object.freeze({ ...x, source: d.name })))),
+  ir: (name: string, spec: Omit<IrSpec, 'name'>): M => add('ir', 'irs', () => [{ ...spec, name }]),
+  theme: (t: Theme): M => add('theme', 'themes', () => [t]),
+  icons: (map: Record<string, string>): M => modifier<KitDef>('icons', d => ({ ...d, icons: { ...d.icons, ...map } }), [map]),
+  docs: (md: string): M => add('docs', 'docs', () => [md]),
+};
+
+export const KITS = new BuilderKind<KitDef, KitValue<any>>('kit', {
+  methods: kitMods as unknown as Record<string, (...a: any[]) => M>,
+  derived: d => ({ name: d.name, def: d }),
+  explain: d => ({ name: d.name, ...(d.version ? { version: d.version } : {}), commands: d.commands.map(c => c.id), tools: d.tools.map(t => t.id), state: d.state.map(s => s.key) }),
+});
 
 const emptyDef = (name: string): KitDef => ({
   name,
@@ -23,11 +104,9 @@ const emptyDef = (name: string): KitDef => ({
   forms: [],
   fragments: [],
   commands: [],
-  menus: [],
   keys: [],
   springs: [],
   tools: [],
-  panels: [],
   passes: [],
   irs: [],
   themes: [],
@@ -35,105 +114,43 @@ const emptyDef = (name: string): KitDef => ({
   docs: [],
 });
 
-export class KitBuilder<S = any> {
-  readonly def: KitDef;
-  constructor(def: KitDef) {
-    this.def = def;
-  }
-  version(v: string): this {
-    this.def.version = v;
-    return this;
-  }
-  requires(...kits: (string | Kit)[]): this {
-    this.def.requires.push(...kits);
-    return this;
-  }
-  /** a state slice: document tier unless listed in view (relative sub-paths, or true for the whole slice) */
-  state(key: string, o: { init: unknown; view?: string[] | boolean }): this {
-    const entry: KitDef['state'][number] = { key, init: o.init, at: site() };
-    if (o.view !== undefined) entry.view = o.view;
-    this.def.state.push(entry);
-    return this;
-  }
-  derive(path: string, fn: (s: S) => unknown): this {
-    this.def.derived.push({ path, fn, at: site() });
-    return this;
-  }
-  route(prefix: string, decl: Omit<RouteDecl, 'prefix'> = {}): this {
-    this.def.routes.push({ ...decl, prefix, source: this.def.name });
-    return this;
-  }
-  forms(...specs: FormSpec[]): this {
-    for (const s of specs) this.def.forms.push({ ...s, source: this.def.name });
-    return this;
-  }
-  fragments(...frags: Fragment[]): this {
-    for (const f of frags) {
-      f.source = f.source ?? this.def.name;
-      this.def.fragments.push(f);
-    }
-    return this;
-  }
-  commands(f: (c: CommandsBuilder<S>) => void): this {
-    f(new CommandsBuilder<S>(this.def, this.def.name));
-    return this;
-  }
-  menus(f: (m: MenusBuilder) => void): this {
-    f(new MenusBuilder(this.def, this.def.name));
-    return this;
-  }
-  keys(scope: string, map: Record<string, KeyTarget>): this {
-    this.def.keys.push({ scope, map, at: site(), source: this.def.name });
-    return this;
-  }
-  tools(f: (t: ToolsBuilder<S>) => void): this {
-    f(new ToolsBuilder<S>(this.def, this.def.name));
-    return this;
-  }
-  /** panels defined, not placed: the variant places them */
-  panels(...nodes: NodeData[]): this {
-    this.def.panels.push(...nodes.flat());
-    return this;
-  }
-  passes(...p: PassDef[]): this {
-    for (const x of p) {
-      x.source = x.source ?? this.def.name;
-      this.def.passes.push(x);
-    }
-    return this;
-  }
-  ir(name: string, spec: Omit<IrSpec, 'name'>): this {
-    this.def.irs.push({ ...spec, name });
-    return this;
-  }
-  theme(t: Theme): this {
-    this.def.themes.push(t);
-    return this;
-  }
-  icons(map: Record<string, string>): this {
-    Object.assign(this.def.icons, map);
-    return this;
-  }
-  docs(md: string): this {
-    this.def.docs.push(md);
-    return this;
-  }
+/** an empty kit (ck.kit(name)); chain methods add to it */
+export function kit<St = unknown>(name: string, at: CallSite | null = site()): KitValue<St> {
+  return KITS.make(emptyDef(name), at) as KitValue<St>;
 }
+export const isKit = (v: unknown): v is KitValue => KITS.is(v);
 
-export function kit<St = unknown>(name: string, f: (k: KitBuilder<any>, opts?: any) => unknown, opts?: unknown, at: CallSite | null = site()): Kit<St> {
-  const def = emptyDef(name);
-  f(new KitBuilder(def), opts);
-  return {
-    kind: 'kit',
-    name,
-    version: def.version,
-    def,
-    at,
-    opts,
-    with: (o: unknown) => kit<St>(name, f, o, site()),
-  };
+/**
+ * What a kit offers a layout (CHB-035 §32: one product shape for every kit): the kit to install, its panels and
+ * modules (builders a layout places), its menus and key maps (values a layout places), the ids of its tools and
+ * commands, its docs; `sel` (typed selectors) and `lib` (helpers) when it has them.
+ */
+export interface KitProduct<K extends KitValue<any> = KitValue<any>> {
+  readonly kit: K;
+  readonly panels: Readonly<Record<string, (...a: any[]) => unknown>>;
+  readonly modules: Readonly<Record<string, (...a: any[]) => unknown>>;
+  readonly menus: Readonly<Record<string, (...a: any[]) => unknown>>;
+  readonly keys: Readonly<Record<string, Record<string, KeyTarget>>>;
+  readonly tools: readonly string[];
+  readonly commands: readonly string[];
+  readonly docs: string;
 }
-export const isKit = (v: unknown): v is Kit => !!v && typeof v === 'object' && (v as Kit).kind === 'kit';
+export type ProductParts = Partial<Omit<KitProduct, 'kit' | 'tools' | 'commands' | 'docs'>> & Record<string, unknown>;
+
+/** a kit's product: the parts given, plus its tool and command ids and its docs (from the kit) */
+export function product<K extends KitValue<any>, P extends ProductParts>(k: K, parts: P): KitProduct<K> & P {
+  return Object.freeze({
+    panels: {},
+    modules: {},
+    menus: {},
+    keys: {},
+    ...parts,
+    kit: k,
+    tools: Object.freeze(k.def.tools.map(t => t.id)),
+    commands: Object.freeze(k.def.commands.map(c => c.id)),
+    docs: k.def.docs.join('\n\n'),
+  }) as unknown as KitProduct<K> & P;
+}
 
 /** Dependencies first, each once (by name). X130 missing, X131 cycle. */
 export function orderKits(uses: { kit: Kit; at: CallSite | null }[], D: Diagnostics): Kit[] {
@@ -178,9 +195,7 @@ export function installKits(ir: UiIR, kits: Kit[], D: Diagnostics, programInit: 
   const stateOwner = new Map<string, Kit>();
   const routeOwner = new Map<string, string>();
   const kitCommands: typeof ir.commands = [];
-  const kitMenus: typeof ir.menus = [];
   const kitKeys: typeof ir.keys = [];
-  const panelOwner = new Map<string, { src: string | undefined; at: CallSite | null }>();
   for (const k of kits) {
     const d = k.def;
     ir.kits.push({ name: k.name, version: d.version, requires: d.requires.map(r => (typeof r === 'string' ? r : r.name)), at: k.at, docs: d.docs });
@@ -220,7 +235,6 @@ export function installKits(ir: UiIR, kits: Kit[], D: Diagnostics, programInit: 
       }
       kitCommands.push(c);
     }
-    kitMenus.push(...d.menus);
     kitKeys.push(...d.keys);
     ir.springs.push(...d.springs);
     for (const t of d.tools) {
@@ -231,36 +245,12 @@ export function installKits(ir: UiIR, kits: Kit[], D: Diagnostics, programInit: 
       }
       ir.tools.set(t.id, t);
     }
-    for (const p of d.panels) {
-      const id = String(p.props['id']);
-      const prev = panelOwner.get(id);
-      if (prev && prev.src !== k.name) {
-        D.error('CK-X101', `Two kits define the panel '${id}'`, { at: p.at, facts: [`first: ${sourceOf(prev.src)}${loc(prev.at)}`, `again: kit ${k.name}${loc(p.at)}`], source: k.name });
-        continue;
-      }
-      panelOwner.set(id, { src: k.name, at: p.at });
-      if (!ir.panels.has(id)) ir.panels.set(id, p);
-    }
     ir.passes.push(...d.passes);
     for (const x of d.irs) ir.irs.set(x.name, x);
     for (const t of d.themes) ir.themes.set(t.name, t);
     Object.assign(ir.icons, d.icons);
     for (const md of d.docs) ir.docs.push({ source: k.name, md });
   }
-  // the program's own commands come after the kits'; replacing a kit's command needs replace: true
-  for (const c of ir.commands) {
-    const prev = kitCommands.find(x => x.id === c.id);
-    if (prev && !c.spec.replace)
-      D.warn('CK-X102', `The program redefines '${c.id}' from kit ${prev.source}`, { at: c.at, facts: [`kit: ${prev.at ? `${prev.at.file}:${prev.at.line}` : prev.source}`], fix: `c.add('${c.id}', { …, replace: true }) if this is on purpose.` });
-  }
-  ir.commands = [...kitCommands, ...ir.commands];
-  // menus with the same label merge
-  const menus = [...kitMenus];
-  for (const m of ir.menus) {
-    const prev = menus.find(x => x.label === m.label);
-    if (prev) menus[menus.indexOf(prev)] = { ...prev, items: prev.items.concat(['-'], m.items) };
-    else menus.push(m);
-  }
-  ir.menus = menus;
+  ir.commands = kitCommands;
   ir.keys = [...kitKeys, ...ir.keys];
 }

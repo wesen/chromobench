@@ -1,4 +1,5 @@
-// The recorded program: the `ui` IR that builders fill and passes check. Plain data plus lambdas.
+// The recorded program: the data of the builder values (shell, modules, kits, menus) and the `ui` IR the build makes
+// from them and the passes check. Plain data plus lambdas.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CallSite, Diag } from '../core/diag.ts';
@@ -92,8 +93,7 @@ export interface ToolSpec<S = any> {
   cursor?: string | ((s: S, vp: any) => string);
   enabled?: boolean | ((s: S) => boolean);
   why?: string | ((s: S) => string);
-  /** the key's scope (default: the modules whose viewports list the tool) */
-  scope?: string;
+  /** the modules whose menus, palette and keys offer it (default: the modules whose viewports list the tool) */
   module?: string | string[];
   on?: {
     enter?: KeyTarget;
@@ -123,20 +123,13 @@ export interface ModuleDef<S = any> {
   key: string | null;
   icon: string | null;
   regions: Partial<Record<Region, NodeData | null>>;
+  /** the module's keys (scope module:<id>) */
   keys: KeyDef[];
   at: CallSite | null;
-  tools: string[];
   txOpts?: ((s: S) => TxOpts) | TxOpts;
   onEnter?: KeyTarget;
   onEscape?: KeyTarget;
-  calls: PendingBuilderCall[];
   source?: string | undefined;
-}
-
-export interface PendingBuilderCall {
-  name: string;
-  args: unknown[];
-  at: CallSite | null;
 }
 
 export interface Theme {
@@ -218,6 +211,7 @@ export interface KitState {
   view?: string[] | boolean;
   at: CallSite | null;
 }
+/** A kit's data: what it declares. Its keys bind in scope kit:<name> (every module). */
 export interface KitDef {
   name: string;
   version?: string;
@@ -228,26 +222,23 @@ export interface KitDef {
   forms: FormSpec[];
   fragments: Fragment[];
   commands: CommandDef[];
-  menus: MenuDef[];
   keys: KeyDef[];
   springs: SpringDef[];
   tools: ToolSpec[];
-  panels: NodeData[];
   passes: PassDef[];
   irs: IrSpec[];
   themes: Theme[];
   icons: Record<string, string>;
   docs: string[];
 }
+/** What a kit value has besides its chain methods (kits.ts). */
 export interface Kit<St = unknown> {
   readonly kind: 'kit';
   readonly name: string;
-  readonly version: string | undefined;
+  /** the kit's data (its declarations) */
   readonly def: KitDef;
+  readonly data: KitDef;
   readonly at: CallSite | null;
-  readonly opts: unknown;
-  /** a parameterised copy */
-  with(opts: unknown): Kit<St>;
   /** phantom: the state slice the kit adds */
   readonly _state?: St;
 }
@@ -267,7 +258,6 @@ export interface UiIR<S = any> {
   keys: KeyDef[];
   springs: SpringDef[];
   tools: Map<string, ToolSpec<S>>;
-  toolGroups: { name: string; ids: string[]; opts: Record<string, unknown>; at: CallSite | null }[];
   panels: Map<string, NodeData>;
   modules: ModuleDef<S>[];
   contexts: Map<string, unknown>;

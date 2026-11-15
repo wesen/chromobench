@@ -22,7 +22,7 @@ import type { ModuleDef, ToolSpec } from '../build/types.ts';
 import { explainApp } from '../build/explain.ts';
 import { withDefaults } from '../build/checks.ts';
 import type { BuiltApp } from './built-app.ts';
-import { assemble } from './assemble.ts';
+import { assemble, menuIndex } from './assemble.ts';
 import { builtinCommands, GRAYS } from './builtins.ts';
 import { DEFAULT_THEME, GRAY_IDS, resolveTheme } from '../themes/tokens.ts';
 import { RecordingChrome, type ChromeApi, type DialogSpec, type ToastOpts } from './chrome.ts';
@@ -551,7 +551,7 @@ export class Runtime<S = any> {
   /** the scopes a menu's shortcut may come from: those that answer in this module without a focused field */
   liveScopes(): string[] {
     const tool = this.store.peek(['ui', 'tool']);
-    return ['global', 'module:*', 'module:' + this.module, 'canvas'].concat(tool ? ['tool:' + tool] : []);
+    return ['global', 'module:*', ...this.app.ir.kits.map(k => 'kit:' + k.name), 'module:' + this.module, 'canvas'].concat(tool ? ['tool:' + tool] : []);
   }
   /** the chain, innermost first: text · dialog · tool · panel · canvas · module · global (focus from the DOM half) */
   scopeChain(): string[] {
@@ -630,6 +630,7 @@ export class Runtime<S = any> {
   /** the app as text; { live: true } evaluates τ props and command labels against the current state */
   explain(o: { live?: boolean; at?: boolean } = {}): string {
     const st = this.store.readonly();
+    const menus = menuIndex(this.app.ir.menus);
     const rows = this.programCommands().map(c => {
       const status = this.commands.status(c.id, st);
       return {
@@ -637,7 +638,7 @@ export class Runtime<S = any> {
         label: this.commands.label(c.id, st) + (o.live && !status.ok ? ` — disabled, why: ${status.why}` : ''),
         chord: this.keymap.chordsFor(c.id)[0],
         source: c.source as string | undefined,
-        menu: c.menu,
+        menu: menus.get(c.id),
       };
     });
     return explainApp(

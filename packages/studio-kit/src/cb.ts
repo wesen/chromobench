@@ -10,7 +10,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { defaultRecipe, getPath, type FrameRecipe, type Vec3 } from '@chromobench/contract';
-import { libraryRoot, type Ck, type NodeData } from '@chromobench/shell';
+import { libraryRoot, type Ck, type CommandTable, type NodeData, type ToolTable } from '@chromobench/shell';
 import { argModel, argProblem, parseStep, stepUnits, STRIPPABLE } from './kit/args.ts';
 import { CB_FORMS } from './kit/forms.ts';
 import { frameRef, isImageHandle, type FrameRef, type ImageHandle } from './handles.ts';
@@ -159,6 +159,11 @@ export function createCb(ck: Ck) {
       if (w === 'pad' && a.model.type !== 'vec3') p.error('CB-A120', `cb.arg('${path}'): the pad widget edits printer lights (vec3), not ${a.model.type}`, { at: n.at, fix: `cb.arg('print.lights.logH').pad()` });
     }
   });
+  /** CB-R001, CB-F102, CB-L001: a kit's forms or tools used where the kit is not installed (the kit's own passes run
+   *  only where it is installed, so cb.core runs each kit's check) */
+  const kitsPass = ck.pass('cb.kits', { on: 'ui', after: 'slots' }, (ir: any, p) => {
+    for (const k of Object.values(cb.kits)) (k as { missing?: (ir: unknown, p: unknown) => void }).missing?.(ir, p);
+  });
   const handlesPass = ck.pass('cb.handles', { on: 'ui', after: 'normalize' }, (ir: any, p) => {
     for (const n of ir.find('viewport') as NodeData[]) {
       const views = n.props['views'];
@@ -166,435 +171,425 @@ export function createCb(ck: Ck) {
     }
   });
 
-  // ── tools (gestures on the viewer) ──
   const recipeOf = (ctx: any, f: string): FrameRecipe | undefined => ctx.state.recipes?.[f];
-  const core = ck.kit<CbState>('cb.core', k => {
-    k.version('1')
-      .state('catalog', { init: CORE_STATE.catalog })
-      .state('snapshots', { init: CORE_STATE.snapshots })
-      .state('recipes', { init: {} })
-      .route('recipes', {
-        keyDepth: 1,
-        checkPath: rest => {
-          const path = rest.map(String).join('.');
-          if (!path || argModel(path) || getPath(DUMMY, path) !== undefined) return null;
-          const pr = argProblem(path);
-          return { message: `no recipe path ${path}`, ...(pr?.code === 'CB-A101' && pr.fix ? { fix: pr.fix } : {}) };
+  // ── the command table and the tools ──
+  const needFrame = { enabled: (s: any) => !!current(s), why: 'Open a frame first' };
+  const flag = (ctx: any, v: CatalogFrame['flag'], label: string) =>
+    ctx.tx(label, (t: any) => {
+      for (const id of targets(ctx)) if (t.catalog.frames[id]) t.catalog.frames[id].flag = v;
+    });
+  const hostRun = (ctx: any, action: string, ...args: unknown[]): unknown => {
+    const h = studioOf(ctx).host as Record<string, unknown> | null;
+    const f = h?.[action];
+    if (typeof f === 'function') return (f as (...a: unknown[]) => unknown).apply(h, args);
+    ctx.toast('Not available in this window', { kind: 'why' });
+    return null;
+  };
+  const openFrame = { enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!], why: 'Open a frame first' };
+  const orientCurrent = (ctx: any, step: 'cw90' | 'ccw90' | 'flipH', label: string): void => {
+    const f = current(ctx.state);
+    const r = f ? recipeOf(ctx, f) : undefined;
+    if (!f || !r) return;
+    const next = orientFrame(r.view.frame, step);
+    ctx.tx(label, (t: any) => t.$set(['recipes', f, 'view', 'frame'], { ...next, crop: next.crop ? { ...next.crop } : null }));
+  };
+  const reopenAs = async (ctx: any, id: string | null, as: 'photo' | 'negative'): Promise<unknown> => {
+    if (!id) return null;
+    const studio = studioOf(ctx);
+    const name = ctx.state.catalog?.frames?.[id]?.name ?? id;
+    if (!studio.frames.get(id)) {
+      ctx.toast(`${name} is not open: select it to open its file first`, { kind: 'why' });
+      return null;
+    }
+    ctx.toast(`Re-opening ${name} as a ${as}…`, { kind: 'info' });
+    try {
+      const r = await studio.reopen(id, as);
+      ctx.toast(`${name} is open as a ${as} now${r.outcome === 'resumed' ? ` (its saved recipe as a ${as})` : ''}`, { kind: 'ok' });
+      return r.entry.id;
+    } catch (e) {
+      ctx.toast(`${name}: ${String((e as { diag?: { message?: string } })?.diag?.message ?? (e as Error)?.message ?? e)}`, { kind: 'error' });
+      return null;
+    }
+  };
+  const coreCommands: CommandTable = {
+    'frame.pick': { label: 'Flag as Pick', ...needFrame, run: ctx => flag(ctx, 'pick', 'Flag as Pick') },
+    'frame.reject': { label: 'Reject', ...needFrame, run: ctx => flag(ctx, 'reject', 'Reject') },
+    'frame.unflag': { label: 'Unflag', ...needFrame, run: ctx => flag(ctx, null, 'Unflag') },
+    'frame.rate': {
+      label: 'Set Stars',
+      palette: false,
+      ...needFrame,
+      run: (ctx, n: number) =>
+        ctx.tx(`${n} Stars`, (t: any) => {
+          for (const id of targets(ctx)) if (t.catalog.frames[id]) t.catalog.frames[id].stars = n;
+        }),
+    },
+    'frame.label': {
+      label: 'Set Colour Label',
+      palette: false,
+      ...needFrame,
+      run: (ctx, colour: string | null) =>
+        ctx.tx(`Label ${colour ?? 'none'}`, (t: any) => {
+          const id = current(ctx.state)!;
+          if (t.catalog.frames[id]) t.catalog.frames[id].label = t.catalog.frames[id].label === colour ? null : colour;
+        }),
+    },
+    'frame.select': {
+      label: 'Select Frame',
+      palette: false,
+      run: (ctx, id: string) => {
+        studioOf(ctx).route.endBurst();
+        ctx.set({ ui: { selection: { ids: [id], primary: id, anchor: id }, showProposal: null } });
+      },
+    },
+    'frame.reopenAsPhoto': {
+      label: 'Re-open as Photo',
+      enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
+      why: 'Open a frame first',
+      hidden: (s: any) => kindIn(s, current(s)) === 'photo',
+      run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'photo'),
+    },
+    'frame.reopenAsNegative': {
+      label: 'Re-open as Negative',
+      enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
+      why: 'Open a frame first',
+      hidden: (s: any) => kindIn(s, current(s)) === 'negative',
+      run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'negative'),
+    },
+    'frame.remove': {
+      label: (s: any) => (sel(s).length > 1 ? `Remove ${sel(s).length} Frames from Library` : 'Remove from Library'),
+      ...needFrame,
+      run: ctx => {
+        const ids = targets(ctx);
+        if (!ids.length) return;
+        const names = ids.map(id => ctx.state.catalog?.frames?.[id]?.name ?? id);
+        studioOf(ctx).remove(ids);
+        ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its recipe`, { kind: 'info' });
+      },
+    },
+    // CHB-031 F20: turn or mirror the frame shown (view.frame.orientation; a strip's frames may come sideways)
+    'frame.rotateLeft': { label: 'Rotate Left', ...openFrame, run: ctx => orientCurrent(ctx, 'ccw90', 'Rotate Left') },
+    'frame.rotateRight': { label: 'Rotate Right', ...openFrame, run: ctx => orientCurrent(ctx, 'cw90', 'Rotate Right') },
+    'frame.flip': { label: 'Flip Left to Right', ...openFrame, run: ctx => orientCurrent(ctx, 'flipH', 'Flip') },
+    // ── the host's actions (CHB-027: the top bar folded into the menus); hidden where the host has none ──
+    'file.open': { label: 'Open Files…', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => hostRun(ctx, 'openFiles') },
+    'file.openFolder': { label: 'Open Folder…', hidden: (s: any) => !hostHas(s, 'openFolder'), run: ctx => hostRun(ctx, 'openFolder') },
+    'file.reopenFolder': {
+      label: (s: any) => `Reopen ${s.ui?.host?.folder ?? 'Last Folder'}`,
+      hidden: (s: any) => !hostHas(s, 'reopenFolder') || !s.ui?.host?.folder,
+      run: ctx => hostRun(ctx, 'reopenFolder'),
+    },
+    'file.openAs.auto': { label: 'Photo or Negative: Guess', palette: false, checked: (s: any) => (s.prefs?.openAs ?? 'auto') === 'auto', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'auto' } }) },
+    'file.openAs.photo': { label: 'Open as Photos', palette: false, checked: (s: any) => s.prefs?.openAs === 'photo', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'photo' } }) },
+    'file.openAs.negative': { label: 'Open as Negatives', palette: false, checked: (s: any) => s.prefs?.openAs === 'negative', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'negative' } }) },
+    // F18: Photos / Negatives last until the studio restarts (then Guess), unless kept
+    'file.openAs.keep': { label: 'Keep This Choice After Restart', palette: false, checked: (s: any) => !!s.prefs?.openAsKeep, hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAsKeep: !ctx.state.prefs?.openAsKeep } }) },
+    'file.dust': {
+      label: 'Heal Dust on Open',
+      checked: (s: any) => !!s.prefs?.dust,
+      hidden: (s: any) => !hostHas(s, 'dust'),
+      run: ctx => {
+        const on = !ctx.state.prefs?.dust;
+        ctx.set({ prefs: { dust: on } });
+        return hostRun(ctx, 'dust', on);
+      },
+    },
+    // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
+    'file.export': { label: 'Export…', ...needFrame, run: ctx => (hostHas(ctx.state, 'exportPrint') ? hostRun(ctx, 'exportPrint') : ctx.run('output.save')) },
+    'file.saveRecipe': { label: 'Save Recipe', ...needFrame, hidden: (s: any) => !hostHas(s, 'saveRecipe'), run: ctx => hostRun(ctx, 'saveRecipe') },
+    'view.layout': {
+      label: 'Layout…',
+      hidden: (s: any) => !hostHas(s, 'setLayout') || !(s.ui?.host?.layouts?.length > 0),
+      run: async (ctx, id?: string) => {
+        if (typeof id === 'string') return hostRun(ctx, 'setLayout', id);
+        const h = ctx.state.ui?.host;
+        const pick = await studioOf(ctx).rt!.chrome.dialog({
+          title: 'Layout of the studio',
+          buttons: (h?.layouts ?? []).map((l: { id: string; label: string }) => ({ label: l.label, value: l.id, primary: l.id === h?.layout })),
+        }).result;
+        if (typeof pick === 'string' && pick !== h?.layout) return hostRun(ctx, 'setLayout', pick);
+        return null;
+      },
+    },
+    'frame.next': { label: 'Next Frame', run: ctx => step(ctx, 1) },
+    'frame.previous': { label: 'Previous Frame', run: ctx => step(ctx, -1) },
+    'view.mode': { label: 'Library View', palette: false, run: (ctx, mode: string) => ctx.set({ view: { mode } }) },
+    'view.show': { label: 'Show View', palette: false, run: (ctx, v: ViewMode) => ctx.set({ view: { view: v } }) },
+    'view.beforeAfter': {
+      label: 'Before / After',
+      ...needFrame,
+      checked: (s: any) => s.view?.compare !== 'off',
+      run: ctx => ctx.set({ view: { compare: ({ off: 'split', split: 'before', before: 'off' } as Record<string, string>)[ctx.state.view.compare] ?? 'off' } }),
+    },
+    'view.sideBySide': { label: 'Side by Side', ...needFrame, run: ctx => ctx.set({ view: { compare: ctx.state.view.compare === 'lr' ? 'off' : 'lr' } }) },
+    'step.go': { label: 'Go to Step', palette: false, run: (ctx, id: string) => ctx.set({ view: { step: id } }) },
+    'history.jump': {
+      label: 'Jump in History',
+      palette: false,
+      run: (ctx, f: string, index: number) => studioOf(ctx).route.jump(f, index),
+    },
+    'proposal.show': {
+      label: 'Show Proposal',
+      palette: false,
+      run: (ctx, tx: string | null) => ctx.set({ ui: { showProposal: ctx.state.ui.showProposal === tx ? null : tx } }),
+    },
+    'proposal.toggle': {
+      label: 'Include Change',
+      palette: false,
+      run: (ctx, tx: string, seq: number) => {
+        const off = ctx.state.ui.approvals?.[tx]?.off ?? [];
+        ctx.set({ ui: { approvals: { [tx]: { off: off.includes(seq) ? off.filter((x: number) => x !== seq) : [...off, seq] } } } });
+      },
+    },
+    'proposal.approve': {
+      label: 'Approve Agent Change',
+      palette: false,
+      run: (ctx, f: string, tx: string, force = false) => approve(ctx, f, tx, !!force),
+    },
+    'proposal.reject': {
+      label: 'Reject Agent Change',
+      palette: false,
+      run: (ctx, f: string, tx: string) => {
+        const p = (ctx.state.proposals?.[f] ?? []).find((x: any) => x.tx === tx);
+        if (!p) return;
+        studioOf(ctx).route.reject(f, p.seqs);
+        ctx.set({ ui: { showProposal: ctx.state.ui.showProposal === tx ? null : ctx.state.ui.showProposal } });
+      },
+    },
+    'proposal.approveAll': {
+      label: 'Approve All Agent Changes',
+      enabled: (s: any) => !!current(s) && (s.proposals?.[current(s)!]?.length ?? 0) > 0,
+      why: 'No pending agent changes on this frame',
+      run: ctx => {
+        const f = current(ctx.state)!;
+        for (const p of [...(ctx.state.proposals?.[f] ?? [])]) approve(ctx, f, p.tx, false);
+      },
+    },
+    'snapshot.new': {
+      label: 'New Snapshot',
+      ...needFrame,
+      run: (ctx, name?: string) => {
+        const f = current(ctx.state)!;
+        const e = studioOf(ctx).frames.get(f);
+        if (!e) return;
+        const list = ctx.state.snapshots?.[f] ?? [];
+        const snap = { id: `s${list.length + 1}`, name: name ?? `Snapshot ${list.length + 1}`, ts: ctx.rt.clock.now(), stateHash: e.log.stateHash, recipe: e.log.committed };
+        ctx.tx(`Snapshot "${snap.name}"`, (t: any) => {
+          t.$set(['snapshots', f], [...list, snap]);
+        });
+      },
+    },
+    'snapshot.restore': {
+      label: 'Restore Snapshot',
+      palette: false,
+      run: (ctx, id: string) => {
+        const f = current(ctx.state)!;
+        const snap = (ctx.state.snapshots?.[f] ?? []).find((x: any) => x.id === id);
+        const e = studioOf(ctx).frames.get(f);
+        if (!snap || !e) return;
+        const ms = diffRecipes(e.log.committed, snap.recipe);
+        if (ms.length) studioOf(ctx).route.applyMutations(f, ms, `Restore "${snap.name}"`);
+      },
+    },
+    'print.applyToSelection': {
+      label: 'Apply Print Settings to Selection',
+      enabled: (s: any) => sel(s).length > 1,
+      why: 'Select the frames to copy the settings to (and the source as primary)',
+      run: ctx => {
+        const src = recipeOf(ctx, current(ctx.state)!);
+        if (!src) return;
+        ctx.tx('Apply Print Settings', (t: any) => {
+          for (const id of sel(ctx.state)) {
+            if (id === current(ctx.state) || !t.recipes[id]) continue;
+            for (const p of PRINT_SETTINGS) t.$set(['recipes', id, ...p.split('.')], getPath(src, p));
+          }
+        });
+      },
+    },
+    'probe.pin': {
+      label: 'Pin Probe',
+      enabled: (s: any) => !!current(s) && !!s.ui?.probe,
+      why: 'Hover the print with the probe tool first',
+      run: ctx => {
+        const f = current(ctx.state)!;
+        const [x, y] = ctx.state.ui.probe!;
+        const n = Object.keys(recipeOf(ctx, f)?.probes ?? {}).length + 1;
+        ctx.tx(`Pin probe ${n}`, (t: any) => {
+          t.$set(['recipes', f, 'probes', `p${n}`], { x, y, r: 2 });
+        });
+      },
+    },
+    'ring.apply': {
+      label: 'Use This Print',
+      palette: false,
+      run: (ctx, offset: Vec3, label = 'Ring-around') => {
+        const f = current(ctx.state)!;
+        const r = recipeOf(ctx, f);
+        if (!r) return;
+        const l = r.print.lights.logH;
+        ctx.tx(label, (t: any) => {
+          t.$set(['recipes', f, 'print', 'lights', 'logH'], l.map((x, i) => Number((x + offset[i]!).toFixed(6))));
+        });
+        ctx.set({ ui: { tool: null } });
+      },
+    },
+    'exposure.add': {
+      label: 'Add Exposure',
+      ...needFrame,
+      run: (ctx, kind: 'dodge' | 'burn' | 'flash' = 'burn') => {
+        const f = current(ctx.state)!;
+        const r = recipeOf(ctx, f)!;
+        const id = nextExposureId(r, kind);
+        studioOf(ctx).route.applyMutations(f, [{ op: 'exposure.add', exposure: { id, kind, stops: kind === 'flash' ? null : 0.5, ...(kind === 'flash' ? { time_s: 2 } : {}) } }], `Add ${kind} ${id}`);
+      },
+    },
+    'exposure.remove': {
+      label: 'Remove Exposure',
+      palette: false,
+      run: (ctx, id: string) => studioOf(ctx).route.applyMutations(current(ctx.state)!, [{ op: 'exposure.remove', id }], `Remove exposure ${id}`),
+    },
+    'agent.mode': {
+      label: 'Agent Mode',
+      palette: false,
+      run: (ctx, mode: 'read-only' | 'ask' | 'auto') => {
+        studioOf(ctx).frames.setMode(mode);
+        ctx.set({ prefs: { agentMode: mode } });
+      },
+    },
+    'output.save': {
+      label: 'Save the Print',
+      // in menus as File ▸ Export… (file.export, CHB-027), which runs this where the host has no export dialog
+      ...needFrame,
+      run: ctx => {
+        const save = ctx.services['save'] as ((f: string) => unknown) | undefined;
+        if (save) return save(current(ctx.state)!);
+        ctx.toast('Export with colour management comes with CHB-011', { kind: 'info' });
+        return null;
+      },
+    },
+  };
+  // the tools: gestures on the viewer
+  const coreTools: ToolTable = {
+    'probe': {
+      label: 'Densitometer',
+      icon: 'eyedropper',
+      key: 'I',
+      cursor: 'crosshair',
+      on: {
+        hover: (e, ctx) => ctx.set({ ui: { probe: [Math.round(e.x), Math.round(e.y)] } }),
+        down: (e, ctx) => {
+          ctx.set({ ui: { probe: [Math.round(e.x), Math.round(e.y)] } });
+          return false;
         },
-      })
-      .state('proposals', { init: {} })
-      .route('proposals', { keyDepth: 1, readonly: true })
-      .state('view', { init: CORE_STATE.view, view: true })
-      .state('ui', { init: CORE_STATE.ui, view: true })
-      .state('prefs', { init: CORE_STATE.prefs, view: true })
-      .keys('global', { 'Mod+O': 'file.open', 'Mod+E': 'file.export' })
-      .forms(...CB_FORMS)
-      .fragments(testStripFragment, padFragment)
-      .passes(argsPass, handlesPass)
-      .commands(c => {
-        const needFrame = { enabled: (s: any) => !!current(s), why: 'Open a frame first' };
-        const flag = (ctx: any, v: CatalogFrame['flag'], label: string) =>
-          ctx.tx(label, (t: any) => {
-            for (const id of targets(ctx)) if (t.catalog.frames[id]) t.catalog.frames[id].flag = v;
-          });
-        const hostRun = (ctx: any, action: string, ...args: unknown[]): unknown => {
-          const h = studioOf(ctx).host as Record<string, unknown> | null;
-          const f = h?.[action];
-          if (typeof f === 'function') return (f as (...a: unknown[]) => unknown).apply(h, args);
-          ctx.toast('Not available in this window', { kind: 'why' });
-          return null;
+      },
+    },
+    'test-strip': {
+      label: 'Test Strip',
+      icon: 'layers',
+      key: 'T',
+      cursor: 'pointer',
+      image: (r, s: any) => (isImageHandle(r) && r.what === 'print' ? frameRef(r.frame, r.recipe).testStrip(s.ui?.toolOptions?.['test-strip']) : r),
+      // the bands' edges and values over the print (click a band to use its value)
+      overlay: (g: any, vp: any, s: any) => {
+        const f = current(s);
+        const r = f ? s.recipes?.[f] : undefined;
+        const [w, h] = vp.natural();
+        if (!r || !w) return;
+        const o = s.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
+        const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
+        const vals = stripValues(o.vary, base, o.step, o.count);
+        const doc = g.ownerDocument as Document;
+        const el = (tag: string, a: Record<string, string | number>) => {
+          const x = doc.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (const [k, v] of Object.entries(a)) x.setAttribute(k, String(v));
+          return x;
         };
-        const openFrame = { enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!], why: 'Open a frame first' };
-        const orientCurrent = (ctx: any, step: 'cw90' | 'ccw90' | 'flipH', label: string): void => {
+        vals.forEach((v, i) => {
+          const [x0, y0] = vp.toScreen(i / vals.length, 0);
+          const [x1, y1] = vp.toScreen((i + 1) / vals.length, 1);
+          const band = el('g', { class: `cb-band${i === (vals.length - 1) / 2 ? ' is-current' : ''}`, 'data-value': v });
+          band.append(el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'cb-band-r' }));
+          const t = el('text', { x: (x0 + x1) / 2, y: y1 - 8, 'text-anchor': 'middle', class: 'cb-band-t' });
+          t.textContent = stripLabel(o.vary, v, r);
+          band.append(t);
+          g.append(band);
+        });
+        void h;
+      },
+      on: {
+        down: (e, ctx) => {
           const f = current(ctx.state);
           const r = f ? recipeOf(ctx, f) : undefined;
-          if (!f || !r) return;
-          const next = orientFrame(r.view.frame, step);
-          ctx.tx(label, (t: any) => t.$set(['recipes', f, 'view', 'frame'], { ...next, crop: next.crop ? { ...next.crop } : null }));
-        };
-        const reopenAs = async (ctx: any, id: string | null, as: 'photo' | 'negative'): Promise<unknown> => {
-          if (!id) return null;
-          const studio = studioOf(ctx);
-          const name = ctx.state.catalog?.frames?.[id]?.name ?? id;
-          if (!studio.frames.get(id)) {
-            ctx.toast(`${name} is not open: select it to open its file first`, { kind: 'why' });
-            return null;
-          }
-          ctx.toast(`Re-opening ${name} as a ${as}…`, { kind: 'info' });
-          try {
-            const r = await studio.reopen(id, as);
-            ctx.toast(`${name} is open as a ${as} now${r.outcome === 'resumed' ? ` (its saved recipe as a ${as})` : ''}`, { kind: 'ok' });
-            return r.entry.id;
-          } catch (e) {
-            ctx.toast(`${name}: ${String((e as { diag?: { message?: string } })?.diag?.message ?? (e as Error)?.message ?? e)}`, { kind: 'error' });
-            return null;
-          }
-        };
-        c.add('frame.pick', { label: 'Flag as Pick', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, 'pick', 'Flag as Pick') })
-          .add('frame.reject', { label: 'Reject', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, 'reject', 'Reject') })
-          .add('frame.unflag', { label: 'Unflag', menu: 'Frame', ...needFrame, run: ctx => flag(ctx, null, 'Unflag') })
-          .add('frame.rate', {
-            label: 'Set Stars',
-            menu: 'Frame',
-            palette: false,
-            ...needFrame,
-            run: (ctx, n: number) =>
-              ctx.tx(`${n} Stars`, (t: any) => {
-                for (const id of targets(ctx)) if (t.catalog.frames[id]) t.catalog.frames[id].stars = n;
-              }),
-          })
-          .add('frame.label', {
-            label: 'Set Colour Label',
-            palette: false,
-            ...needFrame,
-            run: (ctx, colour: string | null) =>
-              ctx.tx(`Label ${colour ?? 'none'}`, (t: any) => {
-                const id = current(ctx.state)!;
-                if (t.catalog.frames[id]) t.catalog.frames[id].label = t.catalog.frames[id].label === colour ? null : colour;
-              }),
-          })
-          .add('frame.select', {
-            label: 'Select Frame',
-            palette: false,
-            run: (ctx, id: string) => {
-              studioOf(ctx).route.endBurst();
-              ctx.set({ ui: { selection: { ids: [id], primary: id, anchor: id }, showProposal: null } });
-            },
-          })
-          .add('frame.reopenAsPhoto', {
-            label: 'Re-open as Photo',
-            menu: 'Frame',
-            enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
-            why: 'Open a frame first',
-            hidden: (s: any) => kindIn(s, current(s)) === 'photo',
-            run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'photo'),
-          })
-          .add('frame.reopenAsNegative', {
-            label: 'Re-open as Negative',
-            menu: 'Frame',
-            enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!],
-            why: 'Open a frame first',
-            hidden: (s: any) => kindIn(s, current(s)) === 'negative',
-            run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? current(ctx.state), 'negative'),
-          })
-          .add('frame.remove', {
-            label: (s: any) => (sel(s).length > 1 ? `Remove ${sel(s).length} Frames from Library` : 'Remove from Library'),
-            menu: 'Frame',
-            ...needFrame,
-            run: ctx => {
-              const ids = targets(ctx);
-              if (!ids.length) return;
-              const names = ids.map(id => ctx.state.catalog?.frames?.[id]?.name ?? id);
-              studioOf(ctx).remove(ids);
-              ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its recipe`, { kind: 'info' });
-            },
-          })
-          // CHB-031 F20: turn or mirror the frame shown (view.frame.orientation; a strip's frames may come sideways)
-          .add('frame.rotateLeft', { label: 'Rotate Left', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'ccw90', 'Rotate Left') })
-          .add('frame.rotateRight', { label: 'Rotate Right', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'cw90', 'Rotate Right') })
-          .add('frame.flip', { label: 'Flip Left to Right', menu: 'Frame', ...openFrame, run: ctx => orientCurrent(ctx, 'flipH', 'Flip') })
-          // ── the host's actions (CHB-027: the top bar folded into the menus); hidden where the host has none ──
-          .add('file.open', { label: 'Open Files…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => hostRun(ctx, 'openFiles') })
-          .add('file.openFolder', { label: 'Open Folder…', menu: 'File', hidden: (s: any) => !hostHas(s, 'openFolder'), run: ctx => hostRun(ctx, 'openFolder') })
-          .add('file.reopenFolder', {
-            label: (s: any) => `Reopen ${s.ui?.host?.folder ?? 'Last Folder'}`,
-            menu: 'File',
-            hidden: (s: any) => !hostHas(s, 'reopenFolder') || !s.ui?.host?.folder,
-            run: ctx => hostRun(ctx, 'reopenFolder'),
-          })
-          .add('file.openAs.auto', { label: 'Photo or Negative: Guess', menu: 'File', palette: false, checked: (s: any) => (s.prefs?.openAs ?? 'auto') === 'auto', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'auto' } }) })
-          .add('file.openAs.photo', { label: 'Open as Photos', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'photo', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'photo' } }) })
-          .add('file.openAs.negative', { label: 'Open as Negatives', menu: 'File', palette: false, checked: (s: any) => s.prefs?.openAs === 'negative', hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAs: 'negative' } }) })
-          // F18: Photos / Negatives last until the studio restarts (then Guess), unless kept
-          .add('file.openAs.keep', { label: 'Keep This Choice After Restart', menu: 'File', palette: false, checked: (s: any) => !!s.prefs?.openAsKeep, hidden: (s: any) => !hostHas(s, 'openFiles'), run: ctx => ctx.set({ prefs: { openAsKeep: !ctx.state.prefs?.openAsKeep } }) })
-          .add('file.dust', {
-            label: 'Heal Dust on Open',
-            menu: 'File',
-            checked: (s: any) => !!s.prefs?.dust,
-            hidden: (s: any) => !hostHas(s, 'dust'),
-            run: ctx => {
-              const on = !ctx.state.prefs?.dust;
-              ctx.set({ prefs: { dust: on } });
-              return hostRun(ctx, 'dust', on);
-            },
-          })
-          // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
-          .add('file.export', { label: 'Export…', menu: 'File', ...needFrame, run: ctx => (hostHas(ctx.state, 'exportPrint') ? hostRun(ctx, 'exportPrint') : ctx.run('output.save')) })
-          .add('file.saveRecipe', { label: 'Save Recipe', menu: 'File', ...needFrame, hidden: (s: any) => !hostHas(s, 'saveRecipe'), run: ctx => hostRun(ctx, 'saveRecipe') })
-          .add('view.layout', {
-            label: 'Layout…',
-            menu: 'View',
-            hidden: (s: any) => !hostHas(s, 'setLayout') || !(s.ui?.host?.layouts?.length > 0),
-            run: async (ctx, id?: string) => {
-              if (typeof id === 'string') return hostRun(ctx, 'setLayout', id);
-              const h = ctx.state.ui?.host;
-              const pick = await studioOf(ctx).rt!.chrome.dialog({
-                title: 'Layout of the studio',
-                buttons: (h?.layouts ?? []).map((l: { id: string; label: string }) => ({ label: l.label, value: l.id, primary: l.id === h?.layout })),
-              }).result;
-              if (typeof pick === 'string' && pick !== h?.layout) return hostRun(ctx, 'setLayout', pick);
-              return null;
-            },
-          })
-          .add('frame.next', { label: 'Next Frame', menu: 'Frame', run: ctx => step(ctx, 1) })
-          .add('frame.previous', { label: 'Previous Frame', menu: 'Frame', run: ctx => step(ctx, -1) })
-          .add('view.mode', { label: 'Library View', palette: false, run: (ctx, mode: string) => ctx.set({ view: { mode } }) })
-          .add('view.show', { label: 'Show View', palette: false, run: (ctx, v: ViewMode) => ctx.set({ view: { view: v } }) })
-          .add('view.beforeAfter', {
-            label: 'Before / After',
-            menu: 'View',
-            ...needFrame,
-            checked: (s: any) => s.view?.compare !== 'off',
-            run: ctx => ctx.set({ view: { compare: ({ off: 'split', split: 'before', before: 'off' } as Record<string, string>)[ctx.state.view.compare] ?? 'off' } }),
-          })
-          .add('view.sideBySide', { label: 'Side by Side', menu: 'View', ...needFrame, run: ctx => ctx.set({ view: { compare: ctx.state.view.compare === 'lr' ? 'off' : 'lr' } }) })
-          .add('step.go', { label: 'Go to Step', palette: false, run: (ctx, id: string) => ctx.set({ view: { step: id } }) })
-          .add('history.jump', {
-            label: 'Jump in History',
-            palette: false,
-            run: (ctx, f: string, index: number) => studioOf(ctx).route.jump(f, index),
-          })
-          .add('proposal.show', {
-            label: 'Show Proposal',
-            palette: false,
-            run: (ctx, tx: string | null) => ctx.set({ ui: { showProposal: ctx.state.ui.showProposal === tx ? null : tx } }),
-          })
-          .add('proposal.toggle', {
-            label: 'Include Change',
-            palette: false,
-            run: (ctx, tx: string, seq: number) => {
-              const off = ctx.state.ui.approvals?.[tx]?.off ?? [];
-              ctx.set({ ui: { approvals: { [tx]: { off: off.includes(seq) ? off.filter((x: number) => x !== seq) : [...off, seq] } } } });
-            },
-          })
-          .add('proposal.approve', {
-            label: 'Approve Agent Change',
-            palette: false,
-            run: (ctx, f: string, tx: string, force = false) => approve(ctx, f, tx, !!force),
-          })
-          .add('proposal.reject', {
-            label: 'Reject Agent Change',
-            palette: false,
-            run: (ctx, f: string, tx: string) => {
-              const p = (ctx.state.proposals?.[f] ?? []).find((x: any) => x.tx === tx);
-              if (!p) return;
-              studioOf(ctx).route.reject(f, p.seqs);
-              ctx.set({ ui: { showProposal: ctx.state.ui.showProposal === tx ? null : ctx.state.ui.showProposal } });
-            },
-          })
-          .add('proposal.approveAll', {
-            label: 'Approve All Agent Changes',
-            menu: 'Edit',
-            enabled: (s: any) => !!current(s) && (s.proposals?.[current(s)!]?.length ?? 0) > 0,
-            why: 'No pending agent changes on this frame',
-            run: ctx => {
-              const f = current(ctx.state)!;
-              for (const p of [...(ctx.state.proposals?.[f] ?? [])]) approve(ctx, f, p.tx, false);
-            },
-          })
-          .add('snapshot.new', {
-            label: 'New Snapshot',
-            menu: 'Frame',
-            ...needFrame,
-            run: (ctx, name?: string) => {
-              const f = current(ctx.state)!;
-              const e = studioOf(ctx).frames.get(f);
-              if (!e) return;
-              const list = ctx.state.snapshots?.[f] ?? [];
-              const snap = { id: `s${list.length + 1}`, name: name ?? `Snapshot ${list.length + 1}`, ts: ctx.rt.clock.now(), stateHash: e.log.stateHash, recipe: e.log.committed };
-              ctx.tx(`Snapshot "${snap.name}"`, (t: any) => {
-                t.$set(['snapshots', f], [...list, snap]);
-              });
-            },
-          })
-          .add('snapshot.restore', {
-            label: 'Restore Snapshot',
-            palette: false,
-            run: (ctx, id: string) => {
-              const f = current(ctx.state)!;
-              const snap = (ctx.state.snapshots?.[f] ?? []).find((x: any) => x.id === id);
-              const e = studioOf(ctx).frames.get(f);
-              if (!snap || !e) return;
-              const ms = diffRecipes(e.log.committed, snap.recipe);
-              if (ms.length) studioOf(ctx).route.applyMutations(f, ms, `Restore "${snap.name}"`);
-            },
-          })
-          .add('print.applyToSelection', {
-            label: 'Apply Print Settings to Selection',
-            menu: 'Frame',
-            enabled: (s: any) => sel(s).length > 1,
-            why: 'Select the frames to copy the settings to (and the source as primary)',
-            run: ctx => {
-              const src = recipeOf(ctx, current(ctx.state)!);
-              if (!src) return;
-              ctx.tx('Apply Print Settings', (t: any) => {
-                for (const id of sel(ctx.state)) {
-                  if (id === current(ctx.state) || !t.recipes[id]) continue;
-                  for (const p of PRINT_SETTINGS) t.$set(['recipes', id, ...p.split('.')], getPath(src, p));
-                }
-              });
-            },
-          })
-          .add('probe.pin', {
-            label: 'Pin Probe',
-            menu: 'Frame',
-            enabled: (s: any) => !!current(s) && !!s.ui?.probe,
-            why: 'Hover the print with the probe tool first',
-            run: ctx => {
-              const f = current(ctx.state)!;
-              const [x, y] = ctx.state.ui.probe!;
-              const n = Object.keys(recipeOf(ctx, f)?.probes ?? {}).length + 1;
-              ctx.tx(`Pin probe ${n}`, (t: any) => {
-                t.$set(['recipes', f, 'probes', `p${n}`], { x, y, r: 2 });
-              });
-            },
-          })
-          .add('ring.apply', {
-            label: 'Use This Print',
-            palette: false,
-            run: (ctx, offset: Vec3, label = 'Ring-around') => {
-              const f = current(ctx.state)!;
-              const r = recipeOf(ctx, f);
-              if (!r) return;
-              const l = r.print.lights.logH;
-              ctx.tx(label, (t: any) => {
-                t.$set(['recipes', f, 'print', 'lights', 'logH'], l.map((x, i) => Number((x + offset[i]!).toFixed(6))));
-              });
-              ctx.set({ ui: { tool: null } });
-            },
-          })
-          .add('exposure.add', {
-            label: 'Add Exposure',
-            menu: 'Frame',
-            ...needFrame,
-            run: (ctx, kind: 'dodge' | 'burn' | 'flash' = 'burn') => {
-              const f = current(ctx.state)!;
-              const r = recipeOf(ctx, f)!;
-              const id = nextExposureId(r, kind);
-              studioOf(ctx).route.applyMutations(f, [{ op: 'exposure.add', exposure: { id, kind, stops: kind === 'flash' ? null : 0.5, ...(kind === 'flash' ? { time_s: 2 } : {}) } }], `Add ${kind} ${id}`);
-            },
-          })
-          .add('exposure.remove', {
-            label: 'Remove Exposure',
-            palette: false,
-            run: (ctx, id: string) => studioOf(ctx).route.applyMutations(current(ctx.state)!, [{ op: 'exposure.remove', id }], `Remove exposure ${id}`),
-          })
-          .add('agent.mode', {
-            label: 'Agent Mode',
-            palette: false,
-            run: (ctx, mode: 'read-only' | 'ask' | 'auto') => {
-              studioOf(ctx).frames.setMode(mode);
-              ctx.set({ prefs: { agentMode: mode } });
-            },
-          })
-          .add('output.save', {
-            label: 'Save the Print',
-            // in menus as File ▸ Export… (file.export, CHB-027), which runs this where the host has no export dialog
-            ...needFrame,
-            run: ctx => {
-              const save = ctx.services['save'] as ((f: string) => unknown) | undefined;
-              if (save) return save(current(ctx.state)!);
-              ctx.toast('Export with colour management comes with CHB-011', { kind: 'info' });
-              return null;
-            },
-          });
-      })
-      .tools(t =>
-        t
-          .tool('probe', {
-            label: 'Densitometer',
-            icon: 'eyedropper',
-            key: 'I',
-            cursor: 'crosshair',
-            on: {
-              hover: (e, ctx) => ctx.set({ ui: { probe: [Math.round(e.x), Math.round(e.y)] } }),
-              down: (e, ctx) => {
-                ctx.set({ ui: { probe: [Math.round(e.x), Math.round(e.y)] } });
-                return false;
-              },
-            },
-          })
-          .tool('test-strip', {
-            label: 'Test Strip',
-            icon: 'layers',
-            key: 'T',
-            cursor: 'pointer',
-            image: (r, s: any) => (isImageHandle(r) && r.what === 'print' ? frameRef(r.frame, r.recipe).testStrip(s.ui?.toolOptions?.['test-strip']) : r),
-            // the bands' edges and values over the print (click a band to use its value)
-            overlay: (g: any, vp: any, s: any) => {
-              const f = current(s);
-              const r = f ? s.recipes?.[f] : undefined;
-              const [w, h] = vp.natural();
-              if (!r || !w) return;
-              const o = s.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
-              const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
-              const vals = stripValues(o.vary, base, o.step, o.count);
-              const doc = g.ownerDocument as Document;
-              const el = (tag: string, a: Record<string, string | number>) => {
-                const x = doc.createElementNS('http://www.w3.org/2000/svg', tag);
-                for (const [k, v] of Object.entries(a)) x.setAttribute(k, String(v));
-                return x;
-              };
-              vals.forEach((v, i) => {
-                const [x0, y0] = vp.toScreen(i / vals.length, 0);
-                const [x1, y1] = vp.toScreen((i + 1) / vals.length, 1);
-                const band = el('g', { class: `cb-band${i === (vals.length - 1) / 2 ? ' is-current' : ''}`, 'data-value': v });
-                band.append(el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'cb-band-r' }));
-                const t = el('text', { x: (x0 + x1) / 2, y: y1 - 8, 'text-anchor': 'middle', class: 'cb-band-t' });
-                t.textContent = stripLabel(o.vary, v, r);
-                band.append(t);
-                g.append(band);
-              });
-              void h;
-            },
-            on: {
-              down: (e, ctx) => {
-                const f = current(ctx.state);
-                const r = f ? recipeOf(ctx, f) : undefined;
-                if (!f || !r) return false;
-                const o = ctx.state.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
-                const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
-                const vals = stripValues(o.vary, base, o.step, o.count);
-                const i = Math.max(0, Math.min(vals.length - 1, Math.floor(e.u * vals.length)));
-                const m = stripMutation(o.vary, r, vals[i]!);
-                if (m.op === 'set') ctx.tx('Test strip band', (tx: any) => tx.$set(['recipes', f, ...m.path.split('.')], m.value));
-                ctx.set({ ui: { tool: null } });
-                return false;
-              },
-            },
-          })
-          .tool('ring-around', { label: 'Ring-around', icon: 'grid', key: 'R' })
-          .tool('mask-ellipse', {
-            label: 'Burn Ellipse',
-            key: 'M',
-            cursor: 'crosshair',
-            on: {
-              down: (e, ctx) => ({ x0: e.x, y0: e.y }),
-              drag: () => undefined,
-              up: (e, ctx, g) => maskGesture(ctx, { kind: 'ellipse', cx: (g.x0 + e.x) / 2, cy: (g.y0 + e.y) / 2, rx: Math.max(2, Math.abs(e.x - g.x0) / 2), ry: Math.max(2, Math.abs(e.y - g.y0) / 2) }),
-            },
-          })
-          .tool('mask-gradient', {
-            label: 'Burn Gradient',
-            cursor: 'crosshair',
-            on: {
-              down: (e, ctx) => ({ x0: e.x, y0: e.y }),
-              drag: () => undefined,
-              up: (e, ctx, g) => maskGesture(ctx, { kind: 'gradient', from: [g.x0, g.y0], to: [e.x, e.y] }),
-            },
-          })
-          .tool('mask-brush', {
-            label: 'Burn Brush',
-            cursor: 'crosshair',
-            on: {
-              down: (e, ctx) => ({ points: [[e.x, e.y, e.pressure || 1]] }),
-              drag: (e, ctx, g) => void g.points.push([e.x, e.y, e.pressure || 1]),
-              up: (e, ctx, g) => maskGesture(ctx, { kind: 'stroke', points: g.points, radius: ctx.state.ui.toolOptions['mask-brush']?.radius ?? 6, hardness: 0.5, mode: 'add' }),
-            },
-          }),
-      )
-      .docs(CORE_DOCS);
-  });
+          if (!f || !r) return false;
+          const o = ctx.state.ui.toolOptions['test-strip'] as { vary: StripVary; step: number; count: number };
+          const base = o.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[o.vary.slice(-1) as 'c' | 'm' | 'y'];
+          const vals = stripValues(o.vary, base, o.step, o.count);
+          const i = Math.max(0, Math.min(vals.length - 1, Math.floor(e.u * vals.length)));
+          const m = stripMutation(o.vary, r, vals[i]!);
+          if (m.op === 'set') ctx.tx('Test strip band', (tx: any) => tx.$set(['recipes', f, ...m.path.split('.')], m.value));
+          ctx.set({ ui: { tool: null } });
+          return false;
+        },
+      },
+    },
+    'ring-around': { label: 'Ring-around', icon: 'grid', key: 'R' },
+    'mask-ellipse': {
+      label: 'Burn Ellipse',
+      key: 'M',
+      cursor: 'crosshair',
+      on: {
+        down: (e, ctx) => ({ x0: e.x, y0: e.y }),
+        drag: () => undefined,
+        up: (e, ctx, g) => maskGesture(ctx, { kind: 'ellipse', cx: (g.x0 + e.x) / 2, cy: (g.y0 + e.y) / 2, rx: Math.max(2, Math.abs(e.x - g.x0) / 2), ry: Math.max(2, Math.abs(e.y - g.y0) / 2) }),
+      },
+    },
+    'mask-gradient': {
+      label: 'Burn Gradient',
+      cursor: 'crosshair',
+      on: {
+        down: (e, ctx) => ({ x0: e.x, y0: e.y }),
+        drag: () => undefined,
+        up: (e, ctx, g) => maskGesture(ctx, { kind: 'gradient', from: [g.x0, g.y0], to: [e.x, e.y] }),
+      },
+    },
+    'mask-brush': {
+      label: 'Burn Brush',
+      cursor: 'crosshair',
+      on: {
+        down: (e, ctx) => ({ points: [[e.x, e.y, e.pressure || 1]] }),
+        drag: (e, ctx, g) => void g.points.push([e.x, e.y, e.pressure || 1]),
+        up: (e, ctx, g) => maskGesture(ctx, { kind: 'stroke', points: g.points, radius: ctx.state.ui.toolOptions['mask-brush']?.radius ?? 6, hardness: 0.5, mode: 'add' }),
+      },
+    },
+  };
+
+  const core = ck
+    .kit('cb.core')
+    .version('1')
+    .state('catalog', { init: CORE_STATE.catalog })
+    .state('snapshots', { init: CORE_STATE.snapshots })
+    .state('recipes', { init: {} })
+    .route('recipes', {
+      keyDepth: 1,
+      checkPath: rest => {
+        const path = rest.map(String).join('.');
+        if (!path || argModel(path) || getPath(DUMMY, path) !== undefined) return null;
+        const pr = argProblem(path);
+        return { message: `no recipe path ${path}`, ...(pr?.code === 'CB-A101' && pr.fix ? { fix: pr.fix } : {}) };
+      },
+    })
+    .state('proposals', { init: {} })
+    .route('proposals', { keyDepth: 1, readonly: true })
+    .state('view', { init: CORE_STATE.view, view: true })
+    .state('ui', { init: CORE_STATE.ui, view: true })
+    .state('prefs', { init: CORE_STATE.prefs, view: true })
+    .keys({ 'Mod+O': 'file.open', 'Mod+E': 'file.export' })
+    .forms(...CB_FORMS)
+    .fragments(testStripFragment, padFragment)
+    .passes(argsPass, handlesPass, kitsPass)
+    .commands(coreCommands)
+    .tools(coreTools)
+    .docs(CORE_DOCS);
 
   function step(ctx: any, dir: number): void {
     const list = libraryFrames(ctx.state);
@@ -753,13 +748,13 @@ export function createCb(ck: Ck) {
     const sections = a.groups.map(g =>
       ck.section(g.title, {}, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, wrap: true })] : [])),
     );
-    return ck.panel(id, { title: o.title ?? a.name }, ifFrame(...sections));
+    return ck.panel.define(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
   /** the children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
   const ifFrame = (...kids: any[]): any => ck.when((s: any) => !!cb.recipe(s), ck.column({}, ...kids), ck.text(NO_FRAME, { dim: true, wrap: true }));
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
-    return ck.panel(pid ?? id, { title: t ?? title }, node(form, rest));
+    return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, rest));
   };
 
   const cb = {
@@ -801,7 +796,7 @@ export function createCb(ck: Ck) {
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
       output: panel('cb.output', 'output', 'Save'),
       chat: panel('cb.chat', 'chat', 'Chat'),
-      navigator: (o: { id?: string } = {}) => ck.panel(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => s.catalog?.frames?.[current(s) ?? '']?.name ?? 'No frame', { dim: true })),
+      navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => s.catalog?.frames?.[current(s) ?? '']?.name ?? 'No frame', { dim: true })),
     },
     /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
     ifFrame,
@@ -817,6 +812,27 @@ export function createCb(ck: Ck) {
       libraryModes: { G: ['view.mode', 'grid'], E: ['view.mode', 'loupe'], C: ['view.mode', 'compare'], N: ['view.mode', 'survey'] } as Record<string, any>,
       views: { '1': ['view.show', 'print'], '2': ['view.show', 'negative'], '3': ['view.show', 'dyes'], '4': ['view.show', 'classes'] } as Record<string, any>,
       darkroom: { '\\': 'view.beforeAfter', Y: 'view.sideBySide', P: 'probe.pin', S: 'snapshot.new', ArrowRight: 'frame.next', ArrowLeft: 'frame.previous' } as Record<string, any>,
+    },
+    /** the studio's standard menus; the kits add theirs (cb.kits.roll.menus.roll(), …) */
+    menus: {
+      file: () =>
+        ck.menu('File', [
+          // the host's actions (CHB-027); hidden where the host has none (the dev host, tests)
+          'file.open', 'file.openFolder', 'file.reopenFolder',
+          { label: 'Open As', items: ['file.openAs.auto', 'file.openAs.photo', 'file.openAs.negative', 'file.openAs.keep', '-', 'file.dust'] },
+          '-', 'file.export', 'file.saveRecipe', '-', 'app.palette',
+        ]),
+      edit: () => ck.menu('Edit', ['edit.undo', 'edit.redo', '-', 'proposal.approveAll']),
+      frame: () =>
+        ck.menu('Frame', [
+          'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.rotateLeft', 'frame.rotateRight', 'frame.flip', '-', 'frame.reopenAsPhoto', 'frame.reopenAsNegative', 'frame.remove',
+          '-', 'frame.next', 'frame.previous', '-', 'snapshot.new', 'probe.pin', 'exposure.add', 'print.applyToSelection',
+        ]),
+      view: () => ck.menu('View', ['view.beforeAfter', 'view.sideBySide', '-', 'view.fit', 'view.actual', 'view.zoomIn', 'view.zoomOut', '-', 'view.layout', 'app.theme']),
+      window: () => ck.menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'workspace.reset']),
+      help: () => ck.menu('Help', ['app.shortcuts', 'app.diagnostics']),
+      /** File, Edit, Frame, View, Window, Help */
+      standard: () => [cb.menus.file(), cb.menus.edit(), cb.menus.frame(), cb.menus.view(), cb.menus.window(), cb.menus.help()],
     },
     ring: { tiles: ringTiles },
     arrangements: { DARKROOM },

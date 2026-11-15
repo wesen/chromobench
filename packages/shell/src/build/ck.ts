@@ -1,6 +1,7 @@
 // createCk(): the public namespace (port of CraftKit index.js). Every call to createCk() returns a fresh instance
-// with its own forms, fragments, passes, themes and panel registry (DR-2: tests build several variants in one
-// process and kits must not leak between them). `ck` (index.ts) is a default instance.
+// with its own vocabulary (the fragments and kits registered with ck.extend), so tests build several layouts in one
+// process and kits never leak between them (DR-2). `ck` (index.ts) is a default instance. Everything a ck instance
+// builds is an immutable value: nodes, modules, menus, kits and the shell (CHB-035 §30, §32).
 //
 // Nouns: State · Value · Element · Habit · Command · Chord · Tool · Transaction · Place · Token · Kit · Pass
 // Verbs: bind · derive · show · arrange · choose · act · map · handle · change · extend · check · explain
@@ -14,12 +15,13 @@ import { MIXED, monotone, parseValue, UNITS } from '../core/math.ts';
 import { isNode, isProps, nodeMods, NodeVocab, type NodeData } from '../ir/node.ts';
 import { builtinForms, type FormSpec, type FormSlotsMap, type BuiltinForm } from '../ir/forms.ts';
 import { commonSlots, slot, type PropOf, type PropsOf, type Traced, type CommandRef } from '../ir/slots.ts';
-import { ShellBuilder, type ShellDef } from './shell-builder.ts';
+import { menu, moduleData, moduleKind, shellData, shellKind, type ModuleProps, type ModuleValue, type ShellValue } from './shell.ts';
 import { fragment, type FragmentTarget } from './fragments.ts';
-import { kit, isKit, KitBuilder } from './kits.ts';
+import { kit, isKit, product, type KitValue, type ProductParts } from './kits.ts';
 import { pass, runPasses, isPass } from './passes.ts';
 import { explainNode, explainKit, explainPass, explainFragment, explainDiags } from './explain.ts';
 import type { Fragment, FragmentSpec, IrSpec, Kit, PassCtx, PassDef, ShellOpts, Theme } from './types.ts';
+import type { ShellDef } from './shell.ts';
 import { BuiltApp, buildApp } from '../app/built-app.ts';
 import { Runtime } from '../app/runtime.ts';
 import { craftkit } from '../themes/craftkit.ts';
@@ -80,9 +82,6 @@ const svgIn = (g: any, tag: string, attrs: Record<string, unknown>): any => {
 export function createCk<S = any>(options: CkOptions = {}) {
   const platform = options.platform || OTHER;
   const forms = new Map<string, FormSpec>(builtinForms().map(f => [f.name, f]));
-  const panels = new Map<string, NodeData>();
-  const fragments: Fragment[] = [];
-  const passes: PassDef[] = [];
   const themes = new Map<string, Theme>([
     [craftkit.name, craftkit],
     [chromogen.name, chromogen],
@@ -95,6 +94,9 @@ export function createCk<S = any>(options: CkOptions = {}) {
   const kitFragments: Fragment[] = [];
   const vocabForms = new Map<string, FormSpec>(forms);
   const vocab = new NodeVocab(() => vocabForms, () => [...extensions, ...kitFragments]);
+  const builderFragments = (): Fragment[] => [...extensions, ...kitFragments];
+  const shells = shellKind(builderFragments, (def: ShellDef, o: { platform?: Platform }) => buildApp<S>(def, ck, { platform: o.platform || platform }));
+  const modules = moduleKind(builderFragments);
   const node = <F extends string>(form: F, props: Record<string, unknown> = {}, kids: unknown = [], at: CallSite | null = site()): FormNode<F, S> => vocab.node(form, props, kids, at) as FormNode<F, S>;
   const ctor = <F extends string>(form: F, f: (...a: any[]) => any): any => Object.assign(f, { form });
   /** (props?, ...kids) → node */
@@ -116,30 +118,37 @@ export function createCk<S = any>(options: CkOptions = {}) {
   const ck = {
     platform,
     forms,
-    panels,
     fragments: extensions,
-    passes,
     themes,
     irs,
     MIXED,
 
-    shell: (name: string, opts: ShellOpts = {}): ShellBuilder<S> => {
-      const b = new ShellBuilder<S>(name, opts, (def: ShellDef, o: { platform?: Platform }) => buildApp<S>(def, b.self, ck, { platform: o.platform || platform }));
-      return b.self;
+    // ── the program: a shell, its modules and menus; kits ──
+    /** the shell: an immutable value; .use(kit), .module(m), .menus(...), .keys(map), .build() */
+    shell: (name: string, opts: ShellOpts = {}): ShellValue<S> => shells.make(shellData(name, opts, site())) as ShellValue<S>,
+    /** a module: ck.module('print', { label: 'Print', key: 'D' }).left(…).center(…).keys(…) */
+    module: (id: string, props: ModuleProps<S> = {}): ModuleValue<S> => {
+      const at = site();
+      return modules.make(moduleData(id, props, at), at) as ModuleValue<S>;
     },
+    /** a menu the shell places with .menus(…): command ids, '-' separators, submenus { label, items } */
+    menu,
+    /** a kit: ck.kit('ratings').version('1').state(…).commands({ id: spec }).tools({ id: spec }).keys(…) */
+    kit: <St = unknown>(name: string): KitValue<St> => kit<St>(name, site()),
+    /** what a kit offers a layout: { kit, panels, modules, menus, keys, tools, commands, docs } */
+    product: <K extends KitValue<any>, P extends ProductParts>(k: K, parts: P) => product(k, parts),
 
     // ── place: panels and containers ──
-    /** ck.panel(id) references a panel; ck.panel(id, opts?, ...kids) defines one (placed where it stands) */
-    panel(id: string, opts?: P<'panel', S> | Child, ...kids: Child[]): FormNode<'panel', S> {
-      const at = site();
-      if (opts === undefined && !kids.length) return node('panelref', { id }, [], at) as unknown as FormNode<'panel', S>;
-      let props: Record<string, unknown> = {};
-      if (isProps(opts)) props = opts as Record<string, unknown>;
-      else kids.unshift(opts as Child);
-      const n = node('panel', { id, ...props }, kids, at);
-      panels.set(id, n);
-      return n;
-    },
+    /** ck.panel(id) references a panel defined elsewhere in the program; ck.panel.define(id, props?, ...kids) defines one where it stands */
+    panel: Object.assign((id: string): FormNode<'panelref', S> => node('panelref', { id }, [], site()), {
+      define(id: string, props?: P<'panel', S> | Child, ...kids: Child[]): FormNode<'panel', S> {
+        const at = site();
+        let p: Record<string, unknown> = {};
+        if (isProps(props)) p = props as Record<string, unknown>;
+        else if (props !== undefined) kids.unshift(props as Child);
+        return node('panel', { id, ...p }, kids, at);
+      },
+    }),
     section(title: Traced<S, string>, opts?: P<'section', S> | Child, ...kids: Child[]): FormNode<'section', S> {
       const at = site();
       let props: Record<string, unknown> = {};
@@ -252,16 +261,6 @@ export function createCk<S = any>(options: CkOptions = {}) {
     },
 
     // ── extend ──
-    /** define a form (CraftKit's ck.define) and get its constructor */
-    form<F extends string>(name: F, spec: Omit<FormSpec, 'name'>): FormCtor<F, S> & { spec: FormSpec } {
-      const full: FormSpec = { ...spec, name };
-      forms.set(name, full);
-      vocabForms.set(name, full);
-      vocab.invalidate();
-      const c = box(name) as FormCtor<F, S> & { spec: FormSpec };
-      (c as any).spec = full;
-      return c;
-    },
     /**
      * Register fragments (their methods on this instance's nodes and builders; their props, slots and checks in every
      * build) or kits (the methods and setters of their fragments and forms; the kit installs the rest where it is
@@ -277,6 +276,8 @@ export function createCk<S = any>(options: CkOptions = {}) {
         } else throw new TypeError('ck.extend(…): fragments (ck.fragment) or kits (ck.kit)');
       }
       vocab.invalidate();
+      shells.invalidate();
+      modules.invalidate();
     },
     /** the node modifiers: n.tip(v) ≡ n.with(ck.mod.tip(v)); ck.mod.when(bool, m) is a build-time choice */
     mod: nodeMods,
@@ -285,15 +286,7 @@ export function createCk<S = any>(options: CkOptions = {}) {
     fragment: (target: FragmentTarget, spec: FragmentSpec): Fragment => fragment(target, spec),
     /** an extensible kind a library declares for its own objects (frame handles): a fragment target */
     extensible: (kind: string): { extensible: string } => ({ extensible: kind }),
-    kit: <St = unknown>(name: string, f: (k: KitBuilder<S & St>, opts?: any) => unknown): Kit<St> => kit<St>(name, f, undefined, site()),
     pass: <I = any>(name: string, o: { on?: string; after?: string | string[]; before?: string | string[]; options?: Record<string, unknown> } | string, run: (ir: I, p: PassCtx) => I | void): PassDef<I> => pass<I>(name, o, run),
-    /** install passes or themes on the instance (every shell built from it gets them) */
-    install(...xs: (PassDef | Theme)[]): void {
-      for (const x of xs) {
-        if (isPass(x)) passes.push(x);
-        else if ((x as Theme).light) themes.set((x as Theme).name, x as Theme);
-      }
-    },
     ir: (name: string, spec: Omit<IrSpec, 'name'>): IrSpec => {
       const s = { ...spec, name };
       irs.set(name, s);
@@ -304,25 +297,20 @@ export function createCk<S = any>(options: CkOptions = {}) {
       const spec = irs.get(on);
       const D = new Diagnostics();
       if (spec?.validate) for (const d of spec.validate(ir) || []) D.add(d);
-      const r = runPasses(on, ir, [...passes, ...(o.passes || [])], { D, ...(o.options ? { options: o.options } : {}), explain: x => ck.explain(x, { ir: on }) });
+      const r = runPasses(on, ir, o.passes || [], { D, ...(o.options ? { options: o.options } : {}), explain: x => ck.explain(x, { ir: on }) });
       return { ir: r.ir, diagnostics: r.diagnostics, order: r.order };
     },
-    theme: (t: Theme): Theme => {
-      themes.set(t.name, t);
-      return t;
-    },
-
     // ── inspect ──
     explain(x: unknown, o: { at?: boolean; live?: boolean; ir?: string; state?: unknown } = {}): string {
       if (x instanceof BuiltApp) return x.explain(o);
       if (x instanceof Runtime) return x.explain(o);
-      if (isNode(x)) return explainNode(x, { forms, panels, ...(o.at ? { at: true } : {}), ...(o.state !== undefined ? { live: o.state } : {}) });
+      if (isNode(x)) return explainNode(x, { forms: vocabForms, ...(o.at ? { at: true } : {}), ...(o.state !== undefined ? { live: o.state } : {}) });
       if (isKit(x)) return explainKit(x);
       if (isPass(x)) return explainPass(x);
       if (x && typeof x === 'object' && (x as Fragment).kind === 'fragment') return explainFragment(x as Fragment);
       if (x instanceof Diagnostics) return explainDiags(x.list, o);
       if (Array.isArray(x) && x.every(d => d && typeof d === 'object' && 'code' in d && 'message' in d)) return explainDiags(x as Diag[], o);
-      if (Array.isArray(x) && x.every(isNode)) return x.map(n => explainNode(n, { forms, panels })).join('\n');
+      if (Array.isArray(x) && x.every(isNode)) return x.map(n => explainNode(n, { forms: vocabForms })).join('\n');
       if (o.ir && irs.get(o.ir)?.explain) return irs.get(o.ir)!.explain!(x);
       try {
         return JSON.stringify(x, null, 1) ?? String(x);
@@ -345,4 +333,4 @@ export function createCk<S = any>(options: CkOptions = {}) {
 }
 
 export type Ck<S = any> = ReturnType<typeof createCk<S>>;
-export type { Kit, Fragment, PassDef, Theme, NodeData };
+export type { Kit, Fragment, PassDef, Theme, NodeData, KitValue, ModuleValue, ShellValue };

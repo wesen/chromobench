@@ -8,22 +8,22 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
     then:
       column
         section "Exposure"
-          cb.arg  path "print.enlarger.mode"
-          cb.arg  path "print.enlarger.time_s"
-          cb.arg  path "print.enlarger.fstop"
+          cb.arg  path "print.enlarger.mode"  segmented
+          cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
+          cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
           text τ  dim  wrap
         section "Filtration"
-          cb.arg  path "print.enlarger.filtration"
+          cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
         section "Printer lights"
-          cb.arg  path "print.lights.logH"  widget "pad"
+          cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
         section "Paper"
-          cb.arg  path "print.paper"
-          cb.arg  path "print.grade"
-          cb.arg  path "print.preflash"
+          cb.arg  path "print.paper"  select
+          cb.arg  path "print.grade"  slider  step 0.5 none
+          cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
         section "Film and viewing"
-          cb.arg  path "capture.stock"
-          cb.arg  path "scan.stock"
-          cb.arg  path "scan.scanner"
-          cb.arg  path "view.illuminant"
+          cb.arg  path "capture.stock"  select
+          cb.arg  path "scan.stock"  select
+          cb.arg  path "scan.scanner"  select
+          cb.arg  path "view.illuminant"  select
           text τ  dim  wrap"
 `;

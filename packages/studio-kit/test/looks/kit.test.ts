@@ -42,8 +42,8 @@ const lights = (s: Awaited<ReturnType<typeof startedLooks>>, f: string) => s.stu
 describe('cb.kits.looks in variants', () => {
   it('CB-L001: looks forms without the kit; CB-L002: an unknown look in a choice', () => {
     const errs = (def: unknown) => buildVariant(def).app.diagnostics.list.filter((d) => d.level === 'error' && d.code.startsWith('CB-L')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').right(cb.kits['looks'].amount()) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).right(ck.panel('p', {}, cb.kits['looks'].choice(['warm-print', 'warm prnt']))) }))).toEqual(['CB-L002']);
+    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('main').right(cb.kits['looks'].amount())) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
+    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).module(ck.module('main').right(ck.panel.define('p', {}, cb.kits['looks'].choice(['warm-print', 'warm prnt'])))) }))).toEqual(['CB-L002']);
   });
 });
 

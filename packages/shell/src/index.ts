@@ -20,7 +20,7 @@ export { browserClock } from './core/clock.ts';
 export type { Clock, IdleDeadline } from './core/clock.ts';
 export { Commands } from './core/commands.ts';
 export type { Command, CommandSpec } from './core/commands.ts';
-export { Keymap, KeyRouter, parseChord, chordFromEvent, chordLabel, chordParts } from './core/keys.ts';
+export { Keymap, KeyRouter, parseChord, chordFromEvent, chordLabel, chordParts, everyModule } from './core/keys.ts';
 export type { Binding, KeyTarget, Spring, KeyEventLike } from './core/keys.ts';
 export { diag, Diagnostics, BuildError, formatDiag, site, libraryRoot, where, familyOf } from './core/diag.ts';
 export type { Diag, DiagLevel, DiagExtra, CallSite } from './core/diag.ts';
@@ -39,8 +39,9 @@ export type { FormSpec, FormSlotsMap, BuiltinForm } from './ir/forms.ts';
 export { ICONS } from './ir/icons.ts';
 
 // build
-export { ShellBuilder, ModuleBuilder } from './build/shell-builder.ts';
-export { KitBuilder, kit, isKit } from './build/kits.ts';
+export { shellMods, moduleMods, menu, MENUS, type ShellValue, type ModuleValue, type ModuleProps, type MenuValue, type ShellDef } from './build/shell.ts';
+export { kit, isKit, kitMods, product, type KitValue, type KitProduct, type ProductParts, type CommandTable, type ToolTable } from './build/kits.ts';
+export { BuilderKind, type Built, type BuilderWith, type TrailStep } from './build/builder.ts';
 export { fragment, isFragment } from './build/fragments.ts';
 export { pass, isPass, runPasses, orderPasses } from './build/passes.ts';
 export { explainNode, explainKit, explainApp, explainDiags } from './build/explain.ts';

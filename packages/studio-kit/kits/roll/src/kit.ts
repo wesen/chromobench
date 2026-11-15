@@ -246,8 +246,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
         p.error('CB-R003', `cb.arg('${path}').rollScope('${mode}'): ${path} is not shared by the roll`, { at: n.at, facts: [`roll-shared paths: ${SHARED_PATHS.join(', ')}`], fix: `cb.arg('${path}') (frame scope), or a shared path such as cb.arg('scan.stock').rollScope('${mode}')` });
     }
   });
-  /** CB-R001: roll forms in a variant that did not install the kit (installed on the ck instance) */
-  const missing = ck.pass('cb.roll.installed', { on: 'ui', after: 'slots' }, (ir: any, p) => {
+  /** CB-R001: roll forms in a layout that did not install the kit (cb.core's pass cb.kits runs it) */
+  const missing = (ir: any, p: any): void => {
     if (ir.kits.some((k: any) => k.name === 'cb.roll')) return;
     for (const f of FORMS) {
       const n = (ir.find(f.name) as NodeData[])[0];
@@ -256,196 +256,186 @@ export function createRollKit(ck: Ck, cb: Cb) {
         return;
       }
     }
-  });
-  ck.install(missing);
+  };
 
   // ── the kit ──
-  const kit = ck.kit<typeof ROLL_STATE>('cb.roll', (k) => {
-    k.version('1')
-      .requires('cb.core')
-      .state('roll', { init: ROLL_STATE.roll })
-      .state('rollView', { init: ROLL_STATE.rollView, view: true })
-      .forms(...FORMS)
-      .fragments(rollScope)
-      .passes(checks)
-      .commands((c) => {
-        c.add('roll.fromFrames', {
-          label: 'New Roll from Open Frames',
-          menu: 'Roll',
-          enabled: (s: any) => (s.catalog?.order?.length ?? 0) > 0,
-          why: 'Open the scans of a roll first',
-          run: (ctx: any, o: { analyse?: boolean; label?: string } = {}) => {
-            const sel: string[] = ctx.state.ui?.selection?.ids ?? [];
-            const frames: string[] = sel.length > 1 ? sel : [...(ctx.state.catalog?.order ?? [])];
-            const first = recipeOf(ctx)(frames[0]!);
-            if (!first) return null;
-            const n = Object.keys(ctx.state.roll?.rolls ?? {}).length + 1;
-            const id = `roll-${n}`;
-            const fragment = fragmentOf(first);
-            const stock = getPath(first, 'scan.stock');
-            const label = o.label ?? `${typeof stock === 'string' ? stockName(stock) : 'Roll'} · ${frames.length} frames`;
-            ctx.tx(`New roll "${label}"`, (t: any) => {
-              t.$set(['roll', 'rolls', id], newRoll(id, label, frames, fragment));
-              t.$set(['roll', 'order'], [...(t.roll.order ?? []), id]);
-              t.$set(['roll', 'current'], id);
-            });
-            const join = (): string => {
-              const m = membersBatch(ctx, rollOf(ctx.state, id)!);
-              if (m.frames.length) applyBatch(ctx, m, { force: true });
-              return id;
-            };
-            return o.analyse === false ? join() : analyse(ctx, { firstPrint: true }).then(join);
-          },
-        })
-          .add('roll.select', {
-            label: 'Select Roll',
-            palette: false,
-            // a selection, not an edit: no undo step
-            run: (ctx: any, id: string) => {
-              if (ctx.state.roll?.current !== id) ctx.rt.store.writeDoc([{ path: ['roll', 'current'], value: id }], { tier: 'document' });
-            },
-          })
-          .add('roll.analyse', {
-            label: 'Analyse Roll',
-            menu: 'Roll',
-            enabled: (s: any) => !!rollOf(s) && !s.rollView?.progress,
-            why: 'Make a roll first, or wait for the running analysis',
-            run: (ctx: any) => (physicsOf(ctx) ? analyse(ctx) : (ctx.toast('The host provides no roll physics (services.rollPhysics)', { kind: 'error' }), null)),
-          })
-          .add('roll.firstPrint', {
-            label: 'First Print of the Roll',
-            menu: 'Roll',
-            enabled: (s: any) => !!rollOf(s)?.analysis,
-            why: 'Analyse the roll first',
-            // one card: the first print of the roll as a batch to approve or reject (the automatic one on a new roll is applied at once)
-            run: (ctx: any, all = false) => {
-              const b = planFirstPrint(ctx, all ? rollOf(ctx.state)!.frames : undefined);
-              showPending(ctx, b);
-              return b;
-            },
-          })
-          .add('roll.setReference', {
-            label: 'Set as Roll Reference',
-            menu: 'Roll',
-            enabled: (s: any) => !!rollOf(s) && !!s.ui?.selection?.primary && rollOf(s)!.frames.includes(s.ui.selection.primary),
-            why: 'Select a frame of the roll',
-            run: (ctx: any) => {
-              const roll = rollOf(ctx.state)!;
-              const f = ctx.state.ui.selection.primary as string;
-              ctx.tx(`Reference: ${ctx.state.catalog?.frames?.[f]?.name ?? f}`, (t: any) => t.$set(['roll', 'rolls', roll.id, 'reference'], f));
-            },
-          })
-          .add('roll.matchToReference', {
-            label: 'Print the Roll Like the Reference',
-            menu: 'Roll',
-            enabled: (s: any) => !!rollOf(s)?.reference && !!rollOf(s)?.analysis,
-            why: (s: any) => (!rollOf(s)?.analysis ? 'Analyse the roll first' : 'Choose a reference frame first'),
-            run: (ctx: any) => {
-              const b = planMatch(ctx);
-              showPending(ctx, b);
-              return b;
-            },
-          })
-          .add('roll.alpha', {
-            label: 'Roll Consistency',
-            palette: false,
-            run: (ctx: any, a: number) => {
-              setView(ctx, 'alpha', Math.max(0, Math.min(1, Number(a))));
-              if (ctx.state.rollView?.pending?.kind === 'match') showPending(ctx, planMatch(ctx));
-            },
-          })
-          .add('roll.pending.toggle', {
-            label: 'Include Frame',
-            palette: false,
-            run: (ctx: any, f: string) => {
-              const off: string[] = ctx.state.rollView?.off ?? [];
-              setView(ctx, 'off', off.includes(f) ? off.filter((x) => x !== f) : [...off, f]);
-            },
-          })
-          .add('roll.pending.approve', {
-            label: 'Approve Roll Batch',
-            palette: false,
-            enabled: (s: any) => !!s.rollView?.pending,
-            why: 'Nothing pending',
-            run: (ctx: any, force = false) => {
-              // plain copies: the state hands out read-only proxies, which the logs (and their KV) cannot clone
-              const b = plain(ctx.state.rollView?.pending as MutationBatch | null);
-              if (!b) return null;
-              const res = applyBatch(ctx, withoutFrames(b, plain(ctx.state.rollView.off ?? [])), { force: !!force });
-              if (res !== true) {
-                setView(ctx, 'stale', res.map((d) => ({ code: d.code, message: d.message })));
-                return res;
-              }
-              const roll = rollOf(ctx.state);
-              if (roll && b.kind === 'match') writeRoll(ctx, { ...roll, match: { alpha: Number(b.meta?.['alpha'] ?? 0), appliedAt: ctx.rt.clock?.now?.() ?? Date.now(), batch: b.id }, status: 'balanced' });
-              if (roll && b.kind === 'clear-match') writeRoll(ctx, { ...roll, match: null, status: 'first-printed' });
-              if (roll && b.kind === 'first-print') firstPrinted(ctx, roll.id);
-              showPending(ctx, null);
-              return true;
-            },
-          })
-          .add('roll.pending.reject', { label: 'Reject Roll Batch', palette: false, run: (ctx: any) => showPending(ctx, null) })
-          .add('roll.clearMatch', {
-            label: 'Clear Roll Match',
-            menu: 'Roll',
-            enabled: (s: any) => !!rollOf(s)?.match,
-            why: 'Nothing matched',
-            run: (ctx: any) => {
-              const roll = rollOf(ctx.state)!;
-              const b = clearMatchBatch(roll, recipeOf(ctx), { consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, rejected: rejectedOf(ctx.state) });
-              showPending(ctx, b);
-              return b;
-            },
-          })
-          .add('roll.setShared', {
-            label: 'Set on the Roll',
-            palette: false,
-            ...hasRoll,
-            run: (ctx: any, path: string, v: unknown) => {
-              const roll = rollOf(ctx.state)!;
-              const value = plain(v);
-              // the roll's value and every frame's copy in one transaction: one undo step
-              ctx.tx(`Roll: ${path}`, (t: any) => {
-                t.$set(['roll', 'rolls', roll.id, 'fragment', path], value);
-                for (const f of roll.frames) if (t.recipes?.[f]) t.$set(['recipes', f, ...path.split('.')], value);
-              });
-            },
-          })
-          .add('roll.applyToRoll', {
-            label: 'Apply This Setting to the Roll',
-            palette: false,
-            ...hasRoll,
-            run: (ctx: any, path: string) => {
-              const f = ctx.state.ui?.selection?.primary;
-              const r = f ? recipeOf(ctx)(f) : undefined;
-              if (r) ctx.run('roll.setShared', path, getPath(r, path));
-            },
-          })
-          .add('roll.contact.mode', {
-            label: 'Contact Sheet: One Time and Pack',
-            menu: 'Roll',
-            checked: (s: any) => s.rollView?.contact?.mode === 'single',
-            run: (ctx: any, mode?: 'balanced' | 'single') => setView(ctx, 'contact', { mode: mode ?? (ctx.state.rollView?.contact?.mode === 'single' ? 'balanced' : 'single') }),
-          })
-          .add('roll.cull.sweep', {
-            label: 'Cull the Roll',
-            menu: 'Roll',
-            ...hasRoll,
-            run: (ctx: any) => {
-              const first = rollOf(ctx.state)!.frames[0];
-              if (first) ctx.run('frame.select', first);
-              ctx.set({ view: { mode: 'loupe' } });
-            },
-          })
-          .add('roll.exportSheet', {
-            label: 'Export Contact Sheet…',
-            menu: 'Roll',
-            ...hasRoll,
-            run: (ctx: any) => ctx.toast('Contact sheet export (darkroom.contactSheet) comes with CHB-011', { kind: 'info' }),
+  const kit = ck
+    .kit('cb.roll')
+    .version('1')
+    .requires('cb.core')
+    .state('roll', { init: ROLL_STATE.roll })
+    .state('rollView', { init: ROLL_STATE.rollView, view: true })
+    .forms(...FORMS)
+    .fragments(rollScope)
+    .passes(checks)
+    .commands({
+      'roll.fromFrames': {
+        label: 'New Roll from Open Frames',
+        enabled: (s: any) => (s.catalog?.order?.length ?? 0) > 0,
+        why: 'Open the scans of a roll first',
+        run: (ctx: any, o: { analyse?: boolean; label?: string } = {}) => {
+          const sel: string[] = ctx.state.ui?.selection?.ids ?? [];
+          const frames: string[] = sel.length > 1 ? sel : [...(ctx.state.catalog?.order ?? [])];
+          const first = recipeOf(ctx)(frames[0]!);
+          if (!first) return null;
+          const n = Object.keys(ctx.state.roll?.rolls ?? {}).length + 1;
+          const id = `roll-${n}`;
+          const fragment = fragmentOf(first);
+          const stock = getPath(first, 'scan.stock');
+          const label = o.label ?? `${typeof stock === 'string' ? stockName(stock) : 'Roll'} · ${frames.length} frames`;
+          ctx.tx(`New roll "${label}"`, (t: any) => {
+            t.$set(['roll', 'rolls', id], newRoll(id, label, frames, fragment));
+            t.$set(['roll', 'order'], [...(t.roll.order ?? []), id]);
+            t.$set(['roll', 'current'], id);
           });
-      })
-      .docs(ROLL_DOCS);
-  });
+          const join = (): string => {
+            const m = membersBatch(ctx, rollOf(ctx.state, id)!);
+            if (m.frames.length) applyBatch(ctx, m, { force: true });
+            return id;
+          };
+          return o.analyse === false ? join() : analyse(ctx, { firstPrint: true }).then(join);
+        },
+      },
+      'roll.select': {
+        label: 'Select Roll',
+        palette: false,
+        // a selection, not an edit: no undo step
+        run: (ctx: any, id: string) => {
+          if (ctx.state.roll?.current !== id) ctx.rt.store.writeDoc([{ path: ['roll', 'current'], value: id }], { tier: 'document' });
+        },
+      },
+      'roll.analyse': {
+        label: 'Analyse Roll',
+        enabled: (s: any) => !!rollOf(s) && !s.rollView?.progress,
+        why: 'Make a roll first, or wait for the running analysis',
+        run: (ctx: any) => (physicsOf(ctx) ? analyse(ctx) : (ctx.toast('The host provides no roll physics (services.rollPhysics)', { kind: 'error' }), null)),
+      },
+      'roll.firstPrint': {
+        label: 'First Print of the Roll',
+        enabled: (s: any) => !!rollOf(s)?.analysis,
+        why: 'Analyse the roll first',
+        // one card: the first print of the roll as a batch to approve or reject (the automatic one on a new roll is applied at once)
+        run: (ctx: any, all = false) => {
+          const b = planFirstPrint(ctx, all ? rollOf(ctx.state)!.frames : undefined);
+          showPending(ctx, b);
+          return b;
+        },
+      },
+      'roll.setReference': {
+        label: 'Set as Roll Reference',
+        enabled: (s: any) => !!rollOf(s) && !!s.ui?.selection?.primary && rollOf(s)!.frames.includes(s.ui.selection.primary),
+        why: 'Select a frame of the roll',
+        run: (ctx: any) => {
+          const roll = rollOf(ctx.state)!;
+          const f = ctx.state.ui.selection.primary as string;
+          ctx.tx(`Reference: ${ctx.state.catalog?.frames?.[f]?.name ?? f}`, (t: any) => t.$set(['roll', 'rolls', roll.id, 'reference'], f));
+        },
+      },
+      'roll.matchToReference': {
+        label: 'Print the Roll Like the Reference',
+        enabled: (s: any) => !!rollOf(s)?.reference && !!rollOf(s)?.analysis,
+        why: (s: any) => (!rollOf(s)?.analysis ? 'Analyse the roll first' : 'Choose a reference frame first'),
+        run: (ctx: any) => {
+          const b = planMatch(ctx);
+          showPending(ctx, b);
+          return b;
+        },
+      },
+      'roll.alpha': {
+        label: 'Roll Consistency',
+        palette: false,
+        run: (ctx: any, a: number) => {
+          setView(ctx, 'alpha', Math.max(0, Math.min(1, Number(a))));
+          if (ctx.state.rollView?.pending?.kind === 'match') showPending(ctx, planMatch(ctx));
+        },
+      },
+      'roll.pending.toggle': {
+        label: 'Include Frame',
+        palette: false,
+        run: (ctx: any, f: string) => {
+          const off: string[] = ctx.state.rollView?.off ?? [];
+          setView(ctx, 'off', off.includes(f) ? off.filter((x) => x !== f) : [...off, f]);
+        },
+      },
+      'roll.pending.approve': {
+        label: 'Approve Roll Batch',
+        palette: false,
+        enabled: (s: any) => !!s.rollView?.pending,
+        why: 'Nothing pending',
+        run: (ctx: any, force = false) => {
+          // plain copies: the state hands out read-only proxies, which the logs (and their KV) cannot clone
+          const b = plain(ctx.state.rollView?.pending as MutationBatch | null);
+          if (!b) return null;
+          const res = applyBatch(ctx, withoutFrames(b, plain(ctx.state.rollView.off ?? [])), { force: !!force });
+          if (res !== true) {
+            setView(ctx, 'stale', res.map((d) => ({ code: d.code, message: d.message })));
+            return res;
+          }
+          const roll = rollOf(ctx.state);
+          if (roll && b.kind === 'match') writeRoll(ctx, { ...roll, match: { alpha: Number(b.meta?.['alpha'] ?? 0), appliedAt: ctx.rt.clock?.now?.() ?? Date.now(), batch: b.id }, status: 'balanced' });
+          if (roll && b.kind === 'clear-match') writeRoll(ctx, { ...roll, match: null, status: 'first-printed' });
+          if (roll && b.kind === 'first-print') firstPrinted(ctx, roll.id);
+          showPending(ctx, null);
+          return true;
+        },
+      },
+      'roll.pending.reject': { label: 'Reject Roll Batch', palette: false, run: (ctx: any) => showPending(ctx, null) },
+      'roll.clearMatch': {
+        label: 'Clear Roll Match',
+        enabled: (s: any) => !!rollOf(s)?.match,
+        why: 'Nothing matched',
+        run: (ctx: any) => {
+          const roll = rollOf(ctx.state)!;
+          const b = clearMatchBatch(roll, recipeOf(ctx), { consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, rejected: rejectedOf(ctx.state) });
+          showPending(ctx, b);
+          return b;
+        },
+      },
+      'roll.setShared': {
+        label: 'Set on the Roll',
+        palette: false,
+        ...hasRoll,
+        run: (ctx: any, path: string, v: unknown) => {
+          const roll = rollOf(ctx.state)!;
+          const value = plain(v);
+          // the roll's value and every frame's copy in one transaction: one undo step
+          ctx.tx(`Roll: ${path}`, (t: any) => {
+            t.$set(['roll', 'rolls', roll.id, 'fragment', path], value);
+            for (const f of roll.frames) if (t.recipes?.[f]) t.$set(['recipes', f, ...path.split('.')], value);
+          });
+        },
+      },
+      'roll.applyToRoll': {
+        label: 'Apply This Setting to the Roll',
+        palette: false,
+        ...hasRoll,
+        run: (ctx: any, path: string) => {
+          const f = ctx.state.ui?.selection?.primary;
+          const r = f ? recipeOf(ctx)(f) : undefined;
+          if (r) ctx.run('roll.setShared', path, getPath(r, path));
+        },
+      },
+      'roll.contact.mode': {
+        label: 'Contact Sheet: One Time and Pack',
+        checked: (s: any) => s.rollView?.contact?.mode === 'single',
+        run: (ctx: any, mode?: 'balanced' | 'single') => setView(ctx, 'contact', { mode: mode ?? (ctx.state.rollView?.contact?.mode === 'single' ? 'balanced' : 'single') }),
+      },
+      'roll.cull.sweep': {
+        label: 'Cull the Roll',
+        ...hasRoll,
+        run: (ctx: any) => {
+          const first = rollOf(ctx.state)!.frames[0];
+          if (first) ctx.run('frame.select', first);
+          ctx.set({ view: { mode: 'loupe' } });
+        },
+      },
+      'roll.exportSheet': {
+        label: 'Export Contact Sheet…',
+        ...hasRoll,
+        run: (ctx: any) => ctx.toast('Contact sheet export (darkroom.contactSheet) comes with CHB-011', { kind: 'info' }),
+      },
+    })
+    .docs(ROLL_DOCS);
 
   // ── builder calls ──
   const contactCell = (o: { size?: number } = {}) => (item: CatalogFrame) =>
@@ -474,7 +464,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     );
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
-    return ck.panel(pid ?? id, { title: t ?? title }, node(form, rest));
+    return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, rest));
   };
 
   return {
@@ -486,6 +476,10 @@ export function createRollKit(ck: Ck, cb: Cb) {
     inspector: panel('roll.inspector', 'roll-inspector', 'Roll analysis'),
     contactSheet,
     contactCell,
+    /** the Roll menu: new roll, analysis, first print, reference and match */
+    menus: {
+      roll: () => ck.menu('Roll', ['roll.fromFrames', 'roll.analyse', 'roll.firstPrint', '-', 'roll.setReference', 'roll.matchToReference', 'roll.clearMatch', '-', 'roll.contact.mode', 'roll.cull.sweep', 'roll.exportSheet']),
+    },
     /** the cull keys plus M (match) and R (reference); scope them to the module that shows the sheet */
     cullKeys: { ...cb.keys.cull, M: 'roll.matchToReference', R: 'roll.setReference' } as Record<string, any>,
     badge: rollBadge,
@@ -497,6 +491,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     applyBatch,
     /** exposure bookkeeping, for variants that show it */
     exposure: { totalOf, splitTotal },
+    missing,
   };
 }
 

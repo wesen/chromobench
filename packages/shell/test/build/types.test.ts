@@ -27,7 +27,7 @@ describe('the grammar is typed', () => {
     // @ts-expect-error .step() takes a number
     const f = ck.ui.slider(0, 1, {}).step('fine');
     expect([a, b, c, d, e, f].every(ck.isNode)).toBe(true);
-    const app = ck.shell('t').state({ dev: { light: { exposure: 0 } }, ui: { photo: 'a' } }).center(ck.column({}, a, d)).build();
+    const app = ck.shell('t').state({ dev: { light: { exposure: 0 } }, ui: { photo: 'a' } }).module(ck.module('main').center(ck.column({}, a, d))).build();
     expect(app.codes()).toEqual(expect.arrayContaining(['CK-B140']));
   });
 });

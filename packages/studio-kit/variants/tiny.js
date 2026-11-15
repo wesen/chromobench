@@ -8,7 +8,12 @@ export default {
   build: (ck, cb) =>
     cb
       .studio('Chromobench')
-      .left(ck.dock.column({ width: 180 }, cb.view.strip({ vertical: true })))
-      .center(cb.viewer(s => cb.frame(s)?.print() ?? null))
-      .right(ck.dock.column({ width: 300 }, cb.panel.controls('darkroom'), cb.panel.history())),
+      .menus(...cb.menus.standard())
+      .module(
+        ck
+          .module('main', { label: 'Chromobench' })
+          .left(ck.dock.column({ width: 180 }, cb.view.strip({ vertical: true })))
+          .center(cb.viewer(s => cb.frame(s)?.print() ?? null))
+          .right(ck.dock.column({ width: 300 }, cb.panel.controls('darkroom'), cb.panel.history())),
+      ),
 };

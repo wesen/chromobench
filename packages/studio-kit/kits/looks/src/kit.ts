@@ -28,7 +28,7 @@ import { axis, ring } from './engine/sweep.ts';
 import { looksProvider } from './engine/provider.ts';
 import { LOOKS_STATE, looksView, agentBatches } from './state.ts';
 import { createLooksModel } from './model.ts';
-import { addLooksCommands } from './commands.ts';
+import { looksCommands } from './commands.ts';
 import { createLooksPanels } from './panels.ts';
 
 const LOOKS_DOCS = `## cb.kits.looks
@@ -56,8 +56,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   ];
 
   // ── passes ──
-  /** CB-L001: looks forms in a variant that did not install the kit; CB-L002: unknown look ids in a choice */
-  const installed = ck.pass('cb.looks.installed', { on: 'ui', after: 'slots' }, (ir: any, p) => {
+  /** CB-L001: looks forms in a layout that did not install the kit (cb.core's pass cb.kits runs it) */
+  const missing = (ir: any, p: any): void => {
     if (ir.kits.some((k: any) => k.name === 'cb.looks')) return;
     for (const f of FORMS) {
       const n = (ir.find(f.name) as NodeData[])[0];
@@ -66,8 +66,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
         return;
       }
     }
-  });
-  ck.install(installed);
+  };
+  /** CB-L002: unknown look ids in a choice */
   const checks = ck.pass('cb.looks.checks', { on: 'ui', after: 'slots' }, (ir: any, p) => {
     for (const n of ir.find('button') as NodeData[]) {
       const run = n.props['run'];
@@ -82,18 +82,16 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   });
 
   // ── the kit ──
-  const kit = ck.kit<typeof LOOKS_STATE>('cb.looks', (k) => {
-    k.version('1')
-      .requires('cb.core')
-      .state('looks', { init: LOOKS_STATE.looks })
-      .state('looksView', { init: LOOKS_STATE.looksView, view: true })
-      .forms(...FORMS)
-      .passes(checks)
-      .commands((c) => {
-        addLooksCommands(c, cb, M);
-      })
-      .docs(LOOKS_DOCS);
-  });
+  const kit = ck
+    .kit('cb.looks')
+    .version('1')
+    .requires('cb.core')
+    .state('looks', { init: LOOKS_STATE.looks })
+    .state('looksView', { init: LOOKS_STATE.looksView, view: true })
+    .forms(...FORMS)
+    .passes(checks)
+    .commands(looksCommands(cb, M))
+    .docs(LOOKS_DOCS);
 
   const P = createLooksPanels(ck, cb, M);
   const { panel, paramsModel, amountModel, diffModel, compareModel, cardModel, groupsModel, presetsModel, lookCell, library, survey, choiceRow } = P;
@@ -143,8 +141,17 @@ export function createLooksKit(ck: Ck, cb: Cb) {
     planApply,
     /** the DSL's LooksProvider (cb.looks.* for the agent), over the same registry */
     provider: (getState: () => any) => looksProvider(() => looksOf(getState())),
+    /** the Looks menu */
+    menus: {
+      looks: () =>
+        ck.menu('Looks', [
+          'looks.apply', 'looks.applyToRoll', 'looks.applyToLibrary', '-', 'looks.survey.open', 'looks.preview', 'looks.setReference', 'looks.snapshot', '-',
+          'looks.copy', 'looks.paste', 'looks.sync', '-', 'looks.saveAsPreset', 'looks.bake', '-', 'looks.virtualCopy', 'looks.match',
+        ]),
+    },
     keys: { N: 'looks.survey.open', 'Mod+Enter': 'looks.apply', 'Mod+Alt+N': 'looks.snapshot' } as Record<string, any>,
     errors: (e: unknown): Diagnostic => toDiagnostic(e),
+    missing,
   };
 }
 

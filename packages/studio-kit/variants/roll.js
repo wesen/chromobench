@@ -2,22 +2,19 @@
 // the left, the contact sheet in the centre (cull keys P X U 0–5, R reference, M match), the balance bar and the
 // analysis inspector on the right — then the classic Print module with the roll's frames in the strip.
 // Receives ck and cb (the roll kit is cb.kits.roll); imports only sibling variant parts.
-import { menus, printModule, rollMenu, rollModule } from './classic.js';
+import { printModule, rollModule } from './classic.js';
 
 export default {
   id: 'roll',
   label: 'Roll',
   description: 'Roll setup, first print, contact sheet, print the roll like this frame',
-  build: (ck, cb) => {
-    const roll = cb.kits.roll;
-    const s = cb
+  build: (ck, cb) =>
+    cb
       .studio('Chromobench')
       .theme('craftkit')
-      .use(roll.kit)
-      .menus(m => rollMenu(menus(m)));
-    // the same Roll module as the classic variant, here first and on G
-    s.module('roll', m => rollModule(ck, cb)(m).key('G'));
-    s.module('print', printModule(ck, cb));
-    return s;
-  },
+      .use(cb.kits.roll.kit)
+      .menus(...cb.menus.standard(), cb.kits.roll.menus.roll())
+      // the same Roll module as the classic variant, here first and on G
+      .module(rollModule(ck, cb).key('G'))
+      .module(printModule(ck, cb)),
 };

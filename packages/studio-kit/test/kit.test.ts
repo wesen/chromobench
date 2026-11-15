@@ -9,7 +9,7 @@ import { recipePath, started } from './helpers.ts';
 const studioWith = (body: (ck: ReturnType<typeof createCk>, cb: ReturnType<typeof createCb>) => unknown) => {
   const ck = createCk();
   const cb = createCb(ck);
-  return cb.studio('t').center(body(ck, cb) as any).build();
+  return cb.studio('t').module(ck.module('main').center(body(ck, cb) as any)).build();
 };
 
 describe('cb.arg', () => {

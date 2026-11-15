@@ -7,12 +7,14 @@ import { miniStudio, type MiniState } from '../fixtures/mini-studio.ts';
 describe('the counter (guide §5.2)', () => {
   it('builds, runs and undoes headless', () => {
     const ck = createCk();
+    const counter = ck.kit('counter').commands({ 'count.up': { label: 'Count Up', run: ctx => ctx.tx('Count', (t: any) => void t.count++) } });
     const app = ck
       .shell('Counter')
       .state({ count: 0, ui: {} })
-      .commands(c => c.add('count.up', { label: 'Count Up', menu: 'Edit', run: ctx => ctx.tx('Count', t => void t.count++) }))
-      .keys('global', { 'Mod+ArrowUp': 'count.up' })
-      .center(ck.column({}, ck.text(s => `Count: ${s.count}`), ck.ui.command('count.up')))
+      .use(counter)
+      .menus(ck.menu('Edit', ['count.up']))
+      .keys({ 'Mod+ArrowUp': 'count.up' })
+      .module(ck.module('main').center(ck.column({}, ck.text(s => `Count: ${s.count}`), ck.ui.command('count.up'))))
       .build();
     expect(app.errors).toEqual([]);
     const rt = app.start({ clock: manualClock() });
@@ -35,15 +37,14 @@ describe('the binding typo (guide §2.1)', () => {
     const app = ck
       .shell('Develop demo')
       .state({ dev: { light: { exposure: 0, contrast: 0 } }, ui: {} })
-      .right(ck.panel('basic', { title: 'Basic' }, ck.ui.slider(-5, 5, { label: 'Exposure', bind: s => s.dev.light.exposur, step: 0.05, reset: 0 })))
-      .center(ck.text('x'))
+      .module(ck.module('main').right(ck.panel.define('basic', { title: 'Basic' }, ck.ui.slider(-5, 5, { label: 'Exposure', bind: s => s.dev.light.exposur, step: 0.05, reset: 0 }))).center(ck.text('x')))
       .build();
     const d = app.diagnostics.list.find(x => x.code === 'CK-B110')!;
     expect(d).toBeDefined();
     expect(d.facts).toEqual(['s.dev.light.exposur does not exist.', 'dev.light has: exposure, contrast']);
     expect(d.fix).toBe('Did you mean s.dev.light.exposure?');
     expect(d.at?.file).toMatch(/build\.test\.ts$/);
-    expect(d.at?.line).toBe(38); // the ck.ui.slider(...) line above
+    expect(d.at?.line).toBe(40); // the ck.ui.slider(...) line above
   });
 });
 
@@ -136,8 +137,9 @@ describe('the mini studio', () => {
 describe('build checks', () => {
   const ck = createCk();
   const build = (f: (ck: Ck) => { build(): BuiltApp }): BuiltApp => f(ck).build();
+  const main = (ck: Ck, center: unknown, right?: unknown) => (right ? ck.module('main').center(center as any).right(right as any) : ck.module('main').center(center as any));
   it('B130 unknown option with a suggestion, B140 lambda in a β slot', () => {
-    const app = build(ck => ck.shell('x').state({ v: 0 }).center(ck.ui.slider(0, 1, { bind: (s: any) => s.v, stpe: 0.1 } as any)).right(ck.ui.slider((() => 0) as any, 1, { bind: s => s.v })));
+    const app = build(ck => ck.shell('x').state({ v: 0 }).module(main(ck, ck.ui.slider(0, 1, { bind: (s: any) => s.v, stpe: 0.1 } as any), ck.ui.slider((() => 0) as any, 1, { bind: (s: any) => s.v }))));
     const b130 = app.diagnostics.list.find(d => d.code === 'CK-B130')!;
     expect(b130.fix).toBe("Did you mean 'step'?");
     expect(app.codes('error')).toContain('CK-B140');
@@ -147,7 +149,7 @@ describe('build checks', () => {
       ck
         .shell('x')
         .state({ dev: {} as Record<string, { e: number }>, ui: { sel: null as string | null } })
-        .center(ck.column({}, ck.ui.slider(0, 1, { bind: s => s.dev[s.ui.sel!]!.e }), ck.ui.slider(0, 1, { bind: () => { throw new Error('boom'); } }))),
+        .module(main(ck, ck.column({}, ck.ui.slider(0, 1, { bind: (s: any) => s.dev[s.ui.sel!]!.e }), ck.ui.slider(0, 1, { bind: () => { throw new Error('boom'); } })))),
     );
     expect(app.codes('warning')).toContain('CK-B111');
     expect(app.codes('error')).toContain('CK-B112');
@@ -157,11 +159,12 @@ describe('build checks', () => {
       ck
         .shell('x')
         .state({ mode: 'a' })
-        .menus(m => m.menu('Edit', ['edit.undoo']))
-        .module('m', m =>
-          m
-            .left(ck.dock.column({}, ck.panel('p1', { title: 'P' }), ck.panel('p2x')))
-            .right(ck.dock.column({}, ck.panel('p1'), ck.match(s => s.mode, { a: ck.text('a') }, { of: ['a', 'b'] }), ck.viewport(() => null, { tools: ['crpo'] }))),
+        .menus(ck.menu('Edit', ['edit.undoo']))
+        .module(
+          ck
+            .module('m')
+            .left(ck.dock.column({}, ck.panel.define('p1', { title: 'P' }), ck.panel('p2x')))
+            .right(ck.dock.column({}, ck.panel('p1'), ck.match((s: any) => s.mode, { a: ck.text('a') }, { of: ['a', 'b'] }), ck.viewport(() => null, { tools: ['crpo'] }))),
         ),
     );
     const codes = app.codes();
@@ -169,17 +172,39 @@ describe('build checks', () => {
     expect(app.diagnostics.list.find(d => d.code === 'CK-B150')!.fix).toBe("Did you mean 'edit.undo'?");
   });
   it('B160 unknown form, B170 unknown icon, B180 unlabelled icon button', () => {
-    const app = build(ck => ck.shell('x').center(ck.column({}, ck.node('sliderr', {}), ck.ui.iconButton('flg'), ck.icon('flag'))));
+    const app = build(ck => ck.shell('x').module(main(ck, ck.column({}, ck.node('sliderr', {}), ck.ui.iconButton('flg'), ck.icon('flag')))));
     expect(app.codes()).toEqual(expect.arrayContaining(['CK-B160', 'CK-B170', 'CK-B180']));
     expect(app.diagnostics.list.find(d => d.code === 'CK-B170')!.fix).toBe("Did you mean 'flag'?");
   });
-  it('builds of several variants in one process do not leak', () => {
+  it('builds of several layouts in one process do not leak', () => {
     const a = createCk();
     const b = createCk();
-    a.form('only.a', { slots: {} });
-    const appB = b.shell('b').center(b.node('only.a', {})).build();
+    const onlyA = a.kit('a').forms({ name: 'only.a', slots: {} });
+    const appB = b.shell('b').module(b.module('main').center(b.node('only.a', {}))).build();
     expect(appB.codes()).toContain('CK-B160');
-    const appA = a.shell('a').center(a.node('only.a', {})).build();
+    const appA = a.shell('a').use(onlyA).module(a.module('main').center(a.node('only.a', {}))).build();
     expect(appA.codes()).not.toContain('CK-B160');
+  });
+  it('builders are immutable values: every chain method returns a new one; unknown methods throw CK-X120', () => {
+    const ck = createCk();
+    const s0 = ck.shell('x');
+    const s1 = s0.theme('chromogen');
+    expect(s1).not.toBe(s0);
+    expect(s0.data.theme).toBe(null);
+    expect(s1.data.theme).toBe('chromogen');
+    expect(Object.isFrozen(s1) && Object.isFrozen(s1.data) && Object.isFrozen(s1.data.modules)).toBe(true);
+    const m0 = ck.module('lib', { label: 'Library', key: 'G' });
+    const m1 = m0.center(ck.text('x'));
+    expect(m0.data.regions.center).toBeUndefined();
+    expect(m1.data.regions.center!.$).toBe('text');
+    expect(m1.trail.map(t => t.name)).toEqual(['center']);
+    expect(() => (s1 as any).moduel(m1)).toThrow(/CK-X120[\s\S]*Did you mean \.module\(\)\?/);
+    const k0 = ck.kit('k');
+    const k1 = k0.commands({ 'k.x': { label: 'X', run: () => 1 } });
+    expect(k0.def.commands).toEqual([]);
+    expect(k1.def.commands.map(c => c.id)).toEqual(['k.x']);
+    // a modifier is a value: build once, apply to many
+    const dark = ck.shell('y').with((s: any) => s.theme('chromogen'));
+    expect(dark.data.theme).toBe('chromogen');
   });
 });

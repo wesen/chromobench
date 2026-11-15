@@ -226,7 +226,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -306,7 +306,7 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 125 · keys 104 in 15 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 125 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -391,7 +391,7 @@ commands
   frame.pick "Flag as Pick" (Frame) ← cb.core
   frame.reject "Reject" (Frame) ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -434,7 +434,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 29 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
@@ -626,7 +626,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -690,7 +690,7 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 107 · keys 74 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 107 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
@@ -956,7 +956,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -999,7 +999,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 84 · keys 82 in 12 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 84 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1134,7 +1134,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1176,22 +1176,22 @@ commands
   exposure.remove "Remove Exposure" ← cb.core
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
-  roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
+  roll.fromFrames "New Roll from Open Frames" ← cb.roll
   roll.select "Select Roll" ← cb.roll
-  roll.analyse "Analyse Roll" (Roll) ← cb.roll
-  roll.firstPrint "First Print of the Roll" (Roll) ← cb.roll
-  roll.setReference "Set as Roll Reference" (Roll) ← cb.roll
-  roll.matchToReference "Print the Roll Like the Reference" (Roll) ← cb.roll
+  roll.analyse "Analyse Roll" ← cb.roll
+  roll.firstPrint "First Print of the Roll" ← cb.roll
+  roll.setReference "Set as Roll Reference" ← cb.roll
+  roll.matchToReference "Print the Roll Like the Reference" ← cb.roll
   roll.alpha "Roll Consistency" ← cb.roll
   roll.pending.toggle "Include Frame" ← cb.roll
   roll.pending.approve "Approve Roll Batch" ← cb.roll
   roll.pending.reject "Reject Roll Batch" ← cb.roll
-  roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
+  roll.clearMatch "Clear Roll Match" ← cb.roll
   roll.setShared "Set on the Roll" ← cb.roll
   roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
-  roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
-  roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
-  roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
+  roll.contact.mode "Contact Sheet: One Time and Pack" ← cb.roll
+  roll.cull.sweep "Cull the Roll" ← cb.roll
+  roll.exportSheet "Export Contact Sheet…" ← cb.roll
   looks.pick "Pick Look" ← cb.looks
   looks.param "Set Look Parameter" ← cb.looks
   looks.amount "Look Amount" ← cb.looks
@@ -1227,7 +1227,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 133 · keys 63 in 8 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 133 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1351,7 +1351,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1410,7 +1410,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 99 · keys 52 in 5 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 99 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1481,7 +1481,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1524,7 +1524,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 26 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1567,7 +1567,7 @@ commands
   frame.pick "Flag as Pick" (Frame) ← cb.core
   frame.reject "Reject" (Frame) ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1610,7 +1610,7 @@ commands
   agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 23 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `

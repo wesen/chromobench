@@ -6,13 +6,12 @@
 import { suggest } from './util.ts';
 import type { CallSite } from './diag.ts';
 
-export type Traced<S, T> = T | ((s: Readonly<S>) => T);
+/** a value, or a lambda of state (τ); with an untyped state (any) the lambda may type its own parameter */
+export type Traced<S, T> = T | (0 extends 1 & S ? (s: any) => T : (s: Readonly<S>) => T);
 
 /** S: the state type; C: the context handlers receive (the runtime's Ctx<S>) */
 export interface CommandSpec<S = any, C = any> {
   label?: Traced<S, string>;
-  /** the menu the command appears in (the default menus are built from this) */
-  menu?: string;
   icon?: string;
   enabled?: Traced<S, boolean>;
   why?: Traced<S, string>;
@@ -21,10 +20,11 @@ export interface CommandSpec<S = any, C = any> {
   /** a handler (ctx, ...args) or the id of another command (an alias) */
   run?: string | ((ctx: C, ...args: any[]) => unknown);
   palette?: boolean;
+  /** a set of commands (a submenu { label, group } lists them; the palette groups by it when no menu places one) */
   group?: string;
   /** shown in menus and the palette only while one of these modules is current */
   module?: string | string[] | undefined;
-  /** replace a command of the same id on purpose (a variant replacing a kit's command) */
+  /** replace a command of the same id on purpose (a kit replacing another kit's command) */
   replace?: boolean;
   /** extend a previous definition instead of replacing it */
   extend?: boolean;

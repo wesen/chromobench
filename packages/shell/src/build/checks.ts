@@ -62,7 +62,7 @@ export const normalizePass: PassDef<UiIR> = pass<UiIR>('normalize', { on: 'ui' }
   for (const [id, panel] of ir.panels) ir.panels.set(id, applyDefaults(panel, idx));
   for (const m of ir.modules)
     for (const [side, r] of Object.entries(m.regions)) if (r && isNode(r)) (m.regions as any)[side] = applyDefaults(r, idx);
-  for (const t of ir.tools.values()) if (t.content && isNode(t.content)) t.content = applyDefaults(t.content, idx);
+  for (const [id, t] of ir.tools) if (t.content && isNode(t.content)) ir.tools.set(id, { ...t, content: applyDefaults(t.content, idx) });
   // panels defined inline where they are placed are panels too (first definition wins)
   for (const m of ir.modules)
     for (const r of Object.values(m.regions))
@@ -70,14 +70,6 @@ export const normalizePass: PassDef<UiIR> = pass<UiIR>('normalize', { on: 'ui' }
         walk(r, n => {
           if (n.$ === 'panel' && n.props['id'] != null && !ir.panels.has(String(n.props['id']))) ir.panels.set(String(n.props['id']), n);
         });
-  // CraftKit compatibility: references to panels known only to the Ck instance (defined anywhere through it)
-  const registry = (p as any).registry as Map<string, NodeData> | undefined;
-  if (registry)
-    for (const t of ir.trees())
-      walk(t.node, n => {
-        const id = String(n.props['id']);
-        if (n.$ === 'panelref' && !ir.panels.has(id) && registry.has(id)) ir.panels.set(id, applyDefaults(registry.get(id)!, idx));
-      });
   const asm = assemble(ir, fx(p).builtins, fx(p).platform);
   p.facts.set('assembled', asm);
   ir.hasCommand = (id: string) => asm.commands.has(id);
@@ -199,7 +191,7 @@ export const dockingPass = pass<UiIR>('docking', { on: 'ui', after: 'normalize' 
   const ids = [...ir.panels.keys()];
   const missing = (n: NodeData, id: string, where: string): void => {
     const s = suggest(id, ids);
-    p.error('CK-D302', `No panel '${id}'`, { at: n.at, facts: [`placed in ${where}`, `panels: ${ids.join(', ') || 'none defined'}`], fix: s.length ? `Did you mean '${s[0]}'?` : `Define it with ck.panel('${id}', { title }, …) first.` });
+    p.error('CK-D302', `No panel '${id}'`, { at: n.at, facts: [`placed in ${where}`, `panels: ${ids.join(', ') || 'none defined'}`], fix: s.length ? `Did you mean '${s[0]}'?` : `Define it where it is placed: ck.panel.define('${id}', { title }, …).` });
   };
   for (const t of ir.trees())
     walk(t.node, n => {
@@ -219,7 +211,7 @@ export const dockingPass = pass<UiIR>('docking', { on: 'ui', after: 'normalize' 
         }
       });
     }
-    if (!mod.regions.center) p.warn('CK-D303', `Module '${mod.id}' has no centre`, { at: mod.at, facts: ['Nothing fills the middle of the window.'], fix: `.module('${mod.id}', m => m.center(ck.viewport(…)))` });
+    if (!mod.regions.center) p.warn('CK-D303', `Module '${mod.id}' has no centre`, { at: mod.at, facts: ['Nothing fills the middle of the window.'], fix: `ck.module('${mod.id}', …).center(ck.viewport(…))` });
   }
 });
 
@@ -277,7 +269,7 @@ export const toolsPass = pass<UiIR>('tools', { on: 'ui', after: 'normalize' }, (
     for (const t of (n.props['tools'] as string[]) || [])
       if (!ir.tools.has(t)) {
         const s = suggest(t, ids);
-        p.error('CK-V302', `Viewport names a tool that does not exist: '${t}'`, { at: n.at, facts: [`tools: ${ids.join(', ') || 'none'}`], fix: s.length ? `Did you mean '${s[0]}'?` : `Add it with .tools(t => t.tool('${t}', { … }))` });
+        p.error('CK-V302', `Viewport names a tool that does not exist: '${t}'`, { at: n.at, facts: [`tools: ${ids.join(', ') || 'none'}`], fix: s.length ? `Did you mean '${s[0]}'?` : `Declare it in a kit: ck.kit(…).tools({ '${t}': { … } })` });
       }
   });
   for (const t of ir.tools.values())
@@ -344,7 +336,7 @@ export const reachPass = pass<UiIR>('reach', { on: 'ui', after: ['docking', 'key
   const keyed = new Set(asm.keymap.bindings.map(b => (Array.isArray(b.target) ? b.target[0] : b.target)).filter(x => typeof x === 'string'));
   const lost = asm.commands
     .all()
-    .filter(c => !c.builtin && c.palette === false && !inMenus.has(c.id) && !keyed.has(c.id) && !(ir.menus.length === 0 && c.menu))
+    .filter(c => !c.builtin && c.palette === false && !inMenus.has(c.id) && !keyed.has(c.id))
     .map(c => c.id);
   if (lost.length) p.info('CK-I011', 'Commands reachable from nothing', { at: ir.at, facts: [lost.join(', ')], fix: 'Give them a menu, a key, a toolbar button, or palette: true.' });
 });

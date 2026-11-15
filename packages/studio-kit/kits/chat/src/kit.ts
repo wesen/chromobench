@@ -98,16 +98,14 @@ export const EFFORT_LABELS: Record<ChatEffort, string> = { low: 'Quick', medium:
 
 export function createChatKit(ck: Ck, cb: Cb) {
   const panel = (o: Record<string, unknown> = {}): any => cb.panel.chat({ title: 'Assistant', ...o });
-  const kitAny = ck as any;
   /** the Assistant module: the print in the centre, the chat on the right */
-  const module = (o: { width?: number } = {}) => (m: any) =>
-    m
-      .label('Assistant')
-      .txOpts((s: any) => ({ channel: cb.current(s) }))
-      .left(kitAny.dock.column({ width: 220 }, cb.panel.navigator({ id: 'navigator-assistant' }), cb.panel.history({ id: 'history-assistant' })))
+  const module = (o: { id?: string; width?: number } = {}) =>
+    ck
+      .module(o.id ?? 'assistant', { label: 'Assistant', txOpts: (s: any) => ({ channel: cb.current(s) }) })
+      .left(ck.dock.column({ width: 220 }, cb.panel.navigator({ id: 'navigator-assistant' }), cb.panel.history({ id: 'history-assistant' })))
       .center(cb.viewer((s: any) => cb.frame(s)?.print() ?? null, { id: 'assistant', views: true, compare: true, tools: ['probe'], hud: cb.hud.readout() }))
-      .right(kitAny.dock.column({ width: o.width ?? 400 }, panel({ id: 'chat' })))
-      .bottom(kitAny.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-assistant' })))
+      .right(ck.dock.column({ width: o.width ?? 400 }, panel({ id: 'chat' })))
+      .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-assistant' })))
       .keys({ ...cb.keys.views });
   return { panel, module, MODES, EFFORT_LABELS };
 }

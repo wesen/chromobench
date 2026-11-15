@@ -15,8 +15,8 @@ afterEach(() => {
 
 function setup(o: { theme?: string; themeRoot?: HTMLElement } = {}) {
   const ck = createCk<MiniState>();
-  const b = miniStudio(ck);
-  if (o.theme) b.theme(o.theme);
+  // a shell is a value: .theme() returns a new one
+  const b = o.theme ? miniStudio(ck).theme(o.theme) : miniStudio(ck);
   const rt = b.build().start({ clock: manualClock(), bridges: [fakeBridge()], presenter: () => fakePresenter() });
   const root = document.createElement('div');
   document.body.append(root);

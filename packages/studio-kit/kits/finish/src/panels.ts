@@ -22,7 +22,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
   const viewer = (o: Record<string, unknown> = {}) => cb.viewer(shown, { id: 'finish', tools: ['crop', 'spot'], compare: true, ...o } as any);
   const aspectOptions = (list: readonly string[]) => list.map((a) => ({ value: a, label: a === 'original' ? 'Original' : a === 'free' ? 'Free' : a }));
   const cropPanel = (o: { id?: string; title?: string; aspects?: readonly string[] } = {}) =>
-    ck.panel(o.id ?? 'finish-crop', { title: o.title ?? 'Crop & straighten' },
+    ck.panel.define(o.id ?? 'finish-crop', { title: o.title ?? 'Crop & straighten' },
       ck.row({ class: 'cb-finish-tools' }, ck.ui.command('tool.crop', { text: 'Crop (R)', small: true }), ck.ui.command('crop.done', { text: 'Done', small: true })),
       ck.ui.select(aspectOptions(o.aspects ?? ASPECTS), { bind: (s: any) => s.finish.crop.aspect, set: 'crop.aspect', label: 'Aspect' } as any),
       ck.ui.toggle('Lock aspect', { bind: (s: any) => s.finish.crop.locked } as any),
@@ -50,7 +50,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       }, { class: 'cb-warn' } as any),
     );
   const retouchPanel = (o: { id?: string; title?: string; modes?: SpotMode[] } = {}) =>
-    ck.panel(o.id ?? 'finish-retouch', { title: o.title ?? 'Spot removal' },
+    ck.panel.define(o.id ?? 'finish-retouch', { title: o.title ?? 'Spot removal' },
       ck.row({ class: 'cb-finish-tools' }, ck.ui.command('tool.spot', { text: 'Spots (Q)', small: true }), ck.ui.command('spot.show', { text: 'Show', small: true })),
       ck.ui.segmented((o.modes ?? ['heal', 'clone', 'dust']).map((m) => ({ value: m, label: m === 'dust' ? 'Dust (on the film)' : m === 'heal' ? 'Heal' : 'Clone' })), { bind: (s: any) => s.finish.spot.mode, label: 'Mode', small: true } as any),
       ck.ui.slider(1, 200, { bind: (s: any) => s.finish.spot.r, label: 'Size', step: 1, unit: 'px', decimals: 0 } as any),
@@ -68,7 +68,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.text('Heal and clone work on the print; Dust works on the film (scan.heal) where the engine has it.', { dim: true } as any),
     );
   const tonesPanel = (o: { id?: string; title?: string; only?: string[] } = {}) =>
-    ck.panel(o.id ?? 'finish-tones', { title: o.title ?? 'Finishing (digital, after the print)' },
+    ck.panel.define(o.id ?? 'finish-tones', { title: o.title ?? 'Finishing (digital, after the print)' },
       ck.text('Not darkroom controls: they change the finished print digitally.', { dim: true } as any),
       ...FINISHING_PATHS.filter((p) => !o.only || o.only.some((x) => p.endsWith(x))).map((p) => cb.arg(p, { why: 'finishing, not darkroom' })),
       ck.row({ class: 'cb-finish-tone-cmds' }, ck.ui.command('finish.toggle', { text: 'Before / after', small: true }), ck.ui.command('finish.resetTones', { text: 'Reset', small: true })),
