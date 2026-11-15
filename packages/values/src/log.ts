@@ -234,6 +234,23 @@ export class Log {
     return this.#with({ docs: new Map(this.#s.docs).set(id, rec), values: new Map(this.#s.values).set(id, initial) });
   }
 
+  /**
+   * Add the top-level fields of `fields` that a document lacks, to its initial state and to its state now. Not a
+   * step (nothing to undo; the fields were not there to change). A program that declares more state than the one
+   * that made the log adopts the log this way: View ▸ Layout from a layout without the roll kit to one with it
+   * (CHB-037 P9). Fields the document has, now or initially, stay as they are.
+   */
+  withFields(id: string, fields: object): Log {
+    const rec = this.#rec(id);
+    const now = this.#s.values.get(id) as Record<string, unknown>;
+    const add = Object.entries(fields).filter(([k, v]) => v !== undefined && !(k in now) && !(k in rec.initial));
+    if (!add.length) return this;
+    const extra = Object.fromEntries(add);
+    const initial = document({ ...extra, ...rec.initial });
+    const value = document({ ...extra, ...now });
+    return this.#with({ docs: new Map(this.#s.docs).set(id, freeze({ ...rec, initial })), values: new Map(this.#s.values).set(id, value) });
+  }
+
   /** Remove a document with its entries; steps left empty go (the other documents' history is untouched). */
   close(id: string): Log {
     this.#rec(id);

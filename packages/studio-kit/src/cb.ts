@@ -229,7 +229,9 @@ export function createCb(ck: Ck) {
   const strip = (o: { vertical?: boolean; id?: string } = {}) =>
     (o.vertical ? ck.view.list : ck.view.filmstrip)((s: any) => sel.library(s), {
       id: o.id ?? (o.vertical ? 'strip-v' : 'strip'),
-      ...(o.vertical ? { row: cellFrame() } : { cell: cellFrame() }),
+      // a vertical strip's rows hold a thumbnail and its caption (the list's 24 px default left the picture 2 px tall:
+      // only names showed, CHB-037 P9-4)
+      ...(o.vertical ? { row: cellFrame(), rowHeight: 150 } : { cell: cellFrame() }),
       key: (x: CatalogFrame) => x.id,
       select: { bind: (s: any) => s.ui.selection, mode: 'multi' },
       context: FRAME_CONTEXT,

@@ -211,6 +211,9 @@ test('the darkroom arrangement: the Enlarger is the darkroom stack; the digital 
   const strip = page.locator('.ck-side-left .ck-listview');
   expect((await strip.boundingBox())!.height).toBeGreaterThan(150);
   await expect(strip.locator('.ck-coll-row')).toHaveCount(2);
+  // each row shows its print, not only its name (P9-4: the thumbnails were 2 px tall)
+  await expect(strip.locator('.ck-coll-row .ck-thumb[data-rendered]')).toHaveCount(2, { timeout: 60_000 });
+  expect((await strip.locator('.ck-coll-row .ck-thumb').first().boundingBox())!.height).toBeGreaterThan(80);
   await strip.locator('.ck-coll-row', { hasText: 'landscape-neg.tif' }).click();
   await idle(page);
   expect(await hook<string>(page, 'cb.studio.frames.get(cb.studio.current).name')).toBe('landscape-neg.tif');
@@ -365,4 +368,22 @@ return JSON.stringify({ before: before.D[1], after: after.D[1] })`);
   await hook(page, `cb.run('view.layout', 'classic')`);
   await page.waitForFunction(() => document.body.dataset['layout'] === 'classic', null, { timeout: 60_000 });
   expect(await hook<number>(page, 'cb.units()')).toBe(1);
+});
+
+// P9-8 (the persona session): after View ▸ Layout from Darkroom first (no roll kit) to Classic, New roll failed with
+// E_PATH (the adopted log's main document had no `roll`); a layout's own state now joins the adopted log.
+test('a roll after switching from Darkroom first to Classic', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/?nosw&canvas2d&fresh&engine=mock&layout=darkroom');
+  await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
+  await page.setInputFiles('#file', [tif('roll-a.tif', negativeScan(200, 130)), tif('roll-b.tif', negativeScan(200, 130, { exposure: 1 }))]);
+  await opened(page, 2);
+  await hook(page, `cb.run('view.layout', 'classic')`);
+  await page.waitForFunction(() => document.body.dataset['layout'] === 'classic', null, { timeout: 60_000 });
+  await idle(page);
+  await module(page, 'roll');
+  await page.locator('#roll-new').click();
+  await expect(page.locator('#rolls li')).toHaveCount(1, { timeout: 60_000 });
+  expect(await hook<string[]>(page, 'Object.keys(cb.state().roll.rolls)')).toEqual(['roll-1']);
 });
