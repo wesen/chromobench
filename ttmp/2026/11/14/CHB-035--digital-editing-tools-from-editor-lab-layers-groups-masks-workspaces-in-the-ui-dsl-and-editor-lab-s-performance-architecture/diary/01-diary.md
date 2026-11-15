@@ -290,3 +290,165 @@ reflow of the code blocks.
 
 ### Technical details
 - Bundle: `/ai/2026/11/14/CHB-035/CHB-035 Digital editing and engine performance from Editor lab.pdf`.
+
+## Step 4: Research for the unified model (v2)
+
+The owner reread v1's conclusion (digital layers added beside the existing darkroom, finishing and retouch concepts)
+and asked for full unification instead: one concept of layer, group, mask and stage, a core of composable fluent
+builder APIs around a few components, customisable by lambdas at build time or at runtime, with no backwards
+compatibility (a hard cut-off). Three read-only surveys mapped what exists; their findings drive v2.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, we really want to unify, so study / research / design that, and then update the
+design doc and flesh it out and explain the goal: a core of composable fluent builder APIs that are modular around a
+set of core components that can be modifed with lambdas for either build or runtime. [blank line] Upload the doc as v2 to the
+remarkable tablet." — followed by: "the target goal is to a have a powerful professional lightroom for my dad, who
+often works with film (either scanning, or as film simulation), but have a flexible UI language that allows for many
+reconfigurations of the application while looking cohesive and elegant. We also combine high performance webgpu
+functionality, and are adding a full layer system photoshop/traditional lightroom capabilities." — "also agent
+manipulatable / an agent having only eval can basically cover all the necessary functionality and introspection into
+the workbench" — "unify all of it, we don't have backwards compatibility needs or wrapping or so, we can do hard
+cutoff, now is the time to strive for elegance and consistency and all that. nothing is not worth it if it creates a
+more robust and simple core"
+
+**Assistant interpretation:** Rewrite design 01 as v2: a unified editing model (stages with laws; one layer, group,
+mask, collection and history concept), the builder core and its binding times, an eval-complete agent surface, a hard
+cut-off plan; upload as v2.
+
+**Inferred user intent:** A simple, robust core that makes the application both reconfigurable and coherent for the
+photographer, and fully drivable by an agent.
+
+### What I did
+- Three Explore surveys (recipe and compile; UI DSL builders and kits; agent DSL, vocabulary and looks), each asked
+  for file:line evidence. A git worktree of `task/chb-035-digital-editing-design` in the scratchpad holds this work,
+  so the pattern-experiment batch running from the main checkout is not disturbed.
+
+### What worked
+- The surveys found the duplication that v2 must remove, with references:
+  - Six shapes for "a list of masked edits": `print.exposures` (array addressed by id), `print.densityMasks` and
+    `retouch.spots` (records, null deletes), `scan.dust.spots` (plain array), `MaskDoc.shapes` (or-folded),
+    `mask.paint` strokes (JSON string); three JSON-string list args (`scan.heal`, `retouch.heal`, `mask.paint`).
+  - Exposure semantics in three copies: `compile` (`graph.ts:281-301`), the DSL's `printChain`
+    (`dsl/src/host/print.ts:28-80`, which has diverged: no flash modes, no density masks) and `compileExposures`
+    (`core/src/print/exposures.ts:84-121`).
+  - Masks reach only darkroom exposures; finishing is one hard-coded clarity call; `finishing.look` and
+    `finishing.hues` are stored but never compiled; `finishing.hue` exists as an op but is not wired.
+  - Mutations are a closed set with three collection idioms (`exposure.add/remove`, `set … null`, `mask.set` with no
+    delete).
+  - "Look" means three things; two batch builders (`roll/src/engine/batch.ts`, `looks/src/engine/plan.ts`) with
+    different `by` unions; the same edit expressible four ways.
+  - Two histories: the shell store's inverse patches and the contract's `EditLog`, bridged by
+    `editlog-route.ts`; the store's preview type is already called `Layer`.
+  - UI DSL: mutable builders over immutable nodes; Proxy fragments that record unknown calls; three key-scope
+    defaults; two menu sources; two pass registrations; `ck.panel` both ref and define; `enabled` vs `disabled`
+    polarity; `when`/`pick` returning a node or a value by argument type; tools listed in three places; four kit
+    "product" shapes; untyped selectors. CHB-029's nine streamlining items are all still open.
+  - Binding times already exist in the UI IR (`shell/ir/slots.ts:1-40`: β, τ, bind, θ, ƒ, ρ) and looks already
+    expand once into mutations (`looks/src/engine/look.ts:1-4`): two halves of the lambda story v2 needs.
+  - The darkroom law is already one formula (`core/src/print/exposures.ts:32-47`): contributions add in linear H
+    under masks, density masks multiply transmission.
+
+### What didn't work
+- N/A
+
+### What I learned
+- The unification is mostly removal: one collection idiom, one compiler, one history, one mask algebra, one builder
+  value model. The new concepts are few: stage laws, modulator layers, linked groups, bindings.
+
+### What was tricky to build
+- Looks that change an existing setting (warmth on the enlarger filtration) do not fit "a group of layers" until the
+  darkroom gains modulator layers (a filter or a neutral density in the light path). With them every look is an
+  addition, and its Amount is the stage's own amount.
+
+### What warrants a second pair of eyes
+- The darkroom law with modulators must reproduce `combinePixel` exactly for today's exposure kinds.
+
+### What should be done in the future
+- Write v2 (Step 5) and upload it (Step 6).
+
+### Code review instructions
+- N/A (research).
+
+### Technical details
+- Contract today: 55 ops, `RECIPE_VERSION = 2`, latest change note CC-017, contract 0.4.
+
+## Step 5: Document 01 v2 — one editing model, the builder core, the workbench
+
+Version 2 rewrites document 01 in place (v1 stays in git at b448815). Parts I and II (fundamentals, Editor lab) are
+kept with corrections; Parts III–VI are new: the inventory of today's duplicates, the unified model, the builder core
+with binding times and the agent's workbench, and a hard cut-off plan. 1,350 lines, eight decision records (D1–D8).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Write the unified design and explain the goal (a core of composable fluent builders
+around a few components, customisable by lambdas at build time or runtime) in the owner's terms: a professional
+Lightroom with film at its heart, a reconfigurable yet cohesive UI language, WebGPU performance, a full layer system,
+and an agent that needs only `eval`.
+
+**Inferred user intent:** A design simple and robust enough to build the whole studio on, with nothing kept for
+compatibility.
+
+**Commit (code):** (this step's commit) — design/01 v2, tasks, changelog, related files
+
+### What I did
+- Opening: the goal (four requirements), the design on one page, a v1 → v2 table.
+- Part III (Sections 14–19): the inventory from Step 4.
+- Part IV (20–29): five components (Op, Mask, Layer, Group, Stage) plus Link and Binding in a Document (format 3);
+  five stages with media and laws (repair, composite, light); the light law as `combinePixel` plus filter modulators;
+  amount defined per law (D2); every existing edit mapped to a layer (table), heal runs coalesced; one collection
+  idiom and four mutations (D3); masks with one algebra in document units (D4); one history; links for rolls, looks,
+  presets and sync (D5); bindings reading only upstream cuts; one compiler with named cuts.
+- Part V (30–34): builders return immutable values, chain methods are modifiers, `explain` everywhere; four binding
+  times (build β, compile κ, interaction τ θ ƒ ρ, none per pixel) with four rules (D6); the UI DSL rules that fold in
+  CHB-029; one stack kit with specialised views and a stage policy pass; the workbench (`wb`) and its two
+  completeness tests (D7).
+- Part VI (35–38): the cut-off (D8), phases 0–10 with golden pictures first, the property tests, risks and five owner
+  questions. Glossary and references (with prior art: darktable, Nuke, Photoshop, Lightroom, Capture One, Jetpack
+  Compose, SwiftUI, Halide, Kotlin builders) updated.
+- Carried from v1: working encodings (linear and OkLab per op) and the digital op table, now without the `digital.`
+  prefix (an op's stages are a catalogue field).
+- Assembled with a script (`scratchpad/v2/assemble.py`) from the new parts and v1's Parts I–II, with seven
+  corrections to stale cross-references and to two wrong rows (`finishing.hue` is not compiled).
+
+### Why
+- The owner wants elegance over compatibility; most of the unification is removal (one compiler, one history, one
+  collection idiom, one mask algebra, one builder value model).
+
+### What worked
+- The darkroom fits the uniform entry once filters are modulators: every look becomes an addition, and amount can mean
+  scaled time or density there and opacity elsewhere without special rules.
+
+### What didn't work
+- Eleven code lines exceeded the 98-character limit for the PDF (the one-page diagram, `defineLaw`, the light-law
+  formula, two layout lines); shortened by hand and reassembled; the check now prints nothing.
+- `docmgr doc relate` with paths into the main checkout from the worktree stored them as `abs://…`; removed and
+  related again through the worktree's paths, which normalise to repository-relative ones.
+
+### What I learned
+- Binding times already half exist (UI glyphs; looks resolve once); naming the compile time (κ) and forbidding pixel
+  lambdas is what makes the rule set complete.
+
+### What was tricky to build
+- First print cannot be a binding: it searches time and lights against the darkroom's own output. The rule "a binding
+  reads only cuts strictly upstream of its stage" keeps compile acyclic, and first print stays a command.
+- Retouch spots as layers would cost one spatial node each; coalescing adjacent runs of a coalescible op keeps one
+  node without changing a pixel.
+
+### What warrants a second pair of eyes
+- Section 22's light law with modulators against `combinePixel`; preflash and split exposures (flagged in Section 23).
+- Section 32's UI rules: whether every listed inconsistency is real in the current code.
+
+### What should be done in the future
+- Upload v2 (Step 6); owner answers to Section 38; then the implementation ticket for phases 0–7.
+
+### Code review instructions
+- Read the opening, then Sections 20–22 (model and laws), 29 (compiler), 31 (binding times), 34 (workbench), 36
+  (phases). `docmgr doctor --ticket CHB-035` passes.
+
+### Technical details
+- Decision records: D1 one stack concept with stage laws; D2 amount per law; D3 one collection idiom; D4 one mask
+  algebra; D5 links; D6 binding times, no stored code; D7 immutable builders and an eval-complete workbench; D8 hard
+  cut-off.

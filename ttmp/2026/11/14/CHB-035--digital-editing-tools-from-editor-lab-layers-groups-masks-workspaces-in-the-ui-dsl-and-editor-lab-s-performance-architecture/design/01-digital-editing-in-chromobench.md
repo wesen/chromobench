@@ -1,5 +1,5 @@
 ---
-Title: Digital editing in chromobench — what to take from Editor lab, where it goes, and how it fits the UI DSL
+Title: One editing model for chromobench (v2) — stages, layers, groups and masks as one concept, composable builders, an eval-complete workbench
 Ticket: CHB-035
 Status: active
 Topics:
@@ -9,14 +9,6 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: packages/contract/src/catalog/view-output-mask.ts
-      Note: mask ops; and/or/not are min/max/1-m
-    - Path: packages/contract/src/graph.ts
-      Note: 'compile(): the pipeline stages and the insertion points of the digital stages'
-    - Path: packages/contract/src/recipe.ts
-      Note: 'recipe model: masks library, exposures, retouch, finishing; where recipe.digital goes'
-    - Path: packages/contract/src/vocab.ts
-      Note: frame vocabulary and domains; frame.finished() would join it
     - Path: packages/studio-kit/kits/finish/src/kit.ts
       Note: 'the kit pattern: tools, commands, panels, state, docs'
     - Path: packages/studio-kit/kits/finish/src/passes.ts
@@ -25,47 +17,127 @@ RelatedFiles:
       Note: layouts compose modules; printModule and libraryModule
     - Path: packages/studio-kit/variants/finish-module.js
       Note: 'the Finish module: the pattern for an Edit module'
+    - Path: repo://packages/contract/src/catalog/view-output-mask.ts
+      Note: mask ops (min/max today); replaced by one product algebra
+    - Path: repo://packages/contract/src/editlog.ts
+      Note: EditLog; merged with the store's document tier into one history
+    - Path: repo://packages/contract/src/graph.ts
+      Note: compile(); becomes one compiler over stage laws with named cuts
+    - Path: repo://packages/contract/src/mutations.ts
+      Note: five special mutations; replaced by set/insert/remove/move
+    - Path: repo://packages/contract/src/recipe.ts
+      Note: the recipe v2 that the document format 3 replaces (six list shapes, finishing fields)
+    - Path: repo://packages/contract/src/vocab.ts
+      Note: frame accessors; become the named cuts
+    - Path: repo://packages/core/src/print/exposures.ts
+      Note: combinePixel, the darkroom law the light law must reproduce; compileExposures (deleted)
+    - Path: repo://packages/dsl/src/host/print.ts
+      Note: printChain, the drifted third copy of the exposure semantics (deleted)
+    - Path: repo://packages/shell/src/build/shell-builder.ts
+      Note: mutable ShellBuilder/ModuleBuilder; become immutable value builders
+    - Path: repo://packages/shell/src/ir/slots.ts
+      Note: binding-time glyphs; gain the compile time (kappa)
+    - Path: repo://packages/studio-kit/kits/looks/src/engine/look.ts
+      Note: CHB-021 looks; become look functions returning groups (links)
 ExternalSources:
     - ~/Downloads/editor-lab-work.zip (Editor lab, 12–14 Nov 2026)
-Summary: 'An intern''s guide: the fundamentals of layer-based digital editing (alpha, adjustment layers, blend modes, groups, masks, neighbourhood operations), what Editor lab built and what of it to reuse, where digital edits belong in chromobench''s physical print pipeline, the recipe and graph changes, the edit kit in the UI DSL, and a phased plan.'
-LastUpdated: 2026-11-14T19:30:00-05:00
-WhatFor: Designing and building Lightroom/Photoshop-style precision editing in chromobench.
-WhenToUse: Before touching the recipe's digital stage, the edit kit, or the layouts that host it.
+Summary: 'Version 2 (hard cut-off): one model of stages (medium, stack, law), layers, groups, masks and links from the scan to the finished print; one collection idiom, mutation set, history and compiler; a core of immutable fluent builders with modifiers and four binding times for lambdas; a workbench an agent drives with eval alone; the fundamentals of layer editing and what to take from Editor lab; a phased plan.'
+LastUpdated: 2026-11-14T22:30:00-05:00
+WhatFor: Building the unified editing model, the builder core and the agent workbench of chromobench.
+WhenToUse: Before touching the document model, the compiler, the stack kit, the UI DSL builders or the agent surface.
 ---
 
 
 
 
+# One editing model for chromobench (v2)
 
+*Stages, layers, groups and masks as one concept from the scan to the finished print; a core of composable fluent
+builders around a few components, customised by lambdas at defined times; a workbench an agent can drive with
+`eval` alone. Version 2 of the CHB-035 design; it replaces version 1's additive plan.*
 
+## The goal
 
+Chromobench is becoming a professional Lightroom for one photographer, the owner's father, who works with film: he
+scans negatives, and he wants film's look for his digital camera files. Four requirements shape everything in this
+document.
 
+1. **A darkroom and a digital editor in one model.** The physical print chain (scan, film, paper, enlarger) stays the
+   heart of the look. Around it he gets the full digital toolset of Lightroom and Photoshop: adjustment layers,
+   blend modes, groups, parametric masks, curves, colour grading, retouching, later selections.
+2. **A UI language that reconfigures without falling apart.** The studio's interface is a program in a JavaScript
+   UI DSL. It must allow many arrangements (one screen with a darkroom and a digital palette, separate modules,
+   layouts for scans or camera files, layouts an agent writes) while every arrangement looks and behaves as one
+   coherent, elegant application.
+3. **High performance.** The engine is WebGPU (with an f64 reference engine for correctness). Every edit must keep
+   the interactive path fast: unchanged work reused, pointwise work fused, wide work computed once.
+4. **An agent with only `eval`.** An agent that can evaluate DSL code, and nothing else, must be able to do
+   everything the photographer can do and see everything he can see: edit any stage, build and inspect layouts, run
+   any command, read the state, explain any value.
 
-# Digital editing in chromobench
+The quality we aim for is a small, robust core: **a few components, each meaning one thing everywhere, composed by
+one kind of builder.** Version 1 of this document added a digital layer stack next to the darkroom's exposures, the
+finishing controls and the retouch spots. That would have given the photographer, the UI and the agent three ideas
+of "layer". Version 2 unifies them, and since there is no backwards compatibility to keep (the owner's decision,
+2026-11-14), it does so with a hard cut-off: no migrations, no wrappers, no second path.
 
-This document explains how to give chromobench the standard tools of digital photo editing (adjustment layers,
-blend modes, groups, parametric masks, selections, precise tone and colour controls) without turning the darkroom
-into Photoshop. It is written for a developer who knows TypeScript and has not worked on chromobench, on image
-compositing, or on photographic printing before. By the end you should be able to answer three questions with
-reasons: what a digital edit is in chromobench's physical model, where in the pipeline each kind of edit belongs,
-and how it reaches the photographer through the UI DSL.
+## The design on one page
 
-The material comes from two places. The first is chromobench itself: its recipe, its compiled print graph, its
-mask library, and the studio's UI DSL with its kits, modules and layouts. The second is **Editor lab**, a
-separate effort (12–14 November 2026): a one-page browser photo editor with a layer stack, layer groups,
-Lightroom-style mask components, ten stage tools, 32 presets, a scripting API that an agent drives, and a
-nine-chapter textbook on building such an engine. Editor lab is a good teacher and a good source of algorithms.
-It is not a design to copy: it works on 8-bit sRGB numbers, it has no notion of film or paper, and reading it
-closely turned up defects that this document lists so you do not import them.
+```text
+ Document ─── geometry (orientation, crop)   output (display, proof, export)   links (roll, looks)
+    │
+    ├── Stage scan     medium: scanner, stock, base    law: repair, in order        (scans)
+    ├── Stage scene    medium: camera, white balance   law: composite, scene-linear (camera files)
+    ├── Stage film     medium: stock, process          law: none yet                (camera files)
+    ├── Stage darkroom medium: paper, developer        law: light on the paper
+    └── Stage print    medium: viewing lamp, flare     law: composite, print-referred
+            │
+            └── stack: Layer | Group   every entry: id, op, params, enabled, amount, mask,
+                                    blend, source (provenance); groups hold entries
+ Masks ──── one library, one algebra; any entry in any stage may use one
+ Ops ────── one catalogue: args with units, class, encoding, the stages an op may live in
+```
 
-A companion document, `02-editor-lab-performance-architecture.md`, covers Editor lab's other half: tiles,
-pyramids, content-keyed caches, scheduling, the GPU and WebAssembly, and what chromobench's engine should take
-from them.
+- **Five components** carry the whole editing model: **Op** (a catalogue entry), **Mask** (a coverage function),
+  **Layer** (an op instance with amount, mask and blend), **Group** (layers that act as one), **Stage** (a medium and
+  a stack, combined by the stage's **law**). A **Document** holds the stages of one frame.
+- **A law per stage gives every entry the same fields with a physical meaning.** In the darkroom a layer is light on
+  the paper and its amount scales the light; in the print stage a layer is an adjustment composited over the image
+  and its amount is opacity. Dodge, burn, flash, a contrast mask, a colour filter, a curve, a heal spot and a colour
+  grade are all layers.
+- **One collection idiom, one mutation set, one history, one compiler.** Every list in the document is an ordered
+  record; every change is `set`, `insert`, `remove` or `move`; one transaction log holds user, agent and automatic
+  edits; one compiler serves the viewer, the export, the first print and the agent's what-if.
+- **Rolls, looks and presets are linked groups**: shared definitions that appear in many frames' stacks.
+- **Builders produce immutable values.** Layers, masks, looks, layouts, modules, panels and kits are all built with
+  the same fluent, immutable style; a **modifier** is a function from a value to a value; `.with(m)` applies it.
+- **Lambdas have four binding times**: build (once, while a value is built), compile (per frame, while the document
+  is compiled: looks, bindings), interaction (per state change or gesture: selectors, handlers), and pixel (none:
+  every per-pixel computation is a catalogue op with a GPU and a reference implementation).
+- **The workbench is data.** Every action is a command or a transaction, every visible thing is a value with
+  `explain()`; the agent's DSL reaches both, so `eval` is enough.
 
-> **How to read this.** Part I builds the fundamentals in order; each section uses only what came before.
-> Part II describes Editor lab. Part III is the design for chromobench, with decision records. Part IV is the
-> plan. A glossary is at the end; terms in **bold** at first use are in it. File references are
-> `path:line`; Editor lab paths are relative to the archive's `editor-lab/` folder.
+## What changed from version 1
+
+| Version 1 (additive) | Version 2 (unified, hard cut-off) |
+|---|---|
+| a new `recipe.digital` stack beside exposures, density masks, finishing and retouch | every stage has one stack of layers and groups; all existing edits become layers |
+| masks only on darkroom exposures and digital layers | any layer or group in any stage takes a mask |
+| two mask intersections (`mask.and` min, `mask.intersect` product) | one algebra; `mask.and`/`mask.or` as min/max are gone |
+| finishing controls and digital layers side by side | finishing becomes ordinary layers in the print stage |
+| looks stay parameter edits; digital looks become groups | every look is a linked group of layers; one Amount |
+| rolls keep copying a fragment into every recipe | a roll is a linked group shared by its frames |
+| a recipe migration adds empty stacks | no migration: a new document format, version 3; old recipes are refused |
+| the edit kit added beside the finish kit | one stack kit for every stage; darkroom and finish are its specialised views |
+| UI DSL left as it is, CHB-029 later | the UI DSL becomes immutable throughout, CHB-029 folded in |
+| agent API extended with `f.digital.print.group(...)` | the agent uses the same builders as the UI, and inspects the whole workbench |
+
+> **How to read this.** Parts I and II are unchanged from version 1 except for corrections: the fundamentals of
+> layer editing, then what Editor lab built. Part III is new: an honest inventory of what chromobench has today.
+> Part IV is the unified model, Part V the builder core and the agent's workbench, Part VI the plan. Decision records
+> sit where their decision is made. File references are `path:line` in this repository; Editor lab paths are
+> relative to the archive's `editor-lab/` folder. The pattern language in `docs/patterns/` (branch
+> `task/pattern-language`) names several of the shapes used here; chapters are cited by number.
 
 ---
 
@@ -196,7 +268,7 @@ Two warnings before you use any formula from this table in chromobench.
 
 - **The formulas assume display-encoded numbers in 0…1.** Editor lab blends sRGB-encoded values; its exposure and
   temperature adjustments convert to linear light and back, nothing else does (`src/engine.js:7-15`). Multiply on
-  linear light is a physical filter; multiply on sRGB numbers is not. Section 10 decides which encoding
+  linear light is a physical filter; multiply on sRGB numbers is not. Section 22 decides which encoding
   chromobench's digital stage uses.
 - **Separable modes are not colour-neutral in every encoding.** Luminosity and color are defined through a
   luminance with fixed weights; Editor lab uses Rec. 709 weights (`src/engine.js:16`), the W3C spec uses
@@ -242,7 +314,7 @@ at opacity 1 without a mask is the identity; Editor lab gives it its top child's
 For chromobench, the question "what is a group for" has a precise answer: **a pass-through group is the unit a
 photographer fades and masks** ("all my sky corrections, at 60 %, only above the horizon"), and **a preset or look
 arrives as a group** so it can be removed or faded in one step. Isolated groups matter only for source layers
-(painted or filled pixels), which chromobench's digital stage starts without (Section 11).
+(painted or filled pixels), which chromobench's composite stages start without (Section 23).
 
 ### 7. Masks as coverage functions
 
@@ -270,8 +342,8 @@ then        v = invert ? 1 − v : v ;   coverage = 1 − density · (1 − v)
 Why products for subtract and intersect, when fuzzy-set theory says min? Because two feathered edges multiplied
 meet in a smooth falloff; min meets them in a crease, a visible kink where the two ramps cross (book `03.md:36-43`).
 Chromobench's mask algebra today is the fuzzy-set one: `mask.and` is the minimum, `mask.or` the maximum, `mask.not`
-is 1 − m (`packages/contract/src/catalog/view-output-mask.ts:122-133`). Section 11 adds the product forms rather than
-changing these (a decision record explains why).
+is 1 − m (`packages/contract/src/catalog/view-output-mask.ts:122-133`). Version 2 replaces them
+with one algebra of product forms (Section 25, Decision D4).
 
 Two kinds of component behave differently with respect to the image:
 
@@ -281,7 +353,7 @@ Two kinds of component behave differently with respect to the image:
 - **Range** components (luminance, colour) read the backdrop. They follow edits below them: brighten the sky and
   a luminance mask on the sky changes. In chromobench this raises a question Editor lab never faced: which domain do
   they read? A luminance range read on print-xyz selects by how bright the print is; read on the scene, by how
-  bright the scene was. Section 10 answers it per stage.
+  bright the scene was. Section 25 answers it: a mask reads its stage's input unless it names another cut.
 
 ### 8. Neighbourhood operations and reach
 
@@ -363,10 +435,10 @@ step.
 | Contrast masking | none | `print.densityMask` (physical silver mask) |
 | Crop, straighten, orientation | none | `output.frame` (finish kit) |
 | Heal and clone | none | `retouch.heal` (finish kit), `scan.heal` for dust |
-| Clarity, hue tweaks | clarity, hue/sat | `finishing.clarity`, `finishing.hue` |
+| Clarity, hue tweaks | clarity, hue/sat | `finishing.clarity` (the `finishing.hue` op exists but is not compiled) |
 | Grain | digital grain | physical film grain in µm |
 | Curves with control points | parametric only (and buggy, Section 13) | none |
-| HSL per hue band, vibrance | hue/sat (global), vibrance | `finishing.hue` (hue bands) |
+| HSL per hue band, vibrance | hue/sat (global), vibrance | none (`finishing.hue` is not wired in) |
 | Colour grading, split toning | via colour-mode fills in luminance ranges | none |
 | Parametric masks with components | linear, radial, brush, luminance, colour | gradient, ellipse, paint, luminance; and/or/not |
 | Layer stack, blend modes, groups | yes (18 modes, pass-through and isolated) | exposures only, no blend modes |
@@ -438,8 +510,8 @@ if (n.$ === 'cb.arg' && String(n.props['path'] ?? '').startsWith('finishing.'))
 ```
 
 So the studio already has the three things a digital editing workspace needs: a place in the pipeline (after the
-print), a kit pattern, and a rule that keeps digital controls out of the darkroom view. The design below extends all
-three.
+print), a kit pattern, and a rule that keeps digital controls out of the darkroom view. Version 2 keeps the place
+and the kit pattern, and replaces the string-prefix rule by a stage policy pass driven by the catalogue (Section 33).
 
 ### 13. Defects found in Editor lab (do not import them)
 
@@ -457,439 +529,768 @@ defects; each would be easy to copy along with the algorithm.
 
 ---
 
-## Part III — The design for chromobench
+## Part III — What chromobench has today
 
-### 14. Where digital edits live: three stages
+Unification starts with an honest count. Three read-only surveys of the code (14 November 2026) mapped the recipe,
+the compiler, the UI DSL, the agent's DSL and the looks. This part lists what they found, because every duplicate
+below is something version 2 removes.
 
-The pipeline offers three physically distinct places for an edit. Each has a different meaning, and the
-photographer's question "could I add layers on or around the negative?" has a different answer at each.
+### 14. The editing data
 
-```text
- STAGE A  scene / negative            STAGE B  darkroom                 STAGE C  the finished
-     print
- ───────────────────────────          ─────────────────                 ──────────────────────────
- before the film (RAW: scene XYZ;     print.expose … print.combine      after view.adapt
-     (print-xyz),
- scans: scanner density)              exposures with masks              with retouch and finishing
- "what the camera/negative saw"       "how the paper is exposed"        "what is done to the
-     print"
- digital, scene-referred              physical (time, filtration)        digital, print-referred
-```
+The recipe (`packages/contract/src/recipe.ts:169-197`, `RECIPE_VERSION = 2`) holds a frame's whole edit. Its edits
+come in six shapes for one idea, "an ordered list of things, each maybe masked":
 
-**Stage C, the finished print, is the primary home for digital layers.** It is where Lightroom-style precision
-belongs once the print exists: a point curve on the print's tones, a colour grade on its shadows, a vignette, a
-masked hue shift. Its input is light reflected from the print in XYZ, which is linear and well defined, so blend
-modes and curves have a clear meaning (Section 15 chooses the working encoding). It is also where chromobench
-already puts digital work (retouch, clarity), so the physical-digital boundary does not move.
+| Field | Shape | enabled | amount | mask | order |
+|---|---|---|---|---|---|
+| `print.exposures` (dodge, burn, flash, split) | array, addressed by element id (`paths.ts:36`) | yes | — | id into `masks` | array order |
+| `print.densityMasks` | record by id; `set … null` deletes | yes | `amount` | — | sorted keys |
+| `retouch.spots` (heal, clone) | record by id; null deletes | yes | `opacity` | — | insertion order |
+| `scan.dust.spots` | plain array, set as a whole | — | — | — | array order |
+| `MaskDoc.shapes` (studio mask editor) | list, or-folded into one mask (`studio-kit/src/model/tools.ts:203-218`) | — | — | — | — |
+| `mask.paint` strokes | list inside a canonical JSON string arg | — | — | — | — |
 
-**Stage A, the scene, is the right home for camera files that the photographer edits before the "film".** His
-current order is Lightroom first, then Dehancer's film look. Edits in stage A reproduce that order: a local
-exposure on the scene goes through the film's curve and grain afterwards, so it looks like the film would have
-recorded a different scene. The cost is that stage A edits change what the first print meters (Section 18), and that
-the film's nonlinearity makes their effect on the print less direct than in stage C.
+Three ops take a list as a JSON string (`scan.heal`, `retouch.heal`, `mask.paint`). The masks library (`masks`)
+stores node closures, is written by its own mutation (`mask.set`), and cannot be deleted. Masks reach only darkroom
+exposures: retouch and finishing take none.
 
-**Stage B, the darkroom, already has layers**, and they should stay physical: dodge, burn and flash exposures with
-masks, density masks. What stage B gains from this work is the mask library: parametric components (Section 16)
-can drive a dodge as precisely as a digital adjustment.
+Finishing is mostly empty. `compile` reads `finishing.values.clarity` and its radius (`graph.ts:312-313`);
+`finishing.look` and `finishing.hues` are stored but never compiled, and the `finishing.hue` op exists without being
+wired in. Roll settings live as a `fragment` copied into every frame's recipe (`roll.ts:21-32`).
 
-**On the negative itself**, generic digital layers do not make sense. A negative scan is inverted and orange; an
-adjustment on scanner density acts through the film's inversion and the paper's curve, so a "+0.2 brightness" on
-the negative lands as an unpredictable change on the print. The useful operations around the negative are the
-physical ones, and they exist: dust healing on the scan (`scan.heal`), the density mask sandwiched with the
-negative (`print.densityMask`), and dodging and burning through the enlarger. If the photographer wants "layers
-around the negative", the honest offer is stage B with better masks.
+Mutations are a closed set (`mutations.ts:9-14`): `set`, `exposure.add`, `exposure.remove`, `mask.set`,
+`frame.add`, so each collection has its own idiom for adding and deleting.
 
-#### Decision: the primary home of digital layers
+### 15. The compiler and its copies
 
-- **Context:** Digital edits can act on the scene, on the paper exposure, or on the finished print; each choice
-  changes their meaning, colour space and UI placement.
-- **Options considered:** (1) one digital stage after the print; (2) one before the film; (3) both, as two stages
-  with the same layer model; (4) layers inside the darkroom exposure stack.
-- **Decision:** (3), built in order: stage C first, stage A second, with one layer model and one UI kit. Stage B
-  keeps its physical exposures and gains the mask components.
-- **Rationale:** Stage C matches where precision is wanted and where chromobench already does digital work; stage A
-  reproduces the photographer's Lightroom-then-film order for camera files; one model keeps the code and the UI
-  single. Option (4) would mix physical and digital controls in the darkroom, which the studio deliberately avoids
-  (CB-F101).
-- **Consequences:** Two compile insertion points; range mask components must say which stage's image they read;
-  stage A edits interact with first-print metering (Section 18).
-- **Status:** proposed.
-
-### 15. The working space of the digital stages
-
-Editor lab does arithmetic on sRGB-encoded numbers. Chromobench must not: its images are linear light with
-physical meaning, and its display transform already works in OkLCh (`output.display`'s knee). The digital stages
-need two encodings:
-
-- **Linear RGB** (a wide-gamut linear space such as linear Rec. 2020 under D65, converted from print-xyz) for
-  operations that model light: exposure, multiply and screen, blurs, clarity's low-pass, mixing by coverage.
-- **A perceptual encoding** (OkLab/OkLCh, already used by `output.display`) for operations defined by eye: curves,
-  hue/saturation per band, vibrance, colour grading, luminance used by masks and by the luminosity and color modes.
-
-Each digital op declares which encoding it works in; the compiler inserts the conversions, and adjacent ops in the
-same encoding fuse without converting back and forth.
-
-#### Decision: working encodings of digital ops
-
-- **Context:** Blend modes and adjustments have different results in different encodings; Editor lab's sRGB-number
-  arithmetic is not physical.
-- **Options considered:** (1) sRGB numbers, as Editor lab and as display-referred editors do; (2) linear only;
-  (3) linear for light-like ops, OkLab/OkLCh for perceptual ones, declared per op.
-- **Decision:** (3).
-- **Rationale:** Light-like operations must be linear to agree with the physics; tone and colour controls must be
-  perceptual so a slider's travel feels even. OkLCh is already in the codebase.
-- **Consequences:** Every digital op's catalogue entry gains an `encoding` field; parity tests must use the same
-  conversions in core and WGSL; preset values from Editor lab do not transfer numerically and must be re-tuned.
-- **Status:** proposed.
-
-### 16. The recipe: a digital layer stack
-
-The recipe gains one field per stage, in the existing record-keyed style (`print.densityMasks`, `retouch.spots`):
-
-```ts
-// packages/contract/src/recipe.ts (proposed)
-export type DigitalKind =
-  | 'curve' | 'levels' | 'exposure' | 'hsl' | 'vibrance' | 'grade' | 'mixer' | 'temperature'
-  | 'clarity' | 'sharpen' | 'vignette' | 'group';
-
-export interface DigitalLayer {
-  kind: DigitalKind;
-  name: string;
-  enabled: boolean;
-  opacity: number;                 // 0..1
-  blend: BlendMode | 'pass';       // 'pass' only on groups
-  params: Record<string, unknown>; // validated by the op's ArgSpecs
-  mask: string | null;             // id into recipe.masks (shared with darkroom exposures)
-  // a group's id; children are listed after their group in `order`
-  parent: string | null;
-  source?: Provenance;             // what made it (look, agent turn, script line, user)
-}
-
-export interface DigitalStage { order: string[]; layers: Record<string, DigitalLayer> }
-
-export interface FrameRecipe {
-  // …
-  digital: { scene: DigitalStage; print: DigitalStage };   // stage A and stage C
-}
-```
-
-Design notes:
-
-- **`order` plus records** gives cheap reordering (one `set digital.print.order` mutation) and stable ids for the
-  edit log, controls and provenance; Editor lab's single array conflates both.
-- **Masks are shared.** `mask` is an id into `recipe.masks`, the library that darkroom exposures already reference
-  (`graph.ts:293-296`). One "sky" mask can drive a burn in the darkroom and a hue shift on the print.
-- **Pixels never enter the recipe.** Like Editor lab's presets ("presets hold settings, not pixels",
-  `src/views/presets.js:125-139`), and like the finish kit ("the recipe stores vectors, never pixels"). Brush masks
-  are stored as strokes (`mask.paint`'s canonical JSON).
-- **The edit log is the history.** Every change is a recipe mutation, recorded with its inverse by the studio's store
-  (`packages/shell/src/core/store.ts:215-221`); grouping several layers is one transaction, the counterpart of
-  Editor lab's `restructure`.
-
-The contract change follows `packages/contract/CONTRACT-DECISIONS.md`'s template:
+`compile()` (`graph.ts:252-316`) builds the chain of Section 2, with hash-consed nodes (`g.intern`, `nodeId` is the
+sha256 of op, canonical args and input ids). Its darkroom part is already a law: exposures add in linear exposure
+H under their masks, a dodge subtracts from the main exposure, a flash adds light that did not pass the negative,
+and density masks multiply the transmission (`combinePixel`, `packages/core/src/print/exposures.ts:32-47`):
 
 ```text
-CC-NNN  digital.scene,
-    digital.print: digital layer stacks before the film and after the print (CHB-035)
-class:     additive (minor); new recipe paths, new ops in area 'digital'
-changes:   FrameRecipe.digital; DigitalLayer/DigitalStage types; ops digital.* ;
-    mask.subtract/intersect (product forms)
-consumers: DSL (generated), UI (generated controls; edit kit), engines (core reference,
-    GPU WGSL; mock: pass-through)
-migration: migrations[n] adds empty stages to stored recipes (no picture change)
-tests:     conformance cases per op; laws (identity at k = 0; pass-through group at opacity 1 is
-    the identity)
+H = 10^(−Σ d_m) · ( max(10^x − Σ_dodge r·m·10^x_i, 0) + Σ_add r·m·10^x_i )
+    + Σ_flash r·m·10^x_flash
 ```
 
-### 17. Compiling the stack
+The exposure semantics exist **three times**: in `compile` (`graph.ts:281-301`), in the agent DSL's what-if
+`printChain` (`packages/dsl/src/host/print.ts:28-80`), and in `compileExposures` (`core/src/print/exposures.ts:84-121`)
+for the studio's tools. The DSL copy says it "mirrors compile()" and has drifted: it knows no flash modes and no
+density masks, so `frame.print({ time_s })` can show a picture that the same edit, committed, does not produce.
 
-Each layer becomes graph nodes; hash-consing (`g.intern`) gives every node a content id, so an unchanged prefix of
-the stack is the same nodes after every edit, and the engines' caches see that.
+### 16. History, looks, rolls
 
-```ts
-// packages/contract/src/graph.ts (proposed, after finishing.clarity)
-function compileDigital(stage: DigitalStage, back: Node, g: Graph, r: FrameRecipe): Node {
-  const roots = stage.order.filter(id => stage.layers[id]?.parent == null);
-  return foldLayers(roots, back);
+- **Two histories.** The shell store records transactions as patches with inverses (`packages/shell/src/core/store.ts:216-305`);
+  the contract's `EditLog` records logged mutations with author, transaction, batch and status
+  (`packages/contract/src/editlog.ts`). A bridge turns one into the other (`studio-kit/src/bridge/editlog-route.ts`).
+- **"Look" means three things**: a CHB-021 Look (`kits/looks/src/engine/look.ts:98-113`), the unused number
+  `finishing.look`, and the DSL's `h.look()` that shows an image to the agent.
+- **A look edits parameters.** Its body runs once per frame and returns `set`/`add`/`mul` per recipe path; Amount
+  interpolates each path from its base by a rule chosen from the arg's unit (stops, mireds, linear, steps;
+  `amount.ts:15-84`). A look cannot carry mask geometry.
+- **Two batch builders**: the roll kit's `buildBatch` and the looks kit's `planApply`, with different author unions.
+- **One edit, four spellings**: `frame.edit({ path: v })`, `cb.looks.apply(name)`, a look body returning
+  `f.print({ … })`, and a roll fragment.
 
-  function foldLayers(ids: string[], below: Node): Node {
-    let v = below;
-    for (const id of ids) {                     // bottom to top
-      const L = stage.layers[id]!;
-      if (!L.enabled || L.opacity <= 0) continue;
-      v = L.kind === 'group' ? group(id, L, v) : layer(L, v);
-    }
-    return v;
-  }
-  function layer(L: DigitalLayer, back: Node): Node {
-    const adjusted = I(`digital.${L.kind}`, [back], L.params);                 // A(C_b)
-    // opacity × mask, or null
-    const k = coverage(L, back);
-    return I('digital.mix', [back, adjusted, ...(k ? [k.id] : [])], { blend: L.blend,
-        opacity: L.opacity });
-  }
-  function group(id: string, G: DigitalLayer, back: Node): Node {
-    const kids = stage.order.filter(k => stage.layers[k]?.parent === id);
-    if (G.blend === 'pass') {
-      // children act on the backdrop
-      const top = foldLayers(kids, back);
-      // identity: no node at all
-      if (G.opacity >= 1 && !G.mask) return top;
-      return I('digital.mix', [back, top, ...maskOf(G, back)], { blend: 'normal',
-          opacity: G.opacity });
-    }
-    // isolated: from transparent
-    const top = foldLayers(kids, I('digital.transparent', [back], {}));
-    return I('digital.composite', [back, top, ...maskOf(G, back)], { blend: G.blend,
-        opacity: G.opacity });
-  }
-}
-```
+### 17. The UI DSL
 
-Two properties are worth checking in review. A pass-through group at full opacity without a mask produces **no
-node** (Editor lab's identity rule, made structural). And a disabled layer produces no node, so toggling a layer off
-returns to exactly the graph, and the cached results, of the stack without it.
+The studio's interface is built with `ck` (CraftKit, `packages/shell`) and `cb` (the studio, `packages/studio-kit`).
+Its intermediate representation is already good: immutable nodes, passes, explain with binding-time glyphs
+(`shell/ir/slots.ts:1-40`: β build, τ tracked selector, bind, θ per item, ƒ format, ρ handler). Its builders are
+not yet consistent:
 
-The insertion points:
+- **Mutable builders over immutable nodes.** `ck.shell`, modules and `ck.kit` record into a mutable definition and
+  return `this`; nodes are copy-on-write. Unknown methods on both are recorded by a Proxy and resolved later.
+- **One thing, several registrations.** Menus come from the command `menu:` field and from `menus()`; passes from a
+  kit's `.passes()` and from instance-global `ck.install()`; panels from `ck.panel(id, opts, …)` (which also
+  registers, as a side effect), from a kit's `.panels()` and from the shell's; tools from the kit, the viewport's
+  `tools:` and the module's `.tools(ids)`.
+- **Signatures and polarity vary.** `keys()` defaults its scope three ways; `ck.hud(opts, value)` against
+  `ck.statusline(value, opts)`; commands and tools say `enabled`, nodes say `disabled`; `ck.when` and `ck.pick`
+  return a node or a value depending on their argument; four different kit "products" (a Kit, a helper object, a
+  function returning modules, a curried module recipe).
+- **CHB-029's nine streamlining items** (host capabilities, one menu source, command tables, `cb.modules`, status
+  bar, jobs, typed state, catalogue order and "Advanced", the rename variant → layout) are all still open; CHB-030
+  (agent-written layouts) waits on them.
 
-```text
-stage A (scene):   … capture.expose's input: source.xyz → compileDigital(scene) → capture.expose
-    …   (camera RAW)
-stage C (print):   … finishing.clarity → compileDigital(print) → output.display …
-```
+### 18. The agent's surface
 
-For negative scans stage A is not compiled (Section 14). `frame.print()` keeps naming `view.adapt`; a new accessor
-`frame.finished()` names the output of stage C, so the agent and the viewer can address both.
+The agent evaluates JavaScript in a QuickJS sandbox (`packages/dsl/src/session.ts`). Its values are good:
+immutable, lazy, hash-consed handles over the same graph; options must be literals; edits are proposals with the
+agent's provenance, applied in one batch per evaluation. Its reach is narrow: it edits through `frame.edit` and named
+looks, and it cannot see the studio: not the layout, not the active module, not the selection, not the commands.
 
-### 18. Operations, engines and parity
+### 19. What the inventory says
 
-Every new op needs three implementations: core (f64, the reference; `packages/core/src/ops/ops.ts`), the GPU
-engine (WGSL; pointwise ops as opcodes of the fused kernel `packages/gpu/kernels/pointwise.wgsl`, neighbourhood ops
-as spatial passes), and the mock engine (pass-through). Each gets a conformance case and a parity test against core,
-like every existing op.
-
-| Op (area `digital`) | Encoding | Class | Parameters (proposed) | Source of the algorithm |
-|---|---|---|---|---|
-| `digital.curve` | OkLab L (or per channel) | pointwise (LUT) | control points, channel | standard monotone cubic; **not** Editor lab's parametric curve |
-| `digital.levels` | linear or OkLab | pointwise | black, white, gamma, output range, per channel | Editor lab `levels` + per channel |
-| `digital.exposure` | linear | pointwise | EV, offset | Editor lab `exposure` (already linear) |
-| `digital.hsl` | OkLCh | pointwise | per band hue/sat/lum, band widths | extends `finishing.hue` |
-| `digital.vibrance` | OkLCh | pointwise | amount | Editor lab `vibrance`, in chroma |
-| `digital.grade` | OkLab | pointwise | shadows/midtones/highlights colour wheels, balance | colour grading; Editor lab P-07 approximates it |
-| `digital.mixer` | linear | pointwise | 3 × 3 matrix, monochrome flag | Editor lab `bw` generalised |
-| `digital.clarity` / `digital.sharpen` | linear (low-pass), OkLab L (detail) | neighbourhood, radius in µm on the print | amount, radius | Editor lab `clarity`/`sharpen` (unsharp, midtone weight) |
-| `digital.vignette` | linear | positional | amount, size, feather | Editor lab `vignette` |
-| `digital.mix` / `digital.composite` | linear | pointwise | blend, opacity | Sections 4–6 |
-| `mask.subtract`, `mask.intersect` | — | pointwise | other | product forms of Section 7 |
-| `mask.colourRange` | OkLab ΔE | pointwise, reads an image | colour, tolerance, softness | Editor lab `color` component, in ΔE instead of RGB distance |
-
-The parity tolerance for display-path ops is chromobench's usual one (within one 8-bit level; most ops far less).
-Pointwise digital ops fuse into the existing pointwise kernel; its `MAXOPS = 12` limit (`program.ts:14`) splits long
-stacks into several passes, which is correct and needs no special handling.
-
-#### Decision: mask combination algebra
-
-- **Context:** Chromobench's masks combine by min/max (`mask.and`, `mask.or`); Lightroom-style components combine by
-  max for add and products for subtract and intersect, which avoids creases between feathered edges.
-- **Options considered:** (1) keep min/max only; (2) switch `mask.and` to a product; (3) add `mask.subtract` and
-  `mask.intersect` as products and keep `mask.and`/`mask.or`.
-- **Decision:** (3).
-- **Rationale:** Changing `mask.and` would change stored darkroom masks' pictures (a breaking change); the product
-  forms are what the component UI needs.
-- **Consequences:** Two intersections exist; the mask panel uses the product forms, the catalogue documents both.
-- **Status:** proposed.
-
-**Stage A and the first print.** The first print meters the image that reaches the paper (`firstPrint`,
-`apps/studio/src/host/first-print.ts`). A stage A edit changes that image, so it changes the proposed exposure. That
-is the darkroom's behaviour (a brighter scene prints with a shorter time), and it is what the photographer expects
-if he thinks of stage A as "the scene". The UI should say so when a stage A edit moves the first print, and the
-first print should not re-run automatically on every stage A edit (today it is made when a frame is opened).
-
-### 19. The edit kit in the UI DSL
-
-The digital stages reach the photographer through a new kit, `cb.kits.edit`, built like the finish kit and in the
-shape CHB-029 sets for all kits (declarative command tables, capability-gated host actions, typed selectors,
-catalogue-driven controls with an "Advanced" disclosure).
-
-```ts
-// packages/studio-kit/kits/edit/src/kit.ts (sketch)
-export function createEditKit(ck: Ck, cb: Cb) {
-  const kit = ck.kit('cb.edit', k => k
-    .version('1').requires('cb.core')
-    .state('edit', { init: { stage: 'print', active: null, selection: [] }, view: true })
-    .passes(physicalModulePass)                 // CB-E101 below
-    .tools(t => t
-      .tool('mask-linear',  { label: 'Linear gradient', key: 'G', on: linearGestures })
-      .tool('mask-radial',  { label: 'Radial gradient', key: 'U', on: radialGestures })
-      .tool('mask-brush',   { label: 'Mask brush',      key: 'B', on: brushGestures }))
-    // add layer, group, ungroup, move, duplicate, delete, fold …
-    .commands(c => c.table(EDIT_COMMANDS))
-    .docs(EDIT_DOCS));
-  return {
-    kit,
-    viewer: (o?) => cb.viewer(s => cb.frame(s)?.finished() ?? null, { tools: ['mask-linear',
-        'mask-radial', 'mask-brush'], ...o }),
-    // the stack with groups, fold, drag into a group, opacity, blend, mask thumbnail
-    layersPanel: (o?) => …,
-    // the active layer's controls, from the catalogue (cb.arg on …layers.<id>.params.*)
-    paramsPanel: (o?) => …,
-    // components: + linear/radial/brush/luminance/colour, op (+ − ∩), invert, amount
-    masksPanel:  (o?) => …,
-    stagePicker: () => …,        // Scene | Print, for camera files
-    keys: { 'Mod+G': 'edit.group', 'Mod+Shift+G': 'edit.ungroup', Delete: 'edit.delete',
-        '[': ['brush.size', -1], ']': ['brush.size', 1] },
-  };
-}
-```
-
-Panels are built only from `ck.ui` and `cb.arg`, as the finish kit's are, so every host renders them without extra
-renderers. The Layers panel's operations map to recipe transactions:
-
-| Gesture in the Layers panel | Recipe transaction (one undo step) |
-|---|---|
-| + Layer ▸ Curve | `set digital.print.layers.<id>` (new), `set digital.print.order` |
-| Group (selection) | new group record; `parent` of each selected; `order` |
-| Drag into a group | `parent`, `order` |
-| Opacity drag | live preview while dragging, one `set …opacity` on release (the shell's draft/commit) |
-| Mask ▸ + Radial | `set masks.<mid>` (component nodes), `set …layers.<id>.mask = <mid>` |
-
-A pass keeps the darkroom physical, like CB-F101:
-
-```js
-// CB-E101: a digital layer control or the edit viewer in a module labelled Print or Darkroom
-p.warn('CB-E101', `the edit kit's ${what} is in the module '${m.label}'`, {
-  facts: ['digital layers act on the scene or on the finished print; the Print module is the
-      darkroom'],
-  fix: 'put it in an Edit module, or relabel the module' });
-```
-
-#### Workspaces: how layouts arrange it
-
-Because layouts are programs, each arrangement the photographer might prefer is a few lines. Three examples (the
-`edit.*` parts are the proposed kit; `ck` and `cb` calls are today's API unless marked):
-
-```js
-// 1. Classic plus an Edit module: Library, Print, Edit, Finish as separate screens
-s.module('edit', m => m.label('Edit').key('E')
-  .left(ck.dock.column({ width: 260 }, edit.layersPanel(),
-      cb.panel.history({ id: 'history-edit' })))
-  .center(edit.viewer({ hud: cb.hud.readout() }))
-  .right(ck.dock.column({ width: 300 }, edit.paramsPanel(), edit.masksPanel()))
-  .bottom(ck.dock.column({ width: 124 }, cb.view.strip({ id: 'strip-edit' })))
-  .keys(edit.keys));
-
-// 2. Darkroom with a digital palette: the print fills the centre, the enlarger right,
-//    the digital stack in a collapsible tile under it (one screen, two clearly labelled zones)
-.right(ck.dock.column({ width: 300 },
-  ck.panel('enlarger', { title: 'Enlarger' }, …),
-  ck.panel('digital', { title: 'Digital (after the print)', collapsed: true /* proposed */ },
-      edit.layersPanel({ compact: true }))))
-
-// 3. Camera files: Scene edits before the film in their own module,
-    opened from the photo's first print
-s.module('scene', m => m.label('Scene').key('Mod+Alt+S')
-  .center(edit.viewer({ stage: 'scene' })).right(ck.dock.column({ width: 300 },
-      edit.layersPanel({ stage: 'scene' }), edit.paramsPanel())));
-```
-
-Arrangement 2 is the one to test first with the photographer persona: it keeps one screen, which he liked in the
-darkroom layout, and the panel title states that the digital stack acts after the print. CB-E101 would warn on it
-because the module is labelled Darkroom; a layout that does this on purpose should acknowledge the warning with a
-module option (proposed: `.allow('CB-E101')`; the DSL has no such option yet), which documents the choice in the layout.
-
-### 20. Looks, presets and provenance
-
-Chromobench's looks kit (CHB-021) is where presets live. A look that contains digital layers arrives as a
-pass-through group named after the look, as in Editor lab, so it can be faded with one slider, masked as a whole,
-and removed in one step. Each layer carries `source: { kind: 'look', id, name, index }`; the agent stamps
-`{ kind: 'agent', thread, turn, step }`; a DSL script stamps `{ kind: 'script', file, line }`. The Layers panel shows
-a chip; clicking it opens the look, the agent's step or the script line; the look's panel lists "on this frame: these
-layers". This is Editor lab's provenance design (`src/views/panels.js:26-75`), and the edit log already records who
-made each change, so the addition is only where-from.
-
-For DSL authors, the earlier "editor grammar" sketch in the archive suggests macros that expand at build time and
-keep provenance (`earlier-work/editor-grammar-examples/editor-grammar-examples.mjs:252-274`):
-
-```js
-const sunGlow = define('adjust.sunGlow', {
-  params: { center: param.point({ default: [0.6, 0.35] }), strength: param.slider({ min: 0,
-      max: 1, default: 0.5 }) },
-  expand: ({ center, strength }) => adjust.temperature(strength.map(s => s * 40))
-    .mask(mask.radial({ center, radius: [0.2, 0.14], feather: 0.6 })),
-});
-```
-
-In chromobench the same idea is a look that expands into digital layers and mask records, with each expanded layer
-carrying the macro's name in its provenance.
-
-### 21. The agent's surface
-
-Editor lab's agent and scripts call one API; chromobench's agent uses the DSL in a QuickJS sandbox
-(`packages/dsl`) and the frame vocabulary (`packages/contract/src/vocab.ts`). The digital stages extend both:
-
-```js
-// in the agent DSL (sketch)
-const f = frame('DSC_8559');
-const sky = f.masks.add('sky', mask.gradient({ from: [0.5, 0], to: [0.5,
-    0.55] }).intersect(mask.luminance({ above: 0.5, softness: 0.1 })));
-const g = f.digital.print.group('Sky', { opacity: 0.8, mask: sky });
-g.add('curve', { points: [[0, 0], [0.5, 0.44], [1, 1]] });
-g.add('hsl', { blue: { sat: -0.15 } });
-f.finished().stats();          // the agent checks its result on the finished print
-```
-
-Each call is one recipe transaction with the agent's provenance; reads (`stats`, `sample`) evaluate
-`frame.finished()`. Keep the API single, as Editor lab's report insists: the UI, the agent and scripts should all
-reach the stack through the same recipe mutations.
+The pieces are better than their sum. Hash-consing, the op catalogue with units, the immutable node IR with binding
+times, the edit log with provenance, the darkroom's exposure law and the agent's immutable handles are each the right
+idea. What hurts is that each idea is implemented once per subsystem, slightly differently. Version 2 keeps the ideas
+and removes the copies.
 
 ---
 
-## Part IV — Plan
+## Part IV — The unified model
 
-### 22. Phases
+### 20. Five components
 
-| Phase | Content | Files | Done when |
+Everything a frame's edit contains is built from five components and held in a document.
+
+| Component | What it is | Holds | Today's counterparts it replaces |
 |---|---|---|---|
-| 1 | Contract: `DigitalLayer`, `DigitalStage`, `recipe.digital`, migration; ops `digital.mix`, `digital.composite`, `digital.curve`, `digital.levels`, `digital.exposure`, `digital.hsl`; `mask.subtract`, `mask.intersect`; compile stage C | `packages/contract/src/{recipe,graph,paths}.ts`, `catalog/digital.ts`, `CONTRACT-DECISIONS.md` | contract tests, laws (k = 0 identity; pass-through identity), conformance cases |
-| 2 | Core reference implementations, parity cases | `packages/core/src/ops/` | conformance on the reference engine |
-| 3 | GPU: pointwise opcodes, mix/composite, encodings (linear ↔ OkLab) | `packages/gpu/kernels/pointwise.wgsl`, `src/chain/program.ts` | gpu-parity on SwiftShader and `REAL_GPU=1` |
-| 4 | Edit kit: layers, params, masks panels; mask tools; commands; CB-E101 | `packages/studio-kit/kits/edit/` | kit unit tests; studio-kit browser spec |
-| 5 | Layouts: Edit module in classic; darkroom-with-palette arrangement | `packages/studio-kit/variants/` (layouts after CHB-029) | browser specs; explain snapshots |
-| 6 | Cosplay session with the photographer persona on both arrangements | CHB-026 protocol | findings triaged; the default arrangement chosen with the owner |
-| 7 | Neighbourhood ops (`clarity`/`sharpen` in µm), `grade`, `vibrance`, `mixer`, `vignette`; colour-range masks | as above | parity; export tiling with halos |
-| 8 | Stage A for camera files; first-print interaction; `frame.finished()` and DSL words | `graph.ts`, `vocab.ts`, `packages/dsl` | DSL tests; persona session on a RAW |
-| 9 | Looks as groups; provenance chips and links | looks kit, edit kit | looks tests |
-| 10 | Selections (marquee, lasso, wand) as mask sources, in a separate kit | `kits/select/` | only if the photographer asks for them |
+| **Op** | an entry in the op catalogue: a named operation with typed, unit-tagged arguments | name, args (ArgSpec with units), class (pointwise, spatial, …), encoding, **stages** it may live in, implementations (reference, GPU) | the catalogue (`packages/contract/src/catalog/*.ts`), extended by `encoding` and `stages` |
+| **Mask** | a coverage function in 0…1 over the image | an ordered collection of components (linear, radial, ellipse, paint, luminance, colour range), each with a combine op and an amount; feather; invert | `masks` node closures, `MaskDoc`, `mask.paint` JSON strokes |
+| **Layer** | one op applied in a stage | `op`, `params`, `enabled`, `amount`, `mask`, `blend`, `name`, `source` | exposures, density masks, retouch spots, dust spots, finishing values, v1's digital layers |
+| **Group** | entries that act as one | a stack of entries, `enabled`, `amount`, `mask`, `blend` (`pass` or a blend mode), `name`, `source` | v1's digital groups; looks applied as a unit |
+| **Stage** | one physical place in the pipeline | a **medium** (the settings of the physical process), a **stack** of layers and groups, and a **law** that combines them | the recipe's `scan`, `capture`, `print`, `view`, `retouch`, `finishing` sections |
 
-Phases 1–6 give a usable stage C with curves, levels, HSL, groups and parametric masks, and answer the open UI
-question with the photographer before the larger op set is built.
+Two further pieces complete the model: a **Link** (an entry or a medium whose content comes from a shared
+definition: a roll, a look, a preset; Section 27) and a **Binding** (a parameter whose value a registered function
+computes at compile time; Section 28).
 
-### 23. Testing
+A **Document** is one frame's edit: its source, its stages in pipeline order, its mask library, its geometry
+(orientation, straighten, crop) and its output settings (display, proof, export). It replaces the recipe; its format
+is version 3, and nothing reads versions 1 and 2 (Decision D8).
 
-- **Laws** (contract): an adjustment at k = 0 is the identity; a pass-through group at opacity 1 without a mask
-  compiles to no node; isolated and pass-through agree when every child is a normal source layer; toggling a layer
-  off yields the same node ids as the stack without it.
-- **Conformance and parity**: each op against core in both engines, on SwiftShader and on Metal (`REAL_GPU=1`).
-- **Golden pictures**: a stack of each op through a mask, compared to stored references, small and synthetic.
-- **Geometry**: masks and digital layers survive the full-resolution export (CHB-028's scaler must include
-  `digital.*` mask references).
-- **UI**: the Layers panel's gestures each produce exactly one undo step; CB-E101 fires where it should.
-- **Persona sessions**: the arrangement question is a usability question; it is answered by watching, not by
-  arguing.
+```ts
+// packages/contract/src/document.ts (proposed)
+type Id = string;                                    // unique within a document
+interface Coll<T> { order: Id[]; items: Record<Id, T> }        // the one collection idiom (§24)
 
-### 24. Risks and open questions
+interface EntryBase {
+  name: string; enabled: boolean; amount: number;    // amount: the stage law's meaning (§22)
+  mask: Id | null;                                   // into Document.masks
+  blend: BlendMode | 'pass';                         // only where the stage law allows blending
+  source: Provenance;                    // user | agent turn | look | roll | script line
+}
+interface Layer extends EntryBase { kind: 'layer'; op: OpName; params: Params }
+interface Group extends EntryBase { kind: 'group'; stack: Coll<Entry> }
+interface LinkEntry extends EntryBase { kind: 'link'; ref: LinkRef; params: Params;
+                                        overrides: Record<string, unknown> }
+type Entry = Layer | Group | LinkEntry;
 
-- **Scope creep toward Photoshop.** The photographer asked for precision, not for pixel painting. Start without
-  source layers (fills, paint, images); add them only on request.
-- **Two places for similar controls.** Exposure exists as enlarger time (physical) and as `digital.exposure`. The
-  layouts must make the difference visible (stage labels, CB-E101), and the darkroom should remain the first place
-  he reaches for exposure and colour.
-- **Range masks and stage A.** A luminance mask in stage A reads the scene, in stage C the print; the mask panel
-  must say which.
-- **Performance of deep stacks.** Each digital layer adds nodes; long stacks at 4,000 px need the caching and
-  checkpoint work of the companion document.
-- **Open, for the owner:** which arrangement is the default (Section 19); whether stage A is wanted at all; whether
-  selections are wanted.
+interface Stage<M> { medium: M | Linked<M>; stack: Coll<Entry> }
+
+interface Document {
+  format: 3; source: SourceRef;
+  stages: { scan?: Stage<ScanMedium>; scene?: Stage<SceneMedium>; film?: Stage<FilmMedium>;
+            darkroom: Stage<DarkroomMedium>; print: Stage<ViewMedium> };
+  masks: Coll<Mask>;
+  geometry: Geometry;                                // orientation, angle, crop: document units
+  output: OutputSettings;                            // display knee, proof, export
+}
+```
+
+Every id is unique in the document, so an entry is addressed by its id wherever it sits: moving a layer into a group
+does not change how the edit log, the UI or the agent name it (pattern chapter 12, Shared Handle Vocabulary).
+
+#### Decision D1: one stack concept, with a law per stage
+
+- **Context:** Today six list shapes, three exposure implementations and two finishing mechanisms express "ordered,
+  maybe masked edits" (Part III). Version 1 would have added a seventh.
+- **Options considered:** (1) v1's additive digital stack; (2) one global layer stack across the pipeline, as a
+  display-referred editor has; (3) one stack concept per stage, with the stage's physics as its combining law.
+- **Decision:** (3).
+- **Rationale:** A layer must mean something physical: a burn is light on the paper, a curve is a change to the
+  print's tones. One global stack (2) would let a curve sit between two exposures, which has no physical meaning.
+  One concept per stage keeps the physics and gives the photographer, the UI and the agent a single idea of layer,
+  group, amount and mask.
+- **Consequences:** Laws must be specified exactly (Section 22); every existing edit is re-expressed as layers
+  (Section 23); the compiler becomes generic over laws (Section 29).
+- **Status:** proposed.
+
+### 21. The stages
+
+| Stage | For | Input domain | Medium (settings of the process) | Law | Layers it accepts |
+|---|---|---|---|---|---|
+| **scan** | negative scans | camera-linear → scanner density | scanner, stock, format, rebate or base, flat field, flare | **repair**: entries replace pixels in order | heal and clone spots on the negative (dust) |
+| **scene** | camera files | scene XYZ | camera profile, white balance | **composite**, scene-linear | digital adjustments before the film (v1's stage A) |
+| **film** | camera files | exposure on the film → film dyes | stock, push, development, halation, grain | none yet | — |
+| **darkroom** | all | film dyes → paper exposure H | paper, developer, enlarger lamp | **light**: contributions add in H, modulators multiply transmission | expose, burn, dodge, flash, density mask, filter |
+| **print** | all | print-xyz (the print under the viewing lamp) | viewing illuminant, flare | **composite**, print-referred | retouch, clarity, curves, levels, HSL, grade, mixer, vignette, … |
+
+Output (display transform, proof, export) and geometry (orientation, crop) are not stages: they do not change what
+the print looks like, only how it is shown or cut. The medium of each stage holds what used to be fixed recipe
+fields (`scan.*`, `capture.*`, `print.paper`, `view.*`).
+
+Negative scans have no scene stage (an edit on scanner density acts through the film's inversion and the paper's curve, so it lands
+unpredictably on the print);
+camera files have no scan stage. The darkroom and the print stage exist for every frame.
+
+### 22. The laws
+
+A **law** says how a stage's entries combine, what `amount` and `blend` mean there, and which group kinds exist. The
+same entry fields therefore mean the same *kind* of thing everywhere, expressed in each stage's physics.
+
+**Light (darkroom).** Every entry is either a **contribution** (light that reaches the paper) or a **modulator** (a
+filter in the light path). Contributions: `expose` (the main exposure through the negative; exactly one, id `main`),
+`burn` (more light through the negative under a mask), `dodge` (light held back from the main exposure under a
+mask), `flash` (light that does not pass the negative, `through: base | open`), and `preflash` (uniform flash
+before the main exposure). Modulators: `densityMask` (an unsharp or contrast silver mask sandwiched with the
+negative) and `filter` (colour or neutral filtration in the head; the printer lights and the multigrade grade are
+filters). With transmissions T and contributions E, each already multiplied by its amount and mask:
+
+```text
+H(x) = T_all(x) · ( T_neg(x) · ( max(E_main − Σ E_dodge, 0) + Σ E_burn ) + Σ E_flash )
+T_neg = Π 10^(−d_m) over density masks          T_all = Π 10^(−f) over filters (per channel)
+```
+
+This is today's `combinePixel` with filters added; for today's entry kinds it is the same formula, so the darkroom's
+pictures do not change. **Amount** scales a contribution's time (0.5 = half the burn) and a modulator's density
+(0.5 = half the filter): both are what a printer does with a card or a filter. **Groups** multiply their children's
+amounts and masks (a card held over several exposures). The sum is order-free, so the darkroom's stack order only
+arranges the panel; there are no blend modes and no isolated groups.
+
+**Composite (scene, print).** Entries apply in order, bottom to top. A layer with op A, blend mode B, amount a and
+coverage m maps the backdrop v to
+
+```text
+v ← v + a·m·( B(v, A(v)) − v )          computed in the op's declared encoding (linear or OkLab)
+```
+
+**Amount** is opacity. Groups are `pass` (children act on the backdrop; the group fades their total effect) or
+isolated with a blend mode (children composite from transparent; the result blends as one layer), as in Part I.
+
+**Encodings.** The composite stages need two working encodings, as version 1 found: **linear RGB** (a wide-gamut
+linear space such as linear Rec. 2020 under D65) for operations that model light (exposure, multiply and screen,
+blurs, clarity's low-pass, mixing by coverage), and **OkLab/OkLCh** (already used by `output.display`'s knee) for
+operations defined by eye (curves, hue and saturation per band, vibrance, grading, the luminance that masks and the
+luminosity and colour blend modes use). Each op declares its encoding in the catalogue; the compiler inserts the
+conversions, and adjacent ops in one encoding fuse without converting back and forth. Editor lab's arithmetic on
+sRGB numbers is not imported, so its preset values do not transfer and are re-tuned.
+
+**Repair (scan).** Entries apply in order; each replaces pixels within its geometry (a heal or clone spot). Amount is
+opacity, as in composite; there are no blend modes.
+
+A law is registered like an op, with its compile function and its properties (Section 29):
+
+```ts
+defineLaw('light',     { blend: false, groups: ['pass'], amount: 'scale',   order: 'free' });
+defineLaw('composite', { blend: true,  groups: ['pass', 'isolated'],
+                         amount: 'opacity', order: 'stack' });
+defineLaw('repair',    { blend: false, groups: ['pass'], amount: 'opacity', order: 'stack' });
+```
+
+#### Decision D2: amount means the stage's own fade
+
+- **Context:** Today "amount" is a density-mask strength, a retouch opacity, and a look's parameter interpolation
+  by unit rules (stops, mireds); v1 added layer opacity.
+- **Options considered:** (1) opacity everywhere (image-space mixing); (2) parameter interpolation everywhere;
+  (3) the stage law decides: light scales time and density, composite and repair mix.
+- **Decision:** (3).
+- **Rationale:** Mixing two darkroom prints is not something an enlarger can do; scaling a burn's time is. Mixing is
+  exactly what a digital layer's opacity is. With modulators (filters), every darkroom look is an addition whose
+  amount scales physically, so looks no longer need per-unit interpolation rules.
+- **Consequences:** `amount.ts`'s unit rules leave the looks kit (they survive as a helper for sweeps, if wanted);
+  darkroom amount 0 removes the entry's light; the UI shows "Amount" with the law's unit hint (time, density,
+  opacity).
+- **Status:** proposed.
+
+### 23. Everything is a layer
+
+The cut-off maps every edit of today onto the model. Nothing is kept beside it.
+
+| Today | Becomes |
+|---|---|
+| `print.enlarger` (time, f-stop) | darkroom layer `expose`, id `main` |
+| `print.lights`, `print.grade` | darkroom `filter` layers (printer lights; multigrade filtration) |
+| `print.exposures[]` dodge / burn / flash / split | darkroom layers `dodge`, `burn`, `flash`; `split` is two `expose`-like contributions with filters |
+| `print.preflash` | darkroom layer `preflash` (to verify: if `print.preflash` models more than added light, it stays a medium setting) |
+| `print.densityMasks.*` | darkroom layers `densityMask` |
+| `print.paper`, developer, `print.aim` | darkroom medium |
+| `scan.dust.spots[]` | scan-stage `heal` layers (in a group "Dust") |
+| `retouch.spots.*` heal / clone | print-stage `heal` / `clone` layers (in a group "Retouch") |
+| `finishing.values.clarity` | print-stage layer `clarity` |
+| `finishing.hues`, `finishing.look` | removed (never compiled); `hsl` and looks replace them |
+| v1's `recipe.digital.print` / `.scene` | print-stage and scene-stage stacks |
+| `masks` (node closures), `MaskDoc` | `masks: Coll<Mask>` (Section 25) |
+| `view.frame` (orientation, angle, crop) | document `geometry` |
+| `view.output.*` | document `output` |
+| `scan.*`, `capture.*`, `view.reflect/flare/adapt` settings | the media of scan, film and print |
+| roll `fragment` | a roll link on media and stacks (Section 27) |
+| CHB-021 looks | links to registered looks (Section 27) |
+
+A heal spot as a layer sounds expensive: forty spots would be forty spatial nodes. The composite and repair laws
+therefore **coalesce runs** of adjacent entries with the same coalescible op into one node (`retouch.heal` with forty
+spots), the way fusion cuts at barriers without changing the result (pattern chapter 7). The panel shows them in a
+collapsible group; the engine sees one op.
+
+**The new ops for the composite stages** (phase 8) carry no `digital.` prefix: the stage an op may live in is a
+catalogue field (`stages`), not part of its name. Each needs a reference (f64) and a GPU implementation, a
+conformance case and a parity test, like every op today.
+
+| Op | Stages | Encoding | Class | Parameters (proposed) | Source of the algorithm |
+|---|---|---|---|---|---|
+| `curve` | scene, print | OkLab L (or per channel) | pointwise (LUT) | control points, channel | monotone cubic; **not** Editor lab's parametric curve |
+| `levels` | scene, print | linear or OkLab | pointwise | black, white, gamma, output range, per channel | Editor lab `levels`, per channel |
+| `exposure` | scene, print | linear | pointwise | EV, offset | Editor lab `exposure` (already linear) |
+| `hsl` | scene, print | OkLCh | pointwise | per band hue, saturation, lightness; band widths | replaces the unwired `finishing.hue` |
+| `vibrance` | scene, print | OkLCh | pointwise | amount | Editor lab `vibrance`, in chroma |
+| `grade` | scene, print | OkLab | pointwise | shadow, midtone, highlight wheels; balance | colour grading; Editor lab P-07 approximates it |
+| `mixer` | scene, print | linear | pointwise | 3 × 3 matrix, monochrome | Editor lab `bw`, generalised |
+| `clarity`, `sharpen` | print | linear low-pass, OkLab L detail | spatial, radius in mm on the print | amount, radius | Editor lab `clarity`/`sharpen`; replaces `finishing.clarity` |
+| `vignette` | scene, print | linear | positional | amount, size, feather | Editor lab `vignette` |
+| `heal`, `clone` | scan, print | the stage's | spatial, coalescible | mode, source offset; geometry from the mask | today's `scan.heal`, `retouch.heal` |
+| mask `colour` component | any | OkLab ΔE | reads an image | colour, tolerance, softness | Editor lab `color`, in ΔE instead of RGB distance |
+
+Blending and mixing are not ops a user adds: they are what the composite law compiles each entry into.
+
+### 24. One collection idiom, one mutation set
+
+Every list in the document, at every depth, is a `Coll<T> = { order, items }`: stacks, groups' stacks, the mask
+library, a mask's components, a paint component's strokes, probes. JSON-string list arguments disappear: an op that
+takes a list takes a structured value, and canonical JSON still feeds the node hash.
+
+Four mutations replace today's five special ones:
+
+| Mutation | Meaning | Inverse |
+|---|---|---|
+| `set(path, value)` | set a field (`<id>.amount`, `darkroom.medium.paper`, `<id>.params.ev`) | `set` with the old value |
+| `insert(coll, id, item, at?)` | add an item to a collection (a stack, a group, the mask library, strokes) | `remove` |
+| `remove(id)` | delete an item, wherever it is | `insert` at its old place |
+| `move(id, { into, at })` | reorder, or move into another collection (into a group, out of it) | `move` back |
+
+Paths start at an id when they address an entry (`a7f3.params.points`), so they survive moves. Validation is the
+op's ArgSpecs for params, the law's rules for entries (no blend in the darkroom, one `main`), and the stage's
+accepted ops (catalogue `stages`).
+
+#### Decision D3: one collection idiom
+
+- **Context:** Arrays addressed by id, records with null deletes, plain arrays set whole, JSON strings, and a library
+  that cannot delete; five special mutations.
+- **Options considered:** (1) arrays with ids; (2) records with an order field per item; (3) `{ order, items }`.
+- **Decision:** (3).
+- **Rationale:** Stable ids for the log, the UI and the agent; cheap reordering (one `move`); one validation path;
+  structurally equal documents hash equally.
+- **Consequences:** Four mutations, one implementation; the UI's list views and the agent's iteration use one shape.
+- **Status:** proposed.
+
+### 25. Masks
+
+A mask is a value in the library, referenced by id from any entry or group, in any stage.
+
+```ts
+interface Mask { name: string; components: Coll<Component>; feather: Length; invert: boolean;
+                 reads: 'stage-input' | CutName }       // what image range components measure
+interface Component { kind: 'linear' | 'radial' | 'ellipse' | 'paint' | 'luminance' | 'colour';
+                      params: Params; combine: 'add' | 'subtract' | 'intersect'; amount: number }
+```
+
+- **One algebra.** `add` is max, `subtract` is a·(1 − b), `intersect` is a·b, `invert` is 1 − m. The product forms
+  avoid creases between feathered edges (Part I, Section 7). Today's min/max `mask.and`/`mask.or` and Editor lab's
+  second subtract are gone (Decision D4).
+- **Geometry in document units.** Positions and sizes of geometric components are in document pixels (pixels of
+  the full-resolution source); physical sizes (feather on the print, density-mask radius) are in µm on the film or
+  mm on the print, as the catalogue's units say. Nothing is stored in preview pixels, so export at any size needs no
+  rescaling pass (pattern chapter 9, Vector Edit Document; this removes the need for CC-018's `rescaleRecipe` and
+  the fixed default µm-per-pixel of `densityMask.ts:21`).
+- **What range components read.** Luminance and colour components read the input of the stage that uses the mask,
+  unless `reads` names another cut; a "sky" mask built on the scene can drive a burn in the darkroom and a hue shift
+  on the print, and the mask panel says which image it measures.
+
+#### Decision D4: one mask algebra
+
+- **Context:** min/max today, product forms needed for components, v1 kept both.
+- **Decision:** max / product / product / complement, everywhere; no min/max ops.
+- **Rationale:** One algebra means one gesture gives one edge; the hard cut-off removes the only reason (stored
+  pictures) to keep the old forms.
+- **Status:** proposed.
+
+### 26. One history
+
+The document log replaces both the shell store's document tier history and the contract's `EditLog`.
+
+- A **transaction** is a list of mutations with their inverses, a label, an author (`user`, `agent`, `auto`), a
+  source (look, roll, agent turn and step, script line, gesture), an optional batch id (one look over a roll), and a
+  status (`applied`, `pending`, `rejected`).
+- **Undo and redo** walk applied transactions; agents **propose** (pending until approved, or applied directly in
+  auto mode); batches approve and reject as one.
+- **Gestures** preview without logging (the store's preview tier) and commit one transaction on release. The store
+  keeps its view and preview tiers; its document tier *is* the log. The store's preview type, today called `Layer`,
+  is renamed `Draft` so that "layer" has one meaning.
+- **One batch builder**: `plan(targets, (doc) => transaction)` serves looks, rolls, sync and the agent.
+
+`why(path)` (today `EditLog.why`) answers "who set this, and from where" for any field, which is what the
+provenance chips in the UI show.
+
+### 27. Links: rolls, looks, presets, sync
+
+A **link** puts shared content into a document: a roll's settings, a look, a preset, a synced edit. It is one
+mechanism with one resolution step.
+
+```ts
+type LinkRef = { roll: Id } | { look: string; version: number } | { preset: Id };
+type Linked<T> = { link: LinkRef; overrides: Record<string, unknown> };   // a linked medium
+```
+
+- **Rolls.** A roll holds partial media and stacks (the scanner and stock of all its scans, a shared base exposure,
+  a shared dust group). Each frame's media link to the roll; per-frame changes are overrides, so "divergence from the
+  roll" is the list of overrides, read directly instead of computed (today `roll.ts:1-3`).
+- **Looks.** A look is a registered **look function**: `(params, facts) → Group`, versioned, pure (Section 28). A
+  link entry `{ look: 'warm-print', version: 2 }` with params and an amount expands at compile time into the group it
+  returns. Changing the look's params re-expands; the photographer can fade, mask or disable it like any group.
+  "Bake" turns a link into the plain group it expands to, with its source recorded.
+- **Presets** are looks without parameters: stored groups (and masks) that a link names.
+- **Sync** across frames is a batch transaction that either copies values (independent afterwards) or inserts the
+  same link (they stay together): the photographer chooses, and the UI says which.
+- A look may contain entries for several stages (a darkroom filter and a print curve): its link appears once per
+  stage it touches, sharing one id prefix and one Amount control.
+
+Today's four spellings of one edit (Section 16) become two: a direct transaction, or a link.
+
+### 28. Bindings: computed parameters
+
+A parameter may be bound to a registered function instead of holding a value: `{ bind: 'grain.fromIso', args: {} }`.
+The compiler calls the function with the frame's facts (EXIF, the source's analysis statistics, the roll) and,
+optionally, a measurement of a **cut strictly upstream of the entry's stage**, so a binding can never depend on its
+own output. Binding functions are registered by name and version, pure, and cached by their inputs' hashes.
+
+Bindings cover the automatic values that today are special code: auto colour balance (`print.lights.auto`), grain
+size from ISO, a scan's base density from the rebate. The **first print** stays a command (it searches exposure time
+and lights against the darkroom's own output, which a binding may not read); its result is an ordinary transaction by
+`auto`, as today.
+
+### 29. One compiler
+
+```text
+compile(doc):
+  1. resolve links (rolls, looks, presets) → plain media and stacks, with sources
+  2. resolve bindings, stage by stage (upstream cuts are compiled and measured first)
+  3. for each stage in pipeline order:
+       medium ops (today's fixed chain: scan.density, film.develop, view.adapt, …)
+       law.compile(stack, input)             → node ids (hash-consed, as today)
+  4. output: display, frame geometry
+```
+
+- **One copy of every law.** The darkroom law compiles to one generalised `print.combine` node (contributions,
+  modulators, masks), as today's single barrier; the studio's tools call the same law to show exposure seconds; the
+  agent's what-if is `compile(doc ⊕ draft)` (Section 34). `printChain` and `compileExposures` are deleted.
+- **Structural identities.** A disabled entry, an amount of 0 (composite) and a pass group at amount 1 without a mask
+  produce no node, so toggling returns exactly to the cached graph of the stack without them. Unchanged prefixes of a
+  stack are the same nodes after every edit (pattern chapter 1).
+- **Cuts** are named outputs a reader can address: `scan`, `negative`, `scene`, `film`, `darkroom.H`, `print` (after
+  `view.adapt`), `finished` (after the print stack), `display`. The frame vocabulary (`vocab.ts`) maps these names;
+  `frame.print()` and v1's `frame.finished()` are two of them.
+- **Performance** is kept by construction: composite layers whose ops are pointwise fuse into the existing pointwise
+  kernel (split at `MAXOPS = 12`, `packages/gpu/src/chain/program.ts:14`); masks and spatial ops are barriers;
+  coalesced runs (Section 23) are one barrier; the preview's tabulated path (pattern chapter 6) and the render slots
+  (chapter 4) are untouched. Design 02's caching and residency work applies unchanged, with cuts as checkpoint
+  candidates.
+
+#### Decision D5: links for rolls, looks, presets and sync
+
+- **Context:** Roll fragments copied into recipes; looks that resolve to parameter edits; presets as files of edits;
+  two batch builders.
+- **Decision:** one link mechanism, resolved first in compile; looks become look functions returning groups.
+- **Rationale:** Shared content stays shared (a roll change reaches every frame that has not overridden it); a look
+  stays one removable, fadeable, maskable unit; divergence is explicit.
+- **Consequences:** Look functions are compile-time lambdas (Section 31); the looks kit's `amount.ts` rules and its
+  parameter edits go; `bake` is the explicit way to detach.
+- **Status:** proposed.
+
+---
+
+## Part V — The builder core and the workbench
+
+### 30. The goal: composable fluent builders around a few components
+
+The second half of the unification is the API. The photographer never sees it, but everything he sees is built with
+it: the layouts that arrange his studio, the panels that show his layers, the looks he applies, the scripts and the
+agent that edit for him. If the API has one shape, the application can be rearranged freely and still behave as one
+thing. The goal, in one sentence: **a core of composable fluent builder APIs, modular around a small set of core
+components, each customisable by lambdas at build time or at runtime.**
+
+The core components of the API are the editing components of Part IV plus the UI's own:
+
+| Area | Components |
+|---|---|
+| editing | Op, Mask, Layer, Group, Link, Stage, Document, Transaction |
+| reading | Cut (a named point in the compiled graph), Handle (a lazy image or value at a cut) |
+| interface | Node (panel, row, control, viewer…), Module, Layout, Kit, Command, Tool, Pass |
+
+Every component is built the same way:
+
+1. **A builder returns an immutable value.** `layer.curve({ … })` is a Layer value; `.amount(0.8)` returns a new
+   Layer; nothing is mutated, ever (today's `ShellBuilder` and `KitBuilder` record into mutable definitions; they
+   become value builders like `ck` nodes already are).
+2. **Every chain method is a modifier.** A **modifier** is a function from a value to a value of the same kind.
+   `x.amount(0.8)` is shorthand for `x.with(amount(0.8))`. Modifiers are values too: they compose (`m1.then(m2)`),
+   can be named, passed around, and applied to many components.
+3. **Every value explains itself.** `explain()` gives its structure, where it was built (`file:line`, as `ck` nodes
+   record today), its binding times, and, for editing values, the node ids it compiles to.
+4. **Every value is data where it must be stored.** Editing values serialise into the document (Part IV); they never
+   contain functions (Section 31). Interface values are code (a layout is a program) but name their stored or
+   cross-boundary lambdas.
+
+```js
+// modifiers are values: build once, apply anywhere
+const soft   = amount(0.6).then(maskWith('sky'));
+const warmUp = (k) => group('Warm', layer.filter({ y: 0.04 * k })).with(soft);
+
+doc.stage('darkroom').push(warmUp(1));                 // a transaction value
+doc.stage('print').push(layer.grade({ shadows: [210, 0.08] }).with(soft));
+
+// the same style builds the interface
+const compact = (p) => p.with({ density: 'compact' });
+const right   = ck.dock.column({ width: 300 }, stack.params().with(compact), stack.masks());
+```
+
+The patterns behind this are in the pattern language: values hash-consed into a graph (chapter 1), unit-tagged
+arguments from one catalogue (chapter 2), a document of vectors in document units (chapter 9), two vocabularies for
+layouts (chapter 10), kits with policy passes (chapter 11) and one handle vocabulary (chapter 12).
+
+### 31. Binding times: when a lambda may run
+
+Lambdas make builders powerful; they also make values opaque, unserialisable and slow if they run in the wrong place.
+The core therefore fixes **four binding times**, extends the glyphs the UI IR already shows (`shell/ir/slots.ts`),
+and says for each what a lambda may read and whether it can be stored.
+
+| Time | Glyph | Runs | Examples | May read | Stored in the document? |
+|---|---|---|---|---|---|
+| **build** | β | once, while a value is built (a layout, a kit, a look's group, a script) | `ck.each`, `.with(fn)`, a modifier, `when` with a boolean, a layout's `build(ck, cb)` | build options, the catalogue | no: the value it produces is |
+| **compile** | κ | per frame, while the document compiles | look functions, binding functions, law compile functions | the document, frame facts, upstream cuts | by name, version and arguments only |
+| **interaction** | τ θ ƒ ρ, bind | on state change, per item, on a gesture or a command | selectors, per-row renderers, formatters, handlers, tool gestures | state (through typed selectors), the gesture | never (they live in layouts and kits) |
+| **pixel** | — | per pixel, in the engines | — none — | — | — |
+
+Four rules follow.
+
+1. **No lambda enters the document.** A document is JSON, portable between machines and engines (pattern chapter 9).
+   Where a stored value needs computation, it names a registered function (a look, a binding) with a version.
+2. **Compile-time functions are registered, pure and deterministic.** They are keyed by name and version, cached by
+   the hash of their inputs, and run in the host (built-in looks and bindings) or in the QuickJS sandbox (looks
+   written as `*.cblook.js` by the photographer or the agent). Their output is ordinary entries with their source.
+3. **Interaction lambdas read state through typed selectors and write through commands or transactions.** CHB-029's
+   typed state and `cb.sel.*` become the only way to read; a handler that changes the document builds a transaction.
+4. **There are no per-pixel lambdas.** Every per-pixel computation is a catalogue op with a reference (f64) and a GPU
+   implementation, checked for parity. Editor lab's `code` layers stay out; a new effect is a new op.
+
+The split also decides what an agent-written layout (CHB-030) can contain: build-time code runs in the sandbox,
+interaction lambdas must be registered selectors and command ids (or path expressions), so the layout that comes out
+is a portable value the host can mount.
+
+#### Decision D6: four binding times, no stored code
+
+- **Context:** Lambdas appear today at build (kits, layouts), resolve (look bodies), interaction (selectors,
+  handlers) and are refused as DSL options; Editor lab stored per-pixel code.
+- **Decision:** build, compile, interaction; none at pixel time; stored lambdas only by registered name and version.
+- **Rationale:** Values stay data where they are stored and code where they are run; caches stay correct; both
+  engines stay in parity; the agent's sandbox boundary is crossed only by data and names.
+- **Status:** proposed.
+
+### 32. The UI DSL, made consistent
+
+The studio's UI DSL keeps its two vocabularies (`ck` for the shell, `cb` for the studio) and its immutable node IR.
+The builders around them change to the rules of Section 30, and CHB-029's open items are folded in:
+
+| Rule | Replaces (Part III, Section 17) |
+|---|---|
+| Shell, module, kit, panel and command-table builders return immutable values | mutable `ShellBuilder`, `ModuleBuilder`, `KitBuilder` |
+| Unknown chain methods are build errors with "did you mean"; fragments are registered explicitly (`ck.extend`) | Proxy-recorded pending calls |
+| One registration per kind: kits declare panels, tools, commands, menus and passes; layouts place them by id | menus in two places, passes via `ck.install`, panels three ways, tools three ways |
+| `panel(id)` is always a reference; `ck.panel.define(…)` defines | `ck.panel` as ref or define by arity |
+| Containers take `(props?, ...children)`, leaves `(value, props?)`, controls take one props object | `hud(opts, value)` vs `statusline(value, opts)`, positional `slider(min, max, opts)` |
+| `enabled` and `why` everywhere | `enabled` on commands, `disabled` on nodes |
+| `ck.when(cond, a, b)` is always an interaction node; build-time choice is plain JavaScript or `.with(when(bool, m))` | `when`/`pick` changing kind by argument type |
+| Scopes follow where a thing is declared (shell → global, module → module, kit → kit) | three defaults for `keys()` |
+| Typed state per kit, read through `cb.sel.*` | `(s: any)` selectors, duplicated `current` |
+| Every kit exposes the same product: `kit.panels.*`, `kit.modules.*`, `kit.tools`, `kit.commands`, `kit.docs` | four product shapes |
+| Host capabilities typed at mount; commands declare `requires` | `hostHas`/`hostRun` |
+| "variant" is called "layout" everywhere | the rename (CHB-029 item 9) |
+
+### 33. One stack kit for every stage
+
+The edit kit of version 1 and the finish kit's panels become one **stack kit**, generic over stages, built from
+the stage's law and the catalogue:
+
+```js
+const stack = cb.kits.stack;                 // panels, tools, commands for any stage
+stack.layers('print')                        // the stack: rows, groups, drag into groups,
+                                             // amount, blend (if the law allows), mask chip
+stack.params()                               // the selected entry's controls, from the catalogue
+stack.masks()                         // the selected entry's mask: components, algebra, reads
+stack.add('print', { ops: ['curve', 'levels', 'hsl', 'grade'] })   // the "+ Layer" menu
+```
+
+Specialised views are the same kit with lambdas at the right times:
+
+```js
+// the darkroom's Enlarger panel: the main exposure and the filters as rows (θ per item)
+const enlarger = stack.layers('darkroom', {
+  title: 'Enlarger',
+  row: (entry) => entry.op === 'expose' ? enlargerRow(entry) : stack.row(entry),   // θ
+  order: 'kind',                         // the light law is order-free: group rows by kind
+});
+
+// the finish view: retouch tools produce heal layers in the print stage
+const finish = stack.layers('print', { filter: sel.ops(['heal', 'clone', 'clarity']) });
+```
+
+One **stage policy pass** replaces CB-F101 and v1's CB-E101: a module declares the stages it shows
+(`m.stages('darkroom')`), every control knows its op's stages from the catalogue, and the pass warns when a module
+shows a stage it does not declare. No string prefixes, no per-kit copies; a layout that mixes stages on purpose
+declares both, which documents the choice (arrangement 2 below declares
+`m.stages('darkroom', 'print')` and labels the zones).
+
+Workspaces stay programs, and each arrangement is a few lines with these pieces:
+
+```js
+// 1. Classic plus an Edit module: Library, Darkroom, Edit, Finish as separate screens
+const edit = ck.module('edit', { label: 'Edit', key: 'E', stages: ['print'] })
+  .left(ck.dock.column({ width: 260 }, stack.layers('print'), cb.panel('history')))
+  .center(cb.viewer({ cut: 'finished', tools: stack.maskTools }))
+  .right(ck.dock.column({ width: 300 }, stack.params(), stack.masks()));
+
+// 2. The darkroom with a digital palette: one screen, two labelled zones
+const darkroom = ck.module('darkroom',
+    { label: 'Darkroom', key: 'D', stages: ['darkroom', 'print'] })
+  .center(cb.viewer({ cut: 'finished', tools: [...enlarger.tools, ...stack.maskTools] }))
+  .right(ck.dock.column({ width: 300 },
+    enlarger,
+    ck.panel.define('digital', { title: 'Digital (after the print)', collapsed: true },
+      stack.layers('print', { density: 'compact' }))));
+
+// 3. Camera files: scene edits before the film, in their own module
+const scene = ck.module('scene', { label: 'Scene', key: 'Mod+Alt+S', stages: ['scene'] })
+  .center(cb.viewer({ cut: 'scene' }))
+  .right(ck.dock.column({ width: 300 }, stack.layers('scene'), stack.params()));
+```
+
+Arrangement 2 is the one to test first with the photographer persona: one screen, which he liked in the darkroom
+layout, with the digital zone labelled as acting after the print. Any arrangement he or the agent invents is built
+the same way. Cohesion comes from the components, not from a fixed layout: every arrangement shows the same stack
+rows, the same amount control, the same mask chip and the same provenance.
+
+### 34. The workbench for an agent with only `eval`
+
+The agent evaluates JavaScript in the QuickJS sandbox. With version 2 it reaches the whole workbench through two
+principles:
+
+- **Anything a person can do is a command or a transaction.** Menus, keys, buttons and tool gestures end in a
+  command (with typed arguments) or a document transaction; the agent runs the same commands and builds the same
+  transactions with the same builders.
+- **Anything a person can see is a value or a handle.** Documents, stacks, masks, cuts, the layout, the mounted
+  screen with its live values, the selection, the history: each is a value with `explain()`, or an image handle the
+  agent can measure or show.
+
+```js
+// in the agent's sandbox
+const d = doc('frame-0412');                       // the document: stages, masks, geometry
+d.stage('darkroom').explain();                     // entries, law, amounts, compiled node ids
+
+const sky = mask.linear({ from: [2000, 0], to: [2000, 1700] })     // document pixels
+  .intersect(mask.luminance({ above: 0.5, softness: 0.1 })).named('sky');
+const tx = d.masks.insert(sky)
+  .then(d.stage('darkroom').push(layer.burn({ stops: 0.5 }).mask('sky')))
+  .then(d.stage('print').push(group('Sky', layer.hsl({ blue: { sat: -0.15 } })).mask('sky')));
+
+await d.with(tx).cut('finished').stats();          // what-if: the one compiler, on a draft
+tx.propose({ why: 'the sky prints 0.4 D denser than the foreground' });
+
+wb.commands();                                     // every command: id, args, keys, enabled/why
+wb.screen().explain();                             // the mounted layout with live values
+wb.run('module.open', { id: 'print' });           // the same command a key press runs
+```
+
+The workbench surface (`wb`) is thin because the UI is a client of the same core: `wb.commands()` lists the command
+table, `wb.run` runs a command, `wb.state(sel)` reads through a typed selector, `wb.screen()` is the runtime's
+explain with live values (`Runtime.explain({ live })` exists today), `wb.layouts.build(src)` builds a layout value in
+the sandbox and checks it with the passes (CHB-030), and `wb.layouts.use(layout)` proposes it. Two tests keep the
+surface complete: every command reachable from a key, a menu or a button is in `wb.commands()`; every control in
+every built layout maps to a document path or a command.
+
+The vocabulary is cleaned on the way: the DSL's image display `h.look()` becomes `h.show()`, so "look" means one
+thing; `frame.edit` becomes the transaction builders above; named looks become links.
+
+#### Decision D7: immutable builders and an eval-complete workbench
+
+- **Context:** Mutable builders beside immutable nodes; an agent that can edit a frame but cannot see or drive the
+  studio.
+- **Decision:** every builder returns an immutable value with `with`, `then` and `explain`; every user action is a
+  command or a transaction; every visible thing is a value or a handle reachable from the sandbox.
+- **Rationale:** One shape makes layouts recombinable and the agent's scripts look like the studio's own code; the
+  agent needs no tool besides `eval`.
+- **Consequences:** CHB-029's items become part of phase 4; CHB-030 becomes straightforward (layouts are values);
+  tests check that the command table and the agent surface agree.
+- **Status:** proposed.
+
+---
+
+## Part VI — Plan
+
+### 35. The hard cut-off
+
+#### Decision D8: a new format and no compatibility path
+
+- **Context:** The owner decided (2026-11-14) that there are no backwards-compatibility needs: "we can do hard
+  cutoff, now is the time to strive for elegance and consistency".
+- **Options considered:** (1) migrations from recipe v2 to document v3; (2) a reader that wraps old recipes; (3) a
+  new format, old files refused with a clear message.
+- **Decision:** (3). Contract 1.0; document format 3; the recipe types, the five special mutations, `printChain`,
+  `compileExposures`, the `finishing` fields, the roll fragment, the CHB-021 look body and its Amount rules are
+  deleted, not deprecated.
+- **Rationale:** Every compatibility path is a second implementation to keep in parity; this design exists to remove
+  second implementations.
+- **Consequences:** Test fixtures are rewritten as documents; stored studio state (the library's recipes) is cleared
+  once, with the photographer's frames re-opened from their sources; one change note (CC-NNN, class breaking)
+  records the cut. The correctness of the darkroom is protected by golden pictures made before anything is deleted
+  (phase 0).
+- **Status:** proposed.
+
+### 36. Phases
+
+| Phase | Content | Done when |
+|---|---|---|
+| 0 | **Golden pictures.** Render the synthetic fixture set and the conformance cases through today's compiler on the reference engine at the cuts `print` and `display`; store them with their recipes. (The photographer's own frames stay local and are never committed.) | goldens committed; a script re-renders them |
+| 1 | **Builder core.** Immutable values, modifiers (`with`, `then`), `explain`, provenance; `Coll` and the four mutations with inverses; transactions | property tests (Section 37) |
+| 2 | **Contract 1.0.** Document format 3; Op catalogue with `stages` and `encoding`; Mask, Layer, Group, Link, Stage; the laws light, composite and repair; mask algebra; link and binding resolution; one compiler with cuts; delete the recipe path | reference engine reproduces the goldens for documents equivalent to the old recipes |
+| 3 | **GPU.** Generalised `print.combine` with modulators; composite mix and blend in the pointwise kernel; coalesced heal; encodings (linear ↔ OkLab) | parity on SwiftShader and on Metal (`REAL_GPU=1`) |
+| 4 | **One history.** The document log replaces `EditLog` and the store's document tier; `Draft` rename; one batch builder | undo, redo, proposals, batches tested; studio specs green |
+| 5 | **UI DSL.** Immutable builders and the rules of Section 32 (CHB-029 folded in); the stack kit; the stage policy pass; layouts rewritten (classic, darkroom, finish, lab) | explain snapshots per layout; browser specs |
+| 6 | **Agent workbench.** Transaction builders and `wb` in the DSL; `h.show`; generated reference regenerated | surface tests (every command, every control); agent examples rewritten |
+| 7 | **Links.** Look functions (built-ins rewritten as groups), `*.cblook.js` in the sandbox, roll links and overrides, sync as copy or link, bake | looks and roll specs; one-step undo of a look over a roll |
+| 8 | **The digital op set.** curve, levels, exposure, hsl, vibrance, grade, mixer, vignette, clarity and sharpen in µm, colour-range masks; the scene stage for camera files | parity per op; golden stacks |
+| 9 | **Persona sessions** (CHB-026 protocol) on the arrangements of Section 33 | the default arrangement chosen with the owner |
+| 10 | **Selections** (marquee, lasso, wand) as mask components, in their own kit | only if the photographer asks |
+
+Phases 1 and 5 can start in parallel (the builder core is shared, the UI rules need no new contract). Phase 2 is the
+long pole; phase 3 follows it; 6 and 7 need 2 and 4. Phases 0–7 deliver the unified studio with today's features; 8
+brings the new digital tools on top.
+
+### 37. Testing
+
+- **Golden pictures** (phase 0) are the oracle for the cut-off: the light law must reproduce today's darkroom.
+- **Law properties:** for random stacks of today's darkroom kinds, the light law equals `combinePixel`; in composite,
+  amount 0 and disabled entries produce no node; a pass group at amount 1 without a mask produces no node; isolated
+  and pass agree when every child is a normal-blend layer; coalescing a run of heals does not change a pixel.
+- **Mask algebra:** `add` is idempotent; intersecting with full coverage is the identity; `subtract` is a·(1 − b);
+  `invert` is an involution; a mask in document pixels evaluated at scale s equals the full-scale mask resampled.
+- **Collections and history:** for random mutation sequences, applying a transaction and then its inverse restores
+  the document exactly; ids survive `move`.
+- **Links and bindings:** resolving a baked link equals resolving the link; a binding that reads its own stage or a
+  later one is a compile error; binding results are deterministic.
+- **One compiler:** the agent's what-if (`doc.with(tx)`) yields the same node ids as committing `tx` and compiling.
+- **Builders:** no builder method mutates its receiver (a frozen-value property test); `then` is associative;
+  `explain` snapshots per layout.
+- **Workbench:** every command reachable from a key, menu or button is in `wb.commands()`; every control maps to a
+  document path or a command; the stage policy pass fires on the cases it should.
+- **Engines:** a conformance case and a parity test per op, as today.
+
+### 38. Risks and open questions
+
+- **Size.** The cut-off touches the contract, both engines, the studio kit, the shell, the DSL and the looks. The
+  goldens, the phase order and the property tests are the safety net; the work happens on one branch and lands when
+  phases 0–7 are green.
+- **The darkroom must still feel like an enlarger.** The stack is the model, not the view: the Enlarger panel stays
+  an enlarger (time, f-stop, filtration, test strips), built as a specialised stack view (Section 33).
+- **Preflash and split exposures** must be checked against today's ops in phase 2 (Section 23); if `print.preflash`
+  models more than added light, it stays a medium setting.
+- **Compile-time cost.** Link resolution and binding functions run on every compile; they are cached by input hash,
+  and look functions in QuickJS are measured in phase 7.
+- **Open, for the owner:**
+  1. the default arrangement (one screen with a digital palette, or separate modules), to be settled in a persona
+     session;
+  2. whether the scene stage for camera files is wanted;
+  3. whether selections are wanted;
+  4. whether "sync" defaults to copying values or to linking;
+  5. whether the darkroom's stack shows the photographer's order or groups by kind (the law does not care).
 
 ---
 
@@ -899,42 +1300,68 @@ question with the photographer before the larger op set is built.
 |---|---|
 | **adjustment layer** | a layer that applies a function to its backdrop and mixes the result by its coverage; holds parameters, not pixels |
 | **alpha / coverage** | how much of a pixel a layer covers, 0…1 |
+| **amount** | an entry's fade, with the meaning its stage's law gives it: time or density in the darkroom, opacity elsewhere |
 | **apron / halo** | the extra pixels around a tile that a neighbourhood op must read |
 | **backdrop** | the image a layer is applied to: the composite of everything below it |
+| **binding** | a parameter whose value a registered function computes at compile time |
+| **binding time** | when a lambda runs: build (β), compile (κ), interaction (τ θ ƒ ρ), never per pixel |
 | **blend mode** | a function B(backdrop, source) that combines colours before mixing by coverage |
-| **component (mask)** | one simple mask function (linear, radial, brush, luminance range, colour range) in a mask's ordered list |
+| **collection** | `{ order, items }`, the one list shape of the document |
+| **component (mask)** | one simple coverage function (linear, radial, ellipse, paint, luminance, colour) in a mask |
+| **contribution** | a darkroom entry that adds (or, for a dodge, withholds) light on the paper |
+| **cut** | a named point in the compiled graph (`negative`, `darkroom.H`, `print`, `finished`, `display`) |
+| **document** | one frame's edit: source, stages, masks, geometry, output; replaces the recipe (format 3) |
 | **domain** | the physical meaning and units of an image between two ops (scanner density, film dyes, print-xyz, …) |
-| **edit log** | chromobench's per-frame history of recipe mutations, with who made each |
+| **draft** | an uncommitted state for a gesture's preview (the shell store's former `Layer`) |
+| **entry** | a layer, a group or a link in a stack |
 | **group, pass-through** | a group whose children act on the real backdrop; the group fades their total effect |
 | **group, isolated** | a group whose children are composited on transparent and blended as one layer |
 | **hash-consing** | building graph nodes so that equal (op, inputs, arguments) give the same node and id |
-| **kit** | a studio-kit bundle of tools, commands, panels, state and passes for one domain (finish, roll, looks, edit) |
-| **layout (variant)** | a program in the UI DSL that arranges modules and panels into the studio's screens |
-| **mask** | a coverage function in 0…1 that confines an edit; in chromobench, node definitions in `recipe.masks` |
-| **module** | one screen of a layout (Library, Print, Finish, Edit), with left/centre/right/bottom regions |
+| **kit** | a bundle of panels, tools, commands, menus, passes, state and docs for one domain |
+| **law** | how a stage combines its entries: light, composite or repair |
+| **layout** | a program in the UI DSL that arranges modules and panels into the studio's screens (formerly "variant") |
+| **link** | shared content in a document (a roll, a look, a preset), resolved at compile time, with per-frame overrides |
+| **look function** | a registered, versioned, pure function from parameters and frame facts to a group |
+| **mask** | a coverage function in 0…1 that confines an entry; a value in the document's mask library |
+| **medium** | a stage's process settings (paper and developer, film stock, scanner, viewing lamp) |
+| **modifier** | a function from a value to a value of the same kind; every chain method is one |
+| **modulator** | a darkroom entry that filters the light (density mask, colour or neutral filter) |
+| **module** | one screen of a layout, with regions, and the stages it declares |
 | **neighbourhood op** | an op that reads pixels around each output pixel (blur, clarity); has a reach |
 | **OkLab / OkLCh** | a perceptual colour space (lightness, a, b) and its polar form (lightness, chroma, hue) |
 | **over** | the operator that puts a source over a backdrop by its coverage |
-| **pass (layout pass)** | a check that runs over a built layout and warns or errors (CB-F101, CB-E101) |
+| **pass (layout pass)** | a check that runs over a built layout and warns or errors (the stage policy pass) |
 | **pointwise op** | an op whose output pixel depends only on the same input pixel |
-| **premultiplied colour** | colour stored multiplied by its alpha |
 | **print-xyz** | the domain after `view.adapt`: light reflected from the print under the viewing lamp, CIE XYZ |
-| **provenance** | the record of what made a layer: a look, an agent step, a script line, the user |
-| **reach** | how far, in pixels, a neighbourhood op reads |
-| **recipe** | the JSON value that describes a frame's whole edit; compiled to a graph |
-| **separable (blend)** | acting on each colour channel independently |
-| **stage A / B / C** | scene or negative before the film / darkroom exposure / the finished print |
+| **provenance** | what made an entry or a change: the user, an agent turn, a look, a roll, a script line |
+| **stage** | one physical place in the pipeline (scan, scene, film, darkroom, print): a medium, a stack and a law |
+| **stack** | a stage's ordered collection of entries |
+| **transaction** | a list of mutations with inverses, author, source, batch and status: one undo step |
+| **workbench** | the studio as the agent sees it: commands, state, layouts, documents, all reachable from `eval` |
 
 ## References
 
-- Chromobench: `packages/contract/src/graph.ts:252-316` (compile); `packages/contract/src/recipe.ts:28-195`
-  (recipe); `packages/contract/src/vocab.ts` (frame vocabulary, domains); `packages/contract/src/catalog/view-output-mask.ts`
-  (mask ops); `packages/studio-kit/variants/{classic,darkroom,finish,finish-module,lab}.js` (layouts);
-  `packages/studio-kit/kits/finish/src/{kit,passes}.ts` (kit pattern, CB-F101); `packages/gpu/src/chain/program.ts`
-  (pointwise kernel, `MAXOPS`); `ttmp/2026/11/12/CHB-029--…/design-doc/01-plan.md` (UI DSL plan).
+- Chromobench today: `packages/contract/src/graph.ts:252-316` (compile); `packages/contract/src/recipe.ts:169-197`
+  (recipe), `:243-335` (`RECIPE_FIELDS`); `packages/contract/src/mutations.ts:9-14`; `packages/contract/src/editlog.ts`;
+  `packages/contract/src/vocab.ts` (cuts and the frame vocabulary); `packages/core/src/print/exposures.ts:32-47`
+  (`combinePixel`), `:84-121`; `packages/dsl/src/host/print.ts:28-80` (`printChain`); `packages/dsl/src/session.ts`;
+  `packages/shell/src/build/{ck,shell-builder,kits,recorders}.ts`; `packages/shell/src/ir/{node,slots}.ts`;
+  `packages/shell/src/core/store.ts`; `packages/studio-kit/src/cb.ts`; `packages/studio-kit/kits/{finish,looks,roll}/`;
+  `packages/gpu/src/engine/defs.ts:8-21`; `packages/gpu/src/chain/program.ts` (`MAXOPS`).
+- Plans: `ttmp/2026/11/12/CHB-029--…/design-doc/01-plan.md` (UI DSL streamlining), CHB-030 (agent-written layouts),
+  companion `02-editor-lab-performance-architecture.md`.
+- Pattern language (`docs/patterns/`, branch `task/pattern-language`): chapters 1 (Interned Operation Graph),
+  2 (Unit-Tagged Parameter Catalogue), 4 (Latest-Wins Render Slots), 6 (Tabulated Preview, Exact Export),
+  7 (Barrier-Cut Fusion), 9 (Vector Edit Document), 10 (Two-Vocabulary Layout DSL), 11 (Kits with Policy Passes),
+  12 (Shared Handle Vocabulary).
 - Editor lab (`editor-lab/`): `src/engine.js` (layers 345–353, blend 139–184, masks 356–397 and 556–603, stack
   440–467, applyLayer 607–648, applyGroup 671–682); `src/workspace.js` (history 35–44, restructure 133–142, masks
-  266–333, selections 336–394); `src/views/{stage,panels,presets,agent,code}.js`; `src/dock.js`; book chapters 01–04
-  and 09.4; `REPORT.pdf`; `earlier-work/docs/Build your own Photoshop-Lightroom - features and algorithms.pdf`;
-  `earlier-work/editor-grammar-examples/editor-grammar-examples.mjs`.
-- Companion: `02-editor-lab-performance-architecture.md`.
+  266–333, selections 336–394); `src/views/{stage,panels,presets,agent,code}.js`; book chapters 01–04 and 09.4;
+  `REPORT.pdf`; `earlier-work/editor-grammar-examples/editor-grammar-examples.mjs`.
+- Prior art for one uniform entry concept: darktable (every processing module offers the same blending, opacity,
+  drawn and parametric masks, and multiple instances in a reorderable pipeline); Nuke (every node has a mask input
+  and a mix control); Photoshop (adjustment layers, pass-through groups, smart filters with their own mask and
+  blending); Lightroom Classic and Capture One (local adjustments as masked sets of the global controls).
+- Prior art for builders and binding times: Jetpack Compose (`Modifier` chains as composable values; state read in a
+  `graphicsLayer { }` lambda is deferred to the draw phase, a binding-time choice); SwiftUI view modifiers; Halide
+  (the algorithm separated from its schedule); Kotlin type-safe builders.
