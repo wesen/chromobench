@@ -260,3 +260,114 @@ inflation under repeated passes (√p), variance bookkeeping for decimation.
 - chromobench: route `film.ts` `gauss` through the single-blur field path (`engine/textures.ts` `gaussianBlur`) and
   derive `reach` from it.
 - Overview: no change needed.
+
+## Step 5: Revision after review
+
+The coordinator relayed general lessons from a reviewer's reading of chapters 2 and 6 (recompute every number and
+watch for degenerate inputs; separate a-priori bounds from measured maxima; precise WebGPU/WGSL semantics; MiB;
+the 4,000-px working image; Solution = invariant only; no task IDs; sketch guards; glossed terms; exercises with
+parameters; one transfer sentence). Recomputing my own numbers found two real errors in chapter 3, both now fixed.
+
+### Prompt Context
+
+**User prompt (verbatim):** (coordinator's revision message, not a user prompt; see Step 1 for the user prompt)
+
+**Assistant interpretation:** Apply the lessons to chapters 3 and 4 and record the changes here.
+
+**Inferred user intent:** Chapters a numerics-trained first-year PhD student can check line by line.
+
+### What didn't work (errors found in my first draft)
+
+- **"Mismatches happen at ties" was incomplete.** Separating ties from non-ties (`scratch/grid3.mjs`): for
+  w = 4,000, 1,419 mismatching columns are ties where the f32 product falls below the integer (548 widths), and 6
+  are near-ties where it rounds *up* across one (6 widths, all n ≥ 3,513). For w = 6,000: 2,177 tie columns
+  (554 widths) and 256 near-tie columns (237 widths, n ≥ 2,497); 791 widths in all, as before. Chapter 3 note 1
+  now gives both conditions: at ties no size is safe; off ties the reciprocal form is exact while n·w ≲ 2²²
+  (1,048 for w = 4,000; 699 for 6,000; sufficient, not necessary).
+- **The test-suite explanation was based on a degenerate input.** I had said the parity scales "cannot show it" and
+  cited 750 ties at 0.375 on a 6,000-px row, but the suites do not use 6,000-px rows. Checking the actual fixture
+  widths (`scratch/fixtures.mjs`; `chb037/packages/gpu/src/parity/residency-tests.ts:26` SCALES = 0.04, 0.125,
+  0.29, 0.5, 0.731; images 403 × 271, 517 × 347, 301 × 203; regions 251 × 173, 300 × 200): odd widths have no ties at
+  all ((2p + 1)·w / 2n is never an integer for odd w); the even widths I checked (200, 300, 320, 352) have ties but
+  0 mismatches at every scale used. f32(8/3) = 2.6666667461 > 8/3 re-derived (it does round up). Chapter 3 now
+  states this, and note 10 says tie tests need even widths.
+- **Working size.** The GPU engine decodes raws to a 4,000-px working image (`chb037/apps/studio/src/host/
+  engines.ts:34,112`, default 4000). The coordinator confirmed 4,000 × 2,674 (CHB-034 diary `01-diary.md:303`,
+  `:452`; the CHB-041 diary's 2,686 is a slip). Chapter 3 now uses the 4,000 width throughout: 554 of 3,901
+  widths mismatch; example n = 106, p = 26: exact 26.5 · 4,000 / 106 = 1,000, GPU 999.99994 → 999 (first draft's
+  "column 22" was the 6,000-px example; corrected). Thumbnail height round(2,674 · 106 / 4,000) = 71 (unchanged
+  from 2,686); rows of that grid: 1 tie, 0 mismatches. One rgba32float working texture: 4,000 × 2,674 × 16 =
+  171,136,000 B = 163.2 MiB, so "163 MiB"; 328 → 47 MiB (the CHB-041 journal's MB are bytes/2²⁰).
+
+### What I did
+
+Chapter 3:
+- Motivation: 4,000-px working image; glossed parity tests, texture, texel, tiles; tie numbers for w = 4,000; the
+  odd-width explanation; one sentence for deep-learning readers (`align_corners`).
+- Note 1 rewritten as a derivation: q = (2p + 1)w/2n is an integer or ≥ 1/2n from one (more precisely a multiple
+  of gcd(w, 2n)/2n); correctly rounded division exact if 2n·w < 2ᵗ (f32: n·w < 8,388,608); WGSL (and Vulkan) round
+  f32 + and × correctly but allow 2.5 ulp for f32 division, giving 10·n·w < 2²⁴ (derivation: 2.5 ulp(q) ≤
+  2.5 · 2¹⁻ᵗ q < 5w·2⁻ᵗ ≤ 1/2n); CUDA division correctly rounded unless fast math; reciprocal form two roundings,
+  ≈ 2⁻²³ relative, exact off ties while n·w ≲ 2²²; u32 multiplication wraps in WGSL, so n·w < 2³¹ is checked.
+  The f32-divide count (157 widths at w = 6,000; 0 at 4,000) assumed correctly rounded division; it is now only
+  in this diary.
+- Note 2: software adapter glossed; 163 MiB; MiB for 328 → 47.
+- Sketch: `grid(…)` constructor refusing empty grids, regions outside the image, and n·w ≥ 2³¹; degenerate
+  gradient (a = b → 1, as `masks.ts:32` `linearAt`); in-use line on 4,000 × 2,674 at 106 × 71; plan-step names
+  defined.
+- Exercises: 1 now separates ties from near-ties and states that the emulated division is correctly rounded;
+  2(a) asks for the three sufficient conditions and the gcd argument (why no f32-divide mismatch below n = 4,096
+  for w = 6,000), so it no longer resembles chapter 6's rounding exercise. Exercise 3 checked for degeneracy:
+  align_corners x = 63p/255 vs half-pixel x = (p + ½)/4 − ½ differ by 3/8 − 3p/1,020, largest 0.375 px at both ends.
+- Cut for length: Direct3D 9 sentence in note 3 (kept in Known uses), the GeoTIFF Known-use line (in Motivation),
+  one Applicability bullet, parts of notes 4, 6, 9.
+
+Chapter 4:
+- Motivation: glossed tile and halo; transfer sentence (dilated convolutions; the fast multipole method).
+- Solution: dropped the path/branch combination and field reading (the image-engine volume's Reach-Declared
+  Tiling); now the invariant only, four sentences.
+- Note 1: per-pixel cost of a running-sum pass (1 add, 1 subtract, 1 multiply per channel) against 2(2r + 1)
+  multiply-adds; arithmetic favours boxes from r ≈ 2 (4(2r + 1) > 18 flops at r = 2; my arithmetic).
+- Note 2: a-priori bound |k∗x − g∗x| ≤ ‖k − g‖₁ max|x| with ‖k − g‖₁ against the *requested* σ (`scratch/
+  boxes2.mjs`): σ = 2: 0.0651; 6: 0.0414; 24: 0.0501; 100: 0.0532; 2-D ≤ 2‖k − g‖₁ (k⊗k − g⊗g = (k − g)⊗k +
+  g⊗(k − g), both factors of mass 1). Measured maximum on a step edge: 1.63 %, 0.58 %, 0.84 %, 0.95 %. (Against the
+  requested σ the peak difference is 3.4 % at σ = 6, 5.8 % at σ = 100; the earlier "6 %" was against a Gaussian of
+  the same variance; removed from the chapter to avoid two numbers for one thing.)
+- Note 3: "random input" stated for the f32 running-sum and summed-area numbers (non-degenerate: uniform [0, 1)).
+- Note 4: bandwidth/compute estimate, parameters stated (400 GB/s, 10 TFLOP/s, 16 B per pixel): six streamed box
+  passes 192 B/px → 0.48 ns/px; direct separable 64 B/px and 16(2r + 1) flop/px (2 passes × (2r + 1) taps × 4
+  channels × 2 flops) → equal at 2r + 1 = 300, r ≈ 150. Labelled a linearised roofline estimate. Limits: WebGPU
+  defaults 16 KiB workgroup storage, 256 invocations; Vulkan required minimums 16 KiB, 128; CUDA 48 KiB static
+  shared memory per block.
+- Note 6: aliasing estimate derived (`scratch/decim.mjs`): a component at 1/s − δ passes the s-box with gain
+  ≈ πδ/sin(π/s), folds to δ, is kept by exp(−2π²σ²δ²); the maximum over δ (at δ = 1/2πσ) is
+  e^(−1/2)/(2σ sin(π/s)). Values: s = 2, σ = 33: 9.2 × 10⁻³ (measured 8.96 × 10⁻³); s = 2, σ = 64: 4.7 × 10⁻³
+  (4.63); s = 4, σ = 66: 6.5 × 10⁻³ (6.63); s = 4, σ = 128: 3.35 × 10⁻³ (2.78); s = 8, σ = 132: 6.0 × 10⁻³ (5.91).
+  The simulation: 1-D, periodic, unit cosines at ~300 frequencies and two phases, the chromobench path (s-box,
+  σlow Gaussian truncated at 3σ, bilinear up at centres) against a direct Gaussian. My first estimate used
+  sin(π/s) ≈ π/s and undershot at s = 2 by π/2; corrected before writing. The chapter states "0.6–1.0 % at
+  σ/s = 16 and 0.3–0.5 % at 32, the higher values at s = 2" (large s: e^(−1/2)/(2π·16) = 0.60 %; s = 2, σ/s = 16:
+  0.6065/64 = 0.95 %; s = 2, σ/s = 32: 0.47 %) and "measured 0.28 % to 0.90 %, never more than 2 % above the
+  estimate" (6.63 vs 6.50 × 10⁻³ at s = 4, σ = 66 is the worst).
+- Note 8: the halo read factor ((t + 2m)/t)² made explicit; note 9 shows 1.56 inside vs 1.52 with clipped edges.
+- Note 9: "20 textures per pixel" reworded to 20 rgba32float textures alive, 320 bytes per pixel
+  (`engine-gpu.ts:336` bytesPerPixel 320).
+- Sketch: `boxWidths(σ ≤ 0)` → identity; `plan` with px ≤ 0 → identity; `gaussWide` refuses when the prefilter
+  and upsampling variances already exceed σ²; `low` and `mid` released; `bilinearUp` takes the output size;
+  every helper defined in the header comment.
+- Exercises: 1 no longer asks for f32 running sums (chapter 2 has the summation exercise), keeps the f32
+  summed-area table; 2(b) gives bandwidth, compute rate, image size and workgroup limits and asks which terms are
+  linearised.
+- Cut for length: Known uses compressed (titles shortened), Collaborations to four steps, one Consequence, the
+  exact-shape bullet of Applicability shortened.
+
+### Word counts after revision
+
+- Chapter 3: raw 3,717; prose outside code 3,181; letters-only 3,002.
+- Chapter 4: raw 3,836; prose outside code 3,206; letters-only 3,009.
+
+### What warrants a second pair of eyes
+
+- WGSL and Vulkan accuracy statements (f32 +, × correctly rounded; ÷ within 2.5 ulp for |y| in [2⁻¹²⁶, 2¹²⁶]) are from
+  my knowledge of the specifications, not re-read for this revision.
+- The roofline device (400 GB/s, 10 TFLOP/s) is a stated example, not a measured chromobench device.

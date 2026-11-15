@@ -19,10 +19,12 @@ area versus pixel is point.
 
 ## Motivation
 
-The running example renders one image on many grids: the whole 6,000 × 4,000 image of a 24-megapixel raw file
-for export, any width the window allows for a preview, regions for zoom, 160-pixel thumbnails, tiles. Three
-engines compute them: a reference in 64-bit floats (f64), a mock for tests, and a WebGPU engine in 32-bit floats
-(f32). All three implement one rule: output pixel p of an n-pixel grid over a region reads image pixel
+The running example renders one image on many grids. Its GPU engine decodes a 24-megapixel raw file to a working
+image 4,000 pixels wide (4,000 × 2,674) and renders that whole for export, at any width the window allows for a
+preview, over regions for zoom, at 160 pixels for thumbnails, and in tiles (pieces computed one at a time). Three
+engines compute these: a reference in 64-bit floats (f64), a mock for tests, and a WebGPU engine in 32-bit floats
+(f32), checked against each other by *parity tests* (tests that compare engines value for value). All three
+implement one rule: output pixel p of an n-pixel grid over a region reads image pixel
 fp = region.x + ⌊(p + ½)·region.w / n⌋. Three failures show what the rule has to cover.
 
 1. **A stage that did not know the rule.** The reference engine's 717 × 478 preview of a 1,024 × 683 test image
@@ -31,21 +33,23 @@ fp = region.x + ⌊(p + ½)·region.w / n⌋. Three failures show what the rule 
    sampled the result. Once it mapped the output grid to a grid of its input, the step took 1.37 s, and every
    stored reference image stayed bit-identical.
 2. **Two origins.** A region rendered at half scale was compared with an engine that read the same region from a
-   full-size copy of the source on the GPU. The first comparison differed in 32,302 of 32,886 samples, by up to
-   0.64. The comparison engine had read the full-size copy as if its first texel were the region's corner; a
-   full-size copy's first texel is the image's corner.
+   full-size *texture* (an image stored on the GPU) of the source. The first comparison differed in 32,302 of
+   32,886 samples, by up to 0.64. The comparison engine had read the full-size texture as if its first texel (a
+   texture's pixel) were the region's corner; a full-size texture's first texel is the image's corner.
 3. **The same formula in different arithmetic.** The reference computes ⌊(p + ½)·w / n⌋ in f64. The GPU kernel
    multiplies p + ½ by the ratio w / n rounded to f32. When an output pixel's centre falls exactly on the boundary
    between two source pixels (a *tie*), the f32 product can land just below the integer, and the floor picks the
-   left pixel. Measured for this chapter: for a 6,000-pixel-wide image, 791 of the 5,901 output widths from 100 to
-   6,000 have at least one such column. At 135 pixels wide, column 22 reads source pixel 999 on the GPU and 1,000
-   in the reference. The parity tests' scales (0.5, 0.4, 0.375, 0.25) cannot show it: 0.375 makes 750 ties in a
-   6,000-pixel row, and all pass only because f32(8/3) happens to round up.
+   left pixel. Measured for this chapter, for the 4,000-pixel width: 554 of the 3,901 output widths from 100 to
+   4,000 have at least one column where the engines read different pixels. At 106 pixels wide, column 26 reads
+   source pixel 999 on the GPU and 1,000 in the reference. The test suites do not show it. Several test images
+   are an odd number of pixels wide (403, 517, 301), and an odd w has no ties at all, since (2p + 1)·w / 2n is
+   then never an integer; on the even widths I checked (200 to 352 pixels, at every scale the suites use), no tie
+   happens to round below the integer.
 
 Geographic rasters meet the same problem: a cell's coordinate names either its corner or its centre (GeoTIFF
-records which), and two files of one terrain end up half a cell apart. So do neural networks: a model trained with
-one framework's resize and deployed with another's sees its inputs shifted by a fraction of a pixel, which is why
-the ONNX resize operator names five coordinate conventions.
+records which), and two files of one terrain end up half a cell apart. Readers from deep learning know it as the
+`align_corners` question: a model trained with one framework's resize and deployed with another's sees its inputs
+shifted by a fraction of a pixel, which is why the ONNX resize operator names five coordinate conventions.
 
 ## Problem
 
@@ -86,7 +90,6 @@ Use it when:
 
 Do not use it when:
 
-- the output exists at one resolution only and no other grid is compared with it;
 - the operation's point is its resampling filter (a high-quality downscale): fix the centres by this rule, but
   check the values against a filtered reference;
 - values live at points, not over areas (table nodes): use a corner-aligned map (Variations), kept apart by type.
@@ -126,6 +129,12 @@ value Stage: kind, reach, inputGrid, error
 
 floorDiv(a, b) → the integer quotient of a by b, rounded down        -- integers only
 
+grid(x, y, w, h, n, m) → Grid:                   -- W × H: the full-resolution size
+  if w < 1 or h < 1 or n < 1 or m < 1: refuse("empty-grid")
+  if x < 0 or y < 0 or x + w > W or y + h > H: refuse("outside-image")
+  if n · w ≥ 2³¹ or m · h ≥ 2³¹: refuse("too-large", fix: "64-bit integers")   -- (2p + 1)·w must not wrap
+  return Grid(x, y, w, h, n, m)
+
 sampleX(g, p) → g.x + floorDiv((2p + 1) · g.w, 2 · g.n)
 sampleY(g, q) → g.y + floorDiv((2q + 1) · g.h, 2 · g.m)
 centre(g, p, q) → (sampleX(g, p) + 0.5, sampleY(g, q) + 0.5)          -- image coordinates
@@ -140,6 +149,7 @@ bilinear(img, x, y):                             -- centres at i + ½; the edge 
 
 grow(g, r) → the region of g enlarged by r pixels on each side, clipped to the image, at scale 1
 
+-- OnGrid, FullThenSample, OnGridScaled: the plan steps an executor runs
 place(stage, g) → match stage.kind:
   pointwise     → OnGrid(g)                          -- commutes with sampling, bit for bit
   permutation   → OnGrid(stage.inputGrid(g))         -- a grid maps to a grid
@@ -148,45 +158,48 @@ place(stage, g) → match stage.kind:
 
 kernel gradientMask(g, a, b) over g:                 -- a position-dependent operation
   (X, Y) ← centre(g, p, q)                           -- (p, q): this invocation's output pixel
-  out[p, q] ← clamp(1 − dot((X, Y) − a, b − a) / dot(b − a, b − a), 0, 1)
+  if a = b: out[p, q] ← 1                            -- a degenerate gradient is full strength
+  else: out[p, q] ← clamp(1 − dot((X, Y) − a, b − a) / dot(b − a, b − a), 0, 1)
 
-law sampleConsistency(engine, node, g):              -- for plans without approximate stages; W × H: full size
-  full ← engine.evaluate(node, Grid(0, 0, W, H, W, H))
+law sampleConsistency(engine, node, g):              -- for plans without approximate stages
+  full ← engine.evaluate(node, grid(0, 0, W, H, W, H))
   part ← engine.evaluate(node, g)
   for p in 0 .. g.n − 1, q in 0 .. g.m − 1:
     assert part[p, q] = full[sampleX(g, p), sampleY(g, q)]          -- equality, not tolerance
 
--- in use: a thumbnail of a 6,000 × 4,000 image, checked against the export at every column, ties included
-for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000, 4000, 135, 90))
+-- in use: a 106-pixel thumbnail of a 4,000 × 2,674 image, checked at every column, the tie at column 26 included
+for engine in [reference, gpu]: sampleConsistency(engine, print, grid(0, 0, 4000, 2674, 106, 71))
 ```
 
 ## Implementation notes
 
-1. **Compute the map in integers.** In 32-bit unsigned integers, ⌊(2p + 1)·w / 2n⌋ is exact for any n·w below 2³¹.
-   In floating point, the floor of a correctly rounded quotient is exact when 2n·w < 2ᵗ, with t = 24 significand
-   bits in f32 and 53 in f64: a non-integer quotient lies at least 1/2n from an integer, and the rounding error is
-   below half an ulp of a number smaller than w. The bound is sufficient, not necessary: for a 6,000-pixel image it
-   fails from n = 1,399, and the first f32-divide mismatch appears at n = 4,109. Multiplying by a rounded
-   reciprocal has no such bound: at a tie the exact answer is an integer, and any downward error flips the floor.
-   This is chromobench's open debt: its GPU pointwise and retouch kernels multiply by an f32 ratio, its
-   straightening kernel divides in f32, and the reference divides in f64.
+1. **Compute the map in integers, and know when floats are enough.** The quotient q = (2p + 1)·w / 2n is either
+   an integer (a tie) or at least 1/2n away from one. In unsigned 32-bit integers ⌊q⌋ is exact while n·w < 2³¹;
+   WGSL's u32 multiplication wraps silently, so check that bound once per grid. In floating point with t
+   significand bits (24 in f32, 53 in f64), a correctly rounded quotient errs by less than half an ulp of a number
+   below w, at most w·2⁻ᵗ, so its floor is exact when 2n·w < 2ᵗ: always in f64, and in f32 only up to n·w ≈ 8.4
+   million. WGSL, like Vulkan's shader rules, rounds f32 + and × correctly but only guarantees f32 division
+   within 2.5 ulp, which tightens the condition to 10·n·w < 2²⁴; CUDA's division is correctly rounded unless fast
+   math is on. Multiplying by a rounded reciprocal f32(w/n) rounds twice (relative error about 2⁻²³), so away
+   from ties it is exact while n·w ≤ 2²². At a tie no size is safe: the exact answer is an integer, and any
+   downward error flips the floor. For the 4,000-pixel width I counted 1,419 mismatching columns at ties and 6
+   near ties, all at n ≥ 3,513. This is chromobench's open debt: its pointwise and retouch kernels multiply by
+   an f32 ratio, its straightening kernel divides in f32, and the reference divides in f64.
 2. **Copying the arithmetic is not sharing the rule.** chromobench keeps reduced copies of each source on the GPU
-   (proxies). The host reproduces the shader's f32 product exactly (the product of two f32 values is exact in
-   f64, so one rounding to f32 gives the device's result). Proxies match the full-size texture bit for bit on a
-   software adapter and on Apple's Metal, and the textures kept after opening two 24-megapixel raw files fell from
-   328 MB to 47 MB. But the proxy agrees with the GPU by sharing its rounding error; the reference still disagrees
-   at ties. In integers, all three would agree.
+   (proxies) so that thumbnails and previews never hold the 163 MiB full-size working texture. The host reproduces
+   the shader's f32 product exactly: the product of two f32 values is exact in f64, and one rounding to f32 then
+   gives the device's correctly rounded product. Proxies match the full-size texture bit for bit on a software
+   adapter (a CPU implementation of the GPU interface, here SwiftShader) and on Apple's Metal, and the textures
+   kept after opening two raw files fell from 328 MiB to 47 MiB. But the proxy agrees with the GPU by sharing its
+   rounding error; the reference still disagrees at ties. In integers, all three would agree.
 3. **Pixel centres at half-integers, everywhere.** Pixel i covers [i, i + 1). A 2:1 reduction puts output centre 0.5
    on the boundary between pixels 0 and 1, and the floor breaks every such tie the same way. A bilinear read
-   subtracts ½ before the floor and clamps the position to [½, W − ½]. Direct3D 9 put pixel centres at integers
-   and texel centres at half-integers, and programs drew textures half a pixel off; chromobench keeps a table
-   lookup without the half-texel offset as a test that must fail
-   ([Tabulated Preview](../06-tabulated-preview-exact-export.md)).
+   subtracts ½ before the floor and clamps the position to [½, W − ½]. chromobench keeps a table lookup without
+   the half-texel offset as a test that must fail ([Tabulated Preview](../06-tabulated-preview-exact-export.md)).
 4. **Evaluate positions at the sample's centre.** chromobench evaluates gradient and elliptical masks at fp + ½, and
-   heals and clones circular spots at full-resolution centres, reading the source disc bilinearly. A masked preview
-   is then the full result sampled, bit for bit. Editor lab, whose previews come from an averaged pyramid,
-   evaluates at the centre of the coarse pixel's block, (x + ½)·2ᴸ. Each matches its sampler; mixed, they
-   disagree by half a full-resolution pixel.
+   heals and clones circular spots at full-resolution centres, so a masked preview is the full result sampled.
+   Editor lab, whose previews come from an averaged pyramid, evaluates at the centre of the coarse pixel's block,
+   (x + ½)·2ᴸ. Each matches its sampler; mixed, they disagree by half a full-resolution pixel.
 5. **Know which stages commute with sampling.** A pointwise f satisfies S(f(x)) = f(S(x)) exactly for a sampling S,
    if its arithmetic does not depend on the grid. A crop and the eight orientations (flips, quarter turns,
    transposes) are permutations in which each output axis reads one input axis, so they map a grid to a grid (the
@@ -194,8 +207,7 @@ for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000
    bilinearly at the grid's samples. Stages that read neighbours do not commute: the reference computes them at
    full resolution and samples; the GPU's previews run them on the reduced grid, an approximation its tile test
    shows to differ in every case but healing.
-6. **Regions are crops only at scale 1.** At scale s, a region's grid is part of the whole image's grid only when
-   the steps match and the offset is a multiple of the step. What holds at every scale is the law. Test that.
+6. **Regions are crops only at scale 1.** At other scales, what holds is the law, not crop equality. Test that.
 7. **One coordinate system per stored image.** Every texture records the region of the image it holds; a reader
    converts image to texel coordinates by subtracting that origin, and in no other way. The two-origins failure
    was a full-size texture read as if it held the region.
@@ -210,10 +222,11 @@ for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000
    for nonlinear stages. Editor lab measured level-2 renders against full renders averaged down: a Gaussian blur
    of σ = 6 px was off by at most 8 of 255 steps, a threshold by up to 223 steps on 6.4 % of pixels. Average
    premultiplied values (colour weighted by coverage), or transparent colours leak into edges. chromobench chose
-   nearest proxies to keep parity bit-exact, and recorded averaged levels as a proposal that would change pixels.
-10. **Test with ties and awkward sizes.** Scales whose ratio is a power of two, or rounds up in f32, cannot reveal a
-    broken map. Sweep every output width of a small image, add widths whose f32 ratio rounds down, compare each
-    engine's fp with the integer rule, and keep a map without the ½ as a negative control.
+   nearest proxies to keep parity bit-exact.
+10. **Test with ties, which need even widths.** An odd source width never produces a tie, and a scale whose f32
+    ratio is exact or rounds up cannot reveal a broken map. Sweep every output width of an even-width image, add
+    widths whose f32 ratio rounds down (4,000 → 106), compare each engine's fp with the integer rule, and keep a
+    map without the ½ as a negative control.
 
 ## Variations
 
@@ -222,8 +235,8 @@ for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000
 - **Corner-aligned maps.** First and last centres map to first and last centres: x = p·(w − 1)/(n − 1). Right for
   values that live at points (table nodes, heights); crops are no longer consistent. PyTorch calls it
   `align_corners=True`; chromobench's lookup tables use it.
-- **Filtered resampling at centres.** Bilinear or Lanczos at x = (p + ½)·w / n − ½: the same centres, filtered
-  values, checked against a reference with the same filter.
+- **Filtered resampling at centres.** Bilinear or Lanczos at x = (p + ½)·w / n − ½, checked against a reference
+  with the same filter.
 - **Power-of-two scales only.** At scales 2⁻ᴸ, fp = p·2ᴸ + 2ᴸ⁻¹ for L ≥ 1: no ties, exact in any arithmetic. The
   display scales the last step, so previews rarely match the window.
 
@@ -245,14 +258,12 @@ for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000
   code written for the other convention. Nearest texture filtering selects texel ⌊u·N⌋, this chapter's rule when
   u = (p + ½)/n.
 - **Halide** (Ragan-Kelley et al., PLDI 2013) defines functions over an unbounded integer domain, so a realised
-  region equals the crop of a larger realisation by construction.
+  region is a crop of any larger realisation.
 - **PyTorch**'s `F.interpolate` made half-pixel centres (`align_corners=False`) the default for linear modes in
   0.4.0; its `nearest` mode omits the offset, and `nearest-exact` was added to match PIL and scikit-image.
 - **OpenCV**'s linear resize uses half-pixel centres; `INTER_NEAREST` does not, and `INTER_NEAREST_EXACT` was added.
-- **ONNX** Resize names the conventions (`half_pixel`, `pytorch_half_pixel`, `align_corners`, `asymmetric`,
-  `tf_crop_and_resize`).
-- **GeoTIFF** records `RasterPixelIsArea` or `RasterPixelIsPoint`; **ITK** places the origin at the first pixel's
-  centre.
+- **ONNX** Resize names the conventions in its `coordinate_transformation_mode` attribute.
+- **ITK** places an image's origin at the centre of its first pixel.
 
 ## Related chapters
 
@@ -270,13 +281,15 @@ for engine in [reference, gpu]: sampleConsistency(engine, print, Grid(0, 0, 6000
 ## Exercises
 
 1. *Implement and measure.* Write the grid map four ways: integer, f64 multiply then divide, f32 multiply by a
-   rounded reciprocal, f32 divide (round after every operation). For every w from 100 to 8,192 and n ≤ w, count
-   columns where each float version differs from the integer one, and find the smallest n·w with an f32-divide
-   mismatch. Then write the sample-consistency law for a toy pipeline (exposure, a gradient mask, a box blur) whose
-   fast path runs pointwise stages on the grid; show that the law fails when the mask moves to the output pixel's
-   own centre.
-2. *Analyse.* (a) Prove ⌊fl(a / b)⌋ = ⌊a / b⌋ for a = (2p + 1)·w, b = 2n and 2n·w < 2ᵗ (t significand bits); give
-   a w, n, p where (p + ½)·fl(w / n) in f32 floors below the true quotient. (b) Prove that a crop followed by any
+   rounded reciprocal, f32 divide (round after every operation, so division is correctly rounded). For every even
+   w from 100 to 8,192 and n ≤ w, count columns where each float version differs from the integer one, separating
+   ties from near-ties, and find the smallest n·w with an f32-divide mismatch. Then write the sample-consistency
+   law for a toy pipeline (exposure, a gradient mask, a box blur) whose fast path runs pointwise stages on the
+   grid; show that the law fails when the mask moves to the output pixel's own centre.
+2. *Analyse.* (a) Prove the three sufficient conditions of note 1: 2n·w < 2ᵗ for a correctly rounded quotient,
+   10·n·w < 2²⁴ for an f32 division within 2.5 ulp, and n·w < 2²² off ties for a rounded reciprocal. Explain why,
+   for w = 6,000, no f32-divide mismatch appears below n = 4,096 although the first bound fails from n = 1,399
+   (hint: the distance of q from an integer is a multiple of gcd(w, 2n)/2n). (b) Prove that a crop followed by any
    of the eight orientations maps a sample grid to a sample grid, and that a 10° rotation does not.
 3. *Another domain.* A segmentation network trained with `align_corners=True` upsampling is deployed with
    half-pixel centres. For 4× upsampling from 64 to 256 pixels, find the largest disagreement in source coordinate,
