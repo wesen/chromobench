@@ -50,6 +50,8 @@ export interface Presenter {
   draw(view: ViewTransform, colours: Colours): void;
   /** the 8-bit value presented for one document pixel */
   readDocPixel(x: number, y: number): Promise<number[] | null>;
+  /** no picture any more: the next draw shows the stage only (CHB-041: a failed render of another picture) */
+  clear?(): void;
   dispose(): void;
 }
 
@@ -80,6 +82,12 @@ export interface RenderBridge<R = unknown> {
   isRenderable(x: unknown): x is R;
   /** equal keys ⇒ same pixels (the content address in chromobench) */
   key(r: R): string;
+  /**
+   * Which picture a renderable shows (CHB-041; studio-kit: its frame). Renderables with equal idents are versions of
+   * one picture (an edit); when a render of another picture fails, the viewport takes the shown one down instead of
+   * leaving it up under the new picture's name. Without it, a failure keeps the shown picture.
+   */
+  ident?(r: R): string;
   render(r: R, t: RenderTarget): Promise<Rendered>;
   naturalSize?(r: R): [number, number] | null;
   /** close bitmaps, free textures on eviction */

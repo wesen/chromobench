@@ -70,6 +70,15 @@ export async function evaluateBands(engine: Engine, bands: readonly Pick<Band, '
 
 const NO_LINKS: LinkContext = Object.freeze({});
 
+/**
+ * What an engine that keeps GPU textures per frame understands (CHB-041; the GPU engine, through the studio's engine):
+ * the frames on screen by their source hash (their textures go last when memory runs short), and frames closed (their
+ * textures go now). Structural: an engine without it keeps nothing per frame.
+ */
+export interface ResidencyHint {
+  resident?(o: { pinned: readonly string[]; dropped?: readonly string[] }): void;
+}
+
 export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   readonly id = 'chromobench';
   readonly frames: Frames;
@@ -108,6 +117,45 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   constructor(frames: Frames, o: { displaySpace?: OutputSpaceId } = {}) {
     this.frames = frames;
     this.displaySpace = o.displaySpace ?? 'srgb';
+    // a frame closed: its textures go now, unless another open frame shows the same file (a strip)
+    frames.onRemoved((e) => {
+      for (const [slot, sha] of this.onScreen) if (sha === e.sha && !frames.bySha(sha)) this.onScreen.delete(slot);
+      this.pin(frames.bySha(e.sha) ? [] : [e.sha]);
+    });
+  }
+
+  // ── residency (CHB-041) ──
+  // The frames on screen are those of the viewports' slots (vp:<id>:after, :before, :cover: the viewer's frame) and of
+  // the thumbnails being drawn (thumb:… while their render runs); the engine lets their textures go last.
+  private readonly onScreen = new Map<string, string>();
+  private readonly drawing = new Map<string, number>();
+  private pinnedKey = '';
+  /** The frames on screen now (source hashes), as the engine was last told. */
+  get pinned(): string[] {
+    return this.pinnedKey ? this.pinnedKey.split(',') : [];
+  }
+  private pin(dropped: readonly string[] = []): void {
+    const shas = [...new Set([...this.onScreen.values(), ...this.drawing.keys()])].sort();
+    const key = shas.join(',');
+    if (key === this.pinnedKey && !dropped.length) return;
+    this.pinnedKey = key;
+    (this.engine as Engine & ResidencyHint).resident?.({ pinned: shas, ...(dropped.length ? { dropped } : {}) });
+  }
+  /** a render starts in a slot: the viewer's frame is on screen; a thumbnail's while it is drawn. Returns the end. */
+  private onScreenFor(slot: string, sha: string): () => void {
+    if (slot.startsWith('vp:')) {
+      this.onScreen.set(slot, sha);
+      this.pin();
+      return () => undefined;
+    }
+    this.drawing.set(sha, (this.drawing.get(sha) ?? 0) + 1);
+    this.pin();
+    return () => {
+      const n = (this.drawing.get(sha) ?? 1) - 1;
+      if (n > 0) this.drawing.set(sha, n);
+      else this.drawing.delete(sha);
+      this.pin();
+    };
   }
   get engine(): Engine {
     return this.frames.engine;
@@ -115,6 +163,10 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
 
   isRenderable(x: unknown): x is ImageHandle {
     return isImageHandle(x) && !!this.frames.get(x.frame);
+  }
+  /** which picture a handle shows (CHB-041): its frame — a failed render of another frame never leaves this one's picture up */
+  ident(h: ImageHandle): string {
+    return h.frame;
   }
   key(h: ImageHandle): string {
     const l = this.lower(h);
@@ -241,10 +293,15 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     const target = { scale: scale >= 1 ? ('full' as const) : scale, precision: 'preview' as const, signal: t.signal, ...(region ? { region } : {}) };
     let res: ImageResult;
     let data: SampleData;
-    if (bands) ({ result: res, data } = await evaluateBands(this.engine, bands, target));
-    else {
-      res = await this.engine.evaluate(shown, target);
-      data = await res.read();
+    const drawn = this.onScreenFor(t.slot ?? '', e.sha);
+    try {
+      if (bands) ({ result: res, data } = await evaluateBands(this.engine, bands, target));
+      else {
+        res = await this.engine.evaluate(shown, target);
+        data = await res.read();
+      }
+    } finally {
+      drawn();
     }
     if (t.signal.aborted) throw new DOMException('aborted', 'AbortError');
     const image: PresentImage = { width: res.width, height: res.height, channels: res.info.channels, data, region: res.region, scale: res.scale };

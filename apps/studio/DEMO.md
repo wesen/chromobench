@@ -23,7 +23,8 @@ URL options: `?layout=classic|darkroom|simple|lab|tiny|roll|finish|looks` (the s
 Enlarger and a collapsed "Digital (after the print)" palette; View ▸ Layout switches in place and also lists layouts
 the assistant wrote and you accepted), `?engine=gpu|reference|mock` (default: GPU when WebGPU works, else the
 reference engine), `?long=N` (long side of the working image on the GPU, default 4000; `0` = the file's own size),
-`?canvas2d` (present without WebGPU), `?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?debug`
+`?gpuBudget=MB` (the GPU engine's memory budget instead of the one sized from the adapter — an eighth of the device
+memory within 512 MiB … 2 GiB; try a smaller machine's), `?canvas2d` (present without WebGPU), `?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?debug`
 (the diagnostics journal keeps debug events — every render — and the GPU engine wraps every queue submit in error
 scopes; slower, for chasing a WebGPU error).
 

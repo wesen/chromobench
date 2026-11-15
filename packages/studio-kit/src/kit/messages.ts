@@ -112,7 +112,10 @@ export function explainError(err: unknown, o: { label?: string } = {}): Explaine
         return 'Cancelled';
       case 'E_TIMEOUT':
         return 'That took too long and was stopped';
-      case 'E_EVAL': case 'E_DEVICE_LOST': case 'E_GPU_OOM': case 'E_KERNEL_COMPILE':
+      case 'E_GPU_OOM':
+        // CHB-041: the engine already let go of the other pictures' memory and tried again
+        return 'Not enough graphics memory to compute this picture, even after freeing what the other pictures held';
+      case 'E_EVAL': case 'E_DEVICE_LOST': case 'E_KERNEL_COMPILE':
         return 'The picture could not be computed (a problem with the graphics card)';
       case 'E_NO_FRAME':
         return 'Open or select a picture first';

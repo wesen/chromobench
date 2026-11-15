@@ -142,6 +142,15 @@ export function viewPaint(
         x.value = v;
         paintOne(x);
       });
-  return { paint, paintCover, paintOverlays };
+  /** No picture (CHB-041): the presenter lets its images go and the stage is drawn without one. */
+  function blank(): void {
+    V.after = null;
+    V.before = null;
+    presenter.clear?.();
+    colours.stage = themeStage();
+    presenter.draw({ docW: V.nw, docH: V.nh, cx: (V.W / 2 - V.ox) / V.s, cy: (V.H / 2 - V.oy) / V.s, zoom: V.s, dpr: V.dpr, split: null }, colours);
+    paintCover();
+  }
+  return { paint, paintCover, paintOverlays, blank };
 }
 export type Paint = ReturnType<typeof viewPaint>;

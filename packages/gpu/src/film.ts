@@ -64,16 +64,32 @@ export class FilmGpu {
   private readonly rt: GpuRuntime;
   private readonly blur: Blur;
   private readonly buffers = new Map<string, GPUBuffer>();
+  private readonly unreclaim: () => void;
   constructor(rt: GpuRuntime, blur: Blur) {
     this.rt = rt;
     this.blur = blur;
+    // the textures of ones count in the budget and go when memory runs short (CHB-041): the oldest sizes first, the
+    // newest only in a recovery (they are made again on the next grain)
+    this.unreclaim = rt.addReclaimer((need, all) => {
+      let freed = 0;
+      const sizes = [...this.onesBySize.keys()];
+      for (const k of all ? sizes : sizes.slice(0, -1)) {
+        if (freed >= need) break;
+        const t = this.onesBySize.get(k)!;
+        freed += rt.textures.bytesOfLive(t);
+        this.onesBySize.delete(k);
+        rt.textures.discard(t);
+      }
+      return freed;
+    });
   }
 
   /** Forget device objects (device loss, dispose). */
   drop(): void {
+    this.unreclaim();
     for (const b of this.buffers.values()) b.destroy();
     this.buffers.clear();
-    for (const t of this.onesBySize.values()) t.destroy();
+    for (const t of this.onesBySize.values()) this.rt.textures.discard(t);
     this.onesBySize.clear();
   }
 
@@ -314,7 +330,8 @@ export class FilmGpu {
    * thumbnail's grain (160×107) and the viewer's grain take turns, and each pass awaits its pipeline between getting
    * this texture and submitting, so the other render destroyed it under a pending submit — the owner's repeated
    * "Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit". Now each size
-   * keeps its own, and one let go is retired (destroyed when no GPU work is in flight).
+   * keeps its own, and one let go is retired (destroyed when no GPU work is in flight). CHB-041: from the texture pool,
+   * so they count in the budget (a 4000-px one is 171 MB), and discarded (retired) when let go.
    */
   private readonly onesBySize = new Map<string, GPUTexture>();
   private static readonly ONES_KEPT = 4;
@@ -327,13 +344,13 @@ export class FilmGpu {
       this.onesBySize.set(key, hit);
       return hit;
     }
-    const t = this.rt.device.createTexture({ label: `film.grain.ones ${key}`, size: [like.width, like.height], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    const t = this.rt.textures.acquire({ format: 'rgba32float', w: like.width, h: like.height, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }, `film.grain.ones ${key}`);
     this.rt.device.queue.writeTexture({ texture: t }, new Float32Array(like.width * like.height * 4).fill(1), { bytesPerRow: like.width * 16 }, [like.width, like.height]);
     this.onesBySize.set(key, t);
     while (this.onesBySize.size > FilmGpu.ONES_KEPT) {
       const [k, old] = this.onesBySize.entries().next().value!;
       this.onesBySize.delete(k);
-      this.rt.retire(old);
+      this.rt.textures.discard(old);
     }
     return t;
   }

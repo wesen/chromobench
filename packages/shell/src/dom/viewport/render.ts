@@ -15,7 +15,7 @@ import type { Pointer } from './pointer.ts';
 export function viewRender(
   { m, p, rt, st, vid, el, lab, busy, msg, presenter, V, api }: ViewportParts,
   { layout, transform }: Geometry,
-  { paint, paintCover, paintOverlays }: Paint,
+  { paint, paintCover, paintOverlays, blank }: Paint,
   { activeTool, paintTool, updateCursor }: Pointer,
 ) {
   // ── renders: the renderable from state (a cell), through rt.renders; stale answers never show ──
@@ -30,6 +30,12 @@ export function viewRender(
   /** the cover's renderable and key (a mask overlay), requested with the picture's target */
   let cover: { r: unknown; key: string } | null = null;
   const requested = { after: '', before: '', cover: '' };
+  /** which picture the shown render is of (the bridge's ident: a frame), null when unknown or none (CHB-041) */
+  let shownIdent: string | null = null;
+  const identOf = (r: unknown): string | null => {
+    const b = rt.renders.bridgeFor(r);
+    return b?.ident ? b.ident(r) : null;
+  };
   const resolve = (x: unknown, s: any): unknown => (typeof x === 'function' ? (x as (s: any) => unknown)(s) : x);
   function visibleRegion(): Rect {
     const [x0, y0] = api.screenToDoc(0, 0);
@@ -79,6 +85,8 @@ export function viewRender(
         present: (res: Rendered, info) => {
           msg.hidden = true;
           if (which === 'after') {
+            delete el.dataset['error'];
+            shownIdent = identOf(r);
             V.after = res.image;
             V.pass = info.pass;
             V.key = k;
@@ -105,6 +113,21 @@ export function viewRender(
           msg.textContent = rt.explainError?.(e, {})?.text ?? raw.replace(/^[A-Z][A-Z0-9]*[_-][A-Z0-9_-]*:\s*/, '');
           msg.title = `Technical: ${raw}`;
           msg.hidden = false;
+          if (which === 'after') {
+            const code = (e as { code?: unknown })?.code;
+            el.dataset['error'] = typeof code === 'string' ? code : 'error';
+            // the picture shown is another one's (another frame): take it down, so the message stands for this picture
+            // and the previous picture never shows under this one's name (CHB-041, CHB-037 P9-11)
+            const failed = identOf(r);
+            if (failed !== null && failed !== shownIdent && V.after) {
+              shownIdent = null;
+              V.key = null;
+              V.fullKey = null;
+              delete el.dataset['rendered'];
+              blank();
+              paintOverlays();
+            }
+          }
           rt.emit('renderError', { viewport: vid, error: e });
         },
       });
@@ -140,6 +163,7 @@ export function viewRender(
         want = null;
         V.after = null;
         V.key = null;
+        shownIdent = null;
         requested.after = '';
         if (presenter instanceof Canvas2DPresenter) presenter.clear();
         paintOverlays();

@@ -17,9 +17,41 @@ export interface GpuCaps {
   features: { f16: boolean; float32Filterable: boolean; timestamps: boolean };
   /** Our own memory budget; WebGPU cannot report free memory. */
   budgetBytes: number;
+  /** how budgetBytes was chosen (CHB-041: budgetFor's rule with its inputs, or "given") */
+  budgetRule: string;
 }
 
+/** The floor of every budget (and the budget before CHB-041): what SwiftShader runs the whole browser suite in. */
 export const DEFAULT_BUDGET = 512 * 2 ** 20;
+
+/**
+ * The budget rule (CHB-041). WebGPU reports no memory size, so the engine sizes its own budget from what the platform
+ * says: the device memory the browser reports (navigator.deviceMemory, GiB, rounded by the browser; ASSUMED when it
+ * reports none) times FRACTION, no more than the adapter's maxBufferSize (Chrome's tier for the adapter: 4 GiB on Apple
+ * Silicon, 1 GiB on SwiftShader), within [FLOOR, CAP] — a software adapter (SwiftShader, memory of the CPU) within
+ * [FLOOR, SOFTWARE_CAP]. A GPU on unified memory (Apple Silicon) shares the RAM with the system, the browser and the
+ * photographer's other programs: an eighth of it is what the studio takes for textures.
+ */
+export const BUDGET_RULE = Object.freeze({ fraction: 1 / 8, floor: DEFAULT_BUDGET, cap: 2 * 2 ** 30, softwareCap: 2 ** 30, assumedMemoryGiB: 4 });
+
+/** The engine's budget for an adapter and the device memory the browser reports (GiB; undefined: not reported). */
+export function budgetFor(a: { maxBufferSize: number; fallback: boolean }, deviceMemoryGiB?: number | null): { bytes: number; rule: string } {
+  const R = BUDGET_RULE;
+  const reported = typeof deviceMemoryGiB === 'number' && deviceMemoryGiB > 0;
+  const mem = reported ? deviceMemoryGiB : R.assumedMemoryGiB;
+  const cap = a.fallback ? R.softwareCap : R.cap;
+  const share = mem * 2 ** 30 * R.fraction;
+  const bytes = Math.floor(Math.max(R.floor, Math.min(cap, a.maxBufferSize, share)) / 2 ** 20) * 2 ** 20;
+  const MB = (x: number): string => `${Math.round(x / 2 ** 20)} MiB`;
+  const rule = `min(${mem} GiB device memory${reported ? '' : ' (assumed: not reported)'} × 1/8, maxBufferSize ${MB(a.maxBufferSize)}) within [${MB(R.floor)}, ${MB(cap)}]${a.fallback ? ' (software adapter)' : ''} = ${MB(bytes)}`;
+  return { bytes, rule };
+}
+
+/** navigator.deviceMemory where there is one (GiB), else undefined. */
+function deviceMemory(): number | undefined {
+  const n = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined;
+  return typeof n?.deviceMemory === 'number' ? n.deviceMemory : undefined;
+}
 
 export function unavailableCaps(why: string, budgetBytes = DEFAULT_BUDGET): GpuCaps {
   return {
@@ -31,7 +63,7 @@ export function unavailableCaps(why: string, budgetBytes = DEFAULT_BUDGET): GpuC
       maxComputeWorkgroupStorageSize: DEFAULT_LIMITS.maxComputeWorkgroupStorageSize, maxComputeInvocationsPerWorkgroup: DEFAULT_LIMITS.maxComputeInvocationsPerWorkgroup,
     },
     features: { f16: false, float32Filterable: false, timestamps: false },
-    budgetBytes,
+    budgetBytes, budgetRule: 'no device',
   };
 }
 
@@ -61,14 +93,28 @@ export function backendOrder(choice: AccelChoice, caps: Pick<GpuCaps, 'available
  * the engine started last (a node's op and id): with renders in flight it is a hint, not a proof.
  */
 export type GpuEvent =
-  | { kind: 'device'; name: string; adapter: GpuCaps['adapter']; features: string[]; limits: Record<string, number>; requested: { features: string[]; limits: Record<string, number> } }
+  | { kind: 'device'; name: string; adapter: GpuCaps['adapter']; features: string[]; limits: Record<string, number>; requested: { features: string[]; limits: Record<string, number> }; budget?: { bytes: number; rule: string } }
   | { kind: 'error'; type: 'validation' | 'out-of-memory' | 'internal' | 'unknown'; message: string; during: string | null; scope?: 'submit' }
   | { kind: 'lost'; reason: string; message: string }
-  | { kind: 'recreate'; why: string };
+  | { kind: 'recreate'; why: string }
+  | GpuMemoryEvent;
+
+/**
+ * The engine's memory (CHB-041), in bytes: each render's high-water mark (`render`), textures of frames not on screen
+ * let go to make room (`evict`), and the recovery after an E_GPU_OOM (`recover`: everything not needed let go and the
+ * render tried once more; ok false when that failed too). `limit` is the budget, `live` what is allocated after.
+ */
+export type GpuMemoryEvent =
+  | { kind: 'memory'; what: 'render'; during: string; peak: number; live: number; limit: number; resident: number }
+  | { kind: 'memory'; what: 'evict'; freed: number; frames: number; live: number; limit: number; during: string | null }
+  | { kind: 'memory'; what: 'recover'; ok: boolean; freed: number; live: number; limit: number; during: string; message: string };
 
 export interface RuntimeOptions {
   forceFallback?: boolean;
+  /** The engine's memory budget; default budgetFor(adapter, navigator.deviceMemory) (CHB-041). */
   budgetBytes?: number;
+  /** The device memory to size the budget for (GiB; tests); default navigator.deviceMemory. */
+  deviceMemory?: number;
   /** Injected navigator.gpu (tests). */
   gpu?: GPU;
   /** Receives the device's events (a host's diagnostics journal); kept for a device made again after a loss. */
@@ -97,10 +143,13 @@ export class GpuRuntime {
   readonly caps: GpuCaps;
   /** the work started last (the engine sets it: a node's op and id), named in the errors this runtime reports */
   activity: string | null = null;
+  /** the host's events hook (a diagnostics journal), or null */
+  readonly events: ((e: GpuEvent) => void) | null;
   private constructor(device: GPUDevice, caps: GpuCaps, opts: RuntimeOptions = {}) {
     this.device = device;
     this.caps = caps;
     const events = opts.events;
+    this.events = events ?? null;
     if (events) {
       device.addEventListener('uncapturederror', (ev) => {
         const err = (ev as GPUUncapturedErrorEvent).error;
@@ -116,6 +165,7 @@ export class GpuRuntime {
     this.timer = new GpuTimer(device);
     this.buffers.retire = (b) => this.retire(b);
     this.textures.retire = (t) => this.retire(t);
+    this.budget.onShort = (need) => void this.reclaim(need);
     device.lost.then((info) => {
       this.lost = info;
       for (const cb of this.lostCbs) cb(info);
@@ -125,7 +175,6 @@ export class GpuRuntime {
   /** Probe without creating a device: returns caps.available = false with a reason on failure. */
   static async create(opts: RuntimeOptions = {}): Promise<GpuRuntime> {
     const gpu = opts.gpu ?? (typeof navigator !== 'undefined' ? navigator.gpu : undefined);
-    const budgetBytes = opts.budgetBytes ?? DEFAULT_BUDGET;
     if (!gpu) throw new ChromobenchError({ code: 'E_EVAL', message: 'this browser has no WebGPU', hint: 'use the reference engine' });
     let adapter = opts.forceFallback ? null : await gpu.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter) adapter = await gpu.requestAdapter({ forceFallbackAdapter: true });
@@ -140,6 +189,10 @@ export class GpuRuntime {
       throw new ChromobenchError({ code: 'E_EVAL', message: `requestDevice failed: ${e instanceof Error ? e.message : String(e)}` });
     }
     const L = device.limits;
+    const budget = opts.budgetBytes !== undefined
+      ? { bytes: opts.budgetBytes, rule: `given: ${Math.round(opts.budgetBytes / 2 ** 20)} MiB` }
+      // the adapter's maxBufferSize (the device's is what negotiate asked for, at most 1 GiB)
+      : budgetFor({ maxBufferSize: (adapter.limits as unknown as Record<string, number>)['maxBufferSize'] ?? L.maxBufferSize, fallback }, opts.deviceMemory ?? deviceMemory());
     const caps: GpuCaps = {
       available: true,
       adapter: { vendor: info.vendor, architecture: info.architecture, description: info.description, fallback },
@@ -153,7 +206,7 @@ export class GpuRuntime {
         float32Filterable: device.features.has('float32-filterable'),
         timestamps: device.features.has('timestamp-query'),
       },
-      budgetBytes,
+      budgetBytes: budget.bytes, budgetRule: budget.rule,
     };
     if (opts.events) {
       const lim: Record<string, number> = {};
@@ -165,6 +218,7 @@ export class GpuRuntime {
         kind: 'device', name: [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') || 'GPU', adapter: caps.adapter,
         features: [...device.features].map(String).sort(), limits: lim,
         requested: { features: [...requiredFeatures].map(String), limits: { ...(requiredLimits as Record<string, number>) } },
+        budget,
       });
     }
     return new GpuRuntime(device, caps, opts);
@@ -226,6 +280,37 @@ export class GpuRuntime {
     if (this.inFlight === 0 || this.destroyed) o.destroy();
     else this.retired.push(o);
   }
+  // ── memory (CHB-041) ──
+  // Who keeps GPU memory between renders that the runtime may take back (the engine's resident textures, the film
+  // grain's textures of ones): asked in the order they were added when an allocation does not fit after the pools'
+  // free lists are trimmed (`all` false: only what is not on screen nor in use), and by relieve() after an E_GPU_OOM
+  // (`all` true). Each returns the bytes it let go of.
+  private readonly reclaimers: ((need: number, all: boolean) => number)[] = [];
+  /** Adds a reclaimer; returns its removal (an engine disposed on a shared runtime). */
+  addReclaimer(f: (need: number, all: boolean) => number): () => void {
+    this.reclaimers.push(f);
+    return () => {
+      const i = this.reclaimers.indexOf(f);
+      if (i >= 0) this.reclaimers.splice(i, 1);
+    };
+  }
+  /** Asks the reclaimers for `need` bytes (frames not on screen first); returns what they let go of. */
+  reclaim(need: number, all = false): number {
+    let freed = 0;
+    for (const f of this.reclaimers) {
+      if (freed >= need) break;
+      freed += f(need - freed, all);
+    }
+    return freed;
+  }
+  /** After an E_GPU_OOM: everything kept between renders and every released object let go; returns the bytes. */
+  relieve(): number {
+    const before = this.budget.live;
+    this.reclaim(Infinity, true);
+    this.budget.trimFree(0);
+    return before - this.budget.live;
+  }
+
   /** objects waiting for the work in flight to end (tests) */
   get retiring(): number {
     return this.retired.length;

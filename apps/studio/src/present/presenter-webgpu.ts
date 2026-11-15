@@ -164,6 +164,20 @@ export class WebGpuPresenter implements Presenter {
     this.before = before ? this.upload(before) : null;
   }
 
+  /** No picture (CHB-041): the images go, and the canvas shows the stage colour until the next one. */
+  clear(): void {
+    this.main?.tex.destroy();
+    this.before?.destroy();
+    this.main = null;
+    this.before = null;
+    if (!this.context || this.canvas.width === 0 || this.canvas.height === 0) return;
+    const s = this.last?.colours.stage ?? [0, 0, 0];
+    const enc = this.device.createCommandEncoder();
+    const pass = enc.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [s[0], s[1], s[2], 1] }] });
+    pass.end();
+    this.device.queue.submit([enc.finish()]);
+  }
+
   private uniforms(view: ViewTransform, colours: Colours, w: number, h: number): Float32Array {
     const img = this.main!.img;
     return new Float32Array([
