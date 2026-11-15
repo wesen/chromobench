@@ -1101,3 +1101,56 @@ E_GPU_OOM with two 24 MP NEFs (≈ 171 MB per open camera file in a 512 MB budge
 
 ### Technical details
 - Report zip: `README.txt`, `journal.txt`, `environment.json`, `report.json`, documents, previews, optional originals.
+
+## Step 20: CHB-041 merged — GPU memory residency; the owner's two raw files open without E_GPU_OOM
+
+CHB-041 (agent branch task/chb-041-gpu-memory, 9379164) is merged (4c4a411). Out-of-memory errors with two 24-megapixel
+raw files came from three things holding the 512 MB budget: a full-size source texture per frame even when only its
+thumbnail was drawn (164 MB for a 4000 px frame), 160 MB of released upload staging buffers that were never reclaimed
+because only the texture pool was trimmed, and the grain's textures of ones outside the budget. The fix: one budget for
+both pools, sized from the adapter (1/8 of device memory, 512 MiB floor, 2 GiB cap, 1 GiB for software adapters,
+`?gpuBudget=MB` override); residency per frame with proxies (the source sampled on a render's grid, bit-exact); frames
+not on screen evicted first; on E_GPU_OOM free everything not needed and retry once, else a plain error and the old
+picture taken down. Metal, the owner's two files: peak 512 MB → ~215 MB, textures live 328 MB → 47 MB, no errors.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 19)
+
+**Assistant interpretation:** Merge the finished GPU-memory ticket and check the merge.
+
+**Inferred user intent:** Open several raw files without the graphics-memory error the owner's father hit.
+
+### What I did
+- `merge-phase.sh task/chb-041-gpu-memory …` → 4c4a411 (clean).
+- Checks on the merge: typecheck, lint, gen:check, test — 142 files, 3425 passed, 19 skipped.
+- Closed P9-11.
+
+### Why
+- P9-11 was the owner's blocking bug.
+
+### What worked
+- The agent's measurements: the owner's scenario at both the 2 GiB and the old 512 MiB budget without errors.
+
+### What didn't work
+- The agent's first full SwiftShader browser run had 7 failures because it edited files under the running servers;
+  the affected specs reran clean (38 passed). Not rerun on the merge.
+
+### What I learned
+- Half-float intermediates were measured and rejected: ~3 eight-bit levels on the display, outside parity tolerance.
+- Cost-aware eviction would rank sources and proxies like LRU; it waits for cached intermediates (checkpoints).
+
+### What was tricky to build
+- See CHB-041 diary Steps 2–4 (leases, pins, deferred destroy, never showing the wrong picture).
+
+### What warrants a second pair of eyes
+- A viewport no longer shown keeps its last frame pinned until it renders again.
+
+### What should be done in the future
+- Browser suite and goldens on the integration branch at the next integration run.
+
+### Code review instructions
+- packages/gpu/src/residency.ts, pool.ts (Budget), e2e/memory.spec.ts; CHB-041 diary.
+
+### Technical details
+- Journal rows GPU_MEMORY, GPU_MEMORY_HIGH, GPU_EVICT, GPU_OOM_RECOVERED, GPU_OOM.
