@@ -98,6 +98,22 @@ describe('ChatSession', () => {
     p.dsl.dispose();
   });
 
+  it('the card says the change in the host\'s words when it has them (the studio passes its History words)', async () => {
+    const p = await page({ mode: 'ask' });
+    const model = new ScriptedModel([{ evals: [{ code: EDIT }] }, { text: 'Done.' }]);
+    const words = (m: { op: string; path?: string; value?: unknown }, before: object): string =>
+      m.op === 'set' && m.path === 'main.params.time_s' ? `Time ${(before as { stages: { darkroom: { stack: { items: { main: { params: { time_s: number } } } } } } }).stages.darkroom.stack.items.main.params.time_s} → ${String(m.value)} s` : '';
+    const chat = new ChatSession({ host: { ...hostOf(p), describe: words as never }, model, system: 'x' });
+    const turn = chat.send('darker');
+    await until(() => chat.state.status === 'waiting');
+    const step = chat.state.items.find((i) => i.kind === 'step')!;
+    if (step.kind !== 'step') throw new Error('no step');
+    expect(step.approval?.changes.map((c) => c.text)).toEqual(['Time 10 → 12.6 s']);
+    chat.decide(step.id, step.approval!.seqs, 'reject');
+    await turn;
+    p.dsl.dispose();
+  });
+
   it('an unticked step is rejected; a stale approval shows its problem; a decision in another panel resumes the step', async () => {
     const p = await page({ mode: 'ask' });
     const two = `frame.propose([set('main.params.time_s', 12.6), set('lights.params.logH', [0.05, 0, 0])])\nreturn 2`;

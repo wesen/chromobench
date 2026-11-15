@@ -56,7 +56,7 @@ test('the scripted demo: streamed text, step cards with a shown image, an approv
   await expect(page.locator('.cb-chat-look img').first()).toBeVisible();
   const card = page.locator('.cb-chat-approval');
   await expect(card).toBeVisible();
-  await expect(card).toContainText('lights.params.logH');
+  await expect(card).toContainText('Printer lights'); // the card in the History's words (CHB-037 P6b)
   expect(await page.evaluate(() => window.chromobench.get('lights.params.logH'))).toEqual(before);
   await card.getByRole('button', { name: 'Approve' }).click();
   await expect(page.locator('#chat')).toHaveAttribute('data-status', 'idle');
@@ -125,4 +125,34 @@ test('the Claude transport: key typed at runtime, streamed reply from the (route
   await page.click('#chat-stop');
   await expect(page.locator('#chat')).toHaveAttribute('data-status', 'idle');
   await expect(page.locator('.cb-chat-notice').last()).toHaveText('Stopped.');
+});
+
+// CHB-037 P6b: the agent's workbench from eval alone — the command table, a command run as the agent, the screen
+// with live values, and a layout written in the sandbox that the photographer accepts in a dialog.
+test('the workbench: wb.commands, wb.run, wb.screen().explain(), and a layout the agent writes, proposed and used', async ({ page }) => {
+  await boot(page);
+  type R = { yaml: string; error?: { code: string; message: string } };
+  const ev = (code: string) => page.evaluate((c) => window.chromobench.eval(c) as Promise<R>, code);
+  const one = (r: R): unknown => {
+    expect(r.error, r.yaml).toBeUndefined();
+    const l = r.yaml.split('\n')[0]!;
+    return JSON.parse(l.startsWith("'") ? l.slice(1, -1).replace(/''/g, "'") : l);
+  };
+  const a = one(await ev(`const c = await wb.commands(); await wb.run('module.print'); const s = await wb.screen(); return JSON.stringify({ n: c.length, hasPick: c.some((x) => x.id === 'frame.pick'), module: s.module, time: s.controls.some((x) => x.path === 'main.params.time_s'), text: (await wb.screen().explain()).includes('module print') })`)) as Record<string, unknown>;
+  expect(a).toMatchObject({ hasPick: true, module: 'print', time: true, text: true });
+  expect(await page.evaluate(() => window.chromobench.rt.module)).toBe('print');
+  // ask mode: a document command the agent runs waits for approval
+  const rated = one(await ev(`return JSON.stringify(await wb.run('frame.rate', 4))`)) as { how: string };
+  expect(rated.how).toBe('proposed');
+  // a layout written in the sandbox: built by the studio (its passes), then proposed; he accepts it
+  const b = one(await ev(`const b = await wb.layouts.build({ id: 'just-print', label: 'Just the print', build: (ck, cb) => cb.studio('Chromobench').menus(...cb.menus.standard()).module(ck.module('main', { label: 'Print', stages: ['darkroom'] }).center(cb.viewer(cb.sel.frame.print(), { tools: ['probe'] })).right(ck.dock.column({ width: 300 }, cb.panels.controls('darkroom'), cb.panels.history().hidden(cb.sel.doc.not())))) }); mem.l = b.layout; const u = await wb.layouts.use(b, { why: 'fewer panels' }); return JSON.stringify({ ok: b.ok, errors: b.errors, status: u.status })`)) as Record<string, unknown>;
+  expect(b).toMatchObject({ ok: true, errors: [], status: 'proposed' });
+  const dlg = page.getByRole('dialog', { name: 'Use the assistant’s layout?' });
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole('button', { name: 'Use Just the print' }).click();
+  await page.waitForFunction(() => document.body.dataset['layout'] === 'just-print');
+  await idle(page);
+  const c = one(await ev(`const l = await wb.layout(); const s = await wb.screen(); return JSON.stringify({ id: l.id, agent: l.agent, modules: s.modules.map((m) => m.id), frame: s.frame })`)) as Record<string, unknown>;
+  expect(c).toMatchObject({ id: 'just-print', agent: true, modules: ['main'] });
+  expect(c['frame']).toBeTruthy();
 });
