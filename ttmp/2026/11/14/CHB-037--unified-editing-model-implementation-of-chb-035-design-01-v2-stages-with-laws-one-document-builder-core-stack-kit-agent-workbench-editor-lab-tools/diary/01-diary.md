@@ -869,3 +869,64 @@ robust tests, and WGSL includes resolved by one linker shared by the engine and 
 
 ### Technical details
 - CPU timings (P3b, loaded machine): slider step 4.2–9.2 s → 0.74–1.29 s; draft 4.1–7.0 s → 0.45–0.78 s.
+
+## Step 16: P9 merged — the unified studio, verified end to end
+
+Integration is done. The browser suite passes 145/145 (2 benches skipped) on SwiftShader and on the M1 Max's Metal
+adapter; walkthroughs cover a negative scan from import to a 16-bit export through every stage, a roll with links and
+sync, a camera file through the scene stage, and an agent with only `eval` building and mounting "a simpler screen".
+A persona session recommends Classic as the default for now. The integration branch holds the whole ticket.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the integration phase and close the implementation.
+
+**Inferred user intent:** A working, verified studio on the unified core.
+
+**Commit (code):** b13cf3c — "Merge P9 integration (…)"
+
+### What I did
+- P9 was interrupted by the account's weekly usage limit (HTTP 429, "You've hit your weekly limit") while rewriting
+  the handoff; after the reset I resumed it with SendMessage, asking it to commit and diary first.
+- Merged with `merge-phase.sh`; final checks on the integration branch: typecheck 0 errors, lint, gen:check (26),
+  vitest 137 files / 3383 passed / 19 skipped, goldens 66/66; ticket tasks 19 open / 4 done (persona findings and
+  owner decisions).
+
+### Why
+- N/A
+
+### What worked
+- Undoing all 14 steps of the scan walkthrough returns the first print's exact graph node; redoing returns the
+  finished node (the one compiler and the one log together).
+
+### What didn't work
+- The darkroom export at 4000 px stays at ~1650 ms (exact tiling); recovering it needs tile planning from the graph's
+  live-texture peak — a GPU-engine task.
+
+### What I learned
+- Running nine phases as worktree branches merged into one integration branch kept every merge small; the only
+  recurring conflict was the ticket changelog, and the only silent one was two change notes with the same number.
+
+### What was tricky to build
+- Keeping each phase agent's scope disjoint while the repository was red between the contract cut (P2a) and the studio
+  phase (P5b-1).
+
+### What warrants a second pair of eyes
+- Owner decisions (design §38 and P9): the default arrangement (Classic now; Darkroom first once it has crop, spots,
+  scene controls, ring-around and test strip), the scene stage, selections, sync default, darkroom row order, medium
+  presets for the deleted film-stock looks.
+
+### What should be done in the future
+- The open CHB-037 tasks (P9 persona findings: P9-1 mask tool stays armed, P9-9 Apply Print Settings source frame,
+  P9-11 GPU memory after ~6 frames, P9-5 crop/spots in Darkroom first, P9-12 white balance before the film, P9-10 the
+  Output module, …); darkroom export speed; a PR from `task/chb-037-unified-model` to main when the owner wants it.
+
+### Code review instructions
+- Start with `docs/HANDOFF.md`, then `reference/02-integration-report.md`, then the phase diaries 02–17.
+- Validate: `pnpm typecheck && pnpm lint && pnpm gen:check && pnpm test && node tools/goldens/render.ts --check`;
+  `CI=1 pnpm test:browser` (headless); `REAL_GPU=1 CI=1 pnpm test:browser` under the GPU lock.
+
+### Technical details
+- Integration branch `task/chb-037-unified-model` at b13cf3c (plus this step), not pushed.
