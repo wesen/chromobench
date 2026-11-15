@@ -92,3 +92,12 @@ P6a: the DSL and the agent on contract 1.0 and the values log — frames are vie
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/agent/src/worker/client.ts — AgentDocs, docs snapshots, replay
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/dsl/src/history.ts — The agent's door into the log
 
+
+## 2026-11-15
+
+P5b-2: cb.kits.stack, the stage policy pass (CB-S101/S102), arrangements (classic Edit/Scene, darkroom digital palette), ratings in the document tier, History jump confirmation (commits ac8781c, 190f4b1, 0e3b454)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p5b2/packages/studio-kit/kits/stack/src/kit.ts — the stack kit
+
