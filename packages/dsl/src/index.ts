@@ -10,5 +10,6 @@ export { assemble } from './results/assemble.ts';
 export { encodePng } from './results/png.ts';
 export { usageReport, formatUsage, type UsageReport } from './telemetry.ts';
 export { docsProvider } from './docs/provider.ts';
+export { defineLookSource, type LookSourceOptions } from './cblook.ts';
 export { VOCABULARY } from './docs/vocabulary.ts';
 export { genInstructions, genReference } from './docs/generate.ts';
