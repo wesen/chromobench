@@ -2,7 +2,6 @@
 // three density planes together. 'patch' copies the best-matching nearby patch (ring SSD over all
 // channels) and corrects the seam with a harmonic density offset (a multiplicative transmittance gain);
 // 'diffuse' fills harmonically. 'neutral' (v1, guide) is not implemented and falls back to 'patch'.
-import type { DustSpot as RecipeDustSpot } from '@chromobench/contract';
 import { components, distanceToSet } from './kernels.ts';
 import type { DustSpot } from './specks.ts';
 
@@ -116,13 +115,13 @@ function findPatch(D: Float32Array[], W: number, H: number, hole: Uint8Array, lo
   return Number.isFinite(best) ? [bdx, bdy] : null;
 }
 
-/** Rasterises recipe spots (x, y, r in sensor px) into a target mask of the plane at origin/scale. */
-export function spotsMask(spots: (DustSpot | RecipeDustSpot)[], w: number, h: number, o: { x0?: number; y0?: number; scale?: number } = {}): Uint8Array {
+/** Rasterises spots (detected specks by their pixels; heal spots by x, y, r in px, pixel centres at i + 0.5) into a target mask of the plane at origin/scale. */
+export function spotsMask(spots: readonly (DustSpot | { x: number; y: number; r: number })[], w: number, h: number, o: { x0?: number; y0?: number; scale?: number } = {}): Uint8Array {
   const m = new Uint8Array(w * h);
   const s = o.scale ?? 1;
   for (const sp of spots) {
     if ('pix' in sp) { for (const p of sp.pix) m[p] = 1; continue; }
-    const cx = (sp.x - (o.x0 ?? 0) + 0.5) * s - 0.5, cy = (sp.y - (o.y0 ?? 0) + 0.5) * s - 0.5, r = sp.r * s;
+    const cx = (sp.x - (o.x0 ?? 0)) * s - 0.5, cy = (sp.y - (o.y0 ?? 0)) * s - 0.5, r = sp.r * s;
     for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(h - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(w - 1, Math.ceil(cx + r)); x++) {
       if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) m[y * w + x] = 1;
     }

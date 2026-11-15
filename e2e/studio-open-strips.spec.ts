@@ -121,7 +121,7 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   await opened(page, 3, 120_000);
   const frames = await page.evaluate(() => {
     const s = window.chromobench.state() as any;
-    return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.recipes[id].view.frame.crop, orientation: s.recipes[id].view.frame.orientation }));
+    return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.docs[id].geometry.crop, orientation: s.docs[id].geometry.orientation }));
   });
   expect(frames.map((f: { name: string }) => f.name)).toEqual(['strip-31.tif · 1/3', 'strip-31.tif · 2/3', 'strip-31.tif · 3/3']);
   // wide frames on a vertical strip, scanned through the base and upside down: mirrored top to bottom by default (F28)
@@ -138,7 +138,7 @@ test('F20: strip frames open upright at a picture\'s working size; Frame ▸ Rot
   await expect(page.locator('#notes')).toContainText('strip of 3 frames, film base read between the frames');
   await page.screenshot({ path: test.info().outputPath('01-synthetic-strip-frame2-upright.png') });
   // Frame ▸ Rotate Right, then Rotate Left: back as it was
-  const orientation = () => page.evaluate(() => (window.chromobench.state() as any).recipes[window.chromobench.studio.current!].view.frame.orientation);
+  const orientation = () => page.evaluate(() => (window.chromobench.state() as any).docs[window.chromobench.studio.current!].geometry.orientation);
   await menu(page, 'Frame', 'frame.rotateRight');
   await idle(page);
   expect(await orientation()).toBe('transpose');

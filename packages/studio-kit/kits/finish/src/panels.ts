@@ -1,24 +1,23 @@
 // cb.kits.finish: the builder calls (split from kit.ts, CHB-032): the finish viewer and the crop, spot and tones
 // panels, built from ck.ui and cb.arg only.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { setPath, type FrameRecipe } from '@chromobench/contract';
+import type { Document } from '@chromobench/contract';
 import type { Ck } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { frameRef, type ImageHandle } from '../../../src/handles.ts';
 import { ASPECTS } from './geometry.ts';
-import { type SpotMode, FINISHING_PATHS, type SpotRef, spotsOf, cropProblem } from './state.ts';
+import { type SpotMode, FINISHING_PATHS, type SpotRef, spotsOf, cropProblem, withoutFinishing } from './state.ts';
 import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 
 export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
   const { sizes } = F;
   // ── builder calls ──
-  /** the print as the finish module shows it: retouch and finishing dropped while finish.toggle is on */
+  /** the print as the finish module shows it: the print stage and the dust turned off while finish.toggle is on */
   const shown = (s: any): ImageHandle | null => {
     const h = cb.sel.frame(s)?.print() ?? null;
-    if (!h || !s.finish?.bypass || h.recipe === 'initial') return h;
-    const r = setPath(setPath(h.recipe, 'retouch.spots', {}), 'finishing.values', {});
-    return frameRef(h.frame, r, `${h.expr} /* before finishing */`).print();
+    if (!h || !s.finish?.bypass || typeof h.doc !== 'object') return h;
+    return frameRef(h.frame, withoutFinishing(h.doc), `${h.expr} /* before finishing */`).print();
   };
   const viewer = (o: Record<string, unknown> = {}) => cb.viewer(shown, { id: 'finish', tools: ['crop', 'spot'], compare: true, ...o } as any);
   const aspectOptions = (list: readonly string[]) => list.map((a) => ({ value: a, label: a === 'original' ? 'Original' : a === 'free' ? 'Free' : a }));
@@ -28,9 +27,9 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.ui.select({ options: aspectOptions(o.aspects ?? ASPECTS), bind: (s: any) => s.finish.crop.aspect, set: 'crop.aspect', label: 'Aspect' } as any),
       ck.ui.checkbox({ label: 'Lock aspect', switch: true, bind: (s: any) => s.finish.crop.locked } as any),
       ck.text((s: any) => {
-        const r = s.recipes?.[sel.current(s) ?? ''] as FrameRecipe | undefined;
+        const r = s.docs?.[sel.current(s) ?? ''] as Document | undefined;
         if (!r) return 'No frame';
-        const f = r.view.frame;
+        const f = r.geometry;
         return `${f.crop ? `${f.crop.w} × ${f.crop.h} px` : 'Whole frame'} · ${f.angle_deg.toFixed(1)}° · ${f.orientation}`;
       }, { dim: true, class: 'cb-crop-readout' } as any),
       ck.row({ class: 'cb-finish-angle' },
@@ -46,7 +45,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.text((s: any) => {
         const f = sel.current(s);
         const z = f ? sizes.get(f) : undefined;
-        const p = f && z && s.recipes?.[f] ? cropProblem(s.recipes[f], z.W, z.H) : null;
+        const p = f && z && s.docs?.[f] ? cropProblem(s.docs[f], z.W, z.H) : null;
         return p ? `${p.code}: ${p.message}` : '';
       }, { class: 'cb-warn' } as any),
     );
@@ -57,7 +56,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
       ck.ui.slider({ min: 1, max: 200, bind: (s: any) => s.finish.spot.r, label: 'Size', step: 1, unit: 'px', decimals: 0 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.feather, label: 'Feather', step: 0.05, decimals: 2 } as any),
       ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.finish.spot.opacity, label: 'Opacity', step: 0.05, decimals: 2 } as any),
-      ck.view.list((s: any) => spotsOf(s.recipes?.[sel.current(s) ?? '']), {
+      ck.view.list((s: any) => spotsOf(s.docs?.[sel.current(s) ?? '']), {
         id: 'finish-spots',
         key: (x: SpotRef) => x.id,
         row: (x: SpotRef) => ck.row({ class: 'cb-spot-row' },
@@ -66,13 +65,13 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
         empty: 'No spots: choose the tool (Q) and click a speck',
       } as any),
       ck.row({ class: 'cb-finish-spot-cmds' }, ck.ui.button({ run: 'spot.delete', text: 'Delete', small: true }), ck.ui.button({ run: 'spot.clear', text: 'Clear all', small: true })),
-      ck.text('Heal and clone work on the print; Dust works on the film (scan.heal) where the engine has it.', { dim: true } as any),
+      ck.text('Heal and clone are layers of the print (the Retouch group); Dust heals the negative of a scan (the Dust group).', { dim: true } as any),
     );
   const tonesPanel = (o: { id?: string; title?: string; only?: string[] } = {}) =>
     ck.panel.define(o.id ?? 'finish-tones', { title: o.title ?? 'Finishing (digital, after the print)' },
       ck.text('Not darkroom controls: they change the finished print digitally.', { dim: true } as any),
       ...FINISHING_PATHS.filter((p) => !o.only || o.only.some((x) => p.endsWith(x))).map((p) => cb.arg(p, { why: 'finishing, not darkroom' })),
-      ck.row({ class: 'cb-finish-tone-cmds' }, ck.ui.button({ run: 'finish.toggle', text: 'Before / after', small: true }), ck.ui.button({ run: 'finish.resetTones', text: 'Reset', small: true })),
+      ck.row({ class: 'cb-finish-tone-cmds' }, ck.ui.button({ run: 'finish.addClarity', text: '+ Clarity', small: true }), ck.ui.button({ run: 'finish.toggle', text: 'Before / after', small: true }), ck.ui.button({ run: 'finish.resetTones', text: 'Reset', small: true })),
     );
   return { shown, viewer, cropPanel, retouchPanel, tonesPanel };
 }

@@ -3,15 +3,18 @@
 // as the aim is "print like this frame" (guide §2.1, §6.3).
 //
 // Exposure bookkeeping. At a real enlarger the frame's exposure offset is its printer lights plus the time:
-//   total(r) = print.lights.logH + log10(time_s / 10 s)          (log H per paper layer)
+//   total(d) = lights.params.logH + log10(main time / 10 s)      (log H per paper layer)
 // The analysis measures, per frame, the integrated paper exposure X̄ under some recipe; the frame's own
 // departure from the aim (LATD-like, + is denser) is λ = −(X̄ − total). Its own auto total is
-// integrateToGrey(λ, aim 0, α). A total goes back into a recipe as at an enlarger: its mean into the time
-// (on the slider's 1/6-stop grid), the rest into the lights.
-import { getPath, type FrameRecipe, type Vec3 } from '@chromobench/contract';
+// integrateToGrey(λ, aim 0, α). A total goes back into a document as at an enlarger: its mean into the time
+// (on the slider's 1/6-stop grid), the rest into the lights. The balance's record (method, α, the total) is the
+// printer lights layer's provenance (`lights.source`, kind 'auto').
+import type { LogEntry } from '@chromobench/values';
+import { documentKind, type Document, type Vec3 } from '@chromobench/contract';
+import { FILTRATION_PATH, FSTOP_PATH, GRADE_PATH, LIGHTS, layerOf, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, read, TIME_PATH } from '../../../../src/model/doc.ts';
 import { ALPHA, LIGHTS_PATHS, ROLL_CONSISTENCY, ROLL_TX, TIME_MAX_S, TIME_MIN_S, TIME_REF_S } from './constants.ts';
-import { changedSets, setWithExpect, type MutationBatch } from './batch.ts';
-import { meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
+import { frameSets, type MutationBatch } from './batch.ts';
+import { fragmentEntries, meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
 
 /** A batch id suffix: the clock in base 36 plus a counter, so two batches made in one millisecond differ. */
 let batchSeq = 0;
@@ -23,10 +26,14 @@ export function gridTime(t: number): number {
   return Number((TIME_REF_S * 2 ** (k / 6)).toFixed(3));
 }
 
-/** A recipe's exposure offset: lights + log10(t / 10 s). */
-export function totalOf(r: FrameRecipe): Vec3 {
-  const l = r.print.lights.logH;
-  const t = Math.log10(r.print.enlarger.time_s / TIME_REF_S);
+/** The printer lights' provenance: the balance's record (method roll / match, α, …) when the roll set it. */
+export const autoOf = (d: Document): Record<string, unknown> => ({ ...((layerOf(d, LIGHTS)?.source ?? { kind: 'user' }) as Record<string, unknown>) });
+export const LIGHTS_SOURCE = `${LIGHTS}.source`;
+
+/** A document's exposure offset: lights + log10(t / 10 s). */
+export function totalOf(d: Document): Vec3 {
+  const l = lightsOf(d);
+  const t = Math.log10(mainExposure(d).time_s / TIME_REF_S);
   return [l[0] + t, l[1] + t, l[2] + t];
 }
 
@@ -66,8 +73,8 @@ export function rollTotals(roll: Pick<Roll, 'frames' | 'analysis'>, o: { consist
 }
 
 /** True when the frame's lights or time carry a hand edit (a user entry outside roll batches) — guide §8.7. */
-export function handEdited(entries: readonly { by: string; tx?: string; m: { op: string; path?: string } }[]): boolean {
-  return entries.some((e) => e.by === 'user' && !(e.tx ?? '').startsWith(ROLL_TX) && e.m.op === 'set' && LIGHTS_PATHS.includes(String(e.m.path)));
+export function handEdited(entries: readonly Pick<LogEntry, 'tx'>[]): boolean {
+  return entries.some((e) => e.tx.by === 'user' && !e.tx.id.startsWith(ROLL_TX) && e.tx.mutations.some((m) => m.op === 'set' && LIGHTS_PATHS.includes(m.path)));
 }
 
 export interface FirstPrintOptions {
@@ -80,7 +87,7 @@ export interface FirstPrintOptions {
 }
 
 /** The first print as one batch (by 'auto'): shared fragment, rebate box, real enlarger, time and lights, auto record. */
-export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecipe | undefined, o: FirstPrintOptions = {}): MutationBatch {
+export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => Document | undefined, o: FirstPrintOptions = {}): MutationBatch {
   const a = roll.analysis;
   if (!a) throw new Error('roll.firstPrint: analyse the roll first');
   const alpha = o.alpha ?? a.alpha ?? ALPHA;
@@ -98,17 +105,17 @@ export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecip
       continue;
     }
     const { time_s, logH } = splitTotal(total);
-    const shared = Object.entries(roll.fragment).filter(([p]) => rec.kind === 'negative-scan' || !p.startsWith('scan.'));
-    const values: Record<string, unknown> = { ...Object.fromEntries(shared), 'print.enlarger.mode': 'real', 'print.enlarger.time_s': time_s, 'print.lights.logH': logH };
+    const scan = documentKind(rec) === 'negative-scan';
+    const shared = fragmentEntries(roll.fragment).filter(([p]) => p !== MODE_PATH && (scan || !p.startsWith('stages.scan.')));
+    // the mode first: the time and lights after it are read in the real enlarger's terms
+    const values: Record<string, unknown> = { [MODE_PATH]: 'real', ...Object.fromEntries(shared), [TIME_PATH]: time_s, [LIGHTS_PATH]: logH };
+    // a frame the analysis flags as mixed keeps its own base; the others take the roll's (baseT, flare)
+    if (a.base.mixed.includes(f)) delete values['stages.scan.medium.baseT'];
     // the frame's own rebate box (source px), unless the photographer picked one
-    // a frame the analysis flags as mixed keeps its own base; the others take the roll's (scan.baseT, scan.flare)
-    if (a.base.mixed.includes(f)) delete values['scan.baseT'];
-    values['roll'] = { id: roll.id };
     const box = fa.layout.rebate?.box;
-    if (box && rec.kind === 'negative-scan' && !getPath(rec, 'scan.rebate')) values['scan.rebate'] = box;
-    const ms = changedSets(rec, values);
-    ms.push(setWithExpect(rec, 'print.lights.auto', { ...rec.print.lights.auto, method: 'roll', alpha, analysisLongSide_px: a.long, rollConsistency: r, matchFrame: null, matchAmount: null, applied: true, logH: r6v(total) }));
-    frames.push({ frame: f, mutations: ms });
+    if (box && scan && !read(rec, 'stages.scan.medium.rebate')) values['stages.scan.medium.rebate'] = box;
+    values[LIGHTS_SOURCE] = { ...autoOf(rec), kind: 'auto', by: 'roll', method: 'roll', alpha, analysisLongSide_px: a.long, rollConsistency: r, matchFrame: null, matchAmount: null, applied: true, logH: r6v(total) };
+    frames.push({ frame: f, ...frameSets(rec, values) });
   }
   const n = frames.length;
   return {
@@ -133,7 +140,7 @@ export interface MatchOptions {
  * the exposure difference from the reference corrected in full, the colour departure by α (α = 0: the
  * reference's pack, density-corrected; α = 1: each frame to the reference's grey).
  */
-export function matchBatch(roll: Roll, ref: FrameId, recipeOf: (f: FrameId) => FrameRecipe | undefined, physics: Pick<RollPhysics, 'integrateToGrey'>, o: MatchOptions = {}): MutationBatch {
+export function matchBatch(roll: Roll, ref: FrameId, recipeOf: (f: FrameId) => Document | undefined, physics: Pick<RollPhysics, 'integrateToGrey'>, o: MatchOptions = {}): MutationBatch {
   const a = roll.analysis;
   if (!a) throw new Error('roll.matchToReference: analyse the roll first');
   const refRec = recipeOf(ref);
@@ -152,13 +159,14 @@ export function matchBatch(roll: Roll, ref: FrameId, recipeOf: (f: FrameId) => F
     if (o.handEdited?.(f) && !o.include?.includes(f)) { skipped.push({ frame: f, why: 'lights set by hand' }); continue; }
     const total = physics.integrateToGrey(fa.latd, aim, alpha);
     const { time_s, logH } = splitTotal(total);
-    // the reference's enlarger settings become the roll's (pack, f-stop, grade, mode)
+    // the reference's enlarger settings become the roll's (mode, pack, f-stop, grade); the mode first
     const values: Record<string, unknown> = {};
-    for (const p of ['print.enlarger.mode', 'print.enlarger.filtration', 'print.enlarger.fstop', 'print.grade']) values[p] = getPath(refRec, p);
+    for (const p of [MODE_PATH, FILTRATION_PATH, FSTOP_PATH, GRADE_PATH]) values[p] = read(refRec, p);
     // time and lights always, so a frame whose exposure changed after planning is stale at approval
-    const ms = [setWithExpect(rec, 'print.enlarger.time_s', time_s), setWithExpect(rec, 'print.lights.logH', logH), ...changedSets(rec, values)];
-    ms.push(setWithExpect(rec, 'print.lights.auto', { ...rec.print.lights.auto, method: 'match', alpha, matchFrame: ref, matchAmount: 1, applied: true, logH: r6v(total) }));
-    frames.push({ frame: f, mutations: ms });
+    values[TIME_PATH] = time_s;
+    values[LIGHTS_PATH] = logH;
+    values[LIGHTS_SOURCE] = { ...autoOf(rec), kind: 'auto', by: 'roll', method: 'match', alpha, matchFrame: ref, matchAmount: 1, applied: true, logH: r6v(total) };
+    frames.push({ frame: f, ...frameSets(rec, values, [TIME_PATH, LIGHTS_PATH]) });
   }
   const label = `Print the roll like ${ref}`;
   return {
@@ -169,17 +177,15 @@ export function matchBatch(roll: Roll, ref: FrameId, recipeOf: (f: FrameId) => F
 }
 
 /** Back to each frame's own (roll-consistent) first-print totals. */
-export function clearMatchBatch(roll: Roll, recipeOf: (f: FrameId) => FrameRecipe | undefined, o: { consistency?: number; rejected?: ReadonlySet<FrameId>; id?: string } = {}): MutationBatch {
+export function clearMatchBatch(roll: Roll, recipeOf: (f: FrameId) => Document | undefined, o: { consistency?: number; rejected?: ReadonlySet<FrameId>; id?: string } = {}): MutationBatch {
   const totals = rollTotals(roll, o);
   const frames: MutationBatch['frames'] = [];
   for (const f of roll.frames) {
     const rec = recipeOf(f);
     const total = totals.get(f);
-    if (!rec || !total || rec.print.lights.auto.method !== 'match') continue;
+    if (!rec || !total || autoOf(rec)['method'] !== 'match') continue;
     const { time_s, logH } = splitTotal(total);
-    const ms = changedSets(rec, { 'print.enlarger.time_s': time_s, 'print.lights.logH': logH });
-    ms.push(setWithExpect(rec, 'print.lights.auto', { ...rec.print.lights.auto, method: 'roll', matchFrame: null, matchAmount: null, rollConsistency: o.consistency ?? ROLL_CONSISTENCY, logH: r6v(total) }));
-    frames.push({ frame: f, mutations: ms });
+    frames.push({ frame: f, ...frameSets(rec, { [TIME_PATH]: time_s, [LIGHTS_PATH]: logH, [LIGHTS_SOURCE]: { ...autoOf(rec), method: 'roll', matchFrame: null, matchAmount: null, rollConsistency: o.consistency ?? ROLL_CONSISTENCY, logH: r6v(total) } }) });
   }
   return { id: o.id ?? `${ROLL_TX}clear-${batchStamp()}`, kind: 'clear-match', by: 'user', frames, skipped: [], label: 'Clear roll match', why: 'Frames back to their own roll-consistent first print' };
 }

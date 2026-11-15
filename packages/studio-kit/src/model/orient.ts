@@ -1,4 +1,4 @@
-// The orientation of frames cut from a strip of film (CHB-031 F20, F28). The recipe's view.frame.orientation is one
+// The orientation of frames cut from a strip of film (CHB-031 F20, F28). The document's geometry.orientation is one
 // of the eight orientations of a rectangle (contract 0.3, applied by output.frame after the crop); Frame ▸ Rotate
 // Left / Right / Flip change it per frame (cb.ts, the finish kit's orientFrame).
 import type { Box, Orientation } from '@chromobench/contract';

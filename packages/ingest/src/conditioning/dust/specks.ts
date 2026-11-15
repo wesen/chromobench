@@ -1,7 +1,7 @@
 // Dust detection in scanner density (guide §2.8, §5.11): goja-cv's SpeckBackground/DetectSpecks
 // (kernels/specks.go 96–277) on the minimum-variance neutral plane, with a neutrality score: dust is an
 // additive, equal bump in every channel (Δ = −log10(1 − a)), image detail and grain are not.
-import type { DustSpot as RecipeDustSpot, Vec3 } from '@chromobench/contract';
+import type { Vec3 } from '@chromobench/contract';
 import { boxMean, components, gaussianBlur, mad, medianOf, oddPad, smoothstep, squareClosing, squareOpening } from './kernels.ts';
 
 export interface SpeckOptions {
@@ -141,12 +141,4 @@ export interface DustCheck { count: number; verdict: 'clean' | 'light' | 'dusty'
 export function checkDust(r: SpeckResult, scoreThreshold = 0.5): DustCheck {
   const count = r.spots.filter((s) => s.score >= scoreThreshold).length;
   return { count, verdict: count === 0 ? 'clean' : count <= 5 ? 'light' : 'dusty', scoreThreshold };
-}
-
-/** Spots for the recipe (scan.dust.spots): sensor px, given the analysed plane's origin and scale. */
-export function toRecipeSpots(spots: DustSpot[], o: { x0?: number; y0?: number; scale?: number; minScore?: number } = {}): RecipeDustSpot[] {
-  const s = o.scale ?? 1;
-  return spots.filter((p) => p.score >= (o.minScore ?? 0.5)).map((p) => ({
-    id: `d${p.id}`, x: (o.x0 ?? 0) + (p.cx + 0.5) / s - 0.5, y: (o.y0 ?? 0) + (p.cy + 0.5) / s - 0.5, r: (p.r + 0.5) / s,
-  }));
 }

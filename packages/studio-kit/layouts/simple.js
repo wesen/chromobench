@@ -4,7 +4,7 @@ export default {
   id: 'simple',
   label: 'Three steps',
   description: 'Pick, Print, Save',
-  // new recipes print normalised: the grey card at the aim, no time or aperture to set (CHB-031)
+  // new documents print normalised: the grey card at the aim, no time or aperture to set (CHB-031)
   enlarger: 'normalised',
   build: (ck, cb) =>
     cb
@@ -25,10 +25,10 @@ export default {
                   cb.viewer(s => cb.sel.frame(s)?.print() ?? null, { id: 'main', tools: ['ring-around'] }),
                   ck.column(
                     { width: 320, class: 'cb-simple-side' },
-                    cb.arg('print.enlarger.time_s', { widget: 'nudge', labels: ['Lighter', 'Darker'], step: '1/3 st' }),
-                    cb.arg('print.lights.logH', { widget: 'nudge', labels: ['Warmer', 'Cooler'], axis: 'yellow-blue', step: '2 pt' }),
-                    cb.arg('print.lights.logH', { widget: 'nudge', labels: ['Greener', 'More magenta'], axis: 'magenta-green', step: '2 pt' }),
-                    cb.arg('print.grade', { widget: 'nudge', labels: ['Softer', 'Harder'], step: 0.5 }),
+                    cb.arg('main.params.time_s', { widget: 'nudge', labels: ['Lighter', 'Darker'], step: '1/3 st' }),
+                    cb.arg('lights.params.logH', { widget: 'nudge', labels: ['Warmer', 'Cooler'], axis: 'yellow-blue', step: '2 pt' }),
+                    cb.arg('lights.params.logH', { widget: 'nudge', labels: ['Greener', 'More magenta'], axis: 'magenta-green', step: '2 pt' }),
+                    cb.arg('stages.darkroom.medium.grade', { widget: 'nudge', labels: ['Softer', 'Harder'], step: 0.5 }),
                     ck.ui.button({ run: 'tool.ring-around', text: 'Which looks best?', primary: true }),
                     cb.approvals({ compact: true }),
                   ),

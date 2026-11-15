@@ -9,21 +9,28 @@
 //
 // The physics (ingest's film layout and roll base, core's integrate-to-grey) arrives as the service
 // `rollPhysics` (RollPhysics), like the engine: studio-kit imports only the contract and the shell.
+//
+// CHB-037: the frames' edits are documents in the store's log. A roll batch (first print, match, clear) is committed
+// with the values batch builder (`plan`) as one step of the log, together with the roll record it changes (an edit
+// of the main document in the same batch): one undo takes the frames and the roll's status back together. The
+// current roll is the view tier (a selection, not an edit).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getPath, type Diagnostic, type FrameRecipe, type Mutation, type Vec3 } from '@chromobench/contract';
+import { canonicalJSON, plan, set, transaction } from '@chromobench/values';
+import { edit, type Diagnostic, type Document, type Vec3 } from '@chromobench/contract';
 import type { Ck, NodeData } from '@chromobench/shell';
-import { slot, type FormSpec } from '@chromobench/shell';
+import { MAIN, slot, strip, type FormSpec } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { sel, type CatalogFrame } from '../../../src/sel.ts';
 import { frameRef } from '../../../src/handles.ts';
+import { FILTRATION_PATH, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, read, storePath, TIME_PATH } from '../../../src/model/doc.ts';
 import { stockName } from '../../../src/model/names.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { analyseRoll } from './engine/analyse.ts';
-import { buildBatch, plain, setWithExpect, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
+import { plain, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
 import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, SHARED_PATHS } from './engine/constants.ts';
-import { clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
-import { baseOfVeilFree, divergence, flareOfVeil, fragmentOf, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
+import { autoOf, clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
+import { baseOfVeilFree, divergence, flareOfVeil, fragmentGet, fragmentOf, fragmentWith, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
 
 export interface RollDoc {
   rolls: Record<string, Roll>;
@@ -65,17 +72,22 @@ export const rollFrames = (s: any): CatalogFrame[] => {
   const cat = s?.catalog?.frames ?? {};
   return r ? r.frames.map((f) => cat[f]).filter((x: CatalogFrame | undefined): x is CatalogFrame => !!x) : [];
 };
-/** the recipe a contact cell shows: the pending batch's preview, or in 'single' mode the reference's time and lights */
-export function contactRecipe(s: any, f: FrameId): FrameRecipe | null {
-  const r0 = s?.recipes?.[f] as FrameRecipe | undefined;
+/** the document a contact cell shows: the pending batch's preview, or in 'single' mode the reference's time and lights */
+export function contactRecipe(s: any, f: FrameId): Document | null {
+  // the state's read-only views are unwrapped: a document is edited (previewed) as the plain value it is
+  const r0 = strip(s?.docs?.[f]) as Document | undefined;
   if (!r0) return null;
-  let r = previewOf(s?.rollView?.pending, f, r0);
+  let r = previewOf(strip(s?.rollView?.pending), f, r0);
   if (s?.rollView?.contact?.mode === 'single') {
     const roll = rollOf(s);
-    const ref = roll?.reference ? (s.recipes?.[roll.reference] as FrameRecipe | undefined) : undefined;
-    const time_s = ref?.print.enlarger.time_s ?? 10;
-    const logH = ref?.print.lights.logH ?? ([0, 0, 0] as Vec3);
-    r = { ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, time_s, ...(ref ? { filtration: ref.print.enlarger.filtration } : {}) }, lights: { ...r.print.lights, logH } } };
+    const ref = roll?.reference ? (strip(s.docs?.[roll.reference]) as Document | undefined) : undefined;
+    const time_s = ref ? mainExposure(ref).time_s : 10;
+    const logH = ref ? lightsOf(ref) : ([0, 0, 0] as Vec3);
+    try {
+      r = edit(r, [set(TIME_PATH, time_s), set(LIGHTS_PATH, logH), ...(ref ? [set(FILTRATION_PATH, mainExposure(ref).filtration)] : [])]).doc;
+    } catch {
+      // a document that does not take the reference's values (another kind): as it is
+    }
   }
   return r;
 }
@@ -88,30 +100,30 @@ export function rollBadge(s: any, f: FrameId): string {
   const a = roll.analysis;
   if (a?.base.mixed.includes(f)) out.push('base ≠ roll');
   if (a?.frames[f]?.hint === 'under') out.push('under?');
-  const r = s?.recipes?.[f];
-  if (r && divergenceOf(roll, r)) out.push('diverges');
+  const r = s?.docs?.[f] as Document | undefined;
+  if (r && divergenceOf(roll, f, r)) out.push('diverges');
   if (s?.rollView?.pending?.frames?.some((x: any) => x.frame === f) && !s.rollView.off?.includes(f)) out.push('preview');
   return out.join(' · ');
 }
-/** the film strip's roll badge: which roll a frame belongs to (FrameRecipe.roll), ★ for the reference, ≠ when it diverges */
+/** the film strip's roll badge: which roll a frame belongs to, ★ for the reference, ≠ when it diverges */
 export function rollTag(s: any, f: FrameId): string {
   const d = s?.roll as RollDoc | undefined;
   if (!d?.order?.length) return '';
-  const r = s?.recipes?.[f] as FrameRecipe | undefined;
-  const id = r?.roll?.id ?? d.order.find((x) => d.rolls[x]?.frames.includes(f));
+  const r = s?.docs?.[f] as Document | undefined;
+  const id = d.order.find((x) => d.rolls[x]?.frames.includes(f));
   const roll = id ? d.rolls[id] : undefined;
   if (!roll) return '';
-  return `roll ${d.order.indexOf(roll.id) + 1}${roll.reference === f ? ' ★' : ''}${r && divergenceOf(roll, r) ? ' ≠' : ''}`;
+  return `roll ${d.order.indexOf(roll.id) + 1}${roll.reference === f ? ' ★' : ''}${r && divergenceOf(roll, f, r) ? ' ≠' : ''}`;
 }
-const divergenceOf = (roll: Roll, r: FrameRecipe): boolean => Object.keys(divergence({ fragment: roll.fragment, frames: [r.frame] }, () => r)).length > 0;
+const divergenceOf = (roll: Roll, f: FrameId, r: Document): boolean => Object.keys(divergence({ fragment: roll.fragment, frames: [f] }, () => r)).length > 0;
 
 const ROLL_DOCS = `## cb.kits.roll
-The roll workflow (CHB-020): a roll record per piece of film (document slice \`roll\`), measured once — base
+The roll workflow (CHB-020): a roll record per piece of film (the main document's slice \`roll\`), measured once — base
 (median of the frames' rebates), veil read on the holder, σ and class shares at the analysis size, stock ranking —
 then an automatic first print of every frame (one \`by: auto\` batch, one undo step), the contact sheet and cull, and
 "print the roll like this frame": integrate-to-grey with the reference frame as the aim, previewed on the sheet,
-approved on one card, applied as one undo step across the frames' EditLogs. Settings shared by the roll are copied
-into every recipe; a frame diverges when its value differs (computed, never stored).`;
+approved on one card, applied as one batch (one undo step across the frames' documents). Settings shared by the roll
+are copied into every document; a frame diverges when its value differs (computed, never stored).`;
 
 export function createRollKit(ck: Ck, cb: Cb) {
   const node = (form: string, props: Record<string, unknown> = {}): any => ck.node(form, props, []);
@@ -121,19 +133,29 @@ export function createRollKit(ck: Ck, cb: Cb) {
     return s;
   };
   const physicsOf = (ctx: any): RollPhysics | null => (ctx.services?.rollPhysics as RollPhysics | undefined) ?? null;
-  // the log's committed recipe (plain objects; the store hands out read-only proxies of the same value)
-  const recipeOf = (ctx: any) => (f: FrameId): FrameRecipe | undefined => studioOf(ctx).frames.get(f)?.log.committed ?? ctx.state.recipes?.[f];
-  const writeRoll = (ctx: any, roll: Roll): void => ctx.rt.store.writeDoc([{ path: ['roll', 'rolls', roll.id], value: roll }], { tier: 'document' });
-  const setView = (ctx: any, k: keyof RollView, v: unknown): void => ctx.rt.store.set(['rollView', k], v);
-  const isHandEdited = (ctx: any) => (f: FrameId): boolean => handEdited(studioOf(ctx).frames.get(f)?.log.inEffect() ?? []);
+  // the log's committed document of a frame
+  const recipeOf = (ctx: any) => (f: FrameId): Document | undefined => studioOf(ctx).doc(f) ?? ctx.state.docs?.[f];
+  /** a roll record written on its own (an analysis): one step */
+  const writeRoll = (ctx: any, roll: Roll, label: string): void => void ctx.tx(label, (t: any) => t.$set(['roll', 'rolls', roll.id], plain(roll)), { by: 'auto' });
+  const setView = (ctx: any, k: keyof RollView, v: unknown): void => ctx.rt.store.writeView([{ path: ['rollView', k], value: plain(v) }]);
+  const isHandEdited = (ctx: any) => (f: FrameId): boolean => handEdited(studioOf(ctx).rt?.store.log.has(f) ? studioOf(ctx).log.inEffect(f) : []);
   const hasRoll = { enabled: (s: any) => !!rollOf(s), why: 'Make a roll first (Roll ▸ New Roll from Open Frames)' };
 
-  /** apply a batch: staleness first (E_STALE unless forced), then one shared tx and one global undo step */
-  function applyBatch(ctx: any, b: MutationBatch, o: { force?: boolean } = {}): Diagnostic[] | true {
+  /**
+   * apply a batch: staleness first (E_STALE unless forced), then the values batch builder over the frames (every
+   * transaction carries the batch's id) and one commit: one step of the log
+   */
+  function applyBatch(ctx: any, b: MutationBatch, o: { force?: boolean; roll?: Roll } = {}): Diagnostic[] | true {
     const stale = staleOf(b, recipeOf(ctx));
     if (stale.length && !o.force) return staleDiagnostics(stale);
-    const entries = plain(b.frames).map((f) => ({ frame: f.frame, mutations: o.force ? f.mutations.map((m): Mutation => (m.op === 'set' ? { op: 'set', path: m.path, value: m.value } : m)) : f.mutations }));
-    studioOf(ctx).route.applyBatch(entries, b.label, { by: b.by, tx: b.id.startsWith(ROLL_TX) ? b.id : `${ROLL_TX}${b.id}`, detail: b.why });
+    const studio = studioOf(ctx);
+    const by = new Map(plain(b.frames).map((f) => [f.frame, f.mutations]));
+    const id = b.id.startsWith(ROLL_TX) ? b.id : `${ROLL_TX}${b.id}`;
+    const source = { kind: 'roll', batch: b.kind, why: b.why };
+    const batch = plan(studio.log.targets<Document>([...by.keys()].filter((f) => studio.log.has(f))), (_d, f) => by.get(f) ?? null, { id, label: b.label, by: b.by, source });
+    // the roll record the batch changes (status, match) goes into the same step
+    const rollEdit = o.roll ? [{ doc: MAIN, tx: transaction({ id: `${id}:${MAIN}`, label: b.label, by: b.by, source, batch: id, mutations: [set(`roll.rolls.${o.roll.id}`, plain(o.roll))] }) }] : [];
+    if (batch.edits.length || rollEdit.length) studio.change((log) => log.commit({ ...batch, edits: [...batch.edits, ...rollEdit] }), b.label);
     return true;
   }
 
@@ -145,7 +167,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
     const entries = roll.frames
       .map((f) => studio.frames.get(f))
       .filter((e): e is NonNullable<typeof e> => !!e)
-      .map((e) => ({ id: e.id, sha256: e.sha, graph: e.graph, recipe: e.log.committed }));
+      .filter((e) => !!studio.doc(e.id))
+      .map((e) => ({ id: e.id, sha256: e.sha, graph: e.graph, doc: studio.doc(e.id)! }));
     setView(ctx, 'progress', { done: 0, total: entries.length, frame: null });
     setView(ctx, 'error', null);
     try {
@@ -157,13 +180,14 @@ export function createRollKit(ck: Ck, cb: Cb) {
       });
       const top = analysis.ranking?.[0]?.stock;
       const next: Roll = { ...rollOf(ctx.state, roll.id)!, analysis, status: 'analysed' };
-      if (top && !next.fragment['scan.stock']) next.fragment = { ...next.fragment, 'scan.stock': top };
-      // the measured base and veil are recipe settings (contract 0.3), not pixel edits: scan.baseT and per-channel scan.flare
+      if (top && !fragmentGet(next.fragment, 'stages.scan.medium.stock')) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.stock', top);
+      // the measured base and veil are scan medium settings, not pixel edits: baseT and per-channel flare
       const bs = analysis.base;
-      if (bs.T) next.fragment = { ...next.fragment, 'scan.baseT': baseOfVeilFree(bs.T, bs.veil) };
-      if (bs.veil) next.fragment = { ...next.fragment, 'scan.flare': flareOfVeil(bs.veil) };
-      writeRoll(ctx, next);
+      if (bs.T) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.baseT', baseOfVeilFree(bs.T, bs.veil));
+      if (bs.veil) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.flare', flareOfVeil(bs.veil));
       for (const d of analysis.diagnostics) ctx.rt.diagnostics.info(d.code, d.message, { runtime: true });
+      // the analysis is a step of its own (by auto), so undoing the first print keeps what was measured
+      writeRoll(ctx, next, `Analyse ${next.label}`);
       if (o.firstPrint) firstPrint(ctx);
       return rollOf(ctx.state, roll.id);
     } catch (e) {
@@ -175,35 +199,23 @@ export function createRollKit(ck: Ck, cb: Cb) {
   }
 
   /** the roll's own bookkeeping once its first print is in: a real enlarger for the roll, status first-printed */
-  function firstPrinted(ctx: any, rollId: string): void {
-    const cur = rollOf(ctx.state, rollId);
-    if (cur) writeRoll(ctx, { ...cur, fragment: { ...cur.fragment, 'print.enlarger.mode': 'real' }, status: 'first-printed' });
-  }
+  const firstPrinted = (cur: Roll): Roll => ({ ...cur, fragment: fragmentWith(cur.fragment, MODE_PATH, 'real'), status: 'first-printed' });
   /** the frames that have no first print yet (the automatic one on a new roll), or `only` */
-  function planFirstPrint(ctx: any, only?: FrameId[]): MutationBatch | null {
-    const roll = rollOf(ctx.state);
+  function planFirstPrint(ctx: any, only?: FrameId[], of?: Roll): MutationBatch | null {
+    const roll = of ?? rollOf(ctx.state);
     if (!roll?.analysis) return null;
-    const pending = only ?? roll.frames.filter((f) => !['roll', 'match'].includes(recipeOf(ctx)(f)?.print.lights.auto.method ?? ''));
+    const pending = only ?? roll.frames.filter((f) => { const d = recipeOf(ctx)(f); return !d || !['roll', 'match'].includes(String(autoOf(d)['method'] ?? '')); });
     if (!pending.length) return null;
     return firstPrintBatch(roll, recipeOf(ctx), { rejected: rejectedOf(ctx.state), consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, only: pending });
   }
   /** the automatic first print of a new roll: applied at once, by 'auto', one undo step */
-  function firstPrint(ctx: any, only?: FrameId[]): MutationBatch | null {
-    const b = planFirstPrint(ctx, only);
-    if (!b) return null;
-    applyBatch(ctx, b, { force: true });
-    firstPrinted(ctx, rollOf(ctx.state)!.id);
+  function firstPrint(ctx: any, only?: FrameId[], of?: Roll): MutationBatch | null {
+    const roll = of ?? rollOf(ctx.state);
+    const b = roll ? planFirstPrint(ctx, only, roll) : null;
+    if (!b || !roll) return null;
+    applyBatch(ctx, b, { force: true, roll: firstPrinted(roll) });
     return b;
   }
-  /** frames of the roll that do not name it yet (FrameRecipe.roll): one 'auto' batch */
-  function membersBatch(ctx: any, roll: Roll): MutationBatch {
-    const frames = roll.frames.flatMap((f) => {
-      const r = recipeOf(ctx)(f);
-      return r && r.roll?.id !== roll.id ? [{ frame: f, mutations: [setWithExpect(r, 'roll', { id: roll.id })] }] : [];
-    });
-    return { id: `${ROLL_TX}members-${roll.id}`, kind: 'setup', by: 'auto', frames, skipped: [], label: 'Add to roll', why: `${frames.length} frame${frames.length === 1 ? '' : 's'} name roll ${roll.id}` };
-  }
-
   function planMatch(ctx: any): MutationBatch | null {
     const roll = rollOf(ctx.state);
     const physics = physicsOf(ctx);
@@ -212,7 +224,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
   }
   function showPending(ctx: any, b: MutationBatch | null): void {
     // coalescing: a new plan replaces the pending one (moving the slider does not stack batches)
-    ctx.rt.store.writeDoc([{ path: ['rollView', 'pending'], value: b }, { path: ['rollView', 'off'], value: [] }, { path: ['rollView', 'stale'], value: [] }], { tier: 'view' });
+    ctx.rt.store.writeView([{ path: ['rollView', 'pending'], value: plain(b) }, { path: ['rollView', 'off'], value: [] }, { path: ['rollView', 'stale'], value: [] }]);
   }
 
   // ── forms ──
@@ -244,7 +256,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
       if (!mode || mode === 'frame') continue;
       const path = String(n.props['path']);
       if (!(SHARED_PATHS as readonly string[]).includes(path))
-        p.error('CB-R003', `cb.arg('${path}').rollScope('${mode}'): ${path} is not shared by the roll`, { at: n.at, facts: [`roll-shared paths: ${SHARED_PATHS.join(', ')}`], fix: `cb.arg('${path}') (frame scope), or a shared path such as cb.arg('scan.stock').rollScope('${mode}')` });
+        p.error('CB-R003', `cb.arg('${path}').rollScope('${mode}'): ${path} is not shared by the roll`, { at: n.at, facts: [`roll-shared paths: ${SHARED_PATHS.join(', ')}`], fix: `cb.arg('${path}') (frame scope), or a shared path such as cb.arg('stages.scan.medium.stock').rollScope('${mode}')` });
     }
   });
   /** CB-R001: roll forms in a layout that did not install the kit (cb.core's pass cb.kits runs it) */
@@ -264,7 +276,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
     .kit('cb.roll')
     .version('1')
     .requires('cb.core')
-    .state('roll', { init: ROLL_STATE.roll })
+    .state('roll', { init: ROLL_STATE.roll, view: ['current'] })
     .state('rollView', { init: ROLL_STATE.rollView, view: true })
     .forms(...FORMS)
     .fragments(rollScope)
@@ -282,19 +294,14 @@ export function createRollKit(ck: Ck, cb: Cb) {
           const n = Object.keys(ctx.state.roll?.rolls ?? {}).length + 1;
           const id = `roll-${n}`;
           const fragment = fragmentOf(first);
-          const stock = getPath(first, 'scan.stock');
+          const stock = read(first, 'stages.scan.medium.stock');
           const label = o.label ?? `${typeof stock === 'string' ? stockName(stock) : 'Roll'} · ${frames.length} frames`;
           ctx.tx(`New roll "${label}"`, (t: any) => {
             t.$set(['roll', 'rolls', id], newRoll(id, label, frames, fragment));
-            t.$set(['roll', 'order'], [...(t.roll.order ?? []), id]);
+            t.$set(['roll', 'order'], [...(ctx.state.roll?.order ?? []), id]);
             t.$set(['roll', 'current'], id);
           });
-          const join = (): string => {
-            const m = membersBatch(ctx, rollOf(ctx.state, id)!);
-            if (m.frames.length) applyBatch(ctx, m, { force: true });
-            return id;
-          };
-          return o.analyse === false ? join() : analyse(ctx, { firstPrint: true }).then(join);
+          return o.analyse === false ? id : analyse(ctx, { firstPrint: true }).then(() => id);
         },
       },
       'roll.select': {
@@ -302,7 +309,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
         palette: false,
         // a selection, not an edit: no undo step
         run: (ctx: any, id: string) => {
-          if (ctx.state.roll?.current !== id) ctx.rt.store.writeDoc([{ path: ['roll', 'current'], value: id }], { tier: 'document' });
+          if (ctx.state.roll?.current !== id) ctx.rt.store.writeView([{ path: ['roll', 'current'], value: id }]);
         },
       },
       'roll.analyse': {
@@ -367,15 +374,17 @@ export function createRollKit(ck: Ck, cb: Cb) {
           // plain copies: the state hands out read-only proxies, which the logs (and their KV) cannot clone
           const b = plain(ctx.state.rollView?.pending as MutationBatch | null);
           if (!b) return null;
-          const res = applyBatch(ctx, withoutFrames(b, plain(ctx.state.rollView.off ?? [])), { force: !!force });
+          const cur = rollOf(ctx.state);
+          // the roll's record after the batch, committed with it
+          const roll = !cur ? undefined
+            : b.kind === 'match' ? { ...cur, match: { alpha: Number(b.meta?.['alpha'] ?? 0), appliedAt: ctx.rt.clock?.now?.() ?? Date.now(), batch: b.id }, status: 'balanced' as const }
+              : b.kind === 'clear-match' ? { ...cur, match: null, status: 'first-printed' as const }
+                : b.kind === 'first-print' ? firstPrinted(cur) : undefined;
+          const res = applyBatch(ctx, withoutFrames(b, plain(ctx.state.rollView.off ?? [])), { force: !!force, ...(roll ? { roll } : {}) });
           if (res !== true) {
             setView(ctx, 'stale', res.map((d) => ({ code: d.code, message: d.message })));
             return res;
           }
-          const roll = rollOf(ctx.state);
-          if (roll && b.kind === 'match') writeRoll(ctx, { ...roll, match: { alpha: Number(b.meta?.['alpha'] ?? 0), appliedAt: ctx.rt.clock?.now?.() ?? Date.now(), batch: b.id }, status: 'balanced' });
-          if (roll && b.kind === 'clear-match') writeRoll(ctx, { ...roll, match: null, status: 'first-printed' });
-          if (roll && b.kind === 'first-print') firstPrinted(ctx, roll.id);
           showPending(ctx, null);
           return true;
         },
@@ -401,8 +410,11 @@ export function createRollKit(ck: Ck, cb: Cb) {
           const value = plain(v);
           // the roll's value and every frame's copy in one transaction: one undo step
           ctx.tx(`Roll: ${path}`, (t: any) => {
-            t.$set(['roll', 'rolls', roll.id, 'fragment', path], value);
-            for (const f of roll.frames) if (t.recipes?.[f]) t.$set(['recipes', f, ...path.split('.')], value);
+            t.$set(['roll', 'rolls', roll.id, 'fragment'], fragmentWith(plain(roll.fragment), path, value));
+            for (const f of roll.frames) {
+              const d = recipeOf(ctx)(f);
+              if (d && read(d, path) !== undefined && canonicalJSON(read(d, path)) !== canonicalJSON(value)) t.$set(storePath(f, d, path), value);
+            }
           });
         },
       },
@@ -413,7 +425,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
         run: (ctx: any, path: string) => {
           const f = sel.current(ctx.state);
           const r = f ? recipeOf(ctx)(f) : undefined;
-          if (r) ctx.run('roll.setShared', path, getPath(r, path));
+          if (r) ctx.run('roll.setShared', path, read(r, path));
         },
       },
       'roll.contact.mode': {
@@ -499,8 +511,6 @@ export function createRollKit(ck: Ck, cb: Cb) {
     sel: { roll: rollOf, frames: rollFrames, badge: rollBadge, tag: rollTag, contact: contactRecipe },
     lib: {
       state: ROLL_STATE,
-      /** CHB-021's "apply look to the roll": per-frame mutations as one batch */
-      batch: (frames: readonly FrameId[], recipe: (f: FrameId) => FrameRecipe | undefined, build: (f: FrameId, r: FrameRecipe) => Mutation[] | { skip: string }, o: { id: string; label: string; why?: string }) => buildBatch(frames, recipe, build, o),
       applyBatch,
       /** exposure bookkeeping, for layouts that show it */
       exposure: { totalOf, splitTotal },

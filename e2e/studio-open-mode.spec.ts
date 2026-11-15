@@ -1,5 +1,5 @@
 // CHB-027 WS-A: files open as photos or negatives without a checkbox (F1), opening an open file says so (F2), a
-// frame is re-opened the other way on the frame itself and its saved recipe never crosses modes (F3, F6, F15), and
+// frame is re-opened the other way on the frame itself and its saved edit never crosses modes (F3, F6, F15), and
 // the library survives a reload with thumbnails, a context menu and Delete (F5, F6). Synthetic files only.
 import { expect, test, type Page } from '@playwright/test';
 import { writeTiff } from '@chromobench/ingest';
@@ -44,7 +44,7 @@ const FILES = {
 };
 
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
-const frames = (page: Page) => page.evaluate(() => window.chromobench.studio.frames.all().map((e) => ({ name: e.name, kind: e.kind, mode: e.log.state.source.decode.mode })));
+const frames = (page: Page) => page.evaluate(() => window.chromobench.studio.frames.all().map((e) => ({ name: e.name, kind: e.kind, mode: window.chromobench.studio.doc(e.id)!.source.decode.mode })));
 const select = (page: Page, name: string) => page.evaluate((n) => window.chromobench.run('frame.select', window.chromobench.studio.frames.all().find((e) => e.name === n)!.id), name);
 
 let errors: string[] = [];
@@ -75,17 +75,17 @@ test('photo or negative is guessed per file; re-open the other way and back; an 
   expect((await frames(page)).length).toBe(2);
 
   // F3/F6: an edit as a negative, re-open as a photo (Frame menu command), then back through the hint (F15)
-  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 14, 'Time'));
+  await page.evaluate(() => window.chromobench.set('main.params.time_s', 14, 'Time'));
   await idle(page);
   await page.evaluate(() => window.chromobench.run('frame.reopenAsPhoto'));
-  await page.waitForFunction(() => window.chromobench.log?.state.kind === 'digital-raw', null, { timeout: 60_000 });
+  await page.waitForFunction(() => (window.chromobench.doc?.stages.scan ? 'negative-scan' : 'digital-raw') === 'digital-raw', null, { timeout: 60_000 });
   await idle(page);
   await expect(page.locator('#frame-mode')).toHaveText('Photo');
   await expect(page.locator('#mode-hint')).toContainText('Looks like a negative');
   await page.locator('#mode-hint').click();
-  await page.waitForFunction(() => window.chromobench.log?.state.kind === 'negative-scan', null, { timeout: 60_000 });
+  await page.waitForFunction(() => (window.chromobench.doc?.stages.scan ? 'negative-scan' : 'digital-raw') === 'negative-scan', null, { timeout: 60_000 });
   await idle(page);
-  expect(await page.evaluate(() => window.chromobench.log!.state.print.enlarger.time_s)).toBe(14);
+  expect(await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number))).toBe(14);
   await expect(page.locator('#frame-mode')).toHaveText('Negative');
 });
 
@@ -131,13 +131,13 @@ test('the library survives a reload: thumbnails, "not open", the context menu, D
   await expect(cells).toHaveCount(1);
 });
 
-test('the host top bar is folded into the menus: File (open, open as, export, recipe), View ▸ Layout', async ({ page }) => {
+test('the host top bar is folded into the menus: File (open, open as, export, document), View ▸ Layout', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/?nosw&canvas2d&fresh&engine=reference');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
   await expect(page.locator('#bar')).toHaveCount(0);
   await page.locator('.ck-menubar-t', { hasText: 'File' }).click();
-  for (const c of ['file.open', 'file.openFolder', 'file.export', 'file.saveRecipe']) await expect(page.locator(`.ck-menu-i[data-command="${c}"]`)).toBeVisible();
+  for (const c of ['file.open', 'file.openFolder', 'file.export', 'file.saveDocument']) await expect(page.locator(`.ck-menu-i[data-command="${c}"]`)).toBeVisible();
   // File ▸ Open As ▸ Open as Photos: remembered, checked
   await page.locator('.ck-menu-i', { hasText: 'Open As' }).hover();
   await page.locator('.ck-menu-i[data-command="file.openAs.photo"]').click();

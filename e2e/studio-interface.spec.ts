@@ -59,8 +59,8 @@ test('F24: View ▸ Layout keeps the open frames open, their edits and one undo 
   await page.setInputFiles('#file', [A, B]);
   await opened(page, 2, 120_000);
   const sel = await page.evaluate(() => window.chromobench.studio.current);
-  const t0 = await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s);
-  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 12.6, 'Time'));
+  const t0 = await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number));
+  await page.evaluate(() => window.chromobench.set('main.params.time_s', 12.6, 'Time'));
   await idle(page);
 
   await layout(page, 'simple');
@@ -76,7 +76,7 @@ test('F24: View ▸ Layout keeps the open frames open, their edits and one undo 
 
   await layout(page, 'darkroom');
   expect(await frames(page)).toBe(2);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12.6);
+  expect(await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number))).toBe(12.6);
   await expect(page.locator('.cb-cell:visible .ck-thumb-badge', { hasText: 'not open' })).toHaveCount(0);
 
   await layout(page, 'classic');
@@ -85,13 +85,13 @@ test('F24: View ▸ Layout keeps the open frames open, their edits and one undo 
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press('ControlOrMeta+z');
   await idle(page);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(t0);
+  expect(await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number))).toBe(t0);
 
   // a new frame takes the layout's enlarger mode: normalised in Simple
   await layout(page, 'simple');
   await page.setInputFiles('#file', C);
   await opened(page, 3, 120_000);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.mode)).toBe('normalised');
+  expect(await page.evaluate(() => window.chromobench.get('stages.darkroom.medium.mode'))).toBe('normalised');
 });
 
 test('F26: "Where is …?" closes as answered when its file is opened through File ▸ Open or dropped', async ({ page }) => {
@@ -151,12 +151,12 @@ test('F36: Undo and Redo of a change on another frame show that frame; F32/F33: 
 
   // History: Rotate and times in words; then 30 more steps
   await menu(page, 'Frame', 'frame.rotateRight');
-  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 10, 'Time'));
+  await page.evaluate(() => window.chromobench.set('main.params.time_s', 10, 'Time'));
   await idle(page);
   const hist = page.locator('#history:visible');
   await expect(hist.locator('.cb-hist-i').filter({ hasText: 'Rotated right' })).toHaveCount(1);
   await expect(hist.locator('.cb-hist-i.is-cursor')).toContainText('Time 14.0 → 10.0 s (−½ stop)');
-  for (let i = 0; i < 30; i++) await page.evaluate((k) => window.chromobench.set('print.grade', 2 + (k % 4) * 0.5, 'Grade'), i);
+  for (let i = 0; i < 30; i++) await page.evaluate((k) => window.chromobench.set('stages.darkroom.medium.grade', 2 + (k % 4) * 0.5, 'Grade'), i);
   await idle(page);
   const rows = await hist.locator('.cb-hist-i').evaluateAll((els) => els.map((e) => ({ t: e.textContent ?? '', h: e.getBoundingClientRect().height, top: e.getBoundingClientRect().top })));
   expect(rows.length).toBeGreaterThan(30);

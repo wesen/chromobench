@@ -26,7 +26,7 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await lib.locator('.cb-look-cell', { hasText: 'warm print' }).getByRole('button', { name: 'Preview' }).click();
   await expect(page.locator('#looks-picked')).toContainText('warm print');
   await expect(page.locator('#looks-result')).toContainText('lights R −2.0 pt, B +2.0 pt');
-  expect(await hook<number>(page, 'cb.log().units.length')).toBe(0);
+  expect(await hook<number>(page, 'cb.log().steps.length')).toBe(0);
 
   // Amount 60 %: the result line in points
   await page.locator('#looks-amount').evaluate((el: HTMLInputElement) => {
@@ -37,11 +37,11 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await expect(page.locator('#looks-pct')).toHaveText('60 %');
   await expect(page.locator('#looks-result')).toContainText('lights R −1.2 pt, B +1.2 pt');
 
-  // apply: one unit labelled with the look; Mod+Z takes it off
+  // apply: one step labelled with the look; Mod+Z takes it off
   await page.locator('#looks-apply').click();
-  await expect.poll(() => hook<number>(page, 'cb.log().units.length')).toBe(1);
-  expect(await hook<string>(page, 'cb.log().units[0].label')).toBe('Look: warm print at 60 %');
-  expect(await hook<number>(page, 'cb.log().committed.print.lights.logH[2]')).toBeCloseTo(0.03, 6);
+  await expect.poll(() => hook<number>(page, 'cb.log().steps.length')).toBe(1);
+  expect(await hook<string>(page, 'cb.log().steps[0].label')).toBe('Look: warm print at 60 %');
+  expect(await hook<number>(page, 'cb.doc().stages.darkroom.stack.items.lights.params.logH[2]')).toBeCloseTo(0.03, 6);
   await expect(page.locator('.cb-hist-i.is-cursor').first()).toContainText('Printer lights R 0 → −1, B 0 → +1 pt');
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('ControlOrMeta+z');
@@ -59,17 +59,18 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
   await expect(survey).toHaveCount(0);
 
   // an agent's look batch over three frames: one card, approve, one undo step
-  await hook(page, `cb.studio.frames.all().slice(0, 3).forEach((e) => e.log.propose([{ op: 'set', path: 'print.grade', value: 3 }], { tx: 'eval-9', batch: 'look:9-1', why: 'Look: grade 3' }))`);
+  await hook(page, `cb.studio.frames.all().slice(0, 3).forEach((e) => cb.studio.propose([{ op: 'set', path: 'stages.darkroom.medium.grade', value: 3 }], { frame: e.id, tx: 'eval-9:' + e.id, batch: 'look:9-1', why: 'Look: grade 3' }))`);
   const card = page.locator('.cb-looks-batch[data-batch="look:9-1"]');
   await expect(card).toBeVisible();
   await expect(card).toContainText('3 frames');
   await expect(card).toContainText('grade 2 → 3 (3 frames)');
   await card.getByRole('button', { name: 'Approve 3' }).click();
   await expect(card).toHaveCount(0);
-  expect(await hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => e.log.committed.print.grade)')).toEqual([3, 3, 3]);
+  const grades3 = () => hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => cb.doc(e.id).stages.darkroom.medium.grade)');
+  expect(await grades3()).toEqual([3, 3, 3]);
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('ControlOrMeta+z');
-  await expect.poll(() => hook<number[]>(page, 'cb.studio.frames.all().slice(0, 3).map((e) => e.log.committed.print.grade)')).toEqual([2, 2, 2]);
+  await expect.poll(grades3).toEqual([2, 2, 2]);
 });
 
 test('looks: apply to the roll’s unedited frames on one card, untick a frame, apply, one undo', async ({ page }) => {
@@ -79,7 +80,7 @@ test('looks: apply to the roll’s unedited frames on one card, untick a frame, 
   const ids = await hook<string[]>(page, `cb.state().roll.rolls['roll-1'].frames`);
   expect(ids.length).toBe(6);
   // frame 2 has been worked on: not "unedited"
-  await hook(page, `cb.studio.route.applyMutations(${JSON.stringify(ids[1])}, [{ op: 'set', path: 'print.grade', value: 3 }], 'Grade')`);
+  await hook(page, `cb.studio.commit(${JSON.stringify(ids[1])}, [{ op: 'set', path: 'stages.darkroom.medium.grade', value: 3 }], 'Grade')`);
   await page.keyboard.press('d');
   await page.locator('.ck-panel[data-panel="looks-library"] .cb-look-cell', { hasText: 'strong grade 4' }).getByRole('button', { name: 'Preview' }).click();
   await page.locator('#looks-apply-roll').click();
@@ -91,7 +92,7 @@ test('looks: apply to the roll’s unedited frames on one card, untick a frame, 
   await expect(card).toContainText('· 4 frames');
   await page.locator('#looks-pending-approve').click();
   await expect(card).toHaveCount(0);
-  const grades = () => hook<number[]>(page, `cb.state().roll.rolls['roll-1'].frames.map((f) => cb.studio.frames.get(f).log.committed.print.grade)`);
+  const grades = () => hook<number[]>(page, `cb.state().roll.rolls['roll-1'].frames.map((f) => cb.doc(f).stages.darkroom.medium.grade)`);
   expect(await grades()).toEqual([4, 3, 4, 4, 4, 2]);
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('ControlOrMeta+z');

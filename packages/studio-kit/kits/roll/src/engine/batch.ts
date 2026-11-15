@@ -1,16 +1,22 @@
-// The mutation-batch IR (guide §6.3): per-frame mutation lists with one label, one why and one approval scope.
-// Roll setup changes, the first print, matching and CHB-021's "apply look to the roll" all have this shape:
-// compute per-frame mutations, show one card, commit as one global undo step (EditLogRoute.applyBatch).
-import { applyMutation, canonicalJSON, getPath, type Diagnostic, type FrameRecipe, type Mutation } from '@chromobench/contract';
+// The roll's batch plans (guide §6.3; CHB-037): per-frame sets on document paths with one label, one why and one
+// approval scope — the first print, matching and its undoing. A plan is shown on one card (previewed on the
+// contact sheet), then committed through the values batch builder (`plan`) as one step of the document log. Each
+// set records the value it replaces, so a frame changed after planning is stale at approval.
+import { canonicalJSON, set, type Mutation } from '@chromobench/values';
+import { edit, type Diagnostic, type Document } from '@chromobench/contract';
+import { strip } from '@chromobench/shell';
+import { read, withoutInert } from '../../../../src/model/doc.ts';
 import type { FrameId } from './model.ts';
 
 export interface FrameMutations {
   frame: FrameId;
   mutations: Mutation[];
+  /** the value each set replaces (path → value) */
+  expect: Record<string, unknown>;
 }
 
 export interface MutationBatch {
-  /** also the EditLog tx of every unit it makes (prefixed ROLL_TX) */
+  /** the batch id: every transaction it commits carries it (prefixed ROLL_TX) */
   id: string;
   kind: 'first-print' | 'match' | 'clear-match' | 'setup' | 'custom';
   label: string;
@@ -25,16 +31,17 @@ export interface MutationBatch {
 /** A plain deep copy (also of the store's read-only proxies, which structuredClone refuses). */
 export const plain = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
-/** `set` mutations carrying the value they replace (DR-7), for the staleness check at approval. */
-export function setWithExpect(r: FrameRecipe, path: string, value: unknown): Mutation {
-  return { op: 'set', path, value: plain(value), expect: plain(getPath(r, path) ?? null) };
-}
-
-/** only the sets whose value differs from the recipe's */
-export function changedSets(r: FrameRecipe, values: Record<string, unknown>): Mutation[] {
-  const out: Mutation[] = [];
-  for (const [p, v] of Object.entries(values)) if (canonicalJSON(getPath(r, p) ?? null) !== canonicalJSON(v ?? null)) out.push(setWithExpect(r, p, v));
-  return out;
+/**
+ * The sets that give a document these values (only those that change something), passed through withoutInert (an
+ * optics set on a normalised document becomes printer lights), with the values they replace.
+ */
+export function frameSets(doc: Document, values: Record<string, unknown>, always: readonly string[] = []): Omit<FrameMutations, 'frame'> {
+  const ms: Mutation[] = [];
+  for (const [p, v] of Object.entries(values)) if (always.includes(p) || canonicalJSON(read(doc, p) ?? null) !== canonicalJSON(v ?? null)) ms.push(set(p, plain(v)));
+  const mutations = withoutInert(doc, ms);
+  const expect: Record<string, unknown> = {};
+  for (const m of mutations) if (m.op === 'set') expect[m.path] = plain(read(doc, m.path) ?? null);
+  return { mutations, expect };
 }
 
 export interface Stale {
@@ -44,16 +51,15 @@ export interface Stale {
   now: unknown;
 }
 
-/** Sets whose `expect` no longer matches the frame's committed value (E_STALE at approval). */
-export function staleOf(b: MutationBatch, recipeOf: (f: FrameId) => FrameRecipe | undefined): Stale[] {
+/** Sets whose replaced value no longer matches the frame's committed value (E_STALE at approval). */
+export function staleOf(b: MutationBatch, docOf: (f: FrameId) => Document | undefined): Stale[] {
   const out: Stale[] = [];
   for (const f of b.frames) {
-    const r = recipeOf(f.frame);
-    if (!r) continue;
-    for (const m of f.mutations) {
-      if (m.op !== 'set' || m.expect === undefined) continue;
-      const now = getPath(r, m.path) ?? null;
-      if (canonicalJSON(now) !== canonicalJSON(m.expect)) out.push({ frame: f.frame, path: m.path, expected: m.expect, now });
+    const d = docOf(f.frame);
+    if (!d) continue;
+    for (const [path, expected] of Object.entries(f.expect)) {
+      const now = read(d, path) ?? null;
+      if (canonicalJSON(now) !== canonicalJSON(expected ?? null)) out.push({ frame: f.frame, path, expected, now });
     }
   }
   return out;
@@ -62,41 +68,19 @@ export function staleOf(b: MutationBatch, recipeOf: (f: FrameId) => FrameRecipe 
 export const staleDiagnostics = (s: Stale[]): Diagnostic[] =>
   s.map((x) => ({ code: 'E_STALE', message: `${x.frame}: ${x.path} changed since the batch was planned: expected ${canonicalJSON(x.expected)}, now ${canonicalJSON(x.now)}` }));
 
-/** The recipe a frame would have with the batch applied (the preview on the contact sheet). */
-export function previewOf(b: MutationBatch | null | undefined, frame: FrameId, r: FrameRecipe): FrameRecipe {
-  const f = b?.frames.find((x) => x.frame === frame);
-  if (!f) return r;
-  let out = r;
-  for (const m of f.mutations) {
-    try {
-      out = applyMutation(out, m.op === 'set' ? { op: 'set', path: m.path, value: m.value } : m).recipe;
-    } catch {
-      return r;
-    }
+/** The document a frame would have with the batch applied (the preview on the contact sheet). The state's
+ *  read-only views of the batch and the document are unwrapped: an edit works on the plain values. */
+export function previewOf(b: MutationBatch | null | undefined, frame: FrameId, d: Document): Document {
+  const f = strip(b)?.frames.find((x) => x.frame === frame);
+  if (!f || !f.mutations.length) return d;
+  try {
+    return edit(strip(d), f.mutations).doc;
+  } catch {
+    return d;
   }
-  return out;
 }
 
 /** Keep only the frames the photographer left ticked (partial approval). */
 export function withoutFrames(b: MutationBatch, off: readonly FrameId[]): MutationBatch {
   return { ...b, frames: b.frames.filter((f) => !off.includes(f.frame)) };
-}
-
-/** A generic batch: build(frame, recipe) → mutations, for every frame (CHB-021's "apply look to the roll"). */
-export function buildBatch(
-  frames: readonly FrameId[],
-  recipeOf: (f: FrameId) => FrameRecipe | undefined,
-  build: (frame: FrameId, r: FrameRecipe) => Mutation[] | { skip: string },
-  o: { id: string; label: string; why?: string; kind?: MutationBatch['kind']; by?: MutationBatch['by'] },
-): MutationBatch {
-  const out: FrameMutations[] = [];
-  const skipped: MutationBatch['skipped'] = [];
-  for (const f of frames) {
-    const r = recipeOf(f);
-    if (!r) continue;
-    const ms = build(f, r);
-    if (!Array.isArray(ms)) skipped.push({ frame: f, why: ms.skip });
-    else if (ms.length) out.push({ frame: f, mutations: ms });
-  }
-  return { id: o.id, kind: o.kind ?? 'custom', label: o.label, why: o.why ?? o.label, by: o.by ?? 'user', frames: out, skipped };
 }

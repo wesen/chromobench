@@ -4,20 +4,26 @@
 // now also makes the analysis image (the file at the analysis size, as a decode at that size makes its working image)
 // when the working size differs; the first print meters it. Synthetic files only.
 import { MessageChannel } from 'node:worker_threads';
-import { defaultRecipe, Graph, sha256Hex, type FrameRecipe, type Vec3 } from '@chromobench/contract';
+import { Graph, newDocument, sha256Hex, type Box, type Document, type Vec3 } from '@chromobench/contract';
+import { lightsOf, mainExposure } from '@chromobench/studio-kit';
 import { CLASS_CODE, classify, DEFAULT_SIGMA_D, integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { plantedFrames, writeTiff16, type RawDecoder } from '@chromobench/ingest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { decodeFile, decodeScan } from '../src/host/decode.ts';
 import { serveEngine, type EngineScope } from '../src/host/engine-serve.ts';
-import { firstPrint, onAnalysis, photoRecipe } from '../src/host/first-print.ts';
+import { firstPrint, onAnalysis, photoDocument } from '../src/host/first-print.ts';
 import { ANALYSIS_LONG, analysisSha, StudioEngine, type AnalysisImage, type HostServices } from '../src/host/studio-engine.ts';
 import { WorkerClient, WorkerEngine, type WorkerLike } from '../src/host/worker-engine.ts';
 
 const noRaw: RawDecoder = { name: 'none', decode: () => Promise.reject(new Error('no camera RAW in this test')) };
 const integrate = (latd: Vec3, alpha: number): Vec3 => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3;
-const total = (r: FrameRecipe): number => Math.log10(r.print.enlarger.time_s) + (r.print.lights.logH[0] + r.print.lights.logH[1] + r.print.lights.logH[2]) / 3;
+const total = (d: Document): number => {
+  const l = lightsOf(d);
+  return Math.log10(mainExposure(d).time_s) + (l[0] + l[1] + l[2]) / 3;
+};
+const cropOf = (d: Document): Box | null => d.geometry.crop;
+const scanOf = (d: Document) => d.stages.scan!.medium as { rebate: Box | null; openGate: unknown; umPerPx: number };
 
 /** A photo with fine detail (a 2 px checker over a gradient), so the metered exposure depends on the resolution. */
 function detailedTiff(w = 240, h = 160): Uint8Array {
@@ -83,46 +89,49 @@ describe('the first print meters the analysis image (first-print.ts)', () => {
     const sha = sha256Hex(bytes);
     const big = await decodeFile(bytes.slice(), sha, 'p.tif', 'photo', opts(0, 60));
     const small = await decodeFile(bytes.slice(), sha, 'p.tif', 'photo', opts(60));
-    const print = async (d: typeof big, analysis: AnalysisImage | null): Promise<FrameRecipe> => {
+    const print = async (d: typeof big, analysis: AnalysisImage | null): Promise<Document> => {
       const e = new RefEngine({ data: nodePacksData(), mode: 'tabulated', sampled: true });
       e.openDecoded(d.info, d.data);
       if (d.analysis) e.openDecoded(d.analysis.info, d.analysis.data!);
       const g = new Graph();
       g.registerSource(d.info);
-      const r0 = photoRecipe(defaultRecipe('digital-raw', { sha256: sha, name: 'p' }), false);
+      const r0 = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'p' }), false);
       return firstPrint(e, g, r0, { integrate, analysis });
     };
     const a = big.analysis!.info;
     const metered = await print(big, { info: a, kx: a.width / big.info.width, ky: a.height / big.info.height });
     const reference = await print(small, null);
     const own = await print(big, null);
-    expect(metered.print.enlarger.time_s).toBe(reference.print.enlarger.time_s);
-    expect(metered.print.lights.logH).toEqual(reference.print.lights.logH);
-    // the recipe stays on its own source; only the measurement moved
+    expect(mainExposure(metered).time_s).toBe(mainExposure(reference).time_s);
+    expect(lightsOf(metered)).toEqual(lightsOf(reference));
+    // the document stays on its own source; only the measurement moved
     expect(metered.source.sha256).toBe(sha);
     // the resolution matters for this picture: metered on the 240 px image the total is elsewhere
     expect(Math.abs(total(own) - total(reference))).toBeGreaterThan(0.005);
   });
 
-  it('onAnalysis moves the source and the boxes a first print has (crop, rebate, open gate) onto the analysis image', () => {
-    const r0 = defaultRecipe('negative-scan', { sha256: 'a'.repeat(64), name: 'n' });
-    const r: FrameRecipe = {
+  it('onAnalysis moves the source, the film pitch and the boxes a first print has (crop, rebate, open gate) onto the analysis image', () => {
+    const r0 = newDocument('negative-scan', { sha256: 'a'.repeat(64), name: 'n', width: 400, height: 240 });
+    const s0 = r0.stages.scan!;
+    const r: Document = {
       ...r0,
-      view: { ...r0.view, frame: { ...r0.view.frame, crop: { x: 100, y: 40, w: 300, h: 200 } } },
-      scan: { ...r0.scan!, rebate: { x: 8, y: 4, w: 40, h: 20 }, openGate: 'flat' },
+      geometry: { ...r0.geometry, crop: { x: 100, y: 40, w: 300, h: 200 } },
+      stages: { ...r0.stages, scan: { ...s0, medium: { ...(s0.medium as object), rebate: { x: 8, y: 4, w: 40, h: 20 }, openGate: 'flat' } as never } },
     };
     const info = { sha256: 'b'.repeat(64), width: 100, height: 60 } as AnalysisImage['info'];
     const m = onAnalysis(r, { info, kx: 0.25, ky: 0.25 });
     expect(m.source.sha256).toBe('b'.repeat(64));
-    expect(m.view.frame.crop).toEqual({ x: 25, y: 10, w: 75, h: 50 });
-    expect(m.scan!.rebate).toEqual({ x: 2, y: 1, w: 10, h: 5 });
-    expect(m.scan!.openGate).toBe('flat');
-    expect(r.view.frame.crop).toEqual({ x: 100, y: 40, w: 300, h: 200 }); // not mutated
+    expect(cropOf(m)).toEqual({ x: 25, y: 10, w: 75, h: 50 });
+    expect(scanOf(m).rebate).toEqual({ x: 2, y: 1, w: 10, h: 5 });
+    expect(scanOf(m).openGate).toBe('flat');
+    // a pixel of the analysis image covers four times the film
+    expect(scanOf(m).umPerPx).toBeCloseTo(scanOf(r).umPerPx * 4, 9);
+    expect(cropOf(r)).toEqual({ x: 100, y: 40, w: 300, h: 200 }); // not mutated
     // a strip frame: its frame as the decode at the analysis size found it; a crop that is no frame: scaled
     const frames = { working: [{ x: 0, y: 0, w: 90, h: 60 }, { x: 100, y: 40, w: 300, h: 200 }], analysis: [{ x: 0, y: 0, w: 23, h: 15 }, { x: 24, y: 9, w: 77, h: 51 }] };
-    expect(onAnalysis(r, { info, kx: 0.25, ky: 0.25, frames }).view.frame.crop).toEqual({ x: 24, y: 9, w: 77, h: 51 });
-    const moved: FrameRecipe = { ...r, view: { ...r.view, frame: { ...r.view.frame, crop: { x: 104, y: 40, w: 300, h: 200 } } } };
-    expect(onAnalysis(moved, { info, kx: 0.25, ky: 0.25, frames }).view.frame.crop).toEqual({ x: 26, y: 10, w: 75, h: 50 });
+    expect(cropOf(onAnalysis(r, { info, kx: 0.25, ky: 0.25, frames }))).toEqual({ x: 24, y: 9, w: 77, h: 51 });
+    const moved: Document = { ...r, geometry: { ...r.geometry, crop: { x: 104, y: 40, w: 300, h: 200 } } };
+    expect(cropOf(onAnalysis(moved, { info, kx: 0.25, ky: 0.25, frames }))).toEqual({ x: 26, y: 10, w: 75, h: 50 });
   });
 });
 
@@ -178,11 +187,11 @@ describe('the analysis image through the engine worker and StudioEngine', () => 
     expect([a.kx, a.ky]).toEqual([50 / 200, a.info.height / studio.graph.source(sha)!.height]);
     expect(studio.notes.get(sha)!.analysis!.data).toBeUndefined();
     // the first print meters it in the worker: the analysis source is open there
-    const r0 = photoRecipe(defaultRecipe('digital-raw', { sha256: sha, name: 'p' }), false);
+    const r0 = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'p' }), false);
     const g = new Graph();
     g.registerSource(studio.graph.source(sha)!);
     const r = await firstPrint(studio, g, r0, { integrate, analysis: a });
-    expect(r.print.enlarger.time_s).toBeGreaterThan(0);
+    expect(mainExposure(r).time_s).toBeGreaterThan(0);
     // re-open as a negative: both sources are forgotten
     await studio.openAs({ kind: 'file', sha256: sha, name: 'p.tif', bytes }, 'negative');
     expect(forgotten).toEqual([sha, analysisSha(sha)]);

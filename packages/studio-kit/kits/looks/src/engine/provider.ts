@@ -1,10 +1,11 @@
 // The agent counterpart (guide §8.5): packages/dsl's LooksProvider over this kit's registry, so cb.looks.apply /
 // whatIf / diff / list in an eval resolve the same looks with the same Amount and diff passes as the UI. The DSL
 // does not import studio-kit; the host injects this (DslSession.create({ looks: cb.kits.looks.provider(() => state) })).
-// The shape matches @chromobench/dsl's LooksProvider structurally.
+// The shape is the host's side of the agent's looks (P6a: the DSL's LooksProvider on documents).
 
-import { closest, fail, type Diagnostic, type FrameRecipe, type Mutation } from '@chromobench/contract';
-import { diffRecipes } from './diff.ts';
+import type { Mutation } from '@chromobench/values';
+import { closest, fail, type Diagnostic, type Document } from '@chromobench/contract';
+import { diffDocs } from './diff.ts';
 import type { Look } from './look.ts';
 import { planFrame, planLabel } from './plan.ts';
 
@@ -12,11 +13,11 @@ export interface LooksProviderShape {
   list(): { id: string; name: string; group: string; requires: string; params: Record<string, { type: string; unit?: string; min?: number; max?: number; default?: unknown }> }[];
   resolve(
     id: string,
-    frame: { id: string; recipe: FrameRecipe },
+    frame: { id: string; doc: Document },
     params: Record<string, unknown>,
     opts: { amount?: number; from?: 'current' | 'defaults' },
   ): { look: { id: string; name: string }; label: string; mutations: Mutation[]; diff: { path: string; shown: string }[]; skip?: Diagnostic };
-  diff(a: FrameRecipe, b: FrameRecipe): { path: string; shown: string }[];
+  diff(a: Document, b: Document): { path: string; shown: string }[];
 }
 
 export function looksProvider(all: () => readonly Look[]): LooksProviderShape {
@@ -37,11 +38,11 @@ export function looksProvider(all: () => readonly Look[]): LooksProviderShape {
     resolve: (id, frame, params, opts) => {
       const l = find(id);
       const k = opts.amount ?? 1;
-      const pf = planFrame(l, params, frame.id, frame.recipe, { amount: k, ...(opts.from ? { from: opts.from } : {}) });
+      const pf = planFrame(l, params, frame.id, frame.doc, { amount: k, ...(opts.from ? { from: opts.from } : {}) });
       // a bad parameter is the agent's error, not a skipped frame
       if (pf.skipped && ['E_ARG_RANGE', 'E_ARG_TYPE', 'E_UNKNOWN_OPTION'].includes(pf.skipped.code)) fail(pf.skipped.code as 'E_ARG_RANGE', pf.skipped.message, pf.skipped);
       return { look: { id: l.id, name: l.name }, label: planLabel(l.name, k), mutations: pf.mutations, diff: pf.diff.map((d) => ({ path: d.path, shown: d.shown })), ...(pf.skipped ? { skip: pf.skipped } : {}) };
     },
-    diff: (a, b) => diffRecipes(a, b).map((d) => ({ path: d.path, shown: d.shown })),
+    diff: (a, b) => diffDocs(a, b).map((d) => ({ path: d.path, shown: d.shown })),
   };
 }

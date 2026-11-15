@@ -65,10 +65,13 @@ test('reference engine in the worker: no frozen window on open or drag; drafts c
     await page.mouse.move(x + 2 * i, y);
     await page.waitForTimeout(30);
   }
-  await page.mouse.up();
   const dragMs = Date.now() - t0;
   expect(dragMs, 'the mouse moves are answered at once').toBeLessThan(5000);
-  const t1 = await page.evaluate(() => window.chromobench.log!.state.print.enlarger.time_s);
+  // the hand holds still before it lets go, until a draft has shown (CHB-037: the reference engine's renders
+  // through the light law take seconds in the worker, longer than the drag, so a draft lands after the moves)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __r: string[] }).__r.some((x) => x.startsWith('main|draft'))), { timeout: 120_000 }).toBe(true);
+  await page.mouse.up();
+  const t1 = await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number));
   await page.evaluate(() => window.chromobench.idle());
   const dragStalls = await stalls(page);
   expect(Math.max(0, ...dragStalls), `drag stalls ${dragStalls}`).toBeLessThan(1000);
@@ -79,6 +82,6 @@ test('reference engine in the worker: no frozen window on open or drag; drafts c
   expect(Math.max(...drafts)).toBeLessThan(Math.min(...screen));
   // the last render is a screen render of the final value
   expect(r.at(-1)![1]).toBe('screen');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(t1);
+  expect(await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number))).toBe(t1);
   expect(errors).toEqual([]);
 });

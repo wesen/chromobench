@@ -31,7 +31,7 @@ const spec = (name: string, slots: FormSpec['slots'], doc: string, extra: Partia
 export const argForm = spec(
   'cb.arg',
   {
-    path: b<string>('a recipe path (print.enlarger.time_s) or a component (print.enlarger.filtration.y)'),
+    path: b<string>('a document path (main.params.time_s, stages.darkroom.medium.paper) or a component (main.params.filtration.y)'),
     label: b<string>(),
     step: b<string | number>("a darkroom step: '1/3 st', '5 CC', '2 pt'"),
     widget: b<string>('slider · stepper · segmented · select · toggle · pad · nudge'),
@@ -49,12 +49,12 @@ const panelSpec = (name: string, doc: string, slots: FormSpec['slots'] = {}): Fo
 
 export const CB_FORMS: FormSpec[] = [
   argForm,
-  panelSpec('cb.history', "The frame's EditLog: groups by tx in darkroom words, author, cursor; click jumps"),
-  panelSpec('cb.approvals', 'One card per pending agent tx: Show · Approve (the checked changes) · Reject; Approve all; Apply anyway on E_STALE'),
-  panelSpec('cb.why', 'Why the focused control has its value (EditLog.why)'),
-  panelSpec('cb.snapshots', 'Named recipes of the frame; restore is one EditLog unit'),
-  panelSpec('cb.exposures', 'The exposure list (dodge, burn, flash, split) and the printing script'),
-  panelSpec('cb.journal', 'Raw EditLog entries: seq, status, by, tx, expect'),
+  panelSpec('cb.history', "The frame's steps in the document log, in darkroom words, author, cursor; click moves the log's cursor there"),
+  panelSpec('cb.approvals', 'One card per pending agent proposal: Show · Approve (the checked changes) · Reject; Approve all; Apply anyway on E_STALE'),
+  panelSpec('cb.why', 'Why the focused control has its value (the log\'s trail of the path)'),
+  panelSpec('cb.snapshots', 'Named versions of the frame\'s document; restore is one step'),
+  panelSpec('cb.exposures', 'The darkroom layers (main, burns, dodges, flashes, preflash, density masks, filters) and the printing script'),
+  panelSpec('cb.journal', 'The log\'s journal for the frame: seq, status, by, transaction, mutations'),
   panelSpec('cb.nodes', 'The display closure with node ids and evaluation counts'),
   panelSpec('cb.explain', 'This studio, explained'),
   panelSpec('cb.metadata', 'The selected frame: name, SHA-256, size, flag, stars'),

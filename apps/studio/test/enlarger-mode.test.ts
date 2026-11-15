@@ -1,9 +1,10 @@
 // CHB-031 WS-A (F17): what Time does to the print in each enlarger mode, on core's RefEngine and synthetic frames.
 // Normalised mode prints the grey card at the aim whatever the optics, so a time change (and the test strip in
 // seconds) changes nothing; real mode exposes the paper for the time, so a longer time prints darker.
-import { compile, defaultRecipe, Graph, type FrameRecipe, type SourceInfo } from '@chromobench/contract';
+import { compile, edit, Graph, newDocument, type Document, type SourceInfo } from '@chromobench/contract';
+import { set, type Mutation } from '@chromobench/values';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
-import { stripRecipe, stripValues } from '@chromobench/studio-kit';
+import { darkroomMedium, lightsOf, mainExposure, MODE_PATH, stripMutation, stripValues, TIME_PATH } from '@chromobench/studio-kit';
 import { describe, expect, it } from 'vitest';
 import { FIRST_PRINT_AIM, firstPrint, measureExposure } from '../src/host/first-print.ts';
 
@@ -25,9 +26,9 @@ function source(kind: Kind): { info: SourceInfo; data: Float32Array } {
   return { info, data };
 }
 
-/** the display chain below output.frame (the studio's host op: crop and orientation) */
-function node(g: Graph, r: FrameRecipe) {
-  const top = compile(r, g);
+/** the display chain below output.frame (the document geometry) */
+function node(g: Graph, d: Document) {
+  const top = compile(d, g).display;
   return top.op === 'output.frame' ? g.get(top.inputs[0]!)! : top;
 }
 
@@ -37,8 +38,8 @@ function setup(kind: Kind) {
   g.registerSource(info);
   const e = new RefEngine({ data: nodePacksData() });
   e.openDecoded(info, data);
-  const r0 = defaultRecipe(kind, { sha256: info.sha256, name: kind });
-  const print = async (r: FrameRecipe): Promise<Float32Array> => {
+  const r0 = newDocument(kind, { sha256: info.sha256, name: kind, width: W, height: H });
+  const print = async (r: Document): Promise<Float32Array> => {
     const n = node(g, r);
     e.adopt(g.closure(n.id));
     return (await e.evaluate(n, { scale: 'full', precision: 'preview' })).read() as Promise<Float32Array>;
@@ -46,7 +47,15 @@ function setup(kind: Kind) {
   return { e, g, info, r0, print };
 }
 
-const withEnlarger = (r: FrameRecipe, o: Partial<FrameRecipe['print']['enlarger']>): FrameRecipe => ({ ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, ...o } } });
+/** the document with its enlarger mode and its main exposure's time set */
+const withEnlarger = (d: Document, o: { mode?: 'real' | 'normalised'; time_s?: number }): Document => {
+  const ms: Mutation[] = [];
+  if (o.mode) ms.push(set(MODE_PATH, o.mode));
+  if (o.time_s !== undefined) ms.push(set(TIME_PATH, o.time_s));
+  return edit(d, ms).doc;
+};
+const modeOf = (d: Document): string => darkroomMedium(d).mode;
+const timeOf = (d: Document): number => mainExposure(d).time_s;
 const mean = (d: ArrayLike<number>): number => {
   let s = 0;
   for (let i = 0; i < d.length; i++) s += d[i]!;
@@ -77,9 +86,10 @@ describe('enlarger mode and time (CHB-031 F17)', () => {
     it(`${kind}: the test strip in seconds varies in both modes; normalised moves the lights by the bands' stops`, async () => {
       const { e, g, r0 } = setup(kind);
       // each band as the whole print at its own value (a band's box of the composite would mix in the picture)
-      const bands = async (r: FrameRecipe): Promise<Float32Array[]> =>
-        Promise.all(stripValues('time', r.print.enlarger.time_s, 1 / 3, 5).map(async (v) => {
-          const n = node(g, stripRecipe('time', r, v));
+      const bands = async (r: Document): Promise<Float32Array[]> =>
+        Promise.all(stripValues('time', timeOf(r), 1 / 3, 5).map(async (v) => {
+          const mu = stripMutation('time', r, v);
+          const n = node(g, edit(r, [set(mu.path, mu.value)]).doc);
           e.adopt(g.closure(n.id));
           return (await e.evaluate(n, { scale: 'full', precision: 'preview' })).read() as Promise<Float32Array>;
         }));
@@ -101,16 +111,19 @@ describe('enlarger mode and time (CHB-031 F17)', () => {
       const m0 = (x0[0] + x0[1] + x0[2]) / 3;
       const { density, alpha } = FIRST_PRINT_AIM[kind];
       const colour0 = x0.map((v) => v - density * m0 - alpha * (v - m0));
-      expect(r0.print.enlarger.mode).toBe('real'); // the contract's default since 0.4
+      expect(modeOf(r0)).toBe('real'); // the contract's default
       const real = await firstPrint(e, g, r0, { integrate });
-      expect(real.print.enlarger.mode).toBe('real');
-      expect(real.print.enlarger.time_s).not.toBe(10);
-      const lightsMean = (r: FrameRecipe) => (r.print.lights.logH[0] + r.print.lights.logH[1] + r.print.lights.logH[2]) / 3;
+      expect(modeOf(real)).toBe('real');
+      expect(timeOf(real)).not.toBe(10);
+      const lightsMean = (r: Document) => {
+        const l = lightsOf(r);
+        return (l[0] + l[1] + l[2]) / 3;
+      };
       const norm = await firstPrint(e, g, withEnlarger(r0, { mode: 'normalised' }), { integrate });
-      expect(norm.print.enlarger.mode).toBe('normalised');
-      expect(norm.print.enlarger.time_s).toBe(10);
+      expect(modeOf(norm)).toBe('normalised');
+      expect(timeOf(norm)).toBe(10);
       // the density the real print put in its time (log10 t/10) is in the normalised print's lights
-      expect(lightsMean(norm)).toBeCloseTo(lightsMean(real) + Math.log10(real.print.enlarger.time_s / 10), 2);
+      expect(lightsMean(norm)).toBeCloseTo(lightsMean(real) + Math.log10(timeOf(real) / 10), 2);
       for (const r of [real, norm]) (await measureExposure(e, g, r)).forEach((v, k) => expect(Math.abs(v - colour0[k]!)).toBeLessThan(0.01));
     }
   });

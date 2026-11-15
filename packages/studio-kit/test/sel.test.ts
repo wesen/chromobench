@@ -10,12 +10,14 @@ describe('cb.sel', () => {
     expect(cb.sel).toBe(sel);
     expect('current' in cb).toBe(false);
   });
-  it('reads the current frame, the targets, the handle and the recipe', async () => {
+  it('reads the current frame, the targets, the handle and the document', async () => {
     const { rt, f } = await started();
     const s = rt.state as CbState;
     expect(sel.current(s)).toBe(f);
     expect(sel.targets(s)).toEqual([f]);
-    expect(sel.recipe(s)).toEqual(s.recipes[f]);
+    expect(sel.doc(s)).toEqual(s.docs[f]);
+    expect(sel.proposals(s)).toEqual([]);
+    expect(sel.logVersion(s)).toBeGreaterThan(0);
     expect(sel.frame(s)?.print().frame).toBe(f);
     expect(sel.name(s)).toBe('m1.tif');
     expect(sel.visible(s).map(x => x.id)).toEqual([f]);

@@ -37,7 +37,7 @@ export const hostCommands = (): CommandTable<CbState> => ({
   },
   // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
   'file.export': { label: 'Export…', ...needFrame, run: ctx => (ctx.rt.capable('host.exportPrint') ? host(ctx).exportPrint!() : ctx.run('output.save')) },
-  'file.saveRecipe': { label: 'Save Recipe', ...needFrame, requires: 'host.saveRecipe', run: ctx => host(ctx).saveRecipe!() },
+  'file.saveDocument': { label: 'Save Document', ...needFrame, requires: 'host.saveDocument', run: ctx => host(ctx).saveDocument!() },
   'view.layout': {
     label: 'Layout…',
     requires: 'host.setLayout',

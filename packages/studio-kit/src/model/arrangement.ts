@@ -1,14 +1,14 @@
-// Moved from apps/studio/src/core/arrangement.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
-// Control arrangements (guide §5.7). "Darkroom" is a hand-written list of recipe paths in groups;
-// "All parameters" is generated from the registry by group. auditArrangement() is Filmbench's
-// Scheme.audit: every path must exist as a generated control.
-import type { FrameRecipe } from '@chromobench/contract';
+// Control arrangements (guide §5.7). "Darkroom" is a hand-written list of document paths in groups (the main
+// exposure's and the printer lights' params, the media); "All parameters" is generated from the catalogue by group.
+// auditArrangement() is Filmbench's Scheme.audit: every path must exist as a generated control.
+import type { Document } from '@chromobench/contract';
 import type { ControlModel } from './controls.ts';
+import { FILTRATION_PATH, FSTOP_PATH, GRADE_PATH, isNormalised, LIGHTS_PATH, MODE_PATH, PAPER_PATH, TIME_PATH } from './doc.ts';
 
 export interface Arrangement {
   name: string;
-  /** `note`: a short wrapped line after the group's controls for the selected frame's recipe ('' for none) */
-  groups: { title: string; paths: string[]; note?: (r: FrameRecipe) => string }[];
+  /** `note`: a short wrapped line after the group's controls for the selected frame's document ('' for none) */
+  groups: { title: string; paths: string[]; note?: (d: Document) => string }[];
 }
 
 /** what the Exposure group says while the enlarger is normalised (its Time and Aperture are hidden; CHB-031) */
@@ -17,16 +17,17 @@ export const NORMALISED_NOTE = 'Normalised enlarger: the grey card prints at the
 export const DARKROOM: Arrangement = {
   name: 'Darkroom',
   groups: [
-    // a control a frame's recipe has no value for is hidden: time and aperture in normalised mode, the scanner and
-    // the scan's film for a photo, the capture film for a negative (CHB-031 F17, F23)
-    { title: 'Exposure', paths: ['print.enlarger.mode', 'print.enlarger.time_s', 'print.enlarger.fstop'], note: (r) => (r.print.enlarger.mode === 'normalised' ? NORMALISED_NOTE : '') },
-    { title: 'Filtration', paths: ['print.enlarger.filtration'] },
-    { title: 'Printer lights', paths: ['print.lights.logH'] },
-    { title: 'Paper', paths: ['print.paper', 'print.grade', 'print.preflash'] },
+    // a control a frame's document has no value for is hidden: time and aperture in normalised mode, the scanner
+    // and the scan's film for a photo, the film of a camera file for a negative (CHB-031 F17, F23)
+    { title: 'Exposure', paths: [MODE_PATH, TIME_PATH, FSTOP_PATH], note: (d) => (isNormalised(d) ? NORMALISED_NOTE : '') },
+    { title: 'Filtration', paths: [FILTRATION_PATH] },
+    { title: 'Printer lights', paths: [LIGHTS_PATH] },
+    // the preflash is a darkroom layer now (Exposures: + preflash), not a paper setting
+    { title: 'Paper', paths: [PAPER_PATH, GRADE_PATH] },
     // the film and the light the print is seen under (CHB-023's demo had them beside the paper)
     {
-      title: 'Film and viewing', paths: ['capture.stock', 'scan.stock', 'scan.scanner', 'view.illuminant'],
-      note: (r) => (r.kind === 'digital-raw'
+      title: 'Film and viewing', paths: ['stages.film.medium.stock', 'stages.scan.medium.stock', 'stages.scan.medium.scanner', 'stages.print.medium.illuminant'],
+      note: (d) => (!d.stages.scan
         ? 'A photo prints as if the scene had been shot on this film. The viewing light is the light the print is seen under.'
         : 'The film of the negative and the scanner that digitised it. The viewing light is the light the print is seen under.'),
     },

@@ -1,12 +1,15 @@
 // cb.kits.looks: the kit's state (looks, looksView), its readers and the agent-batch pass (split from kit.ts, CHB-032).
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { FrameRecipe } from '@chromobench/contract';
-import { aggregate, diffRecipes, type AggregateEntry, type DiffEntry } from './engine/diff.ts';
+import type { Document } from '@chromobench/contract';
+import { strip } from '@chromobench/shell';
+import { sel } from '../../../src/sel.ts';
+import { docAt } from './engine/paths.ts';
+import { aggregate, diffDocs, type AggregateEntry, type DiffEntry } from './engine/diff.ts';
 import { defaultGroups } from './engine/groups.ts';
 import { type AmountBase, type Preset, type PresetEntry } from './engine/look.ts';
-import type { ApplyPlan } from './engine/plan.ts';
+import type { LookPlan } from './engine/plan.ts';
 
-export type CompareSource = 'before' | 'defaults' | { snapshot: string } | { frame: string } | { look: string; params?: Record<string, unknown>; amount?: number } | { recipe: FrameRecipe };
+export type CompareSource = 'before' | 'defaults' | { snapshot: string } | { frame: string } | { look: string; params?: Record<string, unknown>; amount?: number } | { doc: Document };
 
 export interface LooksDoc {
   presets: Record<string, Preset>;
@@ -33,7 +36,7 @@ export interface LooksView {
   groups: string[];
   compare: CompareSource;
   /** a planned apply to the roll or the library, waiting for confirmation */
-  pending: ApplyPlan | null;
+  pending: LookPlan | null;
   off: string[];
   stale: { frame: string; code: string; message: string }[];
   clipboard: { from: string; entries: PresetEntry[]; groups: string[] } | null;
@@ -55,26 +58,23 @@ export const plain = <T>(v: T): T => (v === undefined || v === null ? v : (JSON.
 export const looksView = (s: any): LooksView => ({ ...LOOKS_STATE.looksView, ...(s?.looksView ?? {}) });
 export const amountOf = (s: any): number => Number(looksView(s).amount ?? 100) / 100;
 
-/** an agent batch: pending proposals sharing a batch id (or one tx across frames), coalesced (approval-scope) */
+/** an agent batch: pending proposals of the log sharing a batch id, coalesced (approval scope): one card */
 export interface AgentBatch {
   batch: string;
   why: string;
-  frames: { frame: string; tx: string; seqs: number[]; recipe: FrameRecipe; diff: DiffEntry[] }[];
+  frames: { frame: string; tx: string; seq: number; doc: Document | null; diff: DiffEntry[] }[];
   aggregate: AggregateEntry[];
 }
-/** The approval-scope pass over the published proposals: one entry per batch that spans frames or carries a batch id. */
+/** The approval-scope pass over the published proposals (ui.log): one entry per batch id. */
 export function agentBatches(s: any): AgentBatch[] {
   const by = new Map<string, AgentBatch['frames']>();
   const why = new Map<string, string>();
-  const count = new Map<string, number>();
-  for (const [f, ps] of Object.entries((s?.proposals ?? {}) as Record<string, any[]>)) for (const p of ps ?? []) count.set(p.tx, (count.get(p.tx) ?? 0) + 1);
-  for (const [f, ps] of Object.entries((s?.proposals ?? {}) as Record<string, any[]>)) {
-    for (const p of ps ?? []) {
-      const key = p.batch ?? ((count.get(p.tx) ?? 0) > 1 ? p.tx : null);
-      if (!key) continue;
-      const r = s.recipes?.[f] as FrameRecipe | undefined;
-      by.set(key, [...(by.get(key) ?? []), { frame: f, tx: p.tx, seqs: [...p.seqs], recipe: p.recipe, diff: r && p.recipe ? diffRecipes(r, p.recipe) : [] }]);
-      if (p.why && !why.has(key)) why.set(key, p.why);
+  for (const f of Object.keys(s?.ui?.log?.proposals ?? {})) {
+    for (const p of sel.proposals(s, f)) {
+      if (!p.batch) continue;
+      const d = docAt(s, f);
+      by.set(p.batch, [...(by.get(p.batch) ?? []), { frame: f, tx: p.tx, seq: p.seq, doc: p.doc, diff: d && p.doc ? diffDocs(d, strip(p.doc)) : [] }]);
+      if (!why.has(p.batch)) why.set(p.batch, p.why ?? p.label);
     }
   }
   return [...by].map(([batch, frames]) => ({ batch, why: why.get(batch) ?? batch, frames, aggregate: aggregate(frames.map((f) => f.diff)) }));

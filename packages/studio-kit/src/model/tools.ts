@@ -1,9 +1,12 @@
-// Moved from apps/studio/src/core/tools.ts (CHB-009) for CHB-019 (the original was deleted in the apps/studio migration).
-// Darkroom tool arithmetic and adapters (guide §5.9). Each tool turns a click into one transaction;
-// the op argument shapes are CHB-010's to finalise, so they are kept in this one file.
-import type { Exposure, FrameRecipe, Graph, MaskSpec, Mutation, Vec3 } from '@chromobench/contract';
-import { burnSeconds, dodgeSeconds, formatSeconds, formatStops, PT, signed, stopsBetween, timeAtStops } from './units.ts';
-import { isNormalised, shiftLights } from './enlarger.ts';
+// Darkroom tool arithmetic (guide §5.9; contract 1.0): the test strip and the ring-around vary the main exposure
+// and the printer lights of the document; the burn and dodge tools make a mask in the document's library and a
+// darkroom layer through it. Each tool turns a click into one transaction of the document log.
+import { Coll, insert, set, type Mutation } from '@chromobench/values';
+import { mask as maskValue, pitches, type Document, type Graph, type MaskComponentKind, type Params, type Vec3 } from '@chromobench/contract';
+import {
+  exposureStep, FILTRATION_PATH, isNormalised, LIGHTS_PATH, lightsOf, mainExposure, newDarkroomLayer, nextId, shiftLights, TIME_PATH,
+} from './doc.ts';
+import { formatSeconds, formatStops, PT, signed, stopsBetween, timeAtStops } from './units.ts';
 
 // ---- test strip ----------------------------------------------------------------------------
 
@@ -12,8 +15,14 @@ export type StripVary = 'time' | 'filtration.y' | 'filtration.m' | 'filtration.c
 /** Band offsets centred on the current value: k = −(n−1)/2 … (n−1)/2. */
 export const bandOffsets = (count: number): number[] => Array.from({ length: count }, (_, i) => i - (count - 1) / 2);
 
-/** Lowest filtration shift (contract 0.2: print.enlarger.filtration is a shift on the database neutral pack). */
+/** Lowest filtration shift (the main exposure's filtration is a shift on the database neutral pack). */
 export const FILTRATION_MIN_CC = -100;
+
+/** The value a strip varies, as the document has it: the main time or one component of its filtration. */
+export function stripBase(vary: StripVary, d: Document): number {
+  const e = mainExposure(d);
+  return vary === 'time' ? e.time_s : e.filtration[vary.slice(-1) as 'c' | 'm' | 'y'];
+}
 
 /** The value of each band: t·2^(k·step) for time, base + k·step CC for the filtration shift (clamped at its minimum). */
 export function stripValues(vary: StripVary, base: number, step: number, count: number): number[] {
@@ -21,32 +30,23 @@ export function stripValues(vary: StripVary, base: number, step: number, count: 
 }
 
 /**
- * A band's label: seconds for a time strip, or, when `r` prints in normalised mode (where the time does nothing and
+ * A band's label: seconds for a time strip, or, when `d` prints in normalised mode (where the time does nothing and
  * the strip moves the printer lights instead, CHB-031), the band's stops from the current exposure.
  */
-export function stripLabel(vary: StripVary, v: number, r?: FrameRecipe): string {
-  if (vary === 'time' && r && isNormalised(r)) return `${formatStops(stopsBetween(r.print.enlarger.time_s, v))} st`;
+export function stripLabel(vary: StripVary, v: number, d?: Document): string {
+  if (vary === 'time' && d && isNormalised(d)) return `${formatStops(stopsBetween(mainExposure(d).time_s, v))} st`;
   return vary === 'time' ? `${formatSeconds(v)} s` : `${signed(Number(v.toFixed(1)), Number.isInteger(Number(v.toFixed(1))) ? 0 : 1)} CC`;
 }
 
 /** the log H a time band moves the printer lights by in normalised mode (log10 of its time over the current one) */
-const bandLogH = (r: FrameRecipe, v: number): number => Math.log10(v / r.print.enlarger.time_s);
+const bandLogH = (d: Document, v: number): number => Math.log10(v / mainExposure(d).time_s);
 
-/** The single mutation a band click writes (normalised mode: a time band is written as printer lights, CHB-031). */
-export function stripMutation(vary: StripVary, r: FrameRecipe, v: number): Mutation {
-  if (vary === 'time' && isNormalised(r)) return { op: 'set', path: 'print.lights.logH', value: shiftLights(r.print.lights.logH, bandLogH(r, v)) };
-  if (vary === 'time') return { op: 'set', path: 'print.enlarger.time_s', value: Number(v.toFixed(4)) };
+/** The one set a band click writes (normalised mode: a time band is written as printer lights, CHB-031). */
+export function stripMutation(vary: StripVary, d: Document, v: number): { path: string; value: unknown } {
+  if (vary === 'time' && isNormalised(d)) return { path: LIGHTS_PATH, value: shiftLights(lightsOf(d), bandLogH(d, v)) };
+  if (vary === 'time') return { path: TIME_PATH, value: Number(v.toFixed(4)) };
   const k = vary.slice(-1) as 'c' | 'm' | 'y';
-  return { op: 'set', path: 'print.enlarger.filtration', value: { ...r.print.enlarger.filtration, [k]: Number(v.toFixed(2)) } };
-}
-
-/** The recipe one band of the strip prints with (the same change stripMutation writes; CHB-023). */
-export function stripRecipe(vary: StripVary, r: FrameRecipe, v: number): FrameRecipe {
-  const e = r.print.enlarger;
-  if (vary === 'time' && isNormalised(r)) return { ...r, print: { ...r.print, lights: { ...r.print.lights, logH: shiftLights(r.print.lights.logH, bandLogH(r, v)) } } };
-  if (vary === 'time') return { ...r, print: { ...r.print, enlarger: { ...e, time_s: Number(v.toFixed(4)) } } };
-  const k = vary.slice(-1) as 'c' | 'm' | 'y';
-  return { ...r, print: { ...r.print, enlarger: { ...e, filtration: { ...e.filtration, [k]: Number(v.toFixed(2)) } } } };
+  return { path: FILTRATION_PATH, value: { ...mainExposure(d).filtration, [k]: Number(v.toFixed(2)) } };
 }
 
 /** Band boxes across a frame of width w: vertical strips, left to right (the order of stripValues; CHB-023). */
@@ -63,7 +63,7 @@ export interface RingTile {
   id: string;
   /** The colour the print moves towards, and the complementary it moves away from. */
   label: string;
-  /** Offset in log H added to print.lights.logH. */
+  /** Offset in log H added to the printer lights. */
   offset: Vec3;
   row: number;
   col: number;
@@ -98,83 +98,22 @@ export function ringTiles(stepPt: number): RingTile[] {
   return tiles;
 }
 
-// ---- exposures -----------------------------------------------------------------------------
-
-export interface ExposureRow {
-  id: string;
-  kind: 'main' | Exposure['kind'];
-  enabled: boolean;
-  mask: string | null;
-  change: string;
-  seconds: string;
-  /** Seconds a printer counts for this row (withheld for a dodge). */
-  t: number;
-  filtration: string;
-  note: string;
+/** The printer lights a ring tile chooses (the document's, moved by the tile's offset, held to ±1.5 log H). */
+export function ringLights(d: Document, offset: Vec3): Vec3 {
+  return lightsOf(d).map((x, i) => Number(Math.min(1.5, Math.max(-1.5, x + offset[i]!)).toFixed(6))) as Vec3;
 }
 
-const fmtCmy = (f: { c: number; m: number; y: number }): string => `${Number(f.c.toFixed(1))} / ${Number(f.m.toFixed(1))} / ${Number(f.y.toFixed(1))}`;
-
-/** Seconds an exposure gives: dodge withheld t(1 − 2^−s), burn added t(2^s − 1), or its own time. */
-export function exposureSeconds(e: Exposure, tMain: number): number {
-  if (e.time_s !== null) return e.time_s;
-  if (e.stops === null) return tMain;
-  return e.kind === 'dodge' ? dodgeSeconds(tMain, e.stops) : burnSeconds(tMain, e.stops);
-}
-
-export function exposureRows(r: FrameRecipe): ExposureRow[] {
-  const en = r.print.enlarger;
-  const rows: ExposureRow[] = [{ id: 'main', kind: 'main', enabled: true, mask: null, change: '—', seconds: `${formatSeconds(en.time_s)} s`, t: en.time_s, filtration: fmtCmy(en.filtration), note: '' }];
-  for (const e of r.print.exposures) {
-    const t = exposureSeconds(e, en.time_s);
-    const change = e.stops === null ? '—' : `${formatStops(e.kind === 'dodge' ? -e.stops : e.stops)} st`;
-    const seconds = e.kind === 'dodge' ? `−${formatSeconds(t)} s` : e.kind === 'burn' ? `+${formatSeconds(t)} s` : `${formatSeconds(t)} s`;
-    const filtration = e.kind === 'dodge' ? "(main's)" : e.filtration ? fmtCmy(e.filtration) : e.kind === 'flash' ? fmtCmy(en.filtration) : "(main's)";
-    const note = e.kind === 'dodge' ? 'held back during main' : e.kind === 'burn' ? 'after main' : e.kind === 'flash' ? 'no negative' : 'own filtration';
-    rows.push({ id: e.id, kind: e.kind, enabled: e.enabled, mask: e.mask, change, seconds, t, filtration, note });
-  }
-  return rows;
-}
-
-/** "Expose 12.0 s, hold back face for 1.91 s; burn sky 4.97 s; flash 2.0 s." */
-export function printingScript(r: FrameRecipe): string {
-  const parts: string[] = [];
-  const main: string[] = [`expose ${formatSeconds(r.print.enlarger.time_s)} s`];
-  for (const e of r.print.exposures) {
-    if (!e.enabled) continue;
-    const t = formatSeconds(exposureSeconds(e, r.print.enlarger.time_s));
-    const where = e.mask ?? 'the sheet';
-    if (e.kind === 'dodge') main.push(`hold back ${where} for ${t} s`);
-    else if (e.kind === 'burn') parts.push(`burn ${where} ${t} s`);
-    else if (e.kind === 'flash') parts.push(`flash ${t} s`);
-    else parts.push(`split ${t} s at ${e.filtration ? fmtCmy(e.filtration) : "main's filtration"}`);
-  }
-  const s = [main.join(', '), ...parts].join('; ');
-  return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`;
-}
-
-export function nextExposureId(r: FrameRecipe, kind: string): string {
-  let n = 1;
-  const ids = new Set(r.print.exposures.map((e) => e.id));
-  while (ids.has(`${kind}${n}`)) n++;
-  return `${kind}${n}`;
-}
+export { exposureStep };
 
 // ---- masks ---------------------------------------------------------------------------------
 
 export type Pt3 = [number, number, number];
+/** What a mask tool drew, in document pixels. */
 export type MaskShape =
   | { kind: 'stroke'; points: Pt3[]; radius: number; hardness: number; mode: 'add' | 'erase' }
-  | { kind: 'gradient'; from: [number, number]; to: [number, number] }
-  /** angle: rotation about the centre in degrees (mask.ellipse.angle_deg, contract 0.2). */
+  | { kind: 'linear'; from: [number, number]; to: [number, number] }
+  /** angle: rotation about the centre in degrees (mask.ellipse.angle_deg). */
   | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; angle?: number };
-
-/** The editor's description of a mask; stored in the recipe as a MaskSpec (mask.* node closure). */
-export interface MaskDoc {
-  shapes: MaskShape[];
-  feather: number;
-  invert: boolean;
-}
 
 /** Ramer–Douglas–Peucker simplification of a stroke (x, y, pressure) at `eps` document pixels. */
 export function simplify(points: readonly Pt3[], eps = 0.5): Pt3[] {
@@ -195,50 +134,40 @@ export function simplify(points: readonly Pt3[], eps = 0.5): Pt3[] {
   return [...simplify(points.slice(0, idx + 1), eps).slice(0, -1), ...simplify(points.slice(idx), eps)];
 }
 
-/**
- * Builds the MaskSpec for a MaskDoc on `receiver` (the frame's source node, which fixes the size).
- * Strokes go into mask.paint's `strokes` argument as canonical JSON (contract 0.2, studio request #1), so
- * the recipe stays a small vector document.
- */
-export function maskSpec(graph: Graph, receiver: string, doc: MaskDoc): MaskSpec {
-  const I = (op: string, inputs: string[], args: Record<string, unknown>): string => graph.intern(op, inputs, args).node.id;
-  let root: string | null = null;
-  const strokes = doc.shapes.filter((s) => s.kind === 'stroke');
-  const parts: string[] = [];
-  for (const s of doc.shapes) {
-    if (s.kind === 'ellipse') parts.push(I('mask.ellipse', [receiver], { box: { x: Math.round(s.cx - s.rx), y: Math.round(s.cy - s.ry), w: Math.max(1, Math.round(2 * s.rx)), h: Math.max(1, Math.round(2 * s.ry)) }, ...(s.angle ? { angle_deg: s.angle } : {}) }));
-    else if (s.kind === 'gradient') parts.push(I('mask.gradient', [receiver], { from: { x: s.from[0], y: s.from[1] }, to: { x: s.to[0], y: s.to[1] } }));
+/** A mask component's kind and params for a shape (document px; a stroke is a paint component with one stroke). */
+export function maskComponent(shape: MaskShape, strokeId = 's1'): [MaskComponentKind, Params] {
+  if (shape.kind === 'ellipse') {
+    const box = { x: Math.round(shape.cx - shape.rx), y: Math.round(shape.cy - shape.ry), w: Math.max(1, Math.round(2 * shape.rx)), h: Math.max(1, Math.round(2 * shape.ry)) };
+    return ['ellipse', { box, ...(shape.angle ? { angle_deg: shape.angle } : {}) }];
   }
-  if (strokes.length) parts.push(I('mask.paint', [receiver], { strokes: JSON.stringify(strokes) }));
-  if (parts.length === 0) parts.push(I('mask.paint', [receiver], { strokes: '[]' }));
-  for (const p of parts) root = root === null ? p : I('mask.or', [root], { other: p });
-  if (doc.feather > 0) root = I('mask.feather', [root!], { radius_px: doc.feather });
-  if (doc.invert) root = I('mask.not', [root!], {});
-  return { version: 1, nodes: graph.closure(root!) };
+  if (shape.kind === 'linear') return ['linear', { from: { x: shape.from[0], y: shape.from[1] }, to: { x: shape.to[0], y: shape.to[1] } }];
+  const stroke = { points: simplify(shape.points).map((p) => [Number(p[0].toFixed(2)), Number(p[1].toFixed(2)), Number(p[2].toFixed(3))]), radius: shape.radius, hardness: shape.hardness, mode: shape.mode };
+  return ['paint', { strokes: Coll.of([[strokeId, stroke]]) as unknown as Params[string] }];
 }
 
-/** Reads a MaskDoc back from a MaskSpec built by maskSpec(). */
-export function parseMask(spec: MaskSpec): MaskDoc {
-  const doc: MaskDoc = { shapes: [], feather: 0, invert: false };
-  for (const n of spec.nodes) {
-    const a = n.args as Record<string, unknown>;
-    if (n.op === 'mask.ellipse') {
-      const b = a['box'] as { x: number; y: number; w: number; h: number };
-      const angle = a['angle_deg'] as number | undefined;
-      doc.shapes.push({ kind: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: b.w / 2, ry: b.h / 2, ...(angle ? { angle } : {}) });
-    } else if (n.op === 'mask.gradient') {
-      const f = a['from'] as { x: number; y: number };
-      const t = a['to'] as { x: number; y: number };
-      doc.shapes.push({ kind: 'gradient', from: [f.x, f.y], to: [t.x, t.y] });
-    } else if (n.op === 'mask.paint') {
-      try {
-        const s = JSON.parse(String(a['strokes'])) as MaskShape[];
-        if (Array.isArray(s)) doc.shapes.push(...s);
-      } catch {
-        // not JSON (a pre-0.2 'none' default): nothing to edit
-      }
-    } else if (n.op === 'mask.feather') doc.feather = a['radius_px'] as number;
-    else if (n.op === 'mask.not') doc.invert = true;
-  }
-  return doc;
+/** A feather given in document pixels, as mm on the print (the mask library stores physical sizes). */
+export function featherMm(d: Document, g: Graph, px: number): number {
+  return Number(((px * pitches(d, g).paper) / 1000).toFixed(4));
 }
+
+/**
+ * The mutations of a burn (or dodge) through a new mask: the mask (one component from the shape, feathered) goes
+ * into the document's library, the layer into the darkroom stack with it. Ids are fresh in the document.
+ */
+export function maskedLayer(d: Document, g: Graph, shape: MaskShape, o: { op?: 'burn' | 'dodge'; featherPx?: number } = {}): { mask: string; layer: string; mutations: Mutation[] } {
+  const op = o.op ?? 'burn';
+  const mid = nextId(d, 'm');
+  const lid = nextId(d, op);
+  const [kind, params] = maskComponent(shape, `${mid}s1`);
+  const m = maskValue(`Mask ${mid.slice(1)}`, [`${mid}c1`, kind, params]).feather(featherMm(d, g, o.featherPx ?? 8));
+  const layer = newDarkroomLayer(op, { mask: mid, name: `${op === 'burn' ? 'Burn' : 'Dodge'} ${lid.slice(op.length)}` });
+  return { mask: mid, layer: lid, mutations: [insert('masks', mid, m), insert('stages.darkroom.stack', lid, layer)] };
+}
+
+/** The darkroom layer of a kind at its usual values, as one insert (Exposures panel: + burn, + dodge, …). */
+export function addDarkroomLayer(d: Document, op: 'burn' | 'dodge' | 'flash' | 'preflash' | 'densityMask'): { id: string; mutations: Mutation[] } {
+  const id = nextId(d, op === 'densityMask' ? 'contrast' : op);
+  return { id, mutations: [insert('stages.darkroom.stack', id, newDarkroomLayer(op))] };
+}
+
+export { set };

@@ -2,22 +2,21 @@
 // synthetic events), a typed-entry field in darkroom units, a second readout (aside), double-click to reset, the
 // Strip button from .testStrip(), the lights pad (R, G, B and density) and the two-button nudge.
 //
-// Writes: a drag is ctx.preview per move and one commit on release; arrow keys, the wheel, steppers and nudges are
-// bursts through the route (one EditLog unit per pause); typed values, selects and resets are one transaction.
+// Writes go to the frame's document (docs.<f>, at the path's place in the tree): a drag is ctx.preview per move
+// and one commit on release; arrow keys, the wheel, steppers and nudges are transactions that coalesce (one step
+// for a run of presses on one control); typed values, selects and resets are one transaction.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getPath } from '@chromobench/contract';
 import { h, listen, type MountCtx } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
+import type { Document } from '@chromobench/contract';
 import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
-import { exposureStep, isInert } from '../model/enlarger.ts';
+import { exposureStep, isInert, read, storePath, TIME_PATH } from '../model/doc.ts';
 import { printerSeconds, PT } from '../model/units.ts';
-import type { Studio } from '../studio.ts';
 import { sel } from '../sel.ts';
 
-const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 /** The title of a printer-lights nudge along one colour axis (CHB-031 F25: two rows called "Printer lights" read alike). */
 const AXIS_LABEL: Record<string, string> = { 'yellow-blue': 'Warmth', 'magenta-green': 'Tint' };
 /** A time nudge in normalised mode moves the three lights together: its row is about brightness, not seconds (F25). */
@@ -56,37 +55,40 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const rt = m.rt;
   const st = rt.store;
   const frameOf = (s: any): string | null => (typeof p['frame'] === 'function' ? p['frame'](s) : (p['frame'] ?? sel.current(s)));
-  const pathOf = (f: string): (string | number)[] => ['recipes', f, ...model.path.split('.')];
-  const read = (s: any) => {
+  /** the frame's document as it is now (with a drag's preview) */
+  const docNow = (f: string): Document | undefined => st.peek(['docs', f]);
+  /** where the control's value sits in the store (the document path's place in the frame's tree) */
+  const pathOf = (f: string, path = model.path): (string | number)[] => {
+    const d = docNow(f);
+    return d ? storePath(f, d, path) : ['docs', f, ...path.split('.')];
+  };
+  const readNow = (s: any) => {
     const f = frameOf(s);
-    const r = f ? s.recipes?.[f] : undefined;
+    const d = f ? (s.docs?.[f] as Document | undefined) : undefined;
     // inert: time, aperture and magnification while the enlarger is normalised (CHB-031 F17); na: a path this
     // frame's kind does not have (a scanner for a photo, F23)
-    const v = r ? getPath(r, model.path) : undefined;
-    return { f, v, inert: isInert(r, model.path), na: !!r && v === undefined };
+    const v = read(d, model.path);
+    return { f, v, inert: isInert(d, model.path), na: !!d && v === undefined };
   };
-  /** the frame's recipe as it is now (with a drag's preview) */
-  const recipeNow = (f: string): any => st.peek(['recipes', f]);
-  const initialOf = (f: string): unknown => {
-    const e = studioOf(m).frames.get(f);
-    return e ? getPath(e.initial, model.path) : undefined;
-  };
+  const initialOf = (f: string): unknown => (st.log.has(f) ? read(st.log.initial<Document>(f), model.path) : undefined);
   const txOpts = () => m.txOpts();
   // an inert control never writes (it is hidden; this also holds for a key or script reaching it)
   const commitSet = (f: string, v: unknown, lab = label) => {
     if (now.inert) return;
-    studioOf(m).route.endBurst();
-    m.rctx().tx(lab, (t: any) => t.$set(pathOf(f), v));
+    m.rctx().tx(lab, (t: any) => t.$set(pathOf(f), v), { source: { kind: 'control', control: model.path } });
   };
+  /** a key press, a wheel step, a stepper or a nudge: one transaction; a run of them on this control is one step */
+  const nudgeTo = (f: string, path: string, v: unknown, lab = label) =>
+    m.rctx().tx(lab, (t: any) => t.$set(pathOf(f, path), v), { ...txOpts(), coalesce: `${f}:${path}`, source: { kind: 'control', control: path } });
   const burst = (f: string, v: unknown) => {
-    if (!now.inert) studioOf(m).route.step(st, rt.clock, pathOf(f), v, label, txOpts());
+    if (!now.inert) nudgeTo(f, model.path, v);
   };
   /** Lighter / Darker by stops (CHB-031): the time in real mode, the printer lights in normalised mode */
   const exposeBy = (f: string, stops: number, o: { lightsPoints?: number } = {}) => {
-    const r = recipeNow(f);
-    if (!r) return;
-    const mu = exposureStep(r, stops, o);
-    studioOf(m).route.step(st, rt.clock, ['recipes', f, ...mu.path.split('.')], mu.value, mu.path === 'print.lights.logH' ? 'Printer lights' : 'Time', txOpts());
+    const d = docNow(f);
+    if (!d) return;
+    const mu = exposureStep(d, stops, o);
+    nudgeTo(f, mu.path, mu.value, mu.path === TIME_PATH ? 'Time' : 'Printer lights');
   };
   const widget: string = p['widget'] ?? model.widget;
   const el = h('div', { class: ['cb-arg', `is-${widget}`, p['big'] && 'is-big'], 'data-path': p['path'] });
@@ -116,7 +118,6 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     };
     let dragging = false;
     listen(m.scope, input, 'pointerdown', () => {
-      studioOf(m).route.endBurst();
       dragging = true;
     });
     listen(m.scope, input, 'input', () => {
@@ -211,7 +212,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     const move = (dir: number) => {
       if (!now.f) return;
       // a time nudge (simple's Lighter / Darker) is an exposure step: in normalised mode it moves the lights
-      if (model.path === 'print.enlarger.time_s') return exposeBy(now.f, dir * (step?.unit === 'st' ? step.value : 1 / 3));
+      if (model.path === TIME_PATH) return exposeBy(now.f, dir * (step?.unit === 'st' ? step.value : 1 / 3));
       const base = st.peek(pathOf(now.f)) ?? now.v;
       let v: unknown;
       if (model.type === 'vec3' && axis) {
@@ -259,7 +260,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     const b = h('button', { type: 'button', class: 'ck-btn is-small cb-strip-b', text: 'Strip', 'data-tip': 'Test strip around this value (T)' });
     listen(m.scope, b, 'click', () => {
       const s = parseStep((p['strip'] as { step?: string }).step ?? '1/3 st');
-      const vary = model.path === 'print.enlarger.time_s' ? 'time' : `filtration.${a.component !== null ? 'cmy'[a.component] : 'y'}`;
+      const vary = model.path === TIME_PATH ? 'time' : `filtration.${a.component !== null ? 'cmy'[a.component] : 'y'}`;
       m.rctx().set({ ui: { toolOptions: { 'test-strip': { vary, step: s?.value ?? 1 / 3, count: (p['strip'] as { count?: number }).count ?? 5 } } } });
       rt.runCommand('tool.test-strip', null);
     });
@@ -267,7 +268,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   }
 
   const isSelect = widget === 'select' || model.type === 'enum' || model.type === 'string';
-  m.cell(read, v => {
+  m.cell(readNow, v => {
     // another frame: what was typed (and its red mark) belongs to the old one
     const other = v.f !== now.f;
     now = v;
@@ -281,7 +282,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     // nothing to set: no frame, a path this kind of frame does not have, or a control the enlarger mode ignores
     // (a time nudge stays: it moves the printer lights in normalised mode, under a brightness title with no seconds)
     el.hidden = !v.f || v.na || (v.inert && widget !== 'nudge');
-    if (widget === 'nudge' && model.path === 'print.enlarger.time_s') {
+    if (widget === 'nudge' && model.path === TIME_PATH) {
       lab.textContent = v.inert ? NORMALISED_TIME.label : label;
       lab.title = v.inert ? NORMALISED_TIME.tip : controlTip(model);
       if (v.inert) out.textContent = aside.textContent = '';

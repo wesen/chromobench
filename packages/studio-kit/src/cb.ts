@@ -1,10 +1,11 @@
 // createCb(ck): the `cb` namespace (guide §4–5) bound to one ck instance. Everything here records nodes and
-// definitions; nothing touches the DOM, an engine or storage. Services (the frames, the EditLog route, the render
-// bridge) are reached at run time through ctx.services.studio.
+// definitions; nothing touches the DOM, an engine or storage. Services (the frames, the render bridge, the log's
+// host side) are reached at run time through ctx.services.studio. A frame's edit is its document at docs.<frame>
+// (cb.core's mount; the store's log holds it under the contract's LOG_RULES).
 //
 //   cb.studio(name)       ck.shell(name).use(cb.core) with chromobench's state options
-//   cb.core               the kit: state, routes, forms, fragments, commands, tools, keys, passes, docs
-//   cb.sel.*              the typed selectors (current, frame, recipe, visible, …): every read of state
+//   cb.core               the kit: state, the docs mount, forms, fragments, commands, tools, keys, passes, docs
+//   cb.sel.*              the typed selectors (current, frame, doc, visible, …): every read of state
 //   cb.arg / cb.viewer    a control from ArgSpec; the viewer      cb.panels.*   history, approvals, why, snapshots, …
 //   cb.modules.*          library, print                          cb.views.*    grid, strip, loupe, compare, survey, ring
 //   cb.menus.*            file … help, standard()                 cb.keys.*     cull, libraryModes, views, darkroom
@@ -12,16 +13,14 @@
 //   cb.cell.frame         a θ cell: a print thumbnail (bg lane, cached by node id) + name, flag, stars
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { defaultRecipe, getPath, type FrameRecipe, type Vec3 } from '@chromobench/contract';
-import { isProps, libraryRoot, type Ck, type CommandTable, type NodeData, type ToolTable } from '@chromobench/shell';
-import { argModel, argProblem, parseStep, stepUnits, STRIPPABLE } from './kit/args.ts';
+import { getIn, isProps, libraryRoot, type Ck, type NodeData } from '@chromobench/shell';
+import { argModel, argProblem, controlModels, parseStep, stepUnits, STRIPPABLE } from './kit/args.ts';
 import { CB_FORMS } from './kit/forms.ts';
-import { frameRef, isImageHandle, type FrameRef, type ImageHandle } from './handles.ts';
+import { frameRef, type ImageHandle } from './handles.ts';
 import { DARKROOM, allParameters, type Arrangement } from './model/arrangement.ts';
-import { controlModels } from './kit/args.ts';
-import { diffRecipes, PRINT_SETTINGS, VIEW_MODES, type ViewMode } from './model/recipes.ts';
-import { ringTiles, stripLabel, stripMutation, stripValues, maskSpec, nextExposureId, type StripVary, type MaskDoc } from './model/tools.ts';
-import type { Studio } from './studio.ts';
+import { DOCS, defaultDocument, LIGHTS_PATH } from './model/doc.ts';
+import { VIEW_MODES, type ViewMode } from './model/settings.ts';
+import { ringTiles } from './model/tools.ts';
 import { sel, type CatalogFrame, type CbState } from './sel.ts';
 import { frameCommands } from './commands/frame.ts';
 import { hostCommands } from './commands/host.ts';
@@ -29,10 +28,8 @@ import { viewCommands } from './commands/view.ts';
 import { printCommands } from './commands/print.ts';
 import { agentCommands } from './commands/agent.ts';
 import { coreTools } from './commands/tools.ts';
-import type { OpenAs } from './bridge/frames.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
-import { orientFrame } from '../kits/finish/src/geometry.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
 
@@ -56,11 +53,6 @@ export const CORE_STATE: Pick<CbState, 'catalog' | 'snapshots' | 'view' | 'ui' |
   prefs: { agentMode: 'ask' },
 };
 
-const studioOf = (ctx: any): Studio => {
-  const s = ctx.services?.studio as Studio | undefined;
-  if (!s) throw new Error('No studio service: start the app with studio.services()');
-  return s;
-};
 /** the thumbnail context menu (CHB-027, F6) */
 export const FRAME_CONTEXT = ['frame.reopenAsPhoto', 'frame.reopenAsNegative', '-', 'frame.rotateLeft', 'frame.rotateRight', '-', 'frame.pick', 'frame.reject', 'frame.unflag', '-', 'frame.remove'];
 
@@ -74,7 +66,7 @@ export function createCb(ck: Ck) {
     doc: 'A Strip button beside time or filtration that opens the test strip around this value (T)',
   });
   const padFragment = ck.fragment('cb.arg', {
-    when: n => String(n.props['path']) === 'print.lights.logH',
+    when: n => String(n.props['path']) === LIGHTS_PATH,
     methods: { pad: () => ({ widget: 'pad' }) },
     doc: 'Printer lights as a colour pad plus a density slider, in points',
   });
@@ -85,7 +77,7 @@ export function createCb(ck: Ck) {
       const path = String(n.props['path'] ?? '');
       const pr = argProblem(path);
       if (pr?.code === 'CB-A101') {
-        p.error('CB-A101', pr.message, { at: n.at, ...(pr.fix ? { fix: pr.fix } : {}), facts: [`did you mean ${pr.fix ? pr.fix.slice(8, -2) : '…'}?`, `${pr.valid.length} recipe paths have controls`] });
+        p.error('CB-A101', pr.message, { at: n.at, ...(pr.fix ? { fix: pr.fix } : {}), facts: [`did you mean ${pr.fix ? pr.fix.slice(8, -2) : '…'}?`, `${pr.valid.length} document paths have controls`] });
         continue;
       }
       if (pr) {
@@ -100,7 +92,7 @@ export function createCb(ck: Ck) {
         if (!s || !ok.includes(s.unit)) p.error('CB-A110', `cb.arg('${path}'): the step ${JSON.stringify(st)} does not fit ${a.model.label} (${a.model.displayUnit})`, { at: n.at, facts: [`steps for this path: ${ok.filter(Boolean).join(', ') || 'plain numbers'}`] });
       }
       const w = n.props['widget'];
-      if (w === 'pad' && a.model.type !== 'vec3') p.error('CB-A120', `cb.arg('${path}'): the pad widget edits printer lights (vec3), not ${a.model.type}`, { at: n.at, fix: `cb.arg('print.lights.logH').pad()` });
+      if (w === 'pad' && a.model.type !== 'vec3') p.error('CB-A120', `cb.arg('${path}'): the pad widget edits printer lights (vec3), not ${a.model.type}`, { at: n.at, fix: `cb.arg('${LIGHTS_PATH}').pad()` });
     }
   });
   /** CB-R001, CB-F102, CB-L001: a kit's forms or tools used where the kit is not installed (the kit's own passes run
@@ -121,18 +113,16 @@ export function createCb(ck: Ck) {
     .version('1')
     .state('catalog', { init: CORE_STATE.catalog })
     .state('snapshots', { init: CORE_STATE.snapshots })
-    .state('recipes', { init: {} as CbState['recipes'] })
-    .route('recipes', {
+    // a frame's document: docs.<frame> is the frame's document in the log (the Studio opens it); a binding under
+    // it names the document's tree (stages.darkroom.stack.items.main.params.time_s)
+    .mount(DOCS, {
       keyDepth: 1,
+      kind: 'frame',
       checkPath: rest => {
-        const path = rest.map(String).join('.');
-        if (!path || argModel(path) || getPath(DUMMY, path) !== undefined) return null;
-        const pr = argProblem(path);
-        return { message: `no recipe path ${path}`, ...(pr?.code === 'CB-A101' && pr.fix ? { fix: pr.fix } : {}) };
+        if (!rest.length || DUMMIES.some(d => getIn(d, rest) !== undefined)) return null;
+        return { message: `no document path ${rest.map(String).join('.')}` };
       },
     })
-    .state('proposals', { init: {} as CbState['proposals'] })
-    .route('proposals', { keyDepth: 1, readonly: true })
     .state('view', { init: CORE_STATE.view, view: true })
     .state('ui', { init: CORE_STATE.ui, view: true })
     .state('prefs', { init: CORE_STATE.prefs, view: true })
@@ -162,13 +152,13 @@ export function createCb(ck: Ck) {
   const withProposal = (h: ImageHandle | null, s: any): ImageHandle | null => {
     const tx = s.ui?.showProposal;
     if (!h || !tx) return h;
-    const p = (s.proposals?.[h.frame] ?? []).find((x: any) => x.tx === tx);
-    return p ? Object.freeze({ ...h, recipe: p.recipe, expr: `${h.expr} /* proposal ${tx} */` }) : h;
+    const p = sel.proposals(s, h.frame).find(x => x.tx === tx);
+    return p?.doc ? Object.freeze({ ...h, doc: p.doc, expr: `${h.expr} /* proposal ${tx} */` }) : h;
   };
   const withView = (h: ImageHandle | null, s: any): ImageHandle | null => {
     const v: ViewMode = s.view?.view ?? 'print';
     if (!h || v === 'print' || h.what !== 'print') return h;
-    return frameRef(h.frame, h.recipe).view(v);
+    return frameRef(h.frame, h.doc).view(v);
   };
   const viewer = (fn: (s: any) => ImageHandle | null, o: ViewerOpts = {}): any => {
     const id = o.id ?? 'main';
@@ -221,7 +211,7 @@ export function createCb(ck: Ck) {
     ck.column(
       { class: `cb-cell${o.size === 'large' ? ' is-large' : ''}` },
       ck.view.thumb({
-        image: (s: any) => sel.frame(s, item.id)?.print() ?? null,
+        image: (s: any) => sel.committed(s, item.id)?.print() ?? null,
         // a frame not open in this session: the thumbnail saved with the library (F5)
         src: (s: any) => (sel.isOffline(s, item.id) ? (s.catalog.frames[item.id].thumb ?? null) : null),
         max: o.size === 'large' ? 320 : 160,
@@ -269,14 +259,14 @@ export function createCb(ck: Ck) {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
     const sections = a.groups.map(g =>
-      ck.section({ title: g.title }, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const r = sel.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, wrap: true })] : [])),
+      ck.section({ title: g.title }, ...g.paths.map(p => arg(p, p === LIGHTS_PATH ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const d = sel.doc(s); return d ? g.note!(d) : ''; }, { dim: true, wrap: true })] : [])),
     );
     return ck.panel.define(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
   /** a container: its children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
   const ifFrame = (...args: any[]): any => {
     const props = isProps(args[0]) ? args.shift() : {};
-    return ck.when((s: any) => !!sel.recipe(s), ck.column(props, ...args), ck.text(NO_FRAME, { dim: true, wrap: true }));
+    return ck.when((s: any) => !!sel.doc(s), ck.column(props, ...args), ck.text(NO_FRAME, { dim: true, wrap: true }));
   };
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
@@ -290,12 +280,20 @@ export function createCb(ck: Ck) {
     sel,
     studio: (name: string, opts: Record<string, unknown> = {}) =>
       ck
-        .shell(name, opts as any)
+        .shell(name, (({ state: _s, ...o }) => o)(opts) as any)
         .state({}, {
-          channelName: (id: string, s: any) => s.catalog?.frames?.[id]?.name,
-          currentChannel: (s: any) => sel.current(s),
+          // the library is the view tier (opening a file is not an edit); the frames' documents are saved by the
+          // Studio with their history, so the workspace save leaves them out
+          view: ['ui', 'view', 'prefs', 'workspace', 'catalog'],
+          persist: (d: any) => {
+            const { [DOCS]: _docs, ...rest } = d ?? {};
+            return rest;
+          },
+          docName: (id: string, s: any) => s.catalog?.frames?.[id]?.name,
+          currentDoc: (s: any) => sel.current(s),
           keepUi: ['selection', 'toolOptions'],
           transient: ['vp'],
+          ...opts['state'] as object,
         } as any)
         .use(core),
     arg,
@@ -331,7 +329,7 @@ export function createCb(ck: Ck) {
       library: panel('cb.library', 'library', 'Library'),
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
       output: panel('cb.output', 'output', 'Save'),
-      navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
+      navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.committed(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
     },
     /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
     ifFrame,
@@ -364,7 +362,7 @@ export function createCb(ck: Ck) {
        *  tools, densitometer, darkroom controls, exposures, approvals right (o.extraRight adds panels below) */
       print: (o: { id?: string; extraRight?: unknown[] } = {}) =>
         ck
-          .module(o.id ?? 'print', { label: 'Print', key: 'D', txOpts: (s: any) => ({ channel: sel.current(s) }) })
+          .module(o.id ?? 'print', { label: 'Print', key: 'D' })
           .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-print' }), cb.panels.snapshots(), cb.panels.history()))
           .center(
             viewer((s: any) => sel.frame(s)?.print() ?? null, {
@@ -386,7 +384,7 @@ export function createCb(ck: Ck) {
           // the host's actions (CHB-027); hidden where the host has none (the dev host, tests)
           'file.open', 'file.openFolder', 'file.reopenFolder',
           { label: 'Open As', items: ['file.openAs.auto', 'file.openAs.photo', 'file.openAs.negative', 'file.openAs.keep', '-', 'file.dust'] },
-          '-', 'file.export', 'file.saveRecipe', '-', 'app.palette',
+          '-', 'file.export', 'file.saveDocument', '-', 'app.palette',
         ]),
       edit: () => ck.menu('Edit', ['edit.undo', 'edit.redo', '-', 'proposal.approveAll']),
       frame: () =>
@@ -429,16 +427,19 @@ const VIEW_TIPS: Record<string, string> = {
 };
 
 const badgeOf = (s: any, id: string): string => {
-  const pending = s.proposals?.[id]?.length ?? 0;
+  const pending = sel.proposals(s, id).length;
   return [sel.isOffline(s, id) ? 'not open' : '', pending ? `agent ${pending}` : '', rollTag(s, id)].filter(Boolean).join(' · ');
 };
 const cellCaption = (f: CatalogFrame): string => `${f.flag === 'pick' ? '⚑ ' : f.flag === 'reject' ? '✕ ' : ''}${f.name}${f.stars ? ' ' + '★'.repeat(f.stars) : ''}`;
 
-// a recipe with every optional part present, for checking binding paths under recipes.*
-const DUMMY = defaultRecipe('negative-scan', { sha256: '0'.repeat(64), name: 'x' });
+// a document of each kind, for checking binding paths under docs.*
+const DUMMIES = [
+  defaultDocument('negative-scan', { sha256: '0'.repeat(64), width: 3000, height: 2000 }),
+  defaultDocument('digital-raw', { sha256: '0'.repeat(64), width: 3000, height: 2000 }),
+];
 
 const CORE_DOCS = `## cb.core
-Chromobench's studio vocabulary on the CraftKit shell. Recipes are a projection of each frame's EditLog
-(recipes.<frame>); agent proposals are published under proposals.<frame> and shown, never applied, until approved.
-One global undo (Mod+Z) walks shell transactions and EditLog units together; a step the History panel already
-undid is skipped (CB-H401).`;
+Chromobench's studio vocabulary on the CraftKit shell. A frame's edit is its document (format 3) at docs.<frame>,
+a document of the store's log under the contract's rules; controls address it by document paths (main.params.time_s,
+lights.params.logH, stages.darkroom.medium.paper). Agent proposals are pending entries of the log, shown (never
+applied) until approved. One undo (Mod+Z) walks the log's steps, whichever frame they changed.`;

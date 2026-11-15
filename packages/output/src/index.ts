@@ -17,4 +17,4 @@ export { createLcms, lcmsInWorker, PIXEL_TYPE, type Intent, type Lcms, type Pixe
 export { curveDecode, curveEncode, matrixTrc, parseIcc, type Curve, type IccHeader, type IccProfile, type MatrixTrc } from './icc/parse.ts';
 export { base64Bytes, bundledProfile, getSpace, loadSpaces, pngColour, SPACE_IDS, type OutputSpace } from './spaces.ts';
 export { configureCanvas, displaySpace, P3_QUERY, type CanvasConfig, type CanvasOptions, type CanvasSpace } from './display/canvas.ts';
-export { exportFrame, exportNode, type EncodedFile, type ExportProgress, type ExportRequest } from './export/run.ts';
+export { documentPayload, documentSha256, exportFrame, exportNode, sidecarName, type EncodedFile, type ExportProgress, type ExportRequest } from './export/run.ts';

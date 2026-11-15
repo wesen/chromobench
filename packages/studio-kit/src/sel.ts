@@ -1,11 +1,11 @@
 // The studio's state and its typed selectors (CHB-035 §31 rule 3, §32; CHB-029 item 7). Interaction lambdas read
 // state through these, never by hand: `cb.sel.current(s)` is the one current frame, `cb.sel.frame(s)` its handle.
 // Kits add their own (`cb.kits.roll.sel.*`, `cb.kits.looks.sel.*`); headless and DOM code import this module.
-import type { FrameRecipe } from '@chromobench/contract';
+import type { Document } from '@chromobench/contract';
 import { frameRef, type FrameRef } from './handles.ts';
-import type { ViewMode } from './model/recipes.ts';
+import type { ViewMode } from './model/settings.ts';
 import type { OpenAs } from './bridge/frames.ts';
-import type { HostFlags } from './studio.ts';
+import type { HostFlags, LogView, Proposal } from './studio.ts';
 
 export interface CatalogFrame {
   id: string;
@@ -31,8 +31,8 @@ export interface Snapshot {
   id: string;
   name: string;
   ts: number;
-  stateHash: string;
-  recipe: FrameRecipe;
+  /** the frame's document when the snapshot was taken (Restore writes it back as one step) */
+  doc: Document;
 }
 export interface CbView {
   module?: string;
@@ -53,6 +53,8 @@ export interface CbUi {
   probe: [number, number] | null;
   showProposal: string | null;
   approvals: Record<string, { off?: number[]; stale?: { code: string; message: string }[] }>;
+  /** what the Studio publishes about the log: a change counter and the pending proposals per frame */
+  log?: LogView;
   /** what the host publishes (Studio.setHost): its folder and the layouts it can switch to */
   host?: HostFlags;
 }
@@ -65,12 +67,15 @@ export interface CbPrefs {
   /** heal dust on open */
   dust?: boolean;
 }
-/** The state cb.core declares (the kits add their slices: roll, rollView, finish, looks, looksView). */
+/**
+ * The state cb.core declares (the kits add their slices: roll, rollView, finish, looks, looksView). `docs.<frame>` is
+ * the frame's document in the store's log (mounted by cb.core, opened by the Studio); the library (`catalog`) is
+ * the view tier: opening a file is not an edit.
+ */
 export interface CbState {
   catalog: { frames: Record<string, CatalogFrame>; order: string[] };
   snapshots: Record<string, Snapshot[]>;
-  recipes: Record<string, FrameRecipe>;
-  proposals: Record<string, any[]>;
+  docs: Record<string, Document>;
   view: CbView;
   ui: CbUi;
   prefs: CbPrefs;
@@ -112,12 +117,20 @@ export const sel = {
   frame: (s: St, id?: string | null): FrameRef | null => {
     const f = id ?? current(s);
     if (!f) return null;
-    const r = s?.recipes?.[f];
-    if (!r) return null;
-    return frameRef(f, r, f === current(s) ? 'frame' : `frames['${f}']`);
+    const d = s?.docs?.[f];
+    if (!d) return null;
+    return frameRef(f, d, f === current(s) ? 'frame' : `frames['${f}']`);
   },
-  /** a frame's recipe (the current one by default) */
-  recipe: (s: St, id?: string | null): FrameRecipe | undefined => s?.recipes?.[id ?? current(s) ?? ''],
+  /**
+   * a frame's handle on its committed document (the current one by default), or null when it is not open: what
+   * thumbnails show, so a drag re-renders the viewer only, and the thumbnails once on release
+   */
+  committed: (s: St, id?: string | null): FrameRef | null => {
+    const f = id ?? current(s);
+    return f && s?.docs?.[f] ? frameRef(f, 'committed', f === current(s) ? 'frame' : `frames['${f}']`) : null;
+  },
+  /** a frame's document (the current one by default), as the state shows it (with a gesture's preview) */
+  doc: (s: St, id?: string | null): Document | undefined => s?.docs?.[id ?? current(s) ?? ''],
   /** a frame's catalog entry (the current one by default) */
   entry: (s: St, id?: string | null): CatalogFrame | undefined => s?.catalog?.frames?.[id ?? current(s) ?? ''],
   /** a frame's name in the library (the current one by default), or '' */
@@ -125,14 +138,16 @@ export const sel = {
   library,
   /** the library's frames that are open in this session (frames whose file was not opened since a reload are left
    *  out until their file is opened again) */
-  visible: (s: St): CatalogFrame[] => library(s).filter(x => !s?.recipes || !!s.recipes[x.id]),
+  visible: (s: St): CatalogFrame[] => library(s).filter(x => !s?.docs || !!s.docs[x.id]),
   /** a library frame whose file is not open in this session */
-  isOffline: (s: St, id: string): boolean => !!s?.catalog?.frames?.[id] && !s?.recipes?.[id],
+  isOffline: (s: St, id: string): boolean => !!s?.catalog?.frames?.[id] && !s?.docs?.[id],
   /** how a frame is open: as a photo or a negative (a library frame: as the catalog says) */
   kind: (s: St, id: string | null): 'photo' | 'negative' | null =>
-    id ? (s?.recipes?.[id] ? (s.recipes[id]!.kind === 'digital-raw' ? 'photo' : 'negative') : (s?.catalog?.frames?.[id]?.kind ?? null)) : null,
+    id ? (s?.docs?.[id] ? (s.docs[id]!.stages.scan ? 'negative' : 'photo') : (s?.catalog?.frames?.[id]?.kind ?? null)) : null,
   /** the agent's pending proposals on a frame (the current one by default) */
-  proposals: (s: St, id?: string | null): any[] => s?.proposals?.[id ?? current(s) ?? ''] ?? [],
+  proposals: (s: St, id?: string | null): Proposal[] => s?.ui?.log?.proposals?.[id ?? current(s) ?? ''] ?? [],
+  /** a counter of log changes (a cell that reads the log itself depends on it) */
+  logVersion: (s: St): number => s?.ui?.log?.v ?? 0,
   /** a frame's snapshots (the current one by default) */
   snapshots: (s: St, id?: string | null): Snapshot[] => s?.snapshots?.[id ?? current(s) ?? ''] ?? [],
   prefs: (s: St): Partial<CbPrefs> => s?.prefs ?? {},

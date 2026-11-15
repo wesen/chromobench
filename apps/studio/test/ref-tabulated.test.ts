@@ -1,7 +1,8 @@
 // CHB-031 WS-B (F10): the reference engine as the studio runs it by default, previews through core's tables and the
 // export precision exact (engine-serve.ts TabulatedPreviews), directly and behind the engine worker.
 import { MessageChannel } from 'node:worker_threads';
-import { compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe, type Node } from '@chromobench/contract';
+import { compile, Graph, newDocument, sha256Hex, type Node } from '@chromobench/contract';
+import { withMeasured } from '../src/host/first-print.ts';
 import { nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -22,11 +23,10 @@ async function decoded() {
   return decodeFile(bytes, sha, 'm1.tif', 'scan', { long: 64, dust: false, roll: new Map(), raw: noRaw });
 }
 
-/** The display chain below output.frame (a host op) of a negative's default recipe with its measured base. */
+/** The display chain below output.frame (the document geometry) of a negative's neutral document with its measured base. */
 function chain(g: Graph, d: Awaited<ReturnType<typeof decoded>>): Node {
-  const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
-  const r: FrameRecipe = { ...r0, scan: { ...r0.scan!, ...(d.rebate ? { rebate: d.rebate } : {}), ...(d.flare ? { flare: d.flare } : {}), ...(d.baseT ? { baseT: d.baseT } : {}) } };
-  let top = compile(r, g);
+  const r = withMeasured(newDocument('negative-scan', { sha256: sha, name: 'm1', width: d.info.width, height: d.info.height }), d);
+  let top = compile(r, g).display;
   if (top.op === 'output.frame') top = g.get(top.inputs[0]!)!;
   return top;
 }

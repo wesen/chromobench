@@ -8,22 +8,21 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
     then:
       column
         section "Exposure"
-          cb.arg  path "print.enlarger.mode"  segmented
-          cb.arg  path "print.enlarger.time_s"  slider  s  log2  step 1/6 st  aside st
-          cb.arg  path "print.enlarger.fstop"  stepper  f  log2  aside st
+          cb.arg  path "stages.darkroom.medium.mode"  segmented
+          cb.arg  path "main.params.time_s"  slider  s  log2  step 1/6 st  aside st
+          cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
           text τ  dim  wrap
         section "Filtration"
-          cb.arg  path "print.enlarger.filtration"  slider  CC  step 1 CC  aside pt  detent 0
+          cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
         section "Printer lights"
-          cb.arg  path "print.lights.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+          cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
         section "Paper"
-          cb.arg  path "print.paper"  select
-          cb.arg  path "print.grade"  slider  step 0.5 none
-          cb.arg  path "print.preflash"  slider  fraction  step 0.005 fraction
+          cb.arg  path "stages.darkroom.medium.paper"  select
+          cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
         section "Film and viewing"
-          cb.arg  path "capture.stock"  select
-          cb.arg  path "scan.stock"  select
-          cb.arg  path "scan.scanner"  select
-          cb.arg  path "view.illuminant"  select
+          cb.arg  path "stages.film.medium.stock"  select
+          cb.arg  path "stages.scan.medium.stock"  select
+          cb.arg  path "stages.scan.medium.scanner"  select
+          cb.arg  path "stages.print.medium.illuminant"  select
           text τ  dim  wrap"
 `;

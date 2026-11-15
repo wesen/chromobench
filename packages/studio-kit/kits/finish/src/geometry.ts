@@ -9,7 +9,7 @@
 //   - So on the un-straightened frame the region a crop reads is the box turned by θ about its centre; a crop
 //     is valid when all four corners of that quadrilateral lie inside the frame (nothing empty is shown).
 //   - Spots (retouch.spots, scan.dust.spots) are sensor px of the un-oriented source: a crop never moves them.
-import { sensorAngleSign, type Box, type FrameSettings, type Orientation } from '@chromobench/contract';
+import { sensorAngleSign, type Box, type Geometry, type Orientation } from '@chromobench/contract';
 
 export interface Pt { x: number; y: number }
 export interface Size { w: number; h: number }
@@ -53,10 +53,10 @@ export function rotate(p: Pt, deg: number): Pt {
 }
 
 /** θ (degrees, sensor frame) by which a crop's sampled region is turned: −sign(orientation)·angle. */
-export const sensorTurn = (f: Pick<FrameSettings, 'angle_deg' | 'orientation'>): number => -sensorAngleSign(f.orientation) * f.angle_deg;
+export const sensorTurn = (f: Pick<Geometry, 'angle_deg' | 'orientation'>): number => -sensorAngleSign(f.orientation) * f.angle_deg;
 
 export const fullBox = (W: number, H: number): Box => ({ x: 0, y: 0, w: W, h: H });
-export const cropOf = (f: Pick<FrameSettings, 'crop'>, W: number, H: number): Box => f.crop ?? fullBox(W, H);
+export const cropOf = (f: Pick<Geometry, 'crop'>, W: number, H: number): Box => f.crop ?? fullBox(W, H);
 export const centreOf = (b: Box): Pt => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 
 /** The four corners (sensor px) of the region a crop reads: the box turned by θ about its centre. */
@@ -74,7 +74,7 @@ export function fitsInside(box: Box, thetaDeg: number, W: number, H: number, eps
   return cropCorners(box, thetaDeg).every((p) => p.x >= -eps && p.y >= -eps && p.x <= W + eps && p.y <= H + eps);
 }
 /** The frame's crop is valid: its turned box lies inside the frame. */
-export const frameValid = (f: FrameSettings, W: number, H: number): boolean => fitsInside(cropOf(f, W, H), sensorTurn(f), W, H);
+export const frameValid = (f: Geometry, W: number, H: number): boolean => fitsInside(cropOf(f, W, H), sensorTurn(f), W, H);
 
 /** The largest h of a box with sensor aspect ρ = w/h, centred at c, turned by θ, inside W × H. */
 export function largestHeight(c: Pt, rho: number, thetaDeg: number, W: number, H: number): number {
@@ -141,7 +141,7 @@ export function largestCrop(W: number, H: number, o: { angle_deg?: number; orien
 }
 
 /** The frame with the largest crop of `aspect` at the current centre (or the frame's centre). */
-export function fitCrop(W: number, H: number, o: { angle_deg?: number; orientation?: Orientation; aspect?: Aspect; centre?: Pt } = {}): FrameSettings {
+export function fitCrop(W: number, H: number, o: { angle_deg?: number; orientation?: Orientation; aspect?: Aspect; centre?: Pt } = {}): Geometry {
   const orientation = o.orientation ?? 'none';
   const angle_deg = o.angle_deg ?? 0;
   const aspect = parseAspect(o.aspect ?? 'original', W, H, orientation);
@@ -170,7 +170,7 @@ export const scaleAbout = (b: Box, c: Pt, k: number): Box => ({ x: c.x + (b.x - 
  * about the crop's centre (recentred into the frame when the centre left it) by bisection until it fits,
  * then rounded to integer px. A valid frame is returned unchanged.
  */
-export function constrain(f: FrameSettings, W: number, H: number): FrameSettings {
+export function constrain(f: Geometry, W: number, H: number): Geometry {
   const theta = sensorTurn(f);
   const b0 = cropOf(f, W, H);
   if (fitsInside(b0, theta, W, H) && [b0.x, b0.y, b0.w, b0.h].every(Number.isInteger)) return f;
@@ -204,13 +204,13 @@ export function towards(a: Box, b: Box, thetaDeg: number, W: number, H: number):
 }
 
 /** The shown (final) picture's size: the crop's, oriented. */
-export function shownSize(f: FrameSettings, W: number, H: number): Size {
+export function shownSize(f: Geometry, W: number, H: number): Size {
   const b = cropOf(f, W, H);
   return swapsAxes(f.orientation) ? { w: b.h, h: b.w } : { w: b.w, h: b.h };
 }
 
 /** A point of the shown (cropped, straightened, oriented) picture → sensor px of the un-oriented source. */
-export function toSource(f: FrameSettings, W: number, H: number, X: number, Y: number): Pt {
+export function toSource(f: Geometry, W: number, H: number, X: number, Y: number): Pt {
   const b = cropOf(f, W, H);
   const p = unorientPoint(f.orientation, b.w, b.h, X, Y);
   const v = rotate({ x: p.x - b.w / 2, y: p.y - b.h / 2 }, sensorTurn(f));
@@ -218,22 +218,22 @@ export function toSource(f: FrameSettings, W: number, H: number, X: number, Y: n
   return { x: c.x + v.x, y: c.y + v.y };
 }
 /** The inverse of toSource: sensor px → the shown picture (may lie outside it when cropped away). */
-export function toShown(f: FrameSettings, W: number, H: number, x: number, y: number): Pt {
+export function toShown(f: Geometry, W: number, H: number, x: number, y: number): Pt {
   const b = cropOf(f, W, H);
   const c = centreOf(b);
   const v = rotate({ x: x - c.x, y: y - c.y }, -sensorTurn(f));
   return orientPoint(f.orientation, b.w, b.h, v.x + b.w / 2, v.y + b.h / 2);
 }
 /** Whether a sensor point is inside the shown picture. */
-export function shownContains(f: FrameSettings, W: number, H: number, x: number, y: number): boolean {
+export function shownContains(f: Geometry, W: number, H: number, x: number, y: number): boolean {
   const s = shownSize(f, W, H);
   const p = toShown(f, W, H, x, y);
   return p.x >= 0 && p.y >= 0 && p.x <= s.w && p.y <= s.h;
 }
 
 /** The crop tool's canvas: the whole frame, oriented, not straightened. Canvas px ↔ sensor px. */
-export const canvasToSource = (f: Pick<FrameSettings, 'orientation'>, W: number, H: number, X: number, Y: number): Pt => unorientPoint(f.orientation, W, H, X, Y);
-export const sourceToCanvas = (f: Pick<FrameSettings, 'orientation'>, W: number, H: number, x: number, y: number): Pt => orientPoint(f.orientation, W, H, x, y);
+export const canvasToSource = (f: Pick<Geometry, 'orientation'>, W: number, H: number, X: number, Y: number): Pt => unorientPoint(f.orientation, W, H, X, Y);
+export const sourceToCanvas = (f: Pick<Geometry, 'orientation'>, W: number, H: number, x: number, y: number): Pt => orientPoint(f.orientation, W, H, x, y);
 
 /** The straighten angle (degrees, view.frame.angle_deg) that levels the shown line a → b (horizontal or vertical, whichever is nearer). */
 export function angleOf(a: Pt, b: Pt): number {
@@ -257,7 +257,7 @@ export function composeOrientation(o: Orientation, next: 'cw90' | 'ccw90' | 'fli
 }
 
 /** The frame after one orientation step: the crop box stays (sensor px); the shown angle keeps its look. */
-export function orientFrame(f: FrameSettings, step: 'cw90' | 'ccw90' | 'flipH' | 'flipV'): FrameSettings {
+export function orientFrame(f: Geometry, step: 'cw90' | 'ccw90' | 'flipH' | 'flipV'): Geometry {
   const orientation = composeOrientation(f.orientation, step);
   // the region read is turned by θ = −sign·angle in sensor terms; keep θ, so angle′ = −θ / sign′
   const theta = sensorTurn(f);
@@ -266,7 +266,7 @@ export function orientFrame(f: FrameSettings, step: 'cw90' | 'ccw90' | 'flipH' |
 }
 
 /** Swaps a crop's shown aspect (portrait ↔ landscape) about its centre, as large as fits. */
-export function swapAspect(f: FrameSettings, W: number, H: number): FrameSettings {
+export function swapAspect(f: Geometry, W: number, H: number): Geometry {
   const b = cropOf(f, W, H);
   const c = centreOf(b);
   const box = largestCrop(W, H, { angle_deg: f.angle_deg, orientation: f.orientation, aspect: swapsAxes(f.orientation) ? [b.w, b.h] : [b.h, b.w], centre: c, max: { w: b.h, h: b.w } });

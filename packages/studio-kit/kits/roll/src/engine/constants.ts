@@ -22,28 +22,33 @@ export const TIME_MAX_S = 120;
 export const ROLL_TX = 'roll:';
 
 /**
- * Settings shared by every frame of a roll (decision record 1: copied into each recipe, tracked by the roll).
- * scan.flare and scan.baseT are the roll's measured veil and base (contract 0.3); a frame whose base the analysis
- * flags as mixed keeps its own scan.baseT. Not shared: scan.rebate (a box in one frame's pixels), crop, orientation, dust, the lights and the time
- * (each frame's own exposure and colour), exposures and masks.
+ * Settings shared by every frame of a roll (decision record 1: copied into each document, tracked by the roll; phase 7
+ * turns them into a roll link on the media). The scan medium's flare and baseT are the roll's measured veil and
+ * base; a frame whose base the analysis flags as mixed keeps its own baseT. Not shared: the rebate (a box in one
+ * frame's pixels), the geometry, dust, the printer lights and the time (each frame's own exposure and colour),
+ * darkroom layers and masks.
  */
 export const SHARED_PATHS = [
-  'scan.scanner',
-  'scan.stock',
-  'scan.format',
-  'scan.flat',
-  'scan.openGate',
-  'scan.flare',
-  'scan.baseT',
-  'print.paper',
-  'print.aim',
-  'print.enlarger.mode',
-  'print.enlarger.lamp',
-  'print.enlarger.filtration',
-  'print.enlarger.fstop',
-  'print.grade',
+  'stages.scan.medium.scanner',
+  'stages.scan.medium.stock',
+  'stages.scan.medium.format',
+  'stages.scan.medium.flat',
+  'stages.scan.medium.openGate',
+  'stages.scan.medium.flare',
+  'stages.scan.medium.baseT',
+  'stages.darkroom.medium.paper',
+  'stages.darkroom.medium.aim',
+  'stages.darkroom.medium.mode',
+  'stages.darkroom.medium.lamp',
+  'main.params.filtration',
+  'main.params.fstop',
+  'stages.darkroom.medium.grade',
 ] as const;
 export type SharedPath = (typeof SHARED_PATHS)[number];
+/** The key of a shared path in a roll's fragment (a roll record is part of the main document, whose keys are never
+ *  dotted paths): the path's last segment. */
+export type SharedKey = 'scanner' | 'stock' | 'format' | 'flat' | 'openGate' | 'flare' | 'baseT' | 'paper' | 'aim' | 'mode' | 'lamp' | 'filtration' | 'fstop' | 'grade';
+export const sharedKey = (p: SharedPath | string): SharedKey => p.split('.').pop() as SharedKey;
 
 /** Paths a "hand edit" touches: a frame with such a user entry is skipped by a match (guide §8.7). */
-export const LIGHTS_PATHS = ['print.lights.logH', 'print.enlarger.time_s'];
+export const LIGHTS_PATHS = ['lights.params.logH', 'main.params.time_s'];

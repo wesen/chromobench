@@ -4,27 +4,26 @@
 import { decode as decodePngFast } from 'fast-png';
 import UTIF from 'utif';
 import { describe, expect, it } from 'vitest';
-import { defaultRecipe, Graph, sha256Hex, type ExportSettings, type Node } from '@chromobench/contract';
+import { canonicalJSON, edit, Graph, newDocument, sha256Hex, type Document, type ExportSettings, type Node } from '@chromobench/contract';
 import { nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import { toU16 } from '../src/encode/quantise.ts';
 import { MemorySink, opfsSink } from '../src/encode/sinks.ts';
-import { exportFrame, exportNode, type ExportProgress } from '../src/export/run.ts';
+import { documentPayload, documentSha256, exportFrame, exportNode, type ExportProgress } from '../src/export/run.ts';
 import { memoryDir } from './helpers.ts';
 
-const SETTINGS: ExportSettings = { format: 'png16', space: 'srgb', knee: { method: 'oklch', strength: 6 }, scale: 'full', dpi: 300, compression: 'deflate', signal: 'icc', recipe: 'none' };
+const SETTINGS: ExportSettings = { format: 'png16', space: 'srgb', knee: { method: 'oklch', strength: 6 }, scale: 'full', dpi: 300, compression: 'deflate', signal: 'icc', document: 'none' };
 
-/** A frame in the reference engine and its export node (output.display; the reference engine has no output.frame). */
+/** A frame in the reference engine and its export node (the display cut: output.display, then output.frame). */
 async function setup(tiff = makeM1Tiff(), space: ExportSettings['space'] = 'srgb') {
   const e = new RefEngine({ data: nodePacksData() });
   const g = new Graph();
   const info = await e.open({ kind: 'file', sha256: sha256Hex(tiff), bytes: tiff });
   g.registerSource(info);
-  const r = defaultRecipe('negative-scan', { sha256: info.sha256 });
-  r.view.output.export.space = space;
-  const frame = exportNode(r, g);
-  const display = g.get(frame.inputs[0]!)!;
+  const d0 = newDocument('negative-scan', { sha256: info.sha256, width: info.width, height: info.height });
+  const r: Document = { ...d0, output: { ...d0.output, export: { ...d0.output.export, space } } };
+  const display = exportNode(r, g);
   e.adopt(g.closure(display.id));
   return { e, g, r, display };
 }
@@ -123,11 +122,11 @@ describe('tiled export (stage 5)', () => {
       node: display, settings: SETTINGS, sink, name: 'a.png', tile: 24,
       onProgress: (p) => {
         if (p.tilesDone !== 2) return;
-        // the photographer moves the lights: a new recipe, new nodes; the export keeps its NodeRef
-        const r2 = structuredClone(r);
-        r2.print.lights.logH = [0.2, -0.1, 0];
+        // the photographer moves the lights: a new document, new nodes; the export keeps its NodeRef
+        const r2 = edit(r, [{ op: 'set', path: 'lights.params.logH', value: [0.2, -0.1, 0] }]).doc;
         const n2 = exportNode(r2, g);
-        e.adopt(g.closure(n2.inputs[0]!));
+        expect(n2.id).not.toBe(display.id);
+        e.adopt(g.closure(n2.id));
       },
     });
     const a = decodePngFast(ref.bytes()).data as Uint16Array;
@@ -137,20 +136,38 @@ describe('tiled export (stage 5)', () => {
 
   it('refuses a node that is not display-rgb, and JPEG (needs a canvas encoder)', async () => {
     const { e, g, display } = await setup();
-    const xyz = g.get(display.inputs[0]!)!;
+    const xyz = g.get(g.get(display.inputs[0]!)!.inputs[0]!)!; // under output.frame and output.display: print-xyz
     await expect(exportFrame(e, { node: xyz, settings: SETTINGS, sink: new MemorySink(), name: 'x.png' })).rejects.toThrow(/E_DOMAIN/);
     await expect(exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'jpeg' }, sink: new MemorySink(), name: 'x.jpg' })).rejects.toThrow(/E_NOT_IMPLEMENTED/);
   });
 
-  it('recipe sidecar and embedding', async () => {
+  it('document sidecar and embedding; documentSha256 is the hash of the canonical document', async () => {
     const { e, r, display } = await setup();
-    const json = JSON.stringify(r);
-    const recipe = { json, sha256: sha256Hex(new TextEncoder().encode(json)) };
-    const f = await exportFrame(e, { node: display, settings: { ...SETTINGS, recipe: 'sidecar' }, sink: new MemorySink(), name: 'frame_0042.png', recipe });
-    expect(f.sidecar?.name).toBe('frame_0042.recipe.json');
-    expect(f.recipeSha256).toBe(recipe.sha256);
+    const document = documentPayload(r);
+    expect(document.sha256).toBe(documentSha256(r));
+    expect(document.sha256).toBe(sha256Hex(new TextEncoder().encode(canonicalJSON(r))));
+    expect(JSON.parse(document.json)).toEqual(r);
+    const f = await exportFrame(e, { node: display, settings: { ...SETTINGS, document: 'sidecar' }, sink: new MemorySink(), name: 'frame_0042.png', document });
+    expect(f.sidecar).toEqual({ name: 'frame_0042.chromobench.json', json: document.json });
+    expect(f.documentSha256).toBe(document.sha256);
     const sink = new MemorySink();
-    await exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'tiff16', recipe: 'embedded' }, sink, name: 'f.tif', recipe });
-    expect(new TextDecoder().decode(sink.bytes())).toContain('"recipeSha256"');
+    const g = await exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'tiff16', document: 'embedded' }, sink, name: 'f.tif', document });
+    expect(g.sidecar).toBeUndefined();
+    const text = new TextDecoder().decode(sink.bytes());
+    expect(text).toContain(`"documentSha256":"${document.sha256}"`);
+    expect(text).toContain('"format":3');
+    // without a document: no hash, no sidecar
+    const none = await exportFrame(e, { node: display, settings: { ...SETTINGS, document: 'sidecar' }, sink: new MemorySink(), name: 'x.png' });
+    expect([none.documentSha256, none.sidecar]).toEqual(['', undefined]);
+  });
+
+  it('exportNode uses the export knee where it differs from the display knee', async () => {
+    const { g, r } = await setup();
+    const a = exportNode(r, g);
+    const r2: Document = { ...r, output: { ...r.output, export: { ...r.output.export, knee: { method: 'clip', strength: 6 } } } };
+    const b = exportNode(r2, g);
+    expect(b.op).toBe('output.frame');
+    expect(b.id).not.toBe(a.id);
+    expect(g.get(b.inputs[0]!)!.args['knee']).toBe('clip');
   });
 });

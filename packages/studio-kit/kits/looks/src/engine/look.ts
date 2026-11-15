@@ -1,19 +1,21 @@
-// Looks and presets (CHB-021 guide §2): a preset is a partial recipe (path entries: absolute `set`, offset `add`,
-// factor `mul`); a look is a JS function with declared, ArgSpec-shaped parameters that produces such entries for
-// one frame. Both resolve to the same list of entries; Amount, diff, apply and survey work on that list only
-// (decision: a look never stores a pipeline, it always resolves to mutations).
+// Looks and presets (CHB-021 guide §2; CHB-037: on format-3 documents): a preset is a partial document (path
+// entries: absolute `set`, offset `add`, factor `mul`, on document paths) plus darkroom layers to add; a look is a JS
+// function with declared, ArgSpec-shaped parameters that produces such entries for one frame. Both resolve to the
+// same list of entries; Amount, diff, apply and survey work on that list only (a look never stores a pipeline, it
+// always resolves to mutations; phase 7 turns looks into links).
 //
 //   const warm = look('warm print').group('Print')
 //     .param('warmth', slider(0, 10, { unit: 'pt', default: 4, label: 'Warmth' }))
-//     .edits((f, p) => ({ 'print.lights.logH': add(pt([-p.warmth / 2, 0, p.warmth / 2])) }))
-//   resolveLook(warm, lookFrame('f1', recipe), { warmth: 6 })  → { entries: [{ path, add: [...] }], … }
+//     .edits((f, p) => ({ 'lights.params.logH': add(pt([-p.warmth / 2, 0, p.warmth / 2])) }))
+//   resolveLook(warm, lookFrame('f1', doc), { warmth: 6 })  → { entries: [{ path, add: [...] }], … }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  ChromobenchError, CONTRACT_VERSION, LOGH_PER_POINT, PRINT_OPTION_PATHS, checkArgValue, closest, diag, fail, fieldPattern, settablePaths,
-  type ArgSpec, type Diagnostic, type ExposureInput, type FrameRecipe, type Unit,
+  ChromobenchError, CONTRACT_VERSION, LOGH_PER_POINT, checkArgValue, closest, diag, documentKind, fail,
+  type ArgSpec, type Diagnostic, type Document, type FrameKind, type Unit,
 } from '@chromobench/contract';
-import { isImageHandle, frameRef, type FrameRef, type ImageHandle } from '../../../../src/handles.ts';
+import { darkroomMedium } from '../../../../src/model/doc.ts';
+import { checkPath, specAt } from './paths.ts';
 
 /** How Amount scales one path (guide §4.2); `{ step }` is a threshold for discrete values. */
 export type AmountRule = 'linear' | 'stops' | 'mired' | 'keep' | 'step' | { step: number };
@@ -31,19 +33,30 @@ export type SourceKind = 'film-scan' | 'digital-raw' | 'any';
 export type AmountBase = 'current' | 'defaults';
 
 export const PRESET_FORMAT = 'chromobench.preset';
-export const PRESET_VERSION = 1;
+/** 2: document paths (contract 1.0); a version-1 preset named recipe paths and is not read (hard cut-off). */
+export const PRESET_VERSION = 2;
+
+/** A darkroom layer a preset or look adds (a dodge, a burn, a flash, the preflash, a contrast mask). Amount scales its
+ *  stops, time and preflash fraction; an existing layer of the same id gets its params moved instead. */
+export interface LayerInput {
+  id: string;
+  op: 'burn' | 'dodge' | 'flash' | 'preflash' | 'densityMask';
+  params: Record<string, number | string>;
+  name?: string;
+  mask?: string | null;
+}
 
 export interface Preset {
   format: typeof PRESET_FORMAT;
-  version: 1;
+  version: 2;
   /** slug, unique in the library */
   id: string;
   name: string;
   group?: string;
   notes?: string;
   entries: PresetEntry[];
-  /** dodge/burn/flash rows to add (exposure.add); their stops scale with Amount */
-  exposures?: ExposureInput[];
+  /** darkroom layers to add; their stops, time and preflash fraction scale with Amount */
+  layers?: LayerInput[];
   requires?: { source?: SourceKind };
   /** per-path overrides of the default Amount rule */
   amount?: Record<string, AmountRule>;
@@ -65,31 +78,29 @@ export const add = (value: number | number[] | Record<string, number>): LookEdit
 export const mul = (value: number): LookEdit => Object.freeze({ $: 'look.edit' as const, kind: 'mul' as const, value });
 const isEdit = (x: unknown): x is LookEdit => !!x && typeof x === 'object' && (x as LookEdit).$ === 'look.edit';
 
-/** printer points → log H (numbers or arrays), for `add` on print.lights.logH */
+/** printer points → log H (numbers or arrays), for `add` on lights.params.logH */
 export const pt = (x: number | number[]): any => (Array.isArray(x) ? x.map((v) => v * LOGH_PER_POINT) : x * LOGH_PER_POINT);
 
 /** The read-only frame a look body sees: no measurements (an auto look that measures is a different object). */
 export interface LookFrame {
   readonly id: string;
-  readonly recipe: FrameRecipe;
-  readonly kind: FrameRecipe['kind'];
+  readonly doc: Document;
+  readonly kind: FrameKind;
   readonly source: Exclude<SourceKind, 'any'>;
-  /** the film stock (scan.stock, or capture.stock for a digital RAW) */
+  /** the film stock (the scan's, or the film a camera file is put on) */
   readonly stock: string | null;
   readonly paper: string;
-  /** what-if print handles, the "pipeline" form: (f, p) => f.print({ grade: 3 }) */
-  print(o?: Record<string, unknown>): ImageHandle;
 }
-export function lookFrame(id: string, recipe: FrameRecipe): LookFrame {
-  const ref: FrameRef = frameRef(id, recipe);
+export function lookFrame(id: string, doc: Document): LookFrame {
+  const kind = documentKind(doc);
+  const st = doc.stages as { scan?: { medium: { stock?: string } }; film?: { medium: { stock?: string } } };
   return Object.freeze({
     id,
-    recipe,
-    kind: recipe.kind,
-    source: recipe.kind === 'digital-raw' ? ('digital-raw' as const) : ('film-scan' as const),
-    stock: recipe.scan?.stock ?? recipe.capture?.stock ?? null,
-    paper: recipe.print.paper,
-    print: (o: Record<string, unknown> = {}) => ref.print(o),
+    doc,
+    kind,
+    source: kind === 'digital-raw' ? ('digital-raw' as const) : ('film-scan' as const),
+    stock: st.scan?.medium.stock ?? st.film?.medium.stock ?? null,
+    paper: darkroomMedium(doc).paper,
   });
 }
 
@@ -107,7 +118,7 @@ export interface Look {
   readonly amount: Readonly<Record<string, AmountRule>>;
   readonly base: AmountBase;
   readonly body: LookBody;
-  readonly exposures?: (f: LookFrame, p: Record<string, any>) => ExposureInput[];
+  readonly layers?: (f: LookFrame, p: Record<string, any>) => LayerInput[];
   readonly origin: 'builtin' | 'preset' | 'file' | 'sweep';
   readonly preset?: Preset;
 }
@@ -148,11 +159,11 @@ export interface LookBuilder {
   param(name: string, spec: ArgSpec): LookBuilder;
   amount(path: string, rule: AmountRule): LookBuilder;
   base(b: AmountBase): LookBuilder;
-  exposures(fn: (f: LookFrame, p: Record<string, any>) => ExposureInput[]): LookBuilder;
+  layers(fn: (f: LookFrame, p: Record<string, any>) => LayerInput[]): LookBuilder;
   edits(fn: LookBody): Look;
 }
 export function look(name: string): LookBuilder {
-  const d: { id: string; group: string; notes?: string; requires: SourceKind; params: Record<string, ArgSpec>; amount: Record<string, AmountRule>; base: AmountBase; exposures?: Look['exposures'] } = {
+  const d: { id: string; group: string; notes?: string; requires: SourceKind; params: Record<string, ArgSpec>; amount: Record<string, AmountRule>; base: AmountBase; layers?: Look['layers'] } = {
     id: slug(name), group: 'Mine', requires: 'any', params: {}, amount: {}, base: 'current',
   };
   const b: LookBuilder = {
@@ -163,11 +174,11 @@ export function look(name: string): LookBuilder {
     param: (n, spec) => ((d.params[n] = spec), b),
     amount: (p, r) => ((d.amount[p] = r), b),
     base: (x) => ((d.base = x), b),
-    exposures: (fn) => ((d.exposures = fn), b),
+    layers: (fn) => ((d.layers = fn), b),
     edits: (body) =>
       Object.freeze({
         $: 'look' as const, id: d.id, name, group: d.group, ...(d.notes ? { notes: d.notes } : {}), params: Object.freeze({ ...d.params }), requires: d.requires,
-        amount: Object.freeze({ ...d.amount }), base: d.base, body, ...(d.exposures ? { exposures: d.exposures } : {}), origin: 'builtin' as const,
+        amount: Object.freeze({ ...d.amount }), base: d.base, body, ...(d.layers ? { layers: d.layers } : {}), origin: 'builtin' as const,
       }),
   };
   return b;
@@ -187,31 +198,14 @@ export function paramValues(l: Look, given: Record<string, unknown> = {}): Recor
   return out;
 }
 
-/** The what-if handle form: frame.print({ grade: 3, lights: [...] }) → set entries (PRINT_OPTION_PATHS, 1:1). */
-export function lookEdits(h: ImageHandle): PresetEntry[] {
-  if (h.what !== 'print') fail('E_ARG_TYPE', `a look may return frame.print({...}); got ${h.expr}`);
-  return Object.entries(h.args).map(([k, v]) => {
-    const path = PRINT_OPTION_PATHS[k];
-    if (!path) fail('E_UNKNOWN_OPTION', `print() option "${k}" has no recipe path, so a look cannot apply it`, { valid: Object.keys(PRINT_OPTION_PATHS) });
-    return { path, set: v };
-  });
-}
-
-function checkPath(path: string): void {
-  if (fieldPattern(path)) return;
-  const guess = closest(path, settablePaths());
-  fail('E_PATH', `unknown recipe path "${path}"`, { path, ...(guess ? { hint: `did you mean ${guess}?`, fix: guess } : {}) });
-}
-
-/** A body's result → entries: a path map of cb.set/cb.add/cb.mul or plain values, or a what-if print handle. */
-export function normaliseEdits(out: unknown): PresetEntry[] {
+/** A body's result → entries: a path map of cb.set/cb.add/cb.mul or plain values, or a list of entries. */
+export function normaliseEdits(out: unknown, doc?: Document): PresetEntry[] {
   if (out === undefined || out === null) return [];
-  if (isImageHandle(out)) return lookEdits(out);
-  if (Array.isArray(out)) return out.map((e) => (checkPath(String((e as PresetEntry).path)), e as PresetEntry));
-  if (typeof out !== 'object') fail('E_ARG_TYPE', 'a look body returns a map of recipe paths to cb.set / cb.add / values');
+  if (Array.isArray(out)) return out.map((e) => (checkPath(String((e as PresetEntry).path), doc), e as PresetEntry));
+  if (typeof out !== 'object') fail('E_ARG_TYPE', 'a look body returns a map of document paths to cb.set / cb.add / values');
   const entries: PresetEntry[] = [];
   for (const [path, v] of Object.entries(out as Record<string, unknown>)) {
-    checkPath(path);
+    checkPath(path, doc);
     if (isEdit(v)) entries.push(v.kind === 'set' ? { path, set: v.value } : v.kind === 'add' ? { path, add: v.value as number } : { path, mul: v.value as number });
     else entries.push({ path, set: v });
   }
@@ -223,7 +217,7 @@ export interface Resolved {
   frame: string;
   params: Record<string, any>;
   entries: PresetEntry[];
-  exposures: ExposureInput[];
+  layers: LayerInput[];
   /** set when the look does not apply to this frame (requires) */
   skip?: Diagnostic;
 }
@@ -234,10 +228,10 @@ const SOURCE_WORDS: Record<string, string> = { 'digital-raw': 'a digital RAW', '
 export function resolveLook(l: Look, f: LookFrame, given: Record<string, unknown> = {}): Resolved {
   const params = paramValues(l, given);
   if (l.requires !== 'any' && l.requires !== f.source)
-    return { look: l, frame: f.id, params, entries: [], exposures: [], skip: diag('E_KIND', `'${l.name}' needs ${SOURCE_WORDS[l.requires]}; ${f.id} is ${SOURCE_WORDS[f.source]}`, { hint: `This look needs ${SOURCE_WORDS[l.requires]}` }) };
-  const entries = normaliseEdits(l.body(f, params));
-  const exposures = l.exposures ? l.exposures(f, params) : [];
-  return { look: l, frame: f.id, params, entries, exposures };
+    return { look: l, frame: f.id, params, entries: [], layers: [], skip: diag('E_KIND', `'${l.name}' needs ${SOURCE_WORDS[l.requires]}; ${f.id} is ${SOURCE_WORDS[f.source]}`, { hint: `This look needs ${SOURCE_WORDS[l.requires]}` }) };
+  const entries = normaliseEdits(l.body(f, params), f.doc);
+  const layers = l.layers ? l.layers(f, params) : [];
+  return { look: l, frame: f.id, params, entries, layers };
 }
 
 /** A preset as a look with no parameters and a constant body. */
@@ -245,7 +239,7 @@ export function fromPreset(p: Preset, origin: Look['origin'] = 'preset'): Look {
   const entries = p.entries.map((e) => ({ ...e }));
   return Object.freeze({
     $: 'look' as const, id: p.id, name: p.name, group: p.group ?? 'Mine', ...(p.notes ? { notes: p.notes } : {}), params: Object.freeze({}), requires: p.requires?.source ?? 'any',
-    amount: Object.freeze({ ...(p.amount ?? {}) }), base: p.base ?? 'current', body: () => entries, ...(p.exposures?.length ? { exposures: () => p.exposures!.map((x) => ({ ...x })) } : {}),
+    amount: Object.freeze({ ...(p.amount ?? {}) }), base: p.base ?? 'current', body: () => entries, ...(p.layers?.length ? { layers: () => p.layers!.map((x) => ({ ...x, params: { ...x.params } })) } : {}),
     origin, preset: p,
   });
 }
@@ -256,7 +250,7 @@ export function bake(l: Look, f: LookFrame, given: Record<string, unknown> = {},
   if (r.skip) throw new ChromobenchError(r.skip);
   const name = o.name ?? (Object.keys(r.params).length ? `${l.name} (${Object.entries(r.params).map(([k, v]) => `${k} ${v}`).join(', ')})` : l.name);
   return {
-    format: PRESET_FORMAT, version: PRESET_VERSION, id: o.id ?? slug(name), name, group: l.group, entries: r.entries, ...(r.exposures.length ? { exposures: r.exposures } : {}),
+    format: PRESET_FORMAT, version: PRESET_VERSION, id: o.id ?? slug(name), name, group: l.group, entries: r.entries, ...(r.layers.length ? { layers: r.layers } : {}),
     ...(l.requires !== 'any' ? { requires: { source: l.requires } } : {}), ...(Object.keys(l.amount).length ? { amount: { ...l.amount } } : {}), base: l.base, contract: CONTRACT_VERSION,
   };
 }
@@ -269,6 +263,7 @@ export function validatePreset(x: unknown): Diagnostic[] {
   if (p.format !== PRESET_FORMAT) out.push(diag('E_FORMAT', `not a chromobench preset (format ${JSON.stringify(p.format)})`, { fix: PRESET_FORMAT }));
   if (typeof p.version !== 'number') out.push(diag('E_FORMAT', 'preset version missing'));
   else if (p.version > PRESET_VERSION) out.push(diag('E_FORMAT', `preset version ${p.version} is newer than this app (${PRESET_VERSION})`, { hint: 'update chromobench to read it' }));
+  else if (p.version < PRESET_VERSION) out.push(diag('E_FORMAT', `preset version ${p.version} names recipe paths, which no longer exist`, { hint: 'make the preset again from a frame (Save Frame as Preset)' }));
   if (typeof p.id !== 'string' || !p.id) out.push(diag('E_FORMAT', 'preset id missing'));
   if (typeof p.name !== 'string' || !p.name) out.push(diag('E_FORMAT', 'preset name missing'));
   if (!Array.isArray(p.entries)) return [...out, diag('E_FORMAT', 'preset entries must be an array')];
@@ -278,9 +273,13 @@ export function validatePreset(x: unknown): Diagnostic[] {
       out.push(diag('E_FORMAT', `entry ${i}: { path, set | add | mul }`));
       continue;
     }
-    if (!fieldPattern(e.path)) {
-      const guess = closest(e.path, settablePaths());
-      out.push(diag('E_PATH', `entry ${i}: unknown recipe path "${e.path}"`, { path: e.path, ...(guess ? { hint: `did you mean ${guess}?`, fix: guess } : {}) }));
+    if (!specAt(e.path)) {
+      try {
+        checkPath(e.path);
+      } catch (err) {
+        const d = (err as ChromobenchError).diag;
+        out.push(diag('E_PATH', `entry ${i}: unknown document path "${e.path}"`, { path: e.path, ...(d?.hint ? { hint: d.hint } : {}), ...(d?.fix ? { fix: d.fix } : {}) }));
+      }
     }
   }
   return out;

@@ -1,20 +1,16 @@
-// CHB-027 WS-A: a file is opened as a photo or as a negative (F1), a saved recipe is resumed only in its own mode
+// CHB-027 WS-A: a file is opened as a photo or as a negative (F1), a saved edit is resumed only in its own mode
 // (F3), opening an open file says so (F2), a frame can be re-opened the other way or removed (F6), and the library
 // keeps frames that are not open in this session (F5).
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
-import { EditLog, sha256Hex, type EditLogData } from '@chromobench/contract';
+import { sha256Hex, type Document } from '@chromobench/contract';
+import { set, transaction } from '@chromobench/values';
+import { manualClock } from '@chromobench/shell/testing';
 import { describe, expect, it } from 'vitest';
-import { createStudio, defaultFor, logKey, memoryKV, sel, type KV, type OpenAs } from '../src/index.ts';
-import { recipePath, started } from './helpers.ts';
+import { buildLayout, createStudio, defaultDocument, FRAME_SAVE_FORMAT, logKey, memoryKV, sel, type FrameSave, type KV, type OpenAs } from '../src/index.ts';
+import { LAYOUTS } from '../layouts/index.js';
+import { at, docOf, otherTiff, started, timeOf } from './helpers.ts';
 
-const TIME = 'print.enlarger.time_s';
-
-/** the M1 fixture with one sample changed: another file */
-function otherTiff(): Uint8Array {
-  const b = makeM1Tiff();
-  b[b.length - 2] = (b[b.length - 2]! + 1) & 0xff;
-  return b;
-}
+const TIME = 'main.params.time_s';
 
 /** a studio whose opener decides like the host: 'auto' guesses negative for this fixture */
 async function studioWith(o: { kv?: KV; guess?: 'photo' | 'negative' } = {}) {
@@ -27,40 +23,50 @@ async function studioWith(o: { kv?: KV; guess?: 'photo' | 'negative' } = {}) {
     return { info: await engine.open(src), kind };
   };
   const studio = createStudio({ engine, kv, opener });
-  return { studio, calls, kv };
+  const { app } = buildLayout((await LAYOUTS.tiny()).default);
+  const rt = await app.boot(studio.services({ clock: manualClock(1_000) }));
+  studio.attach(rt);
+  return { studio, calls, kv, rt, engine };
 }
 
-describe('open modes and saved logs (F1, F3)', () => {
-  it('opens as the opener says, and saves the log under (hash, mode)', async () => {
-    const { studio, kv } = await studioWith({ guess: 'photo' });
+/** a saved edit of a file: its document as opened and one Time set */
+async function savedTime(kv: KV, bytes: Uint8Array, kind: 'negative-scan' | 'digital-raw', time: number): Promise<void> {
+  const info = await new MockEngine().open({ kind: 'file', sha256: sha256Hex(bytes), bytes });
+  const initial = defaultDocument(kind, { sha256: info.sha256, name: 'raw010.dng', width: info.width, height: info.height });
+  const rec: FrameSave = { format: FRAME_SAVE_FORMAT, version: 3, initial, applied: [transaction({ id: 't1', label: 'Time', by: 'user', mutations: [set(TIME, time)] })], pending: [] };
+  await kv.put('logs', logKey(info.sha256, kind), rec);
+}
+
+describe('open modes and saved edits (F1, F3)', () => {
+  it('opens as the opener says, and saves the edit under (hash, mode)', async () => {
+    const { studio, kv, rt } = await studioWith({ guess: 'photo' });
     const bytes = makeM1Tiff();
     const r = await studio.openFile(bytes, 'DSC_8559.NEF');
     expect(r.outcome).toBe('opened');
     expect(r.entry.kind).toBe('digital-raw');
-    expect(r.entry.log.committed.kind).toBe('digital-raw');
-    expect(r.entry.log.committed.source.decode.mode).toBe('photo');
+    const d = docOf(rt, r.entry.id) as Document;
+    expect(d.stages.scene).toBeDefined();
+    expect(d.stages.scan).toBeUndefined();
+    expect(d.source.decode.mode).toBe('photo');
     await studio.flush();
     const sha = sha256Hex(bytes);
     expect(await kv.get('logs', logKey(sha, 'digital-raw'))).toBeTruthy();
     expect(await kv.get('logs', logKey(sha, 'negative-scan'))).toBeUndefined();
   });
 
-  it('never resumes a photo recipe on a negative decode (the F3 trap), but resumes an old log of the same kind', async () => {
+  it('never resumes a photo edit on a negative decode (the F3 trap), but resumes it when the file opens as a photo', async () => {
     const kv = memoryKV();
     const bytes = makeM1Tiff();
-    const sha = sha256Hex(bytes);
-    // an old (pre-CHB-027) log saved by hash alone, as a photo, with an edit
-    const old = EditLog.create(defaultFor(sha, 'raw010.dng', 'digital-raw'), { by: 'auto' });
-    old.apply([{ op: 'set', path: TIME, value: 20 }], 'user', 'Time');
-    await kv.put('logs', sha, old.toJSON());
-    const neg = await (await studioWith({ kv })).studio.openFile(bytes, 'raw010.dng', { as: 'negative' });
+    await savedTime(kv, bytes, 'digital-raw', 20);
+    const a = await studioWith({ kv });
+    const neg = await a.studio.openFile(bytes, 'raw010.dng', { as: 'negative' });
     expect(neg.outcome).toBe('opened');
-    expect(neg.entry.log.committed.kind).toBe('negative-scan');
-    expect(neg.entry.log.committed.print.enlarger.time_s).toBe(10);
-    // the same old log is taken when the file opens as a photo again
-    const photo = await (await studioWith({ kv })).studio.openFile(bytes, 'raw010.dng', { as: 'photo' });
+    expect(docOf(a.rt, neg.entry.id).stages.scan).toBeDefined();
+    expect(timeOf(a.rt, neg.entry.id)).toBe(10);
+    const b = await studioWith({ kv });
+    const photo = await b.studio.openFile(bytes, 'raw010.dng', { as: 'photo' });
     expect(photo.outcome).toBe('resumed');
-    expect(photo.entry.log.committed.print.enlarger.time_s).toBe(20);
+    expect(timeOf(b.rt, photo.entry.id)).toBe(20);
   });
 
   it('opening an open file says "already" (F2), or "conflict" when asked for the other mode', async () => {
@@ -86,30 +92,31 @@ describe('open modes and saved logs (F1, F3)', () => {
 });
 
 describe('re-open as photo / negative, remove (F3, F6)', () => {
-  it('re-opens a frame the other way: same id, the other kind, its own log; switching back resumes the first', async () => {
+  it('re-opens a frame the other way: same id, the other kind, its own document; switching back resumes the first', async () => {
     const { rt, studio, f } = await started();
     const e0 = studio.frames.get(f)!;
     expect(e0.kind).toBe('negative-scan');
-    rt.store.preview(recipePath(f, TIME), 14);
+    rt.store.preview(at(rt, f, TIME), 14);
     rt.store.commit('Time');
-    expect(e0.log.committed.print.enlarger.time_s).toBe(14);
+    expect(timeOf(rt, f)).toBe(14);
+    await studio.flush();
     const r = await studio.reopen(f, 'photo');
     expect(r.entry.id).toBe(f);
     expect(r.entry.kind).toBe('digital-raw');
-    expect((rt.state as any).recipes[f].kind).toBe('digital-raw');
+    expect(sel.kind(rt.state as any, f)).toBe('photo');
     expect((rt.state as any).catalog.frames[f].kind).toBe('photo');
-    // the undo of the negative's Time skips: that log is out of the studio now
+    // the negative's document left the log with its steps: nothing to undo on the photo
+    expect(rt.store.log.canUndo).toBe(false);
     rt.run('edit.undo');
-    expect((rt.state as any).recipes[f].kind).toBe('digital-raw');
-    expect(e0.log.cursor).toBe(1);
-    // back to the negative: its saved log, with the Time change
+    expect(sel.kind(rt.state as any, f)).toBe('photo');
+    // back to the negative: its saved edit, with the Time change
+    await studio.flush();
     const back = await studio.reopen(f, 'negative');
     expect(back.outcome).toBe('resumed');
-    expect(back.entry.log.committed.print.enlarger.time_s).toBe(14);
-    expect((rt.state as any).recipes[f].print.enlarger.time_s).toBe(14);
+    expect(timeOf(rt, f)).toBe(14);
   });
 
-  it('removes frames from the library: out of the store, the catalog and the selection; the log stays saved', async () => {
+  it('removes frames from the library: out of the store, the catalog and the selection; the edit stays saved', async () => {
     const { rt, studio, f, kv } = await started();
     const sha = studio.frames.get(f)!.sha;
     const g = (await studio.open(otherTiff(), 'm2.tif')).id;
@@ -118,12 +125,13 @@ describe('re-open as photo / negative, remove (F3, F6)', () => {
     rt.run('frame.remove');
     const s = rt.state as any;
     expect(studio.frames.get(f)).toBeUndefined();
-    expect(s.recipes[f]).toBeUndefined();
+    expect(s.docs[f]).toBeUndefined();
+    expect(rt.store.log.has(f)).toBe(false);
     expect(s.catalog.frames[f]).toBeUndefined();
     expect(s.catalog.order).toEqual([g]);
     expect(s.ui.selection.primary).toBe(g);
     await studio.flush();
-    expect(await kv.get<EditLogData>('logs', logKey(sha, 'negative-scan'))).toBeTruthy();
+    expect(await kv.get('logs', logKey(sha, 'negative-scan'))).toBeTruthy();
     // opening it again resumes it
     const again = await studio.openFile(makeM1Tiff(), 'm1.tif');
     expect(again.outcome).toBe('resumed');
@@ -133,7 +141,7 @@ describe('re-open as photo / negative, remove (F3, F6)', () => {
 describe('the library survives a reload (F5)', () => {
   it('lists catalog frames that are not open, with their saved thumbnail; visibleFrames keeps only open ones', async () => {
     const { rt, f } = await started();
-    rt.store.writeDoc([{ path: ['catalog', 'frames', 'frame_offline'], value: { id: 'frame_offline', sha256: 'ab'.repeat(32), name: 'DSC_1.NEF', flag: null, stars: 0, label: null, keywords: [], kind: 'photo', thumb: 'data:image/jpeg;base64,AA' } }, { path: ['catalog', 'order'], value: [f, 'frame_offline'] }], { tier: 'document' });
+    rt.store.writeView([{ path: ['catalog', 'frames', 'frame_offline'], value: { id: 'frame_offline', sha256: 'ab'.repeat(32), name: 'DSC_1.NEF', flag: null, stars: 0, label: null, keywords: [], kind: 'photo', thumb: 'data:image/jpeg;base64,AA' } }, { path: ['catalog', 'order'], value: [f, 'frame_offline'] }]);
     const s = rt.state as any;
     expect(sel.library(s).map((x) => x.id)).toEqual([f, 'frame_offline']);
     expect(sel.visible(s).map((x) => x.id)).toEqual([f]);
@@ -148,14 +156,14 @@ describe('the library survives a reload (F5)', () => {
     const hidden = (id: string) => rt.commands.hidden(id, rt.state);
     expect(hidden('file.open')).toBe(true);
     const calls: string[] = [];
-    studio.setHost({ openFiles: () => calls.push('open'), saveRecipe: () => calls.push('recipe'), folder: 'Scans 2026', reopenFolder: () => calls.push('folder') });
+    studio.setHost({ openFiles: () => calls.push('open'), saveDocument: () => calls.push('document'), folder: 'Scans 2026', reopenFolder: () => calls.push('folder') });
     expect(hidden('file.open')).toBe(false);
     expect(hidden('file.reopenFolder')).toBe(false);
     expect(rt.commands.label('file.reopenFolder', rt.state)).toBe('Reopen Scans 2026');
     expect(hidden('file.openFolder')).toBe(true);
     rt.run('file.open');
-    rt.run('file.saveRecipe');
-    expect(calls).toEqual(['open', 'recipe']);
+    rt.run('file.saveDocument');
+    expect(calls).toEqual(['open', 'document']);
     rt.run('file.openAs.photo');
     expect((rt.state as any).prefs.openAs).toBe('photo');
   });

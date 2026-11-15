@@ -10,6 +10,8 @@ export interface KV {
   put(store: KvStore, key: string, value: unknown): Promise<void>;
   delete(store: KvStore, key: string): Promise<void>;
   all<T>(store: KvStore): Promise<T[]>;
+  /** the keys of a store (the storage reset of a hard cut-off) */
+  keys(store: KvStore): Promise<string[]>;
 }
 
 export function memoryKV(): KV & { data: Map<string, Map<string, unknown>> } {
@@ -28,6 +30,7 @@ export function memoryKV(): KV & { data: Map<string, Map<string, unknown>> } {
       s(n).delete(k);
     },
     all: async <T>(n: KvStore) => [...s(n).values()].map((v) => structuredClone(v)) as T[],
+    keys: async (n: KvStore) => [...s(n).keys()],
   };
 }
 
@@ -59,6 +62,17 @@ export function localStorageKV(prefix = 'cb-kv', storage?: Storage): KV {
       for (let i = 0; i < st.length; i++) {
         const k = st.key(i)!;
         if (k.startsWith(`${prefix}:${n}:`)) out.push(JSON.parse(st.getItem(k)!) as T);
+      }
+      return out;
+    },
+    async keys(n: KvStore) {
+      const st = ls();
+      if (!st) return [];
+      const out: string[] = [];
+      const pre = `${prefix}:${n}:`;
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i)!;
+        if (k.startsWith(pre)) out.push(k.slice(pre.length));
       }
       return out;
     },

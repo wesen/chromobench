@@ -1,15 +1,19 @@
-// The automatic first print (CHB-023 stage 2): a fresh scan opens as a sensible print. The frame is integrated
-// to grey: the paper exposure x that print.lights hands print.develop is measured over the central 80 % of the
-// frame. In real mode (the default; time and f-number expose the paper) its mean density goes into the enlarger
-// time (on the slider's 1/6-stop grid) and the colour remainder into the printer lights. In normalised mode (a
-// layout's choice, CHB-031) the time does nothing, so everything goes into the lights. Two passes, so a time
-// model that is not exactly log-linear still lands.
+// The automatic first print (CHB-023 stage 2; CHB-037: on documents): a fresh scan opens as a sensible print. The
+// frame is integrated to grey: the paper exposure after the darkroom's light law (the document's `darkroom.H` cut:
+// the main exposure and the printer lights, before development) is measured over the central 80 % of the frame. In
+// real mode (the default; time and f-number expose the paper) its mean density goes into the main exposure's time
+// (main.params.time_s, on the slider's 1/6-stop grid) and the colour remainder into the printer lights
+// (lights.params.logH). In normalised mode (a layout's choice, CHB-031) the time does nothing, so everything goes
+// into the lights. Two passes, so a time model that is not exactly log-linear still lands.
 // A photo (CHB-031 F31) is first-printed too, for its density only (half way from the camera's exposure to the
 // integrated grey): its colour is the camera's as-shot white balance. FIRST_PRINT_AIM holds both kinds' aims.
-// Contract-only: the integrate-to-grey arithmetic is core's (print/balance.ts), injected by the host.
+// Contract-only: the integrate-to-grey arithmetic and the bake are core's (print/balance.ts), injected by the host.
+// The proposal is recorded as the printer lights' provenance (lights.source: kind 'auto', the method and the lights).
 // CHB-034 fusz: the frame is metered on its analysis image (studio-engine.ts ANALYSIS_LONG) when the engine's working
 // image is larger, so the GPU engine (4000 px) and the CPU engine (640 px) meter the same picture and propose the same Time.
-import { applyMutation, compile, defaultRecipe, Graph, type Box, type Engine, type FrameRecipe, type Mutation, type Node, type Vec3 } from '@chromobench/contract';
+import { compile, cutNode, documentKind, edit, Graph, type Box, type Document, type Engine, type FrameKind, type Node, type ScanMedium, type Vec3 } from '@chromobench/contract';
+import { set, type Mutation } from '@chromobench/values';
+import { darkroomMedium, layerOf, LIGHTS, LIGHTS_PATH, lightsOf, mainExposure, TIME_PATH } from '@chromobench/studio-kit';
 import type { AnalysisImage } from './studio-engine.ts';
 
 /** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
@@ -57,7 +61,7 @@ export const LAB_SUBJECT_FAILURE: Readonly<SubjectFailure> = { chroma: 0.1, trim
  *   integration prints large shadows and night scenes too light (a lab printer's density failure; diary 04, F31).
  *   Try another share with ?photoDensity=1.
  */
-export const FIRST_PRINT_AIM: Readonly<Record<FrameRecipe['kind'], Readonly<FirstPrintAim>>> = {
+export const FIRST_PRINT_AIM: Readonly<Record<FrameKind, Readonly<FirstPrintAim>>> = {
   'negative-scan': { density: 1, alpha: 1, subjectFailure: null },
   'digital-raw': { density: 0.5, alpha: 0, subjectFailure: null },
 };
@@ -67,7 +71,7 @@ export const FIRST_PRINT_AIM: Readonly<Record<FrameRecipe['kind'], Readonly<Firs
  * LAB_SUBJECT_FAILURE, `0` for none, or `chroma:0.12,trim:0.01`); for a photo `photoDensity` (0…1). A photo's colour
  * stays the camera's.
  */
-export function firstPrintAim(kind: FrameRecipe['kind'], param: (k: string) => string | null = () => null): FirstPrintAim {
+export function firstPrintAim(kind: FrameKind, param: (k: string) => string | null = () => null): FirstPrintAim {
   const aim = { ...FIRST_PRINT_AIM[kind] };
   const share = (k: string): number | null => {
     const v = Number(param(k) ?? NaN);
@@ -93,33 +97,30 @@ export function firstPrintAim(kind: FrameRecipe['kind'], param: (k: string) => s
 }
 
 /**
- * A photo's first recipe before its first print (CHB-012, F31): the frame's id and source, shot on the default film,
- * as-shot white balance when the camera recorded one, in the enlarger mode of `d` (the layout's).
+ * A photo's document before its first print (CHB-012, F31): the neutral document of a camera file (shot on the
+ * default film, in the enlarger mode the layout gave it), with the as-shot white balance when the camera recorded one.
  */
-export function photoRecipe(d: FrameRecipe, asShot: boolean): FrameRecipe {
-  const { decode, ...src } = d.source;
-  const r = defaultRecipe('digital-raw', src, { frame: d.frame, decode: { ...decode, mode: 'photo' } });
-  if (asShot) r.capture!.whiteBalance.mode = 'as-shot';
-  return { ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, mode: d.print.enlarger.mode } } };
+export function photoDocument(d: Document, asShot: boolean): Document {
+  return asShot && d.stages.scene ? edit(d, [set('stages.scene.medium.whiteBalance.mode', 'as-shot')]).doc : d;
 }
 
 export interface FirstPrintOptions {
   integrate: IntegrateToGrey;
-  /** The colour aim (default FIRST_PRINT_AIM of the recipe's kind). */
+  /** The colour aim (default FIRST_PRINT_AIM of the document's kind). */
   aim?: Partial<FirstPrintAim>;
   /** Pixels analysed (default 200 000). */
   analysisPixels?: number;
   /** Passes (default 2; 3 with a subject-failure rule, which picks its pixels on the corrected print). */
   passes?: number;
   /**
-   * CHB-010 filtration: the dials that carry the first print's lights (core's bakeRecipe, injected by the host).
-   * The colour correction then sits in print.enlarger.filtration and the time, the lights go to what the dials
+   * CHB-010 filtration: the dials that carry the first print's lights (core's bakeLights, injected by the host).
+   * The colour correction then sits in the main exposure's filtration and time, the lights go to what the dials
    * cannot carry. Off by default: a roll's analysis and batches work in lights, with the pack as a roll setting.
    */
-  bake?: (r: FrameRecipe) => Mutation[];
+  bake?: (d: Document) => Mutation[];
   /**
    * The image to meter (CHB-034 fusz; StudioEngine.analysisOf): the source's analysis image, registered with the
-   * engine; null or absent: the recipe's own source (the working image is the analysis image).
+   * engine; null or absent: the document's own source (the working image is the analysis image).
    */
   analysis?: AnalysisImage | null;
 }
@@ -189,11 +190,9 @@ export function gridTime(t: number): number {
   return Number((10 * 2 ** (k / 6)).toFixed(3));
 }
 
-function lightsNode(r: FrameRecipe, g: Graph): Node {
-  const top = compile(r, g);
-  const def = g.closure(top.id).find((d) => d.op === 'print.lights');
-  if (!def) throw new Error('no print.lights node in the display chain');
-  return g.adopt([def])[0]!;
+/** The paper exposure the first print meters: the document's darkroom.H cut (log H after the light law). */
+function exposureNode(d: Document, g: Graph): Node {
+  return cutNode(compile(d, g), 'darkroom.H');
 }
 
 /** A box in working-image px → analysis-image px (kx, ky ≤ 1), kept inside its old edges (as decode.ts scaleBox). */
@@ -203,61 +202,69 @@ function scaleBox(b: Box, kx: number, ky: number): Box {
 }
 
 /**
- * The recipe on the analysis image (CHB-034 fusz): its source, and the boxes a recipe has when it is first printed
- * (a strip frame's crop, the measured rebate, an open-gate box) in the analysis image's px. A strip frame's crop is
- * its frame as found on the analysis image (as the decode at that size finds it), else the crop scaled. Retouch
- * spots, masks and probes come later (a first print never has them) and are left as they are.
+ * The document on the analysis image (CHB-034 fusz): its source, and the boxes a document has when it is first
+ * printed (a strip frame's crop, the measured rebate, an open-gate box) in the analysis image's px, with the scan's
+ * film pitch for that image. A strip frame's crop is its frame as found on the analysis image (as the decode at that
+ * size finds it), else the crop scaled. Layers, masks and probes come later (a first print never has them) and are
+ * left as they are.
  */
-export function onAnalysis(r: FrameRecipe, a: AnalysisImage): FrameRecipe {
+export function onAnalysis(d: Document, a: AnalysisImage): Document {
   const box = (b: Box): Box => scaleBox(b, a.kx, a.ky);
   const same = (p: Box, q: Box): boolean => p.x === q.x && p.y === q.y && p.w === q.w && p.h === q.h;
-  const crop = r.view.frame.crop;
-  const out: FrameRecipe = { ...r, source: { ...r.source, sha256: a.info.sha256 } };
+  const crop = d.geometry.crop;
+  let out: Document = { ...d, source: { ...d.source, sha256: a.info.sha256 } };
   if (crop) {
     const i = a.frames ? a.frames.working.findIndex((b) => same(b, crop)) : -1;
-    out.view = { ...r.view, frame: { ...r.view.frame, crop: i >= 0 ? { ...a.frames!.analysis[i]! } : box(crop) } };
+    out = { ...out, geometry: { ...d.geometry, crop: i >= 0 ? { ...a.frames!.analysis[i]! } : box(crop) } };
   }
-  if (r.scan) {
-    const { rebate, openGate } = r.scan;
-    out.scan = { ...r.scan, rebate: rebate ? box(rebate) : rebate, openGate: openGate && openGate !== 'flat' ? box(openGate) : openGate };
+  const scan = d.stages.scan;
+  if (scan) {
+    const m = scan.medium as ScanMedium;
+    const og = m.openGate;
+    const medium: ScanMedium = { ...m, umPerPx: m.umPerPx / Math.min(a.kx, a.ky), rebate: m.rebate ? box(m.rebate) : m.rebate, openGate: og && og !== 'flat' ? box(og) : og };
+    out = { ...out, stages: { ...out.stages, scan: { ...scan, medium } } };
   }
   return out;
 }
 
-/** Measures the frame's integrated exposure (relative to the aim) under recipe r, over the pixels `sf` keeps. */
-export async function measureExposure(engine: Engine, g: Graph, r: FrameRecipe, analysisPixels = 200_000, sf?: SubjectFailure | null): Promise<Vec3> {
-  const n = lightsNode(r, g);
+/** Measures the frame's integrated exposure (relative to the aim) under document d, over the pixels `sf` keeps. */
+export async function measureExposure(engine: Engine, g: Graph, d: Document, analysisPixels = 200_000, sf?: SubjectFailure | null): Promise<Vec3> {
+  const n = exposureNode(d, g);
   engine.adopt(g.closure(n.id));
   const info = n.info as { width: number; height: number };
   // the central 80 % of the frame: of its crop when it has one (a frame of a strip, CHB-027 WS-D), else of the source
-  const c = r.view.frame?.crop ?? { x: 0, y: 0, w: info.width, h: info.height };
+  const c = d.geometry.crop ?? { x: 0, y: 0, w: info.width, h: info.height };
   const box = { x: c.x + Math.round(c.w * 0.1), y: c.y + Math.round(c.h * 0.1), w: Math.max(1, Math.round(c.w * 0.8)), h: Math.max(1, Math.round(c.h * 0.8)) };
   const scale = Math.min(1, Math.sqrt(analysisPixels / (box.w * box.h)));
   const res = await engine.evaluate(n, { scale: scale >= 1 ? 'full' : Math.max(1e-3, Number(scale.toFixed(4))), precision: 'preview', region: box });
   return integratedExposure(await res.read(), res.width * res.height, res.info.channels, sf);
 }
 
+/** Lights held to the contract's ±1.5 log H. */
+const clampLights = (l: readonly number[]): Vec3 => l.map((x) => r6(Math.min(1.5, Math.max(-1.5, x)))) as Vec3;
+
 /**
- * The first print of a frame in the recipe's enlarger mode (real by default since contract 0.4; CHB-031), integrated
- * to grey with the aim of its kind (FIRST_PRINT_AIM: a negative to grey, a photo half way in density, its colour as shot), the auto
- * proposal recorded in print.lights.auto. Since CHB-010 the aim is fitted once, at calibration, so in real mode
- * time, f-number and the filtration shift move the print as at an enlarger.
+ * The first print of a frame in the document's enlarger mode (real by default; CHB-031), integrated to grey with
+ * the aim of its kind (FIRST_PRINT_AIM: a negative to grey, a photo half way in density, its colour as shot), the
+ * auto proposal recorded as the printer lights' provenance. Since CHB-010 the aim is fitted once, at calibration,
+ * so in real mode time, f-number and the filtration shift move the print as at an enlarger.
  */
-export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, o: FirstPrintOptions): Promise<FrameRecipe> {
-  const aim: FirstPrintAim = { ...FIRST_PRINT_AIM[recipe.kind], ...o.aim };
+export async function firstPrint(engine: Engine, g: Graph, doc: Document, o: FirstPrintOptions): Promise<Document> {
+  const aim: FirstPrintAim = { ...FIRST_PRINT_AIM[documentKind(doc)], ...o.aim };
   const { alpha, density } = aim;
   const N = o.analysisPixels ?? 200_000;
-  let r: FrameRecipe = recipe;
-  const real = r.print.enlarger.mode === 'real';
-  const lights0 = [...r.print.lights.logH] as Vec3;
-  const t0 = r.print.enlarger.time_s;
+  if (!layerOf(doc, LIGHTS)) throw new Error('the first print needs the printer lights (a filter layer with id lights)');
+  let d: Document = doc;
+  const real = darkroomMedium(d).mode === 'real';
+  const lights0 = lightsOf(d);
+  const t0 = mainExposure(d).time_s;
   let lights = lights0;
   let t = t0;
-  // the analysis image (CHB-034 fusz): its own graph, the recipe moved onto it for each measurement
+  // the analysis image (CHB-034 fusz): its own graph, the document moved onto it for each measurement
   const ag = o.analysis ? new Graph() : g;
   if (o.analysis) ag.registerSource(o.analysis.info);
   for (let pass = 0; pass < (o.passes ?? (aim.subjectFailure ? 3 : 2)); pass++) {
-    const delta = await measureExposure(engine, ag, o.analysis ? onAnalysis(r, o.analysis) : r, N, aim.subjectFailure);
+    const delta = await measureExposure(engine, ag, o.analysis ? onAnalysis(d, o.analysis) : d, N, aim.subjectFailure);
     // the exposure moved so far (lights and time) and the frame's own departure from the aim at the start: each pass
     // re-aims from the start, so alpha is the colour share however many passes refine it (not 1 − (1 − α)^passes)
     const off = lights.map((l, k) => l - lights0[k]! + Math.log10(t / t0)) as Vec3;
@@ -271,44 +278,36 @@ export async function firstPrint(engine: Engine, g: Graph, recipe: FrameRecipe, 
     const m = (total[0] + total[1] + total[2]) / 3;
     const t2 = real ? gridTime(t0 * 10 ** m) : t0;
     const moved = Math.log10(t2 / t0); // log H moved into the time
-    lights = total.map((l) => r6(l - moved)) as Vec3;
+    lights = clampLights(total.map((l) => l - moved));
     t = t2;
-    r = { ...r, print: { ...r.print, enlarger: { ...r.print.enlarger, time_s: t }, lights: { ...r.print.lights, logH: lights } } };
+    d = edit(d, [set(TIME_PATH, t), set(LIGHTS_PATH, lights)]).doc;
   }
-  const out: FrameRecipe = {
-    ...r,
-    print: {
-      ...r.print,
-      lights: {
-        logH: lights,
-        auto: { ...r.print.lights.auto, method: 'integrate', alpha, analysisLongSide_px: Math.round(Math.sqrt(N * 1.5)), applied: true, logH: lights },
-      },
-    },
-  };
-  // the auto record keeps the proposal in lights (what was measured); the dials carry it
-  return o.bake ? o.bake(out).reduce((x, m) => applyMutation(x, m).recipe, out) : out;
+  // the auto record keeps the proposal in lights (what was measured), as the lights' provenance; the dials carry it
+  const auto = { kind: 'auto', by: 'first-print', method: 'integrate', alpha, analysisLongSide_px: Math.round(Math.sqrt(N * 1.5)), applied: true, logH: [...lights] };
+  const out = edit(d, [set(`${LIGHTS}.source`, auto)]).doc;
+  return o.bake ? edit(out, o.bake(out)).doc : out;
 }
 
-/** The new recipe with the measured rebate box (CHB-020) as its scan base; no box leaves scan.density's own rule. */
-export function withRebate(recipe: FrameRecipe, rebate: Box | null | undefined): FrameRecipe {
-  return rebate && recipe.scan ? { ...recipe, scan: { ...recipe.scan, rebate } } : recipe;
+/** The new document with the measured rebate box (CHB-020) as its scan base; no box leaves scan.density's own rule. */
+export function withRebate(doc: Document, rebate: Box | null | undefined): Document {
+  return rebate && doc.stages.scan ? edit(doc, [set('stages.scan.medium.rebate', rebate)]).doc : doc;
 }
 
-/** What the host measured at decode (conditionScan), for the new recipe's scan settings (contract 0.3). */
+/** What the host measured at decode (conditionScan), for the new document's scan medium. */
 export interface MeasuredScan {
   rebate?: Box | null;
-  /** scan.flare, percent per channel, from the holder's veil */
+  /** the scan medium's flare, percent per channel, from the holder's veil */
   flare?: Vec3 | null;
-  /** scan.baseT: the flare-corrected base */
+  /** the scan medium's baseT: the flare-corrected base */
   baseT?: Vec3 | null;
 }
 
-/** The recipe with the measured scan settings: rebate box, per-channel flare and base. Nothing measured leaves the default. */
-export function withMeasured(recipe: FrameRecipe, m: MeasuredScan | null | undefined): FrameRecipe {
-  if (!m || !recipe.scan) return recipe;
-  const scan = { ...recipe.scan };
-  if (m.rebate) scan.rebate = m.rebate;
-  if (m.flare && m.flare.some((f) => f > 0)) scan.flare = [...m.flare] as Vec3;
-  if (m.baseT) scan.baseT = [...m.baseT] as Vec3;
-  return { ...recipe, scan };
+/** The document with the measured scan settings: rebate box, per-channel flare and base. Nothing measured leaves the default. */
+export function withMeasured(doc: Document, m: MeasuredScan | null | undefined): Document {
+  if (!m || !doc.stages.scan) return doc;
+  const ms: Mutation[] = [];
+  if (m.rebate) ms.push(set('stages.scan.medium.rebate', { ...m.rebate }));
+  if (m.flare && m.flare.some((f) => f > 0)) ms.push(set('stages.scan.medium.flare', [...m.flare]));
+  if (m.baseT) ms.push(set('stages.scan.medium.baseT', [...m.baseT]));
+  return ms.length ? edit(doc, ms).doc : doc;
 }

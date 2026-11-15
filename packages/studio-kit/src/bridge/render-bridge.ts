@@ -1,15 +1,17 @@
-// The render bridge (guide §5.2): a frame handle → compile(recipe) in the frame's graph → the node the handle
-// names → display-referred for the presenter → Engine.evaluate at the size the viewport asks → PresentImage.
-// Keys are node ids, so equal recipes mean equal keys (content addressing) and the shell's queue and thumbnail
-// cache dedupe by node. The engine is injected (MockEngine in tests and the dev host; RefEngine / GpuEngine later).
-import { compile, cut, fail, type Box, type Engine, type FrameRecipe, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
-import type { PresentImage, RenderBridge, RenderTarget, Rendered } from '@chromobench/shell';
-import { effectiveRecipe, isImageHandle, type ImageHandle } from '../handles.ts';
-import { bandBoxes, stripRecipe, stripValues, type StripVary } from '../model/tools.ts';
+// The render bridge (guide §5.2; contract 1.0): a frame handle → compile(doc) in the frame's graph (the one
+// compiler) → the cut the handle names → what is shown (display RGB: the display cut, or an inspection view) →
+// Engine.evaluate at the size the viewport asks → PresentImage. Keys are node ids, so equal documents mean equal
+// keys (content addressing) and the shell's queue and thumbnail cache dedupe by node. The engine is injected
+// (MockEngine in tests and the dev host; the reference engine and the GPU engine in the studio).
+import { set } from '@chromobench/values';
+import { compile, cutNode, documentKind, edit, fail, type Box, type Document, type Engine, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
+import { strip, type PresentImage, type RenderBridge, type RenderTarget, type Rendered } from '@chromobench/shell';
+import { cutOf, effectiveDoc, isImageHandle, type ImageHandle } from '../handles.ts';
+import { bandBoxes, stripBase, stripMutation, stripValues, type StripVary } from '../model/tools.ts';
 import type { FrameEntry, Frames } from './frames.ts';
 
 export interface Lowered {
-  /** the node the handle names (frame.print() → view.adapt), for vocabulary parity */
+  /** the cut the handle names (frame.print() → the print cut, view.adapt), for vocabulary parity */
   named: Node;
   /** what is shown: display-referred */
   shown: Node;
@@ -72,7 +74,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   displaySpace: OutputSpaceId;
   /** evaluations started, by shown node id (CHB-009's chainRuns, for tests and the lab's node panel) */
   readonly runs = new Map<string, number>();
-  private readonly cache = new WeakMap<FrameRecipe, Map<string, Lowered>>();
+  private readonly cache = new WeakMap<Document, Map<string, Lowered>>();
   /**
    * Adaptive drafts (CHB-027, F4): when set, a draft pass (a slider drag) is sized to take about this many ms on
    * this engine, from the speed measured on earlier renders, between draftMinPixels and the viewport's draft
@@ -119,7 +121,7 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   bands(h: ImageHandle): Band[] | null {
     return this.lower(h).bands ?? null;
   }
-  /** the shown node's size: a crop or a quarter-turn (view.frame, CHB-022) changes it from the frame's */
+  /** the shown node's size: a crop or a quarter-turn (the document's geometry, CHB-022) changes it from the frame's */
   naturalSize(h: ImageHandle): [number, number] | null {
     const e = this.frames.get(h.frame);
     if (!e) return null;
@@ -136,67 +138,72 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
     if (!e) throw new Error(`frame ${h.frame} is not open`);
     return e;
   }
-  private cut(e: FrameEntry, top: Node, op: string): Node {
-    let found: Node | undefined;
-    for (const d of e.graph.closure(top.id)) if (d.op === op) found = e.graph.adopt([d])[0];
-    if (!found) throw new Error(`compiled chain has no ${op}`);
-    return found;
+  /** the document a handle compiles ('initial': the document as the frame was opened, from the log) */
+  docOf(h: ImageHandle): Document {
+    // a handle made in a cell holds the state's read-only proxy of the document: the plain document underneath
+    if (h.doc !== 'initial' && h.doc !== 'committed') return strip(h.doc);
+    const e = this.entry(h);
+    return (h.doc === 'initial' ? this.initialDoc?.(h.frame) : this.committedDoc?.(h.frame)) ?? e.first;
   }
+  /** the log's initial document of a frame (the Studio sets it; without one, the frame's first document) */
+  initialDoc: ((f: string) => Document | undefined) | null = null;
+  /** the log's current document of a frame, without drafts (the Studio sets it) */
+  committedDoc: ((f: string) => Document | undefined) | null = null;
 
   lower(h: ImageHandle): Lowered {
     const e = this.entry(h);
-    const base = h.recipe === 'initial' ? e.initial : h.recipe;
+    const base = this.docOf(h);
     const k = `${h.what}|${JSON.stringify(h.args)}|${this.displaySpace}`;
     let per = this.cache.get(base);
     const hit = per?.get(k);
     if (hit) return hit;
-    const r = effectiveRecipe(h, base);
+    const d = effectiveDoc(h, base);
     const g = e.graph;
-    const top = compile(r, g, { displaySpace: this.displaySpace });
+    const c = compile(d, g, { displaySpace: this.displaySpace });
+    const top = c.display;
     const I = (op: string, inputs: string[], args: Record<string, unknown>): Node => g.intern(op, inputs, args).node;
-    // the shared frame vocabulary (contract cut): the node the DSL names for the same words
-    const cutTo = (op: string): Node => cut(r, g, op, { displaySpace: this.displaySpace });
-    const dyes = (): Node => (r.kind === 'negative-scan' ? cutTo('invert.dyes') : cutTo('film.grain'));
+    const kind = documentKind(d);
     let out: Lowered;
     switch (h.what) {
       case 'print':
       case 'ringTile':
-        out = { named: cutTo('view.adapt'), shown: top };
-        break;
+      case 'finished':
       case 'display':
-        out = { named: top, shown: top };
+        out = { named: cutNode(c, cutOf(h, kind)), shown: top };
         break;
       case 'negative': {
-        const d = dyes();
-        out = { named: d, shown: I('view.inspect', [d.id], { mode: 'dyes' }) };
+        const n = cutNode(c, 'negative');
+        out = { named: n, shown: I('view.inspect', [n.id], { mode: 'dyes' }) };
         break;
       }
       case 'source':
       case 'scan': {
-        const src = cutTo('source.open');
-        const named = h.what === 'scan' ? e.graph.get(dyes().inputs[0]!)! : src;
-        out = { named, shown: I('view.inspect', [src.id], { mode: 'negative' }) };
+        const src = cutNode(c, 'source');
+        out = { named: cutNode(c, cutOf(h, kind)), shown: I('view.inspect', [src.id], { mode: 'negative' }) };
         break;
       }
       case 'view': {
         const mode = h.args['mode'] as string;
-        const d = dyes();
-        if (mode === 'negative') out = { named: d, shown: I('view.inspect', [cutTo('source.open').id], { mode: 'negative' }) };
-        else if (mode === 'dyes') out = { named: d, shown: I('view.inspect', [d.id], { mode: 'dyes' }) };
+        const n = cutNode(c, 'negative');
+        if (mode === 'negative') out = { named: n, shown: I('view.inspect', [cutNode(c, 'source').id], { mode: 'negative' }) };
+        else if (mode === 'dyes') out = { named: n, shown: I('view.inspect', [n.id], { mode: 'dyes' }) };
         else {
-          const cls = I('invert.classes', [d.id], {});
+          const cls = I('invert.classes', [n.id], {});
           out = { named: cls, shown: I('view.inspect', [cls.id], { mode: 'classes' }) };
         }
         break;
       }
       case 'testStrip': {
         const a = h.args as { vary: StripVary; step: number; count: number };
-        const base = a.vary === 'time' ? r.print.enlarger.time_s : r.print.enlarger.filtration[a.vary.slice(-1) as 'c' | 'm' | 'y'];
-        const values = stripValues(a.vary, base, a.step, a.count);
+        const values = stripValues(a.vary, stripBase(a.vary, d), a.step, a.count);
         const info = top.info as ImageInfo;
         const boxes = bandBoxes(values.length, info.width, info.height);
-        const bands = values.map((value, i) => ({ value, box: boxes[i]!, node: compile(stripRecipe(a.vary, r, value), g, { displaySpace: this.displaySpace }) }));
-        out = { named: this.cut(e, bands[0]!.node, 'view.adapt'), shown: bands[0]!.node, bands };
+        const bands = values.map((value, i) => {
+          const m = stripMutation(a.vary, d, value);
+          const band = compile(edit(d, [set(m.path, m.value)]).doc, g, { displaySpace: this.displaySpace });
+          return { value, box: boxes[i]!, node: band.display, named: cutNode(band, 'print') };
+        });
+        out = { named: bands[0]!.named, shown: bands[0]!.node, bands: bands.map(({ value, box, node }) => ({ value, box, node })) };
         break;
       }
     }

@@ -1,15 +1,20 @@
 // The studio's assistant (CHB-008): a ChatSession whose evals run in a DSL session in a Web Worker, against the
-// studio's engine and the frames' EditLogs, offered to the chat kit's panel as the service `chat`.
+// studio's engine and the frames, offered to the chat kit's panel as the service `chat`. This module (and so
+// @chromobench/agent) is loaded on first use through host/lazy-chat.ts: the studio boots without it.
+//
+// CHB-037: the frames' edits are documents in the store's log; the agent works on them through AgentDocs over the
+// studio (the log, the mode, the one way to change the log, a change signal, the open frames), so the page's log and
+// the photographer's mode decide every submission.
 //
 // The model transport is chosen by the photographer in the panel: the Claude API with a key they type (kept in
-// memory, or in this browser's localStorage when they tick "remember"; never in the build or the recipe), or the
+// memory, or in this browser's localStorage when they tick "remember"; never in the build or the document), or the
 // scripted demo (no network). Mode changes go through the studio's `agent.mode` command, so the chat, the
-// approvals panel and the frames' logs agree.
+// approvals panel and the studio's policy (studio.mode) agree.
 import type { AgentMode, EvalRequest } from '@chromobench/contract';
-import { AnthropicModel, BridgePageClient, ChatSession, createDslWorker, DEFAULT_MODEL, demoModel, DslWorkerClient, MODELS, type FrameSource } from '@chromobench/agent';
+import { AnthropicModel, BridgePageClient, ChatSession, createDslWorker, DEFAULT_MODEL, demoModel, DslWorkerClient, MODELS, type AgentDocs } from '@chromobench/agent';
 import type { ChatService } from '@chromobench/studio-kit/kits/chat';
 import type { Runtime } from '@chromobench/shell';
-import type { Studio } from '@chromobench/studio-kit';
+import { frameName, type Studio } from '@chromobench/studio-kit';
 
 const KEY_STORE = 'chromobench.chat.anthropic-key';
 
@@ -35,12 +40,22 @@ export interface StudioChat extends ChatService {
 
 export function createStudioChat(studio: Studio): StudioChat {
   let rt: Runtime | null = null;
-  const frames: FrameSource = studio.frames;
+  const docs: AgentDocs = {
+    log: () => studio.log,
+    mode: () => studio.mode,
+    change: (f) => void studio.change(f),
+    ids: () => studio.frames.ids().filter((id) => studio.doc(id) !== undefined),
+    get: (id) => {
+      const e = studio.frames.get(id);
+      return e ? { info: e.info, name: frameName(e) } : undefined;
+    },
+    subscribe: (fn) => studio.subscribe(fn),
+  };
   const sessions = new Map<string, Promise<DslWorkerClient>>();
   const dsl = (prefix: string): Promise<DslWorkerClient> => {
     let s = sessions.get(prefix);
     if (!s) {
-      s = DslWorkerClient.create({ spawn: createDslWorker, engine: studio.engine, frames, txPrefix: prefix });
+      s = DslWorkerClient.create({ spawn: createDslWorker, engine: studio.engine, docs, txPrefix: prefix });
       sessions.set(prefix, s);
     }
     return s;
@@ -49,11 +64,10 @@ export function createStudioChat(studio: Studio): StudioChat {
     host: {
       evaluate: async (req: EvalRequest, signal: AbortSignal) => (await dsl('chat')).eval(req, { signal }),
       currentFrame: () => studio.current,
-      frames,
-      mode: () => studio.frames.mode,
+      docs,
       setMode: (m: AgentMode) => {
         if (rt) rt.runCommand('agent.mode', null, m);
-        else studio.frames.setMode(m);
+        else studio.mode = m;
       },
     },
   });
@@ -96,9 +110,8 @@ export function createStudioChat(studio: Studio): StudioChat {
       const known = new Set(['default']);
       const b = new BridgePageClient({
         url,
-        frames,
+        docs,
         currentFrame: () => studio.current,
-        mode: () => studio.frames.mode,
         focused: () => document.hasFocus(),
         session: (id) => (known.has(id) ? dsl(id === 'default' ? 'mcp' : `mcp-${id}`) : null),
         createSession: () => {

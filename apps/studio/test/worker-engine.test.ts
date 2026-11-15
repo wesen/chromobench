@@ -2,7 +2,8 @@
 // MessageChannel in Node. Decoding in the worker, the reference engine in the worker giving the same pixels as one
 // in this thread, pixels coming back for an engine on this thread, and cancellation between stages.
 import { MessageChannel } from 'node:worker_threads';
-import { compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe } from '@chromobench/contract';
+import { compile, Graph, newDocument, sha256Hex, type Document } from '@chromobench/contract';
+import { withMeasured } from '../src/host/first-print.ts';
 import { CLASS_CODE, classify, DEFAULT_SIGMA_D, nodePacksData, RefEngine } from '@chromobench/core';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -44,8 +45,8 @@ async function start(engine: 'reference' | 'none' = 'reference'): Promise<{ clie
 }
 
 /** The display chain below output.frame (a host op). */
-function chain(r: FrameRecipe, g: Graph) {
-  let top = compile(r, g);
+function chain(r: Document, g: Graph) {
+  let top = compile(r, g).display;
   if (top.op === 'output.frame') top = g.get(top.inputs[0]!)!;
   return top;
 }
@@ -63,7 +64,7 @@ describe('engine worker (CHB-027)', () => {
     ref.openDecoded(local.info, local.data);
     const g = new Graph();
     g.registerSource(info);
-    const r0 = defaultRecipe('negative-scan', { sha256: sha, name: 'm1' });
+    const r0 = newDocument('negative-scan', { sha256: sha, name: 'm1', width: info.width, height: info.height });
     const r = withMeasured(r0, studio!.notes.get(sha)!);
     const n = chain(r, g);
     studio!.adopt(g.closure(n.id));
@@ -84,7 +85,8 @@ describe('engine worker (CHB-027)', () => {
     await studio!.open({ kind: 'file', sha256: sha, name: 'm1.tif', bytes });
     const g = new Graph();
     g.registerSource(studio!.graph.source(sha)!);
-    const n = chain(defaultRecipe('negative-scan', { sha256: sha, name: 'm1' }), g);
+    const src = studio!.graph.source(sha)!;
+    const n = chain(newDocument('negative-scan', { sha256: sha, name: 'm1', width: src.width, height: src.height }), g);
     studio!.adopt(g.closure(n.id));
     const ctl = new AbortController();
     const p = studio!.evaluate(n, { scale: 'full', precision: 'preview', signal: ctl.signal });
@@ -103,7 +105,7 @@ describe('engine worker (CHB-027)', () => {
     expect(studio!.notes.get(sha)?.notes.join(' ')).toMatch(/^photo:/);
     const g = new Graph();
     g.registerSource(b.info);
-    const src = g.intern('source.open', [], { source: sha }).node;
+    const src = g.intern('source.open', [], { source: sha, umPerPx: 6 }).node;
     studio!.adopt(g.closure(src.id));
     const r = await studio!.evaluate(src, { scale: 'full', precision: 'preview' });
     // the photo decode's pixels, as decoded in this thread
@@ -119,11 +121,3 @@ describe('engine worker (CHB-027)', () => {
     expect(d.notes.join(' ')).toMatch(/working image/);
   });
 });
-
-function withMeasured(r: FrameRecipe, m: { rebate?: unknown; flare?: unknown; baseT?: unknown }): FrameRecipe {
-  const scan = { ...r.scan! };
-  if (m.rebate) scan.rebate = m.rebate as never;
-  if (m.flare) scan.flare = m.flare as never;
-  if (m.baseT) scan.baseT = m.baseT as never;
-  return { ...r, scan };
-}

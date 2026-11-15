@@ -1,10 +1,11 @@
 // cb.kits.finish: the command table (split from kit.ts, CHB-032): crop, straighten, orientation, aspect, spots,
-// before / after and the finishing tones.
+// before / after and the finishing tones. Edits are transactions of the frame's document.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { FrameRecipe, Mutation } from '@chromobench/contract';
+import type { Document } from '@chromobench/contract';
 import { centreOf, constrain, cropOf, fitCrop, orientFrame, swapAspect } from './geometry.ts';
 import type { CommandTable } from '@chromobench/shell';
-import { type SpotMode, FINISHING_PATHS, type DustSpot, plain, spotsOf, cropProblem } from './state.ts';
+import { type SpotMode, CLARITY, edits, removeSpots, spotsOf, cropProblem } from './state.ts';
+import { findEntry, storePath } from '../../../src/model/doc.ts';
 import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 import type { FinishTools } from './tools.ts';
@@ -13,25 +14,21 @@ import type { FinishTools } from './tools.ts';
 export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
   const { studioOf, frameOf, sizes, remember, opts, setFrame, needFrame } = F;
   // ── commands ──
-  const withFrame = (run: (ctx: any, fr: { f: string; W: number; H: number; r: FrameRecipe }, ...a: any[]) => unknown) => (ctx: any, ...a: any[]) => {
+  const withFrame = (run: (ctx: any, fr: { f: string; W: number; H: number; r: Document }, ...a: any[]) => unknown) => (ctx: any, ...a: any[]) => {
     const fr = frameOf(ctx);
     if (!fr) return null;
     remember(fr);
     return run(ctx, fr, ...a);
   };
-  const spotCommandsEnabled = (s: any) => !!s.finish?.selected && spotsOf(s.recipes?.[sel.current(s) ?? '']).some((x) => x.id === s.finish.selected);
-  const deleteSpots = (ctx: any, fr: { f: string; r: FrameRecipe }, ids: string[], label: string): void => {
-    const ms: Mutation[] = [];
-    const dust = ((fr.r.scan?.dust.spots ?? []) as DustSpot[]);
-    const dustOut = dust.filter((d) => ids.includes(d.id));
-    if (dustOut.length) ms.push({ op: 'set', path: 'scan.dust.spots', value: plain(dust.filter((d) => !ids.includes(d.id))) });
-    for (const id of ids) if (fr.r.retouch.spots[id]) ms.push({ op: 'set', path: `retouch.spots.${id}`, value: null });
-    if (ms.length) studioOf(ctx).route.applyMutations(fr.f, ms, label);
+  const spotCommandsEnabled = (s: any) => !!s.finish?.selected && spotsOf(s.docs?.[sel.current(s) ?? '']).some((x) => x.id === s.finish.selected);
+  const deleteSpots = (ctx: any, fr: { f: string; r: Document }, ids: string[], label: string): void => {
+    const ms = removeSpots(fr.r, ids);
+    if (ms.length) studioOf(ctx).commit(fr.f, ms, label);
     ctx.set({ finish: { selected: null } });
   };
 
   function cycle(ctx: any, dir: number): void {
-    const list = spotsOf(ctx.state.recipes?.[sel.current(ctx.state) ?? '']);
+    const list = spotsOf(ctx.state.docs?.[sel.current(ctx.state) ?? '']);
     if (!list.length) return;
     const i = list.findIndex((x) => x.id === ctx.state.finish?.selected);
     ctx.set({ finish: { selected: list[(i + dir + list.length) % list.length]!.id } });
@@ -40,14 +37,14 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
   return {
     'crop.reset': {
       label: 'Reset Crop', ...needFrame,
-      run: withFrame((ctx, fr) => setFrame(ctx, fr.f, { orientation: fr.r.view.frame.orientation, angle_deg: 0, crop: null }, 'Reset Crop')),
+      run: withFrame((ctx, fr) => setFrame(ctx, fr.f, { orientation: fr.r.geometry.orientation, angle_deg: 0, crop: null }, 'Reset Crop')),
     },
     'crop.aspect': {
       label: 'Crop Aspect', palette: false, ...needFrame,
       run: withFrame((ctx, fr, aspect: string) => {
         ctx.set({ finish: { crop: { aspect, locked: aspect !== 'free' } } });
         if (aspect === 'free') return;
-        const fs = fr.r.view.frame;
+        const fs = fr.r.geometry;
         const next = fitCrop(fr.W, fr.H, { orientation: fs.orientation, angle_deg: fs.angle_deg, aspect, centre: centreOf(cropOf(fs, fr.W, fr.H)) });
         setFrame(ctx, fr.f, next, `Crop Aspect ${aspect}`);
       }),
@@ -58,13 +55,13 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
     },
     'crop.swap': {
       label: 'Swap Crop Aspect', ...needFrame,
-      run: withFrame((ctx, fr) => setFrame(ctx, fr.f, swapAspect(fr.r.view.frame, fr.W, fr.H), 'Swap Crop Aspect')),
+      run: withFrame((ctx, fr) => setFrame(ctx, fr.f, swapAspect(fr.r.geometry, fr.W, fr.H), 'Swap Crop Aspect')),
     },
     'crop.straighten': {
       label: 'Straighten', palette: false, ...needFrame,
       /** by `delta` degrees (or to `{ to }`), keeping the crop inside the picture */
       run: withFrame((ctx, fr, by: number | { to: number }) => {
-        const fs = fr.r.view.frame;
+        const fs = fr.r.geometry;
         const a = Math.max(-45, Math.min(45, typeof by === 'object' ? by.to : fs.angle_deg + by));
         const next = constrain({ ...fs, angle_deg: Number(a.toFixed(2)), crop: cropOf(fs, fr.W, fr.H) }, fr.W, fr.H);
         setFrame(ctx, fr.f, next, `Straighten ${a.toFixed(1)}°`);
@@ -74,7 +71,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
       label: 'Fix Crop (Keep Inside)', enabled: (s: any) => {
         const f = sel.current(s);
         const z = f ? sizes.get(f) : undefined;
-        return !!(f && z && s.recipes?.[f] && cropProblem(s.recipes[f], z.W, z.H));
+        return !!(f && z && s.docs?.[f] && cropProblem(s.docs[f], z.W, z.H));
       },
       why: 'The crop lies inside the picture',
       run: withFrame((ctx, fr) => {
@@ -83,10 +80,10 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
       }),
     },
     'crop.done': { label: 'Done Cropping', palette: false, run: (ctx: any) => ctx.set({ ui: { tool: null } }) },
-    'orient.cw': { label: 'Rotate Right', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.view.frame, 'cw90'), 'Rotate Right')) },
-    'orient.ccw': { label: 'Rotate Left', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.view.frame, 'ccw90'), 'Rotate Left')) },
-    'orient.flipH': { label: 'Flip Horizontal', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.view.frame, 'flipH'), 'Flip Horizontal')) },
-    'orient.flipV': { label: 'Flip Vertical', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.view.frame, 'flipV'), 'Flip Vertical')) },
+    'orient.cw': { label: 'Rotate Right', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.geometry, 'cw90'), 'Rotate Right')) },
+    'orient.ccw': { label: 'Rotate Left', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.geometry, 'ccw90'), 'Rotate Left')) },
+    'orient.flipH': { label: 'Flip Horizontal', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.geometry, 'flipH'), 'Flip Horizontal')) },
+    'orient.flipV': { label: 'Flip Vertical', ...needFrame, run: withFrame((ctx, fr) => setFrame(ctx, fr.f, orientFrame(fr.r.geometry, 'flipV'), 'Flip Vertical')) },
     'spot.mode': { label: 'Spot Mode', palette: false, run: (ctx: any, mode: SpotMode) => ctx.set({ finish: { spot: { mode } } }) },
     'spot.size': {
       label: 'Spot Size', palette: false,
@@ -97,7 +94,7 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
       run: withFrame((ctx, fr, id?: string) => deleteSpots(ctx, fr, [id ?? ctx.state.finish.selected], 'Delete Spot')),
     },
     'spot.clear': {
-      label: 'Clear All Spots', enabled: (s: any) => spotsOf(s.recipes?.[sel.current(s) ?? '']).length > 0, why: 'No spots on this frame',
+      label: 'Clear All Spots', enabled: (s: any) => spotsOf(s.docs?.[sel.current(s) ?? '']).length > 0, why: 'No spots on this frame',
       run: withFrame((ctx, fr) => deleteSpots(ctx, fr, spotsOf(fr.r).map((x) => x.id), 'Clear All Spots')),
     },
     'spot.show': { label: 'Show Spots', checked: (s: any) => s.finish?.show !== false, run: (ctx: any) => ctx.set({ finish: { show: !opts(ctx.state).show } }) },
@@ -108,11 +105,19 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
       label: 'Before / After Finishing', checked: (s: any) => !!s.finish?.bypass,
       run: (ctx: any) => ctx.set({ finish: { bypass: !opts(ctx.state).bypass } }),
     },
+    'finish.addClarity': {
+      label: 'Add Clarity', ...needFrame,
+      hidden: (s: any) => !!s.docs?.[sel.current(s) ?? ''] && !!findEntry(s.docs[sel.current(s)!], CLARITY),
+      run: withFrame((ctx, fr) => {
+        if (!findEntry(fr.r, CLARITY)) studioOf(ctx).commit(fr.f, edits.clarity(fr.r, 0), 'Add Clarity');
+      }),
+    },
     'finish.resetTones': {
       label: 'Reset Finishing Tones', ...needFrame,
-      run: withFrame((ctx, fr) => ctx.tx('Reset Finishing Tones', (t: any) => {
-        for (const p of FINISHING_PATHS) if (fr.r.finishing.values[p.split('.').pop()!] !== undefined) t.$set(['recipes', fr.f, ...p.split('.')], 0);
-      })),
+      run: withFrame((ctx, fr) => {
+        if (!findEntry(fr.r, CLARITY)) return;
+        ctx.tx('Reset Finishing Tones', (t: any) => t.$set(storePath(fr.f, fr.r, `${CLARITY}.params.strength`), 0));
+      }),
     },
   };
 }

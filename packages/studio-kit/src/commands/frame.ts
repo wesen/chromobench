@@ -31,20 +31,20 @@ export const frameCommands = (): CommandTable<CbState> => ({
     label: 'Select Frame',
     palette: false,
     run: (ctx, id: string) => {
-      studioOf(ctx).route.endBurst();
+      ctx.cancel();
       ctx.set({ ui: { selection: { ids: [id], primary: id, anchor: id }, showProposal: null } });
     },
   },
   'frame.reopenAsPhoto': {
     label: 'Re-open as Photo',
-    enabled: (s: any) => !!sel.recipe(s),
+    enabled: (s: any) => !!sel.doc(s),
     why: 'Open a frame first',
     hidden: (s: any) => sel.kind(s, sel.current(s)) === 'photo',
     run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? sel.current(ctx.state), 'photo'),
   },
   'frame.reopenAsNegative': {
     label: 'Re-open as Negative',
-    enabled: (s: any) => !!sel.recipe(s),
+    enabled: (s: any) => !!sel.doc(s),
     why: 'Open a frame first',
     hidden: (s: any) => sel.kind(s, sel.current(s)) === 'negative',
     run: (ctx, item?: CatalogFrame) => reopenAs(ctx, item?.id ?? sel.current(ctx.state), 'negative'),
@@ -57,10 +57,10 @@ export const frameCommands = (): CommandTable<CbState> => ({
       if (!ids.length) return;
       const names = ids.map(id => ctx.state.catalog?.frames?.[id]?.name ?? id);
       studioOf(ctx).remove(ids);
-      ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its recipe`, { kind: 'info' });
+      ctx.toast(`${names.length === 1 ? `Removed ${names[0]}` : `Removed ${names.length} frames`}: open the file again to get it back, with its edits`, { kind: 'info' });
     },
   },
-  // CHB-031 F20: turn or mirror the frame shown (view.frame.orientation; a strip's frames may come sideways)
+  // CHB-031 F20: turn or mirror the frame shown (geometry.orientation; a strip's frames may come sideways)
   'frame.rotateLeft': { label: 'Rotate Left', ...openFrame, run: ctx => orientCurrent(ctx, 'ccw90', 'Rotate Left') },
   'frame.rotateRight': { label: 'Rotate Right', ...openFrame, run: ctx => orientCurrent(ctx, 'cw90', 'Rotate Right') },
   'frame.flip': { label: 'Flip Left to Right', ...openFrame, run: ctx => orientCurrent(ctx, 'flipH', 'Flip') },

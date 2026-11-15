@@ -21,7 +21,8 @@ async function select(page: Page, i: number): Promise<void> {
   await page.locator(`.ck-coll-cell[data-key="${id}"]`).click();
   await expect.poll(() => hook<string>(page, 'cb.state().ui.selection.primary')).toBe(id);
 }
-const methods = (page: Page): Promise<string[]> => hook<string[]>(page, `cb.studio.frames.all().map(e => e.log.committed.print.lights.auto.method)`);
+/** the balance's method per frame: the printer lights' provenance (lights.source) of each frame's document */
+const methods = (page: Page): Promise<string[]> => hook<string[]>(page, `cb.studio.frames.all().map(e => cb.doc(e.id).stages.darkroom.stack.items.lights.source.method)`);
 
 test('roll: new roll, first print, cull, reference, match, approve, undo', async ({ page }) => {
   await page.goto('/demo/?layout=roll&fresh');

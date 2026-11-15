@@ -1,18 +1,47 @@
-// cb.arg's model (guide §5.1): a recipe path → CHB-009's ControlModel (from ArgSpec.ui, contract 0.2), a component
-// of a vec3/cmy control, darkroom steps ('1/3 st', '5 CC', '2 pt') and typed entry in darkroom units
+// cb.arg's model (guide §5.1): a document path → CHB-009's ControlModel (from the catalogue's ArgSpec.ui), a
+// component of a vec3/cmy control, darkroom steps ('1/3 st', '5 CC', '2 pt') and typed entry in darkroom units
 // ('15.12 s', '+1/3 st', '+4 pt', '62.5 CC', 'f/8') on top of the shell's arithmetic ('*2', '50%').
-import { allOps, closest, fieldPattern, fieldSpec, type Vec3 } from '@chromobench/contract';
+//
+// A path is a medium, geometry or output field (`stages.darkroom.medium.paper`) or a layer's argument
+// (`main.params.time_s`, `lights.params.logH`, `b1.params.stops`). A layer's op comes from the document when one is
+// given (the entry's own op), else from the well-known ids (main: expose, lights: filter), else from the first layer
+// op that has the argument (a build-time check of a layout that names an id the document makes later).
+import { closest, getOp, type Vec3 } from '@chromobench/contract';
 import { parseValue } from '@chromobench/shell';
-import { componentOf, generateControls, withComponent, type ControlModel } from '../model/controls.ts';
+import { componentOf, documentControls, layerControl, layerOps, withComponent, type ControlModel } from '../model/controls.ts';
+import { opOfId, FILTRATION_PATH, LIGHTS_PATH, TIME_PATH, type Document } from '../model/doc.ts';
 import { fstopIndex, PT, timeAtStops } from '../model/units.ts';
 
-let MODELS: ControlModel[] | null = null;
-export const controlModels = (): ControlModel[] => (MODELS ??= generateControls(allOps()));
+let FIXED: ControlModel[] | null = null;
+/** the models of the fixed parts plus the main exposure's and the printer lights' (the controls a layout can name) */
+export const controlModels = (): ControlModel[] => (FIXED ??= [
+  ...(['time_s', 'fstop', 'filtration'].map((a) => layerControl(getOp('expose'), 'main', a)).filter(Boolean) as ControlModel[]),
+  // the printer lights' filter has no ui group of its own (a filter elsewhere is a local correction)
+  { ...layerControl(getOp('filter'), 'lights', 'logH')!, group: 'Printer lights' },
+  ...documentControls(),
+]);
 export const controlPaths = (): string[] => controlModels().map(m => m.path);
+
+const PARAM_RE = /^([A-Za-z0-9_-]+)\.params\.([A-Za-z_][\w]*)$/;
+const cache = new Map<string, ControlModel | null>();
+
+/** The control model at a document path (no component), or null. */
+export function modelAt(path: string, doc?: Document | null): ControlModel | null {
+  const fixed = controlModels().find(x => x.path === path);
+  if (fixed) return fixed;
+  const pm = PARAM_RE.exec(path);
+  if (!pm) return null;
+  const [, id, arg] = pm as unknown as [string, string, string];
+  const opName = opOfId(doc, id) ?? layerOps().find(o => o.args[arg]?.ui)?.name;
+  if (!opName) return null;
+  const key = `${opName}|${path}`;
+  if (!cache.has(key)) cache.set(key, layerControl(getOp(opName), id, arg));
+  return cache.get(key)!;
+}
 
 export interface ArgModel {
   model: ControlModel;
-  /** the recipe path the control writes (the whole vec3/cmy for a component) */
+  /** the document path the control writes (the whole vec3/cmy for a component) */
   path: string;
   /** the component index (vec3 0–2, cmy c/m/y → 0–2), or null for the whole value */
   component: number | null;
@@ -20,14 +49,13 @@ export interface ArgModel {
 
 const COMPONENT_KEYS: Record<string, number> = { c: 0, m: 1, y: 2, r: 0, g: 1, b: 2, '0': 0, '1': 1, '2': 2 };
 
-/** Resolve a cb.arg path; null when no generated control owns it. */
-export function argModel(path: string): ArgModel | null {
-  const by = controlModels();
-  const m = by.find(x => x.path === path);
+/** Resolve a cb.arg path (against a document when given); null when no generated control owns it. */
+export function argModel(path: string, doc?: Document | null): ArgModel | null {
+  const m = modelAt(path, doc);
   if (m) return { model: m, path, component: null };
   const i = path.lastIndexOf('.');
   if (i > 0) {
-    const base = by.find(x => x.path === path.slice(0, i));
+    const base = modelAt(path.slice(0, i), doc);
     const k = COMPONENT_KEYS[path.slice(i + 1).toLowerCase()];
     if (base && k !== undefined && (base.type === 'vec3' || base.type === 'cmy')) return { model: base, path: base.path, component: k };
   }
@@ -41,13 +69,11 @@ export type ArgProblem =
 /** Why a path cannot be a control (CB-A101 unknown, CB-A102 no ui hints), or null. */
 export function argProblem(path: string): ArgProblem | null {
   if (argModel(path)) return null;
-  if (fieldPattern(path)) {
-    const s = fieldSpec(fieldPattern(path)!);
-    return { code: 'CB-A102', message: `cb.arg('${path}'): the recipe path has no ui hints${s ? ` (${s.type})` : ''}, so no control is generated` };
-  }
+  const pm = PARAM_RE.exec(path);
+  if (pm && layerOps().some(o => o.args[pm[2]!])) return { code: 'CB-A102', message: `cb.arg('${path}'): the argument has no ui hints, so no control is generated` };
   const valid = controlPaths();
   const guess = closest(path, valid) ?? valid.find(c => c.startsWith(path) && path.length >= 3);
-  return { code: 'CB-A101', message: `cb.arg('${path}'): no recipe path ${path}`, ...(guess ? { fix: `cb.arg('${guess}')` } : {}), valid };
+  return { code: 'CB-A101', message: `cb.arg('${path}'): no document path ${path}`, ...(guess ? { fix: `cb.arg('${guess}')` } : {}), valid };
 }
 
 // ── darkroom steps ──
@@ -156,7 +182,8 @@ export function trackRange(sc: { min: number; max: number; step: number; hard: {
   return { min: Number(min.toFixed(6)), max: Number(max.toFixed(6)) };
 }
 
-/** the paths .testStrip() applies to (time, filtration and its components) */
-export const STRIPPABLE = new Set(['print.enlarger.time_s', 'print.enlarger.filtration', 'print.enlarger.filtration.c', 'print.enlarger.filtration.m', 'print.enlarger.filtration.y']);
+/** the paths .testStrip() applies to (the main exposure's time, its filtration and the filtration's components) */
+export const STRIPPABLE = new Set([TIME_PATH, FILTRATION_PATH, `${FILTRATION_PATH}.c`, `${FILTRATION_PATH}.m`, `${FILTRATION_PATH}.y`]);
+export { LIGHTS_PATH };
 
 export const lightsOffset = (l: Vec3, axis: number, pt: number): Vec3 => l.map((x, i) => (i === axis ? Number((x + pt * PT).toFixed(6)) : x)) as Vec3;

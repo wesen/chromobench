@@ -1,13 +1,15 @@
-// Renderers of studio-kit's panels and bars (guide §5.3–5.6). Each reads the store through cells (recipes.<f> and
-// proposals.<f> change whenever the frame's EditLog does) and writes through commands, so every action is in the
-// palette and the shortcut sheet as well.
+// Renderers of studio-kit's panels and bars (guide §5.3–5.6). Each reads the store through cells (docs.<f> changes
+// whenever the frame's document does; ui.log whenever the log does, proposals included) and writes through
+// commands, so every action is in the palette and the shortcut sheet as well.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonicalJSON } from '@chromobench/contract';
+import { canonicalJSON, Coll } from '@chromobench/values';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
-import { describe, historyGroups, whyRows, WHO } from '../model/history.ts';
-import { exposureRows, printingScript } from '../model/tools.ts';
+import { describe, historyRows, whyRows, WHO, type ModelLookup } from '../model/history.ts';
+import { exposureRows, printingScript, TIME_PATH } from '../model/doc.ts';
+import { modelAt } from '../kit/args.ts';
+import { formatSeconds, formatStops } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
 import { sel } from '../sel.ts';
@@ -33,32 +35,39 @@ const list = (cls: string, read: (s: any, n: NodeData) => unknown, draw: (el: HT
 const same = (a: any, b: any) => !!a && Object.keys(a).every(k => a[k] === b[k]) && Object.keys(b).every(k => a[k] === b[k]);
 const frameDeps = (s: any, n: NodeData) => {
   const f = frameOf(n, s);
-  return { f, r: f ? s.recipes?.[f] : undefined, p: f ? s.proposals?.[f] : undefined };
+  return { f, r: f ? s.docs?.[f] : undefined, p: f ? sel.proposals(s, f) : undefined, v: sel.logVersion(s) };
 };
+const lookup: ModelLookup = (p, d) => modelAt(p, d) ?? undefined;
+const FMT = { seconds: formatSeconds, stops: formatStops };
 
 const history = list(
   'cb-history',
   frameDeps,
   (el, v, m) => {
-    const e = v.f ? studioOf(m).frames.get(v.f) : undefined;
-    if (!e) return void el.append(h('p', { class: 'cb-empty', text: 'No frame' }));
-    const lookup = studioOf(m).route.lookup;
-    const groups = historyGroups(e.log, lookup);
+    const st = m.rt.store;
+    if (!v.f || !st.log.has(v.f)) return void el.append(h('p', { class: 'cb-empty', text: 'No frame' }));
+    const log = st.log;
+    const rows = historyRows(log, v.f, lookup);
     const ol = h('ol', { class: 'cb-hist', id: 'history' });
-    const start = h('li', { class: ['cb-hist-i', e.log.cursor === 0 && 'is-cursor'], 'data-index': '0' }, h('span', { class: 'cb-who', text: WHO[e.log.toJSON().initialBy] }), ' Frame added');
-    listen(m.scope, start, 'click', () => m.rt.runCommand('history.jump', null, v.f, 0));
+    // the opening: jumping there undoes every step of this frame (and the steps of other frames after them)
+    const firstCursor = rows.length ? rows[0]!.cursor - 1 : log.cursor;
+    const atStart = !rows.some(r => r.inEffect);
+    const start = h('li', { class: ['cb-hist-i', atStart && 'is-cursor'], 'data-index': '0' }, h('span', { class: 'cb-who', text: WHO.auto }), ' Frame added');
+    listen(m.scope, start, 'click', () => m.rt.runCommand('history.jump', null, firstCursor));
     ol.append(start);
     let cursor: HTMLElement = start;
-    for (const g of groups) {
+    const last = [...rows].reverse().find(r => r.inEffect);
+    for (const g of rows) {
       const text = g.changes.map(c => c.text).join('; ');
       // the whole step in the tooltip, one change a line (a long row is cut with an ellipsis)
-      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g.index + 1 === e.log.cursor && 'is-cursor'], 'data-tx': g.tx, title: g.changes.map(c => c.text).join('\n') }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', text);
-      listen(m.scope, li, 'click', () => m.rt.runCommand('history.jump', null, v.f, g.index + 1));
+      const li = h('li', { class: ['cb-hist-i', !g.inEffect && 'is-undone', g === last && 'is-cursor'], 'data-cursor': String(g.cursor), title: g.changes.map(c => c.text).join('\n') }, h('span', { class: 'cb-who', text: WHO[g.by] + (g.approved ? ' ✓' : '') }), ' ', text || g.label);
+      listen(m.scope, li, 'click', () => m.rt.runCommand('history.jump', null, g.cursor));
       ol.append(li);
-      if (g.index + 1 === e.log.cursor) cursor = li;
+      if (g === last) cursor = li;
     }
     // a rejected proposal in words (CHB-031 F32: not its transaction id and sequence number)
-    for (const r of e.log.entries.filter(x => x.status === 'rejected')) ol.append(h('li', { class: 'cb-hist-i is-rejected', text: `Agent · rejected: ${describe(r.m, e.log.committed, lookup)}` }));
+    const now = log.doc<any>(v.f);
+    for (const r of log.entries.filter(x => x.doc === v.f && x.tx.status === 'rejected')) ol.append(h('li', { class: 'cb-hist-i is-rejected', text: `Agent · rejected: ${r.tx.mutations.map(mu => describe(mu, now, lookup)).join('; ')}` }));
     el.append(ol);
     // the list is drawn anew on every change: keep the current step in view (F33: 30+ steps scroll)
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => {
@@ -85,6 +94,7 @@ const approvals = list(
       const changes = h('div', { class: 'cb-changes' });
       for (const c of p.changes) {
         const box = h('input', { type: 'checkbox', 'aria-label': `Include ${c.text}` }) as HTMLInputElement;
+        // c.seq is the change's index in the proposal's transaction
         box.checked = !off.includes(c.seq);
         listen(m.scope, box, 'change', () => m.rt.runCommand('proposal.toggle', null, p.tx, c.seq));
         changes.append(h('div', { class: 'cb-change' }, h('label', {}, p.changes.length > 1 ? box : null, ' ', c.text)));
@@ -119,11 +129,11 @@ const approvals = list(
 
 const why = list(
   'cb-why',
-  s => ({ f: sel.current(s), r: sel.current(s) ? s.recipes?.[sel.current(s)!] : undefined, path: s.ui?.focusPath ?? 'print.enlarger.time_s' }),
+  s => ({ f: sel.current(s), r: sel.current(s) ? s.docs?.[sel.current(s)!] : undefined, path: s.ui?.focusPath ?? TIME_PATH, v: sel.logVersion(s) }),
   (el, v, m) => {
-    const e = v.f ? studioOf(m).frames.get(v.f) : undefined;
-    if (!e) return;
-    const w = whyRows(e.log, v.path, studioOf(m).route.lookup);
+    const log = m.rt.store.log;
+    if (!v.f || !log.has(v.f)) return;
+    const w = whyRows(log, v.f, v.path, lookup);
     el.append(h('div', { class: 'cb-why-t', id: 'why', text: w.title }));
     const t = h('table', { class: 'cb-tbl' });
     for (const r of w.rows) t.append(h('tr', {}, h('td', { text: r.when }), h('td', { text: r.who }), h('td', { text: r.text }), h('td', { class: 'cb-dim', text: r.note })));
@@ -154,15 +164,21 @@ const exposures = list('cb-exposures', frameDeps, (el, v, m) => {
   if (!v.r) return;
   const t = h('table', { class: 'cb-tbl' });
   t.append(h('tr', {}, ...['', 'kind', 'change', 'seconds', 'filtration', ''].map(x => h('th', { text: x }))));
-  for (const r of exposureRows(v.r)) {
-    const rm = r.kind === 'main' ? null : btn('×', 'exp-rm', { 'aria-label': `Remove ${r.id}` });
+  for (const r of exposureRows(v.r, FMT)) {
+    const fixed = r.id === 'main';
+    const rm = fixed ? null : btn('×', 'exp-rm', { 'aria-label': `Remove ${r.id}` });
     if (rm) listen(m.scope, rm, 'click', () => m.rt.runCommand('exposure.remove', null, r.id));
-    t.append(h('tr', { class: !r.enabled ? 'is-off' : null }, h('td', { text: r.id }), h('td', { text: r.kind }), h('td', { text: r.change }), h('td', { text: r.seconds }), h('td', { text: r.filtration }), h('td', {}, rm)));
+    const on = fixed ? null : (h('input', { type: 'checkbox', 'aria-label': `${r.name} on` }) as HTMLInputElement);
+    if (on) {
+      on.checked = r.enabled;
+      listen(m.scope, on, 'change', () => m.rt.runCommand('exposure.toggle', null, r.id));
+    }
+    t.append(h('tr', { class: !r.enabled ? 'is-off' : null, 'data-id': r.id }, h('td', {}, on, ` ${r.id}`), h('td', { text: r.op === 'expose' ? 'main' : r.op }), h('td', { text: r.change }), h('td', { text: r.seconds }), h('td', { text: r.filtration }), h('td', {}, rm)));
   }
-  el.append(t, h('p', { class: 'cb-script', text: printingScript(v.r) }));
+  el.append(t, h('p', { class: 'cb-script', text: printingScript(v.r, FMT) }));
   const row = h('div', { class: 'cb-card-b' });
-  for (const k of ['dodge', 'burn', 'flash'] as const) {
-    const b = btn(`+ ${k}`, `exp-add-${k}`);
+  for (const [k, label] of [['dodge', 'dodge'], ['burn', 'burn'], ['flash', 'flash'], ['preflash', 'preflash'], ['densityMask', 'contrast mask']] as const) {
+    const b = btn(`+ ${label}`, `exp-add-${k}`);
     listen(m.scope, b, 'click', () => m.rt.runCommand('exposure.add', null, k));
     row.append(b);
   }
@@ -170,21 +186,21 @@ const exposures = list('cb-exposures', frameDeps, (el, v, m) => {
 });
 
 const journal = list('cb-journal', frameDeps, (el, v, m) => {
-  const e = v.f ? studioOf(m).frames.get(v.f) : undefined;
-  if (!e) return;
+  const log = m.rt.store.log;
+  if (!v.f || !log.has(v.f)) return;
   const t = h('table', { class: 'cb-tbl cb-mono' });
-  t.append(h('tr', {}, ...['seq', 'status', 'by', 'tx', 'mutation', 'expect'].map(x => h('th', { text: x }))));
-  for (const x of e.log.entries) {
-    const mm = x.m as any;
-    t.append(h('tr', {}, h('td', { text: String(x.seq) }), h('td', { text: x.status }), h('td', { text: x.by }), h('td', { text: x.tx ?? '' }), h('td', { text: mm.op === 'set' ? `${mm.path} = ${canonicalJSON(mm.value)}` : mm.op }), h('td', { text: mm.expect !== undefined ? canonicalJSON(mm.expect) : '' })));
+  t.append(h('tr', {}, ...['seq', 'status', 'by', 'tx', 'mutations'].map(x => h('th', { text: x }))));
+  for (const x of log.entries.filter(e => e.doc === v.f)) {
+    const ms = x.tx.mutations.map((mu: any) => (mu.op === 'set' ? `${mu.path} = ${canonicalJSON(mu.value ?? null)}` : mu.op === 'insert' ? `insert ${mu.id} into ${mu.coll}` : `${mu.op} ${mu.id}`)).join('; ');
+    t.append(h('tr', {}, h('td', { text: String(x.seq) }), h('td', { text: x.tx.status }), h('td', { text: x.tx.by }), h('td', { text: x.tx.id }), h('td', { text: ms })));
   }
-  el.append(h('div', { class: 'cb-dim', text: `cursor ${e.log.cursor} of ${e.log.units.length} units · state ${e.log.stateHash.slice(0, 12)}` }), t);
+  el.append(h('div', { class: 'cb-dim', text: `cursor ${log.cursor} of ${log.steps.length} steps` }), t);
 });
 
 const nodes = list('cb-nodes', frameDeps, (el, v, m) => {
   if (!v.r || !v.f) return;
   const studio = studioOf(m);
-  const shown = studio.bridge.lower({ $: 'cb.image', frame: v.f, recipe: v.r, what: 'print', args: {}, expr: 'frame.print()' }).shown;
+  const shown = studio.bridge.lower({ $: 'cb.image', frame: v.f, doc: v.r, what: 'print', args: {}, expr: 'frame.print()' }).shown;
   const e = studio.frames.get(v.f)!;
   const ul = h('ol', { class: 'cb-list cb-mono' });
   for (const d of e.graph.closure(shown.id)) {
@@ -249,7 +265,7 @@ const library = list(
 const densitometer = list('cb-densitometer', s => ({ ...frameDeps(s, { props: {} } as NodeData), probe: s.ui?.probe }), (el, v, m) => {
   if (!v.r || !v.f) return;
   const studio = studioOf(m);
-  const pins = Object.entries(v.r.probes ?? {}) as [string, { x: number; y: number }][];
+  const pins = Coll.entries(v.r.probes) as [string, { x: number; y: number }][];
   const t = h('table', { class: 'cb-tbl cb-mono' });
   t.append(h('tr', {}, ...['probe', 'x, y', 'visual D', 'D (R G B)'].map(x => h('th', { text: x }))));
   const rows: [string, number, number][] = [...(v.probe ? [['cursor', v.probe[0], v.probe[1]] as [string, number, number]] : []), ...pins.map(([id, p]) => [id, p.x, p.y] as [string, number, number])];
@@ -272,7 +288,7 @@ const densitometer = list('cb-densitometer', s => ({ ...frameDeps(s, { props: {}
   else el.append(t);
 });
 
-const readout = list('cb-readout', s => ({ f: sel.current(s), r: sel.current(s) ? s.recipes?.[sel.current(s)!] : undefined, probe: s.ui?.probe }), (el, v, m) => {
+const readout = list('cb-readout', s => ({ f: sel.current(s), r: sel.current(s) ? s.docs?.[sel.current(s)!] : undefined, probe: s.ui?.probe }), (el, v, m) => {
   if (!v.probe || !v.r) return;
   const span = h('span', { text: `${v.probe[0]}, ${v.probe[1]} · …` });
   el.append(span);
@@ -284,7 +300,7 @@ const readout = list('cb-readout', s => ({ f: sel.current(s), r: sel.current(s) 
 
 const ribbon = list(
   'cb-ribbon',
-  s => ({ f: sel.current(s), show: s.ui?.showProposal, p: sel.current(s) ? s.proposals?.[sel.current(s)!] : undefined }),
+  s => ({ f: sel.current(s), show: s.ui?.showProposal, p: sel.current(s) ? sel.proposals(s) : undefined }),
   (el, v) => {
     const p = (v.p ?? []).find((x: any) => x.tx === v.show);
     el.hidden = !p;
@@ -352,6 +368,7 @@ const output: Renderer = (n, m) => {
 };
 
 const chat: Renderer = () => h('div', { class: 'cb-panel cb-dim', text: 'The chat comes with CHB-008. Until then: window.chromobench.propose(mutations, why).' });
+void studioOf;
 
 /** every studio-kit renderer, by form name: pass to mount as `renderers` */
 export const CB_RENDERERS: Record<string, Renderer> = {
