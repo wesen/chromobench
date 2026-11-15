@@ -36,7 +36,7 @@ export function frameSource(f: FrameArgs, region: Box, outW: number, outH: numbe
 }
 
 /** One pass of frame.wgsl: `orient` (the source's un-oriented texture) or `straighten`; a new outW × outH texture. */
-export async function framePass(rt: GpuRuntime, entry: 'orient' | 'straighten', src: GPUTexture, outW: number, outH: number, f: FrameArgs, region: Box, origin: { x: number; y: number }, frameW: number, frameH: number): Promise<GPUTexture> {
+export async function framePass(rt: GpuRuntime, entry: 'orient' | 'straighten' | 'crop', src: GPUTexture, outW: number, outH: number, f: FrameArgs, region: Box, origin: { x: number; y: number }, frameW: number, frameH: number): Promise<GPUTexture> {
   rt.check();
   const dev = rt.device;
   const pipe = await rt.pipelines.get({ name: `frame.${entry}`, code: FRAME_WGSL, entryPoint: entry });

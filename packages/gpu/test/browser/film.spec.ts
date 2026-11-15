@@ -54,3 +54,14 @@ test('a digital-raw recipe renders on the GPU like the reference engine', async 
   for (const op of ['source.xyz', 'capture.expose', 'film.couple', 'film.halation', 'film.develop', 'film.grain']) expect(r.ops).toContain(op);
   expect(r.max).toBeLessThan(2e-4);
 });
+
+test('a camera file exports tile by tile exactly as whole: film.couple and film.halation read their reach from the halo', async ({ page }) => {
+  test.setTimeout(600_000);
+  const r = await run(page, 'film:tiles');
+  expect(r.error).toBeUndefined();
+  for (const k of ['film', 'grain']) {
+    expect(r[k].ops, k).toEqual(expect.arrayContaining(['film.couple', 'film.halation']));
+    expect(r[k].codes, k).toBe(0);
+    expect(r[k].before, k).toBeGreaterThan(0);
+  }
+});

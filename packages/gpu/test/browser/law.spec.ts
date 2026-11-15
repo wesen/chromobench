@@ -147,3 +147,19 @@ test('output.frame: crop and the eight orientations are a pixel permutation of o
   expect(r.straighten.maxAbs).toBeLessThan(1e-5);
   expect(r.straighten.core8bit).toBeLessThanOrEqual(1);
 });
+
+test('an export tile by tile equals the whole-frame export for every spatial op (halos, whole-frame fields and extremes)', async ({ page }) => {
+  test.setTimeout(600_000);
+  const r = await run(page, 'law:tiles');
+  expect(r.error).toBeUndefined();
+  const want: Record<string, string[]> = {
+    densityNarrow: ['print.densityMask'], densityWide: ['print.densityMask'], featherNarrow: ['mask.feather'], featherWide: ['mask.feather'],
+    clarity: ['clarity'], sharpen: ['sharpen'], heal: ['heal'],
+  };
+  for (const [k, ops] of Object.entries(want)) for (const op of ops) expect(r[k].ops, k).toContain(op);
+  for (const k of [...Object.keys(want), 'stack']) {
+    expect(r[k].codes, k).toBe(0);
+    // the check can fail: the preview path, every texture on the tile's own grid, differs at the tile borders
+    if (k !== 'heal') expect(r[k].before, k).toBeGreaterThan(0);
+  }
+});

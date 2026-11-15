@@ -35,7 +35,15 @@ export const MAX_PASS_SIGMA = 32;
 export const COMBINE_WGSL = linkKernel(combineCode);
 
 /** The output grid every materialised texture of one evaluation shares. */
-export interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export' }
+export interface GridTarget {
+  outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export';
+  /**
+   * Exact at full resolution (an export at scale 1, CHB-037 P3b): a region is the crop of the whole frame's result —
+   * spatial ops read their reach from a haloed render, wide blurs read a whole-frame field, the density mask's
+   * reference comes from the whole frame. Absent: every texture lives on the grid alone (previews).
+   */
+  exact?: boolean;
+}
 /** How one materialised node is computed: a barrier from its inputs, or a pointwise tail from a root. */
 export type Plan =
   | { kind: 'barrier'; reads: string[] }

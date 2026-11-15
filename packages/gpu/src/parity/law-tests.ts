@@ -438,6 +438,70 @@ export const LAW_TESTS: Record<string, T> = {
   },
 };
 
+/**
+ * CHB-037 P3b: an export tile by tile equals the whole-frame export (16-bit codes, bit for bit) for every spatial op of
+ * the negative's chain, near tile borders: density masks and feathers narrow (one pass, a halo) and wide (the
+ * whole-frame field), clarity (wide) and sharpen (narrow), heal spots across tile borders, and a stack of them. 64-px
+ * tiles over a 352 × 232 frame; fields built from 96-px boxes (exactBox), so they too are assembled from parts. The
+ * preview path (every texture on the tile's grid) is the broken comparison: it differs.
+ */
+async function tilesTest(): Promise<Record<string, unknown>> {
+  const TW = 352, TH = 232, T = 64;
+  const rt = await runtime();
+  const { tiff } = syntheticScan(gold().solve, TW, TH);
+  const gpu = await GpuEngine.create({ runtime: rt, workers: 4, opfs: false, exactBox: 96 });
+  const sha = (await gpu.open({ kind: 'file', sha256: '', bytes: tiff })).sha256;
+  const g = new Graph();
+  g.registerSource(gpu.graph.source(sha)!);
+  const size: [number, number] = [TW, TH];
+  const ell = (feather_mm: number): [Id, Mask][] => [['e', M([['c', C('ellipse', { box: { x: 70, y: 50, w: 150, h: 110 }, angle_deg: 20 })]], { feather_mm })]];
+  const main: [Id, Entry] = ['main', L('expose', { time_s: 12, fstop: 8, filtration: { c: 0, m: 0, y: 0 } })];
+  const spots = spotsColl([
+    { x: 64, y: 64, r: 9, src: { x: 150, y: 120 }, feather: 0.4, opacity: 1 },
+    { x: 190, y: 60, r: 12, src: { x: 186, y: 66 }, feather: 0.3, opacity: 1 },
+    { x: 128, y: 190, r: 7, src: { x: 300, y: 30 }, feather: 0.5, opacity: 0.8 },
+  ]);
+  const docs: Record<string, Document> = {
+    densityNarrow: scanDocument(sha, { darkroom: [main, ['dm', L('densityMask', { gamma: 0.5, radius_um: 40, polarity: 'positive' })]] }, [], size),
+    densityWide: scanDocument(sha, { darkroom: [main, ['dm', L('densityMask', { gamma: 0.5, radius_um: 300, polarity: 'same' })]] }, [], size),
+    featherNarrow: scanDocument(sha, { darkroom: [main, ['b', L('burn', { stops: 0.7 }, { mask: 'e' })]] }, ell(0.12), size),
+    featherWide: scanDocument(sha, { darkroom: [main, ['b', L('burn', { stops: 0.7 }, { mask: 'e' })]] }, ell(0.6), size),
+    clarity: scanDocument(sha, { print: [['cl', L('clarity', { strength: 0.6, radius_mm: 2 })]] }, [], size),
+    sharpen: scanDocument(sha, { print: [['sh', L('sharpen', { strength: 0.8, radius_mm: 0.1 })]] }, [], size),
+    heal: scanDocument(sha, { print: [['h', L('heal', { spots })]] }, [], size),
+    stack: scanDocument(sha, {
+      darkroom: [main, ['dm', L('densityMask', { gamma: 0.4, radius_um: 200, polarity: 'positive' })], ['b', L('burn', { stops: 0.5 }, { mask: 'e' })]],
+      print: [['h', L('heal', { spots })], ['sh', L('sharpen', { strength: 0.5, radius_mm: 0.15 })], ['cl', L('clarity', { strength: 0.4, radius_mm: 1.5 })]],
+    }, ell(0.3), size),
+  };
+  const out: Record<string, unknown> = {};
+  for (const [name, d] of Object.entries(docs)) {
+    const n = compile(d, g).display;
+    gpu.adopt(g.closure(n.id));
+    const whole = await gpu.evaluateU16(n, { scale: 'full' });
+    const tiled = new Uint16Array(TW * TH * 3);
+    const prev = new Float32Array(TW * TH * 3);
+    for (let y = 0; y < TH; y += T) for (let x = 0; x < TW; x += T) {
+      const region = { x, y, w: Math.min(T, TW - x), h: Math.min(T, TH - y) };
+      const t = await gpu.evaluateU16(n, { scale: 'full', region });
+      for (let r = 0; r < region.h; r++) tiled.set(t.data.subarray(r * region.w * 3, (r + 1) * region.w * 3), ((y + r) * TW + x) * 3);
+      const p = await (await gpu.evaluate(n, { scale: 'full', precision: 'preview', region })).read();
+      for (let r = 0; r < region.h; r++) prev.set(p.subarray(r * region.w * 3, (r + 1) * region.w * 3), ((y + r) * TW + x) * 3);
+    }
+    const pw = await (await gpu.evaluate(n, { scale: 'full', precision: 'preview' })).read();
+    let codes = 0, worst = 0, before = 0;
+    for (let i = 0; i < tiled.length; i++) {
+      if (tiled[i] !== whole.data[i]) codes++;
+      worst = Math.max(worst, Math.abs(tiled[i]! - whole.data[i]!));
+      if (Math.abs(prev[i]! - pw[i]!) > 1 / 65535) before++;
+    }
+    out[name] = { ops: [...new Set(g.closure(n.id).map((m) => m.op))].filter((op) => ['print.densityMask', 'mask.feather', 'clarity', 'sharpen', 'heal'].includes(op)), codes, worst, before };
+  }
+  gpu.dispose();
+  return out;
+}
+LAW_TESTS['law:tiles'] = tilesTest;
+
 function max8(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let m = 0;
   for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(Math.round(a[i]! * 255) - Math.round(b[i]! * 255)));

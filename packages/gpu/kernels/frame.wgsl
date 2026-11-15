@@ -76,3 +76,10 @@ fn straighten(@builtin(global_invocation_id) g: vec3<u32>) {
   }
   textureStore(dst, vec2<i32>(g.xy), o);
 }
+
+// a sub-rectangle: dst pixel g is src pixel g + reg.xy (a tile's core out of its haloed render; CHB-037 P3b)
+@compute @workgroup_size(8, 8)
+fn crop(@builtin(global_invocation_id) g: vec3<u32>) {
+  if (g.x >= U.outW || g.y >= U.outH) { return; }
+  textureStore(dst, vec2<i32>(g.xy), textureLoad(src, vec2<i32>(g.xy) + vec2<i32>(U.reg.xy), 0));
+}
