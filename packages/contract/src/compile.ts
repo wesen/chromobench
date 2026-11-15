@@ -261,6 +261,11 @@ export function cutNode(c: Compiled, name: string): Node {
   return c.cuts[def.name] ?? fail('E_CUT', `a ${documentKind(c.doc)} document has no ${name} cut`, { valid: Object.keys(c.cuts) });
 }
 
+/** The node a reader names (the viewer's `cut: 'finished'`, the agent's `d.cut('print')`): compile, then the cut. */
+export function cut(doc: Document, g: Graph, name: string, opts: CompileOptions = {}): Node {
+  return cutNode(compile(doc, g, opts), name);
+}
+
 /**
  * compile, measuring what bindings read: on each missing measurement the measure node is evaluated on the engine
  * (upstream cuts only, so the loop ends) and the compile runs again.

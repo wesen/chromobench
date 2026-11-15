@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { Coll, insert, move, remove, set } from '@chromobench/values';
 import {
-  CUT_NAMES, compile, cutNode, edit, getLaw, maskCombine, mixPixel, nodeId, type Compiled, type Document, type Graph,
+  CUT_NAMES, compile, cut, cutNode, edit, getLaw, maskCombine, mixPixel, nodeId, type Compiled, type Document, type Graph,
 } from '@chromobench/contract';
 import { G, L, camDoc, component, diagOf, graph, linear, maskOf, push, scanDoc, spot, spots } from './helpers.ts';
 
@@ -24,6 +24,7 @@ describe('cuts', () => {
     expect(diagOf(() => cutNode(c, 'scene'))).toMatchObject({ code: 'E_CUT' });
     expect(diagOf(() => cutNode(c, 'nope'))).toMatchObject({ code: 'E_CUT' });
     expect(cutNode(c, 'print').op).toBe('view.adapt');
+    expect(cut(scanDoc(), g, 'negative').id).toBe(c.cuts.negative!.id);
   });
 
   it('a camera file names source, scene, film (= negative), and its film pitch is the format over the long side', () => {

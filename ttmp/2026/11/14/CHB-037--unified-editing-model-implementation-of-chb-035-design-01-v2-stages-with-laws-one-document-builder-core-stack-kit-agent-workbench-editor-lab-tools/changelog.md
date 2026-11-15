@@ -32,3 +32,12 @@ P1 Step 3: transactions deep-frozen; README immutability wording (commit 2c680b9
 
 - /Users/manuel/code/wesen/chromobench/packages/values/src/transactions.ts — transaction() deep-freezes
 
+
+## 2026-11-14
+
+P2a Step 2: contract 1.0 — document format 3, stage laws, one light-law node, mask algebra, one compiler with cuts; recipe model deleted (commit 1dade2e)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p2a/packages/contract/src/compile.ts — The one compiler
+
