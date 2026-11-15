@@ -573,3 +573,87 @@ chromobench 825a08d (build-artifact.py without `scroll-behavior: smooth`; artifa
 
 ### Technical details
 - N/A
+
+## Step 9: Why the tiling runs timed out (transcripts, go-minitrace, the code)
+
+At 18:48 two tiling runs ended `rc=1 3600s` (TIMEOUT). The transcripts, go-minitrace queries over all finished and
+timed-out sessions, and the agents' own code give three causes, two of them in the experiment rather than the task.
+Interventions made at about 18:55: killed an orphaned test process and a hung test in a live run (details below).
+
+### Prompt Context
+
+**User prompt (verbatim):** "can you look at their transcripts?" — "to figure out why they hung on tiling?" — "look at
+go-minitrace skill in ~/.codex/skills btw"
+
+**Assistant interpretation:** Diagnose the two tiling timeouts from the transcripts, using go-minitrace as the skill
+describes (source list, schema help, saved SQL, results).
+
+**Inferred user intent:** Know whether the timeouts measure the pattern, the task, or the harness, before deciding on
+retries.
+
+**Commit (code):** (this step's commit) — analysis/04-time-budget.sql, analysis/05-stalls-and-slow-tools.sql,
+timeline.py
+
+### What I did
+- `timeline.py` over each pi session (per message: local time, gap, thinking size, calls, result heads).
+- go-minitrace: `convert pi --source-list sources.txt` for the two timed-out sessions; queries 01-time-budget,
+  02-longest-model-turns, 03-stalls-and-slow-tools over them and the six finished runs (scratchpad `tiling-hang/`).
+- Ran chapter-1's own tests one by one with a 15 s cap (`per-test.py`), then probed the hanging test's calls.
+- `ps`/`lsof` on running `node --test` and `pi` processes.
+
+### Why
+- A timeout can mean a hard task, a slow model, a hang, or a harness fault; each needs a different fix.
+
+### What worked
+- **tiling/chapter-1: an infinite loop in its own code, and nothing to stop it.** At 18:16:24 it ran
+  `node --test test/tiling.test.ts`; the call never returned. Its test "empty chain and single pixel images" calls
+  `renderTiled` with a 1-pixel budget; `subBlurCount` (`src/index.ts:413`) splits a wide blur into sub-blurs whose
+  variances add and loops `while (Math.ceil((3 * radius) / Math.sqrt(count)) > maxRadius) count++` with
+  `maxRadius = 0`, which never ends. pi's bash call has no timeout, so the agent waited 32 min until the 3600 s kill.
+  The loop came from a rewrite at 18:13 (exact multi-pass streaming instead of the field approximation). Before that it
+  thought hard: two turns of 135 k and 132 k thinking characters (7.0 and 4.8 min).
+- **tiling/control-1: out of time, nearly done.** 61 assistant turns, 168 k output tokens, 450 k thinking characters
+  (graph and document runs: 43–70 k tokens, 63–138 k characters); a 245 k-character first turn (9.1 min); one test run
+  of 10.5 min (its wide-blur suite before an optimisation; 11.7 s after); one 5-min provider stall. At 18:47 its 19
+  tests passed; it was re-reading its code, with DIARY.md, NOTES.md and the answer still unwritten, when killed.
+- **All runs: the provider's concurrency limit.** `OpenAI API error (429): {"code":"CONCURRENT_REQUEST_LIMIT_EXCEEDED",
+  "message":"Organization has reached its maximum number of concurrent requests."}` in 8 runs (9 times); each costs
+  exactly 5.0 min before pi retries. At 18:55, 26 pi agents were running on this machine: 8 of this batch, 11 builds
+  of the agent-operated-engines validation (`~/pattern-validation/builds/…`), 7 reviews under `~/dustdet/review/…`.
+  The two early failures (`upstream_stream_failed`, `willRetry: false`) came at launch under the same load.
+
+### What didn't work
+- `node --test --test-reporter=spec` (and `tap`, with `--test-isolation=none`) under a `perl -e 'alarm 40'` cap printed
+  nothing: a synchronous infinite loop blocks the event loop before the reporter flushes. Running each test alone
+  with `--test-name-pattern` and a subprocess timeout found it in one pass.
+- `run-impl.py`'s 3600 s timeout kills pi but not its children: chapter-1's test process kept running as an orphan at
+  98 % CPU for 37 min, slowing the other runs.
+
+### What I learned
+- slots/control-2 hung the same way, differently: an integration test with real timers waited forever (0 % CPU,
+  25 min) from 18:29:26. Hangs are a property of agent-written tests, not of one task.
+- Interventions (recorded here because they change runs): killed the orphan (pids 66557, 66559, tiling/chapter-1) and
+  the hung test of the live run slots/control-2 (pids 90005, 90007) at about 18:55, so that agent could continue.
+
+### What was tricky to build
+- Telling model time from tool time: tool results are stamped when the call is issued, so a slow tool shows up as a
+  long gap before the next assistant turn; `tool_calls.duration_ms` separates them.
+
+### What warrants a second pair of eyes
+- Whether tiling results from 1-hour runs are comparable at all, given 5-min stalls that hit runs unevenly.
+
+### What should be done in the future
+- `run-impl.py`: start pi in its own process group and kill the group on timeout; a watchdog that kills any test
+  process in the run directory after 5 min (the agent sees it terminated and continues).
+- Prompt: bound test commands (`--test-timeout`), write DIARY.md and NOTES.md as you go (also Step 7's finding).
+- Parallelism: fit the batch to the provider's shared concurrency limit, counting other users' agents.
+- Tiling: rerun all six with the fixes and a 2-hour budget, so chapter and control runs can be compared.
+
+### Code review instructions
+- `docs/patterns/experiments/timeline.py SESSION.jsonl`; `analysis/04-time-budget.sql`,
+  `analysis/05-stalls-and-slow-tools.sql` (run by `analyze.py`).
+
+### Technical details
+- Time budget (recorded min / output tokens / thinking chars): tiling chapter-1 28.1 / 107,826 / 310,396 (then 32 min
+  hung); tiling control-1 59.9 / 168,103 / 450,261; document chapter-1 31.2 / 69,605 / 135,072; graph control-2
+  31.5 / 43,416 / 62,831.
