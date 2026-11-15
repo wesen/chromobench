@@ -9,7 +9,7 @@ import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/she
 import { makeNode, type NodeData } from '@chromobench/shell';
 import { Coll, type Id, type Why } from '@chromobench/values';
 import { getOp, type ArgSpec, type Document, type Entry, type MaskCombine, type MaskComponent, type StageName } from '@chromobench/contract';
-import { findEntry, storePath, type Placed } from '../../../src/model/doc.ts';
+import { entryName, findEntry, storePath, type Placed } from '../../../src/model/doc.ts';
 import { argModel } from '../../../src/kit/args.ts';
 import { renderArg } from '../../../src/dom/arg.ts';
 import { WHO } from '../../../src/model/history.ts';
@@ -39,10 +39,12 @@ function amountControl(m: MountCtx, frame: (s: any) => string | null, id: Id, st
     },
   });
 }
+const entryNameOf = (e: Placed['entry'] | undefined): string => (e ? entryName(e) : '');
 const findName = (m: MountCtx, frame: (s: any) => string | null, id: Id): string => {
   const f = frame(m.store.readonly());
   const d = f ? peekDoc(m, f) : undefined;
-  return (d && findEntry(d, id)?.entry.name) || id;
+  const e = d ? findEntry(d, id)?.entry : undefined;
+  return e ? entryName(e) : id;
 };
 
 // ── the one mask chip and the one provenance chip ──
@@ -185,7 +187,7 @@ function drawRow(m: MountCtx, frame: (s: any) => string | null, r: Pick<StackRow
     el.classList.toggle('is-off', !e.enabled);
     el.classList.toggle('is-sel', v.sel);
     el.setAttribute('aria-selected', v.sel ? 'true' : 'false');
-    name.textContent = e.name;
+    name.textContent = entryName(e);
     detail.textContent = entryDetail(v.d, p);
     blend.value = e.blend;
     tw.textContent = v.collapsed ? '▸' : '▾';
@@ -462,8 +464,8 @@ const params: Renderer = (n, m) => {
     if (!d || !p || !v.id) return void el.append(h('p', { class: 'cb-empty', text: v.f ? 'Select a layer in a stack to see its settings.' : 'Select a photo first.' }));
     const id = v.id;
     const e = p.entry;
-    const head = h('div', { class: 'cb-stack-head' }, h('strong', { class: 'cb-stack-title', text: e.name }), h('span', { class: 'cb-dim', text: ` · ${e.kind === 'layer' ? opWord(e.op) : e.kind === 'group' ? 'Group' : 'Linked'} · ${p.stage}` }), provChip(pm, frame, id));
-    pm.cell((s) => (sel.doc(s, frame(s)) ? findEntry(sel.doc(s, frame(s))!, id)?.entry.name : ''), (nm) => void ((head.firstChild as HTMLElement).textContent = nm ?? ''));
+    const head = h('div', { class: 'cb-stack-head' }, h('strong', { class: 'cb-stack-title', text: entryName(e) }), h('span', { class: 'cb-dim', text: ` · ${e.kind === 'layer' ? opWord(e.op) : e.kind === 'group' ? 'Group' : 'Linked'} · ${p.stage}` }), provChip(pm, frame, id));
+    pm.cell((s) => (sel.doc(s, frame(s)) ? entryNameOf(findEntry(sel.doc(s, frame(s))!, id)?.entry) : ''), (nm) => void ((head.firstChild as HTMLElement).textContent = nm ?? ''));
     el.append(head);
     if (e.kind === 'layer' && e.op && getOp(e.op).doc) el.append(h('p', { class: 'cb-dim cb-stack-doc', text: getOp(e.op).doc.split(/(?<=\.)\s/)[0] ?? '' }));
     el.append(amountControl(pm, frame, id, p.stage, { kind: e.kind, ...(e.kind === 'layer' ? { op: e.op } : {}) }));
@@ -550,7 +552,7 @@ const masks: Renderer = (n, m) => {
       tools.append(b);
     }
     if (!mk) {
-      el.append(h('p', { class: 'cb-empty', text: `${p.entry.name} acts everywhere. Draw a mask on the print with a tool, or add a range:` }), tools);
+      el.append(h('p', { class: 'cb-empty', text: `${entryName(p.entry)} acts everywhere. Draw a mask on the print with a tool, or add a range:` }), tools);
       const add = h('div', { class: 'cb-card-b' });
       for (const k of componentKinds().filter((x) => x === 'luminance' || x === ('colour' as never))) {
         const b = btn(`+ ${KIND_WORDS[k] ?? k}`, `cb-stack-new-${k}`);
@@ -562,7 +564,7 @@ const masks: Renderer = (n, m) => {
     }
     const mid = mk.id;
     const users = maskUsers(d, mid);
-    el.append(h('div', { class: 'cb-stack-head' }, h('strong', { text: mk.mask.name }), h('span', { class: 'cb-dim', text: users.length > 1 ? ` · also used by ${users.filter((u) => u !== id).map((u) => findEntry(d, u)?.entry.name ?? u).join(', ')}` : '' })));
+    el.append(h('div', { class: 'cb-stack-head' }, h('strong', { text: mk.mask.name }), h('span', { class: 'cb-dim', text: users.length > 1 ? ` · also used by ${users.filter((u) => u !== id).map((u) => entryNameOf(findEntry(d, u)?.entry) || u).join(', ')}` : '' })));
     el.append(h('div', { class: 'cb-stack-num' }, h('span', { class: 'cb-stack-num-l', text: 'Draw' }), comb), tools);
     const ol = h('ol', { class: 'cb-stack-comps' });
     for (const [cid, c] of mk.components) {

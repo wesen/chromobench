@@ -1,8 +1,8 @@
 // CHB-031 F32: History in the photographer's words and units (now from the document log). Session 03 read "+0.33
 // st" for a typed time but "+1/3 st" for a button step, "Orientation transpose → flipH" for Rotate, and a crop box in
 // JSON. These pin the words: stops as fractions with glyphs, the Frame menu's verbs, no paths, ids or JSON.
-import { edit, LOG_RULES, type Document } from '@chromobench/contract';
-import { insert, Log, remove, set, transaction, type Mutation } from '@chromobench/values';
+import { edit, layerEntry, LOG_RULES, type Document } from '@chromobench/contract';
+import { Coll, insert, Log, remove, set, transaction, type Json, type Mutation } from '@chromobench/values';
 import { describe as group, expect, it } from 'vitest';
 import { describe, historyRows, orientationWords, pathName, whyRows, type ModelLookup } from '../src/model/history.ts';
 import { defaultDocument, newDarkroomLayer } from '../src/model/doc.ts';
@@ -92,6 +92,24 @@ group('describe: a set in words', () => {
     expect(say(set('burn1.params.stops', 1), withBurn)).toBe('Burn: Stops 0.5 → 1.0 st');
     expect(say(insert('probes', 'p1', { x: 10, y: 10, r: 3 }))).toBe('Probe p1 placed');
     expect(say(insert('masks', 'm1', {}))).toBe('Mask drawn');
+  });
+});
+
+group('describe: digital layers by their catalogue words (CHB-037 P9)', () => {
+  const curve = layerEntry('curve', { channel: 'L', points: Coll.of([['c1p1', { x: 0, y: 0 }], ['c1p2', { x: 1, y: 1 }]]) as unknown as Json });
+  it('a layer added reads by its label, an acronym with its article', () => {
+    expect(say(insert('stages.print.stack', 'c1', curve))).toBe('Added a curve');
+    expect(say(insert('stages.print.stack', 'h1', layerEntry('hsl')))).toBe('Added an HSL');
+    expect(say(insert('stages.print.stack', 'g1', layerEntry('grade')))).toBe('Added a colour grading');
+  });
+  it('a curve point added or removed names the layer, not the point id', () => {
+    const d = with_([insert('stages.print.stack', 'c1', curve)]);
+    expect(say(insert('c1.params.points', 'c1p3', { x: 0.5, y: 0.6 }), d)).toBe('Curve: point added');
+    expect(say(remove('c1p2'), d)).toBe('Curve: point removed');
+  });
+  it('a layer built without a name (the agent, a look) is called by its label', () => {
+    const d = with_([insert('stages.darkroom.stack', 'b1', layerEntry('burn', { stops: 0.5 }))]);
+    expect(say(set('b1.enabled', false), d)).toBe('Burn off');
   });
 });
 

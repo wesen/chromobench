@@ -3,10 +3,10 @@
 // tail), each described from the document as it was before it: "Time 7.94 → 10.0 s (+⅓ stop)", "Added a burn",
 // "Rotated right". No paths, ids or JSON.
 import { applyTransaction, canonicalJSON, getPath, type Author, type Log, type Mutation } from '@chromobench/values';
-import type { Document, Orientation } from '@chromobench/contract';
+import { getOp, stagesOf, type Document, type Entry, type Orientation } from '@chromobench/contract';
 import { composeOrientation } from '../../kits/finish/src/geometry.ts';
 import { componentOf, type ControlModel } from './controls.ts';
-import { findEntry, read } from './doc.ts';
+import { entriesOf, entryName, findEntry, read } from './doc.ts';
 import { formatSeconds, fstopMarkStops, num, stopWords } from './units.ts';
 
 export interface Change {
@@ -107,13 +107,28 @@ function componentChange(model: ControlModel, old: unknown, value: unknown): str
   return `${model.label} ${changed.map((k) => `${model.components![k]} ${num1(old, k)} → ${num1(value, k)}`).join(', ')}${unit}`;
 }
 
-const article = (w: string): string => (/^[aeiou]/i.test(w) ? 'an' : 'a');
+/** a or an, by the sound: "an HSL" (an acronym read letter by letter), "a curve" */
+const article = (w: string): string => (/^[A-Z]{2,}/.test(w) ? (/^[AEFHILMNORSX]/.test(w) ? 'an' : 'a') : /^[aeiou]/i.test(w) ? 'an' : 'a');
 /** What an entry is called in a sentence: its op's word ("burn", "contrast mask", "heal spot"), or a group's name. */
 function entryWord(e: { kind: string; op?: string; name?: string }): string {
   if (e.kind === 'group') return `group "${e.name}"`;
   const words: Record<string, string> = { expose: 'main exposure', densityMask: 'contrast mask', filter: 'filter', heal: 'heal spot', clone: 'clone spot', preflash: 'preflash' };
-  return words[e.op ?? ''] ?? e.op ?? 'layer';
+  if (words[e.op ?? '']) return words[e.op!]!;
+  // the catalogue's label, in a sentence: "curve", "colour grading", "HSL" (CHB-037 P9: was the op id, "a hsl")
+  let label: string | undefined;
+  try {
+    label = e.op ? getOp(e.op).ui?.label : undefined;
+  } catch {
+    label = undefined;
+  }
+  if (label) return /^[A-Z]{2,}/.test(label) ? label : label.toLowerCase();
+  return e.op ?? 'layer';
 }
+/** An entry's name in a sentence: its own name, else its op's word. */
+const nameIn = (e: Entry): string => cap(e.name && !(e.kind === 'layer' && e.name === e.op) ? e.name : e.kind === 'layer' ? entryWord(e) : entryName(e));
+/** "curve1.params.points" → the layer curve1 and its list argument "points" (a point or a band added/removed) */
+const LIST_ARG = /^(?:.*\.)?([^.]+)\.params\.(\w+)$/;
+const LIST_WORDS: Record<string, string> = { points: 'point', bands: 'band', strokes: 'stroke' };
 
 /**
  * One line for a mutation, in the photographer's words and units (CHB-031 F32): "Time 7.94 → 10.0 s (+⅓ stop)",
@@ -141,13 +156,13 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
         const stops = !both ? null : model.storageUnit === 's' ? Math.log2((m.value as number) / (old as number)) : model.storageUnit === 'fstop' ? fstopMarkStops(old as number, m.value as number) : null;
         const who = /^([^.]+)\.params\./.exec(m.path)?.[1];
         const owner = who && who !== 'main' && who !== 'lights' ? findEntry(before, who)?.entry : undefined;
-        const prefix = owner ? `${cap(owner.name || entryWord(owner))}: ` : '';
+        const prefix = owner ? `${nameIn(owner)}: ` : '';
         return `${prefix}${stops !== null ? `${text} (${stopWords(stops)})` : text}`;
       }
       const en = /^([^.]+)\.(enabled|amount|mask|name|blend)$/.exec(m.path);
       const owner = en ? findEntry(before, en[1]!)?.entry : undefined;
       if (en && owner) {
-        const name = cap(owner.name || entryWord(owner));
+        const name = nameIn(owner);
         if (en[2] === 'enabled') return `${name} ${m.value ? 'on' : 'off'}`;
         if (en[2] === 'amount' && typeof m.value === 'number') return `${name} amount ${Math.round(Number(old ?? 1) * 100)} → ${Math.round(m.value * 100)} %`;
         if (en[2] === 'mask') return m.value ? `${name} through a mask` : `${name} without its mask`;
@@ -156,9 +171,9 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
       const p = /^([^.]+)\.params\.(\w+)/.exec(m.path);
       const layer = p ? findEntry(before, p[1]!)?.entry : undefined;
       if (p && layer) {
-        if (p[2] === 'time_s' && typeof m.value === 'number') return `${cap(layer.name || entryWord(layer))} time → ${formatSeconds(m.value)} s`;
-        if (p[2] === 'stops' && typeof m.value === 'number') return `${cap(layer.name || entryWord(layer))} ${stopWords(layer.kind === 'layer' && layer.op === 'dodge' ? -m.value : m.value)}`;
-        return plainChange(`${cap(layer.name || entryWord(layer))} ${pathName(p[2]!).toLowerCase()}`, old, m.value);
+        if (p[2] === 'time_s' && typeof m.value === 'number') return `${nameIn(layer)} time → ${formatSeconds(m.value)} s`;
+        if (p[2] === 'stops' && typeof m.value === 'number') return `${nameIn(layer)} ${stopWords(layer.kind === 'layer' && layer.op === 'dodge' ? -m.value : m.value)}`;
+        return plainChange(`${nameIn(layer)} ${pathName(p[2]!).toLowerCase()}`, old, m.value);
       }
       const probe = /^([^.]+)$/.exec(m.path);
       if (probe && before.probes.items[probe[1]!]) return m.value === undefined ? `Probe ${probe[1]} removed` : `Probe ${probe[1]} moved`;
@@ -176,6 +191,9 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
         const how = typeof pr.stops === 'number' ? ` (${stopWords(it.op === 'dodge' ? -pr.stops : pr.stops)})` : typeof pr.time_s === 'number' && it.op !== 'expose' ? ` (${formatSeconds(pr.time_s)} s)` : '';
         return `Added ${article(w)} ${w}${how}`;
       }
+      const li = LIST_ARG.exec(m.coll);
+      const owner = li ? findEntry(before, li[1]!)?.entry : undefined;
+      if (li && owner) return `${nameIn(owner)}: ${LIST_WORDS[li[2]!] ?? pathName(li[2]!).toLowerCase()} added`;
       return `Added ${m.id}`;
     }
     case 'remove': {
@@ -183,6 +201,16 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
       if (e) return `Removed the ${entryWord(e)}`;
       if (before.masks.items[m.id]) return 'Mask removed';
       if (before.probes.items[m.id]) return `Probe ${m.id} removed`;
+      // a curve point or an HSL band: the layer whose list argument holds the id
+      for (const st of stagesOf(before)) {
+        for (const p of entriesOf(before, st)) {
+          if (p.entry.kind !== 'layer') continue;
+          for (const [arg, v] of Object.entries(p.entry.params)) {
+            const items = (v as { items?: Record<string, unknown> } | null)?.items;
+            if (items && typeof items === 'object' && m.id in items) return `${nameIn(p.entry)}: ${LIST_WORDS[arg] ?? pathName(arg).toLowerCase()} removed`;
+          }
+        }
+      }
       return `Removed ${m.id}`;
     }
     case 'move': {

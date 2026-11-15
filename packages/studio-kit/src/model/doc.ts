@@ -146,6 +146,22 @@ export function findEntry(doc: Document, id: Id): Placed | undefined {
   return undefined;
 }
 
+/**
+ * What an entry is called on screen: its name, or its op's label when the name is only the op (a layer the agent's
+ * builders or a look made without a name is called "burn", "hsl"): "Burn", "HSL" (CHB-037 P9).
+ */
+export function entryName(e: Entry): string {
+  if (e.kind === 'layer' && (!e.name || e.name === e.op)) {
+    try {
+      const label = getOp(e.op).ui?.label;
+      if (label) return label;
+    } catch {
+      // an op the catalogue does not know: its id
+    }
+  }
+  return e.name || (e.kind === 'layer' ? e.op : e.kind);
+}
+
 /** The layer with an id (undefined for a group, a link, or no such entry). */
 export function layerOf(doc: Document, id: Id): Layer | undefined {
   const e = findEntry(doc, id)?.entry;

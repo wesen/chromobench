@@ -46,8 +46,11 @@ export interface WorkbenchHost {
   studio: Studio;
   layout(): LayoutInfo;
   available(): { id: string; label: string }[];
-  /** asks the photographer to use the layout (a dialog); resolves when asked, not when answered */
-  propose?(def: LayoutDef, o: { why?: string; eval: string }): { status: 'proposed' | 'refused'; note: string };
+  /**
+   * asks the photographer to use the layout (a dialog); resolves when asked, not when answered. `layout` is the
+   * layout as data (what the host keeps, so the layout outlives the page: CHB-037 P9).
+   */
+  propose?(def: LayoutDef, o: { why?: string; eval: string; layout: AgentLayout }): { status: 'proposed' | 'refused'; note: string };
   /** registers an agent-written look where the studio compiles (the host imports the DSL's defineLookSource) */
   defineLook?(src: string): Promise<{ name: string; version: number; label: string }> | { name: string; version: number; label: string };
 }
@@ -384,7 +387,7 @@ export function studioWorkbench(host: WorkbenchHost): StudioWorkbench {
       const b = build(l);
       if (!b.ok || !b.def) return { status: 'refused', id: l.id, label: l.label, note: `the layout does not build: ${b.errors.map((e) => `${e.code} ${e.message}`).join('; ')}` };
       if (!host.propose) return { status: 'refused', id: l.id, label: l.label, note: 'this studio cannot switch layouts' };
-      const r = host.propose(b.def, { eval: o.eval, ...(o.why !== undefined ? { why: o.why } : {}) });
+      const r = host.propose(b.def, { eval: o.eval, layout: l, ...(o.why !== undefined ? { why: o.why } : {}) });
       return { status: r.status, id: l.id, label: l.label, note: r.note };
     },
     async defineLook(src) {
