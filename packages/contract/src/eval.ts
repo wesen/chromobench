@@ -2,8 +2,7 @@
 // Shapes follow goja-cv's cvsession result processor; Look and ContextBlock per CHB-007/008.
 import type { Domain } from './domains.ts';
 import type { Diagnostic } from './errors.ts';
-import type { AgentMode } from './editlog.ts';
-import type { LoggedMutation } from './mutations.ts';
+import type { AgentMode, LogEntry } from './editlog.ts';
 import type { Box } from './spec.ts';
 
 export type { Diagnostic } from './errors.ts';
@@ -32,10 +31,7 @@ export interface Look {
 export interface ContextBlock {
   frame?: string;
   mode: AgentMode;
-  /**
-   * Recipe paths this eval's edits touched (set/propose), in order. Not "differs from defaultRecipe":
-   * that would be a separate field (CHB-007 R2, contract 0.2 keeps this meaning).
-   */
+  /** Document paths this eval's transactions touched, in order (id-anchored, design §24). */
   changed: string[];
   /** Pending proposal transaction ids. */
   proposals: string[];
@@ -53,8 +49,8 @@ export interface EvalResult {
   /** With line numbers. */
   warnings: Diagnostic[];
   context: ContextBlock;
-  /** The LoggedMutations EditLog.propose returned for this eval (seq, frame, why, expect). */
-  mutations: LoggedMutation[];
+  /** The log entries EditLog.propose returned for this eval (seq, frame, transaction, why). */
+  transactions: LogEntry[];
   error?: Diagnostic;
   /** Recorded by the harness, not rendered to the model. */
   trace?: { ms: number; ops: Record<string, number> };

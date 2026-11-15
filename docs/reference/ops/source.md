@@ -21,7 +21,7 @@ Returns:
 
 ## `source.open`
 
-Opens a decoded source as linear sensor values (T = signal / flat after scan.flatField).
+Opens a decoded source as linear sensor values (T = signal / flat after scan.flatField), with its pitch on the film.
 
 - Owner: CHB-006
 - On: none (—) → Image (camera-linear)
@@ -29,10 +29,11 @@ Opens a decoded source as linear sensor values (T = signal / flat after scan.fla
 - Implementation: mock
 - See: `source.info`, `scan.flatField`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `source` | string |  |  |  |  |  | SHA-256 of the source file (FrameRecipe.source.sha256); the engine must have opened it. |
-| `encoding` | enum linear/srgb/gamma22 |  |  |  | `"linear"` | source.decode.encoding | Transfer encoding of the stored samples. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `source` | string |  |  |  |  | SHA-256 of the source file (Document.source.sha256); the engine must have opened it. |
+| `encoding` | enum linear/srgb/gamma22 |  |  |  | `"linear"` | Transfer encoding of the stored samples (Document.source.decode.encoding). |
+| `umPerPx` | number | um | [0.01, 100000] |  |  | Film µm per document pixel: the scan medium's umPerPx, or a camera file's film format over its long side. Sets ImageInfo.umPerPx.film, which every physical size (µm on the film, mm on the print) is converted with. |
 
 ## `source.xyz`
 
@@ -44,8 +45,8 @@ Photo mode: camera RGB to scene XYZ with the camera matrices in SourceInfo.camer
 - Implementation: mock
 - See: `capture.expose`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `mode` | enum daylight/as-shot/custom |  |  |  | `"daylight"` | capture.whiteBalance.mode | White balance source. |
-| `temperature_K` | number | K | [2000, 15000] | [2800, 10000] | `5500` | capture.whiteBalance.temperature_K | Custom white balance temperature. |
-| `tint` | number | none | [-150, 150] |  | `0` | capture.whiteBalance.tint | Custom white balance tint (green–magenta). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `mode` | enum daylight/as-shot/custom |  |  |  | `"daylight"` | White balance source. |
+| `temperature_K` | number | K | [2000, 15000] | [2800, 10000] | `5500` | Custom white balance temperature. |
+| `tint` | number | none | [-150, 150] |  | `0` | Custom white balance tint (green–magenta). |

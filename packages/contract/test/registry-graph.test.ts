@@ -1,105 +1,87 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AREAS, allOps, bindArgs, check, ChromobenchError, closest, compile, defaultRecipe, getOp, Graph, law, nodeId, opsAccepting,
-  pathOwners, RECIPE_FIELDS, registerOp, settablePaths, type Diagnostic, type OpDef, type SourceInfo,
+  AREAS, allOps, bindArgs, check, closest, compile, getOp, Graph, law, nodeId, nodeSlots, opsAccepting, opsForStage, registerOp,
+  type OpDef,
 } from '@chromobench/contract';
+import { diagOf, graph, linear, maskOf, push, scanDoc, L } from './helpers.ts';
+import { edit } from '@chromobench/contract';
+import { insert } from '@chromobench/values';
 
-function diagOf(f: () => unknown): Diagnostic {
-  try {
-    f();
-  } catch (e) {
-    if (e instanceof ChromobenchError) return e.diag;
-    throw e;
-  }
-  throw new Error('expected a ChromobenchError');
-}
-
-const SHA = 'ab'.repeat(32);
-export function sourceInfo(sha = SHA, width = 12, height = 10): SourceInfo {
-  return { sha256: sha, format: 'tiff', width, height, channels: 3, bits: 16, sample: 'uint', encoding: { value: 'linear', evidence: 'format' }, levels: { black: [0], white: [65535], from: 'default' }, clippedFraction: 0, notes: [] };
-}
-
-describe('registry and v0 catalog', () => {
-  it('every area has ops and every op-owned recipe path has an owner', () => {
+describe('registry and catalogue', () => {
+  it('every area has ops; the layer ops live in their stages with an encoding', () => {
     for (const a of AREAS) expect(allOps().some((o) => o.area === a), a).toBe(true);
-    for (const [p, rule] of Object.entries(RECIPE_FIELDS)) if (rule.kind === 'op') expect(pathOwners(p).length, p).toBeGreaterThan(0);
-    expect(settablePaths()).toContain('print.lights.logH');
-    expect(settablePaths()).not.toContain('print.lights');
+    const names = (s: Parameters<typeof opsForStage>[0]): string[] => opsForStage(s).map((o) => o.name).sort();
+    expect(names('darkroom')).toEqual(['burn', 'densityMask', 'dodge', 'expose', 'filter', 'flash', 'preflash']);
+    expect(names('print')).toEqual(['clarity', 'clone', 'heal']);
+    expect(names('scan')).toEqual(['clone', 'heal']);
+    expect(names('scene')).toEqual([]);
+    for (const o of allOps({ includeInternal: true })) if (o.stages) expect(o.encoding, o.name).toBeDefined();
+    expect(getOp('clarity')).toMatchObject({ encoding: 'linear', class: 'spatial' });
+    expect(getOp('clarity').args['radius_mm']).toMatchObject({ unit: 'mm' });
+    expect(getOp('heal').coalesce).toEqual({ list: 'spots', opacity: 'opacity' });
   });
 
-  it('the guide §5.5 ops are all present', () => {
+  it('the old ops are gone', () => {
     const names = new Set(allOps({ includeInternal: true }).map((o) => o.name));
-    for (const n of ['source.open', 'source.info', 'source.pattern', 'scan.flatField', 'scan.flare', 'scan.rebate', 'scan.density', 'scan.noise', 'invert.dyes', 'invert.classify',
-      'capture.expose', 'film.couple', 'film.halation', 'film.develop', 'film.grain', 'print.expose', 'print.lights', 'print.preflash', 'print.combine', 'print.develop',
-      'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'output.frame', 'output.encode', 'mask.luminance', 'mask.gradient', 'mask.ellipse', 'mask.paint',
-      'mask.feather', 'mask.and', 'mask.or', 'mask.not', 'measure.stats', 'measure.histogram', 'measure.densitometer', 'measure.patches', 'darkroom.testStrip',
-      'darkroom.ringAround', 'darkroom.contactSheet', 'finishing.clarity', 'finishing.hue']) expect(names.has(n), n).toBe(true);
-    expect(allOps().some((o) => o.name === 'source.pattern')).toBe(false); // internal
+    for (const n of ['print.lights', 'print.preflash', 'mask.and', 'mask.or', 'mask.not', 'mask.gradient', 'scan.heal', 'retouch.heal', 'finishing.clarity', 'finishing.hue']) expect(names.has(n), n).toBe(false);
+    for (const n of ['print.expose', 'print.combine', 'print.develop', 'print.densityMask', 'mask.linear', 'mask.ellipse', 'mask.paint', 'mask.luminance', 'mask.constant', 'mask.combine', 'mask.feather', 'mask.invert', 'composite.mix']) expect(names.has(n), n).toBe(true);
+    // no argument is a JSON string any more
+    for (const o of allOps({ includeInternal: true })) for (const [a, s] of Object.entries(o.args)) expect(s.type === 'string' && /JSON/.test(s.doc), `${o.name}.${a}`).toBe(false);
   });
 
   it('registerOp refuses invalid definitions', () => {
     const base: OpDef = { name: 'print.zz', area: 'print', owner: 't', on: 'Image', returns: 'Image', domainIn: 'paper-logH', domainOut: 'paper-logH', class: 'pointwise', binding: 'setting', args: {}, doc: 'x' };
     const bad: Partial<OpDef>[] = [
-      { name: 'nodot' }, { name: 'view.zz' }, { name: 'print.lights' },
+      { name: 'view.zz' }, { name: 'print.combine' }, { name: 'zz' }, { name: 'zz', stages: ['print'] },
+      { name: 'zz', stages: ['darkroom'], encoding: 'stage' },
       { args: { a: { type: 'number', doc: 'no unit' } } },
       { args: { a: { type: 'number', unit: 'logH', min: 1, max: 0, doc: 'min>max' } } },
-      { args: { a: { type: 'number', unit: 'logH', min: 0, max: 1, usual: [0, 2], doc: 'usual outside' } } },
-      { args: { a: { type: 'enum', doc: 'no values' } } },
       { args: { a: { type: 'enum', values: ['x'], default: 'y', doc: 'bad default' } } },
-      { args: { a: { type: 'number', unit: 'none', path: 'print.nowhere', doc: 'bad path' } } },
+      { args: { a: { type: 'list', doc: 'no item schema' } } },
+      { args: { a: { type: 'list', of: { b: { type: 'number', doc: 'no unit' } }, doc: 'x' } } },
       { domainIn: 'display-rgb' },
       { examples: ['frame.negative(('] },
     ];
     for (const b of bad) expect(diagOf(() => registerOp({ ...base, ...b } as OpDef)).code, JSON.stringify(b)).toBe('E_INVALID_OP_DEF');
   });
 
-  it('bindArgs: defaults, ranges, soft warnings, redirects, did-you-mean', () => {
-    const lights = getOp('print.lights');
-    expect(bindArgs(lights, {}).args).toEqual({ logH: [0, 0, 0] });
-    expect(bindArgs(lights, { logH: [0.6, 0, 0] }).warnings[0]?.code).toBe('RANGE');
-    const r = diagOf(() => bindArgs(lights, { logH: [4, 0, 0] }));
+  it('bindArgs: defaults, ranges, soft warnings, redirects, did-you-mean, structured lists, no non-finite numbers', () => {
+    const filter = getOp('filter');
+    expect(bindArgs(filter, {}).args).toEqual({ logH: [0, 0, 0] });
+    expect(bindArgs(filter, { logH: [0.6, 0, 0] }).warnings[0]?.code).toBe('RANGE');
+    const r = diagOf(() => bindArgs(filter, { logH: [4, 0, 0] }));
     expect(r).toMatchObject({ code: 'E_ARG_RANGE', fix: '[0.1, 0, 0]', valid: ['[-1.5, 1.5]'] });
-    expect(r.hint).toContain('0.025');
-    expect(diagOf(() => bindArgs(lights, { logH: [NaN, 0, 0] })).code).toBe('E_ARG_RANGE');
-    expect(diagOf(() => bindArgs(lights, { logH: 'red' })).code).toBe('E_ARG_TYPE');
-    expect(diagOf(() => bindArgs(lights, { points: [4, 0, 0] }))).toMatchObject({ code: 'E_UNKNOWN_OPTION', fix: 'print.lights({logH: [0.1, 0, 0]})' });
+    expect(diagOf(() => bindArgs(filter, { points: [4, 0, 0] }))).toMatchObject({ code: 'E_UNKNOWN_OPTION', fix: 'filter({logH: [0.1, 0, 0]})' });
     expect(diagOf(() => bindArgs(getOp('print.expose'), { tim_s: 12 }))).toMatchObject({ code: 'E_UNKNOWN_OPTION', hint: 'did you mean time_s?' });
-    expect(bindArgs(getOp('scan.density'), { rebate: [0, 0, 8, 64] }).args).toEqual({ rebate: { x: 0, y: 0, w: 8, h: 64 } });
-    expect(diagOf(() => bindArgs(getOp('darkroom.testStrip'), { vary: 'time', step: 5 })).code).toBe('E_ARG_RANGE');
-    expect(diagOf(() => getOp('print.light')).hint).toBe('did you mean print.lights?');
+    expect(diagOf(() => bindArgs(getOp('print.expose'), { time_s: NaN })).code).toBe('E_ARG_RANGE');
+    const paint = bindArgs(getOp('mask.paint'), { strokes: [{ points: [[1, 2], [3, 4, 0.5]], radius: 2 }] }).args;
+    expect(paint['strokes']).toEqual([{ points: [[1, 2, 1], [3, 4, 0.5]], radius: 2, hardness: 0.5, mode: 'add' }]);
+    expect(diagOf(() => bindArgs(getOp('mask.paint'), { strokes: [{ points: [[1, 2]], radius: 2, mood: 'add' }] })).code).toBe('E_UNKNOWN_OPTION');
+    expect(diagOf(() => bindArgs(getOp('heal'), { spots: [{ x: 1, y: 1, r: 2, src: { x: Infinity, y: 0 } }] })).code).toBe('E_ARG_RANGE');
+    expect(diagOf(() => getOp('print.combin')).hint).toBe('did you mean print.combine?');
   });
 
   it('closest follows the goja-cv edit budget', () => {
     expect(closest('tiem_s', ['time_s', 'fstop'])).toBe('time_s');
     expect(closest('xyz', ['time_s'])).toBeUndefined();
-    expect(closest('LOGH', ['logH'])).toBe('logH');
   });
 
-  it('opsAccepting lists what a paper-logH handle can call', () => {
+  it('opsAccepting lists what a paper-logH handle can call; light terms are not nodes', () => {
     const names = opsAccepting('Image', 'paper-logH').map((o) => o.name);
-    expect(names).toEqual(expect.arrayContaining(['print.lights', 'print.develop', 'measure.stats']));
-    expect(names).not.toContain('print.expose');
+    expect(names).toEqual(expect.arrayContaining(['print.combine', 'print.develop', 'measure.stats']));
+    expect(names).not.toContain('burn');
+    const g = graph();
+    expect(diagOf(() => g.intern('burn', [], { stops: 1 })).code).toBe('E_WRONG_KIND');
   });
 });
 
 describe('graph', () => {
-  const mk = (): Graph => {
-    const g = new Graph();
-    g.registerSource(sourceInfo());
-    return g;
-  };
+  const mk = (): Graph => graph();
 
   it('E_DOMAIN names the op to call first', () => {
     const g = mk();
     const dyes = g.intern('source.pattern', [], { domain: 'film-dyes' }).node;
-    expect(diagOf(() => g.intern('print.lights', [dyes.id], {}))).toMatchObject({ code: 'E_DOMAIN', hint: 'call print.expose first' });
-  });
-
-  it('E_WRONG_KIND for a value receiver', () => {
-    const g = mk();
-    const img = g.intern('source.pattern', [], {}).node;
-    const v = g.intern('measure.stats', [img.id], {}).node;
-    expect(diagOf(() => g.intern('print.lights', [v.id], {})).code).toBe('E_WRONG_KIND');
+    expect(diagOf(() => g.intern('print.develop', [dyes.id], {}))).toMatchObject({ code: 'E_DOMAIN', hint: 'call print.expose first' });
   });
 
   it('graph.hashcons: key order, explicit defaults, -0 → same id; any change → different id', () => {
@@ -107,7 +89,7 @@ describe('graph', () => {
       const g = mk();
       const d = g.intern('source.pattern', [], { domain: 'film-dyes' }).node;
       const a = g.intern('print.expose', [d.id], { time_s: t, filtration: { c, m, y: 0 } }).node;
-      const b = g.intern('print.expose', [d.id], { filtration: { y: -0, m, c }, fstop: 8, time_s: t, mode: 'real' }).node;
+      const b = g.intern('print.expose', [d.id], { filtration: { y: -0, m, c }, fstop: 8, time_s: t, mode: 'real', magnification: 8 }).node;
       const other = g.intern('print.expose', [d.id], { time_s: t === 600 ? 599 : t + 0.001, filtration: { c, m, y: 0 } }).node;
       if (a.id !== b.id) return 'same call, different id';
       if (a.id === other.id) return 'different call, same id';
@@ -117,31 +99,22 @@ describe('graph', () => {
     expect(rep, rep?.message).toMatchObject({ ok: true });
   });
 
-  it('graph.adopt: adopt(closure(n)) reproduces the id in another graph', () => {
+  it('node ids inside structured args are inputs, in a fixed order; adopt(closure) reproduces every id', () => {
     const g = mk();
-    const n = compile(defaultRecipe('negative-scan', { sha256: SHA }), g);
+    const d = edit(scanDoc(), [
+      insert('masks', 'm1', maskOf([['c1', linear()]])),
+      push('darkroom', 'b1', L('burn', { stops: 1 }, { mask: 'm1' })),
+      push('darkroom', 'd1', L('dodge', { stops: 0.5 })),
+      push('darkroom', 'dm', L('densityMask', { gamma: 0.5, radius_um: 300, polarity: 'positive' })),
+    ]).doc;
+    const c = compile(d, g);
+    const h = c.cuts['darkroom.H']!;
+    expect(h.inputs[0]).toBe(c.cuts['darkroom.main']!.id);
+    expect(nodeSlots(getOp('print.combine'), h.args).map((s) => s.at)).toEqual(['terms.0.image', 'terms.0.mask', 'terms.1.image', 'densities.0.image']);
+    expect(h.inputs.slice(1)).toEqual(nodeSlots(getOp('print.combine'), h.args).map((s) => s.id));
     const g2 = mk();
-    const nodes = g2.adopt(g.closure(n.id));
-    expect(nodes[nodes.length - 1]!.id).toBe(n.id);
-    expect(nodeId(g.closure(n.id).at(-1)!)).toBe(n.id);
-  });
-
-  it('compile builds the §5.7 chain and reuses upper nodes when only lights change', () => {
-    const g = mk();
-    const r = defaultRecipe('negative-scan', { sha256: SHA });
-    const a = compile(r, g);
-    expect(g.closure(a.id).map((d) => d.op)).toEqual(['source.open', 'scan.density', 'invert.dyes', 'print.expose', 'print.lights', 'print.develop', 'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'output.frame']);
-    const r2 = { ...r, print: { ...r.print, lights: { ...r.print.lights, logH: [0.1, 0, 0] as [number, number, number] } } };
-    const b = compile(r2, g);
-    const ida = g.closure(a.id).map((d) => nodeId(d));
-    const idb = g.closure(b.id).map((d) => nodeId(d));
-    expect(idb.slice(0, 4)).toEqual(ida.slice(0, 4));
-    expect(idb[4]).not.toBe(ida[4]);
-  });
-
-  it('compile builds the digital-raw chain', () => {
-    const g = mk();
-    const n = compile(defaultRecipe('digital-raw', { sha256: SHA }), g);
-    expect(g.closure(n.id).map((d) => d.op).slice(0, 7)).toEqual(['source.open', 'source.xyz', 'capture.expose', 'film.couple', 'film.halation', 'film.develop', 'film.grain']);
+    const nodes = g2.adopt(g.closure(c.display.id));
+    expect(nodes.at(-1)!.id).toBe(c.display.id);
+    expect(nodeId(g.closure(c.display.id).at(-1)!)).toBe(c.display.id);
   });
 });

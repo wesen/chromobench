@@ -11,10 +11,10 @@ DIR coupler interlayer effects.
 - Class: spatial; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `amount` | number | fraction | [0, 2.5] |  | `1` | capture.development.dir.amount | DIR coupler strength. |
-| `diffusion_um` | number | um | [0, 150] |  | `0` | capture.development.dir.diffusion_um | DIR diffusion length. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `amount` | number | fraction | [0, 2.5] |  | `1` | DIR coupler strength. |
+| `diffusion_um` | number | um | [0, 150] |  | `0` | DIR diffusion length. |
 
 ## `film.develop`
 
@@ -25,10 +25,10 @@ Develops film log exposure to dye amounts through the characteristic curves.
 - Class: pointwise; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `push` | number | stop | [-2, 3] |  | `0` | capture.development.push | Push (+) or pull (−) development. |
-| `curves` | enum datasheet/precorrected |  |  |  | `"datasheet"` |  | Set by compile to precorrected when film.couple precedes this op. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `push` | number | stop | [-2, 3] |  | `0` | Push (+) or pull (−) development. |
+| `curves` | enum datasheet/precorrected |  |  |  | `"datasheet"` | Set by compile to precorrected when film.couple precedes this op. |
 
 ## `film.grain`
 
@@ -39,11 +39,11 @@ Film grain in dye amounts. Deterministic: same seed, same grain, whatever the re
 - Class: spatial; binding: pixel
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `amount` | number | fraction | [0, 4] |  | `1` | capture.development.grain.amount | Grain amount relative to the stock. |
-| `size_um` | number | um | [3, 45] |  | `12` | capture.development.grain.size_um | Grain clump size. |
-| `seed` | number | none | [0, 2147483648] |  | `1` | capture.development.grain.seed | Seed; grain is a pure function of inputs, seed and print grid, independent of tiling. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `amount` | number | fraction | [0, 4] |  | `1` | Grain amount relative to the stock. |
+| `size_um` | number | um | [3, 45] |  | `12` | Grain clump size. |
+| `seed` | number | none | [0, 2147483648] |  | `1` | Seed; grain is a pure function of inputs, seed and print grid, independent of tiling. |
 
 ## `film.halation`
 
@@ -54,6 +54,6 @@ Halation: light scattered back from the film base.
 - Class: spatial; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `strength` | number | fraction | [0, 4] |  | `1` | capture.development.halation.strength | Halation strength relative to the stock. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `strength` | number | fraction | [0, 4] |  | `1` | Halation strength relative to the stock. |

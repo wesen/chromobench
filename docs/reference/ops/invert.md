@@ -11,9 +11,9 @@ Per-pixel class map: 0 ok, 1 blank, 2 below base, 3 out of gamut.
 - Class: pointwise; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` |  | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
 
 ## `invert.classify`
 
@@ -24,9 +24,9 @@ Fractions of the frame per inversion class.
 - Class: measure; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` |  | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `sigma` | vec3 | D | [0, 0.2] |  | `[0.0043,0.0033,0.0057]` | Scanner noise σ per channel in D (from scan.noise; default: Gold 200 at 640 px). |
 
 Returns:
 
@@ -45,7 +45,7 @@ Solves scanner density for dye amounts; channel 4 is the solve residual in D.
 - Implementation: mock
 - See: `invert.classify`, `print.expose`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `stock` | stockId |  |  |  | `"kodak_portra_400"` | scan.stock | Film stock. |
-| `scanner` | string |  |  |  | `"xt5-rgb-led"` | scan.scanner | Scanner model. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `stock` | stockId |  |  |  | `"kodak_portra_400"` | Film stock. |
+| `scanner` | string |  |  |  | `"xt5-rgb-led"` | Scanner model. |

@@ -2,32 +2,47 @@
 
 # mask.* ops
 
-## `mask.and`
+## `mask.combine`
 
-Intersection (minimum).
+The one mask algebra (design §25): v ← v + amount·(op(v, c) − v), op add = max, subtract = v·(1 − c), intersect = v·c. maskCombine (pixel.ts) is the formula.
 
-- Owner: CHB-010
+- Owner: CHB-037
 - On: Mask (mask) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: mock
+- Implementation: stub
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `other` | Mask |  |  |  |  |  | Second mask. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `other` | Mask |  |  |  |  | The component (or mask) folded in. |
+| `mode` | enum add/subtract/intersect |  |  |  |  | add: max(v, c); subtract: v·(1 − c); intersect: v·c (product forms: feathered edges meet smoothly, design D4). |
+| `amount` | number | fraction | [0, 1] |  | `1` | How much the component acts: v ← v + amount·(op(v, other) − v). |
+
+## `mask.constant`
+
+A uniform mask of the receiver's size: the empty mask (0) a component fold starts from, or full coverage (1).
+
+- Owner: CHB-037
+- On: Image (any) → Mask (mask)
+- Class: pointwise; binding: setting
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `value` | number | fraction | [0, 1] |  | `0` | The coverage everywhere (0: the empty mask, where every fold starts). |
 
 ## `mask.ellipse`
 
-Elliptical mask. The edge is antialiased over one pixel; use mask.feather for a soft edge.
+Mask component 'ellipse': the ellipse inscribed in the box. The edge is antialiased over one pixel; the mask's feather softens it.
 
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` |  | Bounding box in source px (before rotation). |
-| `angle_deg` | number | deg | [-90, 90] |  | `0` |  | Rotation about the box centre. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` | Bounding box in document px (before rotation). |
+| `angle_deg` | number | deg | [-90, 90] |  | `0` | Rotation about the box centre. |
 
 ## `mask.feather`
 
@@ -38,70 +53,57 @@ Feathers (blurs) a mask.
 - Class: spatial; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `radius_px` | number | px | [0, 500] | [2, 100] | `10` |  | Feather radius in source px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `radius_px` | number | px | [0, 100000] | [0.5, 500] | `10` | Feather radius in document px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). The compiler converts the mask's feather_mm on the print with the print's pitch. |
 
-## `mask.gradient`
+## `mask.invert`
 
-Linear gradient mask (graduated burn).
+Inverse (1 − m), an involution.
+
+- Owner: CHB-010
+- On: Mask (mask) → Mask (mask)
+- Class: pointwise; binding: setting
+- Implementation: stub
+
+## `mask.linear`
+
+Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn). The receiver only gives the size.
 
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: mock
+- Implementation: stub
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `from` | point | px |  |  | `{"x":0,"y":0}` |  | Where the mask is 1 (source px). |
-| `to` | point | px |  |  | `{"x":0,"y":100}` |  | Where the mask is 0 (source px). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `from` | point | px |  |  | `{"x":0,"y":0}` | Where the mask is 1 (document px). |
+| `to` | point | px |  |  | `{"x":0,"y":100}` | Where the mask is 0 (document px). |
 
 ## `mask.luminance`
 
-Mask from a luminance range of the receiver.
+Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below]. The receiver is the cut the mask reads.
 
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `above` | number | fraction | [0, 1] |  | `0` |  | Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected). |
-| `below` | number | fraction | [0, 1] |  | `1` |  | Select values below this. 1 means no upper bound. |
-| `softness` | number | fraction | [0, 0.5] |  | `0.05` |  | Transition width. |
-
-## `mask.not`
-
-Inverse (1 − m).
-
-- Owner: CHB-010
-- On: Mask (mask) → Mask (mask)
-- Class: pointwise; binding: setting
-- Implementation: mock
-
-## `mask.or`
-
-Union (maximum).
-
-- Owner: CHB-010
-- On: Mask (mask) → Mask (mask)
-- Class: pointwise; binding: setting
-- Implementation: mock
-
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `other` | Mask |  |  |  |  |  | Second mask. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `above` | number | fraction | [0, 1] |  | `0` | Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected). |
+| `below` | number | fraction | [0, 1] |  | `1` | Select values below this. 1 means no upper bound. |
+| `softness` | number | fraction | [0, 0.5] |  | `0.05` | Transition width. |
 
 ## `mask.paint`
 
-Painted mask: brush strokes rasterised with soft round dabs. Pressure is recorded but does not modulate the brush; add takes the maximum, erase multiplies by 1 − coverage.
+Mask component 'paint': brush strokes rasterised with soft round dabs.
 
 - Owner: CHB-009
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `strokes` | string |  |  |  | `"[]"` |  | Canonical JSON of the strokes: [{kind: "stroke", points: [[x, y, pressure]…], radius, hardness, mode: "add"\|"erase"}], sensor px, simplified (RDP 0.5 px). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `strokes` | list of {points, radius, hardness, mode} |  |  |  | `[]` | Brush strokes in order (in a document: a Coll of strokes). |

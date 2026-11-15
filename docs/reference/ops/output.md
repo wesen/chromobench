@@ -4,7 +4,7 @@
 
 ## `output.display`
 
-Turns the print's XYZ into encoded RGB in an output space. Finishing ops come before it; the knee is last.
+Turns the print's XYZ into encoded RGB in an output space. The print stage comes before it; the knee is last.
 
 - Owner: CHB-011
 - On: Image (print-xyz) → Image (display-rgb)
@@ -12,11 +12,11 @@ Turns the print's XYZ into encoded RGB in an output space. Finishing ops come be
 - Implementation: mock
 - See: `output.encode`, `view.adapt`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `space` | enum srgb/display-p3/rec2020/adobe-rgb/prophoto |  |  |  | `"srgb"` |  | Output colour space (the display space for viewing; export uses view.output.export.space). |
-| `rendering` | enum print-as-seen/scan-of-print |  |  |  | `"scan-of-print"` | view.output.rendering | Paper white at its own level (as seen) or at display white (scan). Redirects: view. |
-| `knee` | enum oklch/cam16-ucs/tanh-shoulder/clip |  |  |  | `"oklch"` | view.output.display.knee.method | Gamut compression; always the last colour step. 'oklch': OkLCh chroma knee (spektrafilm's parameters; called 'cam16-ucs' before contract 0.2); 'cam16-ucs': the same in CAM16-UCS (L_A 64, Y_b 20, average surround, D = 1; contract 0.3, CHB-011); 'tanh-shoulder': Chromogen's per-channel shoulder (kept for comparison; it cannot keep paper white at display white); 'clip': per channel. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `space` | enum srgb/display-p3/rec2020/adobe-rgb/prophoto |  |  |  | `"srgb"` | Output colour space (the display space for viewing; export uses Document.output.export.space). |
+| `rendering` | enum print-as-seen/scan-of-print |  |  |  | `"scan-of-print"` | Paper white at its own level (as seen) or at display white (scan). Redirects: view. |
+| `knee` | enum oklch/cam16-ucs/tanh-shoulder/clip |  |  |  | `"oklch"` | Gamut compression; always the last colour step. 'oklch': OkLCh chroma knee (spektrafilm's parameters; called 'cam16-ucs' before contract 0.2); 'cam16-ucs': the same in CAM16-UCS (L_A 64, Y_b 20, average surround, D = 1; contract 0.3, CHB-011); 'tanh-shoulder': Chromogen's per-channel shoulder (kept for comparison; it cannot keep paper white at display white); 'clip': per channel. |
 
 ## `output.encode`
 
@@ -27,11 +27,11 @@ Encodes a display-rgb image as a file in OPFS and returns its EncodedFile descri
 - Class: global; binding: setting; not in the DSL
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `format` | enum tiff16/png16/png8/jpeg |  |  |  | `"tiff16"` | view.output.export.format | File format. |
-| `compression` | enum none/deflate |  |  |  | `"deflate"` | view.output.export.compression | Lossless compression. |
-| `dpi` | number | none | [1, 4800] | [240, 360] | `300` | view.output.export.dpi | Print resolution metadata. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `format` | enum tiff16/png16/png8/jpeg |  |  |  | `"tiff16"` | File format. |
+| `compression` | enum none/deflate |  |  |  | `"deflate"` | Lossless compression. |
+| `dpi` | number | none | [1, 4800] | [240, 360] | `300` | Print resolution metadata. |
 
 Returns:
 
@@ -45,19 +45,19 @@ Returns:
 - `bits`: number (none) — 8 or 16
 - `space`: string — output space id
 - `iccSha256`: string — sha256 of the embedded profile (empty when none)
-- `recipeSha256`: string — sha256 of the canonical recipe (empty when not given)
+- `documentSha256`: string — sha256 of the canonical document (empty when not given)
 
 ## `output.frame`
 
-Crop, straighten and orientation, applied last, resampling once (DR-3: all coordinates are source pixels). Contract 0.3: recipe view.frame for both frame kinds (was scan.orientation / scan.crop).
+Crop, straighten and orientation (Document.geometry), applied last, resampling once (DR-3: all coordinates are document pixels).
 
 - Owner: CHB-011
 - On: Image (display-rgb) → Image (display-rgb)
 - Class: geometric; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `orientation` | enum none/cw90/rot180/ccw90/flipH/flipV/transpose/transverse |  |  |  | `"none"` | view.frame.orientation | Orientation applied for display. |
-| `angle_deg` | number | deg | [-45, 45] |  | `0` | view.frame.angle_deg | Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0. |
-| `crop` (optional) | box | px |  |  |  | view.frame.crop | Crop in source (sensor) pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `orientation` | enum none/cw90/rot180/ccw90/flipH/flipV/transpose/transverse |  |  |  | `"none"` | Orientation applied for display. |
+| `angle_deg` | number | deg | [-45, 45] |  | `0` | Straighten: the crop content is rotated about the crop centre, clockwise as shown (after the orientation); bilinear, empty corners are 0. |
+| `crop` (optional) | box | px |  |  |  | Crop in document pixels of the un-oriented frame; absent = full frame. The output has the box size, oriented. |

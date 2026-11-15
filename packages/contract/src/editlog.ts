@@ -1,125 +1,110 @@
-// The per-frame edit log (guide §5.8; DR-5 cursor over undo units, DR-6 gestures via preview,
-// DR-7 proposals carry `expect`). The recipe state is the fold of the in-effect units.
-// `by` is set by whoever calls the log: the UI passes 'user', ingest 'auto'; agent mutations
-// enter only through propose(), which always records 'agent'. Sandboxed code never holds an EditLog.
-import { ChromobenchError, diag, fail, type Diagnostic } from './errors.ts';
-import { canonicalJSON, sha256Hex, type Graph } from './graph.ts';
-import { applyMutation, currentValue, mutationPaths, type Author, type LoggedMutation, type Mutation } from './mutations.ts';
-import { assertRecipe, getPath, migratePathV1, migrateRecipe } from './paths.ts';
-import type { FrameRecipe } from './recipe.ts';
+// The per-frame edit log, adapted minimally to contract 1.0 (phase 4 replaces it with the one document history,
+// design §26). Every entry is a values Transaction of the four mutations, applied under the contract's rules; an undo
+// unit is one transaction. `by` is set by whoever calls the log: the UI passes 'user', ingest 'auto'; agent
+// transactions enter only through propose(), which always records 'agent'. Sandboxed code never holds an EditLog.
+//
+// A pending transaction is stale when its inverses, recomputed when it is approved, differ from the ones stored at
+// the proposal (the P1 amendment's rule): what it would undo is no longer what the agent saw.
+import {
+  applyTransaction, canonicalJSON, canonicalPath, getPath, transaction,
+  type Author, type JsonObject, type Mutation, type Transaction,
+} from '@chromobench/values';
+import type { Document } from './document.ts';
+import { diag, fail, isChromobenchError, type Diagnostic } from './errors.ts';
+import { sha256Hex } from './graph.ts';
+import { assertDocument, DOCUMENT_RULES } from './validate.ts';
 
+export type { Author } from '@chromobench/values';
 export type AgentMode = 'read-only' | 'ask' | 'auto';
 
-export interface UndoUnit {
-  tx: string;
-  seqs: number[];
-  label: string;
+/** 3 since contract 1.0 (document format 3, transactions); older logs are refused (no migration). */
+export const EDIT_LOG_VERSION = 3 as const;
+
+export interface LogEntry {
+  /** Per-frame monotonic sequence number, from 1. */
+  seq: number;
+  frame: string;
+  /** The transaction: status applied, pending or rejected; mutations in normal form with their inverses. */
+  tx: Transaction;
+  ts: number;
+  /** The agent's one-line reason, shown on the approval card. */
+  why?: string;
+  approvedBy?: 'user';
 }
 
-/** 2 since contract 0.3 (recipe version 2); version-1 logs are migrated on load (migrateEditLogData). */
-export const EDIT_LOG_VERSION = 2 as const;
-
 export interface EditLogData {
-  version: 1 | typeof EDIT_LOG_VERSION;
+  version: typeof EDIT_LOG_VERSION;
   frame: string;
-  /** The recipe frame.add created. */
-  initial: FrameRecipe;
-  /** Who created the frame (frame.add), for why(). */
+  /** The document frame.add created. */
+  initial: Document;
   initialBy: Author;
   initialTs: number;
-  /** Append-only journal: applied, pending and rejected entries. Never deleted from. */
-  entries: LoggedMutation[];
-  /** Applied units, in order. */
-  units: UndoUnit[];
+  /** Append-only journal: applied, pending and rejected transactions. */
+  entries: LogEntry[];
+  /** Applied entries (seqs), in order: the undo units. */
+  units: number[];
   /** units[0..cursor) are in effect. */
   cursor: number;
 }
 
-export interface Provenance {
+export interface WhyEntry {
   seq: number;
   by: Author;
   tx?: string;
   ts: number;
-  op: Mutation['op'];
+  op: Mutation['op'] | 'frame.add';
   path: string;
   value: unknown;
   approvedBy?: 'user';
 }
 
 export type LogEvent =
-  | { type: 'apply'; unit: UndoUnit }
+  | { type: 'apply'; entry: LogEntry }
   | { type: 'undo' | 'redo'; cursor: number }
-  | { type: 'propose'; entries: LoggedMutation[] }
-  | { type: 'approve'; unit: UndoUnit }
+  | { type: 'propose'; entry: LogEntry }
+  | { type: 'approve'; entries: LogEntry[] }
   | { type: 'reject'; seqs: number[] }
-  /** `mutation` is the first of `mutations` (contract 0.2 listeners); `mutations` is the whole overlay. */
-  | { type: 'preview'; mutation: Mutation | null; mutations: Mutation[] }
+  | { type: 'preview'; mutations: Mutation[] }
   | { type: 'mode'; mode: AgentMode };
 
 export interface EditLogOptions {
   mode?: AgentMode;
   now?: () => number;
-  /** Lets mask.set adopt MaskSpecs for a full check. */
-  graph?: Graph;
 }
 
 /** Which pending entries approve()/reject() act on: sequence numbers, or every pending entry of a batch. */
 export type EntrySelector = readonly number[] | { batch: string };
 
-/**
- * Migrates a persisted log to the current version: a version-1 log (contracts 0.1, 0.2) gets its initial and
- * frame.add recipes migrated (migrateRecipe), its set paths moved (scan.orientation → view.frame.orientation,
- * scan.crop → view.frame.crop) and its knee values renamed ('cam16-ucs' → 'oklch', which it always was).
- */
-export function migrateEditLogData(data: EditLogData): EditLogData {
-  if (data.version === EDIT_LOG_VERSION) return data;
-  const d = structuredClone(data) as EditLogData;
-  d.initial = migrateRecipe(d.initial as unknown as Record<string, unknown>);
-  for (const e of d.entries) {
-    const m = e.m as { op: string; path?: string; value?: unknown; expect?: unknown; recipe?: unknown };
-    if (m.op === 'frame.add' && m.recipe) m.recipe = migrateRecipe(m.recipe as Record<string, unknown>);
-    if (m.op !== 'set' || typeof m.path !== 'string') continue;
-    m.path = migratePathV1(m.path);
-    if (/^view\.output\.(display|export)\.knee(\.method)?$/.test(m.path)) {
-      for (const k of ['value', 'expect'] as const) {
-        const v = m[k];
-        if (v === 'cam16-ucs') m[k] = 'oklch';
-        else if (v && typeof v === 'object' && (v as { method?: unknown }).method === 'cam16-ucs') m[k] = { ...(v as object), method: 'oklch' };
-      }
-    }
-  }
-  d.version = EDIT_LOG_VERSION;
-  return d;
-}
-
-export interface ApproveOptions {
-  /** "Apply anyway": skip the E_STALE check (the UI asks the photographer first). */
-  force?: boolean;
+export interface TxMeta {
+  tx?: string;
+  label?: string;
+  batch?: string;
+  source?: JsonObject;
+  why?: string;
 }
 
 export class EditLog {
   private data: EditLogData;
   private modeValue: AgentMode;
   private readonly now: () => number;
-  private readonly graph: Graph | undefined;
   private overlay: Mutation[] | null = null;
-  private committedCache: FrameRecipe | null = null;
-  private stateCache: FrameRecipe | null = null;
+  private committedCache: Document | null = null;
+  private stateCache: Document | null = null;
   private readonly listeners = new Set<(e: LogEvent) => void>();
   private txCounter = 0;
 
   constructor(data: EditLogData, opts: EditLogOptions = {}) {
-    // Logs persisted under contracts 0.1 / 0.2 (version 1) are migrated to version 2 first.
-    const migrated = migrateEditLogData(data);
-    assertRecipe(migrated.initial);
-    this.data = migrated === data ? structuredClone(data) : migrated;
+    if ((data as { version: unknown }).version !== EDIT_LOG_VERSION) {
+      fail('E_DOCUMENT', `edit log version ${String((data as { version: unknown }).version)} is not ${EDIT_LOG_VERSION}: logs of recipes are refused (contract 1.0, no migration)`);
+    }
+    assertDocument(data.initial);
+    this.data = structuredClone(data);
     this.modeValue = opts.mode ?? 'ask';
     this.now = opts.now ?? Date.now;
-    this.graph = opts.graph;
   }
 
-  /** A new log for a frame whose recipe frame.add created. */
-  static create(initial: FrameRecipe, opts: EditLogOptions & { by?: Author } = {}): EditLog {
+  /** A new log for a frame whose document frame.add created. */
+  static create(initial: Document, opts: EditLogOptions & { by?: Author } = {}): EditLog {
     const now = opts.now ?? Date.now;
     return new EditLog({ version: EDIT_LOG_VERSION, frame: initial.frame, initial, initialBy: opts.by ?? 'auto', initialTs: now(), entries: [], units: [], cursor: 0 }, opts);
   }
@@ -146,11 +131,7 @@ export class EditLog {
     return this.data.cursor;
   }
 
-  get units(): readonly UndoUnit[] {
-    return this.data.units;
-  }
-
-  get entries(): readonly LoggedMutation[] {
+  get entries(): readonly LogEntry[] {
     return this.data.entries;
   }
 
@@ -162,40 +143,40 @@ export class EditLog {
     return this.data.cursor < this.data.units.length;
   }
 
-  private entry(seq: number): LoggedMutation {
+  private entry(seq: number): LogEntry {
     return this.data.entries[seq - 1] ?? fail('E_MUTATION', `no entry ${seq}`);
   }
 
-  /** Entries in effect, in order. */
-  inEffect(): LoggedMutation[] {
-    return this.data.units.slice(0, this.data.cursor).flatMap((u) => u.seqs.map((s) => this.entry(s)));
+  /** Applied entries in effect, in order. */
+  inEffect(): LogEntry[] {
+    return this.data.units.slice(0, this.data.cursor).map((s) => this.entry(s));
   }
 
-  /** fold(initial, units[0..cursor)), without the preview overlay. */
-  get committed(): FrameRecipe {
+  /** The fold of the in-effect transactions over the initial document (no preview). */
+  get committed(): Document {
     if (!this.committedCache) {
-      let r = this.data.initial;
-      for (const e of this.inEffect()) r = applyMutation(r, e.m).recipe;
-      this.committedCache = r;
+      let d = this.data.initial;
+      for (const e of this.inEffect()) d = applyTransaction(d, e.tx, DOCUMENT_RULES).doc;
+      this.committedCache = d;
     }
     return this.committedCache;
   }
 
-  /** The committed state with the transient preview overlay applied last (what the viewer renders). */
-  get state(): FrameRecipe {
+  /** The committed document with the transient preview applied last (what the viewer renders). */
+  get state(): Document {
     if (!this.overlay) return this.committed;
-    if (!this.stateCache) this.stateCache = this.overlay.reduce((r, m) => applyMutation(r, m).recipe, this.committed);
+    this.stateCache ??= applyTransaction(this.committed, transaction({ id: 'preview', label: 'preview', by: 'user', mutations: this.overlay }), DOCUMENT_RULES).doc;
     return this.stateCache;
   }
 
-  /** sha256(canonicalJSON(committed state)). The preview never changes it. */
+  /** sha256(canonicalJSON(committed document)). The preview never changes it. */
   get stateHash(): string {
     return sha256Hex(canonicalJSON(this.committed));
   }
 
-  /** sha256 over the in-effect mutations without timestamps. */
+  /** sha256 over the in-effect transactions without timestamps. */
   get logHash(): string {
-    return sha256Hex(canonicalJSON(this.inEffect().map((e) => ({ m: e.m, by: e.by, approvedBy: e.approvedBy ?? null }))));
+    return sha256Hex(canonicalJSON(this.inEffect().map((e) => ({ m: e.tx.mutations, by: e.tx.by, approvedBy: e.approvedBy ?? null }))));
   }
 
   private invalidate(): void {
@@ -212,140 +193,118 @@ export class EditLog {
     return () => this.listeners.delete(fn);
   }
 
-  /** Validates a sequence of mutations against the current state; returns the normalised mutations. */
-  private check(ms: readonly Mutation[], base: FrameRecipe): { ms: Mutation[]; warnings: Diagnostic[] } {
-    let r = base;
-    const out: Mutation[] = [];
-    const warnings: Diagnostic[] = [];
-    for (const m of ms) {
-      const res = applyMutation(r, m, this.graph ? { graph: this.graph } : {});
-      r = res.recipe;
-      warnings.push(...res.warnings);
-      out.push(m.op === 'set' ? { ...m, value: res.value } : m);
-    }
-    return { ms: out, warnings };
-  }
-
-  private append(m: Mutation, by: Author, status: LoggedMutation['status'], tx: string, why?: string, batch?: string): LoggedMutation {
-    const e: LoggedMutation = {
-      seq: this.data.entries.length + 1, frame: this.data.frame, m, by, tx, ...(batch !== undefined ? { batch } : {}), ts: this.now(), status, ...(why !== undefined ? { why } : {}),
-    };
-    this.data.entries.push(e);
-    return e;
-  }
-
-  private pushUnit(u: UndoUnit): void {
-    this.data.units.length = this.data.cursor; // drop the redo tail; its entries stay in the journal
-    this.data.units.push(u);
-    this.data.cursor = this.data.units.length;
-    this.invalidate();
-  }
-
   private nextTx(): string {
     this.txCounter += 1;
     return `g${this.data.entries.length + 1}-${this.txCounter}`;
   }
 
-  /**
-   * Applies mutations as one undo unit (a gesture, a transaction). Validates all first: on any
-   * failure nothing is appended and the ChromobenchError is thrown. Clears the preview overlay.
-   */
-  apply(ms: readonly Mutation[], by: Exclude<Author, 'agent'>, label: string, opts: { tx?: string; batch?: string } = {}): UndoUnit & { warnings: Diagnostic[] } {
-    if ((by as Author) === 'agent') fail('E_READONLY', 'agent mutations enter through propose()');
-    const { ms: norm, warnings } = this.check(ms, this.committed);
-    const tx = opts.tx ?? this.nextTx();
-    const seqs = norm.map((m) => this.append(m, by, 'applied', tx, undefined, opts.batch).seq);
-    const unit: UndoUnit = { tx, seqs, label };
-    this.overlay = null;
-    this.pushUnit(unit);
-    this.emit({ type: 'apply', unit });
-    return { ...unit, warnings };
-  }
-
-  /** Agent mutations. read-only: E_READONLY; ask: pending; auto: applied at once as one unit. */
-  propose(ms: readonly Mutation[], meta: { tx: string; why?: string; label?: string; batch?: string }): LoggedMutation[] {
-    if (this.modeValue === 'read-only') fail('E_READONLY', 'the agent is read-only for this frame', { hint: 'the photographer can switch the agent to ask mode' });
-    const base = this.committed;
-    const { ms: norm } = this.check(ms, base);
-    let r = base;
-    const withExpect = norm.map((m) => {
-      const out: Mutation = m.op === 'set' ? { ...m, expect: m.expect !== undefined ? m.expect : structuredClone(currentValue(r, m.path)) } : m;
-      r = applyMutation(r, m).recipe;
-      return out;
+  private tx(ms: readonly Mutation[], by: Author, meta: TxMeta): Transaction {
+    return transaction({
+      id: meta.tx ?? this.nextTx(), label: meta.label ?? (by === 'agent' ? `agent ${meta.tx ?? ''}`.trim() : 'edit'), by,
+      source: meta.source ?? { kind: by }, ...(meta.batch !== undefined ? { batch: meta.batch } : {}), mutations: ms,
     });
-    if (this.modeValue === 'ask') {
-      const entries = withExpect.map((m) => this.append(m, 'agent', 'pending', meta.tx, meta.why, meta.batch));
-      this.emit({ type: 'propose', entries });
-      return entries;
-    }
-    const entries = withExpect.map((m) => this.append(m, 'agent', 'applied', meta.tx, meta.why, meta.batch));
-    const unit: UndoUnit = { tx: meta.tx, seqs: entries.map((e) => e.seq), label: meta.label ?? `agent ${meta.tx}` };
-    this.pushUnit(unit);
-    this.emit({ type: 'apply', unit });
-    return entries;
   }
 
-  pending(): LoggedMutation[] {
-    return this.data.entries.filter((e) => e.status === 'pending');
+  private append(tx: Transaction, why?: string): LogEntry {
+    const e: LogEntry = { seq: this.data.entries.length + 1, frame: this.data.frame, tx, ts: this.now(), ...(why !== undefined ? { why } : {}) };
+    this.data.entries.push(e);
+    return e;
+  }
+
+  private pushUnit(seq: number): void {
+    this.data.units.length = this.data.cursor; // drop the redo tail; its entries stay in the journal
+    this.data.units.push(seq);
+    this.data.cursor = this.data.units.length;
+    this.invalidate();
   }
 
   /**
-   * Approves pending entries as one unit. Re-validates each and compares `expect` with the current
-   * value (DR-7): on any problem returns the diagnostics (E_STALE, …) and applies nothing.
+   * Applies mutations as one transaction (a gesture, an edit). On any failure nothing is appended and the error is
+   * thrown. Clears the preview.
    */
-  approve(which: EntrySelector, opts: ApproveOptions = {}): UndoUnit | Diagnostic[] {
+  apply(ms: readonly Mutation[], by: Exclude<Author, 'agent'>, label: string, meta: TxMeta = {}): LogEntry & { warnings: readonly Diagnostic[] } {
+    if ((by as Author) === 'agent') fail('E_READONLY', 'agent transactions enter through propose()');
+    const r = applyTransaction(this.committed, this.tx(ms, by, { ...meta, label }), DOCUMENT_RULES);
+    const e = this.append(r.tx);
+    this.overlay = null;
+    this.pushUnit(e.seq);
+    this.emit({ type: 'apply', entry: e });
+    return { ...e, warnings: r.warnings };
+  }
+
+  /** Agent transactions. read-only: E_READONLY; ask: pending; auto: applied at once. */
+  propose(ms: readonly Mutation[], meta: TxMeta & { tx: string }): LogEntry {
+    if (this.modeValue === 'read-only') fail('E_READONLY', 'the agent is read-only for this frame', { hint: 'the photographer can switch the agent to ask mode' });
+    const r = applyTransaction(this.committed, this.tx(ms, 'agent', meta), DOCUMENT_RULES);
+    if (this.modeValue === 'ask') {
+      const e = this.append({ ...r.tx, status: 'pending' }, meta.why);
+      this.emit({ type: 'propose', entry: e });
+      return e;
+    }
+    const e = this.append(r.tx, meta.why);
+    this.pushUnit(e.seq);
+    this.emit({ type: 'apply', entry: e });
+    return e;
+  }
+
+  pending(): LogEntry[] {
+    return this.data.entries.filter((e) => e.tx.status === 'pending');
+  }
+
+  private select(which: EntrySelector): number[] {
+    if (Array.isArray(which)) return [...(which as readonly number[])].sort((a, b) => a - b);
+    const b = (which as { batch: string }).batch;
+    return this.data.entries.filter((e) => e.tx.status === 'pending' && e.tx.batch === b).map((e) => e.seq);
+  }
+
+  /**
+   * Approves pending transactions, in order. Each is re-applied on the current document; when its inverses differ
+   * from the proposal's it is stale (E_STALE) unless `force`. On any problem nothing is applied.
+   */
+  approve(which: EntrySelector, opts: { force?: boolean } = {}): LogEntry[] | Diagnostic[] {
     const seqs = this.select(which);
-    if (seqs.length === 0 && !Array.isArray(which)) return [diag('E_MUTATION', `no pending entries in batch ${(which as { batch: string }).batch}`)];
+    if (seqs.length === 0) return [diag('E_MUTATION', 'nothing pending to approve')];
     const diags: Diagnostic[] = [];
-    const entries = [...seqs].sort((a, b) => a - b).map((s) => this.data.entries[s - 1]);
-    let r = this.committed;
-    for (const [i, e] of entries.entries()) {
-      if (!e || e.status !== 'pending') {
-        diags.push(diag('E_MUTATION', `entry ${seqs[i]} is not pending`));
+    let d = this.committed;
+    const applied: Transaction[] = [];
+    for (const s of seqs) {
+      const e = this.data.entries[s - 1];
+      if (!e || e.tx.status !== 'pending') {
+        diags.push(diag('E_MUTATION', `entry ${s} is not pending`));
         continue;
       }
-      if (e.m.op === 'set' && e.m.expect !== undefined && !opts.force) {
-        const cur = getPath(r, e.m.path);
-        if (canonicalJSON(cur) !== canonicalJSON(e.m.expect)) {
-          diags.push(diag('E_STALE', `${e.m.path} changed since the proposal: expected ${canonicalJSON(e.m.expect)}, now ${canonicalJSON(cur)}`, {
-            path: e.m.path, hint: 'apply anyway or reject', fix: canonicalJSON(e.m.value),
-          }));
+      try {
+        const r = applyTransaction(d, { ...e.tx, inverses: [] }, DOCUMENT_RULES);
+        if (!opts.force && canonicalJSON(r.tx.inverses) !== canonicalJSON(e.tx.inverses)) {
+          diags.push(diag('E_STALE', `transaction ${e.tx.id} is stale: the document changed under it since the proposal`, { hint: 'apply anyway (force) or reject' }));
           continue;
         }
-      }
-      try {
-        r = applyMutation(r, e.m, this.graph ? { graph: this.graph } : {}).recipe;
+        d = r.doc;
+        applied.push(r.tx);
       } catch (err) {
-        if (err instanceof ChromobenchError) diags.push(err.diag);
+        if (isChromobenchError(err)) diags.push(err.diag as Diagnostic);
         else throw err;
       }
     }
     if (diags.length) return diags;
-    const ok = entries as LoggedMutation[];
-    for (const e of ok) {
-      e.status = 'applied';
+    const out = seqs.map((s, i) => {
+      const e = this.data.entries[s - 1]!;
+      e.tx = applied[i]!;
       e.approvedBy = 'user';
-    }
-    const unit: UndoUnit = { tx: ok[0]?.tx ?? this.nextTx(), seqs: ok.map((e) => e.seq), label: `approved ${ok[0]?.tx ?? ''}`.trim() };
-    this.pushUnit(unit);
-    this.emit({ type: 'approve', unit });
-    return unit;
-  }
-
-  /** Sequence numbers of a selector: the given ones, or every pending entry of the batch, in order. */
-  private select(which: EntrySelector): number[] {
-    if (Array.isArray(which)) return [...(which as readonly number[])];
-    const b = (which as { batch: string }).batch;
-    return this.data.entries.filter((e) => e.status === 'pending' && e.batch === b).map((e) => e.seq);
+      this.pushUnit(s);
+      return e;
+    });
+    this.emit({ type: 'approve', entries: out });
+    return out;
   }
 
   reject(which: EntrySelector): void {
     const seqs = this.select(which);
     for (const s of seqs) {
       const e = this.data.entries[s - 1];
-      if (e && e.status === 'pending') e.status = 'rejected';
+      if (e && e.tx.status === 'pending') e.tx = { ...e.tx, status: 'rejected' };
     }
-    this.emit({ type: 'reject', seqs: [...seqs] });
+    this.emit({ type: 'reject', seqs });
   }
 
   undo(): boolean {
@@ -364,39 +323,34 @@ export class EditLog {
     return true;
   }
 
-  /**
-   * Transient overlay for drags: applied last by `state` (in order), never logged, never hashed. One mutation
-   * or several (a gesture that moves two paths at once; contract 0.3); null or [] clears.
-   */
-  preview(m: Mutation | readonly Mutation[] | null): void {
-    const ms = m === null ? [] : Array.isArray(m) ? [...(m as readonly Mutation[])] : [m as Mutation];
-    ms.reduce((r, x) => applyMutation(r, x).recipe, this.committed); // validate; throws on an invalid preview
-    this.overlay = ms.length ? ms : null;
+  /** Transient overlay for drags: applied last by `state`, never logged, never hashed; null or [] clears. */
+  preview(ms: readonly Mutation[] | null): void {
+    const list = ms === null ? [] : [...ms];
+    if (list.length) applyTransaction(this.committed, transaction({ id: 'preview', label: 'preview', by: 'user', mutations: list }), DOCUMENT_RULES);
+    this.overlay = list.length ? list : null;
     this.stateCache = null;
-    this.emit({ type: 'preview', mutation: ms[0] ?? null, mutations: ms });
+    this.emit({ type: 'preview', mutations: list });
   }
 
-  /** In-effect entries that wrote `path`, an ancestor or a descendant; the initial value first. */
-  why(path: string): Provenance[] {
-    const out: Provenance[] = [{ seq: 0, by: this.data.initialBy, ts: this.data.initialTs, op: 'frame.add', path, value: getPath(this.data.initial, path) }];
-    const related = (p: string): boolean => p === '' || p === path || path.startsWith(`${p}.`) || p.startsWith(`${path}.`);
+  /** In-effect mutations that wrote `path`, an ancestor or a descendant (paths are id-anchored); the initial value first. */
+  why(path: string): WhyEntry[] {
+    const doc = this.committed;
+    let canon = path;
+    try {
+      canon = canonicalPath(doc, path);
+    } catch {
+      // a path that no longer resolves still matches what wrote it
+    }
+    const out: WhyEntry[] = [{ seq: 0, by: this.data.initialBy, ts: this.data.initialTs, op: 'frame.add', path: canon, value: getPath(this.data.initial, path) }];
+    const related = (p: string): boolean => p === canon || canon.startsWith(`${p}.`) || p.startsWith(`${canon}.`);
     for (const e of this.inEffect()) {
-      for (const p of mutationPaths(e.m)) {
+      for (const m of e.tx.mutations) {
+        const p = m.op === 'set' ? m.path : m.op === 'insert' ? `${m.id}` : m.id;
         if (!related(p)) continue;
-        const value = e.m.op === 'set' ? e.m.value : e.m.op === 'frame.add' ? getPath(e.m.recipe, path) : e.m.op === 'exposure.add' ? e.m.exposure : e.m.op === 'mask.set' ? e.m.mask : null;
-        out.push({ seq: e.seq, by: e.by, ...(e.tx !== undefined ? { tx: e.tx } : {}), ts: e.ts, op: e.m.op, path: p || path, value, ...(e.approvedBy ? { approvedBy: e.approvedBy } : {}) });
+        const value = m.op === 'set' ? m.value : m.op === 'insert' ? m.item : null;
+        out.push({ seq: e.seq, by: e.tx.by, tx: e.tx.id, ts: e.ts, op: m.op, path: p, value, ...(e.approvedBy ? { approvedBy: e.approvedBy } : {}) });
       }
     }
     return out;
-  }
-
-  /** why() as text, ending with the effective value. */
-  formatWhy(path: string): string {
-    const lines = this.why(path).map((p) => {
-      const who = p.seq === 0 ? `(frame.add by ${p.by})` : `by ${p.by}${p.tx ? `  tx ${p.tx}` : ''}${p.approvedBy ? '  approved' : ''}  seq ${p.seq}`;
-      return `  ${(p.seq === 0 ? 'initial' : p.op).padEnd(10)} ${canonicalJSON(p.value).padEnd(28)} ${who}`;
-    });
-    lines.push(`  ${'effective'.padEnd(10)} ${canonicalJSON(getPath(this.committed, path))}`);
-    return `why('${path}')\n${lines.join('\n')}`;
   }
 }

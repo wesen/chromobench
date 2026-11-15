@@ -1,4 +1,4 @@
-// v0 catalog: measure (CHB-003, CHB-005), darkroom (CHB-010), finishing (CHB-015).
+// Catalog: measure (CHB-003, CHB-005), darkroom tools (CHB-010).
 import { defineOp, type OpDef } from '../registry.ts';
 
 export const measureOps: OpDef[] = [
@@ -105,15 +105,15 @@ export const darkroomOps: OpDef[] = [
     name: 'darkroom.lightsToFiltration', area: 'darkroom', owner: 'CHB-010', on: 'Image', returns: 'Value', domainIn: 'film-dyes',
     class: 'measure', binding: 'setting',
     args: {
-      logH: { type: 'vec3', unit: 'logH', min: -1.5, max: 1.5, default: [0, 0, 0], path: 'print.lights.logH', doc: 'Printer lights to express as filtration and time.' },
-      paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', path: 'print.paper', doc: 'Colour paper.' },
-      mode: { type: 'enum', values: ['real', 'normalised'], default: 'real', path: 'print.enlarger.mode', doc: 'real: filtration and time; normalised: filtration, the density part stays as lights.' },
-      lamp: { type: 'string', valuesFrom: 'lamps', default: 'TH-KG3', path: 'print.enlarger.lamp', doc: 'Enlarger lamp.' },
-      filtration: { type: 'cmy', unit: 'CC', min: -100, max: 200, default: { c: 0, m: 0, y: 0 }, path: 'print.enlarger.filtration', doc: 'Current shift on the neutral pack.' },
-      time_s: { type: 'number', unit: 's', min: 0.1, max: 600, default: 10, path: 'print.enlarger.time_s', doc: 'Current exposure time.' },
-      fstop: { type: 'number', unit: 'fstop', min: 2.8, max: 45, default: 8, path: 'print.enlarger.fstop', doc: 'Lens aperture.' },
-      aim: { type: 'enum', values: ['grey-0.184', 'midgray-normalised'], default: 'grey-0.184', path: 'print.aim', doc: 'The aim.' },
-      aimView: { type: 'string', valuesFrom: 'illuminants', default: 'D50', path: 'view.illuminant', doc: 'Viewing light of the aim.' },
+      logH: { type: 'vec3', unit: 'logH', min: -1.5, max: 1.5, default: [0, 0, 0], doc: 'Printer lights to express as filtration and time.' },
+      paper: { type: 'stockId', valuesFrom: 'stocks:print', default: 'kodak_portra_endura', doc: 'Colour paper.' },
+      mode: { type: 'enum', values: ['real', 'normalised'], default: 'real', doc: 'real: filtration and time; normalised: filtration, the density part stays as lights.' },
+      lamp: { type: 'string', valuesFrom: 'lamps', default: 'TH-KG3', doc: 'Enlarger lamp.' },
+      filtration: { type: 'cmy', unit: 'CC', min: -100, max: 200, default: { c: 0, m: 0, y: 0 }, doc: 'Current shift on the neutral pack.' },
+      time_s: { type: 'number', unit: 's', min: 0.1, max: 600, default: 10, doc: 'Current exposure time.' },
+      fstop: { type: 'number', unit: 'fstop', min: 2.8, max: 45, default: 8, doc: 'Lens aperture.' },
+      aim: { type: 'enum', values: ['grey-0.184', 'midgray-normalised'], default: 'grey-0.184', doc: 'The aim.' },
+      aimView: { type: 'string', valuesFrom: 'illuminants', default: 'D50', doc: 'Viewing light of the aim.' },
     },
     fields: [
       { name: 'filtration', type: 'object', unit: 'CC', doc: '{c, m, y}: the new shift on the neutral pack (what print.enlarger.filtration becomes)' },
@@ -122,27 +122,6 @@ export const darkroomOps: OpDef[] = [
       { name: 'lights', type: 'vec3', unit: 'logH', doc: 'what stays in the printer lights (the density part in normalised mode)' },
       { name: 'residual', type: 'number', unit: 'logH', doc: 'largest per-layer error at the grey card after rounding the dials (0.1 CC, 0.01 s)' },
     ],
-    doc: 'Expresses printer lights as colour-head filtration plus time.',
-  }),
-];
-
-export const finishingOps: OpDef[] = [
-  defineOp({
-    name: 'finishing.clarity', area: 'finishing', owner: 'CHB-015', on: 'Image', returns: 'Image', domainIn: 'print-xyz', domainOut: 'print-xyz',
-    class: 'spatial', binding: 'setting',
-    args: {
-      amount: { type: 'number', unit: 'fraction', min: -1, max: 1, default: 0, path: 'finishing.values.clarity', doc: 'Local contrast.', ui: { widget: 'slider', step: 0.01, label: 'Clarity', group: 'Finishing' } },
-      radius_px: { type: 'number', unit: 'px', min: 5, max: 200, default: 40, path: 'finishing.values.clarity_radius_px', doc: 'Radius.' },
-    },
-    doc: 'Local contrast on the print, before output.display.',
-  }),
-  defineOp({
-    name: 'finishing.hue', area: 'finishing', owner: 'CHB-015', on: 'Image', returns: 'Image', domainIn: 'print-xyz', domainOut: 'print-xyz',
-    class: 'pointwise', binding: 'setting',
-    args: {
-      family: { type: 'enum', values: ['reds', 'skin', 'yellows', 'greens', 'blues', 'purples'], default: 'reds', doc: 'Hue family.' },
-      shift_deg: { type: 'number', unit: 'deg', min: -30, max: 30, default: 0, doc: 'Hue shift.' },
-    },
-    doc: 'Shifts one hue family (recipe: finishing.hues.<family>).',
+    doc: 'Expresses printer lights as colour-head filtration plus time (the caller passes the darkroom medium and the main exposure).',
   }),
 ];

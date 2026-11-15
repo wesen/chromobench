@@ -11,7 +11,7 @@ Exposes film to a scene: scene XYZ to film log exposure per layer (grey card = 0
 - Class: pointwise; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `stock` | stockId |  |  |  | `"kodak_portra_400"` | capture.stock | Film stock the scene is shot on. |
-| `exposureEV` | number | stop | [-10, 10] | [-3, 3] | `0` | capture.exposureEV | Exposure relative to the stock reference. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `stock` | stockId |  |  |  | `"kodak_portra_400"` | Film stock the scene is shot on. |
+| `exposureEV` | number | stop | [-10, 10] | [-3, 3] | `0` | Exposure relative to the stock reference. |

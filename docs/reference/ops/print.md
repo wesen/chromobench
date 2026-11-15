@@ -4,34 +4,37 @@
 
 ## `print.combine`
 
-Sums several exposures in linear H (dodge, burn, flash, split; CHB-010): H = 10^−Σd_m·(max(10^x − Σ_dodge r·m·10^x_i, 0) + Σ_add r·m·10^x_i) + Σ_flash r·m·10^x_flash, one log at the end. In normalised mode each print.expose term is weighted by its seconds over the main time (r = t_i / t_main; 1 in real mode, where the time is already in x).
+The light law of the darkroom in one node (design §22): H = T_all·(T_neg·(max(E_main − Σ E_dodge, 0) + Σ E_burn) + Σ E_flash) + Σ E_pre, with E = a·m·r·10^x per term (r = t_i / t_main in normalised mode, else 1), T_neg = 10^−Σ a·m·d, T_all = 10^Σ a·m·logH, one log at the end: x = log10 max(H, 1e-8). lightH (packages/contract pixel.ts) is the formula per pixel.
 
 - Owner: CHB-010
 - On: Image (paper-logH) → Image (paper-logH)
 - Class: pointwise; binding: setting
 - Implementation: mock
+- See: `print.expose`, `print.densityMask`, `print.develop`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `exposures` | Image[] |  |  |  | `[]` |  | Additional paper-logH exposures (print.expose nodes), summed in linear H. |
-| `masks` | Mask[] |  |  |  | `[]` |  | One mask per additional exposure. |
-| `modes` | string[] |  |  |  | `[]` |  | Per exposure: 'add' (burn, split), 'subtract' (dodge), 'flash-base' or 'flash-open' (a flash: the exposure's print.expose settings evaluated uniformly, through the film base with no image (dye amounts 0), or through an empty gate (no film)). |
-| `densityMasks` | Image[] |  |  |  | `[]` |  | print.densityMask densities d_m (scalar-field): every exposure through the negative is multiplied by 10^−Σd_m, flashes are not (CHB-010 §6.6). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `mainAmount` | number | none | [0, 256] |  | `1` | The main exposure's amount (the receiver: the print.expose of the entry main). |
+| `mainMask` (optional) | Mask |  |  |  |  | The main exposure's coverage; absent = everywhere. |
+| `terms` | list of {role, image, amount, mask} |  |  |  | `[]` | Light terms besides the main exposure, each a print.expose of its own seconds and pack. |
+| `densities` | list of {image, amount, mask} |  |  |  | `[]` | Density masks d_m (print.densityMask, scalar-field): every exposure through the negative is multiplied by 10^−Σ a·m·d_m; flashes and the preflash are not. |
+| `filters` | list of {logH, amount, mask} |  |  |  | `[]` | Filters in the light path: H is multiplied by 10^(Σ a·m·logH) per layer (the printer lights; a colour correction in H). |
+| `preflash` | list of {fraction, amount, mask} |  |  |  | `[]` | Uniform pre-exposures, added after the filters (a fraction of the grey-card exposure, H = 1 at the aim). |
 
 ## `print.densityMask`
 
-The density d_m ≥ 0 of a neutral silver mask made from the negative: H_m = blur of the negative's mean transmittance 10^−PD, with PD = x_clear − x read from the receiver (the main print.expose; x_clear its clear-film exposure, 0 without one). print.combine applies it (densityMasks).
+The density d_m ≥ 0 of a neutral silver mask made from the negative: H_m = blur of the negative's mean transmittance 10^−PD, with PD = x_clear − x read from the receiver (the main print.expose; x_clear its clear-film exposure). print.combine applies it (densities).
 
 - Owner: CHB-010
 - On: Image (paper-logH) → Image (scalar-field)
 - Class: spatial; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `amount` | number | fraction | [0, 1] |  | `0` |  | Mask gamma γ_m (0.6: large-area contrast falls to 40 %). |
-| `radius_um` | number | um | [0, 5000] |  | `500` |  | Gaussian σ of the blur on the film (spacer and diffuser). |
-| `polarity` | enum positive/same |  |  |  | `"positive"` |  | positive lowers large-area contrast (d_m = γ(log10 H_m − log10 min H_m)); same raises it (d_m = γ(log10 max H_m − log10 H_m)). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `gamma` | number | none | [0, 1] |  | `0` | Mask gamma γ_m (0.6: large-area contrast falls to 40 %). |
+| `radius_um` | number | um | [0, 5000] |  | `500` | Gaussian σ of the blur on the film (spacer and diffuser), converted with ImageInfo.umPerPx.film. |
+| `polarity` | enum positive/same |  |  |  | `"positive"` | positive lowers large-area contrast (d_m = γ(log10 H_m − log10 min H_m)); same raises it (d_m = γ(log10 max H_m − log10 H_m)). |
 
 ## `print.develop`
 
@@ -42,64 +45,29 @@ Develops paper log exposure to paper dye amounts through the paper curves.
 - Class: pointwise; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `grade` | number | none | [0, 5] | [1, 4] | `2` | print.grade | Contrast grade: a gamma about the aim grey, so the grey card stays (0 → 0.7, 1 → 0.82, 2 → 1 the paper as made, 3 → 1.2, 4 → 1.45, 5 → 1.8). Colour papers have no grades; this is a contrast control. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | Colour paper. |
+| `grade` | number | none | [0, 5] | [1, 4] | `2` | Contrast grade: a gamma about the aim grey, so the grey card stays (0 → 0.7, 1 → 0.82, 2 → 1 the paper as made, 3 → 1.2, 4 → 1.45, 5 → 1.8). Colour papers have no grades; this is a contrast control (darkroom medium). |
 
 ## `print.expose`
 
-Exposes paper through the negative: the per-stock table from dye amounts to paper log exposure, without lights.
+Exposes paper through the negative: the per-stock table from dye amounts to paper log exposure, without lights. The light law makes one per contribution (the main exposure, each burn, dodge and flash).
 
 - Owner: CHB-003
 - On: Image (film-dyes) → Image (paper-logH)
 - Class: pointwise; binding: stock
 - Implementation: mock
-- See: `print.lights`, `print.develop`
+- See: `print.combine`, `print.develop`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `mode` | enum real/normalised |  |  |  | `"real"` | print.enlarger.mode | real: a physical enlarger, where time, aperture and magnification expose the paper (CHB-010; the default since contract 0.4, CHB-031); normalised: the grey card prints at the aim at lights 0 whatever the optics, so time, aperture and magnification do nothing. |
-| `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp and heat filter. |
-| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0. |
-| `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | print.enlarger.time_s | Exposure time. |
-| `fstop` | number | fstop | [2.8, 45] |  | `8` | print.enlarger.fstop | Enlarger lens aperture. |
-| `magnification` (optional) | number | none | [0.5, 20] |  |  | print.enlarger.magnification | Enlarger magnification (light ∝ 1/(m + 1)²); absent = the calibration's reference, 8×. Real mode only (CHB-010). |
-| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | print.aim | What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone. |
-| `aimView` | string |  |  |  | `"D50"` | view.illuminant | Viewing light the grey-0.184 aim is neutral under (compile passes the recipe viewing light). |
-
-```js
-const neg = frame.negative(); await neg.print({ time_s: 12.6 }).look("time +1/3 stop")
-```
-
-## `print.lights`
-
-Balance colour and density by shifting the paper's log exposure. Never a density offset (Hunt 14.17).
-
-- Owner: CHB-003
-- On: Image (paper-logH) → Image (paper-logH)
-- Class: pointwise; binding: setting
-- Implementation: mock
-- See: `print.expose`, `measure.densitometer`
-
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `logH` | vec3 | logH | [-1.5, 1.5] | [-0.5, 0.5] | `[0,0,0]` | print.lights.logH | Offsets of paper log exposure per layer (R, G, B light), applied after the negative→paper table. Redirects: points. |
-
-```js
-await frame.negative().print({ lights: units.pt([4, 0, 0]) }).look("+4 pt red")
-```
-
-## `print.preflash`
-
-Adds a uniform pre-exposure in linear H.
-
-- Owner: CHB-010
-- On: Image (paper-logH) → Image (paper-logH)
-- Class: pointwise; binding: setting
-- Implementation: mock
-
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `amount` | number | fraction | [0, 0.2] | [0, 0.05] | `0` | print.preflash | Uniform pre-exposure as a fraction of the grey-card exposure. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | Colour paper (darkroom medium). |
+| `mode` | enum real/normalised |  |  |  | `"real"` | real: a physical enlarger, where time, aperture and magnification expose the paper (CHB-010; the default since contract 0.4, CHB-031); normalised: the grey card prints at the aim at lights 0 whatever the optics, so time, aperture and magnification do nothing. |
+| `lamp` | string |  |  |  | `"TH-KG3"` | Enlarger lamp and heat filter. |
+| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. The absolute pack is neutral + shift and must stay ≥ 0. |
+| `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | Exposure time. |
+| `fstop` | number | fstop | [2.8, 45] |  | `8` | Enlarger lens aperture. |
+| `magnification` | number | none | [0.5, 20] |  | `8` | Enlarger magnification: light ∝ 1/(m + 1)² in real mode (8 = the calibration's reference), and the print's pitch: ImageInfo.umPerPx.paper = umPerPx.film × m (CHB-010; contract 1.0: always given). |
+| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | What printer lights 0 mean: the grey card prints as a neutral 0.184 reflectance (grey-0.184), or the normalised mid-grey exposure alone. |
+| `aimView` | string |  |  |  | `"D50"` | Viewing light the grey-0.184 aim is neutral under (the compiler passes the print medium's illuminant). |

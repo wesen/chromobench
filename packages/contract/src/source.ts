@@ -12,7 +12,7 @@ export interface SourceRef {
   path?: string;
   name?: string;
   parts?: { role: 'R' | 'G' | 'B'; sha256: string; path?: string }[];
-  /** Transient bytes handed to Engine.open. Never persisted in a recipe. */
+  /** Transient bytes handed to Engine.open. Never persisted in a document. */
   bytes?: ArrayBuffer | Uint8Array;
 }
 

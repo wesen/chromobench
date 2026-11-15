@@ -1,6 +1,6 @@
 # Contract decisions
 
-`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017), contract 0.3 (`'0.3.0'`, CHB-024) and contract 0.4 (`'0.4.0'`, CHB-031) are the last sections before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
+`@chromobench/contract` v0 (`CONTRACT_VERSION = '0.1.0'`); contract 0.2 (`'0.2.0'`, CHB-017), contract 0.3 (`'0.3.0'`, CHB-024), contract 0.4 (`'0.4.0'`, CHB-031) and contract 1.0 (`'1.0.0'`, CHB-037) are the last sections before the template. The following file records every "Proposed contract additions" item from the intern guides of CHB-002 to CHB-015. CHB-013 proposed none. Each item has one of three statuses:
 
 - **accepted**: in v0 as proposed;
 - **adapted**: in v0 in a different shape, with the reason given;
@@ -421,6 +421,51 @@ migration: none: every recipe and EditLog stores print.enlarger.mode explicitly,
            default recipe prints identically in both modes (10 s, f/8, magnification null = the calibration optics)
 tests:     contract hashcons law (explicit default), core engine-ref 0.2 filtration case (explicit 'normalised'),
            DSL representative trace (node id), apps/studio enlarger-mode, studio-kit enlarger-mode
+```
+
+## Contract 1.0 (CHB-037: one editing model, document format 3)
+
+`CONTRACT_VERSION = '1.0.0'`. The design is CHB-035 design 01 v2 ("One editing model", Part IV); the owner's decision
+of 2026-11-14 is a hard cut-off: no backwards compatibility, no migration, no wrapper. The 0.4.0 catalogue is kept as
+`baselines/catalog-0.4.0.json`. `pnpm contract:check`: 105 changes, 75 breaking (allowed: a major bump).
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| design §20, D1 | Document format 3 (`document.ts`): stages (scan, scene, film, darkroom, print) of a medium and a stack of layers, groups and link entries; masks, probes, geometry, output | accepted | Every list is a values `Coll`; ids are unique in the document, so an entry is addressed by its id wherever it sits. The recipe (version 2), `RECIPE_FIELDS`, `MOVED_PATHS`, the migrations, `defaultRecipe` are deleted; `validateDocument` refuses a recipe with a clear message |
+| design §21, §23 | Media hold today's fixed settings; every edit is a layer | accepted | Never-compiled fields are gone (`capture.adapt`, `capture.autoExposure`, `finishing.*`, `scan.dust.method/marginPx`, `roll`). `print.grade` stays in the darkroom medium: it is a gamma in `print.develop`, not light |
+| design §22, D2 | Stage laws (`defineLaw`): light, composite, repair | accepted | Amount: light scales [0, 16], composite and repair are opacity [0, 1]. Composite: normal blend only (the W3C set is phase 8); an isolated group blends its children's result, so isolated normal equals pass |
+| design §22, §29 | One light-law node: `print.combine` with structured terms, densities, filters, preflash, each with amount and mask | accepted | `print.lights` and `print.preflash` are removed: the printer lights are a `filter` layer, preflash a `preflash` layer. `lightH` (`pixel.ts`) is the per-pixel formula engines share |
+| design §23, plan P2a | `print.preflash` checked against "added light" | adapted | It is added light (x' = log10(10^x + φ), uniform), so it is a layer, but it is added after the printer lights (φ is a fraction of the grey card's exposure), so the law has a term outside T_all |
+| design §23 | Darkroom layer ops `expose`, `burn`, `dodge`, `flash`, `preflash`, `densityMask`, `filter` (returns `Term`) | accepted | `split` is a burn with its own filtration (they compiled identically). A burn, dodge or flash gives exactly one of `time_s` and `stops` |
+| design §23 | `heal`, `clone` with structured spot lists, coalescing | accepted | Layer and node ops in scan and print; spots apply in order, each reading the image as the spots before it left it (today's `retouch.heal` read every source before retouching: the same pixels unless a source overlaps an earlier target); `scan.heal`, `retouch.heal` deleted |
+| design §8, §23 | `clarity` in mm on the print | accepted | `radius_mm`, converted with `ImageInfo.umPerPx.paper`; `finishing.clarity` and `finishing.hue` deleted |
+| design §25, D4 | One mask algebra; geometry in document pixels; feather in mm | accepted | Components linear, ellipse, paint, luminance (`mask.gradient` → `mask.linear`; `mask.not` → `mask.invert`; new `mask.constant`, `mask.combine`); `mask.and`/`mask.or` (min/max) deleted. `mask.paint` takes structured strokes |
+| P0 amendment | Explicit pitches | accepted | `source.open` takes `umPerPx` (the scan medium's, or a camera file's film long edge over its long side) and sets `ImageInfo.umPerPx.film`; `print.expose` sets `umPerPx.paper = film × magnification`; `magnification` is always a number (8 = the calibration) |
+| design §27, §28 | Link and binding registries; the upstream-only rule | accepted | Roll links (media and stacks, with overrides) resolve in compile; look and preset resolvers register in phase 7. Bindings read only cuts computed before their value is used; the pitch fields cannot be bound |
+| design §29 | `compile(doc)` with named cuts | accepted | `source`, `scan`, `scene`, `film`, `negative`, `darkroom.main`, `darkroom.H`, `print`, `finished`, `display`; `vocab.ts` (accessors, `PRINT_OPTIONS`) deleted |
+| design §24, P1 amendment | The four mutations of values with the contract's hooks | accepted | `DOCUMENT_RULES` (per mutation: what it touched; per transaction: the whole document, exactly one main, mask references); the five special mutations deleted; `EditLog` keeps transactions (phase 4 replaces it) |
+| P1 amendment | One error class | accepted | `ChromobenchError` extends values' `ValueError`; `E_RECIPE` → `E_DOCUMENT`; new `E_LINK`, `E_BINDING`, `E_CUT`; `bindArgs` refuses non-JSON (non-finite) values |
+
+```text
+CC-019  contract 1.0: document format 3, stage laws, one light-law node, one mask algebra, one compiler with cuts (CHB-037)
+class:     breaking (major): CONTRACT_VERSION 1.0.0; recipes and edit logs of versions 1 and 2 are refused
+changes:   recipe.ts, paths.ts, mutations.ts, vocab.ts deleted; document.ts, stage-laws.ts, compile.ts, validate.ts,
+           schema.ts, links.ts, bindings.ts, builders.ts, pixel.ts added. Ops removed: print.lights, print.preflash,
+           scan.heal, retouch.heal, finishing.clarity, finishing.hue, mask.gradient, mask.and, mask.or, mask.not. Ops added:
+           expose, burn, dodge, flash, preflash, densityMask, filter (darkroom terms), heal, clone, clarity, composite.mix,
+           mask.linear, mask.constant, mask.combine, mask.invert. Changed: print.combine (structured terms, densities,
+           filters, preflash), print.densityMask (amount → gamma), print.expose (magnification always given; no recipe
+           paths), source.open (umPerPx), mask.paint (structured strokes), mask.feather (range), output.encode field
+           recipeSha256 → documentSha256. ArgSpec: `path` removed, `list` (with `of`) and `polyline` added, Image[]/Mask[]
+           and curve removed. OpDef: `recipePath` removed, `stages`, `encoding`, `term`, `coalesce`, `identity` added.
+           Units: mm. Areas: finishing removed, composite added. Error codes: E_RECIPE removed; E_DOCUMENT, E_LINK,
+           E_BINDING, E_CUT added
+consumers: core (every new or changed op, golden parity: P2b), engine-mock (pass-throughs: P2b), conformance (P2b),
+           gpu (print.combine with modulators, composite.mix, heal/clone, mask.combine: P3), shell/studio-kit/studio
+           (document, stack kit: P4, P5b), dsl and agent (transaction builders, cuts: P6), looks and roll kits (links: P7)
+migration: none (Decision D8): stored studio state is cleared once; frames reopen from their sources
+tests:     packages/contract/test: light law = combinePixel (property, n = 300), order-free, composite identities,
+           coalescing, mask algebra laws, validation errors, compile identities, cuts, links (bake), bindings (upstream)
 ```
 
 ## Change-note template

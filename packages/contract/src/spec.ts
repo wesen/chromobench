@@ -1,14 +1,19 @@
-// Argument specs and the per-value check shared by the binder (DSL, graph) and the mutation
-// validator (edit log), so a value valid in one is valid in the other. Ported from goja-cv
+// Argument specs and the per-value check shared by the binder (graph) and the document validator (layer params,
+// media, mask components), so a value valid in one is valid in the other. Ported from goja-cv
 // pkg/cv/graph/registry.go ArgSpec and args.go range checks. Nothing clamps (DR-2).
+//
+// Contract 1.0: no argument is a JSON string. A list argument is `list` with an item schema (`of`); in a document
+// the same list is a Coll (design §24) and the compiler passes its items in order. `polyline` is a numeric polyline
+// ([x, y, pressure] in document pixels), a value rather than a list of addressable items.
 import { diag, fail, type Diagnostic } from './errors.ts';
 import type { Unit } from './units.ts';
 
 export type ArgType =
   | 'number' | 'vec3' | 'enum' | 'bool' | 'string' | 'stockId' | 'box' | 'point'
-  | 'Image' | 'Mask' | 'curve' | 'cmy' | 'string[]' | 'Image[]' | 'Mask[]';
+  | 'Image' | 'Mask' | 'cmy' | 'string[]' | 'list' | 'polyline';
 
-export const NODE_ARG_TYPES: ReadonlySet<ArgType> = new Set(['Image', 'Mask', 'Image[]', 'Mask[]']);
+/** Node-typed values: node ids that become inputs of the node (at top level or as fields of list items). */
+export const NODE_ARG_TYPES: ReadonlySet<ArgType> = new Set(['Image', 'Mask']);
 
 export interface UiHints {
   widget?: 'slider' | 'wheel' | 'stepper' | 'segmented' | 'toggle' | 'select' | 'box' | 'point';
@@ -47,14 +52,17 @@ export interface ArgSpec {
   /** Data-pack list a stockId/string draws its valid values from (CHB-004). */
   valuesFrom?: 'stocks:film' | 'stocks:print' | 'illuminants' | 'scanners' | 'lamps';
   default?: unknown;
-  /** Absent is allowed and means "automatic" / "none"; recipe stores null. */
+  /** Absent is allowed and means "automatic" / "none"; a document stores null. */
   optional?: boolean;
   /** Names agents actually type, mapped to this one (CHB-002 §11 item 10). */
   redirects?: Record<string, Redirect>;
   /** A number argument that also takes a vec3, one value per channel (R, G, B); ranges apply per component (contract 0.3, scan.flare). */
   perChannel?: boolean;
-  /** Absolute recipe path when not `${OpDef.recipePath}.${name}`. Set to '' for no recipe path. */
-  path?: string;
+  /** `list`: the schema of one item (an object; unknown keys are refused, defaults filled). */
+  of?: Readonly<Record<string, ArgSpec>>;
+  /** `list`: bounds on the number of items. */
+  minItems?: number;
+  maxItems?: number;
   ui?: UiHints;
   doc: string;
 }
@@ -105,7 +113,8 @@ function shapeHint(type: ArgType): string {
     case 'box': return '{x, y, w, h} or [x, y, w, h] in source pixels';
     case 'point': return '{x, y} or [x, y] in source pixels';
     case 'string[]': return 'an array of strings';
-    case 'Image[]': case 'Mask[]': return 'an array of node handles';
+    case 'list': return 'an array of items (a Coll in a document)';
+    case 'polyline': return '[[x, y, pressure], …] in document pixels';
     default: return type;
   }
 }
@@ -153,7 +162,7 @@ export function checkArgValue(spec: ArgSpec, raw: unknown, label: string): Check
     case 'bool':
       if (typeof v !== 'boolean') fail('E_ARG_TYPE', `${label} must be a boolean, got ${formatValue(v)}`, { path: label });
       return { value: v, warnings };
-    case 'string': case 'stockId': case 'curve':
+    case 'string': case 'stockId':
       if (typeof v !== 'string' || v.length === 0) fail('E_ARG_TYPE', `${label} must be a non-empty string, got ${formatValue(v)}`, { path: label });
       if (spec.values && !spec.values.includes(v)) fail('E_ARG_RANGE', `${label} = ${JSON.stringify(v)} is not one of the valid values`, { path: label, valid: spec.values });
       return { value: v, warnings };
@@ -169,9 +178,8 @@ export function checkArgValue(spec: ArgSpec, raw: unknown, label: string): Check
     case 'Image': case 'Mask':
       if (typeof v !== 'string') fail('E_ARG_TYPE', `${label} must be a node handle`, { path: label });
       return { value: v, warnings };
-    case 'Image[]': case 'Mask[]':
-      if (!Array.isArray(v) || !v.every((s) => typeof s === 'string')) fail('E_ARG_TYPE', `${label} must be ${shapeHint(t)}`, { path: label });
-      return { value: Object.freeze([...v]), warnings };
+    case 'list': return checkList(spec, v, label);
+    case 'polyline': return checkPolyline(v, label);
     default: break;
   }
   const comps = components(t, v);
@@ -207,4 +215,51 @@ export function checkArgValue(spec: ArgSpec, raw: unknown, label: string): Check
   }
   const out = t === 'vec3' ? Object.freeze([...comps]) : t === 'number' ? comps[0] : Object.freeze({ ...(v as object) });
   return { value: out, warnings };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Checks one object against a field schema: unknown keys refused (did-you-mean), defaults filled, optional absent. */
+export function checkFields(schema: Readonly<Record<string, ArgSpec>>, v: unknown, label: string): CheckResult {
+  if (!isObj(v)) fail('E_ARG_TYPE', `${label} must be an object with ${Object.keys(schema).join(', ')}`, { path: label, valid: Object.keys(schema) });
+  const warnings: Diagnostic[] = [];
+  for (const k of Object.keys(v)) {
+    if (!(k in schema)) fail('E_UNKNOWN_OPTION', `${label} has no field "${k}"`, { path: `${label}.${k}`, valid: Object.keys(schema) });
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, s] of Object.entries(schema)) {
+    let x = v[k];
+    if (x === undefined || (x === null && s.optional)) {
+      if (s.default !== undefined) x = s.default;
+      else if (s.optional) continue;
+      else fail('E_ARG_TYPE', `${label} needs "${k}"`, { path: `${label}.${k}`, hint: s.doc });
+    }
+    const r = checkArgValue(s, x, `${label}.${k}`);
+    if (r.value === null) continue;
+    out[k] = r.value;
+    warnings.push(...r.warnings);
+  }
+  return { value: Object.freeze(out), warnings };
+}
+
+function checkList(spec: ArgSpec, v: unknown, label: string): CheckResult {
+  if (!Array.isArray(v)) fail('E_ARG_TYPE', `${label} must be ${shapeHint('list')}`, { path: label });
+  if (spec.minItems !== undefined && v.length < spec.minItems) fail('E_ARG_RANGE', `${label} needs at least ${spec.minItems} item(s)`, { path: label });
+  if (spec.maxItems !== undefined && v.length > spec.maxItems) fail('E_ARG_RANGE', `${label} takes at most ${spec.maxItems} item(s)`, { path: label });
+  const schema = spec.of ?? {};
+  const warnings: Diagnostic[] = [];
+  const items = v.map((x, i) => {
+    const r = checkFields(schema, x, `${label}.${i}`);
+    warnings.push(...r.warnings);
+    return r.value;
+  });
+  return { value: Object.freeze(items), warnings };
+}
+
+function checkPolyline(v: unknown, label: string): CheckResult {
+  const ok = Array.isArray(v) && v.every((p) => Array.isArray(p) && (p.length === 2 || p.length === 3) && p.every((c) => typeof c === 'number' && Number.isFinite(c)));
+  if (!ok) fail('E_ARG_TYPE', `${label} must be ${shapeHint('polyline')}`, { path: label });
+  const pts = (v as number[][]).map((p) => Object.freeze([p[0]!, p[1]!, p[2] ?? 1]));
+  if (pts.some((p) => p[2]! < 0 || p[2]! > 1)) fail('E_ARG_RANGE', `${label}: pressure must be in [0, 1]`, { path: label });
+  return { value: Object.freeze(pts), warnings: [] };
 }

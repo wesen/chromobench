@@ -8,12 +8,13 @@ const BOX_DOC = 'Box in source (sensor) pixels; absent means automatic.';
 export const sourceOps: OpDef[] = [
   defineOp({
     name: 'source.open', area: 'source', owner: 'CHB-006', on: 'none', returns: 'Image', domainOut: 'camera-linear',
-    class: 'global', binding: 'scan', recipePath: 'source.decode',
+    class: 'global', binding: 'scan',
     args: {
-      source: { type: 'string', path: '', doc: 'SHA-256 of the source file (FrameRecipe.source.sha256); the engine must have opened it.' },
-      encoding: { type: 'enum', values: ['linear', 'srgb', 'gamma22'], default: 'linear', doc: 'Transfer encoding of the stored samples.', ui: { widget: 'segmented', label: 'Encoding', group: 'Source' } },
+      source: { type: 'string', doc: 'SHA-256 of the source file (Document.source.sha256); the engine must have opened it.' },
+      encoding: { type: 'enum', values: ['linear', 'srgb', 'gamma22'], default: 'linear', doc: 'Transfer encoding of the stored samples (Document.source.decode.encoding).', ui: { widget: 'segmented', label: 'Encoding', group: 'Source' } },
+      umPerPx: { type: 'number', unit: 'um', min: 0.01, max: 100000, doc: "Film µm per document pixel: the scan medium's umPerPx, or a camera file's film format over its long side. Sets ImageInfo.umPerPx.film, which every physical size (µm on the film, mm on the print) is converted with." },
     },
-    doc: 'Opens a decoded source as linear sensor values (T = signal / flat after scan.flatField).',
+    doc: 'Opens a decoded source as linear sensor values (T = signal / flat after scan.flatField), with its pitch on the film.',
     see: ['source.info', 'scan.flatField'],
   }),
   defineOp({
@@ -42,7 +43,7 @@ export const sourceOps: OpDef[] = [
   }),
   defineOp({
     name: 'source.xyz', area: 'source', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'scene-xyz',
-    class: 'pointwise', binding: 'scan', recipePath: 'capture.whiteBalance',
+    class: 'pointwise', binding: 'scan',
     args: {
       mode: { type: 'enum', values: ['daylight', 'as-shot', 'custom'], default: 'daylight', doc: 'White balance source.', ui: { widget: 'segmented', label: 'White balance', group: 'Capture' } },
       temperature_K: { type: 'number', unit: 'K', min: 2000, max: 15000, usual: [2800, 10000], default: 5500, doc: 'Custom white balance temperature.', ui: { widget: 'slider', step: 50, label: 'Temperature', group: 'Capture', aside: 'mired' } },
@@ -56,19 +57,19 @@ export const sourceOps: OpDef[] = [
 export const scanOps: OpDef[] = [
   defineOp({
     name: 'scan.flatField', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'camera-linear',
-    class: 'pointwise', binding: 'scan', recipePath: 'scan',
+    class: 'pointwise', binding: 'scan',
     args: { flat: { type: 'string', optional: true, doc: 'SHA-256 of the flat-field frame (opened like a source).' } },
     doc: 'Divides by the flat field in sensor coordinates.',
   }),
   defineOp({
     name: 'scan.flare', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'camera-linear',
-    class: 'pointwise', binding: 'scan', recipePath: 'scan',
+    class: 'pointwise', binding: 'scan',
     args: { flare: { type: 'number', unit: 'percent', min: 0, max: 20, usual: [0, 3], default: 0, perChannel: true, doc: 'Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel).', ui: { widget: 'slider', step: 0.05, label: 'Scanner flare', group: 'Scan' } } },
     doc: 'Removes scanner flare: T = T′(1 + f) − f per channel, with T′ the signal relative to the open gate (after scan.flatField with an open-gate flat; ingest removeFlareValue).',
   }),
   defineOp({
     name: 'scan.rebate', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Value', domainIn: 'camera-linear',
-    class: 'measure', binding: 'scan', recipePath: 'scan',
+    class: 'measure', binding: 'scan',
     args: { rebate: { type: 'box', unit: 'px', optional: true, doc: BOX_DOC, ui: { widget: 'box', label: 'Rebate', group: 'Scan' } } },
     fields: [
       { name: 'T', type: 'vec3', unit: 'fraction', doc: 'mean transmittance of the rebate' },
@@ -78,7 +79,7 @@ export const scanOps: OpDef[] = [
   }),
   defineOp({
     name: 'scan.density', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'scanner-density',
-    class: 'pointwise', binding: 'scan', recipePath: 'scan',
+    class: 'pointwise', binding: 'scan',
     args: {
       rebate: { type: 'box', unit: 'px', optional: true, doc: BOX_DOC },
       baseT: { type: 'vec3', unit: 'fraction', min: 1e-6, max: 100, optional: true, doc: "Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box." },
@@ -121,30 +122,20 @@ export const scanOps: OpDef[] = [
     doc: 'Detects dust specks.',
   }),
   defineOp({
-    name: 'scan.heal', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'scanner-density', domainOut: 'scanner-density',
-    class: 'spatial', binding: 'scan', recipePath: 'scan.dust',
-    args: {
-      spots: { type: 'string', path: '', default: '[]', doc: 'Canonical JSON of the spots (filled by compile from scan.dust.spots).' },
-      method: { type: 'enum', values: ['patch', 'diffuse', 'neutral'], default: 'patch', doc: 'Healing method.' },
-      marginPx: { type: 'number', unit: 'px', min: 0, max: 50, integer: true, default: 2, doc: 'Margin around each spot.' },
-    },
-    doc: 'Heals dust spots in scanner density.',
-  }),
-  defineOp({
     name: 'scan.checkDust', area: 'scan', owner: 'CHB-006', on: 'Image', returns: 'Value', domainIn: 'scanner-density',
     class: 'measure', binding: 'scan', args: {},
     fields: [
       { name: 'count', type: 'number', unit: 'none', doc: 'remaining specks' },
       { name: 'coverage', type: 'number', unit: 'fraction', doc: 'fraction of the frame covered' },
     ],
-    doc: 'Checks for remaining dust after healing.',
+    doc: 'Checks for remaining dust after healing (the scan stage\'s heal layers).',
   }),
 ];
 
 export const invertOps: OpDef[] = [
   defineOp({
     name: 'invert.dyes', area: 'invert', owner: 'CHB-003', on: 'Image', returns: 'Image', domainIn: 'scanner-density', domainOut: 'film-dyes', channels: 4,
-    class: 'pointwise', binding: 'stock', recipePath: 'scan',
+    class: 'pointwise', binding: 'stock',
     args: {
       stock: { type: 'stockId', valuesFrom: 'stocks:film', default: 'kodak_portra_400', doc: 'Film stock.', ui: { widget: 'select', label: 'Film stock', group: 'Scan' } },
       scanner: { type: 'string', valuesFrom: 'scanners', default: 'xt5-rgb-led', doc: 'Scanner model.', ui: { widget: 'select', label: 'Scanner', group: 'Scan' } },

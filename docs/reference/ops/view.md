@@ -11,22 +11,22 @@ Chromatic adaptation of the print XYZ to the output white.
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `to` | enum D50/D65 |  |  |  | `"D65"` | view.output.white | White to adapt to. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `to` | enum D50/D65 |  |  |  | `"D65"` | White to adapt to (Document.output.white). |
 
 ## `view.flare`
 
-Adds viewing flare. compile() uses 0 when view.output.rendering is scan-of-print.
+Adds viewing flare. The compiler uses 0 when Document.output.rendering is scan-of-print.
 
 - Owner: CHB-003
 - On: Image (print-xyz) → Image (print-xyz)
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `flare` | number | percent | [0, 10] | [0, 2] | `0.48` | view.flare | Viewing flare, percent of the paper white (0.48 % is the textbook value, §2.7). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `flare` | number | percent | [0, 10] | [0, 2] | `0.48` | Viewing flare, percent of the paper white (0.48 % is the textbook value, §2.7). |
 
 ## `view.inspect`
 
@@ -37,9 +37,9 @@ Renders an intermediate domain for inspection (negative, dye, class views) as di
 - Class: pointwise; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `mode` | enum negative/density/dyes/classes/mask |  |  |  | `"negative"` |  | Inspection view. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `mode` | enum negative/density/dyes/classes/mask |  |  |  | `"negative"` | Inspection view. |
 
 ## `view.reflect`
 
@@ -50,6 +50,6 @@ The print seen under the viewing light: paper dyes to XYZ.
 - Class: pointwise; binding: stock
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `illuminant` | string |  |  |  | `"D50"` | view.illuminant | Viewing light. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `illuminant` | string |  |  |  | `"D50"` | Viewing light. |
