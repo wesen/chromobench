@@ -118,7 +118,9 @@ export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => Document |
     const box = fa.layout.rebate?.box;
     if (box && scan && !read(rec, 'stages.scan.medium.rebate')) values['stages.scan.medium.rebate'] = box;
     values[LIGHTS_SOURCE] = { ...autoOf(rec), kind: 'auto', by: 'roll', method: 'roll', alpha, analysisLongSide_px: a.long, rollConsistency: r, matchFrame: null, matchAmount: null, applied: true, logH: r6v(total) };
-    frames.push({ frame: f, ...frameSets(rec, values) });
+    // a mixed frame's own base is set even when nothing reads differently yet: on a linked scan it is the override
+    // that keeps the roll's base away from this frame
+    frames.push({ frame: f, ...frameSets(rec, values, 'stages.scan.medium.baseT' in values ? ['stages.scan.medium.baseT'] : []) });
   }
   const n = frames.length;
   return {
