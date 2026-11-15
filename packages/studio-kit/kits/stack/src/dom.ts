@@ -19,118 +19,9 @@ import {
   linkWords, maskOf, maskUsers, opWord, provenance, readsChoices, rowsOf, addableOps, addMenu, type StackRow,
 } from './model.ts';
 import { selectedIn } from './state.ts';
-
-const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
-const btn = (text: string, cls: string, attrs: Record<string, unknown> = {}) => h('button', { type: 'button', class: `ck-btn is-small ${cls}`, text, ...attrs });
-const run = (m: MountCtx, id: string, ...a: unknown[]): unknown => m.rt.runCommand(id, null, ...a);
-const peekDoc = (m: MountCtx, f: string): Document | undefined => m.store.peek(['docs', f]) as Document | undefined;
-
-// ── the one number control: a slim track and a typed value (amounts, mask settings, arguments without ui hints) ──
-
-interface NumberSpec {
-  label: string;
-  /** the value now (the state with a gesture's preview), or undefined: hidden */
-  read: (s: any) => number | undefined;
-  /** the document path it writes, on the frame */
-  path: string;
-  frame: (s: any) => string | null;
-  min: number;
-  max: number;
-  /** the hard range typed values are held to (default min…max) */
-  hard?: [number, number];
-  step: number;
-  show: (v: number) => string;
-  /** a typed text → a value (default: a number) */
-  parse?: (text: string) => number | null;
-  stepLabel: string;
-  cls?: string;
-  tip?: string;
-  /** write through this instead of the store (a link's Amount moves its siblings in other stages: a command) */
-  commit?: (v: number) => void;
-}
-function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
-  const st = m.store;
-  const input = h('input', { type: 'range', class: 'cb-range', min: String(o.min), max: String(o.max), step: String(o.step), 'aria-label': o.label }) as HTMLInputElement;
-  const field = h('input', { type: 'text', class: 'cb-num', 'aria-label': `${o.label} value`, spellcheck: 'false' }) as HTMLInputElement;
-  const el = h('div', { class: ['cb-stack-num', o.cls], 'data-path': o.path, ...(o.tip ? { title: o.tip } : {}) }, h('span', { class: 'cb-stack-num-l', text: o.label }), input, field);
-  let f: string | null = null;
-  let v: number | undefined;
-  let dragging = false;
-  const where = (): (string | number)[] | null => {
-    const d = f ? peekDoc(m, f) : undefined;
-    try {
-      return f && d ? storePath(f, d, o.path) : null;
-    } catch {
-      return null;
-    }
-  };
-  const [lo, hi] = o.hard ?? [o.min, o.max];
-  const hold = (x: number): number => Number(Math.min(hi, Math.max(lo, x)).toFixed(6));
-  const write = (x: number, coalesce = false): void => {
-    if (o.commit) return o.commit(hold(x));
-    const p = where();
-    if (!p) return;
-    m.rctx().tx(`${o.stepLabel} ${o.show(hold(x))}`, (t: any) => t.$set(p, hold(x)), { ...m.txOpts(), ...(coalesce ? { coalesce: `${f}:${o.path}` } : {}), source: { kind: 'control', control: o.path } });
-  };
-  listen(m.scope, input, 'pointerdown', () => void (dragging = true));
-  listen(m.scope, input, 'input', () => {
-    if (o.commit) {
-      if (!dragging) write(Number(input.value));
-      return;
-    }
-    const p = where();
-    if (!p) return;
-    st.preview(p, hold(Number(input.value)));
-    if (!dragging) st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
-  });
-  listen(m.scope, input, 'change', () => {
-    dragging = false;
-    if (o.commit) return write(Number(input.value));
-    if (st.previewing) st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
-  });
-  listen(m.scope, input, 'keydown', (e: KeyboardEvent) => {
-    const dir = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
-    if (!dir || v === undefined) return;
-    e.preventDefault();
-    e.stopPropagation();
-    write(v + dir * o.step * (e.shiftKey ? 10 : 1), true);
-  });
-  listen(m.scope, field, 'keydown', (e: KeyboardEvent) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') {
-      const x = (o.parse ?? ((t: string) => (Number.isFinite(Number(t.replace(',', '.'))) && t.trim() !== '' ? Number(t.replace(',', '.')) : null)))(field.value);
-      if (x === null) {
-        field.classList.add('is-bad');
-        m.rt.chrome.toast(`${o.label}: "${field.value}" is not a value`, { kind: 'warn', ms: 3000 });
-        return;
-      }
-      field.classList.remove('is-bad');
-      write(x);
-      field.blur();
-    } else if (e.key === 'Escape') {
-      field.value = v === undefined ? '' : o.show(v);
-      field.blur();
-    }
-  });
-  listen(m.scope, field, 'blur', () => void (field.value = v === undefined ? '' : o.show(v)));
-  m.cell((s) => ({ f: o.frame(s), v: o.read(s) }), (x) => {
-    f = x.f;
-    v = x.v;
-    el.hidden = v === undefined;
-    if (v === undefined) return;
-    if (!dragging) input.value = String(Math.min(o.max, Math.max(o.min, v)));
-    if (document.activeElement !== field) field.value = o.show(v);
-    input.setAttribute('aria-valuetext', `${o.label} ${o.show(v)}`);
-  }, { equals: (a: any, b: any) => !!a && a.f === b.f && a.v === b.v });
-  return el;
-}
-
-/** typed percent: '60', '60 %', '0.6' (a fraction below 1.5 when no % is given is read as a fraction only if it has a point) */
-const parsePercent = (t: string): number | null => {
-  const s = t.trim().replace(',', '.').replace(/\s*%$/, '');
-  if (!s || !Number.isFinite(Number(s))) return null;
-  return Number(s) / 100;
-};
+import { btn, frameOf, numAt, numberControl, parsePercent, peekDoc, readPath, run, words } from './controls/dom.ts';
+import { EDITOR_RENDERERS } from './editors/dom.ts';
+import { defaultEditors, mathOf, oklabCss, type Editors } from './editors.ts';
 
 /** The one amount control: the law's range and unit hint ("Amount · opacity"). */
 function amountControl(m: MountCtx, frame: (s: any) => string | null, id: Id, stage: StageName, e: Pick<Entry, 'kind'> & { op?: string }, o: { compact?: boolean } = {}): HTMLElement {
@@ -507,27 +398,6 @@ function specControl(m: MountCtx, frame: (s: any) => string | null, path: string
   }
   return null;
 }
-const words = (k: string): string => k.replace(/_([a-z]+)$/, (_m, u: string) => ` (${u})`).replace(/^\w/, (c) => c.toUpperCase());
-const readPath = (d: Document, path: string): unknown => {
-  try {
-    const parts = path.split('.');
-    const p = findEntry(d, parts[0]!);
-    let cur: any = p ? p.entry : undefined;
-    if (!cur) {
-      // a mask or one of its components
-      for (const [mid, mk] of Coll.entries(d.masks)) {
-        if (mid === parts[0]) cur = mk;
-        else if (Coll.has(mk.components, parts[0]!)) cur = Coll.get(mk.components, parts[0]!);
-        if (cur) break;
-      }
-    }
-    for (const k of parts.slice(1)) cur = cur == null ? undefined : cur[k];
-    return cur;
-  } catch {
-    return undefined;
-  }
-};
-
 const isAdvanced = (spec: ArgSpec): boolean => !!(spec.ui as { advanced?: boolean } | undefined)?.advanced || !!(spec as { advanced?: boolean }).advanced;
 /** an op argument's control: the cb.arg control where the catalogue has ui hints, else the generic number or enum */
 function argControl(m: MountCtx, frame: (s: any) => string | null, id: Id, arg: string, spec: ArgSpec, d: Document): HTMLElement | null {
@@ -537,9 +407,46 @@ function argControl(m: MountCtx, frame: (s: any) => string | null, id: Id, arg: 
   return specControl(m, frame, path, arg, spec);
 }
 
+/** a colour range's colour: its swatch and OkLab numbers, and Sample, which arms the eyedropper for this component */
+function colourSample(m: MountCtx, frame: (s: any) => string | null, cid: Id): HTMLElement {
+  const sw = h('span', { class: 'cb-ed-swatch is-big', role: 'img' });
+  const txt = h('span', { class: 'cb-stack-detail cb-ed-lab' });
+  const b = btn('Sample', 'cb-stack-sample', { 'aria-label': 'Sample the colour on the picture', 'aria-pressed': 'false' });
+  const can = !!mathOf(m.rt.services);
+  if (!can) {
+    b.disabled = true;
+    b.dataset['tip'] = 'The host gives no colour conversion (services.editorMath)';
+  } else b.dataset['tip'] = 'Click, then click the picture: the colour there (the image the mask reads)';
+  listen(m.scope, b, 'click', () => {
+    const armed = (m.store.readonly() as any).stack?.mask?.sample === cid;
+    m.rctx().set({ stack: { mask: { sample: armed ? null : cid } } });
+    const on = (m.store.readonly() as any).ui?.tool === 'mask-colour';
+    // tool.<id> toggles: arm turns the eyedropper on, disarm turns it off
+    if (armed === on) run(m, 'tool.mask-colour');
+  });
+  m.cell((s) => {
+    const d = sel.doc(s, frame(s));
+    const v = d ? readPath(d, `${cid}.params.colour`) : undefined;
+    return { lab: Array.isArray(v) ? (v as number[]).join(',') : '', armed: s.stack?.mask?.sample === cid };
+  }, (v) => {
+    const lab = v.lab ? v.lab.split(',').map(Number) : [0.7, 0, 0];
+    sw.style.background = oklabCss(lab);
+    sw.setAttribute('aria-label', `Colour L ${lab[0]!.toFixed(2)}, a ${lab[1]!.toFixed(3)}, b ${lab[2]!.toFixed(3)}`);
+    txt.textContent = `L ${lab[0]!.toFixed(2)} · a ${lab[1]!.toFixed(3)} · b ${lab[2]!.toFixed(3)}`;
+    b.classList.toggle('is-on', v.armed);
+    b.setAttribute('aria-pressed', v.armed ? 'true' : 'false');
+  }, { equals: (a: any, c: any) => a.lab === c.lab && a.armed === c.armed });
+  return h('div', { class: 'cb-stack-num cb-ed-colour', 'data-path': `${cid}.params.colour` }, h('span', { class: 'cb-stack-num-l', text: 'Colour' }), sw, txt, b);
+}
+
+/** the editors of plain nodes (a stack.params node made without the kit's builder) */
+let PLAIN_EDITORS: Editors | null = null;
+const plainEditors = (): Editors => (PLAIN_EDITORS ??= defaultEditors((form, props) => ({ $: form, props, kids: [], at: null })));
+
 const params: Renderer = (n, m) => {
   const frame = (s: any) => frameOf(n, s);
   const el = h('div', { class: 'cb-panel cb-stack-params' });
+  const editors: Editors = n.props['editors'] === false ? {} : ((n.props['editors'] as Editors | undefined) ?? plainEditors());
   let scope: MountCtx | null = null;
   m.cell((s) => {
     const f = frame(s);
@@ -573,9 +480,17 @@ const params: Renderer = (n, m) => {
     el.append(h('div', { class: 'cb-stack-num' }, h('span', { class: 'cb-stack-num-l', text: 'Mask' }), maskChip(pm, frame, id)));
     if (e.kind === 'layer') {
       const op = getOp(e.op);
+      // the op's editor (curve, levels, HSL, grading wheels, mixer, or one a layout registers), then the generic
+      // controls of the arguments it does not cover
+      const ed = editors[e.op];
+      if (ed) {
+        const x = pm.child('editor').mount(ed.node({ id, stage: p.stage, op: e.op }));
+        if (x) el.append(h('div', { class: 'cb-stack-editor', 'data-op': e.op }, x));
+      }
       const basic = h('div', { class: 'cb-stack-args' });
       const adv = h('details', { class: 'cb-stack-adv' }, h('summary', { text: 'More' }));
       for (const [k, spec] of Object.entries(op.args)) {
+        if (ed?.covers.includes(k)) continue;
         const c = argControl(pm, frame, id, k, spec, d);
         if (c) (isAdvanced(spec) ? adv : basic).append(c);
       }
@@ -663,6 +578,7 @@ const masks: Renderer = (n, m) => {
       listen(pm.scope, rm, 'click', () => run(pm, 'mask.removeComponent', cid));
       li.append(h('div', { class: 'cb-stack-line' }, on, h('span', { class: 'cb-stack-name', text: KIND_WORDS[c.kind] ?? c.kind }), cs, rm));
       li.append(numberControl(pm, { label: 'Amount', path: `${cid}.amount`, frame, min: 0, max: 1, step: 0.01, show: formatAmount, parse: parsePercent, stepLabel: 'Mask component amount', read: (s) => numAt(s, frame, `${cid}.amount`) }));
+      if (c.kind === ('colour' as never)) li.append(colourSample(pm, frame, cid));
       for (const [k, spec] of Object.entries(getOp(`mask.${c.kind}`).args)) {
         const ctl = specControl(pm, frame, `${cid}.params.${k}`, k, spec);
         if (ctl) li.append(ctl);
@@ -703,11 +619,5 @@ const masks: Renderer = (n, m) => {
   }, { equals: (a: any, b: any) => a.key === b.key });
   return el;
 };
-const numAt = (s: any, frame: (s: any) => string | null, path: string): number | undefined => {
-  const d = sel.doc(s, frame(s));
-  const v = d ? readPath(d, path) : undefined;
-  return typeof v === 'number' ? v : undefined;
-};
-
 /** the stack kit's renderers (part of CB_RENDERERS) */
-export const STACK_RENDERERS: Record<string, Renderer> = { 'stack.layers': layers, 'stack.row': row, 'stack.params': params, 'stack.masks': masks };
+export const STACK_RENDERERS: Record<string, Renderer> = { 'stack.layers': layers, 'stack.row': row, 'stack.params': params, 'stack.masks': masks, ...EDITOR_RENDERERS };

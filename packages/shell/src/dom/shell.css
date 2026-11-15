@@ -221,12 +221,13 @@ textarea.ck-field-i { height: 64px; padding: 4px 6px; resize: vertical; }
 /* ── planes: curve, wheel, histogram ─────────────────────────────────── */
 .ck-curve { display: flex; flex-direction: column; gap: 6px; }
 .ck-curve-tabs { align-self: stretch; }
-.ck-curve-g { width: 100%; aspect-ratio: 1; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius, 2px); touch-action: none; display: block; outline: none; }
+.ck-curve-g { width: 100%; aspect-ratio: 1; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius, 2px); touch-action: none; display: block; outline: none; cursor: crosshair; }
+.ck-curve-g.is-static { cursor: default; }
 .ck-curve-g:focus-visible { border-color: var(--accent); }
 .ck-curve-grid path { stroke: var(--line); stroke-width: 1; }
 .ck-curve-id { stroke: var(--line2); stroke-dasharray: 3 3; fill: none; }
 .ck-curve-p { stroke-width: 1.6; fill: none; }
-.ck-curve-pt { fill: var(--panel); stroke: var(--text); stroke-width: 1.2; cursor: move; }
+.ck-curve-pt { fill: var(--panel); stroke: var(--text); stroke-width: 1.2; pointer-events: none; }
 .ck-curve-pt.is-sel { fill: var(--text); }
 .ck-curve-hist { fill: var(--text3); opacity: .28; }
 .ck-curve-band { fill: transparent; } .ck-curve-band.is-alt { fill: var(--hover); }

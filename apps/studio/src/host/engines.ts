@@ -11,7 +11,8 @@
 import type { Box, Document, Engine, Group, Vec3 } from '@chromobench/contract';
 import type { Mutation } from '@chromobench/values';
 import {
-  bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, integrateToGrey, Lights, SCANNER_IDS, scannerForward, type PhysicsData,
+  applyEncode, bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, encodeTransform, evalCurve, evalLevels, integrateToGrey, Lights, SCANNER_IDS,
+  scannerForward, toneCurve, type PhysicsData,
 } from '@chromobench/core';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
@@ -61,8 +62,29 @@ export interface HostSettings {
 /** What the roll kit's physics needs (studio-kit's RollPhysics, structurally): ingest's film layout and roll base, core's integrate-to-grey. */
 export type HostRollPhysics = ReturnType<typeof buildRollPhysics>;
 
+/**
+ * The stack kit's editors' numbers (studio-kit's EditorMath, structurally): core's curve and levels functions, which
+ * the curve and levels editors draw, and core's encodings, which the colour-mask eyedropper converts its sample with.
+ */
+export function buildEditorMath() {
+  return {
+    curve: (points: readonly { x: number; y: number }[]) => {
+      const c = toneCurve(points);
+      return (x: number) => evalCurve(c, x);
+    },
+    levels: (l: { black: number; white: number; gamma: number; outBlack: number; outWhite: number }) => (x: number) => evalLevels(l, x),
+    encode: (from: 'stage' | 'linear' | 'oklab', to: 'stage' | 'linear' | 'oklab', white: 'D50' | 'D65') => {
+      const t = encodeTransform(from, to, white);
+      return (v: ArrayLike<number>) => applyEncode(t, v) as [number, number, number];
+    },
+  };
+}
+export type HostEditorMath = ReturnType<typeof buildEditorMath>;
+
 export interface HostEngine {
   engine: StudioEngine;
+  /** The service `editorMath` of the stack kit's editors (CHB-037 P8b). */
+  editorMath: HostEditorMath;
   /** The service `rollPhysics` of the roll kit (CHB-020). */
   rollPhysics: HostRollPhysics;
   /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
@@ -231,7 +253,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   };
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
   return {
-    engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []),
+    engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []), editorMath: buildEditorMath(),
     bake: (d) => bakeLights(d, data, DEFAULT_CONVENTIONS).mutations,
     dustGroup: (spots) => dustGroup(spots),
     integrate: (latd, alpha) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3,

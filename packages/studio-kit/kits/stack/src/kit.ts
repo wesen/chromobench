@@ -10,6 +10,7 @@
 //   stack.panels.layers('darkroom', { title: 'Enlarger', order: 'kind', row: (r) => r.op === 'expose' ? mainRow(r) : stack.row(r) })
 //   stack.panels.layers('print', { filter: stack.sel.ops(['heal', 'clone', 'clarity']) })   // the finish view
 //   stack.panels.params(); stack.panels.masks(); stack.menus.layer(); stack.maskTools
+//   stack.panels.params({ editors: { ...stack.editors, myOp: stack.editor('my.form', ['a', 'b']) } })   // an op's editor
 //
 // Specialised views are the same kit with lambdas at the right times: `row` is θ (once per row), `filter` is θ
 // (per entry), `order` and `density` are β.
@@ -24,6 +25,7 @@ import { stackCommands, maskTools, MASK_TOOLS } from './commands.ts';
 import { stagePolicy, stagesShown } from './passes.ts';
 import { selectedIn, STACK_STATE } from './state.ts';
 import * as model from './model.ts';
+import { defaultEditors, editorOf, EDITOR_FORMS, type Editor, type Editors } from './editors.ts';
 
 const { build: b, traced: t, item: i } = slot;
 const spec = (name: string, slots: FormSpec['slots'], doc: string, explain?: (n: NodeData) => string | null): FormSpec => ({ name, slots, doc, kind: 'cb', ...(explain ? { explain } : {}) });
@@ -49,9 +51,25 @@ export const STACK_FORMS: FormSpec[] = [
   }, "A stage's stack: one row per layer and group, drag to reorder or into a group, + Layer from the catalogue", layersWords),
   spec('stack.row', { entry: b<string>('the entry id'), stage: b<StageName>(), density: b<'compact' | 'comfortable'>() },
     'The one stack row: on/off, name, what it does, amount (the law\'s unit), blend where the law has one, mask chip, provenance chip'),
-  spec('stack.params', { frame: t<string | null>() }, "The selected entry's controls: name, amount, blend, mask, provenance, and its op's arguments from the catalogue"),
+  spec('stack.params', {
+    frame: t<string | null>(),
+    editors: b<Editors | false>('editors by op ({ covers, node }): the op\'s editor, then generic controls for what it does not cover (default stack.editors)'),
+  }, "The selected entry's controls: name, amount, blend, mask, provenance, its op's editor and its arguments from the catalogue"),
+  ...editorSpecs(),
   spec('stack.masks', { frame: t<string | null>() }, "The selected entry's mask: components with add / subtract / intersect, feather, invert, what it reads"),
 ];
+
+/** the built-in editors' forms (stack.curve, stack.levels, …): a layer's editor in the params panel */
+function editorSpecs(): FormSpec[] {
+  const words: Record<string, string> = {
+    'stack.curve': 'Curve editor: channel L/R/G/B, points (click adds, drag moves, drag off removes), the curve core applies, the stage input\'s histogram behind it',
+    'stack.levels': 'Levels editor: channel, the stage input\'s histogram, black, midtone and white handles',
+    'stack.hsl': 'HSL editor: hue, saturation or lightness per band, band widths',
+    'stack.grade': 'Colour grading: shadow, midtone and highlight wheels (hue around, strength out) with a lightness each',
+    'stack.mixer': 'Channel mixer: a 3 × 3 grid (type, arrows, drag to scrub), row sums, monochrome from the grey row',
+  };
+  return Object.values(EDITOR_FORMS).map((e) => spec(e.form, { entry: b<string>('the layer id'), stage: b<StageName>(), frame: t<string | null>() }, words[e.form] ?? e.form));
+}
 
 const STACK_DOCS = `## cb.kits.stack
 One layer system for every stage. Each stage's stack holds layers (an op of the catalogue with its parameters) and
@@ -60,7 +78,10 @@ layer's time or density and the order is free; on the print and the scene (compo
 down, amount is opacity and layers blend; on the scan (repair) heal and clone spots apply in order. Any entry can
 use a mask from the document's library (add = max, subtract = a·(1 − b), intersect = a·b). Click a row to select
 it (its parameters and its mask show in their panels); drag a row to reorder it or onto a group to move it in.
-Every change is one step of the history (Mod+Z).`;
+Every change is one step of the history (Mod+Z). The layer panel shows an editor for the digital tools: the curve
+(click adds a point, drag moves it, drag it off to remove it), levels over the stage input's histogram, the HSL bands,
+the colour grading wheels and the channel mixer. A colour range mask takes its colour from the picture: Sample, then
+click the picture.`;
 
 /** a stage's panel title */
 const TITLES: Record<StageName, string> = { scan: 'Scan (on the negative)', scene: 'Scene (before the film)', film: 'Film', darkroom: 'Darkroom', print: 'Print (after the darkroom)' };
@@ -108,7 +129,16 @@ export function createStackKit(ck: Ck, cb: Cb) {
   };
   /** the one row component (θ: inside a custom row lambda) */
   const row = (r: Pick<model.StackRow, 'id' | 'stage'>, o: { density?: 'compact' | 'comfortable' } = {}): any => node('stack.row', { entry: r.id, stage: r.stage, ...o });
-  const params = (o: { id?: string; title?: string } = {}): any => ck.panel.define(o.id ?? 'layer-params', { title: o.title ?? 'Layer' }, node('stack.params', {}));
+  /** an editor for an op's layers: a form whose node gets `entry` and `stage`, and the arguments it covers */
+  const editor = (form: string, covers: readonly string[]): Editor => editorOf((f, props) => node(f, props), form, covers);
+  /** the built-in editors: curve, levels, hsl, grade, mixer */
+  const editors: Editors = defaultEditors((f, props) => node(f, props));
+  /**
+   * The selected entry's panel. `editors` maps an op to its editor (default `stack.editors`; false: only the generic
+   * controls): `stack.panels.params({ editors: { ...stack.editors, myOp: stack.editor('my.form', ['a', 'b']) } })`.
+   */
+  const params = (o: { id?: string; title?: string; editors?: Editors | false } = {}): any =>
+    ck.panel.define(o.id ?? 'layer-params', { title: o.title ?? 'Layer' }, node('stack.params', { editors: o.editors ?? editors }));
   const masks = (o: { id?: string; title?: string } = {}): any => ck.panel.define(o.id ?? 'layer-masks', { title: o.title ?? 'Mask' }, node('stack.masks', {}));
 
   /** the "+ Layer" items of a stage: the catalogue's ops of the stage (`ops` narrows them) */
@@ -178,6 +208,10 @@ export function createStackKit(ck: Ck, cb: Cb) {
       selected: (s: any) => selectedIn(s),
     },
     lib: { ...model, addItems, stagesShown, STACK_STATE, MASK_TOOLS },
+    /** the built-in editors of the params panel (curve, levels, hsl, grade, mixer), by op */
+    editors,
+    /** an editor of a form for an op's layers: `stack.editor('my.form', ['covered', 'args'])` */
+    editor,
     /** the mask tools for a viewer's `tools` */
     maskTools: [...MASK_TOOLS],
     /** a stack row (θ) */
