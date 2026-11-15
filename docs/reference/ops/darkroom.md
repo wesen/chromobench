@@ -2,6 +2,22 @@
 
 # darkroom.* ops
 
+## `burn`
+
+More light through the negative under a mask (a split exposure is a burn with its own filtration). Amount scales its time.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: contribution
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `time_s` (optional) | number | s | [0, 600] |  |  | Seconds of light (absolute). Give time_s or stops, not both. |
+| `stops` (optional) | number | stop | [0, 6] |  |  | Relative to the main time: burn and flash t_main·(2^s − 1), dodge t_main·(1 − 2^−s). Give time_s or stops, not both. |
+| `filtration` (optional) | cmy | CC | [-100, 200] |  |  | The exposure's own pack, a shift on the database neutral like the main exposure's filtration; absent = the main exposure's. |
+
 ## `darkroom.contactSheet`
 
 A contact sheet of several frames.
@@ -11,31 +27,31 @@ A contact sheet of several frames.
 - Class: decoration; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `frames` | string[] |  |  |  | `[]` |  | Frame ids. |
-| `cell_px` | number | px | [64, 1024] |  | `256` |  | Cell size. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `frames` | string[] |  |  |  | `[]` | Frame ids. |
+| `cell_px` | number | px | [64, 1024] |  | `256` | Cell size. |
 
 ## `darkroom.lightsToFiltration`
 
-Expresses printer lights as colour-head filtration plus time.
+Expresses printer lights as colour-head filtration plus time (the caller passes the darkroom medium and the main exposure).
 
 - Owner: CHB-010
 - On: Image (film-dyes) → Value
 - Class: measure; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `logH` | vec3 | logH | [-1.5, 1.5] |  | `[0,0,0]` | print.lights.logH | Printer lights to express as filtration and time. |
-| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | print.paper | Colour paper. |
-| `mode` | enum real/normalised |  |  |  | `"real"` | print.enlarger.mode | real: filtration and time; normalised: filtration, the density part stays as lights. |
-| `lamp` | string |  |  |  | `"TH-KG3"` | print.enlarger.lamp | Enlarger lamp. |
-| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | print.enlarger.filtration | Current shift on the neutral pack. |
-| `time_s` | number | s | [0.1, 600] |  | `10` | print.enlarger.time_s | Current exposure time. |
-| `fstop` | number | fstop | [2.8, 45] |  | `8` | print.enlarger.fstop | Lens aperture. |
-| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | print.aim | The aim. |
-| `aimView` | string |  |  |  | `"D50"` | view.illuminant | Viewing light of the aim. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `logH` | vec3 | logH | [-1.5, 1.5] |  | `[0,0,0]` | Printer lights to express as filtration and time. |
+| `paper` | stockId |  |  |  | `"kodak_portra_endura"` | Colour paper. |
+| `mode` | enum real/normalised |  |  |  | `"real"` | real: filtration and time; normalised: filtration, the density part stays as lights. |
+| `lamp` | string |  |  |  | `"TH-KG3"` | Enlarger lamp. |
+| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | Current shift on the neutral pack. |
+| `time_s` | number | s | [0.1, 600] |  | `10` | Current exposure time. |
+| `fstop` | number | fstop | [2.8, 45] |  | `8` | Lens aperture. |
+| `aim` | enum grey-0.184/midgray-normalised |  |  |  | `"grey-0.184"` | The aim. |
+| `aimView` | string |  |  |  | `"D50"` | Viewing light of the aim. |
 
 Returns:
 
@@ -54,10 +70,10 @@ A ring-around: the print surrounded by prints moved one step towards and away fr
 - Class: decoration; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `step_pt` | number | point | [1, 16] | [2, 8] | `4` |  | Printer-light step between prints, in points (2, 4 or 8 are usual). Redirects: step_cc. |
-| `rings` | number | none | [1, 2] |  | `1` |  | Number of rings. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `step_pt` | number | point | [1, 16] | [2, 8] | `4` | Printer-light step between prints, in points (2, 4 or 8 are usual). Redirects: step_cc. |
+| `rings` | number | none | [1, 2] |  | `1` | Number of rings. |
 
 ## `darkroom.testStrip`
 
@@ -68,9 +84,102 @@ A test strip of the receiver's print, each band printed with its own setting.
 - Class: decoration; binding: setting
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `vary` | enum time/lights.r/lights.g/lights.b/filtration.c/filtration.m/filtration.y/grade |  |  |  | `"time"` |  | Quantity varied across the strip. |
-| `steps` | number | none | [2, 12] |  | `7` |  | Number of bands. |
-| `step` | number | none |  |  | `0.5` |  | Step in the varied quantity's display unit: stops (time), points (lights), CC (filtration), grades. |
-| `direction` | enum horizontal/vertical |  |  |  | `"vertical"` |  | Band direction. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `vary` | enum time/lights.r/lights.g/lights.b/filtration.c/filtration.m/filtration.y/grade |  |  |  | `"time"` | Quantity varied across the strip. |
+| `steps` | number | none | [2, 12] |  | `7` | Number of bands. |
+| `step` | number | none |  |  | `0.5` | Step in the varied quantity's display unit: stops (time), points (lights), CC (filtration), grades. |
+| `direction` | enum horizontal/vertical |  |  |  | `"vertical"` | Band direction. |
+
+## `densityMask`
+
+A neutral silver mask made from the negative and sandwiched with it (CHB-010 §6.6): every exposure through the negative passes its density, flashes do not. Amount scales the density.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: spatial; binding: setting
+- Layer in: darkroom; encoding: stage; light term: modulator
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `gamma` | number | none | [0, 1] |  | `0.5` | Mask gamma γ_m (0.6: large-area contrast falls to 40 %). |
+| `radius_um` | number | um | [0, 5000] |  | `300` | Gaussian σ of the blur on the film: wide for a contrast mask, a thin spacer for an unsharp mask. |
+| `polarity` | enum positive/same |  |  |  | `"positive"` | positive lowers large-area contrast; same raises it. |
+
+## `dodge`
+
+Light held back from the main exposure under a mask (never more than the main gives: max(E_main − Σ E_dodge, 0)). Amount scales the time held back.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: contribution
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `time_s` (optional) | number | s | [0, 600] |  |  | Seconds of light (absolute). Give time_s or stops, not both. |
+| `stops` (optional) | number | stop | [0, 6] |  |  | Relative to the main time: burn and flash t_main·(2^s − 1), dodge t_main·(1 − 2^−s). Give time_s or stops, not both. |
+
+## `expose`
+
+The main exposure through the negative: exactly one per document, id `main`. Amount scales its light (a card held over the whole print).
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: main
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+- See: `burn`, `dodge`, `print.expose`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `time_s` | number | s | [0.1, 600] | [2, 60] | `10` | Exposure time. |
+| `fstop` | number | fstop | [2.8, 45] |  | `8` | Enlarger lens aperture (every exposure through the lens uses it). |
+| `filtration` | cmy | CC | [-100, 200] |  | `{"c":0,"m":0,"y":0}` | Dichroic filtration as a shift on the database neutral pack for (paper, film); 0 = neutral. |
+
+## `filter`
+
+A filter in the light path: the printer lights, or a local colour correction in log H under a mask. Amount scales it.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: modulator
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `logH` | vec3 | logH | [-1.5, 1.5] | [-0.5, 0.5] | `[0,0,0]` | Offsets of paper log exposure per layer (R, G, B light): H ← H·10^(a·m·logH). Never a density offset (Hunt 14.17). Redirects: points. |
+
+## `flash`
+
+Light that does not pass the image: uniform under its mask, not held back by density masks.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: contribution
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `time_s` (optional) | number | s | [0, 600] |  |  | Seconds of light (absolute). Give time_s or stops, not both. |
+| `stops` (optional) | number | stop | [0, 6] |  |  | Relative to the main time: burn and flash t_main·(2^s − 1), dodge t_main·(1 − 2^−s). Give time_s or stops, not both. |
+| `filtration` (optional) | cmy | CC | [-100, 200] |  |  | The exposure's own pack, a shift on the database neutral like the main exposure's filtration; absent = the main exposure's. |
+| `through` | enum base/open |  |  |  | `"base"` | Through the film base (no image: dye amounts 0) or an empty gate (no film). |
+
+## `preflash`
+
+A uniform pre-exposure of the paper, added after the filters (it is measured against the grey card's exposure, H = 1 at the aim): H ← H + a·m·φ.
+
+- Owner: CHB-037
+- On: none (—) → Term
+- Class: pointwise; binding: setting
+- Layer in: darkroom; encoding: stage; light term: contribution
+- Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `fraction` | number | fraction | [0, 0.2] | [0, 0.05] | `0.02` | Uniform pre-exposure as a fraction of the grey-card exposure. |

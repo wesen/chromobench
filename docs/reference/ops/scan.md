@@ -11,13 +11,13 @@ Mask of pixels below base or indistinguishable from blank film.
 - Class: pointwise; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `class` | enum below/blank |  |  |  | `"blank"` |  | Which base class to select. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `class` | enum below/blank |  |  |  | `"blank"` | Which base class to select. |
 
 ## `scan.checkDust`
 
-Checks for remaining dust after healing.
+Checks for remaining dust after healing (the scan stage's heal layers).
 
 - Owner: CHB-006
 - On: Image (scanner-density) → Value
@@ -48,10 +48,10 @@ Scanner density relative to the film base: d = −log10(T / T_base), T_base = ba
 - Implementation: mock
 - See: `scan.rebate`, `invert.dyes`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `rebate` (optional) | box | px |  |  |  | scan.rebate | Box in source (sensor) pixels; absent means automatic. |
-| `baseT` (optional) | vec3 | fraction | [0.000001, 100] |  |  | scan.baseT | Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `rebate` (optional) | box | px |  |  |  | Box in source (sensor) pixels; absent means automatic. |
+| `baseT` (optional) | vec3 | fraction | [0.000001, 100] |  |  | Linear value of the film base (the roll's, from roll setup); wins over rebate. Absent = measure on the rebate box. |
 
 ## `scan.flare`
 
@@ -62,9 +62,9 @@ Removes scanner flare: T = T′(1 + f) − f per channel, with T′ the signal r
 - Class: pointwise; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `flare` | number | percent | [0, 20] | [0, 3] | `0` | scan.flare | Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel). |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `flare` | number | percent | [0, 20] | [0, 3] | `0` | Scanner veiling flare f, percent of the open-gate signal; [r, g, b] is per channel (ingest fitFlare / filmLayout measure it per channel). |
 
 ## `scan.flatField`
 
@@ -75,24 +75,9 @@ Divides by the flat field in sensor coordinates.
 - Class: pointwise; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `flat` (optional) | string |  |  |  |  | scan.flat | SHA-256 of the flat-field frame (opened like a source). |
-
-## `scan.heal`
-
-Heals dust spots in scanner density.
-
-- Owner: CHB-006
-- On: Image (scanner-density) → Image (scanner-density)
-- Class: spatial; binding: scan
-- Implementation: mock
-
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `spots` | string |  |  |  | `"[]"` |  | Canonical JSON of the spots (filled by compile from scan.dust.spots). |
-| `method` | enum patch/diffuse/neutral |  |  |  | `"patch"` | scan.dust.method | Healing method. |
-| `marginPx` | number | px | [0, 50] |  | `2` | scan.dust.marginPx | Margin around each spot. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `flat` (optional) | string |  |  |  |  | SHA-256 of the flat-field frame (opened like a source). |
 
 ## `scan.noise`
 
@@ -103,9 +88,9 @@ Measures noise σ per channel (MAD), in density.
 - Class: measure; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `box` (optional) | box | px |  |  |  |  | Region; absent = whole frame. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` (optional) | box | px |  |  |  | Region; absent = whole frame. |
 
 Returns:
 
@@ -133,9 +118,9 @@ Measures the rebate (unexposed base) transmittance.
 - Class: measure; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `rebate` (optional) | box | px |  |  |  | scan.rebate | Box in source (sensor) pixels; absent means automatic. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `rebate` (optional) | box | px |  |  |  | Box in source (sensor) pixels; absent means automatic. |
 
 Returns:
 
@@ -151,9 +136,9 @@ Detects dust specks.
 - Class: measure; binding: scan
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `threshold` | number | none | [1, 20] | [3, 8] | `5` |  | Detection threshold in σ. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `threshold` | number | none | [1, 20] | [3, 8] | `5` | Detection threshold in σ. |
 
 Returns:
 

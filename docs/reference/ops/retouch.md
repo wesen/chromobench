@@ -2,16 +2,32 @@
 
 # retouch.* ops
 
-## `retouch.heal`
+## `clone`
 
-Heals and clones circular spots on the print (after view.adapt, before finishing). Every source is read from the image before retouching; a later spot covers an earlier one. Contract 0.3 stub: the engines pass the image through with W_PREVIEW_APPROX until CHB-022 implements it.
+Clones circular spots: the source patch replaces the target as it is. Adjacent clone layers coalesce into one node.
 
-- Owner: CHB-022
-- On: Image (print-xyz) → Image (print-xyz)
+- Owner: CHB-037
+- On: Image (scanner-density, print-xyz) → Image (same)
 - Class: spatial; binding: setting
-- Implementation: mock
-- See: `scan.heal`
+- Layer in: scan, print; encoding: stage; coalesces (spots)
+- Implementation: stub
+- See: `heal`
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `spots` | string |  |  |  | `"{}"` |  | Canonical JSON of the enabled retouch.spots record (compile fills it): {id: {mode, x, y, r, src: {x, y}, feather, opacity, enabled}}, sensor px of the un-oriented source. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `spots` | list of {x, y, r, src, feather, opacity} |  |  |  | `[]` | Spots in order; each reads the image as the spots before it left it (in a document: a Coll of spots). |
+
+## `heal`
+
+Heals circular spots: the source patch, matched to the target's surroundings, replaces the target (dust on the negative in the scan stage, blemishes on the print). Adjacent heal layers coalesce into one node.
+
+- Owner: CHB-037
+- On: Image (scanner-density, print-xyz) → Image (same)
+- Class: spatial; binding: setting
+- Layer in: scan, print; encoding: stage; coalesces (spots)
+- Implementation: stub
+- See: `clone`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `spots` | list of {x, y, r, src, feather, opacity} |  |  |  | `[]` | Spots in order; each reads the image as the spots before it left it (in a document: a Coll of spots). |

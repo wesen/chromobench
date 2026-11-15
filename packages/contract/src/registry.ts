@@ -1,27 +1,52 @@
 // The op registry: one schema from which the DSL methods, the GUI controls, the conformance cases,
 // the reference docs and the did-you-mean errors are generated. Metadata only; engines implement
 // ops (DR-1). Ported from goja-cv pkg/cv/graph/registry.go, args.go and suggest.go.
-import { DOMAINS, isDomain, type Domain } from './domains.ts';
-import { ChromobenchError, fail, type Diagnostic } from './errors.ts';
+//
+// Contract 1.0: an op is a node op (engines evaluate it; a dotted name `area.verb`), a layer op (it lives in stage
+// stacks: `stages` lists where, the stage's law gives it meaning; an undotted name, design §23), or both (heal,
+// clarity: a layer whose law compiles it to a node of the same op). Light-law ops (expose, burn, …) return 'Term':
+// the darkroom law lowers them to print.expose / print.densityMask nodes and one print.combine.
+import { jsonProblem } from '@chromobench/values';
+import { isDomain, DOMAINS, type Domain } from './domains.ts';
+import type { StageName } from './document.ts';
+import { fail, isChromobenchError, type Diagnostic } from './errors.ts';
 import type { FieldSpec } from './graph-types.ts';
-import { RECIPE_FIELDS } from './recipe.ts';
 import { checkArgValue, formatValue, NODE_ARG_TYPES, normaliseShape, tidy, type ArgSpec } from './spec.ts';
 import { UNITS } from './units.ts';
 
-export type Kind = 'Image' | 'Mask' | 'Value' | 'Regions' | 'Table';
+export type Kind = 'Image' | 'Mask' | 'Value' | 'Regions' | 'Table' | 'Term';
 export type Area = 'source' | 'scan' | 'invert' | 'capture' | 'film' | 'print'
-  | 'view' | 'retouch' | 'output' | 'mask' | 'measure' | 'darkroom' | 'finishing';
-export const AREAS: readonly Area[] = ['source', 'scan', 'invert', 'capture', 'film', 'print', 'view', 'retouch', 'output', 'mask', 'measure', 'darkroom', 'finishing'];
+  | 'view' | 'retouch' | 'output' | 'mask' | 'measure' | 'darkroom' | 'composite';
+export const AREAS: readonly Area[] = ['source', 'scan', 'invert', 'capture', 'film', 'print', 'view', 'retouch', 'output', 'mask', 'measure', 'darkroom', 'composite'];
 export type OpClass = 'pointwise' | 'spatial' | 'global' | 'decoration' | 'measure' | 'geometric';
 export type Binding = 'stock' | 'scan' | 'setting' | 'pixel';
 
+/**
+ * The working encoding of a layer op's arithmetic (design §22): 'stage' = the stage's own values (scanner density,
+ * log H, print XYZ); 'linear' = linear light (both composite stages hold linear XYZ, so no conversion is inserted);
+ * 'oklab' = OkLab/OkLCh, for ops defined by eye (P8: the compiler inserts the conversions).
+ */
+export type Encoding = 'stage' | 'linear' | 'oklab';
+export const ENCODINGS: readonly Encoding[] = ['stage', 'linear', 'oklab'];
+
+/** A light-law term (design §22): light that reaches the paper, or a filter in the light path. */
+export type LightTerm = 'main' | 'contribution' | 'modulator';
+
+/** How adjacent layers of a coalescible op merge into one node (design §23): their `list` args concatenate. */
+export interface Coalesce {
+  /** the list argument whose items concatenate */
+  list: string;
+  /** the item field a layer's amount multiplies (its opacity) */
+  opacity: string;
+}
+
 export interface OpDef {
-  /** Dotted: 'print.expose'; the DSL exposes it as a method. */
+  /** Dotted for node-only ops ('print.expose'); a bare word for layer ops ('burn', 'heal', 'clarity'). */
   name: string;
   area: Area;
   /** Owning ticket, e.g. 'CHB-003'. */
   owner: string;
-  /** Receiver kind; 'none' for receiver-less ops (source.open, darkroom.contactSheet). */
+  /** Receiver kind; 'none' for receiver-less ops (source.open, darkroom.contactSheet) and light-law terms. */
   on: Kind | 'none';
   returns: Kind;
   /** Accepted input domains; 'any' accepts every Image domain. */
@@ -35,12 +60,20 @@ export interface OpDef {
   class: OpClass;
   binding: Binding;
   args: Readonly<Record<string, ArgSpec>>;
-  /** Where the persistent parameters live, e.g. 'print.lights'. */
-  recipePath?: string;
   /** Fields of the returned Value / Regions / Table. */
   fields?: FieldSpec[];
   /** Cross-argument check on the bound args; returns an error message or null. */
   validate?: (args: Readonly<Record<string, unknown>>) => string | null;
+  /** The stages whose stacks may hold this op as a layer (design §21). Absent: not a layer op. */
+  stages?: readonly StageName[];
+  /** Layer ops: the encoding the op computes in. */
+  encoding?: Encoding;
+  /** Light-law ops: what the term is. */
+  term?: LightTerm;
+  /** Layer ops whose adjacent layers merge into one node. */
+  coalesce?: Coalesce;
+  /** Layer ops: params for which the layer changes nothing (it then produces no node, design §29). */
+  identity?: (params: Readonly<Record<string, unknown>>) => boolean;
   /** Hidden from the DSL, the UI and the docs (source.pattern). */
   internal?: boolean;
   /** false keeps the op out of the DSL only (output.encode). Default true. */
@@ -57,8 +90,6 @@ export interface BindResult {
 }
 
 const REGISTRY = new Map<string, OpDef>();
-/** recipe path → [op, arg] owners */
-const PATH_OWNERS = new Map<string, { op: OpDef; arg: string; spec: ArgSpec }[]>();
 
 // ----------------------------------------------------------------------------------------------
 // closest(): case-insensitive Damerau–Levenshtein (optimal string alignment); edit budget
@@ -95,11 +126,6 @@ export function closest(name: string, candidates: readonly string[]): string | u
 
 // ----------------------------------------------------------------------------------------------
 
-export function argPath(op: OpDef, name: string, spec: ArgSpec): string | undefined {
-  if (spec.path !== undefined) return spec.path === '' ? undefined : spec.path;
-  return op.recipePath ? `${op.recipePath}.${name}` : undefined;
-}
-
 function invalid(op: string, why: string): never {
   return fail('E_INVALID_OP_DEF', `registerOp(${op}): ${why}`);
 }
@@ -110,7 +136,7 @@ function domainsOf(d: OpDef['domainIn']): Domain[] | 'any' {
   return Array.isArray(d) ? d : [d];
 }
 
-/** Ops allowed to consume display-rgb (CHB-011/015 rule: finishing comes before output.display). */
+/** Ops allowed to consume display-rgb (CHB-011/015 rule: the print stack comes before output.display). */
 export const DISPLAY_RGB_CONSUMERS: ReadonlySet<string> = new Set(['output.frame', 'output.encode']);
 
 function checkSyntax(code: string): string | null {
@@ -127,9 +153,21 @@ function checkSyntax(code: string): string | null {
 export function registerOp(def: OpDef): OpDef {
   const n = def.name;
   const dot = n.indexOf('.');
-  if (dot < 1) invalid(n, 'name must be dotted, e.g. "print.expose"');
-  if (n.slice(0, dot) !== def.area) invalid(n, `name prefix must equal the area "${def.area}"`);
+  if (dot < 0) {
+    if (!/^[a-z][A-Za-z]*$/.test(n)) invalid(n, 'a layer op is one word, e.g. "burn"');
+    if (!def.stages?.length) invalid(n, 'an undotted name is a layer op and needs stages; node-only ops are dotted, e.g. "print.expose"');
+  } else if (dot < 1 || n.slice(0, dot) !== def.area) invalid(n, `name prefix must equal the area "${def.area}"`);
   if (REGISTRY.has(n)) invalid(n, 'duplicate op name');
+  if (def.stages) {
+    if (def.stages.length === 0) invalid(n, 'stages must not be empty (omit it for a node-only op)');
+    if (!def.encoding) invalid(n, 'a layer op declares its encoding');
+    if (def.stages.includes('darkroom') !== (def.returns === 'Term')) invalid(n, 'darkroom layer ops (and only they) return Term');
+  }
+  if (def.returns === 'Term' && (!def.term || def.on !== 'none' || def.stages?.join() !== 'darkroom')) invalid(n, "a Term op is a darkroom-only layer op with on 'none' and a term role");
+  if (def.coalesce) {
+    const l = def.args[def.coalesce.list];
+    if (l?.type !== 'list' || !l.of?.[def.coalesce.opacity]) invalid(n, `coalesce: ${def.coalesce.list} must be a list with a field ${def.coalesce.opacity}`);
+  }
   if ((def.returns === 'Image' || def.returns === 'Mask') && !def.domainOut) invalid(n, 'Image/Mask ops need domainOut');
   if (def.returns === 'Mask' && def.domainOut !== 'mask') invalid(n, 'Mask ops must output the mask domain');
   if (def.domainOut === 'same' && def.on === 'none') invalid(n, "domainOut 'same' needs a receiver");
@@ -143,7 +181,6 @@ export function registerOp(def: OpDef): OpDef {
   if (din !== 'any' && din.includes('display-rgb') && def.area !== 'measure' && def.area !== 'mask' && !DISPLAY_RGB_CONSUMERS.has(n)) {
     invalid(n, 'only output.frame, output.encode, mask.* and measure.* may consume display-rgb');
   }
-  if (def.area === 'finishing' && def.domainOut === 'display-rgb') invalid(n, 'finishing ops come before output.display');
   for (const [a, s] of Object.entries(def.args)) {
     if (!s.type) invalid(n, `argument ${a} has no type`);
     if (!s.doc) invalid(n, `argument ${a} has no doc`);
@@ -158,19 +195,16 @@ export function registerOp(def: OpDef): OpDef {
       try {
         checkArgValue(s, s.default, `${n}.${a}`);
       } catch (e) {
-        invalid(n, `default of ${a} violates its spec: ${e instanceof ChromobenchError ? e.diag.message : String(e)}`);
+        invalid(n, `default of ${a} violates its spec: ${isChromobenchError(e) ? e.diag.message : String(e)}`);
       }
     }
     if (s.redirects) for (const r of Object.keys(s.redirects)) if (r in def.args) invalid(n, `redirect ${r} shadows an argument`);
-    const p = argPath(def, a, s);
-    if (p !== undefined) {
-      const rule = RECIPE_FIELDS[p];
-      if (!rule) invalid(n, `argument ${a}: recipe path ${p} is not in the recipe schema`);
-      if (rule.kind !== 'op') invalid(n, `argument ${a}: recipe path ${p} is not op-owned in RECIPE_FIELDS`);
-      const owners = PATH_OWNERS.get(p) ?? [];
-      const first = owners[0];
-      if (first && (first.spec.type !== s.type || first.spec.unit !== s.unit || first.spec.min !== s.min || first.spec.max !== s.max || String(first.spec.values) !== String(s.values))) {
-        invalid(n, `argument ${a}: recipe path ${p} is also owned by ${first.op.name}.${first.arg} with a different spec`);
+    if (s.type === 'list') {
+      if (!s.of || Object.keys(s.of).length === 0) invalid(n, `list argument ${a} needs an item schema (of)`);
+      for (const [f, fs] of Object.entries(s.of)) {
+        if (!fs.doc) invalid(n, `argument ${a}.${f} has no doc`);
+        if ((fs.type === 'number' || fs.type === 'vec3' || fs.type === 'cmy') && !fs.unit) invalid(n, `numeric field ${a}.${f} needs a unit`);
+        if (fs.type === 'list') invalid(n, `argument ${a}.${f}: lists do not nest in node args`);
       }
     }
   }
@@ -180,10 +214,6 @@ export function registerOp(def: OpDef): OpDef {
   }
   const frozen = Object.freeze({ ...def, args: Object.freeze({ ...def.args }) });
   REGISTRY.set(n, frozen);
-  for (const [a, s] of Object.entries(def.args)) {
-    const p = argPath(def, a, s);
-    if (p !== undefined) PATH_OWNERS.set(p, [...(PATH_OWNERS.get(p) ?? []), { op: frozen, arg: a, spec: s }]);
-  }
   return frozen;
 }
 
@@ -233,18 +263,9 @@ export function opsProducing(domain: Domain): OpDef[] {
   return allOps().filter((o) => o.domainOut === domain);
 }
 
-/** The op arguments that own a recipe path (first one validates). */
-export function pathOwners(path: string): readonly { op: OpDef; arg: string; spec: ArgSpec }[] {
-  return PATH_OWNERS.get(path) ?? [];
-}
-
-export function recipeBackedArgs(op: OpDef): { arg: string; path: string; spec: ArgSpec }[] {
-  const out: { arg: string; path: string; spec: ArgSpec }[] = [];
-  for (const [a, s] of Object.entries(op.args)) {
-    const p = argPath(op, a, s);
-    if (p !== undefined) out.push({ arg: a, path: p, spec: s });
-  }
-  return out;
+/** Layer ops a stage accepts (catalogue `stages`, design §24). */
+export function opsForStage(stage: StageName): OpDef[] {
+  return allOps({ includeInternal: true }).filter((o) => o.stages?.includes(stage));
 }
 
 /**
@@ -291,6 +312,9 @@ export function bindArgs(op: OpDef, raw: Readonly<Record<string, unknown>> = {})
     const msg = op.validate(out);
     if (msg) fail('E_ARG_RANGE', `${op.name}: ${msg}`, { path: op.name });
   }
+  // nothing non-finite (or otherwise not JSON) reaches canonicalJSON and the node hash
+  const bad = jsonProblem(out);
+  if (bad) fail('E_ARG_RANGE', `${op.name}${bad.path ? `.${bad.path}` : ''}: ${bad.message}`, { path: `${op.name}${bad.path ? `.${bad.path}` : ''}` });
   return { args: Object.freeze(out), warnings };
 }
 
@@ -300,9 +324,39 @@ function scaleForFix(v: unknown, k: number): unknown {
   return v;
 }
 
-/** Node-typed argument names of an op (their values are node ids and become extra inputs). */
+/** Node-typed argument names of an op, at top level or as list-item fields ('terms.image'). */
 export function nodeArgs(op: OpDef): string[] {
-  return Object.entries(op.args).filter(([, s]) => NODE_ARG_TYPES.has(s.type)).map(([a]) => a);
+  const out: string[] = [];
+  for (const [a, s] of Object.entries(op.args)) {
+    if (NODE_ARG_TYPES.has(s.type)) out.push(a);
+    if (s.type === 'list') for (const [f, fs] of Object.entries(s.of ?? {})) if (NODE_ARG_TYPES.has(fs.type)) out.push(`${a}.${f}`);
+  }
+  return out;
+}
+
+/** A node id in a node-typed slot: where it sits, its spec, and the id. */
+export interface NodeSlot { at: string; spec: ArgSpec; id: string }
+
+/**
+ * Every node id in bound args, in a fixed order (arguments in catalogue order, list items in order, fields in schema
+ * order): the extra inputs of the node. `replace` maps a value before it is read (Node objects → ids).
+ */
+export function nodeSlots(op: OpDef, args: Readonly<Record<string, unknown>>): NodeSlot[] {
+  const out: NodeSlot[] = [];
+  for (const [a, s] of Object.entries(op.args)) {
+    const v = args[a];
+    if (v === undefined || v === null) continue;
+    if (NODE_ARG_TYPES.has(s.type)) out.push({ at: a, spec: s, id: v as string });
+    if (s.type === 'list' && Array.isArray(v)) {
+      v.forEach((item, i) => {
+        for (const [f, fs] of Object.entries(s.of ?? {})) {
+          const x = (item as Record<string, unknown>)[f];
+          if (NODE_ARG_TYPES.has(fs.type) && x !== undefined && x !== null) out.push({ at: `${a}.${i}.${f}`, spec: fs, id: x as string });
+        }
+      });
+    }
+  }
+  return out;
 }
 
 /** Default channel count of an op's output. */

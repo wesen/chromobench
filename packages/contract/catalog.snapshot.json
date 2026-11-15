@@ -1,5 +1,88 @@
 {
-  "contractVersion": "0.4.0",
+  "blendModes": [
+    "normal"
+  ],
+  "contractVersion": "1.0.0",
+  "cuts": {
+    "darkroom.H": {
+      "domain": "paper-logH",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 5
+    },
+    "darkroom.main": {
+      "domain": "paper-logH",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 4
+    },
+    "display": {
+      "domain": "display-rgb",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 8
+    },
+    "film": {
+      "domain": "film-dyes",
+      "kinds": [
+        "digital-raw"
+      ],
+      "order": 2
+    },
+    "finished": {
+      "domain": "print-xyz",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 7
+    },
+    "negative": {
+      "domain": "film-dyes",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 3
+    },
+    "print": {
+      "domain": "print-xyz",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 6
+    },
+    "scan": {
+      "domain": "scanner-density",
+      "kinds": [
+        "negative-scan"
+      ],
+      "order": 1
+    },
+    "scene": {
+      "domain": "scene-xyz",
+      "kinds": [
+        "digital-raw"
+      ],
+      "order": 1
+    },
+    "source": {
+      "domain": "camera-linear",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "order": 0
+    }
+  },
+  "documentFormat": 3,
   "domains": {
     "camera-linear": {
       "channels": 3,
@@ -120,13 +203,16 @@
     "EDITS_DROPPED",
     "E_ARG_RANGE",
     "E_ARG_TYPE",
+    "E_BINDING",
     "E_BUSY",
     "E_CANCELLED",
+    "E_CUT",
     "E_DATA_GRID",
     "E_DATA_HASH",
     "E_DATA_POLICY",
     "E_DATA_SCHEMA",
     "E_DEVICE_LOST",
+    "E_DOCUMENT",
     "E_DOMAIN",
     "E_EVAL",
     "E_FORMAT",
@@ -139,6 +225,7 @@
     "E_INVALID_OP_DEF",
     "E_KERNEL_COMPILE",
     "E_KIND",
+    "E_LINK",
     "E_MEMORY",
     "E_MUTATION",
     "E_NOT_AWAITED",
@@ -149,7 +236,6 @@
     "E_NO_SOURCE",
     "E_PATH",
     "E_READONLY",
-    "E_RECIPE",
     "E_SANDBOX",
     "E_SESSION",
     "E_SESSION_RESET",
@@ -201,14 +287,123 @@
     "W_TRIPLET_SHIFT",
     "W_VEIL_FROM_ROLL"
   ],
+  "geometry": {
+    "angle_deg": {
+      "max": 45,
+      "min": -45,
+      "type": "number",
+      "unit": "deg"
+    },
+    "crop": {
+      "optional": true,
+      "type": "box",
+      "unit": "px"
+    },
+    "orientation": {
+      "type": "enum",
+      "values": [
+        "none",
+        "cw90",
+        "rot180",
+        "ccw90",
+        "flipH",
+        "flipV",
+        "transpose",
+        "transverse"
+      ]
+    }
+  },
+  "laws": {
+    "composite": {
+      "amount": "opacity",
+      "amountRange": [
+        0,
+        1
+      ],
+      "blend": true,
+      "coalesce": true,
+      "groups": [
+        "pass",
+        "isolated"
+      ],
+      "order": "stack"
+    },
+    "light": {
+      "amount": "scale",
+      "amountRange": [
+        0,
+        16
+      ],
+      "blend": false,
+      "coalesce": false,
+      "groups": [
+        "pass"
+      ],
+      "order": "free"
+    },
+    "repair": {
+      "amount": "opacity",
+      "amountRange": [
+        0,
+        1
+      ],
+      "blend": false,
+      "coalesce": true,
+      "groups": [
+        "pass"
+      ],
+      "order": "stack"
+    }
+  },
+  "maskComponents": [
+    "linear",
+    "ellipse",
+    "paint",
+    "luminance"
+  ],
   "mutationOps": [
     "set",
-    "exposure.add",
-    "exposure.remove",
-    "mask.set",
-    "frame.add"
+    "insert",
+    "remove",
+    "move"
   ],
   "ops": {
+    "burn": {
+      "area": "darkroom",
+      "args": {
+        "filtration": {
+          "max": 200,
+          "min": -100,
+          "optional": true,
+          "type": "cmy",
+          "unit": "CC"
+        },
+        "stops": {
+          "max": 6,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "stop"
+        },
+        "time_s": {
+          "max": 600,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "s"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "contribution"
+    },
     "capture.expose": {
       "area": "capture",
       "args": {
@@ -216,7 +411,6 @@
           "default": 0,
           "max": 10,
           "min": -10,
-          "path": "capture.exposureEV",
           "type": "number",
           "unit": "stop",
           "usual": [
@@ -226,7 +420,6 @@
         },
         "stock": {
           "default": "kodak_portra_400",
-          "path": "capture.stock",
           "type": "stockId",
           "valuesFrom": "stocks:film"
         }
@@ -237,7 +430,140 @@
       "domainOut": "film-logH",
       "on": "Image",
       "owner": "CHB-012",
-      "recipePath": "capture",
+      "returns": "Image"
+    },
+    "clarity": {
+      "area": "composite",
+      "args": {
+        "radius_mm": {
+          "default": 10,
+          "max": 100,
+          "min": 0.1,
+          "type": "number",
+          "unit": "mm",
+          "usual": [
+            1,
+            30
+          ]
+        },
+        "strength": {
+          "default": 0.25,
+          "max": 1,
+          "min": -1,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "domainIn": "print-xyz",
+      "domainOut": "print-xyz",
+      "encoding": "linear",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "print"
+      ]
+    },
+    "clone": {
+      "area": "retouch",
+      "args": {
+        "spots": {
+          "default": [],
+          "of": {
+            "feather": {
+              "default": 0.3,
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "opacity": {
+              "default": 1,
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "r": {
+              "max": 5000,
+              "min": 0.1,
+              "type": "number",
+              "unit": "px"
+            },
+            "src": {
+              "type": "point",
+              "unit": "px"
+            },
+            "x": {
+              "type": "number",
+              "unit": "px"
+            },
+            "y": {
+              "type": "number",
+              "unit": "px"
+            }
+          },
+          "type": "list"
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "coalesce": {
+        "list": "spots",
+        "opacity": "opacity"
+      },
+      "domainIn": [
+        "scanner-density",
+        "print-xyz"
+      ],
+      "domainOut": "same",
+      "encoding": "stage",
+      "on": "Image",
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scan",
+        "print"
+      ]
+    },
+    "composite.mix": {
+      "area": "composite",
+      "args": {
+        "amount": {
+          "default": 1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "blend": {
+          "default": "normal",
+          "type": "enum",
+          "values": [
+            "normal"
+          ]
+        },
+        "mask": {
+          "optional": true,
+          "type": "Mask"
+        },
+        "top": {
+          "type": "Image"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": [
+        "scanner-density",
+        "scene-xyz",
+        "print-xyz"
+      ],
+      "domainOut": "same",
+      "dsl": false,
+      "on": "Image",
+      "owner": "CHB-037",
       "returns": "Image"
     },
     "darkroom.contactSheet": {
@@ -268,7 +594,6 @@
       "args": {
         "aim": {
           "default": "grey-0.184",
-          "path": "print.aim",
           "type": "enum",
           "values": [
             "grey-0.184",
@@ -277,7 +602,6 @@
         },
         "aimView": {
           "default": "D50",
-          "path": "view.illuminant",
           "type": "string",
           "valuesFrom": "illuminants"
         },
@@ -289,7 +613,6 @@
           },
           "max": 200,
           "min": -100,
-          "path": "print.enlarger.filtration",
           "type": "cmy",
           "unit": "CC"
         },
@@ -297,13 +620,11 @@
           "default": 8,
           "max": 45,
           "min": 2.8,
-          "path": "print.enlarger.fstop",
           "type": "number",
           "unit": "fstop"
         },
         "lamp": {
           "default": "TH-KG3",
-          "path": "print.enlarger.lamp",
           "type": "string",
           "valuesFrom": "lamps"
         },
@@ -315,13 +636,11 @@
           ],
           "max": 1.5,
           "min": -1.5,
-          "path": "print.lights.logH",
           "type": "vec3",
           "unit": "logH"
         },
         "mode": {
           "default": "real",
-          "path": "print.enlarger.mode",
           "type": "enum",
           "values": [
             "real",
@@ -330,7 +649,6 @@
         },
         "paper": {
           "default": "kodak_portra_endura",
-          "path": "print.paper",
           "type": "stockId",
           "valuesFrom": "stocks:print"
         },
@@ -338,7 +656,6 @@
           "default": 10,
           "max": 600,
           "min": 0.1,
-          "path": "print.enlarger.time_s",
           "type": "number",
           "unit": "s"
         }
@@ -458,6 +775,116 @@
       "owner": "CHB-010",
       "returns": "Image"
     },
+    "densityMask": {
+      "area": "darkroom",
+      "args": {
+        "gamma": {
+          "default": 0.5,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "none"
+        },
+        "polarity": {
+          "default": "positive",
+          "type": "enum",
+          "values": [
+            "positive",
+            "same"
+          ]
+        },
+        "radius_um": {
+          "default": 300,
+          "max": 5000,
+          "min": 0,
+          "type": "number",
+          "unit": "um"
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "modulator"
+    },
+    "dodge": {
+      "area": "darkroom",
+      "args": {
+        "stops": {
+          "max": 6,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "stop"
+        },
+        "time_s": {
+          "max": 600,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "s"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "contribution"
+    },
+    "expose": {
+      "area": "darkroom",
+      "args": {
+        "filtration": {
+          "default": {
+            "c": 0,
+            "m": 0,
+            "y": 0
+          },
+          "max": 200,
+          "min": -100,
+          "type": "cmy",
+          "unit": "CC"
+        },
+        "fstop": {
+          "default": 8,
+          "max": 45,
+          "min": 2.8,
+          "type": "number",
+          "unit": "fstop"
+        },
+        "time_s": {
+          "default": 10,
+          "max": 600,
+          "min": 0.1,
+          "type": "number",
+          "unit": "s",
+          "usual": [
+            2,
+            60
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "main"
+    },
     "film.couple": {
       "area": "film",
       "args": {
@@ -465,7 +892,6 @@
           "default": 1,
           "max": 2.5,
           "min": 0,
-          "path": "capture.development.dir.amount",
           "type": "number",
           "unit": "fraction"
         },
@@ -473,7 +899,6 @@
           "default": 0,
           "max": 150,
           "min": 0,
-          "path": "capture.development.dir.diffusion_um",
           "type": "number",
           "unit": "um"
         }
@@ -484,7 +909,6 @@
       "domainOut": "film-logH",
       "on": "Image",
       "owner": "CHB-012",
-      "recipePath": "capture.development.dir",
       "returns": "Image"
     },
     "film.develop": {
@@ -502,7 +926,6 @@
           "default": 0,
           "max": 3,
           "min": -2,
-          "path": "capture.development.push",
           "type": "number",
           "unit": "stop"
         }
@@ -522,7 +945,6 @@
           "default": 1,
           "max": 4,
           "min": 0,
-          "path": "capture.development.grain.amount",
           "type": "number",
           "unit": "fraction"
         },
@@ -531,7 +953,6 @@
           "integer": true,
           "max": 2147483648,
           "min": 0,
-          "path": "capture.development.grain.seed",
           "type": "number",
           "unit": "none"
         },
@@ -539,7 +960,6 @@
           "default": 12,
           "max": 45,
           "min": 3,
-          "path": "capture.development.grain.size_um",
           "type": "number",
           "unit": "um"
         }
@@ -550,7 +970,6 @@
       "domainOut": "film-dyes",
       "on": "Image",
       "owner": "CHB-012",
-      "recipePath": "capture.development.grain",
       "returns": "Image"
     },
     "film.halation": {
@@ -560,7 +979,6 @@
           "default": 1,
           "max": 4,
           "min": 0,
-          "path": "capture.development.halation.strength",
           "type": "number",
           "unit": "fraction"
         }
@@ -571,67 +989,146 @@
       "domainOut": "film-logH",
       "on": "Image",
       "owner": "CHB-012",
-      "recipePath": "capture.development.halation",
       "returns": "Image"
     },
-    "finishing.clarity": {
-      "area": "finishing",
+    "filter": {
+      "area": "darkroom",
       "args": {
-        "amount": {
-          "default": 0,
-          "max": 1,
-          "min": -1,
-          "path": "finishing.values.clarity",
-          "type": "number",
-          "unit": "fraction"
-        },
-        "radius_px": {
-          "default": 40,
-          "max": 200,
-          "min": 5,
-          "path": "finishing.values.clarity_radius_px",
-          "type": "number",
-          "unit": "px"
-        }
-      },
-      "binding": "setting",
-      "class": "spatial",
-      "domainIn": "print-xyz",
-      "domainOut": "print-xyz",
-      "on": "Image",
-      "owner": "CHB-015",
-      "returns": "Image"
-    },
-    "finishing.hue": {
-      "area": "finishing",
-      "args": {
-        "family": {
-          "default": "reds",
-          "type": "enum",
-          "values": [
-            "reds",
-            "skin",
-            "yellows",
-            "greens",
-            "blues",
-            "purples"
+        "logH": {
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "max": 1.5,
+          "min": -1.5,
+          "redirects": {
+            "points": 0.025
+          },
+          "type": "vec3",
+          "unit": "logH",
+          "usual": [
+            -0.5,
+            0.5
           ]
-        },
-        "shift_deg": {
-          "default": 0,
-          "max": 30,
-          "min": -30,
-          "type": "number",
-          "unit": "deg"
         }
       },
       "binding": "setting",
       "class": "pointwise",
-      "domainIn": "print-xyz",
-      "domainOut": "print-xyz",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "modulator"
+    },
+    "flash": {
+      "area": "darkroom",
+      "args": {
+        "filtration": {
+          "max": 200,
+          "min": -100,
+          "optional": true,
+          "type": "cmy",
+          "unit": "CC"
+        },
+        "stops": {
+          "max": 6,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "stop"
+        },
+        "through": {
+          "default": "base",
+          "type": "enum",
+          "values": [
+            "base",
+            "open"
+          ]
+        },
+        "time_s": {
+          "max": 600,
+          "min": 0,
+          "optional": true,
+          "type": "number",
+          "unit": "s"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "contribution"
+    },
+    "heal": {
+      "area": "retouch",
+      "args": {
+        "spots": {
+          "default": [],
+          "of": {
+            "feather": {
+              "default": 0.3,
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "opacity": {
+              "default": 1,
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "r": {
+              "max": 5000,
+              "min": 0.1,
+              "type": "number",
+              "unit": "px"
+            },
+            "src": {
+              "type": "point",
+              "unit": "px"
+            },
+            "x": {
+              "type": "number",
+              "unit": "px"
+            },
+            "y": {
+              "type": "number",
+              "unit": "px"
+            }
+          },
+          "type": "list"
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "coalesce": {
+        "list": "spots",
+        "opacity": "opacity"
+      },
+      "domainIn": [
+        "scanner-density",
+        "print-xyz"
+      ],
+      "domainOut": "same",
+      "encoding": "stage",
       "on": "Image",
-      "owner": "CHB-015",
-      "returns": "Image"
+      "owner": "CHB-037",
+      "returns": "Image",
+      "stages": [
+        "scan",
+        "print"
+      ]
     },
     "invert.classes": {
       "area": "invert",
@@ -705,13 +1202,11 @@
       "args": {
         "scanner": {
           "default": "xt5-rgb-led",
-          "path": "scan.scanner",
           "type": "string",
           "valuesFrom": "scanners"
         },
         "stock": {
           "default": "kodak_portra_400",
-          "path": "scan.stock",
           "type": "stockId",
           "valuesFrom": "stocks:film"
         }
@@ -723,12 +1218,26 @@
       "domainOut": "film-dyes",
       "on": "Image",
       "owner": "CHB-003",
-      "recipePath": "scan",
       "returns": "Image"
     },
-    "mask.and": {
+    "mask.combine": {
       "area": "mask",
       "args": {
+        "amount": {
+          "default": 1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "mode": {
+          "type": "enum",
+          "values": [
+            "add",
+            "subtract",
+            "intersect"
+          ]
+        },
         "other": {
           "type": "Mask"
         }
@@ -738,7 +1247,26 @@
       "domainIn": "mask",
       "domainOut": "mask",
       "on": "Mask",
-      "owner": "CHB-010",
+      "owner": "CHB-037",
+      "returns": "Mask"
+    },
+    "mask.constant": {
+      "area": "mask",
+      "args": {
+        "value": {
+          "default": 0,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": "any",
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-037",
       "returns": "Mask"
     },
     "mask.ellipse": {
@@ -775,13 +1303,13 @@
       "args": {
         "radius_px": {
           "default": 10,
-          "max": 500,
+          "max": 100000,
           "min": 0,
           "type": "number",
           "unit": "px",
           "usual": [
-            2,
-            100
+            0.5,
+            500
           ]
         }
       },
@@ -793,7 +1321,18 @@
       "owner": "CHB-010",
       "returns": "Mask"
     },
-    "mask.gradient": {
+    "mask.invert": {
+      "area": "mask",
+      "args": {},
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": "mask",
+      "domainOut": "mask",
+      "on": "Mask",
+      "owner": "CHB-010",
+      "returns": "Mask"
+    },
+    "mask.linear": {
       "area": "mask",
       "args": {
         "from": {
@@ -854,38 +1393,38 @@
       "owner": "CHB-010",
       "returns": "Mask"
     },
-    "mask.not": {
-      "area": "mask",
-      "args": {},
-      "binding": "setting",
-      "class": "pointwise",
-      "domainIn": "mask",
-      "domainOut": "mask",
-      "on": "Mask",
-      "owner": "CHB-010",
-      "returns": "Mask"
-    },
-    "mask.or": {
-      "area": "mask",
-      "args": {
-        "other": {
-          "type": "Mask"
-        }
-      },
-      "binding": "setting",
-      "class": "pointwise",
-      "domainIn": "mask",
-      "domainOut": "mask",
-      "on": "Mask",
-      "owner": "CHB-010",
-      "returns": "Mask"
-    },
     "mask.paint": {
       "area": "mask",
       "args": {
         "strokes": {
-          "default": "[]",
-          "type": "string"
+          "default": [],
+          "of": {
+            "hardness": {
+              "default": 0.5,
+              "max": 1,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "mode": {
+              "default": "add",
+              "type": "enum",
+              "values": [
+                "add",
+                "erase"
+              ]
+            },
+            "points": {
+              "type": "polyline"
+            },
+            "radius": {
+              "max": 5000,
+              "min": 0.1,
+              "type": "number",
+              "unit": "px"
+            }
+          },
+          "type": "list"
         }
       },
       "binding": "setting",
@@ -1076,7 +1615,6 @@
       "args": {
         "knee": {
           "default": "oklch",
-          "path": "view.output.display.knee.method",
           "type": "enum",
           "values": [
             "oklch",
@@ -1087,7 +1625,6 @@
         },
         "rendering": {
           "default": "scan-of-print",
-          "path": "view.output.rendering",
           "redirects": {
             "view": null
           },
@@ -1115,7 +1652,6 @@
       "domainOut": "display-rgb",
       "on": "Image",
       "owner": "CHB-011",
-      "recipePath": "view.output",
       "returns": "Image"
     },
     "output.encode": {
@@ -1123,7 +1659,6 @@
       "args": {
         "compression": {
           "default": "deflate",
-          "path": "view.output.export.compression",
           "type": "enum",
           "values": [
             "none",
@@ -1134,7 +1669,6 @@
           "default": 300,
           "max": 4800,
           "min": 1,
-          "path": "view.output.export.dpi",
           "type": "number",
           "unit": "none",
           "usual": [
@@ -1144,7 +1678,6 @@
         },
         "format": {
           "default": "tiff16",
-          "path": "view.output.export.format",
           "type": "enum",
           "values": [
             "tiff16",
@@ -1204,13 +1737,12 @@
           "type": "string"
         },
         {
-          "name": "recipeSha256",
+          "name": "documentSha256",
           "type": "string"
         }
       ],
       "on": "Image",
       "owner": "CHB-011",
-      "recipePath": "view.output.export",
       "returns": "Value"
     },
     "output.frame": {
@@ -1220,19 +1752,16 @@
           "default": 0,
           "max": 45,
           "min": -45,
-          "path": "view.frame.angle_deg",
           "type": "number",
           "unit": "deg"
         },
         "crop": {
           "optional": true,
-          "path": "view.frame.crop",
           "type": "box",
           "unit": "px"
         },
         "orientation": {
           "default": "none",
-          "path": "view.frame.orientation",
           "type": "enum",
           "values": [
             "none",
@@ -1252,27 +1781,138 @@
       "domainOut": "display-rgb",
       "on": "Image",
       "owner": "CHB-011",
-      "recipePath": "view.frame",
       "returns": "Image"
+    },
+    "preflash": {
+      "area": "darkroom",
+      "args": {
+        "fraction": {
+          "default": 0.02,
+          "max": 0.2,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction",
+          "usual": [
+            0,
+            0.05
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "encoding": "stage",
+      "on": "none",
+      "owner": "CHB-037",
+      "returns": "Term",
+      "stages": [
+        "darkroom"
+      ],
+      "term": "contribution"
     },
     "print.combine": {
       "area": "print",
       "args": {
-        "densityMasks": {
+        "densities": {
           "default": [],
-          "type": "Image[]"
+          "of": {
+            "amount": {
+              "max": 256,
+              "min": 0,
+              "type": "number",
+              "unit": "none"
+            },
+            "image": {
+              "type": "Image"
+            },
+            "mask": {
+              "optional": true,
+              "type": "Mask"
+            }
+          },
+          "type": "list"
         },
-        "exposures": {
+        "filters": {
           "default": [],
-          "type": "Image[]"
+          "of": {
+            "amount": {
+              "max": 256,
+              "min": 0,
+              "type": "number",
+              "unit": "none"
+            },
+            "logH": {
+              "max": 1.5,
+              "min": -1.5,
+              "type": "vec3",
+              "unit": "logH"
+            },
+            "mask": {
+              "optional": true,
+              "type": "Mask"
+            }
+          },
+          "type": "list"
         },
-        "masks": {
-          "default": [],
-          "type": "Mask[]"
+        "mainAmount": {
+          "default": 1,
+          "max": 256,
+          "min": 0,
+          "type": "number",
+          "unit": "none"
         },
-        "modes": {
+        "mainMask": {
+          "optional": true,
+          "type": "Mask"
+        },
+        "preflash": {
           "default": [],
-          "type": "string[]"
+          "of": {
+            "amount": {
+              "max": 256,
+              "min": 0,
+              "type": "number",
+              "unit": "none"
+            },
+            "fraction": {
+              "max": 0.2,
+              "min": 0,
+              "type": "number",
+              "unit": "fraction"
+            },
+            "mask": {
+              "optional": true,
+              "type": "Mask"
+            }
+          },
+          "type": "list"
+        },
+        "terms": {
+          "default": [],
+          "of": {
+            "amount": {
+              "max": 256,
+              "min": 0,
+              "type": "number",
+              "unit": "none"
+            },
+            "image": {
+              "type": "Image"
+            },
+            "mask": {
+              "optional": true,
+              "type": "Mask"
+            },
+            "role": {
+              "type": "enum",
+              "values": [
+                "burn",
+                "dodge",
+                "flash-base",
+                "flash-open"
+              ]
+            }
+          },
+          "type": "list"
         }
       },
       "binding": "setting",
@@ -1286,12 +1926,12 @@
     "print.densityMask": {
       "area": "print",
       "args": {
-        "amount": {
+        "gamma": {
           "default": 0,
           "max": 1,
           "min": 0,
           "type": "number",
-          "unit": "fraction"
+          "unit": "none"
         },
         "polarity": {
           "default": "positive",
@@ -1324,7 +1964,6 @@
           "default": 2,
           "max": 5,
           "min": 0,
-          "path": "print.grade",
           "type": "number",
           "unit": "none",
           "usual": [
@@ -1334,7 +1973,6 @@
         },
         "paper": {
           "default": "kodak_portra_endura",
-          "path": "print.paper",
           "type": "stockId",
           "valuesFrom": "stocks:print"
         }
@@ -1352,7 +1990,6 @@
       "args": {
         "aim": {
           "default": "grey-0.184",
-          "path": "print.aim",
           "type": "enum",
           "values": [
             "grey-0.184",
@@ -1361,7 +1998,6 @@
         },
         "aimView": {
           "default": "D50",
-          "path": "view.illuminant",
           "type": "string",
           "valuesFrom": "illuminants"
         },
@@ -1373,7 +2009,6 @@
           },
           "max": 200,
           "min": -100,
-          "path": "print.enlarger.filtration",
           "type": "cmy",
           "unit": "CC"
         },
@@ -1381,27 +2016,23 @@
           "default": 8,
           "max": 45,
           "min": 2.8,
-          "path": "print.enlarger.fstop",
           "type": "number",
           "unit": "fstop"
         },
         "lamp": {
           "default": "TH-KG3",
-          "path": "print.enlarger.lamp",
           "type": "string",
           "valuesFrom": "lamps"
         },
         "magnification": {
+          "default": 8,
           "max": 20,
           "min": 0.5,
-          "optional": true,
-          "path": "print.enlarger.magnification",
           "type": "number",
           "unit": "none"
         },
         "mode": {
           "default": "real",
-          "path": "print.enlarger.mode",
           "type": "enum",
           "values": [
             "real",
@@ -1410,7 +2041,6 @@
         },
         "paper": {
           "default": "kodak_portra_endura",
-          "path": "print.paper",
           "type": "stockId",
           "valuesFrom": "stocks:print"
         },
@@ -1418,7 +2048,6 @@
           "default": 10,
           "max": 600,
           "min": 0.1,
-          "path": "print.enlarger.time_s",
           "type": "number",
           "unit": "s",
           "usual": [
@@ -1433,80 +2062,6 @@
       "domainOut": "paper-logH",
       "on": "Image",
       "owner": "CHB-003",
-      "recipePath": "print.enlarger",
-      "returns": "Image"
-    },
-    "print.lights": {
-      "area": "print",
-      "args": {
-        "logH": {
-          "default": [
-            0,
-            0,
-            0
-          ],
-          "max": 1.5,
-          "min": -1.5,
-          "path": "print.lights.logH",
-          "redirects": {
-            "points": 0.025
-          },
-          "type": "vec3",
-          "unit": "logH",
-          "usual": [
-            -0.5,
-            0.5
-          ]
-        }
-      },
-      "binding": "setting",
-      "class": "pointwise",
-      "domainIn": "paper-logH",
-      "domainOut": "paper-logH",
-      "on": "Image",
-      "owner": "CHB-003",
-      "recipePath": "print.lights",
-      "returns": "Image"
-    },
-    "print.preflash": {
-      "area": "print",
-      "args": {
-        "amount": {
-          "default": 0,
-          "max": 0.2,
-          "min": 0,
-          "path": "print.preflash",
-          "type": "number",
-          "unit": "fraction",
-          "usual": [
-            0,
-            0.05
-          ]
-        }
-      },
-      "binding": "setting",
-      "class": "pointwise",
-      "domainIn": "paper-logH",
-      "domainOut": "paper-logH",
-      "on": "Image",
-      "owner": "CHB-010",
-      "returns": "Image"
-    },
-    "retouch.heal": {
-      "area": "retouch",
-      "args": {
-        "spots": {
-          "default": "{}",
-          "type": "string"
-        }
-      },
-      "binding": "setting",
-      "class": "spatial",
-      "domainIn": "print-xyz",
-      "domainOut": "print-xyz",
-      "on": "Image",
-      "owner": "CHB-022",
-      "recipePath": "retouch",
       "returns": "Image"
     },
     "scan.baseClass": {
@@ -1570,13 +2125,11 @@
           "max": 100,
           "min": 0.000001,
           "optional": true,
-          "path": "scan.baseT",
           "type": "vec3",
           "unit": "fraction"
         },
         "rebate": {
           "optional": true,
-          "path": "scan.rebate",
           "type": "box",
           "unit": "px"
         }
@@ -1587,7 +2140,6 @@
       "domainOut": "scanner-density",
       "on": "Image",
       "owner": "CHB-006",
-      "recipePath": "scan",
       "returns": "Image"
     },
     "scan.flare": {
@@ -1597,7 +2149,6 @@
           "default": 0,
           "max": 20,
           "min": 0,
-          "path": "scan.flare",
           "perChannel": true,
           "type": "number",
           "unit": "percent",
@@ -1613,7 +2164,6 @@
       "domainOut": "camera-linear",
       "on": "Image",
       "owner": "CHB-006",
-      "recipePath": "scan",
       "returns": "Image"
     },
     "scan.flatField": {
@@ -1621,7 +2171,6 @@
       "args": {
         "flat": {
           "optional": true,
-          "path": "scan.flat",
           "type": "string"
         }
       },
@@ -1631,43 +2180,6 @@
       "domainOut": "camera-linear",
       "on": "Image",
       "owner": "CHB-006",
-      "recipePath": "scan",
-      "returns": "Image"
-    },
-    "scan.heal": {
-      "area": "scan",
-      "args": {
-        "marginPx": {
-          "default": 2,
-          "integer": true,
-          "max": 50,
-          "min": 0,
-          "path": "scan.dust.marginPx",
-          "type": "number",
-          "unit": "px"
-        },
-        "method": {
-          "default": "patch",
-          "path": "scan.dust.method",
-          "type": "enum",
-          "values": [
-            "patch",
-            "diffuse",
-            "neutral"
-          ]
-        },
-        "spots": {
-          "default": "[]",
-          "type": "string"
-        }
-      },
-      "binding": "scan",
-      "class": "spatial",
-      "domainIn": "scanner-density",
-      "domainOut": "scanner-density",
-      "on": "Image",
-      "owner": "CHB-006",
-      "recipePath": "scan.dust",
       "returns": "Image"
     },
     "scan.noise": {
@@ -1717,7 +2229,6 @@
       "args": {
         "rebate": {
           "optional": true,
-          "path": "scan.rebate",
           "type": "box",
           "unit": "px"
         }
@@ -1739,7 +2250,6 @@
       ],
       "on": "Image",
       "owner": "CHB-006",
-      "recipePath": "scan",
       "returns": "Value"
     },
     "scan.specks": {
@@ -1815,7 +2325,6 @@
       "args": {
         "encoding": {
           "default": "linear",
-          "path": "source.decode.encoding",
           "type": "enum",
           "values": [
             "linear",
@@ -1825,6 +2334,12 @@
         },
         "source": {
           "type": "string"
+        },
+        "umPerPx": {
+          "max": 100000,
+          "min": 0.01,
+          "type": "number",
+          "unit": "um"
         }
       },
       "binding": "scan",
@@ -1832,7 +2347,6 @@
       "domainOut": "camera-linear",
       "on": "none",
       "owner": "CHB-006",
-      "recipePath": "source.decode",
       "returns": "Image"
     },
     "source.pattern": {
@@ -1906,7 +2420,6 @@
       "args": {
         "mode": {
           "default": "daylight",
-          "path": "capture.whiteBalance.mode",
           "type": "enum",
           "values": [
             "daylight",
@@ -1918,7 +2431,6 @@
           "default": 5500,
           "max": 15000,
           "min": 2000,
-          "path": "capture.whiteBalance.temperature_K",
           "type": "number",
           "unit": "K",
           "usual": [
@@ -1930,7 +2442,6 @@
           "default": 0,
           "max": 150,
           "min": -150,
-          "path": "capture.whiteBalance.tint",
           "type": "number",
           "unit": "none"
         }
@@ -1941,7 +2452,6 @@
       "domainOut": "scene-xyz",
       "on": "Image",
       "owner": "CHB-006",
-      "recipePath": "capture.whiteBalance",
       "returns": "Image"
     },
     "view.adapt": {
@@ -1949,7 +2459,6 @@
       "args": {
         "to": {
           "default": "D65",
-          "path": "view.output.white",
           "type": "enum",
           "values": [
             "D50",
@@ -1972,7 +2481,6 @@
           "default": 0.48,
           "max": 10,
           "min": 0,
-          "path": "view.flare",
           "type": "number",
           "unit": "percent",
           "usual": [
@@ -1987,7 +2495,6 @@
       "domainOut": "print-xyz",
       "on": "Image",
       "owner": "CHB-003",
-      "recipePath": "view",
       "returns": "Image"
     },
     "view.inspect": {
@@ -2018,7 +2525,6 @@
       "args": {
         "illuminant": {
           "default": "D50",
-          "path": "view.illuminant",
           "type": "string",
           "valuesFrom": "illuminants"
         }
@@ -2029,336 +2535,12 @@
       "domainOut": "print-xyz",
       "on": "Image",
       "owner": "CHB-003",
-      "recipePath": "view",
       "returns": "Image"
     }
   },
-  "recipeFields": {
-    "capture.adapt": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
+  "output": {
+    "display.knee.method": {
       "type": "enum",
-      "unit": null,
-      "values": [
-        "to-film-reference",
-        "none"
-      ]
-    },
-    "capture.autoExposure.analysisLongSide_px": {
-      "kind": "spec",
-      "max": 4096,
-      "min": 16,
-      "nullable": false,
-      "type": "number",
-      "unit": "px",
-      "values": null
-    },
-    "capture.autoExposure.method": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "off",
-        "mean",
-        "grey"
-      ]
-    },
-    "capture.development.dir.amount": {
-      "kind": "op"
-    },
-    "capture.development.dir.diffusion_um": {
-      "kind": "op"
-    },
-    "capture.development.grain.amount": {
-      "kind": "op"
-    },
-    "capture.development.grain.seed": {
-      "kind": "op"
-    },
-    "capture.development.grain.size_um": {
-      "kind": "op"
-    },
-    "capture.development.halation.strength": {
-      "kind": "op"
-    },
-    "capture.development.push": {
-      "kind": "op"
-    },
-    "capture.exposureEV": {
-      "kind": "op"
-    },
-    "capture.format.longEdge_mm": {
-      "kind": "spec",
-      "max": 300,
-      "min": 10,
-      "nullable": false,
-      "type": "number",
-      "unit": "none",
-      "values": null
-    },
-    "capture.stock": {
-      "kind": "op"
-    },
-    "capture.whiteBalance.mode": {
-      "kind": "op"
-    },
-    "capture.whiteBalance.temperature_K": {
-      "kind": "op"
-    },
-    "capture.whiteBalance.tint": {
-      "kind": "op"
-    },
-    "data": {
-      "kind": "custom"
-    },
-    "finishing.hues.*": {
-      "kind": "custom"
-    },
-    "finishing.look": {
-      "kind": "spec",
-      "max": 1,
-      "min": 0,
-      "nullable": false,
-      "type": "number",
-      "unit": "fraction",
-      "values": null
-    },
-    "finishing.values.clarity": {
-      "kind": "op"
-    },
-    "finishing.values.clarity_radius_px": {
-      "kind": "op"
-    },
-    "print.aim": {
-      "kind": "op"
-    },
-    "print.densityMasks.*": {
-      "kind": "custom"
-    },
-    "print.enlarger.filtration": {
-      "kind": "op"
-    },
-    "print.enlarger.fstop": {
-      "kind": "op"
-    },
-    "print.enlarger.lamp": {
-      "kind": "op"
-    },
-    "print.enlarger.magnification": {
-      "kind": "op"
-    },
-    "print.enlarger.mode": {
-      "kind": "op"
-    },
-    "print.enlarger.time_s": {
-      "kind": "op"
-    },
-    "print.exposures.*.enabled": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "bool",
-      "unit": null,
-      "values": null
-    },
-    "print.exposures.*.filtration": {
-      "kind": "spec",
-      "max": 200,
-      "min": -100,
-      "nullable": true,
-      "type": "cmy",
-      "unit": "CC",
-      "values": null
-    },
-    "print.exposures.*.kind": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "dodge",
-        "burn",
-        "flash",
-        "split"
-      ]
-    },
-    "print.exposures.*.mask": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": true,
-      "type": "string",
-      "unit": null,
-      "values": null
-    },
-    "print.exposures.*.stops": {
-      "kind": "spec",
-      "max": 6,
-      "min": -6,
-      "nullable": true,
-      "type": "number",
-      "unit": "stop",
-      "values": null
-    },
-    "print.exposures.*.through": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": true,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "base",
-        "open"
-      ]
-    },
-    "print.exposures.*.time_s": {
-      "kind": "spec",
-      "max": 600,
-      "min": 0,
-      "nullable": true,
-      "type": "number",
-      "unit": "s",
-      "values": null
-    },
-    "print.grade": {
-      "kind": "op"
-    },
-    "print.lights.auto": {
-      "kind": "custom"
-    },
-    "print.lights.logH": {
-      "kind": "op"
-    },
-    "print.paper": {
-      "kind": "op"
-    },
-    "print.preflash": {
-      "kind": "op"
-    },
-    "probes.*": {
-      "kind": "custom"
-    },
-    "retouch.spots.*": {
-      "kind": "custom"
-    },
-    "roll": {
-      "kind": "custom"
-    },
-    "scan.baseT": {
-      "kind": "op"
-    },
-    "scan.dust.marginPx": {
-      "kind": "op"
-    },
-    "scan.dust.method": {
-      "kind": "op"
-    },
-    "scan.dust.spots": {
-      "kind": "custom"
-    },
-    "scan.flare": {
-      "kind": "op"
-    },
-    "scan.flat": {
-      "kind": "op"
-    },
-    "scan.format": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "135",
-        "645",
-        "66",
-        "67",
-        "45"
-      ]
-    },
-    "scan.openGate": {
-      "kind": "custom"
-    },
-    "scan.rebate": {
-      "kind": "op"
-    },
-    "scan.scanner": {
-      "kind": "op"
-    },
-    "scan.stock": {
-      "kind": "op"
-    },
-    "source.decode.encoding": {
-      "kind": "op"
-    },
-    "source.decode.mode": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
-      "values": [
-        "scan",
-        "photo"
-      ]
-    },
-    "view.flare": {
-      "kind": "op"
-    },
-    "view.frame.angle_deg": {
-      "kind": "op"
-    },
-    "view.frame.crop": {
-      "kind": "op"
-    },
-    "view.frame.orientation": {
-      "kind": "op"
-    },
-    "view.illuminant": {
-      "kind": "op"
-    },
-    "view.output.display.knee.method": {
-      "kind": "op"
-    },
-    "view.output.display.knee.strength": {
-      "kind": "spec",
-      "max": 20,
-      "min": 0,
-      "nullable": false,
-      "type": "number",
-      "unit": "none",
-      "values": null
-    },
-    "view.output.display.proof": {
-      "kind": "custom"
-    },
-    "view.output.export.compression": {
-      "kind": "op"
-    },
-    "view.output.export.dpi": {
-      "kind": "op"
-    },
-    "view.output.export.format": {
-      "kind": "op"
-    },
-    "view.output.export.knee.method": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
-      "type": "enum",
-      "unit": null,
       "values": [
         "oklch",
         "cam16-ucs",
@@ -2366,51 +2548,77 @@
         "clip"
       ]
     },
-    "view.output.export.knee.strength": {
-      "kind": "spec",
+    "display.knee.strength": {
       "max": 20,
       "min": 0,
-      "nullable": false,
       "type": "number",
-      "unit": "none",
-      "values": null
+      "unit": "none"
     },
-    "view.output.export.recipe": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
+    "display.proof": {
+      "type": "custom"
+    },
+    "export.compression": {
       "type": "enum",
-      "unit": null,
+      "values": [
+        "none",
+        "deflate"
+      ]
+    },
+    "export.document": {
+      "type": "enum",
       "values": [
         "sidecar",
         "embedded",
         "none"
       ]
     },
-    "view.output.export.scale": {
-      "kind": "custom"
+    "export.dpi": {
+      "max": 4800,
+      "min": 1,
+      "type": "number",
+      "unit": "none",
+      "usual": [
+        240,
+        360
+      ]
     },
-    "view.output.export.signal": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
+    "export.format": {
       "type": "enum",
-      "unit": null,
+      "values": [
+        "tiff16",
+        "png16",
+        "png8",
+        "jpeg"
+      ]
+    },
+    "export.knee.method": {
+      "type": "enum",
+      "values": [
+        "oklch",
+        "cam16-ucs",
+        "tanh-shoulder",
+        "clip"
+      ]
+    },
+    "export.knee.strength": {
+      "max": 20,
+      "min": 0,
+      "type": "number",
+      "unit": "none"
+    },
+    "export.scale": {
+      "type": "custom"
+    },
+    "export.signal": {
+      "type": "enum",
       "values": [
         "icc",
         "icc+cicp",
         "none"
       ]
     },
-    "view.output.export.space": {
-      "kind": "spec",
-      "max": null,
-      "min": null,
-      "nullable": false,
+    "export.space": {
       "type": "enum",
-      "unit": null,
       "values": [
         "srgb",
         "display-p3",
@@ -2419,17 +2627,279 @@
         "prophoto"
       ]
     },
-    "view.output.printer": {
-      "kind": "custom"
+    "printer": {
+      "type": "custom"
     },
-    "view.output.rendering": {
-      "kind": "op"
+    "rendering": {
+      "redirects": {
+        "view": null
+      },
+      "type": "enum",
+      "values": [
+        "print-as-seen",
+        "scan-of-print"
+      ]
     },
-    "view.output.white": {
-      "kind": "op"
+    "white": {
+      "type": "enum",
+      "values": [
+        "D50",
+        "D65"
+      ]
     }
   },
-  "recipeVersion": 2,
+  "stages": {
+    "darkroom": {
+      "input": "negative",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "law": "light",
+      "medium": {
+        "aim": {
+          "type": "enum",
+          "values": [
+            "grey-0.184",
+            "midgray-normalised"
+          ]
+        },
+        "grade": {
+          "max": 5,
+          "min": 0,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            1,
+            4
+          ]
+        },
+        "lamp": {
+          "type": "string",
+          "valuesFrom": "lamps"
+        },
+        "magnification": {
+          "max": 20,
+          "min": 0.5,
+          "type": "number",
+          "unit": "none"
+        },
+        "mode": {
+          "type": "enum",
+          "values": [
+            "real",
+            "normalised"
+          ]
+        },
+        "paper": {
+          "type": "stockId",
+          "valuesFrom": "stocks:print"
+        }
+      },
+      "mediumAfter": "negative",
+      "output": "darkroom.H"
+    },
+    "film": {
+      "input": "scene",
+      "kinds": [
+        "digital-raw"
+      ],
+      "law": null,
+      "medium": {
+        "dir.amount": {
+          "max": 2.5,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "dir.diffusion_um": {
+          "max": 150,
+          "min": 0,
+          "type": "number",
+          "unit": "um"
+        },
+        "exposureEV": {
+          "max": 10,
+          "min": -10,
+          "type": "number",
+          "unit": "stop",
+          "usual": [
+            -3,
+            3
+          ]
+        },
+        "format.longEdge_mm": {
+          "max": 300,
+          "min": 10,
+          "type": "number",
+          "unit": "mm"
+        },
+        "grain.amount": {
+          "max": 4,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "grain.seed": {
+          "integer": true,
+          "max": 2147483648,
+          "min": 0,
+          "type": "number",
+          "unit": "none"
+        },
+        "grain.size_um": {
+          "max": 45,
+          "min": 3,
+          "type": "number",
+          "unit": "um"
+        },
+        "halation.strength": {
+          "max": 4,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction"
+        },
+        "push": {
+          "max": 3,
+          "min": -2,
+          "type": "number",
+          "unit": "stop"
+        },
+        "stock": {
+          "type": "stockId",
+          "valuesFrom": "stocks:film"
+        }
+      },
+      "mediumAfter": "scene",
+      "output": "film"
+    },
+    "print": {
+      "input": "print",
+      "kinds": [
+        "negative-scan",
+        "digital-raw"
+      ],
+      "law": "composite",
+      "medium": {
+        "flare": {
+          "max": 10,
+          "min": 0,
+          "type": "number",
+          "unit": "percent",
+          "usual": [
+            0,
+            2
+          ]
+        },
+        "illuminant": {
+          "type": "string",
+          "valuesFrom": "illuminants"
+        }
+      },
+      "mediumAfter": "negative",
+      "output": "finished"
+    },
+    "scan": {
+      "input": "source",
+      "kinds": [
+        "negative-scan"
+      ],
+      "law": "repair",
+      "medium": {
+        "baseT": {
+          "max": 100,
+          "min": 0.000001,
+          "optional": true,
+          "type": "vec3",
+          "unit": "fraction"
+        },
+        "flare": {
+          "max": 20,
+          "min": 0,
+          "perChannel": true,
+          "type": "number",
+          "unit": "percent",
+          "usual": [
+            0,
+            3
+          ]
+        },
+        "flat": {
+          "optional": true,
+          "type": "string"
+        },
+        "format": {
+          "type": "enum",
+          "values": [
+            "135",
+            "645",
+            "66",
+            "67",
+            "45"
+          ]
+        },
+        "openGate": {
+          "type": "custom"
+        },
+        "rebate": {
+          "optional": true,
+          "type": "box",
+          "unit": "px"
+        },
+        "scanner": {
+          "type": "string",
+          "valuesFrom": "scanners"
+        },
+        "stock": {
+          "type": "stockId",
+          "valuesFrom": "stocks:film"
+        },
+        "umPerPx": {
+          "max": 100000,
+          "min": 0.01,
+          "type": "number",
+          "unit": "um"
+        }
+      },
+      "mediumAfter": null,
+      "output": "scan"
+    },
+    "scene": {
+      "input": "source",
+      "kinds": [
+        "digital-raw"
+      ],
+      "law": "composite",
+      "medium": {
+        "whiteBalance.mode": {
+          "type": "enum",
+          "values": [
+            "daylight",
+            "as-shot",
+            "custom"
+          ]
+        },
+        "whiteBalance.temperature_K": {
+          "max": 15000,
+          "min": 2000,
+          "type": "number",
+          "unit": "K",
+          "usual": [
+            2800,
+            10000
+          ]
+        },
+        "whiteBalance.tint": {
+          "max": 150,
+          "min": -150,
+          "type": "number",
+          "unit": "none"
+        }
+      },
+      "mediumAfter": "source",
+      "output": "scene"
+    }
+  },
   "units": [
     "D",
     "logH",
@@ -2438,6 +2908,7 @@
     "CC",
     "mired",
     "K",
+    "mm",
     "um",
     "nm",
     "px",

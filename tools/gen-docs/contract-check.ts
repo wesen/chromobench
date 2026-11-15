@@ -79,21 +79,36 @@ for (const [name, op] of Object.entries<any>(base.ops)) {
   for (const a of Object.keys(now.args)) if (!op.args[a]) out.push({ cls: now.args[a].default !== undefined || now.args[a].optional ? 'minor' : 'breaking', what: `${name}.${a} added` });
 }
 for (const name of Object.keys(cur.ops)) if (!base.ops[name]) out.push({ cls: 'minor', what: `op ${name} added` });
-for (const p of Object.keys(base.recipeFields)) if (!cur.recipeFields[p]) out.push({ cls: 'breaking', what: `recipe path ${p} removed` });
-for (const p of Object.keys(cur.recipeFields)) if (!base.recipeFields[p]) out.push({ cls: 'minor', what: `recipe path ${p} added` });
-for (const p of Object.keys(base.recipeFields)) {
-  const [o, nRule] = [base.recipeFields[p], cur.recipeFields[p]];
-  if (!nRule || J(o) === J(nRule)) continue;
-  // an op-owned path is checked by its owning argument: compare against that ArgSpec
-  const owner = nRule.kind === 'op' ? Object.values<any>(cur.ops).flatMap((op) => Object.values<any>(op.args)).find((a) => a.path === p) : undefined;
-  const n = owner ? { kind: 'op', type: owner.type, unit: owner.unit ?? null, values: owner.values ?? null, min: owner.min ?? null, max: owner.max ?? null } : nRule;
-  if (o.kind === 'spec' && n.kind === 'op' && J([o.type, o.unit, o.values, o.min, o.max]) === J([n.type, n.unit, n.values, n.min, n.max])) {
-    out.push({ cls: 'minor', what: `recipe path ${p}: now op-owned (${J(owner)}), same values` });
-    continue;
+if (base.recipeFields && !cur.recipeFields) {
+  out.push({ cls: 'breaking', what: `recipe version ${base.recipeVersion} (${Object.keys(base.recipeFields).length} paths) replaced by document format ${cur.documentFormat}: recipes are refused, no migration` });
+} else if (base.recipeFields) {
+  for (const p of Object.keys(base.recipeFields)) if (!cur.recipeFields[p]) out.push({ cls: 'breaking', what: `recipe path ${p} removed` });
+  for (const p of Object.keys(cur.recipeFields)) if (!base.recipeFields[p]) out.push({ cls: 'minor', what: `recipe path ${p} added` });
+  for (const p of Object.keys(base.recipeFields)) {
+    const [o, nRule] = [base.recipeFields[p], cur.recipeFields[p]];
+    if (!nRule || J(o) === J(nRule)) continue;
+    // an op-owned path is checked by its owning argument: compare against that ArgSpec
+    const owner = nRule.kind === 'op' ? Object.values<any>(cur.ops).flatMap((op) => Object.values<any>(op.args)).find((a) => a.path === p) : undefined;
+    const n = owner ? { kind: 'op', type: owner.type, unit: owner.unit ?? null, values: owner.values ?? null, min: owner.min ?? null, max: owner.max ?? null } : nRule;
+    if (o.kind === 'spec' && n.kind === 'op' && J([o.type, o.unit, o.values, o.min, o.max]) === J([n.type, n.unit, n.values, n.min, n.max])) {
+      out.push({ cls: 'minor', what: `recipe path ${p}: now op-owned (${J(owner)}), same values` });
+      continue;
+    }
+    const removed = (o.values ?? []).some((v: string) => !(n.values ?? []).includes(v));
+    const narrowed = (n.min ?? -Infinity) > (o.min ?? -Infinity) || (n.max ?? Infinity) < (o.max ?? Infinity);
+    out.push({ cls: removed || narrowed || (o.type && n.type && o.type !== n.type) ? 'breaking' : 'minor', what: `recipe path ${p}: ${J(o)} → ${J(n)}` });
   }
-  const removed = (o.values ?? []).some((v: string) => !(n.values ?? []).includes(v));
-  const narrowed = (n.min ?? -Infinity) > (o.min ?? -Infinity) || (n.max ?? Infinity) < (o.max ?? Infinity);
-  out.push({ cls: removed || narrowed || (o.type && n.type && o.type !== n.type) ? 'breaking' : 'minor', what: `recipe path ${p}: ${J(o)} → ${J(n)}` });
+}
+// contract 1.0: the document's fixed fields (stage media, geometry, output) by path
+const docFields = (snap: any): Record<string, any> => (snap.stages
+  ? Object.assign({}, ...Object.entries<any>(snap.stages).map(([s, st]) => Object.fromEntries(Object.entries<any>(st.medium).map(([p, f]) => [`stages.${s}.medium.${p}`, f]))),
+    Object.fromEntries(Object.entries<any>(snap.geometry ?? {}).map(([p, f]) => [`geometry.${p}`, f])), Object.fromEntries(Object.entries<any>(snap.output ?? {}).map(([p, f]) => [`output.${p}`, f])))
+  : {});
+if (base.stages) {
+  const [bf, cf] = [docFields(base), docFields(cur)];
+  for (const p of Object.keys(bf)) if (!cf[p]) out.push({ cls: 'breaking', what: `document field ${p} removed` });
+  for (const p of Object.keys(cf)) if (!bf[p]) out.push({ cls: 'minor', what: `document field ${p} added` });
+  for (const p of Object.keys(bf)) if (cf[p] && J(bf[p]) !== J(cf[p])) out.push({ cls: 'breaking', what: `document field ${p}: ${J(bf[p])} → ${J(cf[p])}` });
 }
 for (const c of base.errorCodes) if (!cur.errorCodes.includes(c)) out.push({ cls: 'breaking', what: `error code ${c} removed` });
 for (const c of cur.errorCodes) if (!base.errorCodes.includes(c)) out.push({ cls: 'minor', what: `error code ${c} added` });

@@ -6,8 +6,7 @@ import { canonicalJSON } from '@chromobench/values';
 import { DOMAINS, type Domain, type ImageInfo } from './domains.ts';
 import { fail, type Diagnostic } from './errors.ts';
 import type { Node, NodeDef, NodeInfo, ValueInfo } from './graph-types.ts';
-import type { FrameRecipe, OutputSpaceId } from './recipe.ts';
-import { acceptsDomain, bindArgs, getOp, nodeArgs, opsProducing, outputChannels, type OpDef } from './registry.ts';
+import { acceptsDomain, bindArgs, getOp, nodeSlots, opsProducing, outputChannels, type OpDef } from './registry.ts';
 import type { SourceInfo } from './source.ts';
 import type { Box } from './spec.ts';
 
@@ -92,6 +91,7 @@ export class Graph {
   /** Builds (or finds) the node for op(inputs, raw). Node-typed args become extra inputs. */
   intern(opName: string, inputs: readonly string[], raw: Readonly<Record<string, unknown>> = {}): InternResult {
     const op = getOp(opName);
+    if (op.returns === 'Term') fail('E_WRONG_KIND', `${op.name} is a darkroom layer, not a node: the light law compiles it into print.expose and print.combine`, { hint: 'insert it into stages.darkroom.stack and compile the document' });
     const recv = inputs.map((id) => this.nodes.get(id) ?? fail('E_NO_NODE', `unknown input node ${id.slice(0, 12)}…`, { hint: 'adopt its closure first' }));
     if (op.on === 'none') {
       if (recv.length !== 0) fail('E_WRONG_KIND', `${op.name} takes no receiver`);
@@ -104,26 +104,14 @@ export class Graph {
       }
       if (isImage(r.info) && !acceptsDomain(op, r.info.domain)) this.domainError(op, r.info.domain);
     }
-    // Node-typed args: replace Node objects by ids, check them.
-    const rawArgs: Record<string, unknown> = { ...raw };
-    for (const a of nodeArgs(op)) {
-      const v = rawArgs[a];
-      if (v === undefined || v === null) continue;
-      const ids = (Array.isArray(v) ? v : [v]).map((x) => (typeof x === 'object' && x !== null && 'id' in x ? (x as { id: string }).id : x));
-      rawArgs[a] = Array.isArray(v) ? ids : ids[0];
-    }
-    const { args, warnings } = bindArgs(op, rawArgs);
+    // Node-typed values (top level or list-item fields) may be Node objects: bind ids, then check each one.
+    const { args, warnings } = bindArgs(op, toIds(raw) as Record<string, unknown>);
     const extra: string[] = [];
-    for (const a of nodeArgs(op)) {
-      const v = args[a];
-      if (v === undefined) continue;
-      const spec = op.args[a]!;
-      for (const id of (Array.isArray(v) ? v : [v]) as string[]) {
-        const n = this.nodes.get(id) ?? fail('E_NO_NODE', `${op.name}.${a}: unknown node ${id.slice(0, 12)}…`);
-        if (!isImage(n.info)) fail('E_WRONG_KIND', `${op.name}.${a} needs an image`);
-        if (spec.type.startsWith('Mask') && n.info.domain !== 'mask') fail('E_DOMAIN', `${op.name}.${a} needs a mask; got ${n.info.domain}`, { hint: 'build one with mask.*' });
-        extra.push(id);
-      }
+    for (const slot of nodeSlots(op, args)) {
+      const n = this.nodes.get(slot.id) ?? fail('E_NO_NODE', `${op.name}.${slot.at}: unknown node ${String(slot.id).slice(0, 12)}…`);
+      if (!isImage(n.info)) fail('E_WRONG_KIND', `${op.name}.${slot.at} needs an image`);
+      if (slot.spec.type === 'Mask' && n.info.domain !== 'mask') fail('E_DOMAIN', `${op.name}.${slot.at} needs a mask; got ${n.info.domain}`, { hint: 'build one with mask.*' });
+      extra.push(slot.id);
     }
     const def: NodeDef = { op: op.name, inputs: [...inputs, ...extra], args };
     const id = nodeId(def, this.canon);
@@ -160,12 +148,14 @@ export class Graph {
     let width: number;
     let height: number;
     let umPerPx: ImageInfo['umPerPx'] = {};
+    // the pitches (contract 1.0): source.open carries the film's, print.expose derives the print's (× magnification)
     let channels = outputChannels(op, inInfo?.domain);
     if (op.name === 'source.open') {
       const s = this.sources.get(args['source'] as string) ?? fail('E_NO_SOURCE', `source ${String(args['source']).slice(0, 12)}… is not open`, { hint: 'engine.open(source) and graph.registerSource(info) first' });
       width = s.width;
       height = s.height;
       channels = s.channels === 1 ? 3 : s.channels;
+      umPerPx = { film: args['umPerPx'] as number };
     } else if (op.name === 'source.pattern') {
       width = args['width'] as number;
       height = args['height'] as number;
@@ -181,6 +171,7 @@ export class Graph {
       width = inInfo.width;
       height = inInfo.height;
       umPerPx = { ...inInfo.umPerPx };
+      if (op.name === 'print.expose' && umPerPx.film !== undefined) umPerPx.paper = umPerPx.film * (args['magnification'] as number);
       if (op.name === 'output.frame') {
         const crop = args['crop'] as Box | undefined;
         if (crop) {
@@ -229,75 +220,12 @@ export class Graph {
   }
 }
 
-export interface CompileOptions {
-  /** Display space of the viewer (output.display.space); default srgb. */
-  displaySpace?: OutputSpaceId;
-}
-
-/** Builds the display node of a recipe, taking every recipe-backed argument from the recipe. */
-export function compile(r: FrameRecipe, g: Graph, opts: CompileOptions = {}): Node {
-  const I = (op: string, inputs: string[], args: Record<string, unknown>): string => g.intern(op, inputs, args).node.id;
-  let n = I('source.open', [], { source: r.source.sha256, encoding: r.source.decode.encoding });
-  let dyes: string;
-  if (r.kind === 'negative-scan') {
-    const s = r.scan ?? fail('E_RECIPE', 'negative-scan recipe without scan settings');
-    if (s.flat) n = I('scan.flatField', [n], { flat: s.flat });
-    // scan.flare: a number or a per-channel vec3 (contract 0.3); omitted when zero
-    if (Array.isArray(s.flare) ? s.flare.some((f) => f !== 0) : s.flare) n = I('scan.flare', [n], { flare: s.flare });
-    // the roll's base wins over the frame's rebate box (CHB-020 scan.baseT)
-    n = I('scan.density', [n], s.baseT ? { baseT: s.baseT } : s.rebate ? { rebate: s.rebate } : {});
-    if (s.dust.spots.length > 0) n = I('scan.heal', [n], { spots: canonicalJSON(s.dust.spots), method: s.dust.method, marginPx: s.dust.marginPx });
-    dyes = I('invert.dyes', [n], { stock: s.stock, scanner: s.scanner });
-  } else {
-    const c = r.capture ?? fail('E_RECIPE', 'digital-raw recipe without capture settings');
-    n = I('source.xyz', [n], { mode: c.whiteBalance.mode, temperature_K: c.whiteBalance.temperature_K, tint: c.whiteBalance.tint });
-    n = I('capture.expose', [n], { stock: c.stock, exposureEV: c.exposureEV });
-    n = I('film.couple', [n], { amount: c.development.dir.amount, diffusion_um: c.development.dir.diffusion_um });
-    n = I('film.halation', [n], { strength: c.development.halation.strength });
-    n = I('film.develop', [n], { push: c.development.push, curves: 'precorrected' });
-    dyes = I('film.grain', [n], { amount: c.development.grain.amount, size_um: c.development.grain.size_um, seed: c.development.grain.seed });
+/** Node objects (anything with an id) in a raw argument value → their ids, at any depth of arrays and objects. */
+function toIds(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(toIds);
+  if (v !== null && typeof v === 'object') {
+    if ('id' in v && 'op' in v && 'inputs' in v) return (v as { id: string }).id;
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, toIds(x)]));
   }
-  const p = r.print;
-  const e = p.enlarger;
-  const exposeArgs = (time_s: number, filtration = e.filtration): Record<string, unknown> => ({
-    paper: p.paper, mode: e.mode, lamp: e.lamp, filtration, time_s, fstop: e.fstop, ...(e.magnification !== null ? { magnification: e.magnification } : {}),
-    aim: p.aim, aimView: r.view.illuminant,
-  });
-  let x = I('print.expose', [dyes], exposeArgs(e.time_s));
-  const extra = p.exposures.filter((ex) => ex.enabled);
-  // density masks (CHB-010 C5): made from the main exposure, applied by print.combine to every exposure
-  // through the negative (not to flashes); several masks multiply (their densities add)
-  const dms = Object.keys(p.densityMasks).sort().map((id) => p.densityMasks[id]!).filter((m) => m.enabled && m.amount > 0)
-    .map((m) => I('print.densityMask', [x], { amount: m.amount, radius_um: m.radius_um, polarity: m.polarity }));
-  if (extra.length > 0 || dms.length > 0) {
-    const exposures: string[] = [];
-    const masks: string[] = [];
-    const modes: string[] = [];
-    for (const ex of extra) {
-      const t = ex.time_s ?? (ex.stops === null ? e.time_s : ex.kind === 'dodge' ? e.time_s * (1 - 2 ** -ex.stops) : e.time_s * (2 ** ex.stops - 1));
-      exposures.push(I('print.expose', [dyes], exposeArgs(Math.max(t, 0.1), ex.filtration ?? e.filtration)));
-      const spec = ex.mask ? r.masks[ex.mask] : undefined;
-      if (ex.mask && !spec) fail('E_RECIPE', `exposure ${ex.id}: unknown mask ${ex.mask}`);
-      const maskNodes = spec ? g.adopt(spec.nodes) : [];
-      const m = maskNodes.length ? maskNodes[maskNodes.length - 1]!.id : I('mask.luminance', [x], { above: 0, below: 1, softness: 0 });
-      masks.push(m);
-      // a flash goes through the film base (or an empty gate), not through the image (CHB-010 C6)
-      modes.push(ex.kind === 'dodge' ? 'subtract' : ex.kind === 'flash' ? (ex.through === 'open' ? 'flash-open' : 'flash-base') : 'add');
-    }
-    x = I('print.combine', [x], { exposures, masks, modes, densityMasks: dms });
-  }
-  x = I('print.lights', [x], { logH: p.lights.logH });
-  if (p.preflash > 0) x = I('print.preflash', [x], { amount: p.preflash });
-  const pd = I('print.develop', [x], { paper: p.paper, grade: p.grade });
-  let v = I('view.reflect', [pd], { illuminant: r.view.illuminant });
-  v = I('view.flare', [v], { flare: r.view.output.rendering === 'scan-of-print' ? 0 : r.view.flare });
-  v = I('view.adapt', [v], { to: r.view.output.white });
-  // retouch (CHB-022): after the adaptation, before finishing; omitted when no spot is enabled
-  const spots = Object.fromEntries(Object.entries(r.retouch.spots).filter(([, sp]) => sp.enabled));
-  if (Object.keys(spots).length > 0) v = I('retouch.heal', [v], { spots: canonicalJSON(spots) });
-  const clarity = r.finishing.values['clarity'] ?? 0;
-  if (clarity !== 0) v = I('finishing.clarity', [v], { amount: clarity, radius_px: r.finishing.values['clarity_radius_px'] ?? 40 });
-  const d = I('output.display', [v], { space: opts.displaySpace ?? 'srgb', rendering: r.view.output.rendering, knee: r.view.output.display.knee.method });
-  const f = r.view.frame;
-  return g.intern('output.frame', [d], { orientation: f.orientation, angle_deg: f.angle_deg, ...(f.crop ? { crop: f.crop } : {}) }).node;
+  return v;
 }

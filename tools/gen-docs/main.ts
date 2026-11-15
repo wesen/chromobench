@@ -1,17 +1,18 @@
 // registry → packages/contract/src/generated/op-args.ts, docs/reference/ops/<area>.md,
 // packages/contract/catalog.snapshot.json. `--check` fails when a checked-in file is out of date.
-// CHB-007 extends this tool to emit the DSL .d.ts and the agent reference.
+// CHB-007 extends this tool to emit the DSL .d.ts and the agent reference. `--contract-only` writes (or checks) the
+// contract's own files only: the DSL and agent targets are generated from packages/dsl and packages/agent, which
+// follow the contract in their own phases (CHB-037: P6 brings them to contract 1.0).
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allOps, AREAS, argPath, CONTRACT_VERSION, type ArgSpec, type OpDef } from '@chromobench/contract';
+import { allOps, AREAS, CONTRACT_VERSION, type ArgSpec, type OpDef } from '@chromobench/contract';
 import { MockEngine } from '@chromobench/engine-mock';
 import { buildSnapshot } from './snapshot.ts';
-import { dslFiles } from './dsl.ts';
-import { agentFiles } from './agent.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const check = process.argv.includes('--check');
+const contractOnly = process.argv.includes('--contract-only');
 
 const pascal = (s: string): string => s.split(/[.\-_]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 
@@ -22,23 +23,22 @@ function tsType(s: ArgSpec): string {
     case 'enum': return (s.values ?? []).map((v) => JSON.stringify(v)).join(' | ');
     case 'bool': return 'boolean';
     case 'stockId': return 'StockId';
-    case 'string': case 'curve': return 'string';
+    case 'string': return 'string';
     case 'box': return 'Box | [number, number, number, number]';
     case 'point': return 'Point | [number, number]';
     case 'cmy': return 'Cmy';
     case 'string[]': return 'string[]';
     case 'Image': case 'Mask': return 'NodeHandle';
-    case 'Image[]': case 'Mask[]': return 'NodeHandle[]';
+    case 'list': return `{ ${Object.entries(s.of ?? {}).map(([n, f]) => `${n}${f.default !== undefined || f.optional ? '?' : ''}: ${tsType(f)}`).join('; ')} }[]`;
+    case 'polyline': return '[number, number, number?][]';
   }
 }
 
-function docComment(s: ArgSpec, op: OpDef, name: string): string {
+function docComment(s: ArgSpec): string {
   const bits = [s.doc];
   if (s.unit) bits.push(`Unit: ${s.unit}.`);
   if (s.min !== undefined || s.max !== undefined) bits.push(`Range [${s.min ?? '-∞'}, ${s.max ?? '∞'}].`);
   if (s.default !== undefined) bits.push(`Default ${JSON.stringify(s.default)}.`);
-  const p = argPath(op, name, s);
-  if (p) bits.push(`Recipe: ${p}.`);
   return `  /** ${bits.join(' ').replace(/\*\//g, '* /')} */`;
 }
 
@@ -58,7 +58,7 @@ function genOpArgs(): string {
     lines.push(`/** ${op.name}: ${op.doc.replace(/\*\//g, '* /')} */`);
     lines.push(`export interface ${pascal(op.name)}Args {`);
     for (const [n, s] of Object.entries(op.args)) {
-      lines.push(docComment(s, op, n));
+      lines.push(docComment(s));
       const opt = s.default !== undefined || s.optional ? '?' : '';
       lines.push(`  ${n}${opt}: ${tsType(s)};`);
     }
@@ -85,18 +85,19 @@ function genAreaDoc(area: string, implemented: Map<string, string[]>): string {
     const din = op.domainIn === undefined ? '—' : Array.isArray(op.domainIn) ? op.domainIn.join(', ') : op.domainIn;
     out.push(`- On: ${op.on} (${din}) → ${op.returns}${op.domainOut ? ` (${op.domainOut})` : ''}`);
     out.push(`- Class: ${op.class}; binding: ${op.binding}${op.dsl === false ? '; not in the DSL' : ''}`);
-    out.push(`- Implementation: ${engines.length ? engines.join(', ') : 'stub'}`);
+    if (op.stages) out.push(`- Layer in: ${op.stages.join(', ')}; encoding: ${op.encoding}${op.term ? `; light term: ${op.term}` : ''}${op.coalesce ? `; coalesces (${op.coalesce.list})` : ''}`);
+    out.push(`- Implementation: ${op.returns === 'Term' ? 'the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)' : engines.length ? engines.join(', ') : 'stub'}`);
     if (op.see?.length) out.push(`- See: ${op.see.map((s) => `\`${s}\``).join(', ')}`);
     out.push('');
     const args = Object.entries(op.args);
     if (args.length) {
-      out.push('| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |', '|---|---|---|---|---|---|---|---|');
+      out.push('| Argument | Type | Unit | Range | Usual | Default | Doc |', '|---|---|---|---|---|---|---|');
       for (const [n, s] of args) {
-        const type = s.type === 'enum' ? `enum ${(s.values ?? []).join('/')}` : s.type;
+        const type = s.type === 'enum' ? `enum ${(s.values ?? []).join('/')}` : s.type === 'list' ? `list of {${Object.keys(s.of ?? {}).join(', ')}}` : s.type;
         const range = s.min !== undefined || s.max !== undefined ? `[${s.min ?? ''}, ${s.max ?? ''}]` : '';
         const usual = s.usual ? `[${s.usual[0]}, ${s.usual[1]}]` : '';
         const doc = s.doc.replace(/\|/g, '\\|') + (s.redirects ? ` Redirects: ${Object.keys(s.redirects).join(', ')}.` : '');
-        out.push(`| \`${n}\`${s.optional ? ' (optional)' : ''} | ${type.replace(/\|/g, '\\|')} | ${s.unit ?? ''} | ${range} | ${usual} | ${fmt(s.default)} | ${argPath(op, n, s) ?? ''} | ${doc} |`);
+        out.push(`| \`${n}\`${s.optional ? ' (optional)' : ''} | ${type.replace(/\|/g, '\\|')} | ${s.unit ?? ''} | ${range} | ${usual} | ${fmt(s.default)} | ${doc} |`);
       }
       out.push('');
     }
@@ -119,9 +120,12 @@ const files: [string, string][] = [
   ['packages/contract/src/generated/op-args.ts', genOpArgs()],
   ['packages/contract/catalog.snapshot.json', `${JSON.stringify(buildSnapshot(), null, 2)}\n`],
   ...AREAS.map((a): [string, string] => [`docs/reference/ops/${a}.md`, genAreaDoc(a, implemented)]),
-  ...dslFiles(root), // CHB-007
-  ...agentFiles(root), // CHB-008: the MCP server's embedded texts
 ];
+if (!contractOnly) {
+  const { dslFiles } = await import('./dsl.ts'); // CHB-007
+  const { agentFiles } = await import('./agent.ts'); // CHB-008: the MCP server's embedded texts
+  files.push(...dslFiles(root), ...agentFiles(root));
+}
 
 let drift = 0;
 for (const [rel, content] of files) {

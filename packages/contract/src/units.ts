@@ -4,11 +4,11 @@ import { fail } from './errors.ts';
 
 export type Unit =
   | 'D' | 'logH' | 'stop' | 'point' | 'CC' | 'mired' | 'K'
-  | 'um' | 'nm' | 'px' | 's' | 'fstop' | 'fraction' | 'percent' | 'none'
+  | 'mm' | 'um' | 'nm' | 'px' | 's' | 'fstop' | 'fraction' | 'percent' | 'none'
   | 'deg' | 'degC';
 
 export const UNITS: readonly Unit[] = [
-  'D', 'logH', 'stop', 'point', 'CC', 'mired', 'K', 'um', 'nm', 'px', 's', 'fstop',
+  'D', 'logH', 'stop', 'point', 'CC', 'mired', 'K', 'mm', 'um', 'nm', 'px', 's', 'fstop',
   'fraction', 'percent', 'none', 'deg', 'degC',
 ];
 
@@ -24,7 +24,7 @@ const FAMILY: Record<Unit, string> = {
   D: 'density', CC: 'density',
   fraction: 'ratio', percent: 'ratio',
   K: 'colour-temperature', mired: 'colour-temperature',
-  um: 'length', nm: 'length',
+  mm: 'length', um: 'length', nm: 'length',
   px: 'pixels', s: 'time', fstop: 'aperture', none: 'none', deg: 'angle', degC: 'temperature',
 };
 
@@ -37,7 +37,7 @@ const TO_BASE: Partial<Record<Unit, number>> = {
   logH: 1, stop: LOG10_2, point: LOGH_PER_POINT,
   D: 1, CC: D_PER_CC,
   fraction: 1, percent: 0.01,
-  um: 1, nm: 0.001,
+  mm: 1000, um: 1, nm: 0.001,
 };
 
 function refuse(from: Unit, to: Unit): never {
@@ -45,7 +45,7 @@ function refuse(from: Unit, to: Unit): never {
     fail('E_UNIT', `cannot convert ${from} to ${to}: ${HUNT_MESSAGE}`, { hint: 'Only a characteristic curve maps density to log exposure.' });
   }
   if (from === 'px' || to === 'px') {
-    fail('E_UNIT', `cannot convert ${from} to ${to} without ImageInfo.umPerPx`, { hint: 'Pixel sizes need the image scale.' });
+    fail('E_UNIT', `cannot convert ${from} to ${to} without ImageInfo.umPerPx`, { hint: 'Pixel sizes need the image scale (film or paper µm per document pixel).' });
   }
   if ((from === 's' || from === 'fstop') && to === 'stop') {
     fail('E_UNIT', `${from} → stop needs a reference value`, { hint: from === 's' ? 'Use stopsFromTime(t1_s, t2_s).' : 'Use stopsFromFstop(n1, n2).' });
@@ -103,7 +103,7 @@ export class Quantity {
 const ALIASES: Record<string, Unit> = {
   d: 'D', D: 'D', logh: 'logH', logH: 'logH', stop: 'stop', stops: 'stop', ev: 'stop', EV: 'stop',
   pt: 'point', pts: 'point', point: 'point', points: 'point', cc: 'CC', CC: 'CC', mired: 'mired', k: 'K', K: 'K',
-  um: 'um', 'µm': 'um', nm: 'nm', px: 'px', s: 's', sec: 's', f: 'fstop', fstop: 'fstop',
+  mm: 'mm', um: 'um', 'µm': 'um', nm: 'nm', px: 'px', s: 's', sec: 's', f: 'fstop', fstop: 'fstop',
   '%': 'percent', percent: 'percent', fraction: 'fraction', deg: 'deg', '°': 'deg', degC: 'degC', '°C': 'degC',
 };
 

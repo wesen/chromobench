@@ -11,11 +11,11 @@ Reads densities at a point, like a hand densitometer.
 - Class: measure; binding: pixel
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `at` | point | px |  |  | `{"x":0,"y":0}` |  | Centre in source px. |
-| `aperture_px` | number | px | [1, 200] |  | `9` |  | Aperture diameter. |
-| `response` (optional) | enum status-a/status-m/visual |  |  |  |  |  | Densitometric response; absent = chosen by domain. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `at` | point | px |  |  | `{"x":0,"y":0}` | Centre in source px. |
+| `aperture_px` | number | px | [1, 200] |  | `9` | Aperture diameter. |
+| `response` (optional) | enum status-a/status-m/visual |  |  |  |  | Densitometric response; absent = chosen by domain. |
 
 Returns:
 
@@ -31,10 +31,10 @@ Histogram over the domain range.
 - Class: measure; binding: pixel
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `channel` | enum r/g/b/L |  |  |  | `"L"` |  | Channel (L = mean of channels). |
-| `bins` | number | none | [8, 1024] |  | `64` |  | Number of bins. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `channel` | enum r/g/b/L |  |  |  | `"L"` | Channel (L = mean of channels). |
+| `bins` | number | none | [8, 1024] |  | `64` | Number of bins. |
 
 Returns:
 
@@ -50,11 +50,11 @@ Mean value per grid cell (test strips, ring-arounds, charts).
 - Class: measure; binding: pixel
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `box` (optional) | box | px |  |  |  |  | Region; absent = whole image. |
-| `cols` | number | none | [1, 24] |  | `1` |  | Columns. |
-| `rows` | number | none | [1, 24] |  | `1` |  | Rows. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` (optional) | box | px |  |  |  | Region; absent = whole image. |
+| `cols` | number | none | [1, 24] |  | `1` | Columns. |
+| `rows` | number | none | [1, 24] |  | `1` | Rows. |
 
 Returns:
 
@@ -69,10 +69,10 @@ Exact statistics over a region.
 - Class: measure; binding: pixel
 - Implementation: mock
 
-| Argument | Type | Unit | Range | Usual | Default | Recipe path | Doc |
-|---|---|---|---|---|---|---|---|
-| `box` (optional) | box | px |  |  |  |  | Region in source px; absent = whole image. |
-| `mask` (optional) | Mask |  |  |  |  |  | Weighting mask. |
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` (optional) | box | px |  |  |  | Region in source px; absent = whole image. |
+| `mask` (optional) | Mask |  |  |  |  | Weighting mask. |
 
 Returns:
 

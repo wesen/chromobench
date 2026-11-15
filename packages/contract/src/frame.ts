@@ -1,7 +1,7 @@
 // output.frame's straightening (contract 0.3, CHB-022): the reference sampling every engine and host uses, so
-// a straightened crop is the same pixels everywhere. Order: the crop box (sensor px of the un-oriented frame)
+// a straightened crop is the same pixels everywhere. Order: the crop box (document px of the un-oriented frame)
 // is cut out with its content rotated about the box centre, then the orientation is applied (by the caller).
-import type { Orientation } from './recipe.ts';
+import type { Orientation } from './document.ts';
 import type { Box } from './spec.ts';
 
 /** Mirrored orientations reverse the turn: angle_deg is clockwise as shown, after the orientation. */

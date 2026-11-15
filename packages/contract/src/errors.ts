@@ -1,5 +1,8 @@
 // Diagnostics and error codes. Every code has one meaning and one owner.
 // Shape follows goja-cv pkg/cv/graph/errors.go and the architecture doc §5.5.
+// One error class (contract 1.0): ChromobenchError extends @chromobench/values' ValueError, so an error thrown by
+// the builder core (paths, mutations, documents) and one thrown by the contract are the same thing to a caller.
+import { ValueError } from '@chromobench/values';
 
 export interface Diagnostic {
   code: string;
@@ -29,11 +32,14 @@ export const ERROR_CODES = {
   E_WRONG_KIND: 'A Value where an Image is required, or the reverse.',
   E_UNIT: 'Refused unit conversion or unit algebra (D + logH: Hunt 14.17).',
   E_KIND: 'Refused spectrum-kind algebra.',
-  E_PATH: 'Unknown or non-settable recipe path; siblings in valid.',
+  E_PATH: 'A path does not resolve or addresses nothing settable; siblings in valid.',
   E_READONLY: 'Agent mutation while the agent is read-only.',
-  E_STALE: "A pending mutation's expect no longer matches the recipe.",
-  E_RECIPE: 'The recipe document does not validate.',
-  E_MUTATION: 'A structural mutation is invalid (duplicate id, missing mask, …).',
+  E_STALE: 'A pending transaction no longer applies as proposed (its inverses changed).',
+  E_DOCUMENT: 'The document does not validate (format 3: stages, media, entries, masks, references).',
+  E_MUTATION: 'A structural mutation is invalid (duplicate id, unknown id, position, cycle).',
+  E_LINK: 'A link cannot be resolved (unknown roll, look or preset, or no resolver for its kind).',
+  E_BINDING: 'A binding is unknown, reads a cut that is not upstream of its stage, or lacks its measurement.',
+  E_CUT: 'No such cut, or the document has none of that name (a scan cut of a camera file).',
   E_NO_SOURCE: 'source.open references a source the graph or engine has not opened.',
   E_NO_NODE: 'The engine does not know the node; adopt its closure first.',
   E_INVALID_OP_DEF: 'registerOp refused an op definition.',
@@ -120,15 +126,16 @@ export const ERROR_CODES = {
 
 export type ErrorCode = keyof typeof ERROR_CODES;
 
-export class ChromobenchError extends Error {
-  readonly diag: Diagnostic;
+/**
+ * values' ValueError typed with the contract's wider Diagnostic (any code of ERROR_CODES, `where`, `fix`). The
+ * runtime class is ValueError itself: `e instanceof ValueError` holds for every contract error.
+ */
+const DiagnosticError = ValueError as unknown as new (diag: Diagnostic) => Error & { readonly diag: Diagnostic; readonly code: string };
+
+export class ChromobenchError extends DiagnosticError {
   constructor(diag: Diagnostic) {
-    super(`${diag.code}: ${diag.message}`);
+    super(diag);
     this.name = 'ChromobenchError';
-    this.diag = diag;
-  }
-  get code(): string {
-    return this.diag.code;
   }
 }
 
@@ -140,8 +147,9 @@ export function fail(code: ErrorCode, message: string, extra: Omit<Diagnostic, '
   throw new ChromobenchError(diag(code, message, extra));
 }
 
+/** Whether e is a contract or builder-core error (one class: both carry a Diagnostic in `diag`). */
 export function isChromobenchError(e: unknown): e is ChromobenchError {
-  return e instanceof ChromobenchError;
+  return e instanceof ValueError;
 }
 
 /** Turns any thrown value into a Diagnostic (E_INTERNAL for foreign errors). */
