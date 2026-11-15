@@ -591,3 +591,63 @@ stage now exist in the contract, the reference engine and the GPU engine, at par
 ### Technical details
 - Timings (P8a, M1 Max, 4000 × 2674): one exposure layer 22–23 ms preview / 256–263 ms export; six fused layers 23–24
   / 274–276 ms; plus one masked curve 49–52 / 369–391 ms.
+
+## Step 11: P7 merged — rolls, looks, presets and sync as one link mechanism
+
+Looks are now registered, versioned look functions that return groups; a link entry expands at compile with the
+stage law's amount; bake turns a link into its plain group; presets are parameterless looks; a roll links the scan
+medium with per-frame overrides; sync copies values or inserts one link; the DSL's named looks are link inserts and
+`.cblook.js` files run in their own sandbox. With P8a and P7 merged, every check is green.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P7, keep the contract's record straight, flag feature changes for the owner.
+
+**Inferred user intent:** Shared content stays shared, and nothing the photographer used silently disappears.
+
+**Commit (code):** f9d599a — "Merge P7 links (…)"; (this step's commit) — CC-021 renumbering, contract 1.2.0, docs
+
+### What I did
+- Merged with `merge-phase.sh`. Git merged `CONTRACT-DECISIONS.md` without a conflict but with two notes numbered
+  CC-020 (P8a's composite op set at line 509, P7's links at 471): P8a landed first and keeps CC-020; P7's became
+  CC-021 (contract 1.2.0, additive); `CONTRACT_VERSION` 1.1.0 → 1.2.0; `pnpm gen` regenerated `op-args.ts` and the
+  catalogue snapshot.
+- Checks: typecheck 0 errors; lint; gen:check (26); vitest 129 files, 3161 passed, 19 skipped; goldens 66/66;
+  `contract:check`: 118 changes, 75 breaking (against the 0.4 baseline, as expected for the cut-off).
+
+### Why
+- Parallel phases that each add a change note will collide on numbers; the merge is where numbering is settled.
+
+### What worked
+- P7's whole-repo checks were green on its branch, and P5b-2's parallel work did not get in its way.
+
+### What didn't work
+- A silent duplicate: git cannot see two independent "next number" choices as a conflict.
+
+### What I learned
+- Check `CONTRACT-DECISIONS.md` numbering after every merge that touches the contract.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- **Feature removed by P7, to raise with the owner**: the film looks ("Portra on Endura", "Gold 200") and the grade
+  looks were parameter edits of media (stock, paper, grade), which have no group form, so they were deleted; contrast
+  looks became darkroom light (density masks, preflash). The design allows linked media (`Linked<M>`, §27); a
+  "medium preset" (a link on a stage's medium, with overrides) would bring them back within the one mechanism.
+- A roll links only the scan medium; printing choices stay per frame (`roll.setShared` copies them).
+
+### What should be done in the future
+- Ask the owner about medium presets for film/paper looks.
+- P5b-2 must merge P7's studio-kit edits (`model/doc.ts`, `render-bridge.ts`, `studio.ts`, `dom/arg.ts`,
+  `bridge/frames.ts`, `model/history.ts`, `apps/studio` `main.ts` and `host/chat.ts`); show a link as one row (name,
+  Amount, Bake, Remove) and roll fields with a follow/override badge; read roll fields through
+  `read(…, linksOf(state))`.
+
+### Code review instructions
+- `packages/contract/src/links.ts`, `links-looks.ts`; `diary/13-phase-p7-links.md`.
+
+### Technical details
+- Running: P5b-2 (stack kit), P3b (engines).

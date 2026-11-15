@@ -468,8 +468,9 @@ migration: none (Decision D8): stored studio state is cleared once; frames reope
 tests:     packages/contract/test: light law = combinePixel (property, n = 300), order-free, composite identities,
            coalescing, mask algebra laws, validation errors, compile identities, cuts, links (bake), bindings (upstream)
 
-CC-020  links: look functions, presets, linked media helpers, bake of a whole link (CHB-037 P7)
-class:     additive within 1.0 (minor), except bakeLink's signature (breaking for its one caller, the contract's tests)
+CC-021  links: look functions, presets, linked media helpers, bake of a whole link (CHB-037 P7; contract 1.2.0;
+        numbered CC-020 on its branch, renumbered at the merge because P8a's CC-020 landed first)
+class:     additive (minor), except bakeLink's signature (breaking for its one caller, the contract's tests)
 changes:   links.ts: defineLook / getLook / allLooks / lookParams / lookSkip (registered, versioned, pure look functions
            (params, { kind, facts, doc, size }) → { stacks per stage, masks }); the look and preset resolvers; Preset
            (format chromobench.preset version 3: stacks and masks), validatePreset, makePreset, lookAsPreset;

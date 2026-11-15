@@ -4,7 +4,7 @@
 // one compiler with named cuts, validation through the values hooks (a frame's history is the values document log
 // with LOG_RULES). Contract 1.1 (CHB-037 P8a): the composite op set, blend modes, working encodings, colour and radial
 // masks. Importing this module registers the catalogue.
-export const CONTRACT_VERSION = '1.1.0';
+export const CONTRACT_VERSION = '1.2.0';
 
 export * from './errors.ts';
 export * from './units.ts';
