@@ -7,12 +7,12 @@ import { canonicalJSON, Coll } from '@chromobench/values';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
 import { describe, historyRows, whyRows, WHO, type ModelLookup } from '../model/history.ts';
-import { exposureRows, printingScript, TIME_PATH } from '../model/doc.ts';
+import { TIME_PATH } from '../model/doc.ts';
 import { modelAt } from '../kit/args.ts';
-import { formatSeconds, formatStops } from '../model/units.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
 import { sel } from '../sel.ts';
+import { STACK_RENDERERS } from '../../kits/stack/src/dom.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
@@ -38,7 +38,6 @@ const frameDeps = (s: any, n: NodeData) => {
   return { f, r: f ? s.docs?.[f] : undefined, p: f ? sel.proposals(s, f) : undefined, v: sel.logVersion(s) };
 };
 const lookup: ModelLookup = (p, d) => modelAt(p, d) ?? undefined;
-const FMT = { seconds: formatSeconds, stops: formatStops };
 
 const history = list(
   'cb-history',
@@ -159,31 +158,6 @@ const snapshots = list(
   },
   same,
 );
-
-const exposures = list('cb-exposures', frameDeps, (el, v, m) => {
-  if (!v.r) return;
-  const t = h('table', { class: 'cb-tbl' });
-  t.append(h('tr', {}, ...['', 'kind', 'change', 'seconds', 'filtration', ''].map(x => h('th', { text: x }))));
-  for (const r of exposureRows(v.r, FMT)) {
-    const fixed = r.id === 'main';
-    const rm = fixed ? null : btn('×', 'exp-rm', { 'aria-label': `Remove ${r.id}` });
-    if (rm) listen(m.scope, rm, 'click', () => m.rt.runCommand('exposure.remove', null, r.id));
-    const on = fixed ? null : (h('input', { type: 'checkbox', 'aria-label': `${r.name} on` }) as HTMLInputElement);
-    if (on) {
-      on.checked = r.enabled;
-      listen(m.scope, on, 'change', () => m.rt.runCommand('exposure.toggle', null, r.id));
-    }
-    t.append(h('tr', { class: !r.enabled ? 'is-off' : null, 'data-id': r.id }, h('td', {}, on, ` ${r.id}`), h('td', { text: r.op === 'expose' ? 'main' : r.op }), h('td', { text: r.change }), h('td', { text: r.seconds }), h('td', { text: r.filtration }), h('td', {}, rm)));
-  }
-  el.append(t, h('p', { class: 'cb-script', text: printingScript(v.r, FMT) }));
-  const row = h('div', { class: 'cb-card-b' });
-  for (const [k, label] of [['dodge', 'dodge'], ['burn', 'burn'], ['flash', 'flash'], ['preflash', 'preflash'], ['densityMask', 'contrast mask']] as const) {
-    const b = btn(`+ ${label}`, `exp-add-${k}`);
-    listen(m.scope, b, 'click', () => m.rt.runCommand('exposure.add', null, k));
-    row.append(b);
-  }
-  el.append(row);
-});
 
 const journal = list('cb-journal', frameDeps, (el, v, m) => {
   const log = m.rt.store.log;
@@ -377,7 +351,6 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.approvals': approvals,
   'cb.why': why,
   'cb.snapshots': snapshots,
-  'cb.exposures': exposures,
   'cb.journal': journal,
   'cb.nodes': nodes,
   'cb.explain': explain,
@@ -390,4 +363,6 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.readout': readout,
   'cb.ribbon': ribbon,
   'cb.filter': filter,
+  // the stack kit is in every studio (cb.studio installs it)
+  ...STACK_RENDERERS,
 };

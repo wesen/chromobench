@@ -1,11 +1,10 @@
 // cb.kits.finish: the command table (split from kit.ts, CHB-032): crop, straighten, orientation, aspect, spots,
-// before / after and the finishing tones. Edits are transactions of the frame's document.
+// before / after (clarity is a layer of the stack kit's finish view). Edits are transactions of the frame's document.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Document } from '@chromobench/contract';
 import { centreOf, constrain, cropOf, fitCrop, orientFrame, swapAspect } from './geometry.ts';
 import type { CommandTable } from '@chromobench/shell';
-import { type SpotMode, CLARITY, edits, removeSpots, spotsOf, cropProblem } from './state.ts';
-import { findEntry, storePath } from '../../../src/model/doc.ts';
+import { type SpotMode, removeSpots, spotsOf, cropProblem } from './state.ts';
 import { sel } from '../../../src/sel.ts';
 import type { FinishContext } from './context.ts';
 import type { FinishTools } from './tools.ts';
@@ -100,24 +99,17 @@ export function finishCommands(F: FinishContext, T: FinishTools): CommandTable {
     'spot.show': { label: 'Show Spots', checked: (s: any) => s.finish?.show !== false, run: (ctx: any) => ctx.set({ finish: { show: !opts(ctx.state).show } }) },
     'spot.next': { label: 'Next Spot', palette: false, run: (ctx: any) => cycle(ctx, 1) },
     'spot.prev': { label: 'Previous Spot', palette: false, run: (ctx: any) => cycle(ctx, -1) },
-    'spot.select': { label: 'Select Spot', palette: false, run: (ctx: any, id: string | null) => ctx.set({ finish: { selected: id } }) },
+    'spot.select': {
+      label: 'Select Spot', palette: false,
+      // the spot's layer is also the selected entry of the stack (its row and its settings show it)
+      run: (ctx: any, id: string | null) => {
+        const f = sel.current(ctx.state);
+        ctx.set({ finish: { selected: id }, ...(f && id ? { stack: { selected: { [f]: id } } } : {}) });
+      },
+    },
     'finish.toggle': {
       label: 'Before / After Finishing', checked: (s: any) => !!s.finish?.bypass,
       run: (ctx: any) => ctx.set({ finish: { bypass: !opts(ctx.state).bypass } }),
-    },
-    'finish.addClarity': {
-      label: 'Add Clarity', ...needFrame,
-      hidden: (s: any) => !!s.docs?.[sel.current(s) ?? ''] && !!findEntry(s.docs[sel.current(s)!], CLARITY),
-      run: withFrame((ctx, fr) => {
-        if (!findEntry(fr.r, CLARITY)) studioOf(ctx).commit(fr.f, edits.clarity(fr.r, 0), 'Add Clarity');
-      }),
-    },
-    'finish.resetTones': {
-      label: 'Reset Finishing Tones', ...needFrame,
-      run: withFrame((ctx, fr) => {
-        if (!findEntry(fr.r, CLARITY)) return;
-        ctx.tx('Reset Finishing Tones', (t: any) => t.$set(storePath(fr.f, fr.r, `${CLARITY}.params.strength`), 0));
-      }),
     },
   };
 }

@@ -177,7 +177,7 @@ export function explainApp(ir: UiIR, sum: AppSummary, o: ExplainOpts = {}): stri
   const out = [`shell ${JSON.stringify(ir.name)} · theme ${ir.theme ?? 'craftkit'} · kits: ${kits.length ? kits.join(', ') : 'none'}`];
   const opts: ExplainOpts = { ...o, forms: ir.forms, panels: ir.panels };
   for (const m of ir.modules) {
-    out.push(`module ${m.id} ${JSON.stringify(m.label)}${m.key ? ` key ${m.key}` : ''}`);
+    out.push(`module ${m.id} ${JSON.stringify(m.label)}${m.key ? ` key ${m.key}` : ''}${m.stages?.length ? ` stages ${m.stages.join(', ')}` : ''}`);
     for (const side of ['top', 'left', 'center', 'right', 'bottom', 'toolbar'] as const) {
       const r = m.regions[side];
       if (!r) continue;

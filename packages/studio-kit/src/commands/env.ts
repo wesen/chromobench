@@ -1,12 +1,11 @@
 // What cb.core's command tables share (CHB-029 item 3): the studio service, the frame guards, flagging, orientation,
-// re-opening, stepping through the library, approving agent proposals, the mask gesture. Edits of a frame are
+// re-opening, stepping through the library, approving agent proposals. Edits of a frame are
 // transactions of its document (ctx.tx writes under docs.<frame>; structural edits go through studio.commit).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Document } from '@chromobench/contract';
 import type { Studio } from '../studio.ts';
 import { sel, type CatalogFrame } from '../sel.ts';
 import { DOCS, storePath } from '../model/doc.ts';
-import { maskedLayer, type MaskShape } from '../model/tools.ts';
 import { orientFrame } from '../../kits/finish/src/geometry.ts';
 
 /** the studio service (ctx.services.studio) */
@@ -76,14 +75,4 @@ export function approve(ctx: any, f: string, tx: string, force: boolean): unknow
   }
   ctx.set({ ui: { approvals: { [tx]: { off: [], stale: [] } }, showProposal: ctx.state.ui.showProposal === tx ? null : ctx.state.ui.showProposal } });
   return res;
-}
-/** A burn through a new mask drawn on the print (the mask tools): the mask and the layer as one step. */
-export function maskGesture(ctx: any, shape: MaskShape): void {
-  const f = sel.current(ctx.state);
-  const studio = studioOf(ctx);
-  const e = f ? studio.frames.get(f) : undefined;
-  const d = f ? studio.doc(f) : undefined;
-  if (!f || !e || !d) return;
-  const r = maskedLayer(d, e.graph, shape, { op: 'burn', featherPx: 8 });
-  studio.commit(f, r.mutations, `Burn ${r.layer} through mask ${r.mask}`);
 }

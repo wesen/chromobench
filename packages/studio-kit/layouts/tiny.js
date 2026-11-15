@@ -11,7 +11,7 @@ export default {
       .menus(...cb.menus.standard())
       .module(
         ck
-          .module('main', { label: 'Chromobench' })
+          .module('main', { label: 'Chromobench', stages: ['darkroom'] })
           .left(ck.dock.column({ width: 180 }, cb.views.strip({ vertical: true })))
           .center(cb.viewer(s => cb.sel.frame(s)?.print() ?? null))
           .right(ck.dock.column({ width: 300 }, cb.panels.controls('darkroom'), cb.panels.history())),

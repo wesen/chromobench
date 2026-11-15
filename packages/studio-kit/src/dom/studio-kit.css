@@ -1,3 +1,4 @@
+@import '../../kits/stack/src/stack.css';
 /* studio-kit components on the shell's tokens (--panel, --line, --text, --text2, --accent, --track, --pending, …).
    CHB-025: CraftKit Studio's app styling (its app.css) ported onto these components — Lightroom's slider rows, grid
    and filmstrip cells, history rows, the loupe surround; no literal colours here (tools/scripts/check-colours.ts),

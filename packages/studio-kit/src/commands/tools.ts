@@ -1,11 +1,11 @@
-// cb.core's tools (gestures on the viewer): the densitometer, the test strip, the ring-around, the burn masks (a mask
-// in the document's library and a burn layer through it).
+// cb.core's tools (gestures on the viewer): the densitometer, the test strip, the ring-around. The mask tools are the
+// stack kit's (cb.kits.stack.maskTools).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ToolTable } from '@chromobench/shell';
 import { frameRef, isImageHandle } from '../handles.ts';
 import { sel, type CbState } from '../sel.ts';
 import { stripBase, stripLabel, stripMutation, stripValues, type StripVary } from '../model/tools.ts';
-import { docOf, maskGesture, setDoc } from './env.ts';
+import { docOf, setDoc } from './env.ts';
 
 export const coreTools = (): ToolTable<CbState> => ({
   'probe': {
@@ -69,32 +69,4 @@ export const coreTools = (): ToolTable<CbState> => ({
     },
   },
   'ring-around': { label: 'Ring-around', icon: 'grid', key: 'R' },
-  'mask-ellipse': {
-    label: 'Burn Ellipse',
-    key: 'M',
-    cursor: 'crosshair',
-    on: {
-      down: (e, ctx) => ({ x0: e.x, y0: e.y }),
-      drag: () => undefined,
-      up: (e, ctx, g) => maskGesture(ctx, { kind: 'ellipse', cx: (g.x0 + e.x) / 2, cy: (g.y0 + e.y) / 2, rx: Math.max(2, Math.abs(e.x - g.x0) / 2), ry: Math.max(2, Math.abs(e.y - g.y0) / 2) }),
-    },
-  },
-  'mask-gradient': {
-    label: 'Burn Gradient',
-    cursor: 'crosshair',
-    on: {
-      down: (e, ctx) => ({ x0: e.x, y0: e.y }),
-      drag: () => undefined,
-      up: (e, ctx, g) => maskGesture(ctx, { kind: 'linear', from: [g.x0, g.y0], to: [e.x, e.y] }),
-    },
-  },
-  'mask-brush': {
-    label: 'Burn Brush',
-    cursor: 'crosshair',
-    on: {
-      down: (e, ctx) => ({ points: [[e.x, e.y, e.pressure || 1]] }),
-      drag: (e, ctx, g) => void g.points.push([e.x, e.y, e.pressure || 1]),
-      up: (e, ctx, g) => maskGesture(ctx, { kind: 'stroke', points: g.points, radius: ctx.state.ui.toolOptions['mask-brush']?.radius ?? 6, hardness: 0.5, mode: 'add' }),
-    },
-  },
 });

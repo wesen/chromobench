@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`layouts build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -51,7 +51,7 @@ module roll "Roll" key Mod+Alt+R
              roll.inspector
            panel history-roll "History"
              cb.history
-module print "Print" key D
+module print "Print" key D stages darkroom
   left   dockcol  width 236
            panel navigator-print "Navigator"
              thumb  image τ
@@ -65,7 +65,7 @@ module print "Print" key D
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -142,12 +142,35 @@ module print "Print" key D
                      cb.arg  path "stages.print.medium.illuminant"  rollScope "frame"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
-             cb.exposures
+             stack.layers  stage "darkroom"  light law · + Layer 6 ops
+             text τ  class "cb-script"  dim  wrap
+           panel layer-params-print "Layer"
+             stack.params
+           panel layer-masks-print "Mask"
+             stack.masks
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
            filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
-module finish "Finish" key F
+module edit "Edit" key Mod+Alt+E stages print
+  left   dockcol  width 260
+           panel layers-edit "Print layers"
+             stack.layers  stage "print"  composite law · + Layer 1 ops
+           panel history-edit "History"
+             cb.history
+  center column  class "cb-viewer"  grow 1
+           cb.ribbon
+           viewport edit τ  before τ  compare  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
+             hud:
+               cb.readout
+  right  dockcol  width 300
+           panel layer-params-edit "Layer"
+             stack.params
+           panel layer-masks-edit "Mask"
+             stack.masks
+  bottom dockcol  width 124
+           filmstrip strip-edit  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
+module finish "Finish" key F stages scan, print
   left   dockcol  width 236
            panel navigator-finish "Navigator"
              thumb  image τ
@@ -189,11 +212,16 @@ module finish "Finish" key F
              slider 1…200 "Size"  bind finish.spot.r  decimals 0  step 1  unit "px"
              slider 0…1 "Feather"  bind finish.spot.feather  decimals 2  step 0.05
              slider 0…1 "Opacity"  bind finish.spot.opacity  decimals 2  step 0.05
-             listview finish-spots  empty "No spots: choose the tool (Q) and click a spec…  items τ  key θ  row θ
              row  class "cb-finish-spot-cmds"
                button  run spot.delete  small  text "Delete"
                button  run spot.clear  small  text "Clear all"
              text "Heal and clone are layers of the print (the Re…  dim
+           panel finish-layers "Retouch and clarity"
+             stack.layers  add [clarity]  filter θ  stage "print"  composite law · + Layer 1 ops
+           panel finish-dust "Dust (on the negative)"
+             stack.layers  empty "A photo has no negative: dust is healed on a s…  stage "scan"  repair law
+           panel layer-params-finish "Layer"
+             stack.params
   bottom dockcol  width 124
            filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module assistant "Assistant"
@@ -258,9 +286,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -268,6 +293,26 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -304,15 +349,13 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
-  finish.addClarity "Add Clarity" (Finish) ← cb.finish
-  finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 127 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
+commands 145 · keys 113 in 19 scopes · tools 10 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1
-module main "Chromobench"
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core)
+module main "Darkroom" stages darkroom, print
   left   dockcol  width 200
            listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
            panel history "History"  hidden τ
@@ -321,7 +364,7 @@ module main "Chromobench"
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-brush, mask-gradient]
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -366,16 +409,7 @@ module main "Chromobench"
                      button "+2 step"  run ring.apply([0.2, 0.2, 0.2], "Ring-around +2…)  small
   right  dockcol  width 300
            panel enlarger "Enlarger"
-             when  cond τ
-               else:
-                 text τ  dim  wrap
-               then:
-                 column
-                   cb.arg  path "stages.darkroom.medium.mode"  segmented
-                   cb.arg  path "main.params.time_s"  strip {step}  slider  s  log2  step 1/6 st  aside st  +testStrip(1/3 st)
-                   cb.arg  path "main.params.fstop"  stepper  f  log2  aside st
-                   cb.arg  path "main.params.filtration"  slider  CC  step 1 CC  aside pt  detent 0
-                   cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
+             stack.layers  order "kind"  row θ  stage "darkroom"  light law · + Layer 6 ops
            panel paper "Paper"  hidden τ
              when  cond τ
                else:
@@ -384,8 +418,12 @@ module main "Chromobench"
                  column
                    cb.arg  path "stages.darkroom.medium.paper"  select
                    cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
-           panel exposures "Exposures"  hidden τ
-             cb.exposures
+           panel digital "Digital (after the print)"  hidden τ
+             stack.layers  density "compact"  stage "print"  composite law · + Layer 1 ops
+           panel layer-params "Layer"  hidden τ
+             stack.params
+           panel layer-masks "Mask"  hidden τ
+             stack.masks
            panel approvals "Agent proposals"  hidden τ
              cb.approvals
 commands
@@ -425,9 +463,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -435,12 +470,32 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 82 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 101 · keys 33 in 6 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.finish@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -472,7 +527,7 @@ module library "Library" key G
              cb.metadata
   bottom dockcol  width 124
            filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
-module print "Print" key D
+module print "Print" key D stages darkroom
   left   dockcol  width 236
            panel navigator-print "Navigator"
              thumb  image τ
@@ -486,7 +541,7 @@ module print "Print" key D
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -563,12 +618,17 @@ module print "Print" key D
                      cb.arg  path "stages.print.medium.illuminant"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
-             cb.exposures
+             stack.layers  stage "darkroom"  light law · + Layer 6 ops
+             text τ  class "cb-script"  dim  wrap
+           panel layer-params-print "Layer"
+             stack.params
+           panel layer-masks-print "Mask"
+             stack.masks
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
            filmstrip strip-print  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
-module finish "Finish" key F
+module finish "Finish" key F stages scan, print
   left   dockcol  width 236
            panel navigator-finish "Navigator"
              thumb  image τ
@@ -610,19 +670,16 @@ module finish "Finish" key F
              slider 1…200 "Size"  bind finish.spot.r  decimals 0  step 1  unit "px"
              slider 0…1 "Feather"  bind finish.spot.feather  decimals 2  step 0.05
              slider 0…1 "Opacity"  bind finish.spot.opacity  decimals 2  step 0.05
-             listview finish-spots  empty "No spots: choose the tool (Q) and click a spec…  items τ  key θ  row θ
              row  class "cb-finish-spot-cmds"
                button  run spot.delete  small  text "Delete"
                button  run spot.clear  small  text "Clear all"
              text "Heal and clone are layers of the print (the Re…  dim
-           panel finish-tones "Finishing (digital, after the print)"
-             text "Not darkroom controls: they change the finishe…  dim
-             cb.arg  path "clarity.params.strength"  why "finishing, not darkroom"  slider  fraction  step 0.01 fraction
-             cb.arg  path "clarity.params.radius_mm"  why "finishing, not darkroom"  slider  mm  step 0.5 mm
-             row  class "cb-finish-tone-cmds"
-               button  run finish.addClarity  small  text "+ Clarity"
-               button  run finish.toggle  small  text "Before / after"
-               button  run finish.resetTones  small  text "Reset"
+           panel finish-layers "Retouch and clarity"
+             stack.layers  add [clarity]  filter θ  stage "print"  composite law · + Layer 1 ops
+           panel finish-dust "Dust (on the negative)"
+             stack.layers  empty "A photo has no negative: dust is healed on a s…  stage "scan"  repair law
+           panel layer-params-finish "Layer"
+             stack.params
   bottom dockcol  width 124
            filmstrip strip-finish  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 commands
@@ -662,9 +719,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -672,6 +726,26 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
   crop.reset "Reset Crop" (Finish) ← cb.finish
   crop.aspect "Crop Aspect" ← cb.finish
   crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
@@ -692,14 +766,12 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
-  finish.addClarity "Add Clarity" (Finish) ← cb.finish
-  finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 109 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
+commands 126 · keys 78 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.chat@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -731,7 +803,7 @@ module library "Library" key G
              cb.metadata
   bottom dockcol  width 124
            filmstrip strip  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
-module print "Print" key D
+module print "Print" key D stages darkroom
   left   dockcol  width 236
            panel navigator-print "Navigator"
              thumb  image τ
@@ -745,7 +817,7 @@ module print "Print" key D
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -822,7 +894,12 @@ module print "Print" key D
                      cb.arg  path "stages.print.medium.illuminant"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
-             cb.exposures
+             stack.layers  stage "darkroom"  light law · + Layer 6 ops
+             text τ  class "cb-script"  dim  wrap
+           panel layer-params-print "Layer"
+             stack.params
+           panel layer-masks-print "Mask"
+             stack.masks
            panel approvals "Agent proposals"
              cb.approvals
            panel why "Why"
@@ -847,7 +924,7 @@ module assistant "Assistant"
              cb.chat
   bottom dockcol  width 124
            filmstrip strip-assistant  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
-module lab "Lab" key L
+module lab "Lab" key L stages darkroom
   left   dockcol  width 280
            panel controls-all "All parameters"
              when  cond τ
@@ -990,9 +1067,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1000,12 +1074,32 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 85 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 104 · keys 86 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -1169,9 +1263,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1179,6 +1270,26 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" ← cb.roll
@@ -1229,12 +1340,12 @@ commands
   looks.syncGroup "Sync Group" ← cb.looks
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 134 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 153 · keys 67 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core)
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.roll@1 (requires cb.core)
 module roll "Roll" key G
   left   dockcol  width 300
            panel roll-library "Rolls"
@@ -1253,7 +1364,7 @@ module roll "Roll" key G
              roll.inspector
            panel history-roll "History"
              cb.history
-module print "Print" key D
+module print "Print" key D stages darkroom
   left   dockcol  width 236
            panel navigator-print "Navigator"
              thumb  image τ
@@ -1267,7 +1378,7 @@ module print "Print" key D
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-ellipse, mask-gradient…
+               viewport main τ  before τ  compare  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
                  hud:
                    cb.readout
              cases.ring:
@@ -1344,7 +1455,12 @@ module print "Print" key D
                      cb.arg  path "stages.print.medium.illuminant"  rollScope "frame"  select
                      text τ  dim  wrap
            panel exposures "Exposures"
-             cb.exposures
+             stack.layers  stage "darkroom"  light law · + Layer 6 ops
+             text τ  class "cb-script"  dim  wrap
+           panel layer-params-print "Layer"
+             stack.params
+           panel layer-masks-print "Mask"
+             stack.masks
            panel approvals "Agent proposals"
              cb.approvals
   bottom dockcol  width 124
@@ -1386,9 +1502,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1396,6 +1509,26 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1412,13 +1545,13 @@ commands
   roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 100 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 119 · keys 56 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1
-module main "Chromobench"
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core)
+module main "Chromobench" stages darkroom
   top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
   center match  of [pick, print, save]  on τ
            cases.pick:
@@ -1517,9 +1650,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1527,13 +1657,33 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 82 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 101 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1
-module main "Chromobench"
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core)
+module main "Chromobench" stages darkroom
   left   dockcol  width 180
            listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  select ui.selection
   center column  class "cb-viewer"  grow 1
@@ -1603,9 +1753,6 @@ commands
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  exposure.add "Add Darkroom Layer" (Frame) ← cb.core
-  exposure.remove "Remove Darkroom Layer" ← cb.core
-  exposure.toggle "Turn Darkroom Layer On or Off" ← cb.core
   output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
@@ -1613,8 +1760,28 @@ commands
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
-tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 82 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
+  layer.select "Select Layer" ← cb.stack
+  layer.add "Add Layer" ← cb.stack
+  layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
+  layer.delete "Delete Layer" (Layer) ← cb.stack
+  layer.rename "Rename Layer" ← cb.stack
+  layer.group "Group Layer" (Layer) Ctrl+G ← cb.stack
+  layer.ungroup "Ungroup" (Layer) Ctrl+Shift+G ← cb.stack
+  layer.move "Move Layer" ← cb.stack
+  layer.up "Move Layer Up" (Layer) ← cb.stack
+  layer.down "Move Layer Down" (Layer) ← cb.stack
+  layer.toggle "Turn Layer On or Off" (Layer) ← cb.stack
+  layer.amount "Layer Amount" ← cb.stack
+  layer.blend "Layer Blend Mode" ← cb.stack
+  layer.collapse "Collapse Group" ← cb.stack
+  mask.new "New Mask" ← cb.stack
+  mask.attach "Use Mask" ← cb.stack
+  mask.detach "Remove Mask" (Layer) ← cb.stack
+  mask.addComponent "Add Mask Component" ← cb.stack
+  mask.removeComponent "Remove Mask Component" ← cb.stack
+  mask.set "Mask Setting" ← cb.stack
+tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
+commands 101 · keys 27 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `
@@ -1623,7 +1790,10 @@ exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] =
   "darkroom": [],
   "finish": [],
   "lab": [],
-  "looks": [],
+  "looks": [
+    "CB-S101 cb.arg('main.params.time_s') shows the darkroom stage in the module 'Print', which declares no stages",
+    "CB-S101 cb.arg('lights.params.logH') shows the darkroom stage in the module 'Print', which declares no stages",
+  ],
   "roll": [],
   "simple": [],
   "tiny": [],

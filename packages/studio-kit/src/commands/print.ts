@@ -1,5 +1,5 @@
 // cb.core's print commands (CHB-029 item 3: one declarative table per area): history jumps, snapshots, apply print
-// settings to the selection, probe pins, the ring-around choice, darkroom layers, save. Every edit is a transaction
+// settings to the selection, probe pins, the ring-around choice, save (darkroom layers: the stack kit's layer.*). Every edit is a transaction
 // of the frame's document (several frames: one step).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Vec3 } from '@chromobench/contract';
@@ -7,11 +7,9 @@ import type { CommandTable } from '@chromobench/shell';
 import { sel, type CbState } from '../sel.ts';
 import { DOCS, LIGHTS_PATH, nextId, storePath } from '../model/doc.ts';
 import { copySettings } from '../model/settings.ts';
-import { addDarkroomLayer, ringLights } from '../model/tools.ts';
+import { ringLights } from '../model/tools.ts';
 import { docOf, needFrame, setDoc, studioOf } from './env.ts';
 
-type LayerKind = 'dodge' | 'burn' | 'flash' | 'preflash' | 'densityMask';
-const LAYER_WORDS: Record<LayerKind, string> = { dodge: 'dodge', burn: 'burn', flash: 'flash', preflash: 'preflash', densityMask: 'contrast mask' };
 
 export const printCommands = (): CommandTable<CbState> => ({
   'history.jump': {
@@ -83,37 +81,6 @@ export const printCommands = (): CommandTable<CbState> => ({
       if (!d) return;
       setDoc(ctx, f, LIGHTS_PATH, ringLights(d, offset), label);
       ctx.set({ ui: { tool: null } });
-    },
-  },
-  'exposure.add': {
-    label: 'Add Darkroom Layer',
-    ...needFrame,
-    run: (ctx, kind: LayerKind = 'burn') => {
-      const f = sel.current(ctx.state)!;
-      const d = docOf(ctx, f);
-      if (!d) return;
-      const r = addDarkroomLayer(d, kind);
-      studioOf(ctx).commit(f, r.mutations, `Add ${LAYER_WORDS[kind]} ${r.id}`);
-    },
-  },
-  'exposure.remove': {
-    label: 'Remove Darkroom Layer',
-    palette: false,
-    run: (ctx, id: string) => {
-      const f = sel.current(ctx.state)!;
-      if (id === 'main') return;
-      studioOf(ctx).commit(f, [{ op: 'remove', id }], `Remove ${id}`);
-    },
-  },
-  'exposure.toggle': {
-    label: 'Turn Darkroom Layer On or Off',
-    palette: false,
-    run: (ctx, id: string) => {
-      const f = sel.current(ctx.state)!;
-      const d = docOf(ctx, f);
-      if (!d || id === 'main') return;
-      const on = !!(d.stages.darkroom.stack.items[id] as { enabled?: boolean } | undefined)?.enabled;
-      setDoc(ctx, f, `${id}.enabled`, !on, `${on ? 'Turn off' : 'Turn on'} ${id}`);
     },
   },
   'output.save': {
