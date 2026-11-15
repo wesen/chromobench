@@ -152,3 +152,8 @@ P3b: exact exports fit the budget at 4000 px, browser-free parity warm fixture (
 
 P9 integration: browser suite green on SwiftShader and Metal (145 passed, 2 skipped); end-to-end walkthroughs; persona session on Darkroom first and Classic (Classic recommended as default for now); fixes: darkroom strip, roll after layout switch (Log.withFields), Settings menu (copy/paste/sync), agent layouts and looks persisted, History wording; HANDOFF rewritten; report reference/02-integration-report.md
 
+
+## 2026-11-15
+
+Triage (CHB-044): 45 open → 44 open; qv4l is a duplicate of CHB-035 t:qyx4 (default arrangement). P9 and P10 items spot-checked against the code and still open; all consolidated into the CHB-044 backlog by functionality.
+

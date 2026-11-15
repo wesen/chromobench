@@ -16,3 +16,8 @@ Document 01 v2: one editing model (stages with laws; layers, groups, masks, link
 
 v2 uploaded to the reMarkable (/ai/2026/11/14/CHB-035/CHB-035 v2 One editing model for chromobench.pdf); diary Step 6
 
+
+## 2026-11-15
+
+Triage after the CHB-037 cut-off (CHB-044): 3 open → 2 open; done: 4yny (CHB-037). Open: the owner decisions (merged list in CHB-044) and the performance ticket for design 02 (CHB-041 did half of P1 and P2; state of P1-P8 in the CHB-044 backlog).
+

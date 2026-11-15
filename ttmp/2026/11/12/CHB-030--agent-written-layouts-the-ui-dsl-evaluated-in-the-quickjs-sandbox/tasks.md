@@ -1,9 +1,9 @@
 # Tasks
 
 ## TODO
-- [ ] Design study: selectors over the sandbox boundary (prototype + measurements) vs a declarative selector/path language; decision record <!-- t:cfpi -->
-- [ ] Layout API surface for agents: generated bindings and docs for ck/cb with CHB-029 host capabilities <!-- t:vqrd -->
-- [ ] Loading and lifecycle: Load Layout (from CHB-028 Load Variant), validation and explain before mount, hot replace, fallback, save to library, list under View ▸ Layout <!-- t:kdx1 -->
-- [ ] Agent tools: layout.write/preview/explain/save; playbook 'make a simpler layout'; mock-engine tests <!-- t:3yd4 -->
-- [ ] Safety tests: escapes, runaway selectors, memory, layouts that throw at build or runtime <!-- t:t7ql -->
-- [ ] Acceptance: cosplay session where the photographer asks the assistant for a simpler interface <!-- t:sd56 -->
+- [x] Design study: selectors over the sandbox boundary (prototype + measurements) vs a declarative selector/path language; decision record — done: decided in CHB-037 P6b (diary 16, decision 4): layouts are recorded on proxies in the sandbox and cross as data; selectors are declarative chains (cb.sel.frame.print()) <!-- t:cfpi -->
+- [x] Layout API surface for agents: generated bindings and docs for ck/cb with CHB-029 host capabilities — done: wb and the layout surface in the generated agent docs (packages/dsl/generated/instructions.md, reference.md; dsl/src/docs/topics/workbench.md) <!-- t:vqrd -->
+- [x] Loading and lifecycle: Load Layout (from CHB-028 Load Variant), validation and explain before mount, hot replace, fallback, save to library, list under View ▸ Layout — done: wb.layouts.build checks with the passes and explains, wb.layouts.use asks in a dialog, accepted layouts are kept in the KV and listed under View ▸ Layout, ?layout= reloads them (apps/studio/src/host/workbench.ts; CHB-037 P9 f1007f5); removing a kept layout is CHB-037 t:1qlj <!-- t:kdx1 -->
+- [x] Agent tools: layout.write/preview/explain/save; playbook 'make a simpler layout'; mock-engine tests — done: wb.layouts.build/use and wb.screen().explain() (studio-kit/test/chat/workbench.test.ts:98-124); the agent's 'Writing a layout' topic (dsl/src/docs/topics/workbench.md:42) serves as the playbook <!-- t:3yd4 -->
+- [ ] Safety tests: escapes, runaway selectors, memory, layouts that throw at build or runtime — now: E_LAYOUT for functions is tested; remaining: layouts that throw at build or run time, runaway selectors, memory <!-- t:t7ql -->
+- [x] Acceptance: cosplay session where the photographer asks the assistant for a simpler interface — done: e2e/walkthrough.spec.ts walkthrough 5 ("a simpler screen"), named CHB-030's acceptance in the CHB-037 integration report §2; a session with a live model was not run <!-- t:sd56 -->

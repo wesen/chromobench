@@ -2,23 +2,23 @@
 
 ## TODO
 - [ ] [from CHB-018 aj14] ck.inspector() panel over rt.inspect() (rt.inspect exists: packages/shell/src/app/runtime.ts:602) <!-- t:fj9p -->
-- [ ] [from CHB-018 aj14] Perf benches and targets: cells re-checked per step, frame budget, store tx on a 10k catalog, build/mount time <!-- t:sy6a -->
-- [ ] [from CHB-018 3sh4] Generated reference page from form docs; shell diagnostics wording review; a test for the I010/I011 reach passes <!-- t:r414 -->
-- [ ] [from CHB-019 rvl9] Catalog collections and keyword-editing commands (keywords are only searched today) <!-- t:39pe -->
+- [ ] [from CHB-018 aj14] Perf benches and targets: cells re-checked per step, frame budget, store tx on a 10k catalog, build/mount time — now: with CHB-035 design 02 P4 (open-loop bench) <!-- t:sy6a -->
+- [ ] [from CHB-018 3sh4] Generated reference page from form docs; shell diagnostics wording review; a test for the I010/I011 reach passes — now: the reach checks exist (shell/src/build/checks.ts:322,341) but no test covers them <!-- t:r414 -->
+- [ ] [from CHB-019 rvl9] Catalog collections and keyword-editing commands (keywords are only searched today) — now: frame.keywords exists (studio-kit/src/commands/frame.ts:25, not in the palette); remaining: collections and a keyword-editing UI <!-- t:39pe -->
 - [x] (split: Load Variant moved to CHB-030 task 3; hot reload is the next task here) [from CHB-019 xupn] Dev hot reload and Load Variant (load a variant from a file) <!-- t:0sry -->
-- [ ] [from CHB-019 qv62/ktgo] axe-core checks in the per-variant Playwright smokes <!-- t:bxp0 -->
-- [ ] [from CHB-019 7bs1] Recipe sidecars on export and on open (export passes recipe: 'none' in apps/studio/src/host/export.ts:67; output supports 'sidecar') <!-- t:hcts -->
+- [ ] [from CHB-019 qv62/ktgo] axe-core checks in the per-variant Playwright smokes — now: in the per-layout Playwright smokes <!-- t:bxp0 -->
+- [ ] [from CHB-019 7bs1] Recipe sidecars on export and on open (export passes recipe: 'none' in apps/studio/src/host/export.ts:67; output supports 'sidecar') — now: document (format 3) sidecars: write <name>.chromobench.json beside an export (File ▸ Save Document exists, apps/studio/src/main.ts:844; the export passes document: 'none', host/export.ts:69) and read one on open <!-- t:hcts -->
 - [ ] [from CHB-019 tlko] Playwright test for ingest's 8-bit decodeBrowser fallback (JPEG/WebP) in the studio host <!-- t:pb6c -->
-- [ ] [from CHB-019 g4p6] A real 2D printer-lights colour pad with a density readout (today: three sliders plus Lighter/Darker) <!-- t:nbof -->
+- [ ] [from CHB-019 g4p6] A real 2D printer-lights colour pad with a density readout (today: three sliders plus Lighter/Darker) — (check: still three sliders plus Lighter/Darker, studio-kit/src/dom/arg.ts:245-262) <!-- t:nbof -->
 - [x] (moved to CHB-029 item 9) [from CHB-016] Glossary of the UI vocabulary (variant = layout, module, kit, fragment, pass, cell, lane, slot; the 'studio' names; ck/cb) <!-- t:04sm -->
 - [ ] [from CHB-016 vp7c] Diagnostics table: every CK-/CB- code with family, title, owner and fix template <!-- t:d552 -->
-- [ ] [from CHB-016 no98] Help topic 'Writing a variant' from the declarations and examples <!-- t:v4fu -->
-- [ ] [from CHB-019 xupn] Dev hot reload of layouts (import.meta.hot); Load Variant moved to CHB-030 <!-- t:0x4k -->
-- [ ] Exports at the file's own size on both engines: an export is the working image's size (apps/studio/src/host/export.ts), so the CPU engine exports 640 px (512 before CHB-031) and the GPU its 4000 px default; decode at full size for an export (tiled), keep previews at the working size <!-- t:qfae -->
-- [ ] From CHB-026 session 04 F41: with 'Where is …?' open the File menu does not react and Ctrl+O gives no file chooser (modal dialog); let the dialog offer 'Open another file…' or let File ▸ Open through <!-- t:5vfk -->
-- [ ] From CHB-026 session 04 F43: History details — '+0.4 stop' next to ⅓ units, 'You' on every row, a merged Time row ordered after later rotate rows, a truncated long row <!-- t:6lah -->
+- [ ] [from CHB-016 no98] Help topic 'Writing a variant' from the declarations and examples — now: a developer help topic 'Writing a layout' (the agent's version exists in dsl/src/docs/topics/workbench.md:42) <!-- t:v4fu -->
+- [ ] [from CHB-019 xupn] Dev hot reload of layouts (import.meta.hot); Load Variant moved to CHB-030 — now: hot reload of layouts <!-- t:0x4k -->
+- [ ] Exports at the file's own size on both engines: an export is the working image's size (apps/studio/src/host/export.ts), so the CPU engine exports 640 px (512 before CHB-031) and the GPU its 4000 px default; decode at full size for an export (tiled), keep previews at the working size — now: with CHB-037 P9-14 (export size) <!-- t:qfae -->
+- [ ] From CHB-026 session 04 F41: with 'Where is …?' open the File menu does not react and Ctrl+O gives no file chooser (modal dialog); let the dialog offer 'Open another file…' or let File ▸ Open through — (check: apps/studio/src/main.ts:617-621 closes the dialog when the file opens another way; whether the File menu reacts while it is up) <!-- t:5vfk -->
+- [ ] From CHB-026 session 04 F43: History details — '+0.4 stop' next to ⅓ units, 'You' on every row, a merged Time row ordered after later rotate rows, a truncated long row — (check against the CHB-037 History panel, studio-kit/src/model/history.ts) <!-- t:6lah -->
 - [ ] From CHB-026 session 04 F44: switching a photo from Real to Normalised darkens it (luma 105 → 52): carry the time's density into the lights on a mode switch (and back) <!-- t:8nfh -->
-- [ ] From CHB-026 session 03 F37: the first filtration step (20 CC) flips a warm photo to blue; consider 5/10 CC steps for the first moves <!-- t:czh4 -->
+- [ ] From CHB-026 session 03 F37: the first filtration step (20 CC) flips a warm photo to blue; consider 5/10 CC steps for the first moves — now: with CHB-037 P9-6 (coarse sliders) <!-- t:czh4 -->
 - [ ] From CHB-026 session 04 F42: portrait frames on a strip open sideways (flipV default fits landscape frames); a per-roll orientation or 'rotate all portrait frames' command <!-- t:itds -->
 - [x] Owner decision (CHB-026 F30): the first print's colour aim for scans — neutral (now) or warm about 0.05–0.10 log H (CHB-031 WS-C diary 04 step 3 table); then one value for the studio's first print and the Roll module's ALPHA 0.75 <!-- t:cpv9 -->
-- [ ] Roll first prints vs studio first print: the Roll module's ALPHA 0.75 keeps a quarter of each frame's cast, the studio integrates negatives fully to grey (alpha 1, kept by the owner 2026-11-14); align or document why they differ <!-- t:5wjl -->
+- [ ] Roll first prints vs studio first print: the Roll module's ALPHA 0.75 keeps a quarter of each frame's cast, the studio integrates negatives fully to grey (alpha 1, kept by the owner 2026-11-14); align or document why they differ — now: an owner decision (kits/roll/src/engine/constants.ts:9 ALPHA 0.75 vs FIRST_PRINT_AIM in apps/studio/src/host/first-print.ts:64), listed in CHB-044's backlog <!-- t:5wjl -->

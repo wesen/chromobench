@@ -1,7 +1,7 @@
 ---
 Title: 'GPU memory: textures per open frame exhaust the engine budget (E_GPU_OOM with two 24 MP NEFs); residency for on-screen frames, a budget from the adapter, recovery that never shows the wrong picture'
 Ticket: CHB-041
-Status: active
+Status: complete
 Topics:
     - webgpu
 DocType: index
@@ -10,10 +10,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-15T15:19:50.840189-05:00
+LastUpdated: 2026-11-15T17:49:27.559209-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # GPU memory: textures per open frame exhaust the engine budget (E_GPU_OOM with two 24 MP NEFs); residency for on-screen frames, a budget from the adapter, recovery that never shows the wrong picture
 

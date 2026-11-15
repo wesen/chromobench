@@ -15,3 +15,8 @@
 fusz (diary 02): the first print's engine difference was the metered image's resolution (CPU 640 px vs GPU 4000 px: DSC_8559 0.0084 log H apart on one engine), not Metal's filter weights (GPU = CPU to 4e-6 at equal size). Every engine now meters a 640 px analysis image (the decode at 640 px, its own source); GPU DSC_8559 5.612 s -> 6.3 s (= CPU); photos within 0.0004 log H; CPU engine bit-identical; e2e parity test (commits 9c6739f, 7ec3684, 53e8c94). Follow-ups szeo, 3nod, ayqx, alwi
 
 - Step 11 (0371aac): fusz merged after review (comments corrected, script renumbered 07); re-measured: same Time on both engines for all 15 frames; both browser suites 108/108; measurement scripts headless by default
+
+## 2026-11-15
+
+Triage after the CHB-037 cut-off (CHB-044): 5 open → 5 open; the engine-dependent measurements are grouped with CHB-035 design 02 P2 (engine-independent analysis levels) in the CHB-044 backlog.
+

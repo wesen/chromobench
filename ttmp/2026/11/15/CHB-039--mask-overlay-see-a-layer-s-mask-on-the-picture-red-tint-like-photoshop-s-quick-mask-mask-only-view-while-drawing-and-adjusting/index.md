@@ -1,7 +1,7 @@
 ---
 Title: 'Mask overlay: see a layer''s mask on the picture (red tint like Photoshop''s quick mask, mask-only view), while drawing and adjusting'
 Ticket: CHB-039
-Status: active
+Status: complete
 Topics:
     - ui
     - webgpu
@@ -11,10 +11,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-15T14:25:10.811554-05:00
+LastUpdated: 2026-11-15T17:49:26.589151-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Mask overlay: see a layer's mask on the picture (red tint like Photoshop's quick mask, mask-only view), while drawing and adjusting
 

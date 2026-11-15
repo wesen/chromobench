@@ -1,7 +1,7 @@
 ---
 Title: 'Diagnostics and bug reports: structured logging, GPU error capture, a report the photographer can send (logs, environment, documents, history, optional images), reports that reopen for reproduction'
 Ticket: CHB-038
-Status: active
+Status: complete
 Topics:
     - ui
     - webgpu
@@ -12,10 +12,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-11-15T14:14:23.488403-05:00
+LastUpdated: 2026-11-15T17:49:25.603554-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Diagnostics and bug reports: structured logging, GPU error capture, a report the photographer can send (logs, environment, documents, history, optional images), reports that reopen for reproduction
 
