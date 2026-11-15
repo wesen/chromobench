@@ -5,12 +5,9 @@
 // with its own location · one concrete fix. The shape is a structural superset of the contract's Diagnostic
 // (code, message, where, path, valid, hint, fix), so studio-kit can pass a Diag wherever the contract expects one.
 
-export interface CallSite {
-  url: string;
-  file: string;
-  line: number;
-  col: number;
-}
+import { libraryRoot, where, type CallSite } from '@chromobench/values';
+
+export { libraryRoot, site, where, type CallSite } from '@chromobench/values';
 
 export type DiagLevel = 'error' | 'warning' | 'info';
 
@@ -48,49 +45,9 @@ export function diag(code: string, message: string, extra: DiagExtra = {}): Diag
 }
 
 // ── call sites ────────────────────────────────────────────────────────────
-// site() parses new Error().stack and returns the first frame outside the registered library roots. The shell
-// registers its own src/ directory; studio-kit and kits call ck.libraryRoot(import.meta.url).
-const ROOTS = new Set<string>();
-const normRoot = (u: string): string => {
-  let s = String(u).replace(/[?#].*$/, '');
-  if (!s.endsWith('/')) s = s.slice(0, s.lastIndexOf('/') + 1);
-  return stripScheme(s);
-};
-const stripScheme = (u: string): string => u.replace(/^file:\/\//, '').replace(/^https?:\/\/[^/]+(\/@fs)?/, '');
-
-/** Register a library root: frames under it are skipped when looking for the program's line. */
-export function libraryRoot(url: string): void {
-  ROOTS.add(normRoot(url));
-}
-// the shell's own sources: packages/shell/src/
+// One call-site mechanism for every builder (@chromobench/values): site() returns the first stack frame outside the
+// registered library roots. The shell registers its own src/ directory; studio-kit and kits register theirs.
 libraryRoot(new URL('..', import.meta.url).href);
-
-const FRAME = /((?:https?|file):\/\/[^\s)]+?|\/[^\s)(]+?):(\d+):(\d+)/;
-const isLib = (url: string): boolean => {
-  const p = stripScheme(url.replace(/[?#].*$/, ''));
-  for (const r of ROOTS) if (p.startsWith(r)) return true;
-  return /\/node_modules\/|^node:|\(node:/.test(url);
-};
-
-/** The first stack frame outside the libraries: the line in the app that called the builder. */
-export function site(skip = 0): CallSite | null {
-  const stack = String(new Error().stack || '').split('\n').slice(1);
-  const frames: { url: string; line: number; col: number }[] = [];
-  for (const line of stack) {
-    const m = line.match(FRAME);
-    if (m) frames.push({ url: m[1]!, line: +m[2]!, col: +m[3]! });
-  }
-  const app = frames.filter(f => !isLib(f.url));
-  const f = app[skip] || app[0];
-  if (!f) return null;
-  return { url: f.url.replace(/[?#].*$/, ''), file: shortFile(f.url), line: f.line, col: f.col };
-}
-
-export function shortFile(url: string): string {
-  const u = String(url).replace(/[?#].*$/, '');
-  return u.split('/').slice(-2).join('/');
-}
-export const where = (at: CallSite | null | undefined): string => (at ? `${at.file}:${at.line}:${at.col}` : 'unknown place');
 
 export const FAMILIES: Record<string, string> = {
   I: 'Info',

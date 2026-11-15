@@ -58,6 +58,12 @@ const usedFragments = (def: ShellDef): Fragment[] => {
   return out;
 };
 
+/** a builder fragment's result applied: a function of the builder (it may return the builder) */
+export function applyBuilderFragment<T>(b: T, r: unknown): T {
+  if (typeof r === 'function') return ((r as (x: T) => T | void)(b) ?? b) as T;
+  return b;
+}
+
 /** Wrap a builder so unknown methods resolve to builder fragments (now or at build). */
 function fragmentProxy<T extends object>(target: T, kind: 'shell' | 'module', frags: () => Fragment[], record: (c: PendingBuilderCall) => void): T {
   const proxy: T = new Proxy(target, {
@@ -67,7 +73,7 @@ function fragmentProxy<T extends object>(target: T, kind: 'shell' | 'module', fr
         return typeof v === 'function' ? v.bind(proxy) : v;
       }
       const m = builderMethod(frags(), kind, k);
-      if (m) return (...args: unknown[]) => m.apply(proxy, args) ?? proxy;
+      if (m) return (...args: unknown[]) => applyBuilderFragment(proxy, m(...args));
       return (...args: unknown[]) => {
         record({ name: k, args, at: site() });
         return proxy;

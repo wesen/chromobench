@@ -6,13 +6,14 @@
 // Verbs: bind · derive · show · arrange · choose · act · map · handle · change · extend · check · explain
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Modifier } from '@chromobench/values';
 import { diag, libraryRoot, site, Diagnostics, type CallSite, type Diag, type DiagExtra } from '../core/diag.ts';
 import { chordLabel, parseChord } from '../core/keys.ts';
 import { OTHER, type Platform } from '../core/util.ts';
 import { MIXED, monotone, parseValue, UNITS } from '../core/math.ts';
-import { makeNode, isNode, isProps, type NodeData, type NodeHost } from '../ir/node.ts';
+import { isNode, isProps, nodeMods, NodeVocab, type NodeData } from '../ir/node.ts';
 import { builtinForms, type FormSpec, type FormSlotsMap, type BuiltinForm } from '../ir/forms.ts';
-import { commonSlots, slot, type PropOf, type PropsOf, type SlotTable, type Traced, type CommandRef } from '../ir/slots.ts';
+import { commonSlots, slot, type PropOf, type PropsOf, type Traced, type CommandRef } from '../ir/slots.ts';
 import { ShellBuilder, type ShellDef } from './shell-builder.ts';
 import { fragment, type FragmentTarget } from './fragments.ts';
 import { kit, isKit, KitBuilder } from './kits.ts';
@@ -39,9 +40,10 @@ export interface Chain<F extends string, S> {
   prop(key: string, value: unknown): FormNode<F, S>;
   /** append to a list slot (overlays, badges) */
   slot(key: string, ...items: unknown[]): FormNode<F, S>;
-  with(props: PropsFor<F, S> & Record<string, unknown>): FormNode<F, S>;
+  /** a modifier, a function of the node, or a props patch */
+  with(x: Modifier<NodeData> | ((n: FormNode<F, S>) => NodeData) | (PropsFor<F, S> & Record<string, unknown>)): FormNode<F, S>;
   tip(v: Traced<S, string>): FormNode<F, S>;
-  disabled(v: Traced<S, boolean>, why?: Traced<S, string>): FormNode<F, S>;
+  enabled(v: Traced<S, boolean>, why?: Traced<S, string>): FormNode<F, S>;
   hidden(v: Traced<S, boolean>): FormNode<F, S>;
 }
 type Reserved = keyof NodeData | keyof Chain<string, unknown>;
@@ -87,14 +89,13 @@ export function createCk<S = any>(options: CkOptions = {}) {
   ]);
   const irs = new Map<string, IrSpec>();
 
-  const host: NodeHost = {
-    slotsOf(form) {
-      const s = forms.get(form);
-      return s ? ({ ...commonSlots, ...s.slots } as SlotTable) : null;
-    },
-    site: () => site(),
-  };
-  const node = <F extends string>(form: F, props: Record<string, unknown> = {}, kids: unknown = [], at: CallSite | null = site()): FormNode<F, S> => makeNode(host, form, props, kids, at) as FormNode<F, S>;
+  // ck.extend: fragments whose methods this instance's nodes answer (and which join every build), and kits whose
+  // fragments and forms give the nodes methods and setters (the kit puts them into the builds that use it)
+  const extensions: Fragment[] = [];
+  const kitFragments: Fragment[] = [];
+  const vocabForms = new Map<string, FormSpec>(forms);
+  const vocab = new NodeVocab(() => vocabForms, () => [...extensions, ...kitFragments]);
+  const node = <F extends string>(form: F, props: Record<string, unknown> = {}, kids: unknown = [], at: CallSite | null = site()): FormNode<F, S> => vocab.node(form, props, kids, at) as FormNode<F, S>;
   const ctor = <F extends string>(form: F, f: (...a: any[]) => any): any => Object.assign(f, { form });
   /** (props?, ...kids) → node */
   const box = <F extends string>(form: F): FormCtor<F, S> =>
@@ -116,7 +117,7 @@ export function createCk<S = any>(options: CkOptions = {}) {
     platform,
     forms,
     panels,
-    fragments,
+    fragments: extensions,
     passes,
     themes,
     irs,
@@ -215,7 +216,7 @@ export function createCk<S = any>(options: CkOptions = {}) {
         if (isProps(label)) return node('button', label, [], at);
         return node('button', { label, ...(opts || {}) }, [], at);
       }) as ((label: Traced<S, string> | P<'button', S>, opts?: P<'button', S>) => FormNode<'button', S>) & { form: 'button' },
-      /** a command's button: label, tip with its key and disabled-with-why come from the table */
+      /** a command's button: label, tip with its key and enabled-with-why come from the table */
       command: (id: string, opts?: P<'button', S>): FormNode<'button', S> => node('button', { run: id, ...(opts || {}) }, [], site()),
       iconButton: (iconName: string, opts?: P<'button', S>): FormNode<'button', S> => node('button', { icon: iconName, quiet: true, ...(opts || {}) }, [], site()),
       curve: ctor('curve', (opts?: Record<string, unknown>) => node('curve', opts || {}, [], site())) as ((opts?: P<'curve', S>) => FormNode<'curve', S>) & { form: 'curve' },
@@ -255,10 +256,30 @@ export function createCk<S = any>(options: CkOptions = {}) {
     form<F extends string>(name: F, spec: Omit<FormSpec, 'name'>): FormCtor<F, S> & { spec: FormSpec } {
       const full: FormSpec = { ...spec, name };
       forms.set(name, full);
+      vocabForms.set(name, full);
+      vocab.invalidate();
       const c = box(name) as FormCtor<F, S> & { spec: FormSpec };
       (c as any).spec = full;
       return c;
     },
+    /**
+     * Register fragments (their methods on this instance's nodes and builders; their props, slots and checks in every
+     * build) or kits (the methods and setters of their fragments and forms; the kit installs the rest where it is
+     * used). Nodes made afterwards answer the new methods.
+     */
+    extend(...xs: (Fragment | Kit)[]): void {
+      for (const x of xs) {
+        if (isKit(x)) {
+          kitFragments.push(...x.def.fragments.filter(f => !kitFragments.includes(f)));
+          for (const f of x.def.forms) vocabForms.set(f.name, f);
+        } else if (x && (x as Fragment).kind === 'fragment') {
+          if (!extensions.includes(x as Fragment)) extensions.push(x as Fragment);
+        } else throw new TypeError('ck.extend(…): fragments (ck.fragment) or kits (ck.kit)');
+      }
+      vocab.invalidate();
+    },
+    /** the node modifiers: n.tip(v) ≡ n.with(ck.mod.tip(v)); ck.mod.when(bool, m) is a build-time choice */
+    mod: nodeMods,
     node,
     slot,
     fragment: (target: FragmentTarget, spec: FragmentSpec): Fragment => fragment(target, spec),
@@ -266,11 +287,10 @@ export function createCk<S = any>(options: CkOptions = {}) {
     extensible: (kind: string): { extensible: string } => ({ extensible: kind }),
     kit: <St = unknown>(name: string, f: (k: KitBuilder<S & St>, opts?: any) => unknown): Kit<St> => kit<St>(name, f, undefined, site()),
     pass: <I = any>(name: string, o: { on?: string; after?: string | string[]; before?: string | string[]; options?: Record<string, unknown> } | string, run: (ir: I, p: PassCtx) => I | void): PassDef<I> => pass<I>(name, o, run),
-    /** install fragments or passes on the instance (every shell built from it gets them) */
-    install(...xs: (Fragment | PassDef | Theme)[]): void {
+    /** install passes or themes on the instance (every shell built from it gets them) */
+    install(...xs: (PassDef | Theme)[]): void {
       for (const x of xs) {
-        if ((x as Fragment).kind === 'fragment') fragments.push(x as Fragment);
-        else if (isPass(x)) passes.push(x);
+        if (isPass(x)) passes.push(x);
         else if ((x as Theme).light) themes.set((x as Theme).name, x as Theme);
       }
     },

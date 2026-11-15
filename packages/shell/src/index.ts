@@ -30,8 +30,8 @@ export { MAC, OTHER, detectPlatform, suggest, getIn, setIn, pathStr, parsePath, 
 export type { Platform, Key, Path } from './core/util.ts';
 
 // ir
-export { makeNode, isNode, walk, mapTree, findAll, rebuildNode, NODE } from './ir/node.ts';
-export type { NodeData, PendingCall } from './ir/node.ts';
+export { makeNode, isNode, walk, mapTree, findAll, rebuildNode, nodeMods, NodeVocab, NODE } from './ir/node.ts';
+export type { NodeData } from './ir/node.ts';
 export { slot, commonSlots } from './ir/slots.ts';
 export type { Slot, Time, PropOf, PropsOf, Traced, CommandRef, NotFn, SlotTable } from './ir/slots.ts';
 export { builtinForms } from './ir/forms.ts';

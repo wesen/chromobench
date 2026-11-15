@@ -162,8 +162,8 @@ export interface FragmentSpec {
   name?: string;
   /** only some nodes */
   when?: (node: NodeData) => boolean;
-  /** methods: this is the node (or builder); return a node (or builder) */
-  methods?: Record<string, (this: any, ...a: any[]) => any>;
+  /** chain methods as modifier factories: each returns a modifier, a function of the receiver, or a props patch */
+  methods?: Record<string, (...a: any[]) => unknown>;
   /** new props, checked like the form's own */
   props?: Record<string, { default?: unknown; doc?: string; time?: Time }>;
   /** new slots; an array declares or extends a list slot */

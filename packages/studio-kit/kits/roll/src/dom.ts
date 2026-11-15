@@ -132,7 +132,7 @@ const setup = panelOf('cb-roll-setup', (s) => {
 const BATCH_THUMBS = 12;
 /** a small print thumbnail (the shell's thumb form), mounted from a renderer */
 const thumb = (m: MountCtx, image: unknown, which: 'before' | 'after'): Node => {
-  const el = m.mount(makeNode(null, 'thumb', { image, max: 72 }, [], null)) as HTMLElement;
+  const el = m.mount(makeNode('thumb', { image, max: 72 }, [], null)) as HTMLElement;
   el.classList.add('cb-change-thumb', `is-${which}`);
   el.title = which === 'before' ? 'now' : 'with the batch';
   return el;

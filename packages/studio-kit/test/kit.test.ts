@@ -28,9 +28,10 @@ describe('cb.arg', () => {
     expect(app.diagnostics.list.filter(d => d.code === 'CB-A110').length).toBe(1);
   });
   it('.testStrip() on print.paper is refused (CK-X121); on time it adds the strip', () => {
-    const app = studioWith((ck, cb) => ck.column({}, cb.arg('print.paper').testStrip(), cb.arg('print.enlarger.time_s').testStrip({ step: '1/3 st' })));
-    expect(app.codes()).toContain('CK-X121');
-    expect(app.explain()).toMatch(/cb\.arg {2}path "print\.enlarger\.time_s" {2}strip \{step\} {2}slider {2}s {2}log2 {2}step 1\/6 st {2}aside st {2}\+testStrip\(1\/3 st\)/);
+    expect(() => studioWith((ck, cb) => cb.arg('print.paper').testStrip())).toThrow(/CK-X121/);
+    const app = studioWith((ck, cb) => ck.column({}, cb.arg('print.enlarger.time_s').testStrip({ step: '1/3 st' })));
+    expect(app.errors).toEqual([]);
+    expect(app.explain()).toMatch(/cb\.arg {2}path "print\.enlarger\.time_s" {2}strip \{step\} {2}slider {2}s {2}log2 {2}step 1\/6 st {2}aside st/);
   });
   it('controls("darkroom") explains as sections of generated controls (snapshot)', () => {
     const ck = createCk();

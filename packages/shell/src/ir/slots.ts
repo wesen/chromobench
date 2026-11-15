@@ -1,7 +1,7 @@
 // Slots and binding times. Every option (slot) of every form declares when its value is read:
 //
 //   β     build      once, while the program builds (min, max, a list of sections)
-//   τ     traced     a lambda of state, re-run when what it read changes (label, disabled, a readout)
+//   τ     traced     a lambda of state, re-run when what it read changes (label, enabled, a readout)
 //   bind  binding    a τ lambda naming one state path; two-way (bind: s => s.dev.light.exposure)
 //   θ     per item   called with the real item when its row is drawn (cell: (photo, i) => …)
 //   ƒ     helper     a pure function of the form's own value (format: v => v.toFixed(1)) or a mount function
@@ -68,8 +68,8 @@ export const commonSlots = {
   class: slot.build<string>('extra CSS classes'),
   tip: slot.traced<string>('tooltip'),
   hidden: slot.traced<boolean>(),
-  disabled: slot.traced<boolean>(),
-  why: slot.traced<string>('why it is disabled'),
+  enabled: slot.traced<boolean>('false greys it out (and why says why)'),
+  why: slot.traced<string>('why it is not enabled'),
   keys: slot.build<Record<string, unknown>>('keys that apply while it has focus'),
   grow: slot.build<number | boolean>(),
   style: slot.build<Record<string, string | number>>(),

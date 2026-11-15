@@ -1,6 +1,6 @@
 // Fragments, kits, passes and explain.
 import { describe, expect, it } from 'vitest';
-import { createCk, type FormNode } from '../../src/index.ts';
+import { BuildError, createCk, type Diag, type FormNode } from '../../src/index.ts';
 import { manualClock } from '../../src/testing/index.ts';
 import { miniStudio, type MiniState } from '../fixtures/mini-studio.ts';
 
@@ -25,11 +25,7 @@ const ratingsKit = (ck: ReturnType<typeof createCk>) =>
       .keys('module:*', ck.digits(0, 5, 'rate.set'))
       .fragments(
         ck.fragment('slider', {
-          methods: {
-            stepped(n: number) {
-              return this.prop('step', n);
-            },
-          },
+          methods: { stepped: (n: number) => ({ step: n }) },
           explain: n => (n.props['step'] ? `stepped ${n.props['step']}` : null),
         }),
       )
@@ -44,20 +40,22 @@ const ratingsKit = (ck: ReturnType<typeof createCk>) =>
 describe('kits and fragments', () => {
   it('a kit adds a slice, a command, keys, a fragment method and a pass to a shell', () => {
     const ck = createCk();
-    // the node is made before the kit is installed: the call is recorded and resolved at build
+    const ratings = ratingsKit(ck);
+    // the kit's fragment methods are registered before the nodes are made; the method is a modifier
+    ck.extend(ratings);
     const slider = ck.ui.slider(0, 100, { bind: (s: any) => s.dev.vibrance }).stepped(5);
-    expect(slider.calls.map(c => c.name)).toEqual(['stepped']);
+    expect(slider.props['step']).toBe(5);
+    expect(Object.isFrozen(slider) && Object.isFrozen(slider.props)).toBe(true);
     const app = ck
       .shell('Studio')
       .state({ dev: { vibrance: 0 }, ui: { photo: 'a' } })
-      .use(ratingsKit(ck))
+      .use(ratings)
       .module('m', m => m.center(ck.panel('basic', {}, slider)))
       .build();
     expect(app.errors).toEqual([]);
     expect(app.codes('info')).toContain('RT-001');
     const placed = app.ir.modules[0]!.regions.center!.kids[0]!;
     expect(placed.props['step']).toBe(5);
-    expect(placed.calls).toEqual([]);
     expect(app.ir.view).toContain('ratings.shown');
     const rt = app.start({ clock: manualClock() });
     rt.press('4');
@@ -67,34 +65,39 @@ describe('kits and fragments', () => {
     expect(app.explain()).toMatch(/slider 0…100 {2}bind dev\.vibrance {2}step 5 {2}stepped 5/);
     expect(app.ir.docs[0]!.source).toBe('ratings');
   });
-  it('X120: an unknown fragment method, with a suggestion from the receiver; X121 when `when` refuses', () => {
+  it('X120: an unknown method throws where it is called, with a suggestion from the receiver; X121 when `when` refuses', () => {
     const ck = createCk();
     const kit = ck.kit('strip', k =>
       k.fragments(
         ck.fragment('slider', {
           when: n => n.props['unit'] === 's',
-          methods: {
-            testStrip() {
-              return this.prop('aside', ck.text('strip'));
-            },
-          },
+          methods: { testStrip: () => ({ aside: ck.text('strip') }) },
         }),
       ),
     );
-    const app = ck
-      .shell('x')
-      .state({ t: 1, g: 2 })
-      .use(kit)
-      .center(ck.column({}, (ck.ui.slider(0, 9, { bind: s => s.t, unit: 's' }) as any).testStip(), (ck.ui.slider(0, 9, { bind: s => s.g }) as any).testStrip(), (ck.ui.number({ bind: s => s.t }) as any).testStrip()))
-      .build();
-    const x120 = app.diagnostics.list.filter(d => d.code === 'CK-X120');
-    expect(x120[0]!.fix).toBe('Did you mean .testStrip() (kit strip)?');
-    expect(x120[1]!.facts![0]).toMatch(/exists for slider/);
-    expect(app.codes()).toContain('CK-X121');
+    ck.extend(kit);
+    const thrown = (f: () => unknown): Diag => {
+      try {
+        f();
+      } catch (e) {
+        expect(e).toBeInstanceOf(BuildError);
+        return (e as BuildError).diagnostic;
+      }
+      throw new Error('did not throw');
+    };
+    const typo = thrown(() => (ck.ui.slider(0, 9, { bind: (s: any) => s.t, unit: 's' }) as any).testStip());
+    expect(typo.code).toBe('CK-X120');
+    expect(typo.fix).toBe('Did you mean .testStrip() (kit strip)?');
+    expect(typo.at?.file).toBe('build/extend.test.ts');
+    const other = thrown(() => (ck.ui.number({ bind: (s: any) => s.t }) as any).testStrip());
+    expect(other.code).toBe('CK-X120');
+    expect(other.facts![0]).toMatch(/exists for slider/);
+    expect(thrown(() => (ck.ui.slider(0, 9, { bind: (s: any) => s.g }) as any).testStrip()).code).toBe('CK-X121');
+    expect((ck.ui.slider(0, 9, { bind: (s: any) => s.t, unit: 's' }) as any).testStrip().props['aside'].$).toBe('text');
   });
   it('X110: two kits adding the same method, naming both', () => {
     const ck = createCk();
-    const f = (name: string) => ck.kit(name, k => k.fragments(ck.fragment('slider', { methods: { stepped(n: number) { return this.prop('step', n); } } })));
+    const f = (name: string) => ck.kit(name, k => k.fragments(ck.fragment('slider', { methods: { stepped: (n: number) => ({ step: n }) } })));
     const app = ck.shell('x').use(f('a')).use(f('b')).center(ck.text('x')).build();
     const d = app.diagnostics.list.find(x => x.code === 'CK-X110')!;
     expect(d.facts!.join(' ')).toMatch(/kit a.*kit b/);
@@ -124,11 +127,7 @@ describe('kits and fragments', () => {
     const kit = ck.kit('mods', k =>
       k.fragments(
         ck.fragment('shell', {
-          methods: {
-            simpleModule(this: any, id: string) {
-              return this.module(id, (m: any) => m.center(ck.text(id)));
-            },
-          },
+          methods: { simpleModule: (id: string) => (b: any) => b.module(id, (m: any) => m.center(ck.text(id))) },
         }),
       ),
     );

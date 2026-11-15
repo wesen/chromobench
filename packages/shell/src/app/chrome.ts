@@ -163,7 +163,7 @@ export function resolveMenu(rt: Runtime<any>, items: MenuItem[] | undefined, arg
       continue;
     }
     if (typeof it === 'object') {
-      const row: MenuRow = { label: call(it.label), chord: it['keys'] as string | undefined, disabled: !!call(it['disabled']), why: it['why'] as string | undefined, checked: call(it['checked']) };
+      const row: MenuRow = { label: call(it.label), chord: it['keys'] as string | undefined, disabled: it['enabled'] !== undefined && !call(it['enabled']), why: it['why'] as string | undefined, checked: call(it['checked']) };
       if (it.run !== undefined) row.run = e => rt.runTarget(it.run!, [arg, e].filter(x => x !== undefined));
       out.push(row);
     }

@@ -117,7 +117,6 @@ export function explainNode(n: NodeData, o: ExplainOpts = {}, indent = ''): stri
   head += titleOf(n, o);
   const { words, blocks } = propWords(n, slots, o);
   if (words.length) head += '  ' + words.join('  ');
-  for (const c of n.calls) head += `  +${c.name}(${c.args.map(a => short(a, 20)).join(', ')})`;
   for (const f of o.fragments?.byTarget.get(n.$) || []) {
     if (f.spec.explain && (!f.spec.when || f.spec.when(n))) {
       const x = f.spec.explain(n);

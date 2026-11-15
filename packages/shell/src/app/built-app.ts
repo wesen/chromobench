@@ -12,7 +12,7 @@ import { orderKits, installKits } from '../build/kits.ts';
 import { builderMethod, type FragmentIndex } from '../build/fragments.ts';
 import { runPasses } from '../build/passes.ts';
 import { explainApp } from '../build/explain.ts';
-import { ModuleBuilder, type ShellDef } from '../build/shell-builder.ts';
+import { applyBuilderFragment, ModuleBuilder, type ShellDef } from '../build/shell-builder.ts';
 import type { Fragment, PassDef, Theme, UiIR } from '../build/types.ts';
 import { assemble, type Assembled } from './assemble.ts';
 import { builtinCommands } from './builtins.ts';
@@ -177,7 +177,7 @@ export function buildApp<S>(def: ShellDef, self: any, ck: CkCore, opts: { platfo
       const m = builderMethod(frags(), target, c.name);
       if (m) {
         try {
-          m.apply(receiver, c.args);
+          applyBuilderFragment(receiver, m(...c.args));
         } catch (e) {
           D.error('CK-X123', `.${c.name}() threw on the ${target} builder`, { at: c.at, facts: [String((e as Error)?.message ?? e)] });
         }

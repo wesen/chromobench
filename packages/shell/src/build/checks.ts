@@ -1,6 +1,6 @@
 // The built-in `ui` passes: CraftKit's App.check() split into passes, plus the new ones.
 //
-//   normalize  apply pending fragment calls, collect panels, assemble commands and keys      X110–X123
+//   normalize  fragment defaults, collect panels, assemble commands and keys                 X110
 //   slots      unknown options, lambdas in β slots, bad bind values, unknown forms            B130, B140, B141, B160
 //   bindings   bind paths against the initial state or a route (probe mode)                   B110–B114
 //   docking    unknown or twice-placed panels, modules without a centre                       D301–D303
@@ -24,7 +24,7 @@ import { commonSlots, type SlotTable } from '../ir/slots.ts';
 import type { FormSpec } from '../ir/forms.ts';
 import { ICONS } from '../ir/icons.ts';
 import { assemble, type Assembled } from '../app/assemble.ts';
-import { applyCalls, extendForms, indexFragments, type FragmentIndex } from './fragments.ts';
+import { applyDefaults, extendForms, indexFragments, type FragmentIndex } from './fragments.ts';
 import { pass } from './passes.ts';
 import type { PassCtx, PassDef, UiIR, MenuItem } from './types.ts';
 
@@ -58,11 +58,11 @@ export const normalizePass: PassDef<UiIR> = pass<UiIR>('normalize', { on: 'ui' }
   const idx: FragmentIndex = indexFragments(ir.fragments, D);
   ir.forms = extendForms(ir.forms, idx);
   p.facts.set('fragments', idx);
-  // pending fragment calls, in every tree
-  for (const [id, panel] of ir.panels) ir.panels.set(id, applyCalls(panel, idx, ir.forms, D, `panel '${id}'`));
+  // fragment prop defaults, in every tree
+  for (const [id, panel] of ir.panels) ir.panels.set(id, applyDefaults(panel, idx));
   for (const m of ir.modules)
-    for (const [side, r] of Object.entries(m.regions)) if (r && isNode(r)) (m.regions as any)[side] = applyCalls(r, idx, ir.forms, D, `module '${m.id}' ${side}`);
-  for (const t of ir.tools.values()) if (t.content && isNode(t.content)) t.content = applyCalls(t.content, idx, ir.forms, D, `tool '${t.id}'`);
+    for (const [side, r] of Object.entries(m.regions)) if (r && isNode(r)) (m.regions as any)[side] = applyDefaults(r, idx);
+  for (const t of ir.tools.values()) if (t.content && isNode(t.content)) t.content = applyDefaults(t.content, idx);
   // panels defined inline where they are placed are panels too (first definition wins)
   for (const m of ir.modules)
     for (const r of Object.values(m.regions))
@@ -76,7 +76,7 @@ export const normalizePass: PassDef<UiIR> = pass<UiIR>('normalize', { on: 'ui' }
     for (const t of ir.trees())
       walk(t.node, n => {
         const id = String(n.props['id']);
-        if (n.$ === 'panelref' && !ir.panels.has(id) && registry.has(id)) ir.panels.set(id, applyCalls(registry.get(id)!, idx, ir.forms, D, `panel '${id}'`));
+        if (n.$ === 'panelref' && !ir.panels.has(id) && registry.has(id)) ir.panels.set(id, applyDefaults(registry.get(id)!, idx));
       });
   const asm = assemble(ir, fx(p).builtins, fx(p).platform);
   p.facts.set('assembled', asm);

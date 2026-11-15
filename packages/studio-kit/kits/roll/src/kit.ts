@@ -227,11 +227,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
 
   // ── fragments ──
   const rollScope = ck.fragment('cb.arg', {
-    methods: {
-      rollScope(this: any, mode: 'frame' | 'roll' | 'ask' = 'ask') {
-        return this.prop('rollScope', mode);
-      },
-    },
+    methods: { rollScope: (mode: 'frame' | 'roll' | 'ask' = 'ask') => ({ rollScope: mode }) },
     props: { rollScope: { default: 'frame', doc: "'frame' | 'roll' | 'ask': this control edits the frame, or the whole roll (one batch)" } },
     doc: 'rollScope(): the control edits this frame or the roll (cb.kits.roll)',
   });

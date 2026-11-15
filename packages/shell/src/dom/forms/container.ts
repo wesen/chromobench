@@ -305,7 +305,7 @@ defineRenderer('toolbar', (n, m) => {
     }
     if (typeof it === 'string') {
       const c = m.rt.commands.get(it);
-      const x = m.mount(makeNode(null, 'button', { run: it, icon: c?.icon, small: n.props['small'], quiet: true }, [], n.at));
+      const x = m.mount(makeNode('button', { run: it, icon: c?.icon, small: n.props['small'], quiet: true }, [], n.at));
       if (x) el.append(x);
       continue;
     }
@@ -381,7 +381,7 @@ defineRenderer('docktabs', (n, m) => {
       });
       if (sub) sub.scope.dispose();
       sub = m.child('tab:' + id);
-      const x = sub.mount(m.rt.resolvePanel(makeNode(null, 'panelref', { id }, [], n.at)));
+      const x = sub.mount(m.rt.resolvePanel(makeNode('panelref', { id }, [], n.at)));
       body.replaceChildren(...(x ? [x] : []));
     },
   );

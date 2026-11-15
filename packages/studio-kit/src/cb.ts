@@ -126,20 +126,12 @@ export function createCb(ck: Ck) {
   // ── fragments ──
   const testStripFragment = ck.fragment('cb.arg', {
     when: n => STRIPPABLE.has(String(n.props['path'])),
-    methods: {
-      testStrip(this: any, opts: Record<string, unknown> = {}) {
-        return this.prop('strip', { step: '1/3 st', ...opts });
-      },
-    },
+    methods: { testStrip: (opts: Record<string, unknown> = {}) => ({ strip: { step: '1/3 st', ...opts } }) },
     doc: 'A Strip button beside time or filtration that opens the test strip around this value (T)',
   });
   const padFragment = ck.fragment('cb.arg', {
     when: n => String(n.props['path']) === 'print.lights.logH',
-    methods: {
-      pad(this: any) {
-        return this.prop('widget', 'pad');
-      },
-    },
+    methods: { pad: () => ({ widget: 'pad' }) },
     doc: 'Printer lights as a colour pad plus a density slider, in points',
   });
 
@@ -835,6 +827,8 @@ export function createCb(ck: Ck) {
   cb.kits['finish'] = createFinishKit(ck, cb as any);
   cb.kits['looks'] = createLooksKit(ck, cb as any);
   cb.kits['chat'] = createChatKit(ck, cb as any); // CHB-008: the assistant chat
+  // the kits' fragment methods (cb.arg(…).pad(), .testStrip(), .rollScope()) on the nodes layouts build with this ck
+  ck.extend(core, cb.kits['roll'].kit, cb.kits['finish'].kit, cb.kits['looks'].kit);
   return cb;
 }
 
