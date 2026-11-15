@@ -198,3 +198,64 @@ the clock …"
 
 ### Technical details
 - Vitest after the merge: 113 files, 2850 passed, 19 skipped. P1 diary: `diary/03-phase-p1-values.md`.
+
+## Step 4: Wave 2 results — P2a merged (contract 1.0); the pattern experiment closed
+
+The contract agent delivered contract 1.0: document format 3, the light/composite/repair laws, one compiler with
+named cuts, one mask algebra, the four mutations, one error class. Merged; the repository is now red outside the
+contract by design (850 type errors, 48 test files) until P2b–P6. In parallel, the pattern experiment (CHB-036) was
+closed: blind reviews, results, revised chapters.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1) — and, about the experiment: "what's going on with the node processes, / what
+are the subagents testing? I think we can wrap the pattern stuff up, except for some egregious stuff? or what is
+happening / going on?"
+
+**Assistant interpretation:** Merge P2a and continue the waves; wrap up the pattern work; explain the running
+processes.
+
+**Inferred user intent:** Keep the implementation moving, stop side work that no longer pays.
+
+**Commit (code):** 130e104 — "Merge P2a contract 1.0 (…)"
+
+### What I did
+- Merged `task/chb-037-p2a-contract` (66c2c17); on the integration branch: contract + values vitest 113 passed;
+  `pnpm exec tsc -p packages/contract/tsconfig.json --noEmit` rc=0; lint rc=0.
+- Plan amendments after P2a (contract reading list, per-package typecheck, golden translation rules) and the P3 spec.
+- Process audit for the owner: P5a's browser suite (Vite on 5551–5554, headless Chromium) is legitimate; three
+  orphaned test processes (two from my own tiling-hang probe, one from a v1 tiling run) had used ~100 % CPU for ~3
+  hours. My `kill` of those PIDs was denied twice by the auto-mode permission classifier
+  ("[Destructive or Unwanted Actions]"); I gave the owner the command instead.
+
+### Why
+- P2b and P3 need only the contract; P4 waits for P5a because both touch the shell store and the studio kit.
+
+### What worked
+- P2a's report maps every broken package to the phase that fixes it, with the reason (its diary).
+
+### What didn't work
+- `kill 22552 22549 77058 87605 85025 85026 85029` → "Permission for this action was denied by the Claude Code auto
+  mode classifier". Left to the owner.
+
+### What I learned
+- My own probes need the same supervision as the agents': `per-test.py` killed with `pkill -f <dir>` only after its
+  timeout, and the test runner's child survived.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P2a decisions beyond the design: `print.grade` stays a medium setting (a gamma in `print.develop`); `split` folded
+  into `burn`; heal spots apply sequentially (matches today unless a source overlaps an earlier target); the cut
+  `darkroom.main`; pitch fields cannot be bound.
+
+### What should be done in the future
+- Launch P2b and P3; merge P5a when it reports; then P4.
+
+### Code review instructions
+- `packages/contract/CONTRACT-DECISIONS.md` (CC-019); `diary/05-phase-p2a-contract.md`.
+
+### Technical details
+- Breakage table (P2a report): core 68 tsc errors / 7 test files, engine-mock 21/3, goldens 21/1, gpu 35/browser,
+  output 18/1, ingest 16/0, studio-kit 326/16, apps/studio 72/6, dsl 94/8, agent 45/6, tools/scripts 6/0.

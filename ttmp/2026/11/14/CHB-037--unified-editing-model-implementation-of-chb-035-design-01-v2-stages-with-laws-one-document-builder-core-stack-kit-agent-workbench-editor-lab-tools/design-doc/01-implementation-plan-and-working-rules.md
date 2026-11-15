@@ -293,3 +293,33 @@ consumer breakage.
 - **P4**: a pending transaction is stale when its inverses, recomputed at apply time, differ from the stored ones.
 - **Known flake fixed on the integration branch** (e349b96): roll batch ids were `Date.now()` in base 36, so two
   batches in one millisecond collided; ids now carry a counter.
+
+### Amendments after P2a (main agent, from the P2a report)
+
+- The contract is at 1.0 (CC-019; CC-018 belongs to the unmerged export branch). Read
+  `packages/contract/CONTRACT-DECISIONS.md` (CC-019), `document.ts`, `stage-laws.ts`, `pixel.ts` (`lightH`,
+  `mixPixel`, `maskCombine`: the per-pixel formulas every engine shares) and the P2a diary
+  (`diary/05-phase-p2a-contract.md`) before changing an engine.
+- Per-package typecheck: `pnpm exec tsc -p packages/<pkg>/tsconfig.json --noEmit` (add a tsconfig for your package
+  like the contract's if missing). The full `pnpm typecheck` and `pnpm gen` stay red until P6; generated docs check
+  with `node tools/gen-docs/main.ts --contract-only --check`.
+- Golden translation rules (P2b): umPerPx 6 and magnification 8; main time, f-stop and filtration into
+  `main.params`; lights into `lights.params.logH`, the AutoBalance record into `lights.source`; an exposure without
+  time or stops gets the main time; feather mm = px × 48 / 1000 for scans, and for camera files from the paper pitch
+  (film 36000 / long side × 8); "luminance of the scan" → `reads: 'source'`, "of the main exposure" →
+  `reads: 'darkroom.main'`; or-ed shapes → `add` components. Legitimate golden changes: `neg-burn-and` (min → product,
+  design D4) and pixels where H < 1e-8 (the floor moved after the lights). Any other difference is a bug.
+
+### P3 — the GPU engine on contract 1.0 (design §29, §36 phase 3)
+
+Owns `packages/gpu/`. Implement on WebGPU, with parity against the reference engine's formulas (`pixel.ts`; core is
+being updated in parallel by P2b — test against the contract's formulas and the conformance cases, and coordinate
+through the plan, not by editing core): the generalised `print.combine` (contributions with per-term amount and mask,
+density masks, filters, preflash), `composite.mix` (normal blend; exact at amount 0 and 1), `mask.linear`,
+`mask.constant`, `mask.combine` (add = max, subtract = a·(1−b), intersect = a·b), `mask.invert`, structured
+`mask.paint`, coalesced `heal`/`clone` with structured spots (today no GPU op exists for heal), `clarity` with
+`radius_mm` through `umPerPx.paper`, `source.open`'s `umPerPx`, `print.densityMask.gamma`; remove the GPU code of
+deleted ops. Pointwise ops stay fused in the pointwise kernel; barriers as design §29 says. Acceptance: gpu unit
+tests; the `[gpu-parity]` and `[chromium-webgpu]` browser projects green on SwiftShader (ports 5531–5534) and on the
+real GPU with `REAL_GPU=1` (GPU lock); the diary lists what the studio-level browser specs cannot show yet (they need
+P5b).
