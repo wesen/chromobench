@@ -135,3 +135,15 @@ test('whole documents (every darkroom kind; fused lights; heal and clarity on th
   expect(r.error).toBeUndefined();
   for (const k of ['combine', 'fused', 'print']) expect(r[k].max8bit, k).toBeLessThanOrEqual(1);
 });
+
+test('output.frame: crop and the eight orientations are a pixel permutation of output.display (full, half, region); straightening is core\'s', async ({ page }) => {
+  const r = await run(page, 'law:frame');
+  expect(r.error).toBeUndefined();
+  for (const o of ['none', 'flipH', 'flipV', 'rot180', 'cw90', 'ccw90', 'transpose', 'transverse']) {
+    expect(r[o].size, o).toEqual(r[o].want);
+    expect([r[o].full, r[o].half, r[o].region], o).toEqual([0, 0, 0]);
+  }
+  expect(r.straighten.size).toEqual(r.straighten.want);
+  expect(r.straighten.maxAbs).toBeLessThan(1e-5);
+  expect(r.straighten.core8bit).toBeLessThanOrEqual(1);
+});

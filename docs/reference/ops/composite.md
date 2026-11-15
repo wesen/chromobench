@@ -26,7 +26,7 @@ Converts a composite stage's image between its encodings: XYZ (the stage's), lin
 - Owner: CHB-037
 - On: Image (scene-xyz, scene-rgb, scene-oklab, print-xyz, print-rgb, print-oklab) → Image (same)
 - Class: pointwise; binding: setting; not in the DSL
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -58,7 +58,7 @@ A point curve (Lightroom's point curve, Photoshop's Curves) on lightness or one 
 - Class: pointwise; binding: setting
 - UI: "Curve" in the tone menu (order 20)
 - Layer in: scene, print; encoding: oklab (channel L), linear (channel R), linear (channel G), linear (channel B)
-- Implementation: stub
+- Implementation: mock
 - See: `levels`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -75,7 +75,7 @@ Exposure in linear light: rgb · 2^stops + offset (Editor lab `exposure`, withou
 - Class: pointwise; binding: setting
 - UI: "Exposure" in the tone menu (order 10)
 - Layer in: scene, print; encoding: linear
-- Implementation: stub
+- Implementation: mock
 - See: `levels`, `curve`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -92,7 +92,7 @@ Colour grading with shadow, midtone and highlight wheels in OkLab (Lightroom's C
 - Class: pointwise; binding: setting
 - UI: "Colour grading" in the colour menu (order 30)
 - Layer in: scene, print; encoding: oklab
-- Implementation: stub
+- Implementation: mock
 - See: `hsl`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -117,7 +117,7 @@ Hue, saturation and lightness per hue band in OkLCh (Lightroom's HSL panel); rep
 - Class: pointwise; binding: setting
 - UI: "HSL" in the colour menu (order 10)
 - Layer in: scene, print; encoding: oklab
-- Implementation: stub
+- Implementation: mock
 - See: `vibrance`, `grade`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -133,7 +133,7 @@ Levels on lightness or one channel: out = outBlack + (outWhite − outBlack)·g(
 - Class: pointwise; binding: setting
 - UI: "Levels" in the tone menu (order 30)
 - Layer in: scene, print; encoding: oklab (channel L), linear (channel R), linear (channel G), linear (channel B)
-- Implementation: stub
+- Implementation: mock
 - See: `curve`, `exposure`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -154,7 +154,7 @@ A 3 × 3 channel mixer in linear RGB, or black and white from weighted channels 
 - Class: pointwise; binding: setting
 - UI: "Channel mixer" in the colour menu (order 40)
 - Layer in: scene, print; encoding: linear
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -173,7 +173,7 @@ An unsharp mask on the print's lightness (clarity without the midtone weight, at
 - Class: spatial; binding: setting
 - UI: "Sharpen" in the detail menu (order 20)
 - Layer in: print; encoding: stage
-- Implementation: stub
+- Implementation: mock
 - See: `clarity`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -190,7 +190,7 @@ Vibrance and saturation in OkLCh chroma (Editor lab `vibrance`, in chroma instea
 - Class: pointwise; binding: setting
 - UI: "Vibrance" in the colour menu (order 20)
 - Layer in: scene, print; encoding: oklab
-- Implementation: stub
+- Implementation: mock
 - See: `hsl`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
@@ -207,7 +207,7 @@ A vignette in linear light, centred on the frame (document pixels): rgb · 2^(st
 - Class: pointwise; binding: setting
 - UI: "Vignette" in the effect menu (order 10)
 - Layer in: scene, print; encoding: linear
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|

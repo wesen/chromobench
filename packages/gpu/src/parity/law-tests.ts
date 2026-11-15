@@ -4,10 +4,10 @@
 // same 33³ tables), `kernel` the law ops in f64 (reference.ts, core's functions) on the GPU's own export of every node
 // before them, so only the law kernels differ. `law:core` compares whole documents at display.
 import {
-  compile, Graph, layerEntry, groupEntry, newDocument,
+  compile, edit, Graph, layerEntry, groupEntry, newDocument,
   type Document, type Entry, type EntryBase, type ImageInfo, type Mask, type MaskComponent, type Node, type Params, type ScanMedium,
 } from '@chromobench/contract';
-import { RefEngine, retouch } from '@chromobench/core';
+import { frameImage, RefEngine, retouch } from '@chromobench/core';
 import { OP } from '../chain/program.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { isBarrier } from '../engine/dag.ts';
@@ -386,6 +386,54 @@ export const LAW_TESTS: Record<string, T> = {
       const got = await gpuRead(f, g, disp);
       out[name] = { ...diff(got, want as never), max8bit: max8(got.data, want.data) };
     }
+    return out;
+  },
+
+  /**
+   * output.frame on the GPU (CHB-037 P3b): the display cut with a crop under each orientation equals the crop and
+   * reorientation of the GPU's own output.display (a pixel permutation: bit for bit), at full size, at half scale and
+   * over a region; a straightened crop equals core's frameImage on the GPU's own receiver (f32 bilinear), and the
+   * whole display cut is within one 8-bit level of core.
+   */
+  async 'law:frame'() {
+    const { f, g } = await setup();
+    const base = fusedDarkroom(f.sha);
+    const crop = { x: 7, y: 5, w: 61, h: 43 };
+    const out: Record<string, unknown> = {};
+    const geo = (orientation: string, angle_deg: number): Document => edit(base, [{ op: 'set', path: 'geometry', value: { orientation, angle_deg, crop } }]).doc;
+    for (const o of ['none', 'flipH', 'flipV', 'rot180', 'cw90', 'ccw90', 'transpose', 'transverse']) {
+      const top = g.get(compile(geo(o, 0), g).display.id)!;
+      const disp = g.get(top.inputs[0]!)!;
+      const inner = await gpuRead(f, g, disp);
+      const want = frameImage(inner.data, inner.w, inner.h, 3, { orientation: o, angle_deg: 0, crop });
+      const full = await gpuRead(f, g, top);
+      // previews: the frame's grid against the same grid of a whole-frame render of the framed result
+      const half = await gpuRead(f, g, top, { scale: 0.5, precision: 'preview' });
+      const halfInner = await gpuRead(f, g, disp, { scale: 'full', precision: 'preview' });
+      const fw = want.width, fh = want.height, hw = half.w, hh = half.h;
+      const wantP = frameImage(halfInner.data, halfInner.w, halfInner.h, 3, { orientation: o, angle_deg: 0, crop });
+      const halfWant = new Float32Array(hw * hh * 3);
+      for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+        const sx = Math.min(fw - 1, Math.floor(((x + 0.5) * fw) / hw)), sy = Math.min(fh - 1, Math.floor(((y + 0.5) * fh) / hh));
+        for (let k = 0; k < 3; k++) halfWant[(y * hw + x) * 3 + k] = wantP.data[(sy * fw + sx) * 3 + k]!;
+      }
+      const reg = { x: 3, y: 4, w: 20, h: 17 };
+      const part = await gpuRead(f, g, top, { region: reg });
+      const partWant = new Float32Array(reg.w * reg.h * 3);
+      for (let y = 0; y < reg.h; y++) for (let x = 0; x < reg.w; x++) for (let k = 0; k < 3; k++) partWant[(y * reg.w + x) * 3 + k] = want.data[((reg.y + y) * fw + reg.x + x) * 3 + k]!;
+      out[o] = {
+        size: [full.w, full.h], want: [fw, fh], full: bitwise(full.data, Float32Array.from(want.data)),
+        half: bitwise(half.data, halfWant), region: bitwise(part.data, partWant),
+      };
+    }
+    const st = g.get(compile(geo('cw90', 3.5), g).display.id)!;
+    const disp = g.get(st.inputs[0]!)!;
+    const inner = await gpuRead(f, g, disp);
+    const want = frameImage(inner.data, inner.w, inner.h, 3, { orientation: 'cw90', angle_deg: 3.5, crop });
+    const got = await gpuRead(f, g, st);
+    f.ref.adopt(g.closure(st.id));
+    const core = await (await f.ref.evaluate(st, { scale: 'full', precision: 'export' })).read();
+    out['straighten'] = { size: [got.w, got.h], want: [want.width, want.height], ...diff(got, { data: want.data, c: 3 }), core8bit: max8(got.data, core) };
     return out;
   },
 };

@@ -8,7 +8,7 @@ import { FILM_OPS } from '../film.ts';
 
 export const GPU_OPS = [
   'source.open', 'source.pattern', 'scan.flare', 'scan.density', 'invert.dyes', 'print.expose', 'print.develop',
-  'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
+  'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'output.frame', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
   // the darkroom's light law (contract 1.0: one print.combine with terms, densities, filters, preflash) and masks
   'print.combine', 'print.densityMask',
@@ -25,7 +25,7 @@ export const GPU_OPS = [
  * Multi-input or spatial ops: materialised, computed from materialised inputs (combine.wgsl, blur.wgsl, retouch.wgsl).
  * print.combine is one only when a term reads a texture (engine/light.ts combineIsPointwise); otherwise it fuses.
  */
-export const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
+export const BARRIER_OPS: ReadonlySet<string> = new Set(['output.frame', 'print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
 /** Masks from coordinates, strokes or a constant: their receiver's values are never read. */
 export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.radial', 'mask.ellipse', 'mask.paint', 'mask.constant']);
 /** Pointwise ops a fused composite.mix may run between SAVE and MIX (one program op each; engine/dag.ts fusedMixTop). */

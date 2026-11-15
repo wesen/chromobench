@@ -23,6 +23,7 @@ import { claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigm
 import { Blur } from './spatial.ts';
 import { Retouch, type RepairSpot } from './retouch.ts';
 import { FILM_OPS, FilmGpu } from './film.ts';
+import { framePass, frameSource, type FrameArgs } from './frame.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
 import { planTiles, type GpuTilePlan } from './tiles.ts';
@@ -399,7 +400,33 @@ export class GpuEngine implements Engine {
   // they equal the reference engine's sampled full-resolution result; spatial steps (feather, the
   // density mask's blur) run on the grid with σ scaled to it and clamp at its edge.
 
+  /**
+   * The node on grid t. output.frame (the document geometry, the display cut's last step) renders its receiver on the
+   * grid the output grid maps to and reorients it, or straightens the receiver's footprint (src/frame.ts); everything
+   * else is a DAG evaluation (renderDag).
+   */
   private async renderGraph(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
+    const n = this.graph.get(id);
+    if (n?.op !== 'output.frame') return this.renderDag(id, t);
+    const inner = this.graph.get(n.inputs[0]!) ?? fail('E_NO_NODE', 'output.frame without its receiver');
+    const inInfo = inner.info as ImageInfo;
+    const a = n.args as Record<string, unknown>;
+    const f: FrameArgs = { orientation: a['orientation'] ?? 'none', angle_deg: (a['angle_deg'] as number | undefined) ?? 0, crop: (a['crop'] as Box | undefined) ?? { x: 0, y: 0, w: inInfo.width, h: inInfo.height } };
+    const s = frameSource(f, t.region, t.outW, t.outH, inInfo.width, inInfo.height);
+    const sub: GridTarget = { ...t, frameW: inInfo.width, frameH: inInfo.height, region: s.region, outW: s.full ? s.region.w : s.outW, outH: s.full ? s.region.h : s.outH };
+    const r = await this.renderGraph(inner.id, sub);
+    if (!s.full && f.orientation === 'none') return r;
+    try {
+      const tex = s.full
+        ? await framePass(this.rt, 'straighten', r.tex, t.outW, t.outH, f, t.region, s.region, inInfo.width, inInfo.height)
+        : await framePass(this.rt, 'orient', r.tex, t.outW, t.outH, f, t.region, { x: 0, y: 0 }, inInfo.width, inInfo.height);
+      return { tex, warnings: r.warnings };
+    } finally {
+      this.rt.textures.release(r.tex);
+    }
+  }
+
+  private async renderDag(id: string, t: GridTarget): Promise<{ tex: GPUTexture; warnings: Diagnostic[] }> {
     const { order, plans, refs } = planGraph(this.graph, id, (n) => this.check(n), (nid) => this.chainOf(nid));
     const texs = new Map<string, GPUTexture>();
     const warnings: Diagnostic[] = [];
@@ -522,6 +549,7 @@ export class GpuEngine implements Engine {
         return this.retouchK.k.apply(recv, n.op, a['spots'] as readonly RepairSpot[], info.domain === 'scanner-density' ? 'density' : 'linear', { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
       }
       default: {
+        if (n.op === 'output.frame') return fail('E_NOT_IMPLEMENTED', 'output.frame is the display cut\'s last step on the GPU: nothing may read it');
         if (!FILM_OPS.has(n.op)) return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
         // CHB-012 film ops (src/film.ts): bindings from core, on the output grid
         const chain = this.chainOf(nid);
