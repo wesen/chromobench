@@ -121,3 +121,8 @@ P7 links: look functions, presets, bake, rolls on linked media, looks kit on lin
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p7/packages/contract/src/links.ts — The link mechanism
 
+
+## 2026-11-15
+
+P3b (engines): CPU display cut on the sample grid, 4.2 s -> 0.74 s (d4fecb4); load-robust tests (3878da4); engine-mock implements P8a's ops (4a563cd); explicit WGSL includes, wgsl-check links as the engine (5c306de); GPU output.frame, host output.frame removed (94cbf09); exact tiled exports for every spatial op (2ca1f97)
+

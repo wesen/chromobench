@@ -9,13 +9,29 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://apps/studio/src/host/studio-engine.ts
+      Note: host output.frame removed (with leave)
+    - Path: repo://packages/core/src/engine-ref.ts
+      Note: Sampled output.frame, staged grid plan
+    - Path: repo://packages/engine-mock/src/ops.ts
+      Note: digital ops in the mock
+    - Path: repo://packages/gpu/kernels/field.wgsl
+      Note: downPadAt, upsampleAt
+    - Path: repo://packages/gpu/src/chain/wgsl-link.ts
+      Note: explicit WGSL includes
+    - Path: repo://packages/gpu/src/engine-gpu.ts
+      Note: GPU output.frame, renderRegion halos, whole-frame fields and extremes
+    - Path: repo://packages/gpu/src/frame.ts
+      Note: output.frame on the GPU
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T02:18:18.098599-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
+
 
 # Diary
 
