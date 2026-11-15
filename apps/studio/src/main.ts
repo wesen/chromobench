@@ -17,7 +17,7 @@ import { documentPayload, pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import {
-  buildLayout, createStudio, DOCS, DUST, explainError, frameRef, mainExposure, memoryKV, read, resetStorage, sel, setKnownValues,
+  buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, mainExposure, memoryKV, modelAt, read, resetStorage, sel, setKnownValues,
   STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
   type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
@@ -947,7 +947,10 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       return log.steps.slice(0, log.cursor).filter((st) => log.docsOf(st).includes(cur())).length;
     },
     /** the paths the selected frame's sets in effect wrote, in order (inserts and removes as their op) */
-    paths: (): string[] => (has() ? studio.log.inEffect(cur()).flatMap((e) => e.tx.mutations.map((m) => (m.op === 'set' ? m.path : m.op))) : []),
+    // a set of one component of a vec3 / cmy control (lights.params.logH.0) counts as a set of the control's path
+    paths: (): string[] => (has()
+      ? studio.log.inEffect(cur()).flatMap((e) => liftComponents(e.tx.mutations, studio.log.doc<Document>(cur()), (p, d) => modelAt(p, d) ?? undefined).map((m) => (m.op === 'set' ? m.path : m.op)))
+      : []),
     /** the selected frame's source size */
     size: () => {
       const e = studio.frames.get(cur());

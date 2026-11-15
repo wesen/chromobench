@@ -211,7 +211,7 @@ export function createCb(ck: Ck) {
     ck.column(
       { class: `cb-cell${o.size === 'large' ? ' is-large' : ''}` },
       ck.view.thumb({
-        image: (s: any) => sel.frame(s, item.id)?.print() ?? null,
+        image: (s: any) => sel.committed(s, item.id)?.print() ?? null,
         // a frame not open in this session: the thumbnail saved with the library (F5)
         src: (s: any) => (sel.isOffline(s, item.id) ? (s.catalog.frames[item.id].thumb ?? null) : null),
         max: o.size === 'large' ? 320 : 160,
@@ -329,7 +329,7 @@ export function createCb(ck: Ck) {
       library: panel('cb.library', 'library', 'Library'),
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
       output: panel('cb.output', 'output', 'Save'),
-      navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.frame(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
+      navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.committed(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
     },
     /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
     ifFrame,

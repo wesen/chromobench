@@ -22,8 +22,11 @@ export type HandleWhat = Accessor | 'view' | 'testStrip' | 'ringTile';
 export interface ImageHandle {
   readonly $: 'cb.image';
   readonly frame: string;
-  /** the document to compile; 'initial' is resolved by the bridge (the document as the frame was opened) */
-  readonly doc: Document | 'initial';
+  /**
+   * the document to compile; resolved by the bridge from the log: 'initial' (the document as the frame was opened)
+   * or 'committed' (the frame's document without the open gesture: thumbnails follow commits, not every move)
+   */
+  readonly doc: Document | 'initial' | 'committed';
   readonly what: HandleWhat;
   readonly args: Readonly<Record<string, unknown>>;
   /** how the agent would write it: frame.cut('print') */
@@ -33,7 +36,7 @@ export interface ImageHandle {
 export interface FrameRef {
   readonly $: 'cb.frame';
   readonly frame: string;
-  readonly doc: Document | 'initial';
+  readonly doc: Document | 'initial' | 'committed';
   readonly expr: string;
   source(): ImageHandle;
   scan(): ImageHandle;
@@ -67,7 +70,7 @@ export function cutOf(h: Pick<ImageHandle, 'what'>, kind: 'negative-scan' | 'dig
   }
 }
 
-export function frameRef(frame: string, doc: Document | 'initial', expr = 'frame'): FrameRef {
+export function frameRef(frame: string, doc: Document | 'initial' | 'committed', expr = 'frame'): FrameRef {
   const self: FrameRef = Object.freeze({
     $: 'cb.frame' as const,
     frame,

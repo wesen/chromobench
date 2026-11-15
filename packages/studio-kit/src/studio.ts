@@ -169,7 +169,7 @@ export class Studio {
   private logV = 0;
   private publishing = false;
   /** what was last saved per frame (the log's part of it changes → save again) */
-  private savedSig = new Map<string, string>();
+  private savedSig = new Map<string, { doc: Document; sig: string }>();
   /** the host's first document, before the layout's enlarger mode is applied */
   private readonly hostInitial: InitialDocument | undefined;
   private readonly lookup: ModelLookup = (p, d) => modelAt(p, d) ?? undefined;
@@ -212,6 +212,7 @@ export class Studio {
   attach(rt: Runtime): this {
     this.rt = rt;
     this.bridge.initialDoc = f => (rt.store.log.has(f) ? rt.store.log.initial<Document>(f) : undefined);
+    this.bridge.committedDoc = f => (rt.store.log.has(f) ? rt.store.log.doc<Document>(f) : undefined);
     // errors toast in the photographer's words (CHB-027 F7); the diagnostics keep the codes
     rt.explainError = explainError;
     this.stops.push(
@@ -254,6 +255,7 @@ export class Studio {
   detach(): void {
     if (this.rt?.explainError === explainError) this.rt.explainError = null;
     this.bridge.initialDoc = null;
+    this.bridge.committedDoc = null;
     for (const f of this.stops) f();
     this.stops = [];
     this.rt = null;
@@ -323,10 +325,13 @@ export class Studio {
         if (!log.has(e.id)) continue;
         const pending = log.pending(e.id);
         if (pending.length) proposals[e.id] = this.proposals(log, e.id);
+        // the document (a coalesced step changes it under the same entry), the entries in effect, the proposals
+        const doc = log.doc<Document>(e.id);
         const inEffect = log.inEffect(e.id);
-        const sig = `${inEffect.length}:${inEffect.at(-1)?.seq ?? 0}:${pending.map(p => p.seq).join(',')}`;
-        if (this.savedSig.get(e.id) !== sig) {
-          this.savedSig.set(e.id, sig);
+        const sig = `${inEffect.map(x => x.seq).join(',')}|${pending.map(p => p.seq).join(',')}`;
+        const was = this.savedSig.get(e.id);
+        if (!was || was.doc !== doc || was.sig !== sig) {
+          this.savedSig.set(e.id, { doc, sig });
           this.frames.save(e, frameSave(log, e.id));
         }
       }

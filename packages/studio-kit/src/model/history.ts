@@ -190,6 +190,38 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
   }
 }
 
+const COMPONENT = /^(.*)\.(c|m|y|0|1|2)$/;
+
+/**
+ * Sets of the components of one vec3 / cmy value lifted to one set of the whole value (the net change of a slider on
+ * one component is `main.params.filtration.y`, of the printer lights `lights.params.logH.0` …), so a step reads as
+ * the control's change ("Filtration Y 0 → +3 CC", "Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt"). Other
+ * mutations pass as they are, in order.
+ */
+export function liftComponents(ms: readonly Mutation[], before: Document, lookup: ModelLookup): Mutation[] {
+  const out: Mutation[] = [];
+  const at = new Map<string, number>();
+  for (const m of ms) {
+    const c = m.op === 'set' ? COMPONENT.exec(m.path) : null;
+    const model = c ? lookup(c[1]!, before) : undefined;
+    if (!c || !model || (model.type !== 'vec3' && model.type !== 'cmy')) {
+      out.push(m);
+      continue;
+    }
+    const base = c[1]!;
+    const i = at.get(base);
+    const prev = i === undefined ? read(before, base) : (out[i] as { value: unknown }).value;
+    const next = Array.isArray(prev) ? [...prev] : { ...(prev as Record<string, unknown>) };
+    (next as Record<string, unknown>)[c[2]!] = (m as { value?: unknown }).value;
+    const lifted: Mutation = { op: 'set', path: base, value: next };
+    if (i === undefined) {
+      at.set(base, out.length);
+      out.push(lifted);
+    } else out[i] = lifted;
+  }
+  return out;
+}
+
 /** The steps of the log that touched frame f, oldest first (in effect, then the redo tail), in words. */
 export function historyRows(log: Log, f: string, lookup: ModelLookup): HistoryRow[] {
   const out: HistoryRow[] = [];
@@ -202,7 +234,7 @@ export function historyRows(log: Log, f: string, lookup: ModelLookup): HistoryRo
     for (const e of mine) {
       approved ||= e.approvedBy === 'user';
       let cur = d;
-      for (const m of e.tx.mutations) {
+      for (const m of liftComponents(e.tx.mutations, d, lookup)) {
         changes.push({ seq: e.seq, text: describe(m, cur, lookup) });
         try {
           cur = applyTransaction(cur, { ...e.tx, mutations: [m], inverses: [] }).doc;
@@ -210,7 +242,11 @@ export function historyRows(log: Log, f: string, lookup: ModelLookup): HistoryRo
           // a mutation that does not apply here (beyond the cursor after a branch) is shown, not folded
         }
       }
-      d = cur;
+      try {
+        d = applyTransaction(d, { ...e.tx, inverses: [] }).doc;
+      } catch {
+        d = cur;
+      }
     }
     const first = mine[0]!;
     out.push({ cursor: i + 1, by: first.tx.by, at: first.at, label: st.label, changes, inEffect: i < log.cursor, approved, batch: log.docsOf(st).length > 1 });

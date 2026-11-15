@@ -57,7 +57,7 @@ export function createFinishKit(ck: Ck, cb: Cb) {
         cursor: 'crosshair',
         ...needFrame,
         // the whole frame, oriented and not straightened; the crop is drawn over it
-        image: (h: unknown) => (isImageHandle(h) && h.what === 'print' && h.doc !== 'initial' ? frameRef(h.frame, canvasOf(h.doc)).print() : h),
+        image: (h: unknown) => (isImageHandle(h) && h.what === 'print' && typeof h.doc === 'object' ? frameRef(h.frame, canvasOf(h.doc)).print() : h),
         overlay: cropOverlay,
         on: { down: cropDown, drag: cropDrag as any, up: cropUp as any, escape: (ctx: any) => ctx.cancel() },
       },

@@ -121,6 +121,14 @@ export const sel = {
     if (!d) return null;
     return frameRef(f, d, f === current(s) ? 'frame' : `frames['${f}']`);
   },
+  /**
+   * a frame's handle on its committed document (the current one by default), or null when it is not open: what
+   * thumbnails show, so a drag re-renders the viewer only, and the thumbnails once on release
+   */
+  committed: (s: St, id?: string | null): FrameRef | null => {
+    const f = id ?? current(s);
+    return f && s?.docs?.[f] ? frameRef(f, 'committed', f === current(s) ? 'frame' : `frames['${f}']`) : null;
+  },
   /** a frame's document (the current one by default), as the state shows it (with a gesture's preview) */
   doc: (s: St, id?: string | null): Document | undefined => s?.docs?.[id ?? current(s) ?? ''],
   /** a frame's catalog entry (the current one by default) */

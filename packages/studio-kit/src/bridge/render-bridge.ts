@@ -141,12 +141,14 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   /** the document a handle compiles ('initial': the document as the frame was opened, from the log) */
   docOf(h: ImageHandle): Document {
     // a handle made in a cell holds the state's read-only proxy of the document: the plain document underneath
-    if (h.doc !== 'initial') return strip(h.doc);
+    if (h.doc !== 'initial' && h.doc !== 'committed') return strip(h.doc);
     const e = this.entry(h);
-    return this.initialDoc?.(h.frame) ?? e.first;
+    return (h.doc === 'initial' ? this.initialDoc?.(h.frame) : this.committedDoc?.(h.frame)) ?? e.first;
   }
   /** the log's initial document of a frame (the Studio sets it; without one, the frame's first document) */
   initialDoc: ((f: string) => Document | undefined) | null = null;
+  /** the log's current document of a frame, without drafts (the Studio sets it) */
+  committedDoc: ((f: string) => Document | undefined) | null = null;
 
   lower(h: ImageHandle): Lowered {
     const e = this.entry(h);

@@ -35,7 +35,7 @@ export function lazyChat(studio: Studio, onError: (message: string, err: unknown
         real = m.createStudioChat(studio);
         if (rt) real.attach(rt);
         for (const f of listeners) real.session.on(f);
-        for (const f of listeners) f({ t: 'state' });
+        for (const f of listeners) f({ t: 'changed' });
         // the providers' model lists come with the agent
         const a = real.providers.find((p) => p.id === 'anthropic');
         const mine = providers.find((p) => p.id === 'anthropic');
@@ -69,7 +69,13 @@ export function lazyChat(studio: Studio, onError: (message: string, err: unknown
     stop: () => real?.session.stop(),
     decide: (step, seqs, decision, o) => real?.session.decide(step, seqs, decision, o),
     revertStep: (step) => real?.session.revertStep(step) ?? false,
-    setMode: (m: AgentMode) => (real ? real.session.setMode(m) : rt ? void rt.runCommand('agent.mode', null, m) : void (studio.mode = m)),
+    setMode: (m: AgentMode) => {
+      if (real) return real.session.setMode(m);
+      if (rt) rt.runCommand('agent.mode', null, m);
+      else studio.mode = m;
+      // the panel draws the mode from the session's state: tell it (the agent is not loaded, so nobody else does)
+      for (const f of [...listeners]) f({ t: 'changed' });
+    },
     setEffort: (e: ChatEffort) => real?.session.setEffort(e),
   };
   const providers: ChatProvider[] = [
@@ -81,6 +87,19 @@ export function lazyChat(studio: Studio, onError: (message: string, err: unknown
     providers,
     connect(provider, o) {
       if (real) return real.connect(provider, o);
+      // what the form can say before the assistant is loaded (the same words as host/chat.ts)
+      if (provider !== 'demo' && provider !== 'anthropic') return `unknown provider ${provider}`;
+      if (provider === 'anthropic') {
+        let stored = '';
+        try {
+          stored = globalThis.localStorage?.getItem('chromobench.chat.anthropic-key') ?? '';
+        } catch {
+          /* no storage */
+        }
+        const key = o.apiKey || stored;
+        if (!key) return 'Enter your Anthropic API key.';
+        if (!/^sk-ant-/.test(key)) return 'That does not look like an Anthropic API key (they start with sk-ant-).';
+      }
       void load().then((c) => {
         const err = c?.connect(provider, o);
         if (err) onError(err, null);

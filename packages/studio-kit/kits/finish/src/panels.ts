@@ -16,7 +16,7 @@ export function createFinishPanels(ck: Ck, cb: Cb, F: FinishContext) {
   /** the print as the finish module shows it: the print stage and the dust turned off while finish.toggle is on */
   const shown = (s: any): ImageHandle | null => {
     const h = cb.sel.frame(s)?.print() ?? null;
-    if (!h || !s.finish?.bypass || h.doc === 'initial') return h;
+    if (!h || !s.finish?.bypass || typeof h.doc !== 'object') return h;
     return frameRef(h.frame, withoutFinishing(h.doc), `${h.expr} /* before finishing */`).print();
   };
   const viewer = (o: Record<string, unknown> = {}) => cb.viewer(shown, { id: 'finish', tools: ['crop', 'spot'], compare: true, ...o } as any);
