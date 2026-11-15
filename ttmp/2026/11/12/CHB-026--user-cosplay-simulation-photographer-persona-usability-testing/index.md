@@ -1,7 +1,7 @@
 ---
 Title: 'User cosplay simulation: photographer persona usability testing'
 Ticket: CHB-026
-Status: active
+Status: complete
 Topics:
     - ui
     - product
@@ -12,11 +12,12 @@ Intent: long-term
 Owners: []
 RelatedFiles: []
 ExternalSources: []
-Summary: "User-cosplay usability testing: agents play the photographer (Manfred) on his real photos, keep a diary and an experience report, and file findings."
-LastUpdated: 2026-11-12T13:21:06.625700212-05:00
+Summary: 'User-cosplay usability testing: agents play the photographer (Manfred) on his real photos, keep a diary and an experience report, and file findings.'
+LastUpdated: 2026-11-15T17:48:54.832611-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # User cosplay simulation: photographer persona usability testing
 

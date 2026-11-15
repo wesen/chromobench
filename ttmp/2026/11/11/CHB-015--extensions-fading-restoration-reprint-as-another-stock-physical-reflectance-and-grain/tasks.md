@@ -1,9 +1,9 @@
 # Tasks
 
 ## TODO
-- [ ] [stage 1 E5] Propose the finishing domains and recipe shape to CHB-002 so that every operator runs before output.display <!-- t:1h6y -->
-- [ ] [stage 1 E5] Port Chromogen's finishing operators (dyeSat, grain reduction, guided-filter tone ops, sharpen, bloom, OKLab colour ops) to f64 and WGSL with Look strength <!-- t:e4p0 -->
-- [ ] [stage 1 E5] Replace pixel-scale kernels with physical radii and test identity at 0, neutral preservation, gamut after output.display and scale agreement <!-- t:aubb -->
+- [x] [stage 1 E5] Propose the finishing domains and recipe shape to CHB-002 so that every operator runs before output.display — superseded by CHB-037's document format 3: digital layers are print-stage entries under the composite law, compiled before output.display (contract/src/document.ts, contract/src/stage-laws.ts) <!-- t:1h6y -->
+- [ ] [stage 1 E5] Port Chromogen's finishing operators (dyeSat, grain reduction, guided-filter tone ops, sharpen, bloom, OKLab colour ops) to f64 and WGSL with Look strength — now: sharpen, clarity, HSL, vibrance and colour grading exist as print-stage layers (CHB-037 P8a); remaining: dye saturation, grain reduction, guided-filter tone ops, bloom as catalogue ops <!-- t:e4p0 -->
+- [x] [stage 1 E5] Replace pixel-scale kernels with physical radii and test identity at 0, neutral preservation, gamut after output.display and scale agreement — superseded by CHB-037 P8a and contract 1.0: clarity and sharpen radii are in mm on the print (contract/src/catalog/layers.ts:8,127; adjust.ts:3), mask feather in mm; identity and parity tests came with P8a <!-- t:aubb -->
 - [ ] [stage 2 E1] Implement invert.unfade and the picked-patch fade estimator (LM in log dye space) with E_UNDERDETERMINED <!-- t:jwpu -->
 - [ ] [stage 2 E1] Add roll-level k, PD-table domain widening and diagnostics; test synthetic recovery and the section 3.2 golden fixture <!-- t:33j6 -->
 - [ ] [stage 2 E1] Restore one real faded roll with the photographer (with CHB-013) and record the residuals <!-- t:w7wg -->

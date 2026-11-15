@@ -13,8 +13,8 @@
 - [ ] [stage 3] Implement VC paper components, the shared curve, the fit to ISO ranges and measure.isoRange; reproduce the Section 6 trace as the first unit test <!-- t:hbus -->
 - [ ] [stage 3] Implement invert.silver with the flat-wedge law and residual reporting <!-- t:pzmo -->
 - [ ] [stage 3] Run one-channel grain, halation and adjacency (DIR reuse) through CHB-012's ops; check RMS granularity 17 at 48 µm <!-- t:t7vb -->
-- [ ] [stage 4] Submit the Section 9 contract additions to CHB-002 (silver-density semantics, ops, BwDevelopment, EnlargerHead, degC, diagnostics) <!-- t:dv3n -->
-- [ ] [stage 4] Integrate with CHB-010 (per-component exposure sums, split-grade, grade test strip) and CHB-005 (one-channel GPU path, parity) <!-- t:719o -->
-- [ ] [stage 4] Add CHB-009 grade and head controls, CHB-006 IR-dust disable and rebate as base-plus-fog, and the CHB-008 "choose a grade" playbook <!-- t:z23c -->
+- [ ] [stage 4] Submit the Section 9 contract additions to CHB-002 (silver-density semantics, ops, BwDevelopment, EnlargerHead, degC, diagnostics) — now: as a CC entry in CONTRACT-DECISIONS.md (contract 1.x), not to CHB-002 <!-- t:dv3n -->
+- [ ] [stage 4] Integrate with CHB-010 (per-component exposure sums, split-grade, grade test strip) and CHB-005 (one-channel GPU path, parity) — now: per-component terms of the darkroom light law (contract/src/stage-laws.ts) and a one-channel path in the GPU engine <!-- t:719o -->
+- [ ] [stage 4] Add CHB-009 grade and head controls, CHB-006 IR-dust disable and rebate as base-plus-fog, and the CHB-008 "choose a grade" playbook — now: grade and head controls in the Enlarger stack view <!-- t:z23c -->
 - [ ] [stage 4] Store laws and golden numbers in fixtures/golden/bw/ with a broken variant per law <!-- t:n6qt -->
 - [ ] [stage 5] Extensions from measured data: toning, pyro stain, XP2 Super, colour negatives on B&W paper <!-- t:o8ev -->

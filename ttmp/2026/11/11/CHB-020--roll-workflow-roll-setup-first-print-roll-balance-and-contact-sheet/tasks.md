@@ -11,10 +11,10 @@
 - [x] [stage 3] Headless variant using .use(rollKit): zero error diagnostics and ck.explain snapshot <!-- t:g5ku -->
 - [x] [stage 4] cb.roll.library, card, setup, row with evidence lines, overrides and 'overridden on N frames' note; import flow <!-- t:umlu -->
 - [x] [stage 5] cb.roll.contactSheet and contactCell (theta on bg lane, node-id cache), balanced/single modes, cull hints <!-- t:85wk -->
-- [ ] [stage 5] cb.roll.cullKeys, peek spring, roll.cull.sweep; flags/stars in catalog (undoable) <!-- t:mv3s -->
+- [ ] [stage 5] cb.roll.cullKeys, peek spring, roll.cull.sweep; flags/stars in catalog (undoable) — now: the cull keys (studio-kit/src/cb.ts:361, kits/roll/src/kit.ts:530), roll.cull.sweep (kits/roll/src/kit.ts:468) and undoable document-tier ratings exist; remaining: the peek spring <!-- t:mv3s -->
 - [x] [stage 6] cb.roll.balanceBar, pending-batch preview on the sheet, approval card with before/after thumbnails and skipped list <!-- t:5x10 -->
 - [x] [stage 7] Fragments: film-strip roll badge, cb.arg rollScope(), frame handle roll(); inspector form <!-- t:nzkv -->
 - [x] [stage 7] Playwright smoke per variant: import, first print, flag, set reference, match, approve, undo <!-- t:21al -->
-- [ ] [stage 8] Integrate CHB-010 auto print/filtration and CHB-013 scanner model (per-channel flare); contract additions request to CHB-002/017 <!-- t:wb5j -->
-- [ ] [from CHB-005 erm0] GPU reductions for roll analysis: pairwise means and LATD, median of Y, gamut-class counts (histogram, stats, patches, densitometer already exist); f64 core computes them meanwhile <!-- t:qvyu -->
+- [ ] [stage 8] Integrate CHB-010 auto print/filtration and CHB-013 scanner model (per-channel flare); contract additions request to CHB-002/017 — now: the roll's per-channel flare from the holder's veil exists (kits/roll/src/kit.ts:193-197); remaining: CHB-013's fitted scanner model (t:ggj9) and lights to filtration; contract additions as CC entries <!-- t:wb5j -->
+- [ ] [from CHB-005 erm0] GPU reductions for roll analysis: pairwise means and LATD, median of Y, gamut-class counts (histogram, stats, patches, densitometer already exist); f64 core computes them meanwhile — now: with CHB-037 P10-18 (measure reads the image back as f32; reductions on the device) <!-- t:qvyu -->
 - [ ] [from CHB-006 3wlu] Time a 40-megapixel frame through the dust path on the GPU; reuse packages/gpu's Gaussian blur for the trend <!-- t:j972 -->
