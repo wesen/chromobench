@@ -11,6 +11,7 @@ import { readTiffCodes } from '@chromobench/ingest';
 import type { PhysicsData } from './data/provider.ts';
 import { IMAGE_OPS, newImg, PhysicsEnv, VALUE_OPS, type Img, type OpCtx, type UpNode } from './ops/ops.ts';
 import { conventionsKey, DEFAULT_CONVENTIONS, type Conventions } from './spectral/conventions.ts';
+import { swapsAxes } from './print/geometry.ts';
 import type { SpectraTable } from './film/upsample.ts';
 
 export interface RefEngineOptions {
@@ -131,6 +132,39 @@ function sampleImg(img: Img, g: Grid): Img | null {
   }
   return img.warnings ? { ...out, warnings: img.warnings } : out;
 }
+
+/**
+ * The grid of output.frame's receiver that a sampled output.frame reads (P3b): output pixel (x′, y′) of an
+ * un-straightened frame is receiver pixel (crop.x + x, crop.y + y) with (x, y) the orientation's inverse of
+ * (g.xs[x′], g.ys[y′]); x depends on one output axis and y on the other, so the receiver's samples are a grid too,
+ * transposed when the orientation swaps the axes. Null when the frame is straightened (bilinear: not a sample grid).
+ */
+function frameGrid(n: Node, g: Grid, inW: number, inH: number): { grid: Grid; swap: boolean } | null {
+  const angle = (n.args['angle_deg'] as number | undefined) ?? 0;
+  if (angle !== 0) return null;
+  const o = (n.args['orientation'] as string | undefined) ?? 'none';
+  const b = (n.args['crop'] as Box | undefined) ?? { x: 0, y: 0, w: inW, h: inH };
+  const swap = swapsAxes(o);
+  // the output axis each receiver axis reads, and whether it runs backwards (geometry.ts orientPixels)
+  const fx = o === 'flipH' || o === 'rot180' || o === 'ccw90' || o === 'transverse';
+  const fy = o === 'flipV' || o === 'rot180' || o === 'cw90' || o === 'transverse';
+  const along = (src: Int32Array, flip: boolean, n0: number, off: number): Int32Array => Int32Array.from(src, (v) => off + (flip ? n0 - 1 - v : v));
+  const xs = along(swap ? g.ys : g.xs, fx, b.w, b.x);
+  const ys = along(swap ? g.xs : g.ys, fy, b.h, b.y);
+  return { grid: { key: `${g.key}>${n.id.slice(0, 16)}`, W: inW, H: inH, xs, ys }, swap };
+}
+
+/** img (w × h, c channels) transposed: output pixel (x, y) is img's (y, x). */
+function transposeImg(img: Img): Img {
+  const out = newImg(img.h, img.w, img.c);
+  for (let y = 0; y < img.w; y++) for (let x = 0; x < img.h; x++) {
+    for (let k = 0; k < img.c; k++) out.data[(y * img.h + x) * img.c + k] = img.data[(x * img.w + y) * img.c + k]!;
+  }
+  return img.warnings ? { ...out, warnings: img.warnings } : out;
+}
+
+/** One stage of a staged evaluation: a node, on a sample grid or at full resolution (null). */
+interface Stage { id: string; g: Grid | null }
 
 /** Thrown inside a sampled evaluation when a stage's image is not on the grid: evaluate falls back to full resolution. */
 class OffGrid extends Error {}
@@ -321,7 +355,15 @@ export class RefEngine implements Engine {
     const whole = this.full.recall(`F:${id}`);
     const n = this.graph.get(id) ?? fail('E_NO_NODE', `unknown node ${id.slice(0, 12)}…`);
     let img: Img | null;
-    if (whole || !this.pointwise(n)) {
+    const fg = !whole && n.op === 'output.frame' ? this.frameGridOf(n, g) : null;
+    if (fg) {
+      // un-straightened geometry: the receiver on its own sample grid, reoriented (no full-resolution stage)
+      this.check(n);
+      const inner = this.computeAt(n.inputs[0]!, fg.grid);
+      img = fg.swap ? transposeImg(inner) : inner;
+      if (img.w !== g.xs.length || img.h !== g.ys.length) throw new OffGrid(n.op);
+      this.computed.sampled++;
+    } else if (whole || !this.pointwise(n)) {
       img = sampleImg(whole ?? this.compute(id), g);
       if (!img) throw new OffGrid(n.op);
     } else {
@@ -335,19 +377,35 @@ export class RefEngine implements Engine {
     return this.grid.remember(sk, img, imgBytes(img));
   }
 
-  /** The image nodes of id's closure, inputs first. */
-  private order(id: string): string[] {
-    const out: string[] = [];
+  /** output.frame's receiver grid for grid g (frameGrid), or null when straightened. */
+  private frameGridOf(n: Node, g: Grid): { grid: Grid; swap: boolean } | null {
+    const r = this.graph.get(n.inputs[0]!);
+    if (!r || r.info.kind !== 'Image') return null;
+    const info = r.info as ImageInfo;
+    return frameGrid(n, g, info.width, info.height);
+  }
+
+  /**
+   * The image stages of id's closure, inputs first, each with the grid it is computed on: a pointwise stage passes
+   * its grid to its inputs, an un-straightened output.frame passes its receiver grid (frameGrid), every other stage
+   * (spatial, the negative's stages) is computed at full resolution with its inputs and sampled from there.
+   */
+  private stages(id: string, g: Grid | null): Stage[] {
+    const out: Stage[] = [];
     const seen = new Set<string>();
-    const visit = (nid: string): void => {
-      if (seen.has(nid)) return;
-      seen.add(nid);
+    const visit = (nid: string, at: Grid | null): void => {
+      const k = `${nid}@${at?.key ?? 'F'}`;
+      if (seen.has(k)) return;
+      seen.add(k);
       const m = this.graph.get(nid);
       if (!m) return;
-      for (const i of m.inputs) visit(i);
-      if (m.info.kind === 'Image') out.push(nid);
+      let below: Grid | null = null;
+      if (at && this.pointwise(m)) below = at;
+      else if (at && m.op === 'output.frame') below = this.frameGridOf(m, at)?.grid ?? null;
+      for (const i of m.inputs) visit(i, below);
+      if (m.info.kind === 'Image') out.push({ id: nid, g: at });
     };
-    visit(id);
+    visit(id, g);
     return out;
   }
 
@@ -355,34 +413,29 @@ export class RefEngine implements Engine {
    * Computes id stage by stage, inputs first (on grid g, or at full resolution), yielding between stages and
    * stopping with E_CANCELLED when the signal aborts. Finished stages stay cached; nothing partial is kept.
    */
-  private async staged(id: string, g: Grid | null, signal: AbortSignal | undefined): Promise<Img> {
-    for (const nid of this.order(id)) {
-      if (this.full.peek(`F:${nid}`) || (g && this.grid.peek(`S:${nid}@${g.key}`))) continue;
-      if (g) this.computeAt(nid, g);
-      else this.compute(nid);
+  private async staged(id: string, g: Grid | null, signal: AbortSignal | undefined): Promise<{ img: Img; stages: Stage[] }> {
+    const stages = this.stages(id, g);
+    for (const s of stages) {
+      if (this.full.peek(`F:${s.id}`) || (s.g && this.grid.peek(`S:${s.id}@${s.g.key}`))) continue;
+      if (s.g) this.computeAt(s.id, s.g);
+      else this.compute(s.id);
       await this.yieldFn();
       if (signal?.aborted) throw cancelled();
     }
-    return g ? this.computeAt(id, g) : this.compute(id);
+    return { img: g ? this.computeAt(id, g) : this.compute(id), stages };
   }
 
-  /** Warnings the ops of a node's closure attached to their images (e.g. W_DODGE_EXCEEDS_MAIN), deduplicated. */
-  private warningsOf(id: string, grid?: Grid): Diagnostic[] {
+  /** Warnings the ops of the stages attached to their images (e.g. W_DODGE_EXCEEDS_MAIN), deduplicated. */
+  private warningsOf(stages: readonly Stage[]): Diagnostic[] {
     const out: Diagnostic[] = [];
     const seen = new Set<string>();
-    const visited = new Set<string>();
-    const visit = (nid: string): void => {
-      if (visited.has(nid)) return;
-      visited.add(nid);
-      const m = this.graph.get(nid);
-      for (const i of m?.inputs ?? []) visit(i);
-      const img = this.full.peek(`F:${nid}`) ?? (grid ? this.grid.peek(`S:${nid}@${grid.key}`) : undefined);
+    for (const s of stages) {
+      const img = this.full.peek(`F:${s.id}`) ?? (s.g ? this.grid.peek(`S:${s.id}@${s.g.key}`) : undefined);
       for (const w of img?.warnings ?? []) {
         const k = `${w.code}|${w.message}`;
         if (!seen.has(k)) { seen.add(k); out.push(w); }
       }
-    };
-    visit(id);
+    }
     return out;
   }
 
@@ -411,16 +464,17 @@ export class RefEngine implements Engine {
       let warnings: Diagnostic[] = [];
       if (this.sampled && !whole && target.precision === 'preview') {
         try {
-          data = (await this.staged(n.id, grid, target.signal)).data;
-          warnings = this.warningsOf(n.id, grid);
+          const r = await this.staged(n.id, grid, target.signal);
+          data = r.img.data;
+          warnings = this.warningsOf(r.stages);
         } catch (e) {
           if (!(e instanceof OffGrid)) throw e;
         }
       }
       if (!data) {
-        const img = await this.staged(n.id, null, target.signal);
+        const { img, stages } = await this.staged(n.id, null, target.signal);
         data = sampleImg(img, grid)?.data ?? fail('E_INTERNAL', `${n.op}: image ${img.w}×${img.h} is not the node's ${info.width}×${info.height}`);
-        warnings = this.warningsOf(n.id);
+        warnings = this.warningsOf(stages);
       }
       if (target.signal?.aborted) throw cancelled();
       res = this.results.remember(key, { data, width, height, region, scale, warnings }, data.byteLength);
