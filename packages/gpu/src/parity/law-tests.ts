@@ -4,14 +4,15 @@
 // same 33³ tables), `kernel` the law ops in f64 (reference.ts, core's functions) on the GPU's own export of every node
 // before them, so only the law kernels differ. `law:core` compares whole documents at display.
 import {
-  compile, edit, Graph, layerEntry, groupEntry, newDocument,
+  compile, edit, Graph, MASK_T_FLOOR, layerEntry, groupEntry, newDocument,
   type Document, type Entry, type EntryBase, type ImageInfo, type Mask, type MaskComponent, type Node, type Params, type ScanMedium,
 } from '@chromobench/contract';
 import { frameImage, RefEngine, retouch } from '@chromobench/core';
 import { OP } from '../chain/program.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { isBarrier } from '../engine/dag.ts';
-import { combineArgs } from '../engine/light.ts';
+import { combineArgs, MODE } from '../engine/light.ts';
+import { combinePass } from '../engine/textures.ts';
 import { defaultPhysicsData } from '../physics/data.ts';
 import { gold, runtime } from './page-shared.ts';
 import { EngineReference, LawReference, type Img64 } from './reference.ts';
@@ -612,6 +613,42 @@ async function gridTest(): Promise<Record<string, unknown>> {
   return out;
 }
 LAW_TESTS['law:grid'] = gridTest;
+
+/**
+ * CHB-045 GPUC-3 (CHB-037 P10-26): print.densityMask's density pass (combine.wgsl mode 7) on a blurred transmittance
+ * with 0, f32 subnormals, values below the floor and ordinary ones, the reference extreme floored as the engine floors
+ * it (the smallest T here is 0). Each density must be finite and equal γ·(log10 max(T, MASK_T_FLOOR) − log10 max(min T,
+ * MASK_T_FLOOR)); unfloored, log2(0) is −∞ (WGSL may even assume it never happens).
+ */
+async function densityFloorTest(): Promise<Record<string, unknown>> {
+  const rt = await runtime();
+  const dev = rt.device;
+  const T = [0, 1e-40, 1e-45, 1e-30, 1e-12, 1e-8, 1e-6, 0.01, 0.5, 1];
+  const w = T.length;
+  const make = (label: string, data: Float32Array<ArrayBuffer>): GPUTexture => {
+    const t = dev.createTexture({ label, size: [w, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    dev.queue.writeTexture({ texture: t }, data, { bytesPerRow: w * 16 }, [w, 1]);
+    return t;
+  };
+  const b = make('test.T', Float32Array.from(T.flatMap((v) => [v, v, v, 1])));
+  const a = make('test.recv', new Float32Array(w * 4));
+  const dummy = make('test.dummy', new Float32Array(w * 4));
+  const gamma = 0.5;
+  const lref = Math.log10(Math.max(Math.min(...T), MASK_T_FLOOR));
+  const out = await combinePass(rt, dummy, MODE.DENSITY, a, b, null, 0, [gamma, lref]);
+  const buf = dev.createBuffer({ label: 'test.read', size: 256, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+  const enc = dev.createCommandEncoder();
+  enc.copyTextureToBuffer({ texture: out }, { buffer: buf, bytesPerRow: 256 }, [w, 1]);
+  dev.queue.submit([enc.finish()]);
+  const got = new Float32Array(await rt.readBuffer(buf, w * 16));
+  rt.textures.release(out);
+  for (const t of [a, b, dummy]) t.destroy();
+  buf.destroy();
+  const d = T.map((_, i) => got[i * 4]!);
+  const want = T.map((v) => gamma * (Math.log10(Math.max(v, MASK_T_FLOOR)) - lref));
+  return { d, finite: d.every(Number.isFinite), maxAbs: Math.max(...d.map((x, i) => Math.abs(x - want[i]!))) };
+}
+LAW_TESTS['law:density-floor'] = densityFloorTest;
 
 function max8(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let m = 0;

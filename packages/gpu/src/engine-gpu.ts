@@ -10,7 +10,7 @@
 // combine and blur passes), engine/reduce.ts (measure reductions), engine/results.ts (result cache policy).
 // This file keeps the Engine surface, device-loss handling, sources, and execute() (one materialised node).
 import {
-  ChromobenchError, fail, getOp, isChromobenchError, Graph, quantizeScale, sha256Hex,
+  ChromobenchError, fail, getOp, isChromobenchError, Graph, MASK_T_FLOOR, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
@@ -651,7 +651,7 @@ export class GpuEngine implements Engine {
         // the reference is the whole frame's extreme: in an exact export of a part, from the whole frame (extremesOf)
         const mo = t.exact && !this.whole(t) ? await this.extremesOf(nid, sigma, t, produceT) : await this.extremes1(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
         const same = a['polarity'] === 'same';
-        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(same ? mo.max : mo.min)]);
+        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(Math.max(same ? mo.max : mo.min, MASK_T_FLOOR))]);
         this.rt.textures.release(Hm);
         return out;
       }

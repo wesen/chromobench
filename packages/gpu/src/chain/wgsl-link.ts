@@ -4,6 +4,7 @@
 // links its pipelines with it (chain/working.ts linkKernel, from the ?raw imports) and tools/wgsl-check links every
 // kernel file the same way (from the file system), so the check compiles exactly what the engine compiles. No ?raw
 // import here: Node (the check) loads this module as it is.
+import { H_FLOOR, MASK_T_FLOOR } from '@chromobench/contract';
 import { OK_M1, OK_M1_INV, OK_M2, OK_M2_INV } from '@chromobench/core';
 
 /** A WGSL mat3x3<f32> literal of a row-major matrix (WGSL constructs column by column). */
@@ -17,6 +18,11 @@ export const GENERATED_WGSL: Readonly<Record<string, string>> = {
     `const WK_M1I = ${wgslMat3(OK_M1_INV)};`,
     `const OK_M2 = ${wgslMat3(OK_M2)};`,
     `const OK_M2I = ${wgslMat3(OK_M2_INV)};`,
+  ].join('\n'),
+  // the contract's floors (pixel.ts): the light law's H_FLOOR, the density mask's MASK_T_FLOOR
+  'contract-constants': [
+    `const H_FLOOR: f32 = ${H_FLOOR};`,
+    `const MASK_T_FLOOR: f32 = ${MASK_T_FLOOR};`,
   ].join('\n'),
 };
 

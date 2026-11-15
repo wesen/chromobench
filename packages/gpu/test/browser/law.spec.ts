@@ -168,6 +168,14 @@ test('broken variant: without leases the pool hands the tile\'s field to the oth
   expect(r.codes).toBeGreaterThan(0);
 });
 
+// CHB-045 GPUC-3: the density mask's log of the blurred transmittance is floored (0 and subnormals are finite).
+test('density-mask density pass: 0, subnormal and tiny transmittances give finite densities, floored at MASK_T_FLOOR', async ({ page }) => {
+  const r = await run(page, 'law:density-floor');
+  expect(r.error).toBeUndefined();
+  expect(r.finite).toBe(true);
+  expect(r.maxAbs).toBeLessThan(1e-5);
+});
+
 // CHB-045 GPUC-2: one integer grid rule. Every output width 1…4000 of a 4000-px frame and every height 1…2674 of a
 // 2674-px one, GPU (proxies on and off: the host's gridAxis and kernels/grid.wgsl) against core, column by column; the
 // sweep meets thousands of ties (before: 554 widths of 3901 had a column on another pixel).

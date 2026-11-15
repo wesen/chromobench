@@ -37,6 +37,13 @@ export function gridAxis(origin: number, span: number, n: number): Int32Array {
 /** Lowest paper exposure the light law keeps (x = −8: paper white). */
 export const H_FLOOR = 1e-8;
 
+/**
+ * Lowest blurred transmittance a density mask takes the log of (CHB-045, GPUC-3): density 8, denser than any negative.
+ * The mask film's exposure underflows to 0 in f64 below 10⁻³²⁴ and in f32 below 10⁻⁴⁵ (and a GPU may flush subnormals
+ * below 10⁻³⁸): an unfloored log is −∞, and the mask density with it.
+ */
+export const MASK_T_FLOOR = 1e-8;
+
 /** One light term at a pixel: its paper log exposure (per layer) and its weight w = amount · mask · ratio. */
 export interface LightTermSample {
   role: 'burn' | 'dodge' | 'flash-base' | 'flash-open';
