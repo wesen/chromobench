@@ -313,3 +313,62 @@ as planned: contract, shell and values green, consumers red until their phases.
 
 ### Technical details
 - Running: P2b (reference engine), P3 (gpu), P4 (history).
+
+## Step 6: P2b merged — the reference engine on contract 1.0, goldens 60/60
+
+The reference engine, the mock and conformance now run the unified model; the golden check passes 60/60 with the
+reference engine alone (no app module), including the first dust heal and finishing clarity any physics engine has
+rendered. Two goldens changed deliberately; I decided the one the plan had not foreseen.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P2b, rule on its open question, fix the contract export clash it reported.
+
+**Inferred user intent:** Correct physics on the new core.
+
+**Commit (code):** 7680d20 — "Merge P2b reference engine on contract 1.0 (…)"; (this step's commit) — `OpEncoding`
+rename
+
+### What I did
+- Merged `task/chb-037-p2b-reference` (afb48cd); changelog conflict resolved (both sides).
+- **Decision on `cam-dm-unsharp`**: keep the regenerated golden (max |Δ| print 3.75e-1, display 2.65e-1). P0 blurred a
+  camera file's density mask at core's hidden 6 µm/px while the film ops used 375 µm/px; v2 removes hidden defaults
+  (design §25). Translating the radius to 1875 µm would reproduce the old picture by encoding the old bug.
+- Renamed the contract's op encoding type `Encoding` → `OpEncoding` (`registry.ts`, `index.ts`): it clashed with
+  `source.ts`'s transfer `Encoding` in the index re-export and broke `packages/ingest`'s typecheck.
+- Checks on the integration branch: contract and conformance tsc 0 errors; core and engine-mock 2 each, both
+  `packages/ingest/src/conditioning/dust/{heal,specks}.ts: Module '"@chromobench/contract"' has no exported member
+  'DustSpot'` (P5b); vitest contract + values + core + mock + conformance + shell + goldens: 50 files, 1329 passed, 7
+  skipped; goldens "60/60 cases within max |Δ| ≤ 0.00001"; lint rc=0; contract gen check ok (15 files).
+
+### Why
+- The goldens protect the darkroom's physics, not its old mistakes; each regenerated case has a stated reason.
+
+### What worked
+- 56 of 58 old cases bit-exact through a hand-specified translation (`tools/goldens/translate.ts`).
+
+### What didn't work
+- N/A
+
+### What I learned
+- The hidden µm-per-pixel default had silently changed a camera-file density mask by a factor of 62.5 in radius.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P2b decisions: heal seam additive on scanner density, multiplicative on the print; clarity low-passes luminance only
+  with L = (Y/Y_w)^⅓ and midtone weight 1 − (2L − 1)²; film ops, density masks and clarity refuse images without a
+  pitch (`E_EVAL`); retouch and dust spots became groups of one-spot layers.
+
+### What should be done in the future
+- P5b: `first-print.ts` and `StudioEngine` onto documents; ingest's `DustSpot` needs an explicit heal `src`.
+- Optional (P8 or later): `umPerPx` on `source.pattern` so conformance can seed ops with physical sizes.
+
+### Code review instructions
+- `tools/goldens/translate.ts`, `packages/core/src/print/{clarity,geometry}.ts`; `node tools/goldens/render.ts --check`.
+
+### Technical details
+- P2b diary: `diary/06-phase-p2b-reference.md`.

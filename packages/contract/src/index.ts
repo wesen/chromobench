@@ -14,7 +14,7 @@ export * from './document.ts';
 export {
   AREAS, DISPLAY_RGB_CONSUMERS, ENCODINGS, acceptsDomain, allOps, bindArgs, closest, defineOp, editDistance, getOp, hasOp,
   nodeArgs, nodeSlots, opsAccepting, opsByArea, opsForStage, opsProducing, outputChannels, registerOp,
-  type Area, type Binding, type BindResult, type Coalesce, type Encoding, type Kind, type LightTerm, type NodeSlot, type OpClass, type OpDef,
+  type Area, type Binding, type BindResult, type Coalesce, type OpEncoding, type Kind, type LightTerm, type NodeSlot, type OpClass, type OpDef,
 } from './registry.ts';
 export * from './graph.ts';
 export * from './pixel.ts';

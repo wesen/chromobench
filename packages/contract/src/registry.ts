@@ -26,8 +26,8 @@ export type Binding = 'stock' | 'scan' | 'setting' | 'pixel';
  * log H, print XYZ); 'linear' = linear light (both composite stages hold linear XYZ, so no conversion is inserted);
  * 'oklab' = OkLab/OkLCh, for ops defined by eye (P8: the compiler inserts the conversions).
  */
-export type Encoding = 'stage' | 'linear' | 'oklab';
-export const ENCODINGS: readonly Encoding[] = ['stage', 'linear', 'oklab'];
+export type OpEncoding = 'stage' | 'linear' | 'oklab';
+export const ENCODINGS: readonly OpEncoding[] = ['stage', 'linear', 'oklab'];
 
 /** A light-law term (design §22): light that reaches the paper, or a filter in the light path. */
 export type LightTerm = 'main' | 'contribution' | 'modulator';
@@ -67,7 +67,7 @@ export interface OpDef {
   /** The stages whose stacks may hold this op as a layer (design §21). Absent: not a layer op. */
   stages?: readonly StageName[];
   /** Layer ops: the encoding the op computes in. */
-  encoding?: Encoding;
+  encoding?: OpEncoding;
   /** Light-law ops: what the term is. */
   term?: LightTerm;
   /** Layer ops whose adjacent layers merge into one node. */
