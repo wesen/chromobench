@@ -293,3 +293,204 @@ command tables of CHB-029 item 3 and the menus of item 2 (no `menu:` field; menu
   fewer (three installed passes became `cb.kits`). The mini studio: its commands come from the kit `mini`
   (`← mini`, `kits: mini`, one more scope). `controls("darkroom")`: `ck.explain(node)` now knows the forms of kits
   registered with `ck.extend`, so each `cb.arg` shows its control's words.
+
+## Step 4: Uniform signatures; one name per form; when and pick are interaction forms
+
+Rule 4 of §32 is mostly about call forms, so this step is a rewrite of call sites with a small change in `ck.ts`:
+containers take `(props?, ...children)`, leaves `(value, props?)`, controls one props object. The aliases went (one
+constructor per form), and `ck.when` / `ck.pick` stopped changing kind by argument type. The browser run of the
+previous commit (3585c1f) had two failures that both passed when rerun alone (below), so they are load flakes.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** §32 rows "containers / leaves / controls", "enabled and why everywhere" (done in Step
+2), "`ck.when` always an interaction node … `.with(when(bool, m))`", and "remove aliases".
+
+**Inferred user intent:** One way to write each thing, so arrangements read alike.
+
+**Commit (code):** 03bdaa4 — "CHB-037 P5a step 3: uniform signatures, one name per form, when and pick are interaction forms"
+
+### What I did
+- `ck.ts`: `box` for every container (section, row, column, bar, scroll, grid, cell, dock.column), `leaf(form, key)`
+  for leaves (text, icon, stat, kbd, keys, html, statusline, hud, tabs, toolbar, dock.tabs), `control(form)` for the
+  `ck.ui.*` controls and `ck.view.thumb`. Removed `ck.stack`, `ck.label`, `ck.ui.toggle`, `ck.ui.search`,
+  `ck.ui.command`, `ck.ui.iconButton`; `cb.nudge` (→ `cb.arg(path, { widget: 'nudge', … })`).
+- `ck.when(cond, a, b)`: a non-function `cond` throws `CK-L120`; `ck.pick(key, map)` with a non-function throws
+  `CK-L121`; `ck.mod.when(bool, m)` is the build-time choice (identity when false).
+- `cb.bar.steps(steps, { labels })`; `cb.ifFrame(props?, ...kids)`.
+- A scratch converter (`sigs.py`, balanced-paren) rewrote the positional calls; I re-formatted the mini studio's
+  sections by hand afterwards (the converter joined their lines).
+- Reran the two specs that failed at 3585c1f, alone, on the same commit: `e2e/studio-real.spec.ts` and
+  `packages/studio-kit/test/browser/looks.spec.ts` → 6 passed.
+
+### Why
+- §32 row 3 lists `hud(opts, value)` against `statusline(value, opts)` and positional `slider(min, max, opts)`.
+
+### What worked
+- 113 files, 2852 passed; snapshots unchanged (props are printed sorted, so moving `min`/`max` into the object is
+  invisible to explain).
+
+### What didn't work
+- Browser run at 3585c1f: 106 passed, 2 failed — `[studio-kit] looks.spec.ts:17 … TimeoutError: browserType.launch:
+  Timeout 180000ms exceeded` and `[chromium-webgpu] studio-real.spec.ts:156 offline: … expect(locator('#engine'))
+  … element(s) not found` (60 s). Rerun alone on the same commit: both pass. The machine runs several phase agents.
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- The converter must keep `{ … } as any` casts on option objects: it merges the positional fields into the literal
+  and re-appends the cast.
+
+### What warrants a second pair of eyes
+- `ck.ui.button({ run })` replaces `ck.ui.command(id, o)` everywhere; the button reads the command's label, key and
+  enabled state when `run` is a string, as before.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `packages/shell/src/build/ck.ts` (`box`, `leaf`, `control`, `when`, `pick`); `packages/shell/test/build/build.test.ts`
+  ("uniform signatures").
+
+### Technical details
+- Before → after: `ck.section('Light', { reset: true }, …)` → `ck.section({ title: 'Light', reset: true }, …)`;
+  `ck.ui.slider(0, 5, { … })` → `ck.ui.slider({ min: 0, max: 5, … })`; `ck.ui.segmented(opts, { bind })` →
+  `ck.ui.segmented({ options: opts, bind })`; `ck.ui.toggle('Lock', o)` → `ck.ui.checkbox({ label: 'Lock', switch: true, … })`;
+  `ck.hud(opts, v)` → `ck.hud(v, opts)`.
+
+## Step 5: Typed state and one set of selectors (cb.sel)
+
+Rule 6: the studio's state is declared with types in one module and read through typed selectors. Before, `current`
+existed in cb.ts, in the finish kit's state.ts, as `cur` in two DOM files and inline in the roll kit; `cb.current`,
+`cb.frame`, `cb.recipe`, `cb.visible`, `cb.library` sat next to the vocabulary. Now `packages/studio-kit/src/sel.ts`
+holds `CbState` and `sel`, and `cb.sel` is that object.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** §32 "Typed state per kit, read through `cb.sel.*`; one `current`" and §31 rule 3
+(interaction lambdas read state through typed selectors); CHB-029 item 7.
+
+**Inferred user intent:** A layout or an agent can read every piece of state the same way, typed.
+
+**Commit (code):** 6ec19b0 — "CHB-037 P5a step 4: typed state and one set of selectors (cb.sel)"
+
+### What I did
+- `src/sel.ts`: `CatalogFrame`, `Selection`, `Snapshot`, `CbView`, `CbUi`, `CbPrefs`, `CbState` and
+  `sel = { current, selection, targets, frame, recipe, entry, name, library, visible, isOffline, kind, proposals,
+  snapshots, prefs, view, module, tool, host }`, total on partial states.
+- cb.ts, the kits, the DOM half and the layouts read through `sel` / `cb.sel`; the duplicates are deleted; the index
+  exports `sel` and the state types instead of `current`, `visibleFrames`, `libraryFrames`, `isOffline`.
+- `CORE_STATE` is typed `Pick<CbState, …>`; cb.core's command and tool tables are `CommandTable<CbState>` /
+  `ToolTable<CbState>`, so `ctx.state` is typed in every core handler.
+- `test/sel.test.ts`.
+
+### Why
+- One reader per fact; typed reads give the editor (and later the agent's d.ts) the state's shape.
+
+### What worked
+- 114 files, 2855 passed after one test fix (below).
+
+### What didn't work
+- `expected { version: 2, …(12) } to be { version: 2, …(12) } // Object.is equality`: the store hands out read-only
+  proxies, so `sel.recipe(s)` is equal to, not identical with, `s.recipes[f]` read through another proxy; `toEqual`.
+- My first `perl -pi` over `$FILES` did nothing in zsh (`Can't open packages/studio-kit/CONTRACT-REQUESTS.md …`):
+  zsh does not word-split an unquoted variable; `grep -l … | xargs perl -pi …` works.
+
+### What I learned
+- Kit selectors belong in the kit's product (`cb.kits.roll.sel.roll`, `cb.kits.looks.sel.print`, Step 6).
+
+### What was tricky to build
+- `sel.ts` must not import cb.ts (cb imports it, and so do the kits and the DOM half); the handle helper
+  (`frameRef`) comes from `handles.ts` directly.
+
+### What warrants a second pair of eyes
+- `sel.targets` (selection, else current) replaced cb.ts's private `targets(ctx)`; it reads `ctx.state`.
+
+### What should be done in the future
+- Type the layouts: JS layouts are outside tsconfig; adding `allowJs` + `// @ts-check` with `LayoutDef` typed by
+  `Ck<CbState>` and `Cb` would give layout authors errors (CHB-029 item 7's last clause).
+
+### Code review instructions
+- `packages/studio-kit/src/sel.ts`; `grep -rn "selection?.primary" packages/studio-kit` finds only sel.ts.
+
+### Technical details
+- Before → after: `cb.current(s)` → `cb.sel.current(s)`; `cb.frame(s)?.print()` → `cb.sel.frame(s)?.print()`;
+  `cb.recipe(s)` → `cb.sel.recipe(s)`; `cb.visible(s)` → `cb.sel.visible(s)`; `isOffline(s, id)` → `sel.isOffline(s, id)`.
+
+## Step 6: One kit product shape; cb.modules; no layout imports another
+
+Rule 7 and CHB-029 item 4. Every `cb.kits.*` is now the same shape, made by `ck.product(kit, parts)`: `{ kit, panels,
+views, modules, menus, keys, sel, lib, whenAbsent }` plus the kit's `tools` and `commands` (ids) and `docs`. The
+modules that layouts imported from `classic.js` and `finish-module.js` moved to their owners (`cb.modules.library`,
+`cb.modules.print`, `roll.modules.roll`, `finish.modules.finish`, `looks.modules.print`, `chat.modules.assistant`),
+so every layout is an equal composition of kit parts and imports nothing.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** §32 "Every kit exposes the same product: kit.panels.*, kit.modules.*, kit.tools,
+kit.commands, kit.docs" and "layouts compose kits only"; CHB-029 item 4 (`cb.modules.*`, `cb.menus.*`).
+
+**Inferred user intent:** Any arrangement (including one an agent writes) is built from the same parts.
+
+**Commit (code):** 2242c12 — "CHB-037 P5a step 5: one kit product shape; cb.modules, cb.panels, cb.views; no layout imports another"
+
+### What I did
+- Shell: `ck.product(kit, parts)` / `KitProduct` (kits.ts) — frozen, with `tools`/`commands` ids and `docs` from the kit.
+- roll: `panels { library, setup, balanceBar, inspector }`, `views { contactSheet, contactCell }`, `modules { roll }`,
+  `menus { roll }`, `keys { cull }`, `sel { roll, frames, badge, tag, contact }`, `lib { state, batch, applyBatch,
+  exposure }`. finish: `panels { crop, retouch, tones }`, `views { viewer }`, `modules { finish }`, `keys { finish }`,
+  `sel { shown }`, `lib { state, edits, spots, cropProblem, largestCrop }`. looks: `panels { library, params, amount,
+  diff, card, groups, presets, compare }`, `views { survey, cell, choice }`, `modules { print }`, `keys { looks }`,
+  `sel { print, before, looks, byId, view, diffOf, syncGroups, batches }`, `lib { … authoring, provider, errors }`.
+- chat became a kit: `ck.kit('cb.chat')` declares the `cb.chat` form (moved out of CB_FORMS); `panels { chat }`,
+  `modules { assistant }`, `lib { MODES, EFFORT_LABELS }`; classic and lab `.use(cb.kits.chat.kit)`.
+- cb (cb.core's product): `cb.panels.*` (was `cb.panel.*`, plus `tools`, which was classic.js's), `cb.views.*`
+  (`cb.view` and `cb.views` merged), `cb.modules.{ library, print }`, `cb.menus`, `cb.keys`, `cb.sel`.
+- `whenAbsent` replaces each kit's `missing` (the check cb.core's `cb.kits` pass runs where the kit is absent).
+- Layouts rewritten; `variants/finish-module.js` deleted; `check-boundaries.ts`: a layout imports nothing, the
+  registry (`index.js`) only its sibling layouts.
+
+### Why
+- Four product shapes (a Kit, a helper object, a function returning modules, a curried module recipe) made every
+  layout learn each kit separately.
+
+### What worked
+- 114 files, 2855 passed; boundary check ok (426 file checks).
+
+### What didn't work
+- `TypeError: Cannot read properties of null (reading 'frames')` in looks/kit.test: the looks model reached
+  `cb.kits['roll'].of(s)`, now `cb.kits['roll'].sel.roll(s)`.
+- `git rm -q finish-module.js && cat > classic.js …` stopped at `git rm` ("the following file has local
+  modifications"), so classic.js kept its old body while the other heredocs ran; `git rm -qf` and rewrote it.
+
+### What I learned
+- A product cannot be the Kit value itself: §32 wants `kit.tools`/`kit.commands` (id lists) and `kit.docs`, which
+  collide with the kit's chain methods `.tools(table)`, `.commands(table)`, `.docs(md)`. The product holds the kit.
+
+### What was tricky to build
+- Product typing: `cb.kits` stays `Record<string, any>` because each kit's type depends on `Cb` and `Cb` on the kits
+  (a cycle TypeScript reports as an implicit any); the products themselves are precisely typed (`ck.product` returns
+  `KitProduct<K> & P`).
+
+### What warrants a second pair of eyes
+- classic and lab now install the chat kit (the `cb.chat` form is the chat kit's); a layout that places
+  `chat.panels.chat()` without `.use(chat.kit)` gets CK-B160 "No form 'cb.chat'".
+
+### What should be done in the future
+- Type `cb.kits` without the cycle (an interface per product written by hand) for layout authors.
+
+### Code review instructions
+- `packages/shell/src/build/kits.ts` (`product`), each `kits/*/src/kit.ts` (the `ck.product(…)` at the end), `cb.ts`
+  (`panels`, `views`, `modules`), the layouts.
+
+### Technical details
+- Explain snapshot change: classic and lab list `cb.chat@1 (requires cb.core)` among their kits (only that line).
+- Layout before → after (roll): `import { menus, printModule, rollMenu, rollModule } from './classic.js'` …
+  `s.module('roll', m => rollModule(ck, cb)(m).key('G'))` → no import; `.module(roll.modules.roll().key('G'))`.
