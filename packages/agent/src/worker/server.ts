@@ -12,7 +12,7 @@ import {
   type AgentMode, type Engine, type EngineCaps, type EngineId, type EvalTarget, type ImageResult, type Measurement,
   type MeasureSpec, type NodeDef, type NodeRef, type SourceInfo,
 } from '@chromobench/contract';
-import { agentSubmit, DslSession, docsProvider, type DslHistory, type Submission } from '@chromobench/dsl';
+import { agentSubmit, DslSession, docsProvider, type DslHistory, type DslLinks, type Submission } from '@chromobench/dsl';
 import { Log } from '@chromobench/values';
 import type { DocsSnapshot, Endpoint, FromWorker, ImagePayload, ToWorker } from './protocol.ts';
 
@@ -27,8 +27,11 @@ class MirrorHistory implements DslHistory {
   mode(): AgentMode {
     return this.m;
   }
+  /** the page's link data (rolls, presets) as of the last snapshot */
+  links: DslLinks = {};
   load(s: DocsSnapshot): void {
     this.current = Log.load(s.log, { rules: LOG_RULES });
+    this.links = s.links ?? {};
     this.m = s.mode;
   }
   submit(s: Submission): ReturnType<DslHistory['submit']> {
@@ -128,7 +131,7 @@ export function serveDsl(ep: Endpoint): () => void {
     switch (m.t) {
       case 'init': {
         engine = new ProxyEngine(m.engine.id, m.engine.caps, send);
-        booting = DslSession.create({ engine, history, docs: docsProvider(), ...(m.limits ? { limits: m.limits } : {}), ...(m.txPrefix ? { txPrefix: m.txPrefix } : {}) }).then((s) => {
+        booting = DslSession.create({ engine, history, docs: docsProvider(), links: () => history.links, ...(m.limits ? { limits: m.limits } : {}), ...(m.txPrefix ? { txPrefix: m.txPrefix } : {}) }).then((s) => {
           session = s;
           send({ t: 'ready' });
         });

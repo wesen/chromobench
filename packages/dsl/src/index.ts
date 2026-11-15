@@ -3,7 +3,7 @@
 // the four mutations), the agent's door into the document log, result shaping and the agent-facing docs.
 export { DslSession, DEFAULT_LIMITS, WRAP_PREFIX, WRAP_SUFFIX, loadQuickJS, type DslFrame, type DslLimits, type DslSessionOptions, type EvalTrace } from './session.ts';
 export { agentSubmit, editsOf, historyOf, isBatch, memoryHistory, type DslHistory, type LogHost, type MemoryHistory, type Submission, type Submitted } from './history.ts';
-export { Host, dslOps, layerOps, suggest, type DocsProvider, type FrameEntry, type HandleInfo, type LooksProvider } from './host.ts';
+export { Host, dslOps, layerOps, suggest, type DocsProvider, type DslLinks, type FrameEntry, type HandleInfo } from './host.ts';
 export { describeMutation, touched } from './describe.ts';
 export { renderYaml, fmtNum, params, docLine } from './results/yaml.ts';
 export { assemble } from './results/assemble.ts';

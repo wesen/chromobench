@@ -50,6 +50,8 @@ export function createStudioChat(studio: Studio): StudioChat {
       return e ? { info: e.info, name: frameName(e) } : undefined;
     },
     subscribe: (fn) => studio.subscribe(fn),
+    // the rolls and presets the frames' links resolve against (looks are registered in the contract)
+    links: () => studio.linkData(),
   };
   const sessions = new Map<string, Promise<DslWorkerClient>>();
   const dsl = (prefix: string): Promise<DslWorkerClient> => {

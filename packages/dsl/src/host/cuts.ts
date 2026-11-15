@@ -4,7 +4,7 @@
 // the agent name the same node). Every what-if is compile(edit(doc, change).doc): there is no second copy of the
 // pipeline in the DSL.
 import {
-  ChromobenchError, compile, cutDef, cutNode, CUT_NAMES, diag, edit, formatValue, getOp, toDiagnostic,
+  ChromobenchError, compile, cutDef, cutNode, CUT_NAMES, diag, edit, formatValue, getOp, storedMutations, toDiagnostic,
   type Compiled, type Document, type Node,
 } from '@chromobench/contract';
 import { freshId, getPath, type Mutation } from '@chromobench/values';
@@ -18,12 +18,14 @@ export const CUT_METHODS = CUT_NAMES.filter((c) => /^\w+$/.test(c));
 
 /** compile(doc) into the session's graph, once per document version; its warnings go to the eval that compiled it. */
 export function compiled(h: Host, doc: Document, at: At): Compiled {
-  let c = h.compiledDocs.get(doc);
+  const cache = h.compiledDocs();
+  let c = cache.get(doc);
   if (c) return c;
-  c = compile(doc, h.graph);
+  // links resolve first: the contract's looks, the host's rolls and presets (CHB-037 P7)
+  c = compile(doc, h.graph, { links: h.links() });
   for (const w of c.warnings) h.warnings.push(at && at.eval === h.evalN ? { ...w, where: { line: at.line } } : w);
   for (const n of h.graph.closure(c.display.id)) h.ops[n.op] = (h.ops[n.op] ?? 0) + 1;
-  h.compiledDocs.set(doc, c);
+  cache.set(doc, c);
   return c;
 }
 
@@ -96,7 +98,8 @@ export function mutationsOf(h: Host, raw: unknown, where: string): Mutation[] {
 /** Applies mutations to a view's document under the contract's rules; errors re-targeted at the agent's call. */
 export function applyTo(h: Host, v: View, ms: readonly Mutation[], where: string): { doc: Document; mutations: Mutation[]; inverses: Mutation[] } {
   try {
-    const r = edit(v.doc, ms);
+    // a medium field of a frame on a roll is the frame's override of the roll
+    const r = edit(v.doc, storedMutations(v.doc, ms));
     return { doc: r.doc, mutations: [...r.tx.mutations], inverses: [...r.tx.inverses] };
   } catch (e) {
     throw editError(h, v, e, ms, where);

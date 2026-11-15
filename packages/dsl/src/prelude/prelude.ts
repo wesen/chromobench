@@ -314,7 +314,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     search: (text) => H('docs', { op: 'search', text: String(text) }),
     read: (id, opts) => H('docs', { op: 'read', id: String(id), section: opts && opts.section }),
   }));
-  // ---- cb.looks (CHB-021): the studio's named looks, resolved per frame into proposed edits (one batch, one card) ----
+  // ---- cb.looks (CHB-021; CHB-037 P7): registered looks and presets as links on the frames (one batch, one card) ----
   function toIds(to) {
     if (Array.isArray(to)) return to.map((x) => (x && typeof x === 'object' && typeof x.id === 'string' ? x.id : x));
     if (to && typeof to === 'object' && typeof to.id === 'string') return to.id;
@@ -342,6 +342,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
       return viewObj(r, null, { look: r.look, label: r.label, diff: r.diff, changes: r.changes, skipped: r.skipped });
     },
     diff: (a, b) => H('looks.diff', { a: viewRef(a), b: viewRef(b) }),
+    bake: (key, opts) => Object.freeze(H('looks.bake', { key: String(key), frame: opts && opts.frame !== undefined ? frameIdOf(opts.frame) : null, at: callerLine() })),
   }));
   function compare(pair, lbl) {
     if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(isHandle)) return H('argType', { what: 'cb.compare', expect: 'two image handles: cb.compare([a, b], label)' });

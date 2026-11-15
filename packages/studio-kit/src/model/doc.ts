@@ -54,18 +54,33 @@ export function physical(doc: Document, path: string): (string | number)[] {
   return [...resolvePath(doc, storedPath(doc, path), indexOf(doc)).phys];
 }
 
-let lastLinks: { rolls: unknown; presets: unknown; ctx: LinkContext } | null = null;
+/** The shared data of the studio's state that links resolve against, as data (it crosses to the agent's worker). */
+export interface LinkData {
+  rolls?: Readonly<Record<string, Roll>>;
+  presets?: Readonly<Record<string, Preset>>;
+}
+let lastLinks: { data: LinkData; ctx: LinkContext } | null = null;
 /**
- * The links of the studio's state (CHB-037 P7): the rolls (the roll kit's `roll.rolls`) and the presets (the looks
- * kit's `looks.presets`). The same object while both are unchanged, so caches keyed by it hold.
+ * The link data of the studio's state (CHB-037 P7): the rolls (the roll kit's `roll.rolls`) and the presets (the
+ * looks kit's `looks.presets`). The same object while both are unchanged.
  */
+export function linkDataOf(s: any): LinkData { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
+  const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.data;
+  return linkEntry(rolls, presets).data;
+}
+function linkEntry(rolls: Record<string, Roll> | undefined, presets: Record<string, Preset> | undefined): { data: LinkData; ctx: LinkContext } {
+  const data: LinkData = { ...(rolls ? { rolls } : {}), ...(presets ? { presets } : {}) };
+  lastLinks = { data, ctx: { rolls: (id) => rolls?.[id], presets: (id) => presets?.[id] } };
+  return lastLinks;
+}
+/** The links of the studio's state as a LinkContext; the same object while the data is unchanged, so caches hold. */
 export function linksOf(s: any): LinkContext { // eslint-disable-line @typescript-eslint/no-explicit-any
   const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
   const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
-  if (lastLinks && lastLinks.rolls === rolls && lastLinks.presets === presets) return lastLinks.ctx;
-  const ctx: LinkContext = { rolls: (id) => rolls?.[id], presets: (id) => presets?.[id] };
-  lastLinks = { rolls, presets, ctx };
-  return ctx;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.ctx;
+  return linkEntry(rolls, presets).ctx;
 }
 
 /** The store path of a document path of frame f: ['docs', f, ...physical]. */

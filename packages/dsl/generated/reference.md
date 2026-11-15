@@ -21,7 +21,7 @@ Globals: `cb`, `frame`, `units`, `mem`, `console`; the builders `layer`, `group`
 - `cb.compare([a, b], 'label')` — one side-by-side image; each half carries its own numbers
 - `cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })` — a test strip of the negative; its image carries one reading per band
 - `cb.ringAround(frame, { step_pt: 4 })` — a 3×3 ring-around; its image carries one reading per cell
-- `cb.looks.apply(name, params, { amount, to, where, why }) · whatIf(frame, name, params) · diff(a, b) · list()` — the studio's named looks: what-ifs, diffs, one proposal batch over frames
+- `cb.looks.apply(name, params, { amount, to, where, why }) · whatIf(frame, name, params) · diff(a, b) · bake(link) · list()` — registered looks and presets as links on the frames: what-ifs, diffs, one proposal batch over frames, bake
 - `units.pt(x) · toPt · stops · toStops · stopsFromTime(t1, t2) · stopsFromFstop(n1, n2)` — unit conversions; numbers or arrays
 
 ## Cuts

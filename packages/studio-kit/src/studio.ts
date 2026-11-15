@@ -22,7 +22,7 @@ import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
 import { frameSave, replayFrame } from './bridge/saved.ts';
 import { explainError } from './kit/messages.ts';
-import { DOCS, linksOf, withEnlargerMode, type EnlargerMode } from './model/doc.ts';
+import { DOCS, linkDataOf, linksOf, withEnlargerMode, type EnlargerMode, type LinkData } from './model/doc.ts';
 import { describe, type Change, type ModelLookup } from './model/history.ts';
 import { modelAt } from './kit/args.ts';
 import type { CatalogFrame } from './sel.ts';
@@ -210,6 +210,10 @@ export class Studio {
   /** the links of the state: the rolls and presets a frame's links resolve against (model/doc.ts linksOf) */
   links(): LinkContext {
     return linksOf({ roll: this.rt?.store.peek(['roll']), looks: this.rt?.store.peek(['looks']) });
+  }
+  /** the same as data (the agent's worker gets a copy) */
+  linkData(): LinkData {
+    return linkDataOf({ roll: this.rt?.store.peek(['roll']), looks: this.rt?.store.peek(['looks']) });
   }
   /**
    * a frame's current document as the compiler sees it: every link resolved (a roll's scan settings, looks and
