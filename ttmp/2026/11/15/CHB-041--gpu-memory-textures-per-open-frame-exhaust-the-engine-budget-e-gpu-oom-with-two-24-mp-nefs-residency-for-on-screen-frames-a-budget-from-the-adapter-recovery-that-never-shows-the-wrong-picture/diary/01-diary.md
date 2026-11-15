@@ -258,3 +258,188 @@ shows the wrong picture"
   adapter: `[512 MiB, 1 GiB]`); deviceMemory not reported → 4 GiB assumed (→ 512 MiB). This Mac: Metal 2048 MiB,
   SwiftShader 1024 MiB.
 - Logs (scratchpad, not kept): `chb041-after1-metal.log`.
+
+## Step 3: How this relates to Editor lab's budgets, residency and eviction; half floats measured
+
+The main agent passed on the owner's question how Editor lab's "WebGPU / caching guide" handles memory budgets, and
+asked me to read its book (chapters 6, 8 and 9; third-party text, read as data) and chromobench's analysis of it
+(CHB-035 design 02 §7, P1, P3 and its checkpoint eviction decision), then say what CHB-041 adopts and defers, consider
+cost-aware eviction, consider rgba16float storage for full-size intermediates (measured against the parity
+tolerances), and record a CPU tier as future work unless cheap. I measured the half floats and kept f32; the rest is
+recorded below as decisions.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1); relayed by the main agent: "please read, as background for CHB-041 …
+Editor lab's book … 06.md (§6.3 the cache and its budget …), 08.md (residency …) and 09.md (memory as a measured
+per-device requirement …), and chromobench's own analysis of it … Then, within CHB-041: (a) say in your diary how your
+residency/budget/eviction design relates to these (what you adopt, what you defer, why); (b) consider cost-aware
+eviction (GreedyDual-Size by measured compute cost) instead of plain LRU for cached intermediates if it fits; (c)
+consider 16-bit storage (rgba16float) for full-size intermediates that do not need f32 … — only where parity with the
+reference engine stays within its tolerances, measured; (d) record a CPU tier for evicted textures as future work
+unless cheap. Report what you chose."
+
+**Assistant interpretation:** Relate CHB-041 to the book and CHB-035's proposals; decide (b) and (c) with evidence;
+record (d).
+
+**Inferred user intent:** The owner wants to know that chromobench's memory handling stands on the same ground as the
+engines the book surveys, and where it deliberately differs.
+
+**Commit (code):** a34b761 — "CHB-041: measure half-float storage of a camera file's first full-size texture against
+the parity tolerances (residency:f16)"
+
+### What I did
+- Read Editor lab `src/book/06.md` §6.3–6.5, 6.9; `08.md` §8.8–8.9 (formats table, residency, readback); `09.md` §9.7,
+  §9.11; CHB-035 `design/02-editor-lab-performance-architecture.md` §7, P1, P2, P3 and "Decision: eviction policy for
+  checkpoints".
+- `packages/gpu/src/parity/residency-tests.ts` `residency:f16` + a measurement test in `residency.spec.ts`: a camera
+  file's source rounded to half floats (the input of `film.camMatrix`, the texture in the owner's error), the scene cut
+  and the display compared with the f32 render at preview and export.
+
+### Why
+- (c) had to be measured, not argued: the camera path is nonlinear (film develop, the print) and the parity specs hold
+  the GPU to 3e-5 on the scene cut and 2e-4 on the display against the reference engine.
+
+### What worked
+- SwiftShader, `residency:f16`: source relative error 4.8e-4 (half float's 2⁻¹¹); scene cut max |Δ| 1.6e-4 (mean
+  3.2e-5) at preview and export; display max |Δ| 0.0134 (3.4 8-bit levels; mean 1.5e-4). Tolerances: 3e-5 and 2e-4.
+
+### What didn't work
+- The first full SwiftShader run of the browser suite (`CI=1 pnpm test:browser`, ports 5541–5544, 9.3 min) had 7
+  failures, all `Execution context was destroyed, most likely because of a navigation` or a page without its hook
+  (`TypeError: Cannot read properties of undefined (reading 'idle')`): I edited files the suite's Vite servers serve
+  (a viewport change I then reverted, the new parity test) while it ran, and HMR reloaded the pages. The 7 specs again,
+  untouched tree: 38 passed (5.7 min) — walkthrough, chain, law, spatial, residency. Lesson: no edits under a running
+  suite.
+
+### What I learned
+- How CHB-041 relates to the book and CHB-035 (decision record):
+  - **Budget from the machine (06 §6.3, 09 §9.11) — adopted, the browser's way.** GEGL sizes from total/available
+    memory with a 512 MB floor; a tab only has `navigator.deviceMemory` (rounded; absent in some browsers), and the
+    book says to set a budget and measure against it. `budgetFor` takes an eighth of the reported device memory, at
+    most the adapter's maxBufferSize, within 512 MiB (GEGL's floor, and SwiftShader's proven budget) and 2 GiB (1 GiB
+    for a software adapter); unknown memory assumes 4 GiB. The rule is in the journal, `?gpuBudget` overrides it.
+  - **Residency (08 §8.9; CHB-035 P1) — adopted for sources, not for presentation.** Sources upload once per frame and
+    stay on the GPU between renders; what goes is decided by the budget. P1's other half (present from GPU textures,
+    one device for engine and presenter, no readback) is out of CHB-041's scope and stays proposed.
+  - **Levels (09 §9.11; CHB-035 P2) — a cousin adopted.** The book renders at the zoom's level; P2 proposes an
+    area-averaged pyramid. A proxy is the nearest-sampled level a render already reads, kept at the render's size: it
+    gives P2's memory win (a screen-size texture instead of the full frame) without P2's change of pixels, so parity
+    stays bit-exact. P2 (area-averaged levels in both engines) remains proposed; when it lands, the proxy becomes the
+    pyramid level.
+  - **Eviction policy (06 §6.4; CHB-035 P3's decision) — LRU across frames, cost-aware deferred (b).** GreedyDual-Size
+    pays where entries differ in cost per byte: the book's Sharpen tiles, CHB-035's checkpoints. What CHB-041 keeps
+    are sources and proxies whose cost to remake is an upload (and a CPU gather) roughly proportional to their bytes,
+    so H = clock + cost/size is clock + a constant — GreedyDual-Size degenerates to LRU. The engine caches no GPU
+    intermediates yet (results are CPU read-backs; P3 checkpoints are not built), so there is nothing for a cost-aware
+    policy to protect. When P3 lands, its checkpoints should go into `Residency` with a measured cost and a
+    GreedyDual-Size order (CHB-035's decision); `evict()`'s ordering is the one place to change.
+  - **Checkpoints (06 §6.5) — deferred** with P3.
+  - **Half floats (06 §6.9, 08's formats table) — measured, rejected for engine intermediates (c).** The book's
+    argument holds for intermediates shown in 8 bits; chromobench's camera path amplifies a half float's rounding to
+    3.4 8-bit levels on the display, and the scene cut misses its parity tolerance 5×. Full-size intermediates stay
+    rgba32float. Where 16 bits do fit: the presenter already draws from rgba16float (display values), and P1's
+    presentation path would keep that.
+  - **Tiers (06 §6.9, 09 §9.7) — the CPU tier exists for sources, recorded as future work for intermediates (d).** An
+    evicted source or proxy is rebuilt from the decoded pixels the engine keeps on the CPU (`sources`), which is the
+    book's CPU tier for the only GPU data CHB-041 evicts. A CPU tier for evicted *intermediates* (read back on
+    eviction, uploaded on return) only makes sense with P3's checkpoints, and the readback costs the book measures
+    (and CHB-035 §12's 26 ms at 3000 × 2000) say to measure it against recomputation first. A disk tier (OPFS) is not
+    considered.
+- A measured requirement per device (09) is what the journal now records: every render's high-water mark against the
+  budget, so a report from the photographer's machine says how close it ran.
+
+### What was tricky to build
+- Rounding to half floats in JavaScript: `Math.f16round` where the browser has it, else round-to-nearest-even by hand
+  (subnormals below 2⁻¹⁴ included).
+
+### What warrants a second pair of eyes
+- The f16 measurement rounds the *source*, a stand-in for storing `film.camMatrix`'s output in 16 bits (a 3 × 3 matrix
+  of the same values); the kernels were not changed to write rgba16float.
+
+### What should be done in the future
+- With CHB-035 P3 (checkpoints): checkpoints into `Residency` with measured costs and GreedyDual-Size eviction; a CPU
+  tier for evicted checkpoints if a measurement shows readback beats recomputation.
+- CHB-035 P1 and P2 as proposed; a proxy then becomes the pyramid level.
+
+### Code review instructions
+- `packages/gpu/src/parity/residency-tests.ts` (`residency:f16`); `npx playwright test --project=gpu-parity
+  residency.spec.ts -g half-float` (ports as above).
+
+### Technical details
+- `residency:f16` (SwiftShader): `{"sourceRelError":4.84e-4,"scene.preview":{"maxAbs":1.60e-4,"mean":3.19e-5},
+  "scene.export":{"maxAbs":1.60e-4,"mean":3.19e-5},"display.preview":{"maxAbs":0.01343,"mean":1.47e-4},
+  "display.export":{"maxAbs":0.01340,"mean":1.47e-4}}`.
+
+## Step 4: The checks — SwiftShader suite, gpu-parity on Metal, the owner's scenario before and after
+
+Everything green on the branch: the full browser suite on SwiftShader (after the HMR-induced failures of Step 3, the
+affected specs again on an untouched tree), gpu-parity on Metal under the GPU lock — the proxies are bit-exact there
+too — and the owner's two NEFs on Metal without E_GPU_OOM, both at the adapter's budget and at the old 512 MB.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** The acceptance list of the assignment.
+
+**Inferred user intent:** The fix holds on the photographer's kind of machine and on the CI's software adapter.
+
+**Commit (code):** a34b761 (last code commit); this step's docs commit follows.
+
+### What I did
+- `node tools/goldens/render.ts --check`: 66/66 within max |Δ| ≤ 1e-5.
+- `STUDIO_PORT=5541 STUDIO_KIT_PORT=5542 SHELL_DEMO_PORT=5543 GPU_PARITY_PORT=5544 CI=1 pnpm test:browser` (SwiftShader):
+  150 passed, 2 skipped, 7 failed (9.3 min) — the 7 were pages reloaded under the run by my edits (Step 3); those spec
+  files again (`e2e/walkthrough.spec.ts`, `chain`, `law`, `spatial`, `residency` specs): 38 passed (5.7 min). The tree:
+  158 runnable passed (with the new half-float measurement), 2 skipped.
+- `REAL_GPU=1 … CI=1 npx playwright test --project=gpu-parity` under the GPU lock (removed afterwards): 57 passed,
+  2 skipped (29.5 s). `residency:proxy` on Metal: 0 samples differ at every scale and region (camera, negative);
+  `residency:recover` budget line "2048 MiB"; `residency:f16` display max |Δ| 0.0116 (Metal).
+- The owner's scenario on Metal (GPU lock; local files; console and journal text only):
+  `node tools/scripts/console-capture.ts 'http://127.0.0.1:5545/?layout=classic&fresh&nosw' --sequence --files …/DSC_8535.NEF …/DSC_8538.NEF`,
+  and once more with `&gpuBudget=512`.
+
+### Why
+- The 512 MB run shows the fix is the residency and the cross-pool trim, not the larger budget.
+
+### What worked
+- Before → after (Metal, the owner's two NEFs, 1600 × 1000 page, dpr 1):
+
+  | | before (512 MB) | after (2048 MB, adapter rule) | after (?gpuBudget=512) |
+  |---|---|---|---|
+  | open file 1 → idle | 6154 ms, peak 444 MB | 6301 ms, peak 199 MB | 6183 ms, peak 199 MB |
+  | open file 2 → idle | 5167 ms, peak 512 MB | 5260 ms, peak 215 MB | 5152 ms, peak 215 MB |
+  | textures live after file 2 | 328 MB (two full-size sources) | 47 MB | 47 MB |
+  | free buffers held | 160 MB | 48 MB | 48 MB |
+  | frame switches → idle | 16–75 ms (renders failing) | 52–77 ms | 49–68 ms |
+  | journal warnings/errors | E_GPU_OOM ×9 in main, ×1 in finish | none | none |
+
+- Ten 2400 × 1600 frames in 512 MiB on SwiftShader (`e2e/memory.spec.ts`): peak 109 MB, 69 MB kept over 10 frames.
+
+### What didn't work
+- N/A (Step 3 has the reloaded pages)
+
+### What I learned
+- Open times are decode-bound (LibRaw, ~5–6 s per 24 MP NEF) and did not change; the proxy gather costs less than the
+  full-size upload it replaces.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- On a 2× display the viewer renders at about 0.9 of the frame, so its proxy is ~140 MB per frame on screen; still far
+  inside 2 GiB, and frames not on screen give theirs back first.
+- A `vp:` slot of a viewport that is no longer shown keeps its last frame pinned until it renders again (a few MB of
+  proxies; the recovery evicts pinned frames too).
+
+### What should be done in the future
+- See Step 3 (checkpoints with GreedyDual-Size, a CPU tier for checkpoints, P1, P2). The CHB-037 task P9-11 can be
+  closed by the main agent when this branch merges.
+
+### Code review instructions
+- `git diff f96c135..HEAD --stat`; the commands above.
+
+### Technical details
+- Logs (scratchpad, not kept): `chb041-browser-sw.log`, `chb041-rerun-sw.log`, `chb041-parity-metal.log`,
+  `chb041-after-metal.log`, `chb041-after-metal-512.log`, `chb041-goldens.log`.
