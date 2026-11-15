@@ -281,6 +281,7 @@ commands
   roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
   roll.setShared "Set on the Roll" ← cb.roll
   roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
+  roll.followRoll "Reset to the Roll" ← cb.roll
   roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
@@ -307,7 +308,7 @@ commands
   finish.addClarity "Add Clarity" (Finish) ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 127 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 128 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -1192,13 +1193,13 @@ commands
   roll.clearMatch "Clear Roll Match" ← cb.roll
   roll.setShared "Set on the Roll" ← cb.roll
   roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
+  roll.followRoll "Reset to the Roll" ← cb.roll
   roll.contact.mode "Contact Sheet: One Time and Pack" ← cb.roll
   roll.cull.sweep "Cull the Roll" ← cb.roll
   roll.exportSheet "Export Contact Sheet…" ← cb.roll
   looks.pick "Pick Look" ← cb.looks
   looks.param "Set Look Parameter" ← cb.looks
   looks.amount "Look Amount" ← cb.looks
-  looks.from "Amount From" ← cb.looks
   looks.preview "Preview Look" (Looks) ← cb.looks
   looks.apply "Apply Look to Selection" (Looks) Ctrl+Enter ← cb.looks
   looks.applyToSelection "Apply Look to Selected Frames" ← cb.looks
@@ -1218,9 +1219,13 @@ commands
   looks.restoreSnapshot "Restore Snapshot" ← cb.looks
   looks.copy "Copy Settings" (Looks) ← cb.looks
   looks.paste "Paste Settings" (Looks) ← cb.looks
+  looks.syncMode "Sync Mode" (Looks) ← cb.looks
   looks.sync "Sync Settings to Selection" (Looks) ← cb.looks
   looks.saveAsPreset "Save Frame as Preset…" (Looks) ← cb.looks
-  looks.bake "Save Look as Preset" (Looks) ← cb.looks
+  looks.saveLookAsPreset "Save Look as Preset" (Looks) ← cb.looks
+  looks.setAmount "Look Amount on This Frame" ← cb.looks
+  looks.bake "Bake Look into Layers" (Looks) ← cb.looks
+  looks.remove "Remove Look" (Looks) ← cb.looks
   looks.deletePreset "Delete Preset" ← cb.looks
   looks.importPreset "Import Preset" ← cb.looks
   looks.exportPreset "Export Preset" ← cb.looks
@@ -1230,7 +1235,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 134 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 138 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1409,11 +1414,12 @@ commands
   roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
   roll.setShared "Set on the Roll" ← cb.roll
   roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
+  roll.followRoll "Reset to the Roll" ← cb.roll
   roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 100 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 101 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `

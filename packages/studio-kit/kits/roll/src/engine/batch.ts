@@ -3,7 +3,7 @@
 // contact sheet), then committed through the values batch builder (`plan`) as one step of the document log. Each
 // set records the value it replaces, so a frame changed after planning is stale at approval.
 import { canonicalJSON, set, type Mutation } from '@chromobench/values';
-import { edit, type Diagnostic, type Document } from '@chromobench/contract';
+import { edit, storedMutations, type Diagnostic, type Document } from '@chromobench/contract';
 import { strip } from '@chromobench/shell';
 import { read, withoutInert } from '../../../../src/model/doc.ts';
 import type { FrameId } from './model.ts';
@@ -33,12 +33,13 @@ export const plain = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.str
 
 /**
  * The sets that give a document these values (only those that change something), passed through withoutInert (an
- * optics set on a normalised document becomes printer lights), with the values they replace.
+ * optics set on a normalised document becomes printer lights), with the values they replace. A field of a linked
+ * medium is compared with and written to the frame's override (a frame's own value on a roll).
  */
 export function frameSets(doc: Document, values: Record<string, unknown>, always: readonly string[] = []): Omit<FrameMutations, 'frame'> {
   const ms: Mutation[] = [];
   for (const [p, v] of Object.entries(values)) if (always.includes(p) || canonicalJSON(read(doc, p) ?? null) !== canonicalJSON(v ?? null)) ms.push(set(p, plain(v)));
-  const mutations = withoutInert(doc, ms);
+  const mutations = storedMutations(doc, withoutInert(doc, ms));
   const expect: Record<string, unknown> = {};
   for (const m of mutations) if (m.op === 'set') expect[m.path] = plain(read(doc, m.path) ?? null);
   return { mutations, expect };

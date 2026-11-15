@@ -14,7 +14,7 @@ import { frameRef } from '../../../src/handles.ts';
 import { stockName, valueName } from '../../../src/model/names.ts';
 import { previewOf } from './engine/batch.ts';
 import { SHARED_PATHS } from './engine/constants.ts';
-import { divergence, type Roll } from './engine/model.ts';
+import { divergence, rollValue, type Roll } from './engine/model.ts';
 import { rollFrames, rollOf } from './kit.ts';
 import { sel } from '../../../src/sel.ts';
 
@@ -96,7 +96,7 @@ const setup = panelOf('cb-roll-setup', (s) => {
   if (!a) el.append(h('p', { class: 'cb-dim', text: 'Not analysed yet: Roll ▸ Analyse Roll' }));
   for (const sec of sections) {
     if (sec === 'stock') {
-      const cur = String(r.fragment['stock'] ?? '');
+      const cur = String(rollValue(r, 'stock') ?? '');
       const sel = h('select', { 'aria-label': 'Stock', id: 'roll-stock' }) as HTMLSelectElement;
       const names = [...new Set([cur, ...(a?.ranking ?? []).map((x) => x.stock)].filter(Boolean))];
       for (const x of names) sel.append(h('option', { value: x, text: stockName(x), ...(x === cur ? { selected: true } : {}) }));
@@ -107,17 +107,17 @@ const setup = panelOf('cb-roll-setup', (s) => {
         : 'no ranking (no stock data from the host)';
       el.append(row('Stock', cur ? stockName(cur) : '–', ev, over('stages.scan.medium.stock'), sel));
     } else if (sec === 'scanner') {
-      el.append(row('Scanner', r.fragment['scanner'] ? valueName('scanners', String(r.fragment['scanner'])) : '–', 'estimated, not calibrated (CHB-013 measures the scanner)', over('stages.scan.medium.scanner')));
+      el.append(row('Scanner', rollValue(r, 'scanner') ? valueName('scanners', String(rollValue(r, 'scanner'))) : '–', 'estimated, not calibrated (CHB-013 measures the scanner)', over('stages.scan.medium.scanner')));
     } else if (sec === 'base' && a) {
       const b = a.base;
-      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; written to every frame's film base (baseT)` : 'no rebate found';
+      const ev = b.T ? `median of ${b.used.length} frame rebate${b.used.length === 1 ? '' : 's'}, spread ${b.spreadD.toFixed(3)} D at ${a.long} px${b.absD ? `; absolute ${d3(b.absD)} D` : ''}; the roll's film base (baseT), which every frame follows` : 'no rebate found';
       const mixedNote = b.mixed.length ? `mixed: ${b.mixed.map((f) => `${nameOf(s, f)} (${b.deviationD[f]!.toFixed(3)} D)`).join(', ')} keep their own base` : null;
       el.append(row('Base', b.T ? `T ${d3(b.T)}` : '–', ev, mixedNote ?? over('stages.scan.medium.baseT')));
     } else if (sec === 'veil' && a) {
       const b = a.base;
       const veilOfBase = b.veil && b.T ? (b.veil.map((x, k) => x / b.T![k]!) as Vec3) : null;
       const ev = b.veil
-        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base, written to the scan's flare${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
+        ? `read on the holder of ${b.veilFrames} frame${b.veilFrames === 1 ? '' : 's'}: ${veilOfBase ? veilOfBase.map((x) => pct(x, 2)).join(' ') : ''} of the base, the roll's scan flare${b.flare ? `; flare ${b.flare.map((x) => pct(x, 2)).join(' ')} of the open gate` : ' (no open gate: flare fraction unknown)'}`
         : 'no opaque holder in view: the veil is not measured or corrected';
       el.append(row('Veil (flare)', b.veil ? d3(b.veil.map((x) => x * 1000)) + ' ‰' : '–', ev, over('stages.scan.medium.flare')));
     } else if (sec === 'noise' && a) {

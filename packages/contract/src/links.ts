@@ -455,11 +455,12 @@ export function bakeLink(doc: Document, key: Id, ctx: LinkContext = {}): Mutatio
 
 /**
  * The mutation that links a stage's medium to shared fields (a roll's): the frame keeps as overrides every field it
- * has that the link does not give, and every shared field where its value differs (divergence from the start).
+ * has that the link does not give, and every shared field where its value differs (divergence from the start). A
+ * medium linked elsewhere is relinked from its resolved value (`ctx` resolves the old link).
  */
-export function linkMedium(doc: Document, stage: StageName, ref: LinkRef, shared: JsonObject): Mutation {
+export function linkMedium(doc: Document, stage: StageName, ref: LinkRef, shared: JsonObject, ctx: LinkContext = {}): Mutation {
   const m = doc.stages[stage]?.medium ?? fail('E_DOCUMENT', `a ${documentKind(doc)} document has no ${stage} stage`);
-  const own = (isLinked(m) ? fail('E_LINK', `stages.${stage}.medium is already linked (${linkLabel(m.link)})`) : m) as unknown as JsonObject;
+  const own = (isLinked(m) ? resolveMedium(doc, stage, ctx) : m) as unknown as JsonObject;
   const overrides: Record<string, Json> = {};
   for (const [k, v] of Object.entries(own)) if (!(k in shared) || canonicalJSON(shared[k]) !== canonicalJSON(v)) overrides[k] = v;
   return set(`stages.${stage}.medium`, { link: ref, overrides });

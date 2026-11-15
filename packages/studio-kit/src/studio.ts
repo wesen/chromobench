@@ -12,8 +12,8 @@
 //   await studio.open(bytes, 'frame-12.tif');
 import { Coll, transaction, type Author, type JsonObject, type Log, type Mutation } from '@chromobench/values';
 import {
-  isChromobenchError, LOG_RULES,
-  type AgentMode, type Diagnostic, type Document, type Engine, type OutputSpaceId,
+  isChromobenchError, LOG_RULES, resolveLinks, storedMutations,
+  type AgentMode, type Diagnostic, type Document, type Engine, type LinkContext, type OutputSpaceId,
 } from '@chromobench/contract';
 import { memoryPersistence, type Runtime, type Services } from '@chromobench/shell';
 import { asOf, Frames, type FrameEntry, type InitialDocument, type OpenAs, type OpenResult, rescaleStrip, type SourceOpener } from './bridge/frames.ts';
@@ -22,7 +22,7 @@ import { kvPersistence } from './bridge/persistence.ts';
 import { FrameRenderBridge } from './bridge/render-bridge.ts';
 import { frameSave, replayFrame } from './bridge/saved.ts';
 import { explainError } from './kit/messages.ts';
-import { DOCS, withEnlargerMode, type EnlargerMode } from './model/doc.ts';
+import { DOCS, linksOf, withEnlargerMode, type EnlargerMode } from './model/doc.ts';
 import { describe, type Change, type ModelLookup } from './model/history.ts';
 import { modelAt } from './kit/args.ts';
 import type { CatalogFrame } from './sel.ts';
@@ -207,12 +207,25 @@ export class Studio {
     const log = this.rt?.store.log;
     return log?.has(f) ? log.doc<Document>(f) : undefined;
   }
+  /** the links of the state: the rolls and presets a frame's links resolve against (model/doc.ts linksOf) */
+  links(): LinkContext {
+    return linksOf({ roll: this.rt?.store.peek(['roll']), looks: this.rt?.store.peek(['looks']) });
+  }
+  /**
+   * a frame's current document as the compiler sees it: every link resolved (a roll's scan settings, looks and
+   * presets as plain groups). Portable: what an export writes beside the image.
+   */
+  resolved(f: string): Document | undefined {
+    const d = this.doc(f);
+    return d ? resolveLinks(d, this.links()) : undefined;
+  }
 
   /** connect a started runtime: the frames' documents in its log, catalog entries, saves, the proposals view */
   attach(rt: Runtime): this {
     this.rt = rt;
     this.bridge.initialDoc = f => (rt.store.log.has(f) ? rt.store.log.initial<Document>(f) : undefined);
     this.bridge.committedDoc = f => (rt.store.log.has(f) ? rt.store.log.doc<Document>(f) : undefined);
+    this.bridge.links = () => this.links();
     // errors toast in the photographer's words (CHB-027 F7); the diagnostics keep the codes
     rt.explainError = explainError;
     this.stops.push(
@@ -256,6 +269,7 @@ export class Studio {
     if (this.rt?.explainError === explainError) this.rt.explainError = null;
     this.bridge.initialDoc = null;
     this.bridge.committedDoc = null;
+    this.bridge.links = null;
     for (const f of this.stops) f();
     this.stops = [];
     this.rt = null;
@@ -456,7 +470,10 @@ export class Studio {
   /** One transaction on one frame, one step (structural edits: a layer added, a mask drawn, a snapshot restored). */
   commit(f: string, mutations: readonly Mutation[], label: string, o: { by?: Author; source?: JsonObject; batch?: string } = {}): void {
     if (!mutations.length) return;
-    const tx = transaction({ id: `c${++this.proposeSeq}`, label, by: o.by ?? 'user', source: o.source ?? { kind: 'studio' }, ...(o.batch ? { batch: o.batch } : {}), mutations });
+    // a medium field of a frame on a roll is the frame's override of the roll (contract storedMutations)
+    const d = this.doc(f);
+    const ms = d ? storedMutations(d, mutations) : mutations;
+    const tx = transaction({ id: `c${++this.proposeSeq}`, label, by: o.by ?? 'user', source: o.source ?? { kind: 'studio' }, ...(o.batch ? { batch: o.batch } : {}), mutations: ms });
     this.change(log => log.commit({ doc: f, tx }), label);
   }
 
@@ -481,7 +498,7 @@ export class Studio {
     }
     const tx = transaction({
       id: o.tx ?? `eval-${++this.proposeSeq}`, label: o.label ?? o.why ?? 'Agent change', by: 'agent',
-      source: o.source ?? { kind: 'agent' }, ...(o.batch ? { batch: o.batch } : {}), mutations: ms,
+      source: o.source ?? { kind: 'agent' }, ...(o.batch ? { batch: o.batch } : {}), mutations: storedMutations(this.doc(f)!, ms),
     });
     const next = this.change(log => (this.mode === 'auto' ? log.commit({ doc: f!, tx }) : log.propose({ doc: f!, tx }, o.why !== undefined ? { why: o.why } : {})));
     return next.last?.seq ?? 0;

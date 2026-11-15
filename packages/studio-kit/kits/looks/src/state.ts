@@ -1,30 +1,32 @@
-// cb.kits.looks: the kit's state (looks, looksView), its readers and the agent-batch pass (split from kit.ts, CHB-032).
+// cb.kits.looks: the kit's state (looks, looksView), its readers and the agent-batch pass (split from kit.ts, CHB-032;
+// CHB-037 P7: looks are links, presets are the contract's Preset records).
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Document } from '@chromobench/contract';
+import type { Document, Preset } from '@chromobench/contract';
 import { strip } from '@chromobench/shell';
 import { sel } from '../../../src/sel.ts';
 import { docAt } from './engine/paths.ts';
 import { aggregate, diffDocs, type AggregateEntry, type DiffEntry } from './engine/diff.ts';
 import { defaultGroups } from './engine/groups.ts';
-import { type AmountBase, type Preset, type PresetEntry } from './engine/look.ts';
-import type { LookPlan } from './engine/plan.ts';
+import type { LookPlan } from './engine/looks.ts';
 
 export type CompareSource = 'before' | 'defaults' | { snapshot: string } | { frame: string } | { look: string; params?: Record<string, unknown>; amount?: number } | { doc: Document };
 
+/** How a sync carries settings: copies (each frame on its own afterwards) or one shared preset every frame links. */
+export type SyncMode = 'copy' | 'link';
+
 export interface LooksDoc {
+  /** the photographer's presets (contract Preset records: stored entries and masks) */
   presets: Record<string, Preset>;
   favourites: string[];
-  /** presets imported with problems (unknown paths): shown "needs review" */
+  /** presets imported with problems (unknown ops): shown "needs review" */
   review: Record<string, string[]>;
 }
 export interface LooksView {
   picked: string | null;
   /** parameter values per look id */
   params: Record<string, Record<string, unknown>>;
-  /** Amount in percent, 0–200 */
+  /** Amount in percent, 0–200 (the stage law's amount: light and density in the darkroom, at most 100 % opacity on the print) */
   amount: number;
-  /** null: the look's own base */
-  from: AmountBase | null;
   /** the picked look previewed on the main viewer (nothing committed) */
   preview: boolean;
   mode: 'print' | 'survey';
@@ -32,14 +34,17 @@ export interface LooksView {
   surveySet: string[];
   /** library filter */
   group: string | null;
-  /** sync groups an apply keeps */
+  /** sync groups a copy keeps */
   groups: string[];
+  /** copy values, or link one shared preset */
+  syncMode: SyncMode;
   compare: CompareSource;
   /** a planned apply to the roll or the library, waiting for confirmation */
   pending: LookPlan | null;
   off: string[];
   stale: { frame: string; code: string; message: string }[];
-  clipboard: { from: string; entries: PresetEntry[]; groups: string[] } | null;
+  /** a copy: the values (path, value) and the looks (the same links) of a frame, in the chosen groups */
+  clipboard: { from: string; values: { path: string; value: unknown }[]; links: { ref: unknown; params: unknown; amount: number; name: string; key: string }[]; groups: string[]; lines: string[] } | null;
   /** agent batches: frames unticked, frames refused as stale */
   batchOff: Record<string, string[]>;
   batchStale: Record<string, { frame: string; code: string; message: string }[]>;
@@ -47,7 +52,7 @@ export interface LooksView {
 export const LOOKS_STATE: { looks: LooksDoc; looksView: LooksView } = {
   looks: { presets: {}, favourites: [], review: {} },
   looksView: {
-    picked: null, params: {}, amount: 100, from: null, preview: true, mode: 'print', survey: 'set', surveySet: [], group: null, groups: defaultGroups(), compare: 'before',
+    picked: null, params: {}, amount: 100, preview: true, mode: 'print', survey: 'set', surveySet: [], group: null, groups: defaultGroups(), syncMode: 'copy', compare: 'before',
     pending: null, off: [], stale: [], clipboard: null, batchOff: {}, batchStale: {},
   },
 };

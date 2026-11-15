@@ -14,7 +14,7 @@ import { documentKind, type Document, type Vec3 } from '@chromobench/contract';
 import { FILTRATION_PATH, FSTOP_PATH, GRADE_PATH, LIGHTS, layerOf, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, read, TIME_PATH } from '../../../../src/model/doc.ts';
 import { ALPHA, LIGHTS_PATHS, ROLL_CONSISTENCY, ROLL_TX, TIME_MAX_S, TIME_MIN_S, TIME_REF_S } from './constants.ts';
 import { frameSets, type MutationBatch } from './batch.ts';
-import { fragmentEntries, meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
+import { meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
 
 /** A batch id suffix: the clock in base 36 plus a counter, so two batches made in one millisecond differ. */
 let batchSeq = 0;
@@ -86,7 +86,11 @@ export interface FirstPrintOptions {
   id?: string;
 }
 
-/** The first print as one batch (by 'auto'): shared fragment, rebate box, real enlarger, time and lights, auto record. */
+/**
+ * The first print as one batch (by 'auto'): the real enlarger, time and lights, the auto record, the frame's own
+ * rebate box; a frame whose base the analysis calls mixed keeps its own (an override of the roll's base). What the
+ * roll shares (stock, base, veil) reaches the frames through their link, not through this batch.
+ */
 export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => Document | undefined, o: FirstPrintOptions = {}): MutationBatch {
   const a = roll.analysis;
   if (!a) throw new Error('roll.firstPrint: analyse the roll first');
@@ -106,11 +110,10 @@ export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => Document |
     }
     const { time_s, logH } = splitTotal(total);
     const scan = documentKind(rec) === 'negative-scan';
-    const shared = fragmentEntries(roll.fragment).filter(([p]) => p !== MODE_PATH && (scan || !p.startsWith('stages.scan.')));
     // the mode first: the time and lights after it are read in the real enlarger's terms
-    const values: Record<string, unknown> = { [MODE_PATH]: 'real', ...Object.fromEntries(shared), [TIME_PATH]: time_s, [LIGHTS_PATH]: logH };
-    // a frame the analysis flags as mixed keeps its own base; the others take the roll's (baseT, flare)
-    if (a.base.mixed.includes(f)) delete values['stages.scan.medium.baseT'];
+    const values: Record<string, unknown> = { [MODE_PATH]: 'real', [TIME_PATH]: time_s, [LIGHTS_PATH]: logH };
+    // a frame the analysis flags as mixed keeps its own base (measured on its rebate); the others follow the roll's
+    if (scan && a.base.mixed.includes(f)) values['stages.scan.medium.baseT'] = null;
     // the frame's own rebate box (source px), unless the photographer picked one
     const box = fa.layout.rebate?.box;
     if (box && scan && !read(rec, 'stages.scan.medium.rebate')) values['stages.scan.medium.rebate'] = box;
