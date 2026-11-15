@@ -142,3 +142,8 @@ P8b Step 3: editors as data ({ form, covers }) (commit 82aee84); merged the inte
 
 P6b: the agent's workbench — wb in the DSL (commands, run as the agent under the mode, set, selectors, state, screen().explain(), layout(), layouts.build/use with layouts recorded in the sandbox as data and built by the studio's passes, use as a dialog), the two completeness tests green over every built layout, Look → Show (contract 1.3.0, CC-022), log.commit(x, { why }), frame.get through links, cb.looks.define, approval cards in the History's words (commits 2c29a21, 5d74cc3, 9b2f369, d6db290)
 
+
+## 2026-11-15
+
+P3b: exact exports fit the budget at 4000 px, browser-free parity warm fixture (1b81bf7); final: vitest 3379, goldens 66/66, gpu-parity 54/54 SwiftShader and Metal, wgsl-check 5/5
+

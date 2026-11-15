@@ -515,3 +515,89 @@ extremes)"
 
 ### Technical details
 - Field: s = ⌈σ/32⌉, pad = ⌈3·fieldSigma(σ, s)⌉ + 1, size ⌈W/s⌉ + 2·pad; box side s·⌊exactBox/s⌋.
+
+## Step 8: Metal, the budget at 4000 px, timings, the final checks
+
+On Metal (`REAL_GPU=1`, GPU lock `<scratchpad>/gpu.lock`, owner `P3b`, removed by a trap after every batch) the first
+full parity run passed 53 of 54 runnable tests; the failure was my Step 3 fixture: `Fixture "warmParity" timeout of
+600000ms exceeded during setup … browser.newPage: Test ended` — one worker's `browser.newPage()` never returned on
+Metal. The fixture now warms the Vite server from Node (fetches the page and its entry) and never touches the browser;
+digital.spec and film.spec then passed on Metal (10 passed). A SwiftShader run before that failed the conformance
+case `capture.expose region` (and `film.develop`, `source.xyz`): `E_EVAL: film ops need the film pitch` — an exact
+export of a region asked `FilmGpu.reach` for the pitch of pitchless patterns; only couple and halation ask now
+(commit bd3ea50 "film reach asks for the pitch only for couple and halation"), conformance 524/524.
+
+The darkroom bench (4000 × 2674) then ran out of memory in the exact export: `E_GPU_OOM: blur.v: 51269248 bytes do not
+fit the budget (499113376 of 536870912 live)`, and after a first fix `… 27392000 bytes … (535749312 … live)` in the
+next round's preview. Two causes: haloed tiles planned for five textures per pixel (the darkroom DAG holds about
+twenty at once), and whole-frame fields (~40 MB each at s = 2) cached across rounds next to the 171 MB source texture.
+The plan now declares the export node's halo as a local kernel and plans haloed tiles with 20 textures per pixel
+(12 still ran out of memory), fields stay within a quarter of the budget, and the next non-exact render frees them.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Acceptance on the real GPU, GPU timings before and after (darkroom print, composite
+stack), the final merge of the integration branch and the full checks.
+
+**Inferred user intent:** The changes hold on the photographer's Mac, and the cost of exactness is known.
+
+**Commit (code):** 1b81bf7 — "CHB-037 P3b: exact exports fit the budget at 4000 px; a browser-free parity warm
+fixture"; merges 42db697 (P7, P5b-2) and 0c2233f (P6b; the ticket changelog conflicted, both sides kept).
+
+### What I did
+- Scripts (scratchpad `p3b/`): `metal.sh`, `metal2.sh`, `metal3.sh` (parity under the lock), `bench3.sh`; before
+  benches on the detached worktree `../p3b-before` (887fe95, removed afterwards).
+- `engine-gpu.ts` `planFor(info, node?)` (the halo as a kernel; `bytesPerPixel: 320` when haloed), the field cache
+  bound, `dropFields` on non-exact renders; `bench-tests.ts` reports the plan; `digital-tests.ts` plans with the node.
+
+### Why
+- An exact export that runs out of memory is no export; the planner owns the budget, so it must see the halo.
+
+### What worked
+- GPU timings (M1 Max, Metal, synthetic Gold 200 scan 4000 × 2674; median of 8 rounds after warm-ups; preview at
+  scale 0.4 with f32 read-back, export = 16-bit codes over the engine's tile plan):
+
+  | Print | before preview | after preview | before export | after export |
+  |---|---|---|---|---|
+  | plain (main + lights) | 24.5, 25.0 ms | 22.5, 22.8 ms | 243.3, 236.2 ms | 245.0, 226.9 ms |
+  | darkroom (burn under a 2 mm feather, dodge, contrast mask 300 µm) | 120.9, 128.9 ms | 106.6, 109.4 ms | 781.1, 782.2 ms (tiles wrong at borders) | 1647.5, 1653.9 ms (exact: 48 tiles of 512, halo 64) |
+  | composite: one exposure layer | 24.2, 22.2 ms | 23.5, 21.5 ms | 245.6, 243.4 ms | 246.1, 242.4 ms |
+  | composite: six fused layers | 22.8, 24.6 ms | 24.9, 22.7 ms | 269.3, 277.4 ms | 288.7, 257.1 ms |
+  | composite: six + a masked curve | 54.8, 63.7 ms | 60.2, 49.9 ms | 377.2, 388.4 ms | 435.3, 349.1 ms |
+
+  Previews and prints without spatial ops are unchanged (within this machine's noise); the darkroom export doubles —
+  the price of being right at tile borders (smaller haloed tiles, the field's whole-frame pass).
+- CPU timings: Step 2.
+
+### What didn't work
+- See the prose above (fixture on Metal, pitchless reach, two OOMs).
+
+### What I learned
+- The planner's default of five live textures per pixel holds for pointwise chains, not for a darkroom DAG.
+
+### What was tricky to build
+- Telling a leak from a budget: the second OOM's identical live bytes across code changes pointed at cached state
+  (fields), not at a texture lost in a pass.
+
+### What warrants a second pair of eyes
+- `bytesPerPixel: 320` is measured on one bench, not derived from the DAG; a document with more live textures per
+  tile could still exceed the budget (the pool then reports E_GPU_OOM, as before this phase for whole frames).
+
+### What should be done in the future
+- Exact export speed: plan from the DAG's real peak of live textures (planGraph knows the reads), so haloed tiles can
+  stay at 1024; build all of an export's fields in one pass over the frame; reuse the haloed renders of neighbours.
+- Optional item 6 (masked layers whose mask is pointwise in position fused into the kernel) was not done.
+
+### Code review instructions
+- `packages/gpu/src/engine-gpu.ts` `planFor`, `fieldOf` (the bound), `render` (`dropFields`).
+- Benches: `BENCH=1 REAL_GPU=1 STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1
+  pnpm exec playwright test --project=gpu-parity bench.spec.ts digital.spec.ts -g bench` (take the GPU lock).
+
+### Technical details
+- Logs (scratchpad `p3b/`, not kept): `sw-1..3.log`, `metal-1..3.log`, `bench-*.log`, `bench3-after.log`.
+- Final checks on 0c2233f (after merging the integration branch at 2ff1a19): `pnpm typecheck` 0 errors, `pnpm lint`,
+  `pnpm gen:check` (26); vitest 137 files, 3379 passed, 19 skipped; goldens 66/66 (every case max |Δ| 0);
+  `[gpu-parity]` SwiftShader 54 passed, 2 skipped (BENCH), 6.1 min; Metal 54 passed, 2 skipped, 27.7 s; conformance
+  524/524; `tools/wgsl-check` 5 passed.
