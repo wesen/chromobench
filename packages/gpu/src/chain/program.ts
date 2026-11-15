@@ -6,9 +6,11 @@ import type { CurveRow } from '../physics/core.ts';
 import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs } from '../tables/inputs.ts';
 
 export const OP = Object.freeze({
-  DENSITY: 1, DYES: 2, EXPOSE: 3, ADD: 4, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11,
-  // CHB-010 masks
-  MASK_LUM: 12, MASK_GRADIENT: 13, MASK_ELLIPSE: 14, MASK_NOT: 15,
+  DENSITY: 1, DYES: 2, EXPOSE: 3, DEVELOP: 5, REFLECT: 6, FLARE: 7, DISPLAY: 8, GRAIN: 9, DECODE: 10, ADAPT: 11,
+  // contract 1.0: print.combine without texture terms (engine/light.ts lightPointwise)
+  LIGHT: 4,
+  // masks (design §25)
+  MASK_LUM: 12, MASK_LINEAR: 13, MASK_ELLIPSE: 14, MASK_INVERT: 15, MASK_CONSTANT: 17,
   // contract 0.3: v.rgb · p0.rgb + p1.rgb (scan.flare per channel)
   AFFINE: 16,
 });

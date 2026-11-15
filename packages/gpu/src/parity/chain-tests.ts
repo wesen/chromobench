@@ -40,7 +40,7 @@ interface Frame {
   exact: RefEngine;
   tabulated: RefEngine;
   T: Float32Array;
-  nodes: { dyes: Node; display: Node; displayTanh: Node; darkroom: Node; masks: Node[]; combined: Node; multi: Node; densityMask: Node; flashMasked: Node };
+  nodes: { dyes: Node; display: Node; displayTanh: Node; darkroom: Node };
 }
 let frameP: Promise<Frame> | null = null;
 async function frame(): Promise<Frame> {
@@ -59,37 +59,21 @@ async function frame(): Promise<Frame> {
     for (const e of [gpu, exact, tabulated]) info = await e.open({ kind: 'file', sha256: '', bytes: tiff });
     g.registerSource(info!);
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => g.intern(op, inputs, args).node;
-    const src = I('source.open', [], { source: info!.sha256, encoding: 'linear' });
+    const src = I('source.open', [], { source: info!.sha256, encoding: 'linear', umPerPx: 6 });
     const dens = I('scan.density', [src.id], { rebate: { x: 0, y: 0, w: REBATE_W, h: H } });
     const dyes = I('invert.dyes', [dens.id], { stock: S.film, scanner: S.scanner });
-    const x = I('print.lights', [I('print.expose', [dyes.id], { paper: S.paper }).id], { logH: [0, 0, 0] });
+    // the darkroom without light-law terms is print.expose → print.develop (a print.combine needs core on contract 1.0
+    // to be compared through to display; its law is tested at paper log H in law-tests.ts)
+    const x = I('print.expose', [dyes.id], { paper: S.paper });
     const xyz = I('view.reflect', [I('print.develop', [x.id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
     const display = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
     const displayTanh = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0 }).id], { to: 'D65' }).id], { rendering: 'scan-of-print', knee: 'tanh-shoulder' });
     // CHB-010: a real-mode print (14 s, f/8, +10 M on the neutral pack) on grade 4 (γ 1.45 about the aim grey)
-    const xr = I('print.lights', [I('print.expose', [dyes.id], { paper: S.paper, mode: 'real', time_s: 14, filtration: { c: 0, m: 10, y: 0 } }).id], { logH: [0.02, 0, -0.01] });
+    const xr = I('print.expose', [dyes.id], { paper: S.paper, mode: 'real', time_s: 14, filtration: { c: 0, m: 10, y: 0 } });
     const xyzR = I('view.reflect', [I('print.develop', [xr.id], { paper: S.paper, grade: 4 }).id], { illuminant: 'D50' });
     const darkroom = I('output.display', [I('view.adapt', [I('view.flare', [xyzR.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
-    // CHB-010 stage 3: a real-mode print with two packs and three masks (guide §9.3). Main 12 s through the
-    // neutral pack; burn 6 s through +15 Y under a feathered sky gradient; dodge 3 s under a tilted ellipse;
-    // burn 4 s under painted strokes and the inverse of a luminance band (mask.and).
-    const ex = (time_s: number, filtration = { c: 0, m: 0, y: 0 }) => I('print.expose', [dyes.id], { paper: S.paper, mode: 'real', time_s, filtration });
-    const sky = I('mask.feather', [I('mask.gradient', [src.id], { from: { x: 0, y: 0 }, to: { x: 0, y: 40 } }).id], { radius_px: 8 });
-    const face = I('mask.ellipse', [src.id], { box: { x: 30, y: 20, w: 30, h: 20 }, angle_deg: 25 });
-    const strokes = JSON.stringify([{ kind: 'stroke', points: [[10, 50, 0.5], [50, 58, 0.5], [90, 44, 0.5]], radius: 6, hardness: 0.4, mode: 'add' }, { kind: 'stroke', points: [[48, 40, 0.5], [48, 64, 0.5]], radius: 3, hardness: 1, mode: 'erase' }]);
-    const xMain = ex(12);
-    const band = I('mask.not', [I('mask.luminance', [xMain.id], { above: 0.5, below: 0.65, softness: 0.1 }).id], {});
-    const painted = I('mask.and', [I('mask.paint', [src.id], { strokes }).id], { other: band.id });
-    const combined = I('print.combine', [xMain.id], { exposures: [ex(6, { c: 0, m: 0, y: 15 }).id, ex(3).id, ex(4).id], masks: [sky.id, face.id, painted.id], modes: ['add', 'subtract', 'add'] });
-    const xyzM = I('view.reflect', [I('print.develop', [I('print.lights', [combined.id], { logH: [0.01, 0, -0.02] }).id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
-    const multi = I('output.display', [I('view.adapt', [I('view.flare', [xyzM.id], { flare: 0.48 }).id], { to: 'D65' }).id], { rendering: 'print-as-seen', knee: 'clip' });
-    // stage 4 (contract 0.3): a contrast mask made from the main exposure (σ = 18 µm / 6 µm per px = 3 px), applied by
-    // print.combine with a burn and a base flash (uniform, not held back by the mask)
-    const densityMask = I('print.densityMask', [xMain.id], { amount: 0.4, radius_um: 18 });
-    const all = I('mask.luminance', [xMain.id], { above: 0, below: 1, softness: 0 });
-    const flashMasked = I('print.combine', [xMain.id], { exposures: [ex(4).id, ex(2).id], masks: [sky.id, all.id], modes: ['add', 'flash-base'], densityMasks: [densityMask.id] });
-    for (const n of [display, displayTanh, darkroom, multi, densityMask, flashMasked]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
-    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh, darkroom, masks: [sky, face, painted, band], combined, multi, densityMask, flashMasked } };
+    for (const n of [display, displayTanh, darkroom]) for (const e of [gpu, exact, tabulated]) e.adopt(g.closure(n.id));
+    return { rt, gpu, exact, tabulated, T, nodes: { dyes, display, displayTanh, darkroom } };
   })();
   return frameP;
 }
@@ -289,25 +273,6 @@ export const CHAIN_TESTS: Record<string, (opts: Record<string, unknown>) => Prom
     const pre = levels(await read(f.gpu, f.nodes.darkroom, 'preview'), 3, await read(f.tabulated, f.nodes.darkroom, 'export'), 3);
     const differs = levels(await read(f.exact, f.nodes.darkroom, 'export'), 3, await read(f.exact, f.nodes.display, 'export'), 3);
     return { export: exp, preview: pre, vsDefaultPrint: differs };
-  },
-
-  async 'chain:masks'() {
-    // CHB-010: masks, the multi-exposure sum and the density mask against core exact (guide §9.3)
-    const f = await frame();
-    const masks = [];
-    for (const m of f.nodes.masks) masks.push(compare(`mask ${m.op}`, await read(f.gpu, m, 'export'), await read(f.exact, m, 'export'), { tolerance: 1e-5, stride: 1 }));
-    const x = compare('combined paper-logH (export)', await read(f.gpu, f.nodes.combined, 'export'), await read(f.exact, f.nodes.combined, 'export'), { tolerance: 2e-4, stride: 3 });
-    const xPre = compare('combined paper-logH (preview vs tabulated)', await read(f.gpu, f.nodes.combined, 'preview'), await read(f.tabulated, f.nodes.combined, 'export'), { tolerance: 2e-4, stride: 3 });
-    const exp = levels(await read(f.gpu, f.nodes.multi, 'export'), 3, await read(f.exact, f.nodes.multi, 'export'), 3);
-    const pre = levels(await read(f.gpu, f.nodes.multi, 'preview'), 3, await read(f.tabulated, f.nodes.multi, 'export'), 3);
-    const differs = levels(await read(f.exact, f.nodes.multi, 'export'), 3, await read(f.exact, f.nodes.darkroom, 'export'), 3);
-    const dmExact = await read(f.exact, f.nodes.densityMask, 'export');
-    const dm = compare('density mask d_m', await read(f.gpu, f.nodes.densityMask, 'export'), dmExact, { tolerance: 1e-4, stride: 1 });
-    const dmMax = Math.max(...Array.from(dmExact));
-    const flash = compare('burn, base flash and density mask (paper-logH)', await read(f.gpu, f.nodes.flashMasked, 'export'), await read(f.exact, f.nodes.flashMasked, 'export'), { tolerance: 2e-4, stride: 3 });
-    const half = await f.gpu.evaluate(f.nodes.multi, { scale: 0.5, precision: 'preview' });
-    const halfRef = await f.tabulated.evaluate(f.nodes.multi, { scale: 0.5, precision: 'export' });
-    return { masks, x, xPre, export: exp, preview: pre, vsDarkroomPrint: differs, densityMask: dm, densityMaskMax: dmMax, flashMasked: flash, halfScale: levels(await half.read(), 3, await halfRef.read(), 3) };
   },
 
   async 'chain:builders-identical'() {

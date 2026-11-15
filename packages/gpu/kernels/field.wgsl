@@ -42,6 +42,44 @@ fn sampleField(@builtin(global_invocation_id) g: vec3<u32>) {
   textureStore(dst, vec2<i32>(g.xy), textureSampleLevel(field, samp, uv, 0.0));
 }
 
+// s × s area average of the image extended by clamping (every block counts s² pixels), on a field padded by
+// tileOrigin.x cells on every side: field cell c covers pixels [(c − pad)s, (c − pad + 1)s). Blurring that field is
+// blurring the clamp-extended image, so a Gaussian on it has core's clamp-to-edge rule (gaussianBlur1) at the frame's
+// edge, not the field's (engine/textures.ts gaussianBlur).
+@compute @workgroup_size(8, 8)
+fn downPad(@builtin(global_invocation_id) g: vec3<u32>) {
+  let od = textureDimensions(dst);
+  if (g.x >= od.x || g.y >= od.y) { return; }
+  let sd = vec2<i32>(textureDimensions(src));
+  let s = i32(U.s);
+  let o = (vec2<i32>(g.xy) - vec2<i32>(U.tileOrigin.x)) * s;
+  var acc = vec4<f32>(0.0);
+  for (var j = 0; j < s; j++) {
+    for (var i = 0; i < s; i++) { acc += textureLoad(src, clamp(o + vec2<i32>(i, j), vec2<i32>(0), sd - 1), 0); }
+  }
+  textureStore(dst, vec2<i32>(g.xy), acc / f32(s * s));
+}
+
+// dst = the (padded) field read back bilinearly at every full-resolution pixel centre, with textureLoad (f32 weights:
+// no float32-filterable feature needed, no 8-bit filter weights on real GPUs). Field cell c covers pixels
+// [(c − pad)s, (c − pad + 1)s), so pixel p's centre is at field coordinate (p + ½)/s − ½ + pad.
+@compute @workgroup_size(8, 8)
+fn upsample(@builtin(global_invocation_id) g: vec3<u32>) {
+  let od = textureDimensions(dst);
+  if (g.x >= od.x || g.y >= od.y) { return; }
+  let fd = vec2<i32>(textureDimensions(field));
+  let u = (vec2<f32>(g.xy) + 0.5) / f32(U.s) - 0.5 + f32(U.tileOrigin.x);
+  let f0 = floor(u);
+  let t = u - f0;
+  let i0 = clamp(vec2<i32>(f0), vec2<i32>(0), fd - 1);
+  let i1 = clamp(vec2<i32>(f0) + 1, vec2<i32>(0), fd - 1);
+  let a = textureLoad(field, vec2<i32>(i0.x, i0.y), 0);
+  let b = textureLoad(field, vec2<i32>(i1.x, i0.y), 0);
+  let c = textureLoad(field, vec2<i32>(i0.x, i1.y), 0);
+  let d = textureLoad(field, vec2<i32>(i1.x, i1.y), 0);
+  textureStore(dst, vec2<i32>(g.xy), mix(mix(a, b, t.x), mix(c, d, t.x), t.y));
+}
+
 // src: E in channel 0 (any channel layout), field: the three bounce blurs in x, y, z
 @compute @workgroup_size(8, 8)
 fn combine(@builtin(global_invocation_id) g: vec3<u32>) {

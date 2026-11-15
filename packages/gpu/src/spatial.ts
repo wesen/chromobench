@@ -77,7 +77,7 @@ export class Blur {
     return out;
   }
 
-  private async field(entry: 'down' | 'sampleField' | 'combine', outW: number, outH: number, src: GPUTexture, field: GPUTexture | null, p: Record<string, unknown>): Promise<GPUTexture> {
+  private async field(entry: 'down' | 'downPad' | 'sampleField' | 'upsample' | 'combine', outW: number, outH: number, src: GPUTexture, field: GPUTexture | null, p: Record<string, unknown>): Promise<GPUTexture> {
     const rt = this.rt;
     rt.check();
     const dev = rt.device;
@@ -88,8 +88,8 @@ export class Blur {
     const ub = rt.buffers.acquire({ size: u.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'field.u');
     dev.queue.writeBuffer(ub, 0, u);
     const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer: ub, size: u.byteLength } }, { binding: 2, resource: out.createView() }];
-    if (entry !== 'sampleField') entries.push({ binding: 1, resource: src.createView() });
-    if (entry !== 'down') entries.push({ binding: 3, resource: field!.createView() });
+    if (entry !== 'sampleField' && entry !== 'upsample') entries.push({ binding: 1, resource: src.createView() });
+    if (entry !== 'down' && entry !== 'downPad') entries.push({ binding: 3, resource: field!.createView() });
     if (entry === 'sampleField') entries.push({ binding: 4, resource: this.sampler });
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
     const enc = dev.createCommandEncoder();
@@ -112,6 +112,16 @@ export class Blur {
   /** A tile of size w × h at frame position origin, sampled bilinearly from a whole-frame field. */
   sampleField(field: GPUTexture, origin: [number, number], w: number, h: number, frame: [number, number]): Promise<GPUTexture> {
     return this.field('sampleField', w, h, field, field, { tileOrigin: origin, frameSize: frame });
+  }
+
+  /** s × s area average of the clamp-extended image on a field padded by `pad` cells per side (field.wgsl downPad). */
+  downsamplePadded(src: GPUTexture, s: number, pad: number): Promise<GPUTexture> {
+    return this.field('downPad', Math.ceil(src.width / s) + 2 * pad, Math.ceil(src.height / s) + 2 * pad, src, null, { s, tileOrigin: [pad, pad] });
+  }
+
+  /** A padded field read back to w × h pixels, bilinear with f32 weights (textureLoad; see field.wgsl upsample). */
+  upsample(field: GPUTexture, s: number, pad: number, w: number, h: number): Promise<GPUTexture> {
+    return this.field('upsample', w, h, field, field, { s, tileOrigin: [pad, pad] });
   }
 
   /**

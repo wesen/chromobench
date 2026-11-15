@@ -75,11 +75,11 @@ test('SAT probe: f32 SAT fails to estimate σ = 0.010 at 4096 × 2731; wrapping 
   expect(Math.abs(r.sigmaF32 - 0.01)).toBeGreaterThan(0.005);
 });
 
-test('GpuEngine evaluates every domain along the negative-scan chain', async ({ page }) => {
+test('GpuEngine evaluates every domain along the negative-scan chain (the printer lights as a fused print.combine)', async ({ page }) => {
   const r = await run(page, 'engine:taps');
   const want: Record<string, string> = {
-    'scan.density': 'scanner-density', 'invert.dyes': 'film-dyes', 'film.grain': 'film-dyes', 'print.expose': 'paper-logH',
-    'print.lights': 'paper-logH', 'print.develop': 'paper-dyes', 'view.reflect': 'print-xyz', 'view.flare': 'print-xyz', 'output.display': 'display-rgb',
+    'scan.density': 'scanner-density', 'invert.dyes': 'film-dyes', 'print.expose': 'paper-logH',
+    'print.combine': 'paper-logH', 'print.develop': 'paper-dyes', 'view.reflect': 'print-xyz', 'view.flare': 'print-xyz', 'output.display': 'display-rgb',
   };
   for (const [op, d] of Object.entries(want)) {
     expect(r[op].domain, op).toBe(d);

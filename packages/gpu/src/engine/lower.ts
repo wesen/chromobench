@@ -1,10 +1,12 @@
 // Lowering (split from engine-gpu.ts, CHB-032): a chain of single-receiver pointwise nodes → program segments of
 // kernels/pointwise.wgsl. Every parameter comes from core (physics/core.ts).
-import { DOMAINS, fail, type Box, type Diagnostic, type Graph, type Node } from '@chromobench/contract';
+import { DOMAINS, fail, type Box, type Diagnostic, type Graph, type ImageInfo, type Node } from '@chromobench/contract';
+import { combineRatio, filmUmPerPx, flashExposure, type UpNode } from '@chromobench/core';
 import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from '../chain/program.ts';
 import type { CorePhysics } from '../physics/core.ts';
 import type { Mat3, Vec3 } from '../tables/inputs.ts';
 import type { Lowered } from './defs.ts';
+import { combineArgs, lightPointwise, type LightContext } from './light.ts';
 
 /** Lowers nodes[from…] to segments; nodes[0…from) are upstream context only (ctx.up). */
 export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Map<string, Vec3>, from = 0): Lowered {
@@ -50,7 +52,12 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
         push({ code: OP.EXPOSE, p0: [...offset], node: n.id }, { pd });
         break;
       }
-      case 'print.lights': push({ code: OP.ADD, p0: [...(a['logH'] as number[])], node: n.id }); break;
+      case 'print.combine': {
+        // only the texture-free form reaches the pointwise kernel (engine/dag.ts: a combine with texture terms is a barrier)
+        const lp = lightPointwise(combineArgs(a), lightContext(P, graph, nodes, i));
+        push(lp.additive ? { code: OP.LIGHT, flags: 1, p0: lp.logGain, node: n.id } : { code: OP.LIGHT, p0: lp.gain, p1: lp.offset, node: n.id });
+        break;
+      }
       case 'print.develop': {
         // the grade as x′ = pivot + γ(x − pivot) before the paper row (flag 1), as core's developerAt
         const gr = P.grade(ctx, a['grade'] as number);
@@ -72,16 +79,16 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
         push({ code: OP.GRAIN, flags: (a['seed'] as number) >>> 0, p0: [a['amount'] as number, 0], node: n.id });
         break;
       }
-      // CHB-010 masks (core print/masks.ts on the grid)
+      // masks (design §25; core print/masks.ts on the grid)
       case 'mask.luminance': {
         const rd = graph.get(n.inputs[0]!)?.info;
         const [lo, hi] = DOMAINS[rd && rd.kind === 'Image' ? rd.domain : 'mask'].range;
         push({ code: OP.MASK_LUM, p0: [a['above'] as number, a['below'] as number, a['softness'] as number], p1: [lo, hi], node: n.id });
         break;
       }
-      case 'mask.gradient': {
+      case 'mask.linear': {
         const f = a['from'] as { x: number; y: number }, t = a['to'] as { x: number; y: number };
-        push({ code: OP.MASK_GRADIENT, p0: [f.x, f.y, t.x, t.y], node: n.id });
+        push({ code: OP.MASK_LINEAR, p0: [f.x, f.y, t.x, t.y], node: n.id });
         break;
       }
       case 'mask.ellipse': {
@@ -90,7 +97,8 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
         push({ code: OP.MASK_ELLIPSE, p0: [b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w / 2, 1e-9), Math.max(b.h / 2, 1e-9)], p1: [Math.cos(th), Math.sin(th)], node: n.id });
         break;
       }
-      case 'mask.not': push({ code: OP.MASK_NOT, node: n.id }); break;
+      case 'mask.invert': push({ code: OP.MASK_INVERT, node: n.id }); break;
+      case 'mask.constant': push({ code: OP.MASK_CONSTANT, p0: [a['value'] as number], node: n.id }); break;
       default: fail('E_INTERNAL', `${n.op} has no pointwise GPU lowering (barrier ops are materialised)`);
     }
   }
@@ -98,13 +106,31 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
   return { root: nodes[0]!, segments, warnings };
 }
 
-/** Grain σ per output pixel from size_um (Selwyn: σ²·A constant), filled per target. */
-export function fillGrain(segs: Segment[], nodes: Node[], umPerPxOut: number): void {
+/** Grain σ per output pixel from size_um (Selwyn: σ²·A constant), filled per target; `pxPerOut` frame px per output px. */
+export function fillGrain(segs: Segment[], nodes: Node[], pxPerOut: number): void {
   for (const s of segs) for (const o of s.ops) {
     if (o.code !== OP.GRAIN) continue;
     const n = nodes.find((x) => x.id === o.node)!;
     const size = n.args['size_um'] as number;
+    const umPerPxOut = filmUmPerPx(n.info as ImageInfo) * pxPerOut;
     // σ at a pixel of area p² = 0.012 · size/p (0.012: the Studio's grain scale at p = size)
     o.p0 = [o.p0![0]!, 0.012 * (size / umPerPxOut)];
   }
+}
+
+/**
+ * The light law's context for print.combine node nodes[i]: the receiver is the main print.expose, so a term's seconds
+ * ratio compares its print.expose with it (core combineRatio); a flash's uniform x is core's (flashExposure).
+ */
+export function lightContext(P: CorePhysics, graph: Graph, nodes: readonly Node[], i: number): LightContext {
+  const ctx = P.ctx(nodes, i);
+  const main = graph.get(nodes[i]!.inputs[0]!);
+  const node = (id: string): UpNode | undefined => graph.get(id) as UpNode | undefined;
+  return {
+    ratio: (id) => {
+      const e = graph.get(id);
+      return combineRatio(main?.op === 'print.expose' ? main.args : undefined, e?.op === 'print.expose' ? e.args : undefined);
+    },
+    flashX: (id, role) => flashExposure({ up: ctx.up, env: ctx.env, node }, id, role) ?? fail('E_INTERNAL', `print.combine: the ${role} term ${id.slice(0, 12)}… is not a print.expose`),
+  };
 }

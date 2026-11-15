@@ -1,21 +1,32 @@
-// Multi-input steps of the GPU engine (CHB-010 guide §6.5–6.6): print.combine's sum in linear H,
-// mask.and / mask.or, and print.densityMask's transmittance and mask density. One pass per step on
-// output-grid textures (a, b, m); the f64 reference is core's combinePixel / maskDensity.
+// Multi-input steps of the GPU engine (contract 1.0), one pass each on output-grid textures a, b and a mask m:
+// the light law of print.combine as passes in linear H (src/engine/light.ts plans them; the formula is the
+// contract's lightH), print.densityMask's transmittance and density, composite.mix (mixPixel), mask.combine
+// (maskCombine) and clarity's gain. Every mode reads its own pixel only.
 //
-// mode 0: H = 10^a                                   (the main exposure in linear H)
-// mode 1: H = (flags & 1 ? max(a, 0) : a) + w.x · m · 10^b   (one extra exposure; w.x = ±seconds ratio)
-// mode 2: x = log10(max(flags & 1 ? max(a, 0) : a, 1e-8))   (back to paper log H, H_FLOOR)
-// mode 3: min(a, b) (mask.and)      mode 4: max(a, b) (mask.or)
-// mode 5: T = mean_k 10^(−a_k)       (the mask film's exposure before the blur)
-// mode 6: d = w.x · (log10 b − w.y)   (density mask d_m, contract 0.3: w.x = ±strength, w.y = log10 of the
-//                                       smallest (positive) or largest (same) blurred T; w.x = 0 gives 0)
-// mode 7: copy a
-// mode 8: H = (flags & 1 ? max(a, 0) : a) + m · w.xyz  (a uniform flash, w.xyz = ratio · 10^x_flash; contract 0.3)
-// mode 9: H = (flags & 1 ? max(a, 0) : a) · 10^(−b.r)  (a density mask holds back the exposures through the negative)
-// mode 10: T = mean_k 10^(a_k − w_k)  (the mask film's exposure from paper log H: PD = w − x, w = x_clear)
+// flags: bit 0 (CLAMP) the running H is clamped at 0 before the step (after the dodges); bit 1 (MASK) the pass
+// reads the coverage m.r, else m = 1. A = flags & CLAMP ? max(a, 0) : a.
+//
+// mode 0  MAIN:          H = w.x · m · 10^a                     (the main exposure, w.x = its amount)
+// mode 1  TERM:          H = A + w.x · m · 10^b                 (a burn w.x = a·r; a dodge w.x = −a·r)
+// mode 2  LOG:           x = log10 max(A, 1e-8)                 (H_FLOOR)
+// mode 3  HOLD:          H = A · 10^(−w.x · m · b.r)            (a density mask d = b.r, w.x = its amount)
+// mode 4  UNIFORM:       H = A + m · w.xyz                      (a flash w = a·r·10^x_flash; a preflash w = a·φ)
+// mode 5  FILTER:        H = A · 10^(m · w.xyz)                 (w = a·logH)
+// mode 6  TRANSMITTANCE: T = mean_k 10^(a_k − w_k)              (the mask film's exposure: PD = w − x, w = x_clear)
+// mode 7  DENSITY:       d = w.x · (log10 b − w.y)              (w.x = ±γ, w.y = log10 of the smallest (positive) or
+//                                                               largest (same) blurred T; w.x = 0 gives 0)
+// mode 8  COPY:          a
+// mode 9  MIX:           k = w.x · m; k = 1 → b, k = 0 → a, else a + k·(b − a)   (a backdrop, b top; normal blend)
+// mode 10 MASK:          v = a.r, c = b.r; r = max(v, c) | v·(1 − c) | v·c for w.y = 0 | 1 | 2;
+//                        w.x = 1 → r, else v + w.x·(r − v)       (add, subtract, intersect faded by the amount)
+// mode 11 CLARITY:       a.rgb · (L′ / L)³, L = (Y / Y_w)^⅓, L̄ = (Y_b / Y_w)^⅓, L′ = max(0, L + w.x·w·(L − L̄)),
+//                        w = max(0, 1 − (2L − 1)²); Y = a.g, Y_b = b.g (the low-pass), Y_w = w.y; Y ≤ 0 unchanged
+//                        (core print/clarity.ts)
 
 const LOG2_10: f32 = 3.321928094887362;
 const LOG10_2: f32 = 0.3010299956639812;
+const CLAMP: u32 = 1u;
+const MASK: u32 = 2u;
 
 struct C { mode: u32, flags: u32, pad0: u32, pad1: u32, w: vec4<f32> };
 @group(0) @binding(0) var<uniform> U: C;
@@ -33,38 +44,49 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
   let p = vec2<i32>(g.xy);
   if (g.x >= size.x || g.y >= size.y) { return; }
   let va = textureLoad(a, p, 0);
+  var cov = 1.0;
+  if ((U.flags & MASK) != 0u) { cov = textureLoad(m, p, 0).r; }
+  var A = va.rgb;
+  if ((U.flags & CLAMP) != 0u) { A = max(A, vec3<f32>(0.0)); }
   var out = va;
   switch (U.mode) {
-    case 0u: { out = vec4<f32>(p10(va.rgb), 0.0); }
-    case 1u: {
-      var base = va.rgb;
-      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
-      out = vec4<f32>(base + U.w.x * textureLoad(m, p, 0).r * p10(textureLoad(b, p, 0).rgb), 0.0);
-    }
-    case 2u: {
-      var base = va.rgb;
-      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
-      out = vec4<f32>(lg10(max(base, vec3<f32>(1e-8))), 0.0);
-    }
-    case 3u: { let v = min(va.r, textureLoad(b, p, 0).r); out = vec4<f32>(v, v, v, 1.0); }
-    case 4u: { let v = max(va.r, textureLoad(b, p, 0).r); out = vec4<f32>(v, v, v, 1.0); }
-    case 5u: { let t = dot(p10(-va.rgb), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
-    case 6u: {
+    case 0u: { out = vec4<f32>(U.w.x * cov * p10(va.rgb), 0.0); }
+    case 1u: { out = vec4<f32>(A + U.w.x * cov * p10(textureLoad(b, p, 0).rgb), 0.0); }
+    case 2u: { out = vec4<f32>(lg10(max(A, vec3<f32>(1e-8))), 0.0); }
+    case 3u: { out = vec4<f32>(A * exp2(-LOG2_10 * U.w.x * cov * textureLoad(b, p, 0).r), 0.0); }
+    case 4u: { out = vec4<f32>(A + cov * U.w.xyz, 0.0); }
+    case 5u: { out = vec4<f32>(A * p10(cov * U.w.xyz), 0.0); }
+    case 6u: { let t = dot(p10(va.rgb - U.w.xyz), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
+    case 7u: {
       var d = 0.0;
       if (U.w.x != 0.0) { d = U.w.x * (log2(textureLoad(b, p, 0).r) * LOG10_2 - U.w.y); }
       out = vec4<f32>(d, d, d, 1.0);
     }
-    case 8u: {
-      var base = va.rgb;
-      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
-      out = vec4<f32>(base + textureLoad(m, p, 0).r * U.w.xyz, 0.0);
-    }
     case 9u: {
-      var base = va.rgb;
-      if ((U.flags & 1u) != 0u) { base = max(base, vec3<f32>(0.0)); }
-      out = vec4<f32>(base * exp2(-LOG2_10 * textureLoad(b, p, 0).r), 0.0);
+      // exact at both ends (mixPixel): full coverage is the top itself, none the backdrop itself
+      let k = U.w.x * cov;
+      let top = textureLoad(b, p, 0);
+      if (k == 1.0) { out = top; } else if (k != 0.0) { out = va + k * (top - va); }
     }
-    case 10u: { let t = dot(p10(va.rgb - U.w.xyz), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
+    case 10u: {
+      let v = va.r;
+      let c = textureLoad(b, p, 0).r;
+      var r = max(v, c);
+      if (U.w.y == 1.0) { r = v * (1.0 - c); } else if (U.w.y == 2.0) { r = v * c; }
+      if (U.w.x != 1.0) { r = v + U.w.x * (r - v); }
+      out = vec4<f32>(r, r, r, 1.0);
+    }
+    case 11u: {
+      // core print/clarity.ts clarityGain: L = (Y / Y_w)^⅓, w = max(0, 1 − (2L − 1)²), L′ = max(0, L + s·w·(L − L̄))
+      let Y = va.g;
+      if (Y > 0.0) {
+        let L = pow(Y / U.w.y, 1.0 / 3.0);
+        let Lb = pow(max(textureLoad(b, p, 0).g, 1e-30) / U.w.y, 1.0 / 3.0);
+        let w = max(0.0, 1.0 - (2.0 * L - 1.0) * (2.0 * L - 1.0));
+        let q = max(0.0, L + U.w.x * w * (L - Lb)) / L;
+        out = vec4<f32>(va.rgb * (q * q * q), va.a);
+      }
+    }
     default: {}
   }
   textureStore(dst, p, out);

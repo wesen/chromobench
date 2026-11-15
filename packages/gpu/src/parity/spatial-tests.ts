@@ -274,7 +274,7 @@ export const SPATIAL_TESTS: Record<string, T> = {
     };
     eng.openDecoded(info, data);
     g.registerSource(info);
-    const src = g.intern('source.open', [], { source: info.sha256, encoding: 'linear' }).node;
+    const src = g.intern('source.open', [], { source: info.sha256, encoding: 'linear', umPerPx: 36000 / W }).node // a 36 mm frame;
     const ex = g.intern('capture.expose', [g.intern('source.xyz', [src.id], {}).node.id], { stock: 'kodak_portra_400' }).node;
     const base = g.intern('film.develop', [ex.id], {}).node;
     const gr = g.intern('film.grain', [base.id], { amount: 1, size_um: 12, seed: 5 }).node;

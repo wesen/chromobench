@@ -19,9 +19,9 @@ import { ChainRunner, POINTWISE_WGSL, type RunTarget } from './chain/run.ts';
 import type { Segment } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { REDUCE_WGSL, Reducer } from './measure.ts';
-import { clearExposure, combineRatio, densitiesOf, densityMaskSigma, featherSigma, flashExposure, paintMask, parseSpots, parseStrokes, rebateBox, seedFallbackSpectra, type PhysicsData, type UpNode } from '@chromobench/core';
+import { claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigma, paintMask, rebateBox, seedFallbackSpectra, whiteAt, type PhysicsData, type Stroke } from '@chromobench/core';
 import { Blur } from './spatial.ts';
-import { Retouch } from './retouch.ts';
+import { Retouch, type RepairSpot } from './retouch.ts';
 import { FILM_OPS, FilmGpu } from './film.ts';
 import { CorePhysics } from './physics/core.ts';
 import { loadDefaultPhysicsData } from './physics/data.ts';
@@ -32,8 +32,9 @@ import { OpfsStore, TableCache } from './tables/cache.ts';
 import { TableManager } from './tables/manager.ts';
 import type { Vec3 } from './tables/inputs.ts';
 import { planGraph } from './engine/dag.ts';
-import { cancelled, COMBINE, COMBINE_WGSL, DEFAULT_UM_PER_PX, GPU_OPS, type Cached, type GridTarget, type Lowered, type Plan, type SourceImg, type U16Result } from './engine/defs.ts';
-import { fillGrain, lowerChain } from './engine/lower.ts';
+import { cancelled, COMBINE_WGSL, GPU_OPS, type Cached, type GridTarget, type Lowered, type Plan, type SourceImg, type U16Result } from './engine/defs.ts';
+import { FLAG, MODE, combineArgs, lightPasses } from './engine/light.ts';
+import { fillGrain, lightContext, lowerChain } from './engine/lower.ts';
 import { reduceMeasure } from './engine/reduce.ts';
 import { addResult } from './engine/results.ts';
 import { combinePass, gaussianBlur, readU16, syntheticSource, uploadF32, uploadU16 } from './engine/textures.ts';
@@ -241,7 +242,8 @@ export class GpuEngine implements Engine {
   }
 
   planFor(info: ImageInfo): GpuTilePlan {
-    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? DEFAULT_UM_PER_PX }, [], this.rt.caps);
+    // no spatial kernels are declared, so the pitch only labels the plan (an image without one, a pattern, plans at 1)
+    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? 1 }, [], this.rt.caps);
   }
 
   dispose(): void {
@@ -386,11 +388,12 @@ export class GpuEngine implements Engine {
 
   // ---- DAG evaluation (CHB-010): materialised nodes on the output grid ----
   //
-  // A graph is cut into pointwise tails that end at a materialised node: the target, every multi-input
-  // or spatial op (print.combine, mask.and/or/feather/paint, print.densityMask), every input of one,
-  // and every node read by two consumers (so a shared invert.dyes runs once). Each tail starts at the
-  // source (read through outMap at full resolution, as before), at a materialised texture (read at the
-  // output pixel), or at a coordinate mask (mask.gradient/ellipse, which ignore their receiver's values).
+  // A graph is cut into pointwise tails that end at a materialised node: the target, every barrier
+  // (engine/dag.ts isBarrier: print.combine with texture terms, print.densityMask, mask.combine/feather,
+  // mask.paint, composite.mix, heal, clone, clarity, the film ops), every input of one, and every node read
+  // by two consumers (so a shared invert.dyes runs once). Each tail starts at the source (read through outMap
+  // at full resolution), at a materialised texture (read at the output pixel), or at a generator mask
+  // (mask.linear/ellipse/constant, which ignore their receiver's values).
   // All materialised textures share the target's grid: pointwise steps commute with nearest sampling, so
   // they equal the reference engine's sampled full-resolution result; spatial steps (feather, the
   // density mask's blur) run on the grid with σ scaled to it and clamp at its edge.
@@ -431,13 +434,13 @@ export class GpuEngine implements Engine {
     if (p.kind === 'tail') {
       if (n.op === 'mask.paint') {
         // strokes are rasterised by core on this grid (the same f64 function as the reference engine) and uploaded
-        const m = paintMask(parseStrokes(String(n.args['strokes'])), { w: t.outW, h: t.outH, region: t.region });
+        const m = paintMask(n.args['strokes'] as readonly Stroke[], { w: t.outW, h: t.outH, region: t.region });
         return this.chain.upload(m, t.outW, t.outH, 1, 'mask.paint');
       }
       const treb = await this.rebates(p.nodes.slice(p.from));
       const low = this.lower(p.nodes, treb, p.from);
       warnings.push(...low.warnings);
-      fillGrain(low.segments, p.nodes, t.umOut);
+      fillGrain(low.segments, p.nodes, t.region.w / t.outW);
       const segs = low.segments.length ? low.segments : [{ ops: [], tables: {} }];
       if (p.root === 'source') {
         // pointwise tails read only their own pixels: the source is uploaded for the region alone (CHB-011)
@@ -455,65 +458,64 @@ export class GpuEngine implements Engine {
     const scale = t.outW / t.region.w;
     switch (n.op) {
       case 'print.combine': {
-        // core combinePixel: H = max(10^x − Σ dodge, 0) + Σ add, one log at the end
-        // contract 0.3: flashes are uniform (core flashExposure, f64) and skip the density masks, which
-        // multiply every exposure through the negative by 10^−d_m
-        const ids = a['exposures'] as string[], masks = a['masks'] as string[], modes = a['modes'] as string[];
-        const dms = (a['densityMasks'] as string[] | undefined) ?? [];
-        if (!ids.length && !dms.length) return this.mix(COMBINE.COPY, recv);
+        // the light law (engine/light.ts lightPasses; contract lightH): passes in linear H, one log at the end
         const chain = this.chainOf(nid);
-        const cctx = this.physics.ctx(chain, chain.length - 1);
-        const main = cctx.up('print.expose')?.args;
-        const fctx = { up: cctx.up, env: cctx.env, node: (id: string) => this.graph.get(id) as UpNode | undefined };
-        const terms = ids.map((id, i) => {
-          const e = this.graph.get(id);
-          return { e: tex(id), m: tex(masks[i]!), sign: modes[i] === 'subtract' ? -1 : 1, ratio: combineRatio(main, e?.op === 'print.expose' ? e.args : undefined), flash: flashExposure(fctx, id, modes[i]!) };
-        });
-        let H = await this.mix(COMBINE.EXP, recv);
-        let firstAdd = true;
-        const step = async (next: GPUTexture): Promise<void> => {
-          this.rt.textures.release(H);
+        const passes = lightPasses(combineArgs(a), lightContext(this.physics, this.graph, chain, chain.length - 1));
+        let H: GPUTexture | null = null;
+        for (const q of passes) {
+          const next = await this.mix(q.mode, H ?? recv, q.b === undefined ? null : tex(q.b), q.m === undefined ? null : tex(q.m), q.flags, q.w);
+          if (H) this.rt.textures.release(H);
           H = next;
-        };
-        for (const term of [...terms.filter((x) => x.sign < 0), ...terms.filter((x) => x.sign > 0 && !x.flash)]) {
-          const next = await this.mix(COMBINE.ADD, H, term.e, term.m, term.sign > 0 && firstAdd ? 1 : 0, [term.sign * term.ratio]);
-          if (term.sign > 0) firstAdd = false;
-          await step(next);
         }
-        for (const d of dms) await step(await this.mix(COMBINE.HOLD, H, tex(d), null, 1));
-        for (const term of terms.filter((x) => x.flash)) {
-          await step(await this.mix(COMBINE.FLASH, H, null, term.m, 1, term.flash!.map((x) => term.ratio * 10 ** x)));
-        }
-        const out = await this.mix(COMBINE.LOG, H, null, null, 1);
-        this.rt.textures.release(H);
-        return out;
+        return H!;
       }
-      case 'mask.and': return this.mix(COMBINE.MIN, recv, tex(a['other'] as string));
-      case 'mask.or': return this.mix(COMBINE.MAX, recv, tex(a['other'] as string));
+      case 'composite.mix': {
+        // the composite law per entry (contract mixPixel): exact at coverage 0 and 1
+        if (a['blend'] !== 'normal') return fail('E_NOT_IMPLEMENTED', `composite.mix blend ${String(a['blend'])} has no GPU kernel`);
+        const m = a['mask'] as string | undefined;
+        return this.mix(MODE.MIX, recv, tex(a['top'] as string), m === undefined ? null : tex(m), m === undefined ? 0 : FLAG.MASK, [a['amount'] as number]);
+      }
+      case 'mask.combine': {
+        // the one mask algebra (contract maskCombine): add = max, subtract = v·(1 − c), intersect = v·c
+        const mode = ['add', 'subtract', 'intersect'].indexOf(a['mode'] as string);
+        return this.mix(MODE.MASK, recv, tex(a['other'] as string), null, 0, [a['amount'] as number, mode]);
+      }
       case 'mask.feather': return this.gaussian(recv, featherSigma(a['radius_px'] as number) * scale);
       case 'print.densityMask': {
-        // core maskDensityPolar (contract 0.3): PD = x_clear − x from the main print.expose, blur the mean
-        // transmittance, d = ±γ·(log10 H_m − log10 ref), ref the smallest (positive) or largest (same) H_m
-        const amount = a['amount'] as number;
-        if (amount === 0) return this.mix(COMBINE.DENSITY_MASK, recv, recv, null, 0, [0, 0]);
+        // core maskDensityPolar: PD = x_clear − x from the main print.expose, blur the mean transmittance,
+        // d = ±γ·(log10 H_m − log10 ref), ref the smallest (positive) or largest (same) H_m
+        const gamma = a['gamma'] as number;
+        if (gamma === 0) return this.mix(MODE.DENSITY, recv, recv, null, 0, [0, 0]);
         const info = n.info as ImageInfo;
         const chain = this.chainOf(nid);
         const clear = clearExposure(this.physics.ctx(chain, chain.length - 1));
-        const T = await this.mix(COMBINE.TRANSMITTANCE_X, recv, null, null, 0, [...clear]);
+        const T = await this.mix(MODE.TRANSMITTANCE, recv, null, null, 0, [...clear]);
         const Hm = await this.gaussian(T, densityMaskSigma(a['radius_um'] as number, info.umPerPx.film) * scale);
         this.rt.textures.release(T);
         const mo = await this.reducer.moments(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
         const same = a['polarity'] === 'same';
-        const out = await this.mix(COMBINE.DENSITY_MASK, recv, Hm, null, 0, [same ? -amount : amount, Math.log10(same ? mo.max[0]! : mo.min[0]!)]);
+        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(same ? mo.max[0]! : mo.min[0]!)]);
         this.rt.textures.release(Hm);
         return out;
       }
-      case 'retouch.heal': {
-        // CHB-022 (src/retouch.ts, kernels/retouch.wgsl): source windows of the receiver at full resolution,
-        // core's seam coefficients, one composite pass on the grid
+      case 'clarity': {
+        // core print/clarity.ts: local contrast in lightness, midtone-weighted; the low-pass of Y at σ = radius on the print
+        const info = n.info as ImageInfo;
+        const chain = this.chainOf(nid);
+        const Yw = whiteAt(this.physics.ctx(chain, chain.length - 1))[1];
+        const low = await this.gaussian(recv, claritySigma(a['radius_mm'] as number, info.umPerPx.paper) * scale, 1);
+        try {
+          return await this.mix(MODE.CLARITY, recv, low, null, 0, [a['strength'] as number, Yw]);
+        } finally {
+          this.rt.textures.release(low);
+        }
+      }
+      case 'heal': case 'clone': {
+        // spots in order, each reading the image the spots before it left (src/retouch.ts, kernels/retouch.wgsl)
         if (this.retouchK?.rt !== this.rt) this.retouchK = { rt: this.rt, k: new Retouch(this.rt, (tx, w, h) => this.chain.readTexture(tx, w, h)) };
-        const win = async (box: Box): Promise<GPUTexture> => (await this.renderGraph(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box, umOut: t.umOut * scale })).tex;
-        return this.retouchK.k.apply(recv, parseSpots(a['spots'] as string), { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
+        const info = n.info as ImageInfo;
+        const win = async (box: Box): Promise<GPUTexture> => (await this.renderGraph(n.inputs[0]!, { ...t, outW: box.w, outH: box.h, region: box })).tex;
+        return this.retouchK.k.apply(recv, n.op, a['spots'] as readonly RepairSpot[], info.domain === 'scanner-density' ? 'density' : 'linear', { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region }, win);
       }
       default: {
         if (!FILM_OPS.has(n.op)) return fail('E_INTERNAL', `${n.op} is not a GPU barrier op`);
@@ -524,9 +526,9 @@ export class GpuEngine implements Engine {
     }
   }
 
-  /** A Gaussian blur of σ output px (engine/textures.ts); a new texture. */
-  private gaussian(src: GPUTexture, sigma: number): Promise<GPUTexture> {
-    return gaussianBlur(this.rt, this.blur, src, sigma, (t) => this.mix(COMBINE.COPY, t));
+  /** A Gaussian blur of σ output px, one channel or all (engine/textures.ts); a new texture. */
+  private gaussian(src: GPUTexture, sigma: number, channel?: number): Promise<GPUTexture> {
+    return gaussianBlur(this.rt, this.blur, src, sigma, (t) => this.mix(MODE.COPY, t), channel);
   }
 
   private dummy(): GPUTexture {
@@ -560,8 +562,7 @@ export class GpuEngine implements Engine {
   private async render<T>(n: Node, info: ImageInfo, region: Box, scale: number, precision: EvalTarget['precision'], read: (tex: GPUTexture, w: number, h: number) => Promise<T>): Promise<{ px: T; width: number; height: number; warnings: Diagnostic[] }> {
     const width = Math.max(1, Math.round(region.w * scale));
     const height = Math.max(1, Math.round(region.h * scale));
-    const um = (info.umPerPx.film ?? DEFAULT_UM_PER_PX) * (region.w / width);
-    const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision, umOut: um };
+    const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision };
     const r = await this.gpu(async () => {
       const g = await this.renderGraph(n.id, grid);
       try {

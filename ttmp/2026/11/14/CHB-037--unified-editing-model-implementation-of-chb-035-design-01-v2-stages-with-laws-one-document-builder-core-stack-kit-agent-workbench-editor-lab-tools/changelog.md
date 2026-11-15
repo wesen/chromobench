@@ -72,3 +72,13 @@ P2b: reference engine, mock and conformance on contract 1.0; goldens as format-3
 
 P4 one history: values Log/Draft/plan/diff (102a455, 98af7e8), contract EditLog deleted + LOG_RULES (e4cde19), shell store document tier = the log, Layer -> Draft, routes -> mounts (e236dba); diary 08-phase-p4-history.md
 
+||||||| 1c8eafe
+
+## 2026-11-14
+
+P3 (GPU on contract 1.0): light law fused or as passes, composite.mix, mask algebra, sequential coalesced heal/clone, clarity after core, blurs as one Gaussian; gpu-parity 47 passed on SwiftShader and Metal (commits 384dcb3, 639d6d9)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p3/packages/gpu/src/engine/light.ts — the light law on the GPU
+

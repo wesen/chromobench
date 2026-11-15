@@ -1,8 +1,8 @@
 // CHB-012 parity: the forward film path on the GPU against core's reference engine on the SAME graph
 // (guide §5.6 kernel table): source.xyz, capture.expose, film.couple (pointwise and diffused),
 // film.halation, film.develop and film.grain; pcg4d uniforms bit-identical; grain statistics; a
-// digital-raw recipe end to end. Each stage reports its worst difference so the spec can bound it.
-import { compile, defaultRecipe, Graph, sha256Hex, type Node, type SourceInfo } from '@chromobench/contract';
+// digital-raw document end to end. Each stage reports its worst difference so the spec can bound it.
+import { compile, cutNode, Graph, newDocument, sha256Hex, type Document, type FilmMedium, type Node, type SceneMedium, type SourceInfo } from '@chromobench/contract';
 import { gaussianKernelSum, RefEngine, uniformAt } from '@chromobench/core';
 import { GpuEngine } from '../engine-gpu.ts';
 import { FilmGpu } from '../film.ts';
@@ -94,7 +94,7 @@ export const FILM_TESTS: Record<string, T> = {
     const f = await frame();
     const W = f.info.width, H = f.info.height;
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => f.g.intern(op, inputs, args).node;
-    const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear' });
+    const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear', umPerPx: 36000 / Math.max(f.info.width, f.info.height) });
     const xyz = I('source.xyz', [src.id], { mode: (o['wb'] as string | undefined) ?? 'as-shot', temperature_K: 5500, tint: 0 });
     const ex = I('capture.expose', [xyz.id], { stock: 'kodak_portra_400', exposureEV: 0.5 });
     const cp = I('film.couple', [ex.id], { amount: 1, diffusion_um: 0 });
@@ -120,7 +120,7 @@ export const FILM_TESTS: Record<string, T> = {
     const f = await frame();
     const W = f.info.width, H = f.info.height;
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => f.g.intern(op, inputs, args).node;
-    const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear' });
+    const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear', umPerPx: 36000 / Math.max(f.info.width, f.info.height) });
     const ex = I('capture.expose', [I('source.xyz', [src.id], { mode: 'daylight', temperature_K: 5500, tint: 0 }).id], { stock: 'kodak_portra_400', exposureEV: 0 });
     const dv = I('film.develop', [ex.id], { push: 0, curves: 'datasheet' });
     const gr = I('film.grain', [dv.id], { amount: 1, size_um: 12, seed: 7 });
@@ -164,17 +164,25 @@ export const FILM_TESTS: Record<string, T> = {
     return { max, mean: sum / n };
   },
 
-  /** A digital-raw recipe through compile: the display image of both engines. */
+  /** A digital-raw document through compile (contract 1.0): the display image of both engines. */
   async 'film:recipe'() {
     const f = await frame();
-    const r = defaultRecipe('digital-raw', { sha256: f.info.sha256, name: 'synthetic.dng' });
-    r.capture!.whiteBalance.mode = 'as-shot';
-    r.capture!.development.grain.amount = 0;
-    const top = compile(r, f.g);
+    const d = newDocument('digital-raw', { sha256: f.info.sha256, name: 'synthetic.dng', width: f.info.width, height: f.info.height });
+    const scene = d.stages.scene!, film = d.stages.film!;
+    const sm = scene.medium as SceneMedium, fm = film.medium as FilmMedium; // newDocument's media are values, not links
+    const doc: Document = {
+      ...d,
+      stages: {
+        ...d.stages,
+        scene: { ...scene, medium: { ...sm, whiteBalance: { ...sm.whiteBalance, mode: 'as-shot' } } },
+        film: { ...film, medium: { ...fm, grain: { ...fm.grain, amount: 0 } } },
+      },
+    };
+    const top = cutNode(compile(doc, f.g), 'display');
     const disp = top.op === 'output.frame' ? f.g.get(top.inputs[0]!)! : top;
     const { a, b, c } = await both(f, disp);
     let finite = true;
     for (const v of a) if (!Number.isFinite(v)) finite = false;
-    return { ...diff(a, b, c, f.info.width, f.info.height, 6), finite, ops: [...new Set(f.g.closure(disp.id).map((d) => d.op))] };
+    return { ...diff(a, b, c, f.info.width, f.info.height, 6), finite, ops: [...new Set(f.g.closure(disp.id).map((x) => x.op))] };
   },
 };

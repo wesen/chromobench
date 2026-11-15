@@ -14,7 +14,8 @@ import { bradfordMatrix, D65 } from '@chromobench/core';
 import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { OUTPUT_TESTS } from './output-tests.ts';
-import { RETOUCH_TESTS } from './retouch-tests.ts';
+import { LAW_TESTS } from './law-tests.ts';
+import { BENCH_TESTS } from './bench-tests.ts';
 import { FILM_TESTS } from './film-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { loadDefaultPhysicsData } from '../physics/data.ts';
@@ -201,7 +202,8 @@ const TESTS: Record<string, Test> = {
   ...CHAIN_TESTS,
   ...SPATIAL_TESTS,
   ...OUTPUT_TESTS,
-  ...RETOUCH_TESTS,
+  ...LAW_TESTS,
+  ...BENCH_TESTS,
   ...FILM_TESTS,
 
   /** CHB-002's generated conformance suite against GpuEngine (fresh engine per case, shared device). */
@@ -236,8 +238,8 @@ const TESTS: Record<string, Test> = {
     const graph = new g();
     const src = graph.intern('source.pattern', [], { domain: 'camera-linear', width: 40, height: 30, seed: 9 }).node;
     const chainOps: [string, Record<string, unknown>][] = [
-      ['scan.density', {}], ['invert.dyes', { stock: 'kodak_gold_200', scanner: 'xt5-rgb-led' }], ['film.grain', { amount: 0.5 }],
-      ['print.expose', {}], ['print.lights', { logH: [0.1, 0, -0.05] }], ['print.develop', {}], ['view.reflect', {}], ['view.flare', {}], ['output.display', { knee: 'clip' }],
+      ['scan.density', {}], ['invert.dyes', { stock: 'kodak_gold_200', scanner: 'xt5-rgb-led' }],
+      ['print.expose', {}], ['print.combine', { filters: [{ logH: [0.1, 0, -0.05], amount: 1 }] }], ['print.develop', {}], ['view.reflect', {}], ['view.flare', {}], ['output.display', { knee: 'clip' }],
     ];
     let prev = src;
     const out: Record<string, unknown> = {};

@@ -16,7 +16,7 @@ var<workgroup> sh: array<f32, 896>;
 const OP_DENSITY: u32 = 1u;   // T → −log10(T / Treb)
 const OP_DYES: u32 = 2u;      // D → (c, residual) by solve table or exact solve
 const OP_EXPOSE: u32 = 3u;    // c → x = clearL − PD(c) (table, or the exact integral on export)
-const OP_ADD: u32 = 4u;       // v.rgb += p0.rgb
+const OP_LIGHT: u32 = 4u;     // print.combine fused (no texture terms): x′ = log10 max(p0·10^x + p1, 1e-8); op.y & 1: x′ = max(x + p0, −8)
 const OP_DEVELOP: u32 = 5u;   // x → paper dyes by the paper curves
 const OP_REFLECT: u32 = 6u;   // c_p → XYZ by the print table
 const OP_FLARE: u32 = 7u;     // XYZ → (XYZ + p0) * p1.x
@@ -24,11 +24,12 @@ const OP_DISPLAY: u32 = 8u;   // XYZ → encoded RGB
 const OP_GRAIN: u32 = 9u;     // c += amount √(c + 0.05) σ N(frame x, y, layer, seed)
 const OP_DECODE: u32 = 10u;   // encoded source → linear (p0.x: 0 linear, 1 sRGB, 2 gamma 2.2)
 const OP_ADAPT: u32 = 11u;    // XYZ → B⁻¹ · diag(p0.xyz) · B · XYZ (Bradford, view.adapt)
-// masks (CHB-010; core print/masks.ts): one value replicated in rgb, a = 1
+// masks (contract 1.0, design §25; core print/masks.ts): one value replicated in rgb, a = 1
 const OP_MASK_LUM: u32 = 12u;      // mean rgb normalised to p1.xy, band p0 = (above, below, softness)
-const OP_MASK_GRADIENT: u32 = 13u; // p0 = (from.x, from.y, to.x, to.y), at the frame pixel centre
+const OP_MASK_LINEAR: u32 = 13u;   // p0 = (from.x, from.y, to.x, to.y), at the frame pixel centre
 const OP_MASK_ELLIPSE: u32 = 14u;  // p0 = (cx, cy, a, b), p1 = (cos, sin): antialiased tilted ellipse
-const OP_MASK_NOT: u32 = 15u;      // 1 − m
+const OP_MASK_INVERT: u32 = 15u;   // 1 − m
+const OP_MASK_CONSTANT: u32 = 17u; // p0.x everywhere
 const OP_AFFINE: u32 = 16u;        // v.rgb · p0.rgb + p1.rgb (scan.flare, contract 0.3)
 
 // Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
@@ -316,7 +317,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         if ((U.misc.z & 2u) != 0u) { v = vec4<f32>(p0.rgb + lg10(specSum(7u * U.misc.w, v.rgb)), 0.0); }
         else { v = vec4<f32>(p0.rgb - lut3(pdT, v.rgb, U.rangesA.z, U.rangesA.w).xyz, 0.0); }
       }
-      case 4u: { v = vec4<f32>(v.rgb + p0.rgb, v.a); }
+      case 4u: {
+        // the light law without texture terms (src/engine/light.ts lightPointwise; contract lightH)
+        if ((op.y & 1u) != 0u) { v = vec4<f32>(max(v.rgb + p0.rgb, vec3<f32>(-8.0)), 0.0); }
+        else { v = vec4<f32>(lg10(max(p0.rgb * p10(v.rgb) + p1.rgb, vec3<f32>(1e-8))), 0.0); }
+      }
       case 5u: {
         // op.y & 1: the grade (CHB-010), x′ = pivot + γ·(x − pivot) with p0 = pivot (the aim grey), p1 = γ
         var x = v.rgb;
@@ -383,6 +388,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       }
       case 15u: { let m = 1.0 - v.r; v = vec4<f32>(m, m, m, 1.0); }
       case 16u: { v = vec4<f32>(v.rgb * p0.rgb + p1.rgb, v.a); }
+      case 17u: { v = vec4<f32>(p0.x, p0.x, p0.x, 1.0); }
       default: {}
     }
   }
