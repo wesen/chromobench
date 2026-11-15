@@ -14,23 +14,20 @@ Hash-consed graph; content-addressed DAG; Merkle DAG; structural sharing of expr
 
 ## Motivation
 
-In the running example, every slider movement produces a new recipe, and the recipe is compiled into a graph of
-about thirty operations: decode, scan conditioning, film, paper exposure, development, viewing, display. A naive
-engine builds fresh node objects on every compile and caches results by object identity. Four things go wrong.
+In the running example, every slider movement produces a new recipe, compiled into a graph of about thirty
+operations: decode, scan conditioning, film, paper exposure, development, viewing, display. A naive engine builds
+fresh node objects on every compile and caches results by object identity. Four things go wrong.
 
 1. **Undo misses the cache.** Dragging the exposure time from 10 s to 12 s and back produces a graph equal to the
    first one, but its nodes are new objects, so the result computed seconds ago is not found.
-2. **Shared prefixes are recomputed.** Changing the paper grade does not change the film stage, but the film nodes
-   are new objects too, so nothing upstream can be reused.
-3. **Workers disagree.** The agent's scripting sandbox runs in a worker, the CPU engine in another, and the interface
-   on the main thread; each builds its own graph. To ask a worker for "the print node", you need a name that means
-   the same thing in every one of them.
-4. **Tests compare spellings.** `{ time: 10, fstop: 8 }` and `{ fstop: 8, time: 10 }`, or an argument left at its
-   default and the same argument given explicitly, are different objects but the same computation.
+2. **Shared prefixes are recomputed.** Changing the paper grade leaves the film stage alone, but its nodes are new
+   objects too.
+3. **Workers disagree.** The scripting sandbox, the CPU engine and the interface each build their own graph; asking
+   a worker for "the print node" needs a name that means the same thing in all of them.
+4. **Tests compare spellings.** `{ time: 10, fstop: 8 }` and `{ fstop: 8, time: 10 }`, or a default omitted and the
+   same default given, are different objects but the same computation.
 
-The same problem appears wherever computations are rebuilt often and compared by value: a build system deciding
-whether an action must rerun, a shader-graph editor deciding which material variants to compile, a notebook deciding
-which cells are stale.
+Build systems, shader-graph editors and notebooks deciding what is stale have the same problem.
 
 ## Problem
 
@@ -39,25 +36,29 @@ the computation is equal?**
 
 ## Forces
 
-- **Rebuilding against reuse.** Rebuilding the graph from the document on every edit keeps the code simple, but
-  only stable names let the rebuilt graph reuse earlier work.
+- **Rebuilding against reuse.** Rebuilding the graph on every edit keeps the code simple; only stable names let it
+  reuse earlier work.
 - **Spelling against meaning.** Arguments arrive in many spellings (key order, defaults omitted or explicit, `-0`
-  against `0`); names must depend on meaning only.
-- **Cheap names against safe names.** A short hash is fast to compute and compare; a long one makes collisions
-  negligible. A collision silently returns a wrong picture.
-- **One process against many.** Identity by object reference is free inside one heap and meaningless across two.
-- **Fine names against coarse caches.** A node name says what was computed, not at which scale, region or
-  precision; the cache key must add those.
+  against `0`); names must depend on meaning only, and different meanings must never share a name.
+- **Cheap names against safe names.** A short hash is fast; a long one makes collisions, which silently return a
+  wrong picture, negligible.
+- **One process against many.** Identity by object reference is free inside one heap and meaningless across two;
+  a name that arrives from elsewhere is a claim until it is checked.
+- **Fine names against coarse caches.** A name says what was computed, not at which scale, region or precision; the
+  cache key must add those, and the cache must be free to forget.
 
 ## Solution
 
-**Therefore: build every node through one `intern` operation. It canonicalises the arguments (sorted keys, defaults
-filled, numbers normalised, node references moved out of the arguments into the inputs), hashes the length-prefixed
-operation name, canonical arguments and input ids into the node's id, and returns the existing node when that id is
-already in the graph. The id depends on nothing else (no counter, no salt, no build number), which is why another
-process that interns the same definitions reaches the same ids. Make nodes immutable. Send a graph to another process
-as the definitions of the requested node's closure, inputs first, and let the receiver re-intern them. Keep results
-in a separate, evictable cache keyed by the node id plus the evaluation target (scale, region, precision).**
+**Therefore: build every node through one `intern` operation. It looks the operation up in a registry that declares
+its arguments and its computation together, canonicalises the arguments (unknown keys refused, defaults filled,
+numbers normalised, keys sorted, node references moved into the inputs), hashes the length-prefixed operation name,
+canonical arguments and input ids into the node's id, and returns the existing node when that id is already in the
+graph. The id depends on nothing else (no counter, no salt, no build number), so another process that interns the
+same definitions reaches the same ids. Make nodes immutable. Send a graph to another process as the definitions of
+the requested node's closure, inputs first, each with its id; the receiver checks every definition and recomputes
+every id before interning any, so an import is all or nothing. Keep results in a separate, bounded cache keyed by
+node id plus evaluation target (scale, region, precision), and let each evaluation hold its own results until it
+returns.**
 
 ## Applicability
 
@@ -70,35 +71,34 @@ Use it when:
 Do not use it when:
 
 - the graph is built once and evaluated once (a batch conversion); identity buys nothing;
-- operations have hidden inputs (time, randomness without a seed, global state) that the hash cannot see; make them
+- operations have hidden inputs (time, unseeded randomness, global state) that the hash cannot see; make them
   explicit arguments first, or the names lie;
-- argument values are huge (whole images as arguments); hash a content key of the value instead, or pass it as an
-  input node.
+- argument values are huge (whole images); hash a content key of the value, or pass it as an input.
 
 ## Structure
 
 | Participant | Responsibility |
 |---|---|
-| **Operation registry** | knows each operation's argument specs, so `intern` can fill defaults and validate |
-| **Canonicaliser** | turns arguments into one byte string per meaning (sorted keys, defaults, normalised numbers) |
-| **Graph** | `intern(op, inputs, args) → node`; a map from id to node; `closure(id)`; `adopt(defs)` |
-| **Node** | immutable: id, op, input ids, canonical args, inferred info (size, domain) |
-| **Node definition** | the transferable form `{ op, inputs, args }` |
-| **Result cache** | keyed by node id plus evaluation target (scale, region, precision) |
+| **Operation registry** | one declaration per operation: input count, argument specs and defaults, the computation |
+| **Canonicaliser** | turns arguments into one byte string per meaning; refuses what has no meaning |
+| **Graph** | `intern(op, inputIds, args) → node`; a map from id to node; `closure(id)`; `adopt(defs)` |
+| **Node** | immutable: id, op, input ids, canonical args (plus size or domain, if intern-time checks use them) |
+| **Node definition** | the transferable form `{ id, op, inputs, args }` |
+| **Result cache** | keyed by node id plus evaluation target; bounded and evictable |
 
 ## Collaborations
 
-1. The compiler walks the document and calls `intern` bottom-up; each call returns a node whose inputs already exist.
-2. `intern` validates the receiver's kind, binds and canonicalises arguments, computes the id and returns the stored
-   node if the id exists.
-3. To hand a node to another process, the sender sends `closure(node)`, the definitions it depends on in
-   topological order (inputs first); the receiver calls `adopt`, which re-interns them in that order, refuses unknown
-   operations and cycles, and arrives at the same ids.
-4. An evaluator asked for a node first looks up `(id, target)` in its cache.
+1. The compiler walks the document and calls `intern` bottom-up.
+2. `intern` prepares the node (lookup, checks, canonical arguments, id) without changing anything, then returns the
+   stored node or inserts the new one.
+3. To hand a node to another process, the sender sends `closure(node)`, inputs first. The receiver's `adopt`
+   prepares and checks every definition before inserting any, so a refused import leaves the graph untouched.
+4. An evaluator walks down only until it meets cached results, computes the rest inputs first, and returns a copy.
 
 ```mermaid
 flowchart LR
   D[Document] -->|compile| I[intern op, inputs, args]
+  X[Definitions from another process] -->|adopt: check all, then insert| I
   I --> C[canonicalise]
   C --> H[hash op + args + input ids]
   H -->|id exists| N[existing node]
@@ -107,99 +107,113 @@ flowchart LR
   M --> E
 ```
 
-Read it left to right: every path to a node goes through the canonicaliser and the hash, so two compiles of equal
-documents meet at the same nodes before any evaluation happens.
+Every path to a node, local or imported, goes through the canonicaliser and the hash, so equal documents meet at
+the same nodes before any evaluation happens.
 
 ## Sketch
 
 ```text
-value Node: id, op, inputs, args, info
-value NodeDef: op, inputs, args
+value Node: id, op, inputs, args                   -- inputs are ids; NodeDef has the same fields
 
--- canonical form: one spelling per meaning
-canon(op, raw) → Args:
-  args ← defaults(op) ⊕ raw                       -- explicit defaults equal omitted ones
-  for each a in args: args[a] ← normalise(a, args[a])   -- -0 → 0, node refs → ids, sorted keys
-  return args
+-- one declaration per operation: arguments and computation together
+registry["blur"] ← OpDecl(inputs: 1, args: { radius: int ≥ 0 = 1 }, run: (imgs, args, t) → …)
+
+prepare(known, opName, inputs, raw) → NodeDef:      -- every check, no change
+  decl ← registry(opName) or refuse("unknown-op", opName)
+  check count(inputs) = decl.inputs, every input in known, kinds and domains (Chapter 5)
+  args ← normalise(defaults(decl) ⊕ raw)           -- unknown keys, NaN refused; -0 → 0; sorted
+  id ← sha256(DOMAIN ++ len(opName) ++ opName ++ len(json(args)) ++ json(args)
+              ++ concat(inputs))                    -- 32-byte ids are self-delimiting
+  return NodeDef(id, opName, inputs, args)
 
 intern(graph, opName, inputs, raw) → Node:
-  op ← registry(opName) or refuse("unknown-op", opName)
-  check receiver kinds and domains of inputs       -- see Chapter 5
-  args ← canon(op, raw)
-  -- input ids are fixed-width (32 bytes), so their concatenation is self-delimiting
-  id ← hash(len(opName) ++ opName ++ len(json(args)) ++ json(args) ++ concat(bytes(i) for i in
-      inputs))
-  if graph.has(id): return graph[id]
-  node ← Node(id, opName, inputs, args, infer(op, inputs, args))
-  graph[id] ← node
-  return node
+  d ← prepare(ids(graph), opName, inputs, raw)
+  if not graph.has(d.id): graph[d.id] ← Node(d)
+  return graph[d.id]
 
-closure(graph, id) → list of NodeDef               -- inputs before their users
-adopt(graph, defs) → nodes: for d in defs: intern(graph, d.op, d.inputs, d.args)
+adopt(graph, defs) → Node:                          -- all or nothing
+  known, checked ← ids(graph), []
+  for d in defs:                                    -- pass 1 refuses before anything changes
+    p ← prepare(known, d.op, d.inputs, d.args)      -- inputs known or defined earlier
+    p.id = d.id or refuse("id-mismatch", d.id); known ← known + p.id; checked ← checked ++ [p]
+  for p in checked: if not graph.has(p.id): graph[p.id] ← Node(p)
+  return graph[last(checked).id]
+
+postorder(graph, root, stopAt) → ids                -- inputs first, each once; explicit stack
+closure(graph, id) → list of NodeDef                -- postorder(graph, id) as definitions
+
+evaluate(graph, root, target, cache) → Image:
+  memo ← {}                                         -- this evaluation's results; never evicted
+  hit(id): v ← cache.get((id, target)); if v ≠ none: memo[id] ← v; return v ≠ none
+  for id in postorder(graph, root, stopAt: hit):    -- descends only below misses
+    if id in memo: continue
+    n ← graph[id]
+    memo[id] ← registry(n.op).run([memo[i] for i in n.inputs], n.args, target)
+    cache.put((id, target), memo[id])               -- the cache may evict; the memo may not
+  return copy(memo[root])                           -- callers never alias a cached result
 
 -- in use: undo meets the cache
-g ← new Graph
 a ← compile(recipeAt10s, g); b ← compile(recipeAt12s, g); c ← compile(recipeAt10s, g)
-assert c.print.id = a.print.id                     -- the 10 s result is found again
+assert c.print.id = a.print.id                      -- the 10 s result is found again
 ```
 
 ## Implementation notes
 
-1. **Length-prefix every field before hashing.** Concatenating `op ++ args` without lengths lets two different
-   (op, args) pairs produce the same bytes. The originating project writes a 32-bit length before the op name and
-   before the canonical JSON; goja-cv does the same with SHA-256.
-2. **Test canonicalisation as a law, not as examples.** The originating project has a property test ("hash-consing:
-   key order, explicit defaults, -0 → same id; any change → different id") with a generator and shrinking. Both
-   halves matter: equal meanings must collide, and every real change must not.
-3. **Node-typed arguments become inputs.** A mask passed as an argument is a dependency. Replace the node object by
-   its id in the arguments and append it to the inputs, so the hash covers it and the scheduler sees the edge.
-4. **Validate at intern time, refuse with a fix.** The receiver's kind and domain are checked where the node is
-   made, and the refusal names what to call first (Chapter 5). A graph that cannot contain an ill-typed node needs
-   no later validation pass.
-5. **Choose the cache granularity deliberately.** The originating project caches only whole final images, so a drag
-   on a late operation re-runs every earlier stage from the source. Interning makes intermediate caching *possible*;
-   it does not make it happen. Decide which nodes are checkpoints (Chapter 7).
-   The key itself must add the evaluation target: the running example keys GPU results by `id | scale | region |
-   precision`; forgetting one of these returns a thumbnail where a full render was asked for.
-6. **Hash width is a risk decision; prefer wide.** Editor lab (a browser photo editor with a tiled engine) used a
-   52-bit key so it fits a JavaScript number; by the birthday bound n²/2^(b+1), 10⁵ live keys give about a 10⁻⁶
-   chance of any collision. The running example and goja-cv (a Go image-analysis engine) use 256-bit SHA-256 ids;
-   the cost is negligible next to pixel work. If you must use a short key, store the canonical bytes beside the node
-   and compare them on a hit; darktable guards its 64-bit pipe hashes by checking the buffer size on a match.
-7. **Canonicalise numbers with one routine.** `-0` and `0`, `1` and `1.0`, `1e21` and `1e+21` must serialise alike;
-   `NaN` should be refused, not hashed. Parameters that come from sliders may need quantising to a fixed precision so
-   that 0.30000000000000004 and 0.3 are one node.
-8. **Changing canonicalisation renames everything.** A new default or normalisation rule changes every id and
-   invalidates every cache, persistent ones included. Treat it as a format version: record it, and include the
-   version in persistent keys.
-9. **A hidden input turns names into lies.** Grain needs a seed; a table depends on a data pack. The running
-   example puts the seed in the arguments and hashes the *contents* of the arrays a table builder consumes, so a
-   data update changes the key "without anyone bumping a version".
-   The same goes for anything a result reports: goja-cv replays evaluation warnings when it serves a value from its
-   cache, or a cached answer would arrive without the warning the first one had.
-10. **Keys built from input keys cannot cut off early.** A change below always changes every name above, even when
-   the change below produced identical pixels. Editor lab measured 33–52 % avoidable work above masked edits. If
-   that matters, add output hashes (a verifying trace) at chosen checkpoints.
+1. **Length-prefix every field before hashing.** Concatenating `op ++ args` without lengths, or with delimiters,
+   lets two different pairs produce the same bytes. The originating project and goja-cv (a Go image-analysis
+   engine) write a length before the op name and before the canonical JSON.
+2. **Canonicalise numbers with one routine, and do not round there.** `-0` and `0`, `1` and `1.0`, `1e21` and
+   `1e+21` must serialise alike; `NaN` and unknown argument names are refused, since a typo that yields a valid
+   node yields a misleading name. Do not quantise: 0.3 and 0.30000000000000004 are different computations. Round
+   noise digits at the control that chooses the value (Chapter 2's step).
+3. **Node-typed arguments become inputs.** A mask passed as an argument is a dependency. Replace the node by its id
+   in the arguments and append it to the inputs, so the hash covers it and the scheduler sees the edge.
+4. **Validate at intern time; keep each operation in one declaration.** Input counts, ranges, kinds and domains
+   (Chapter 5) are checked where the node is made, so the graph cannot hold an ill-typed node. With the argument
+   spec and the computation in separate tables, a new operation is two or three edits; one declaration makes it one.
+5. **An import verifies before it interns.** Recompute each definition's id and refuse a mismatch; refuse inputs
+   neither known nor defined earlier (which excludes cycles); change nothing until every definition has passed.
+6. **Walk with an explicit stack, and write the walk once.** Editor chains thousands of nodes deep overflow
+   recursive evaluation and export. One iterative post-order walker, shared by closure and evaluation, removes the
+   overflow and the duplicated traversal.
+7. **Cache every node, bound the cache by bytes, keep evaluation off it.** Interning makes reuse possible, not
+   actual: the originating project caches only final images, so a drag on a late operation re-runs every earlier
+   stage. Cache every node, evict least-recently-used by bytes, and let each evaluation keep its own results; a
+   design that reads its inputs back from the cache breaks when an eviction lands in between. Key by `id | scale |
+   region | precision`, and hand out copies or read-only views so callers cannot change a cached result.
+8. **Hash width is a risk decision; prefer wide.** Editor lab (a browser photo editor) used a 52-bit key to fit a
+   JavaScript number; by the birthday bound n²/2^(b+1), 10⁵ live keys give about a 10⁻⁶ chance of a collision.
+   The running example and goja-cv use 256-bit SHA-256, cheap next to pixel work and needing no byte comparison
+   on a hit; only a short key needs that check (darktable compares buffer sizes when its 64-bit hashes match).
+9. **Changing canonicalisation renames everything.** A new default or normalisation rule changes every id and
+   invalidates every cache. Put a tag for the canonical form into the hash (`DOMAIN` in the sketch) so ids made
+   under two rules never coincide; write a version into exports only if import checks it.
+10. **A hidden input makes names lie, and so does a raw one.** Grain needs a seed; a table depends on a data pack.
+   The running example puts the seed in the arguments and hashes the *contents* of a table builder's arrays.
+   Computations must read the canonical arguments: a generator seeded from the raw value gives `-0` and `0` one id
+   and two pictures. Warnings belong to a result too: goja-cv replays them when it serves a cached value.
+11. **Test identity as laws, against independent references, across a real process.** The originating project's
+   property test ("key order, explicit defaults, -0 → same id; any change → different id") checks both halves.
+   Compare pixels with a separate reference (Chapter 3), and send closures to a second process, not a second graph.
 
 ## Variations
 
-- **Merkle tile keys.** Editor lab names *tiles* of each layer by a hash of the layer's settings, the pixel revisions
-  it reads and the keys of the tiles below that its apron touches. Finer reuse for local edits; more keys to compute
-  (0.2 ms per frame at 128 px tiles, 1.3 ms at 64 px).
-- **Verifying traces.** Name results by a hash of their *output* instead of their inputs; enables early cutoff, but
-  a result must be computed before anything above it can be named.
-- **Interning without hashing.** A structural map keyed by `(op, args, input ids)` in one process; cheaper, but not
-  transferable.
-- **Version counters.** Each input carries a revision number and results store the revisions they saw. Simple for
-  mutable documents; breaks across processes and makes undo miss.
+- **Merkle tile keys.** Editor lab names each layer's *tiles* by a hash of its settings, the pixel revisions it
+  reads and the keys of the tiles below its apron. Finer reuse for local edits; more keys (1.3 ms per frame at 64 px).
+- **Verifying traces.** Input-built keys cannot cut off early: a change below renames everything above, even when
+  it produced identical pixels (Editor lab measured 33–52 % avoidable work above masked edits). Naming checkpoint
+  results by a hash of their *output* restores early cutoff, but a result must exist before anything above is named.
+- **Interning without hashing.** A map keyed by `(op, args, input ids)`; cheaper, not transferable.
+- **Version counters.** Inputs carry revision numbers and results store the revisions they saw. Simple for mutable
+  documents; breaks across processes and makes undo miss.
 
 ## Consequences
 
 - \+ Undo, redo and toggling hit the cache with no invalidation logic.
-- \+ Processes and machines agree on names; graphs travel as definitions.
-- \+ Tests compare ids instead of structures; spelling differences cannot cause false failures.
-- \+ Every node is immutable, so evaluation can be parallel; only interning needs a single writer.
-- − Every argument must be canonicalisable and every input explicit; a forgotten hidden input causes stale results
+- \+ Processes and machines agree on names; graphs travel as definitions and are checked on arrival.
+- \+ Tests compare ids, so spelling differences cannot cause false failures.
+- \+ Nodes are immutable, so evaluation can be parallel; only interning needs a single writer.
+- − Every argument must be canonicalisable and every input explicit; a forgotten hidden input gives stale results
   that look correct.
 - − Interning costs a hash per node per compile; negligible for tens of nodes, measurable for per-tile keys.
 - − Names built from inputs cannot express "unchanged output"; early cutoff needs a second mechanism.
@@ -210,17 +224,22 @@ assert c.print.id = a.print.id                     -- the 10 s result is found a
 - **Nix and Bazel** key build actions by a hash of the command and the hashes of its inputs.
 - **darktable** keys its pixelpipe cache by a hash of the image, the pipe type and every enabled module's
   parameters up to that module, plus the region.
-- **libvips** reuses completed operations through a small in-process cache keyed by the operation and its
-  arguments: the same idea without transferable ids.
-- **goja-cv** hash-conses image-analysis nodes with SHA-256 over the op key, canonical arguments, metadata and input
-  hashes, and keys its evaluation cache by node hash, quantised scale and input signatures.
-- Hash consing is an old technique in Lisp and ML implementations; value numbering in compilers is the same idea in
-  compiler form, without names that travel between processes.
+- **libvips** reuses operations through an in-process cache keyed by operation and arguments.
+- **goja-cv** hash-conses nodes with SHA-256 over op key, canonical arguments, metadata and input hashes.
+- Hash consing is old in Lisp and ML; value numbering is the same idea inside compilers.
+
+## Validation
+
+Four agents with this chapter and one without built the same engine. All passed the hidden tests; the blind design
+review ranked every chapter run above the control, which accepted unknown arguments, hashed with delimiters into a
+truncated key and exported shared inputs once per path. This version drops notes that cost code without paying back
+and adds what the best runs found (`docs/patterns/experiments/RESULTS.md`).
 
 ## Related chapters
 
 - [Chapter 2 · Unit-Tagged Parameter Catalogue](02-unit-tagged-parameter-catalogue.md) supplies the defaults and
   specs canonicalisation needs.
+- [Chapter 3 · Reference Oracle with Negative Controls](03-reference-oracle.md) supplies independent references.
 - [Chapter 5 · Domain-Typed Image Pipeline](05-domain-typed-pipeline.md) checks edges at intern time.
 - [Chapter 7 · Barrier-Cut Fusion](07-barrier-cut-fusion.md) plans evaluation over the interned graph.
 - [Chapter 9 · Vector Edit Document](09-vector-edit-document.md) is what gets compiled into it.
