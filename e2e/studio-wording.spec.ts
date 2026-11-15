@@ -14,7 +14,7 @@ const file = (name: string, n: number): { name: string; mimeType: string; buffer
   return { name, mimeType: 'image/tiff', buffer: b };
 };
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
-const time = (page: Page) => page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s);
+const time = (page: Page) => page.evaluate(() => (window.chromobench.get('main.params.time_s') as number));
 
 test('typed values, names, undo naming and round drags', async ({ page }) => {
   const errors: string[] = [];
@@ -26,7 +26,7 @@ test('typed values, names, undo naming and round drags', async ({ page }) => {
   await page.setInputFiles('#file', [file('first.tif', 1), file('second.tif', 2)]);
   await opened(page, 2);
 
-  const arg = page.locator('.cb-arg[data-path="print.enlarger.time_s"]').first();
+  const arg = page.locator('.cb-arg[data-path="main.params.time_s"]').first();
   const field = arg.locator('.cb-num');
   const toast = page.locator('.ck-toast').last();
   await expect(field).toHaveAttribute('title', /7,5.*\+1\/3 st/);
@@ -69,7 +69,7 @@ test('typed values, names, undo naming and round drags', async ({ page }) => {
   await page.keyboard.press('Escape');
 
   // F9: stock ids read as names, without a raw id above the menu
-  const paper = page.locator('.cb-arg[data-path="print.paper"]').first();
+  const paper = page.locator('.cb-arg[data-path="stages.darkroom.medium.paper"]').first();
   await expect(paper.locator('select option:checked')).toHaveText('Kodak Portra Endura');
   await expect(paper.locator('.cb-arg-v')).toHaveText('');
 

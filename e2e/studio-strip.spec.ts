@@ -16,7 +16,7 @@ const STRIP = { name: 'strip-07.tif', mimeType: 'image/tiff', buffer: stripTiff(
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const state = (page: Page) => page.evaluate(() => {
   const s = window.chromobench.state() as any;
-  return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.recipes[id]?.view.frame.crop ?? null, time: s.recipes[id]?.print.enlarger.time_s ?? null }));
+  return s.catalog.order.map((id: string) => ({ id, name: s.catalog.frames[id].name, crop: s.docs[id]?.geometry.crop ?? null, time: s.docs[id]?.stages.darkroom.stack.items.main.params.time_s ?? null }));
 });
 
 let errors: string[] = [];
@@ -55,7 +55,7 @@ test('a strip opens as three frames, each cropped and printed on its own; remove
   await page.evaluate(() => window.chromobench.run('frame.remove'));
   await idle(page);
   expect((await state(page)).map((f: { id: string }) => f.id)).toEqual([s[0].id, s[2].id]);
-  // the same file again brings it back, with its recipe
+  // the same file again brings it back, with its edit
   await page.setInputFiles('#file', STRIP);
   await page.waitForFunction(() => window.chromobench.studio.frames.all().length === 3, null, { timeout: 60_000 });
   await idle(page);

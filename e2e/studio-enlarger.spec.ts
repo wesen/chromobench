@@ -38,8 +38,8 @@ function photo(): { name: string; mimeType: string; buffer: Buffer } {
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const enlarger = (page: Page) =>
   page.evaluate(() => {
-    const p = window.chromobench.log!.committed.print;
-    return { mode: p.enlarger.mode, time: p.enlarger.time_s, lights: [...p.lights.logH] };
+    const cb = window.chromobench;
+    return { mode: cb.get('stages.darkroom.medium.mode') as string, time: cb.get('main.params.time_s') as number, lights: [...(cb.get('lights.params.logH') as number[])] };
   });
 /** mean display value over a 9×9 grid of the print's pixels */
 const mean = (page: Page) =>
@@ -54,8 +54,8 @@ const mean = (page: Page) =>
   });
 const arg = (page: Page, path: string) => page.locator(`.cb-arg[data-path="${path}"]`).first();
 const darkroom = (page: Page) => page.locator('.ck-panel[data-panel="controls-darkroom"]').first();
-/** the recipe paths the frame's log recorded (its History) */
-const paths = (page: Page) => page.evaluate(() => window.chromobench.log!.entries.map((e) => (e.m as { path?: string }).path ?? e.m.op));
+/** the document paths the frame's steps in effect set (its History) */
+const paths = (page: Page) => page.evaluate(() => window.chromobench.paths());
 
 async function boot(page: Page, layout = '', o: { keep?: boolean } = {}): Promise<string[]> {
   const errors: string[] = [];
@@ -70,11 +70,11 @@ async function goto(page: Page, layout = '', o: { keep?: boolean } = {}): Promis
 }
 async function open(page: Page, file: { name: string; mimeType: string; buffer: Buffer }): Promise<void> {
   await page.setInputFiles('#file', file);
-  await page.waitForFunction(() => !!window.chromobench.log, null, { timeout: 120_000 });
+  await page.waitForFunction(() => !!window.chromobench.doc, null, { timeout: 120_000 });
   await idle(page);
 }
 async function typeTime(page: Page, v: string): Promise<void> {
-  const box = arg(page, 'print.enlarger.time_s').locator('.cb-num');
+  const box = arg(page, 'main.params.time_s').locator('.cb-num');
   await box.fill(v);
   await box.press('Enter');
   await idle(page);
@@ -91,11 +91,11 @@ test('classic: the real enlarger by default; Time changes the print; Lighter is 
   await expect(darkroom(page)).not.toContainText(NO_FRAME);
   const e0 = await enlarger(page);
   expect(e0.mode).toBe('real');
-  await expect(arg(page, 'print.enlarger.time_s')).toBeVisible();
-  await expect(arg(page, 'print.enlarger.fstop')).toBeVisible();
+  await expect(arg(page, 'main.params.time_s')).toBeVisible();
+  await expect(arg(page, 'main.params.fstop')).toBeVisible();
   // a negative shows its film and the scanner, not the film a photo is shot on (F23)
-  await expect(arg(page, 'scan.scanner')).toBeVisible();
-  await expect(arg(page, 'capture.stock')).toBeHidden();
+  await expect(arg(page, 'stages.scan.medium.scanner')).toBeVisible();
+  await expect(arg(page, 'stages.film.medium.stock')).toBeHidden();
 
   // F17: twice the time prints darker, half the time lighter, and the same time prints the same picture
   await typeTime(page, '10');
@@ -133,16 +133,16 @@ test('classic: a photo prints in real mode and shows the film it is shot on, wit
   const errors = await boot(page);
   await open(page, photo());
   await page.keyboard.press('d');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.kind)).toBe('digital-raw');
+  expect(await page.evaluate(() => (window.chromobench.doc?.stages.scan ? 'negative-scan' : 'digital-raw'))).toBe('digital-raw');
   expect((await enlarger(page)).mode).toBe('real');
   // F31: an automatic first print, density only (alpha 0): the three lights stay together, the colour is the camera's
-  const auto = await page.evaluate(() => window.chromobench.log!.committed.print.lights.auto);
+  const auto = await page.evaluate(() => window.chromobench.get('lights.source'));
   expect(auto).toMatchObject({ method: 'integrate', alpha: 0, applied: true });
   const l = (await enlarger(page)).lights;
   expect(Math.max(...l) - Math.min(...l)).toBeLessThan(1e-5);
-  await expect(arg(page, 'capture.stock')).toBeVisible();
-  await expect(arg(page, 'scan.scanner')).toBeHidden();
-  await expect(arg(page, 'scan.stock')).toBeHidden();
+  await expect(arg(page, 'stages.film.medium.stock')).toBeVisible();
+  await expect(arg(page, 'stages.scan.medium.scanner')).toBeHidden();
+  await expect(arg(page, 'stages.scan.medium.stock')).toBeHidden();
   await expect(darkroom(page)).toContainText('A photo prints as if the scene had been shot on this film.');
   const m10 = await mean(page);
   await typeTime(page, '20');
@@ -157,9 +157,9 @@ test('tiny: normalised by default; Time and Aperture hidden; Lighter moves the l
   await open(page, NEG);
   const e0 = await enlarger(page);
   expect(e0.mode).toBe('normalised');
-  await expect(arg(page, 'print.enlarger.mode')).toBeVisible();
-  await expect(arg(page, 'print.enlarger.time_s')).toBeHidden();
-  await expect(arg(page, 'print.enlarger.fstop')).toBeHidden();
+  await expect(arg(page, 'stages.darkroom.medium.mode')).toBeVisible();
+  await expect(arg(page, 'main.params.time_s')).toBeHidden();
+  await expect(arg(page, 'main.params.fstop')).toBeHidden();
   await expect(darkroom(page)).toContainText('so Time and Aperture are hidden');
 
   const m0 = await mean(page);
@@ -170,14 +170,14 @@ test('tiny: normalised by default; Time and Aperture hidden; Lighter moves the l
   expect(e1.time).toBe(e0.time);
   e1.lights.forEach((l, i) => expect(l).toBeCloseTo(e0.lights[i]! - 0.025, 6));
   expect(await mean(page)).toBeGreaterThan(m0);
-  expect(await paths(page)).toContain('print.lights.logH');
-  expect(await paths(page)).not.toContain('print.enlarger.time_s');
+  expect(await paths(page)).toContain('lights.params.logH');
+  expect(await paths(page)).not.toContain('main.params.time_s');
 
   // the visible select: the real enlarger, with its Time and Aperture
-  await arg(page, 'print.enlarger.mode').locator('select').selectOption('real');
+  await arg(page, 'stages.darkroom.medium.mode').locator('select').selectOption('real');
   await idle(page);
   expect((await enlarger(page)).mode).toBe('real');
-  await expect(arg(page, 'print.enlarger.time_s')).toBeVisible();
+  await expect(arg(page, 'main.params.time_s')).toBeVisible();
   await expect(darkroom(page)).not.toContainText('so Time and Aperture are hidden');
   expect(errors).toEqual([]);
 });
@@ -192,11 +192,11 @@ test('simple: normalised by default; its Lighter / Darker move the three printer
   expect(e0.mode).toBe('normalised');
   // F25: no time row that never moves (the time nudge reads "Brightness", no seconds), and the two lights rows
   // have their own titles
-  const timeRow = page.locator('.cb-arg.is-nudge[data-path="print.enlarger.time_s"]').first();
+  const timeRow = page.locator('.cb-arg.is-nudge[data-path="main.params.time_s"]').first();
   await expect(timeRow.locator('.cb-arg-l')).toHaveText('Brightness');
   await expect(timeRow.locator('.cb-arg-v')).toHaveText('');
   await expect(timeRow).not.toContainText(/\d\s*s\b|\bst\b/);
-  await expect(page.locator('.cb-arg.is-nudge[data-path="print.lights.logH"] .cb-arg-l')).toHaveText(['Warmth', 'Tint']);
+  await expect(page.locator('.cb-arg.is-nudge[data-path="lights.params.logH"] .cb-arg-l')).toHaveText(['Warmth', 'Tint']);
   await page.screenshot({ path: test.info().outputPath('f25-simple-normalised.png') });
   const m0 = await mean(page);
   const third = Math.log10(2) / 3;
@@ -207,11 +207,13 @@ test('simple: normalised by default; its Lighter / Darker move the three printer
   expect(e1.time).toBe(e0.time);
   e1.lights.forEach((l, i) => expect(l).toBeCloseTo(e0.lights[i]! - third, 5));
   expect(await mean(page)).toBeGreaterThan(m0);
+  expect(await paths(page)).toContain('lights.params.logH');
+  expect(await paths(page)).not.toContain('main.params.time_s');
+  // Darker right after Lighter: the two presses coalesce into one step whose net change is nothing (no step left)
   await page.getByRole('button', { name: 'Darker', exact: true }).first().click();
   await expect.poll(async () => (await enlarger(page)).lights[0]).toBeCloseTo(e0.lights[0]!, 5);
   (await enlarger(page)).lights.forEach((l, i) => expect(l).toBeCloseTo(e0.lights[i]!, 5));
-  expect(await paths(page)).toContain('print.lights.logH');
-  expect(await paths(page)).not.toContain('print.enlarger.time_s');
+  expect(await paths(page)).not.toContain('main.params.time_s');
   expect(errors).toEqual([]);
 });
 
@@ -227,8 +229,8 @@ test('darkroom: real by default with its mode shown; a frame saved in normalised
   await expect(panel).not.toContainText('No photos yet');
   await expect(panel).not.toContainText(NO_FRAME);
   await expect(page.locator('.ck-panel[data-panel="paper"]').first()).toBeVisible();
-  await expect(arg(page, 'print.enlarger.mode')).toBeVisible();
-  await expect(arg(page, 'print.enlarger.time_s')).toBeVisible();
+  await expect(arg(page, 'stages.darkroom.medium.mode')).toBeVisible();
+  await expect(arg(page, 'main.params.time_s')).toBeVisible();
 
   // a frame printed in tiny (normalised) and saved, opened again in darkroom: still normalised, Time hidden
   await goto(page, 'tiny', { keep: true });
@@ -237,10 +239,10 @@ test('darkroom: real by default with its mode shown; a frame saved in normalised
   await goto(page, 'darkroom', { keep: true });
   await open(page, NEG);
   expect((await enlarger(page)).mode).toBe('normalised');
-  await expect(arg(page, 'print.enlarger.time_s')).toBeHidden();
-  await arg(page, 'print.enlarger.mode').locator('select').selectOption('real');
+  await expect(arg(page, 'main.params.time_s')).toBeHidden();
+  await arg(page, 'stages.darkroom.medium.mode').locator('select').selectOption('real');
   await idle(page);
   expect((await enlarger(page)).mode).toBe('real');
-  await expect(arg(page, 'print.enlarger.time_s')).toBeVisible();
+  await expect(arg(page, 'main.params.time_s')).toBeVisible();
   expect(errors).toEqual([]);
 });

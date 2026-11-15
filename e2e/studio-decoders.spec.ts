@@ -71,7 +71,7 @@ for (const [kind, make] of Object.entries(FILES)) {
     await expect(page.locator('#notes')).toHaveAttribute('title', kind === 'dng' ? /camera RAW \(Synth Scanner\) via LibRaw/ : new RegExp(kind.toUpperCase()));
     await expect(page.locator('#notes')).toHaveAttribute('title', /base/);
     await expect(page.locator('#notes')).toContainText('Colour negative');
-    const r = await page.evaluate(() => ({ w: window.chromobench.size()!.width, h: window.chromobench.size()!.height, auto: window.chromobench.log!.state.print.lights.auto.method }));
+    const r = await page.evaluate(() => ({ w: window.chromobench.size()!.width, h: window.chromobench.size()!.height, auto: window.chromobench.get('lights.source.method') }));
     expect(r).toEqual({ w: W, h: H, auto: 'integrate' });
     // the ramp prints: denser negative (right) → lighter print
     const left = (await page.evaluate(() => window.chromobench.pixel(200, 400)))!;

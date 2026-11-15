@@ -1,7 +1,8 @@
-// CHB-009 studio flows, ported to the shell-based studio (CHB-019, layout lab, MockEngine): recipes resumed by hash
-// after a reload, a folder of scans, the viewer (views, before/after, densitometer and pinned probes), generated
-// controls with keyboard bursts and typed units, approvals with E_STALE, the darkroom tools (test strip, ring-around,
-// masks and exposures, apply to selection) and the WebGPU presenter pipeline.
+// CHB-009 studio flows, ported to the shell-based studio (CHB-019, layout lab, MockEngine) and to format-3 documents
+// in the store's log (CHB-037): edits resumed by hash after a reload, a folder of scans, the viewer (views,
+// before/after, densitometer and pinned probes), generated controls on document paths with coalescing key runs and
+// typed units, approvals with E_STALE, the darkroom tools (test strip, ring-around, masks and darkroom layers, apply
+// to selection) and the WebGPU presenter pipeline.
 // Dropped deliberately in the migration: the OPFS import dialog (folders are read in place) and the
 // keyboard-driven probe on the canvas (the probe is the viewer's I tool).
 import { expect, test, type Page } from '@playwright/test';
@@ -25,8 +26,12 @@ const variant = (n: number): { name: string; mimeType: string; buffer: Buffer } 
 };
 
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
-const hash = (page: Page) => page.evaluate(() => window.chromobench.log!.stateHash);
-const units = (page: Page) => page.evaluate(() => window.chromobench.log!.units.length);
+/** the selected frame's document as canonical text (what the old state hash compared) */
+const hash = (page: Page) => page.evaluate(() => JSON.stringify(window.chromobench.doc));
+/** the steps in effect that changed the selected frame */
+const units = (page: Page) => page.evaluate(() => window.chromobench.units());
+const get = (page: Page, path: string) => page.evaluate((p) => window.chromobench.get(p), path);
+const TIME = 'main.params.time_s';
 
 async function boot(page: Page, extra = ''): Promise<void> {
   await page.goto(`/?nosw&engine=mock&layout=lab${extra}`);
@@ -46,15 +51,14 @@ test.afterEach(() => {
   expect(pageErrors).toEqual([]);
 });
 
-test('a reload keeps the recipe by hash; opening the file again re-attaches it', async ({ page }) => {
+test('a reload keeps the edit by hash; opening the file again re-attaches it', async ({ page }) => {
   await boot(page);
   await open(page);
   await expect(page.locator('.ck-side-bottom .ck-thumb[data-rendered]')).toHaveCount(1);
-  // keyboard burst on Filtration Y: three steps, one undo unit after the burst pauses
+  // a run of key presses on Filtration Y: three transactions that coalesce into one step at once
   const y = page.getByRole('slider', { name: 'Filtration Y' });
   await y.focus();
   for (let i = 0; i < 3; i++) await y.press('ArrowRight');
-  expect(await units(page)).toBe(0);
   await expect.poll(() => units(page)).toBe(1);
   await expect(y).toHaveAttribute('aria-valuetext', /Y 3 CC/);
   await expect(page.locator('#history')).toContainText('Filtration Y 0 → +3 CC');
@@ -94,25 +98,25 @@ test('viewer: inspection views, before/after, densitometer and pinned probes', a
   await page.keyboard.press('1');
 
   // before/after: change the print; \ splits the viewer, the left half shows the first print
-  await page.evaluate(() => window.chromobench.set('print.lights.logH', [0.2, 0, 0], 'R'));
+  await page.evaluate(() => window.chromobench.set('lights.params.logH', [0.2, 0, 0], 'R'));
   await page.keyboard.press('\\');
   await idle(page);
   expect(await page.evaluate(() => window.chromobench.rt.store.peek(['view', 'compare']))).toBe('split');
   await page.keyboard.press('\\');
   await page.keyboard.press('\\');
 
-  // densitometer: the probe tool reads under the pointer; P pins it into the recipe
+  // densitometer: the probe tool reads under the pointer; P pins it into the document
   await page.evaluate(() => window.chromobench.tool('probe'));
   const box = (await page.locator('.ck-vp').first().boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator('.cb-readout').first()).toContainText('visual D');
   await page.keyboard.press('p');
   await idle(page);
-  expect(Object.keys(await page.evaluate(() => window.chromobench.log!.committed.probes))).toEqual(['p1']);
+  expect(await page.evaluate(() => window.chromobench.doc!.probes.order)).toEqual(['p1']);
   await expect(page.locator('.cb-visual-d[data-probe="p1"]')).toHaveText(/^\d\.\d\d$/);
 });
 
-test('controls: typed units, a burst on Time, why() follows focus, undo and redo', async ({ page }) => {
+test('controls: typed units, a key run on Time, why() follows focus, undo and redo', async ({ page }) => {
   await boot(page, '&fresh');
   await open(page);
   const time = page.getByRole('slider', { name: 'Time' });
@@ -121,74 +125,74 @@ test('controls: typed units, a burst on Time, why() follows focus, undo and redo
   await time.press('ArrowRight');
   await expect.poll(() => units(page)).toBe(1);
   await expect(page.locator('#why')).toContainText('Time');
-  const field = page.locator('.cb-arg[data-path="print.enlarger.time_s"] .cb-num').first();
+  const field = page.locator(`.cb-arg[data-path="${TIME}"] .cb-num`).first();
   await field.fill('12');
   await field.press('Enter');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBe(12);
   await field.fill('+1/3 st');
   await field.press('Enter');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBeCloseTo(15.119, 2);
   // undo and redo through the bar and the keyboard
   await menu(page, 'Edit', 'edit.undo');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBe(12);
   await menu(page, 'Edit', 'edit.redo');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBeCloseTo(15.119, 2);
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('ControlOrMeta+z');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBe(12);
   await page.keyboard.press('ControlOrMeta+Shift+Z');
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.119, 2);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBeCloseTo(15.119, 2);
 });
 
 test('approvals: reject, approve all, and E_STALE with apply anyway', async ({ page }) => {
   await boot(page, '&fresh');
   await open(page);
-  await page.evaluate(() => window.chromobench.propose({ 'print.grade': 3 }, 'more contrast'));
+  await page.evaluate(() => window.chromobench.propose({ 'stages.darkroom.medium.grade': 3 }, 'more contrast'));
   await expect(page.locator('#pending li')).toHaveCount(1);
   await expect(page.locator('#pending li')).toContainText('Grade 2.0 → 3.0');
   await page.locator('#pending .reject').click();
   await expect(page.locator('#pending li')).toHaveCount(0);
   await expect(page.locator('#history')).toContainText('rejected');
 
-  await page.evaluate(() => window.chromobench.propose({ 'print.enlarger.time_s': 12 }, 'longer'));
-  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 11, 'Time'));
+  await page.evaluate(() => window.chromobench.propose({ 'main.params.time_s': 12 }, 'longer'));
+  await page.evaluate(() => window.chromobench.set('main.params.time_s', 11, 'Time'));
   await page.locator('#pending .approve').click();
   await expect(page.locator('#pending li')).toContainText('E_STALE');
   await page.locator('#pending .force').click();
   await expect(page.locator('#pending li')).toHaveCount(0);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBe(12);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBe(12);
 
-  await page.evaluate(() => { window.chromobench.propose({ 'print.grade': 3 }); window.chromobench.propose({ 'print.preflash': 0.01 }); });
+  await page.evaluate(() => { window.chromobench.propose({ 'stages.darkroom.medium.grade': 3 }); window.chromobench.propose({ 'main.params.fstop': 11 }); });
   await page.getByRole('button', { name: 'Approve all' }).click();
   await expect(page.locator('#pending li')).toHaveCount(0);
 });
 
-test('tools: test strip band, ring-around tile, masks and exposures, apply to selection', async ({ page }) => {
+test('tools: test strip band, ring-around tile, masks and darkroom layers, apply to selection', async ({ page }) => {
   await boot(page, '&fresh');
   await open(page, [variant(0), variant(1), variant(2)]);
-  await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', 12, 'Time'));
+  await page.evaluate(() => window.chromobench.set('main.params.time_s', 12, 'Time'));
 
   // test strip: 1/3-stop bands around 12.0 s; clicking 15.12 s writes one set
   await page.locator('.ck-vp').first().click();
   await page.keyboard.press('t');
   await idle(page);
   await expect(page.locator('.cb-band text')).toHaveText(['7.56 s', '9.52 s', '12.0 s', '15.12 s', '19.05 s']);
-  const u0 = await page.evaluate(() => window.chromobench.log!.units.length);
+  const u0 = await units(page);
   const band = (await page.locator('.cb-band rect').nth(3).boundingBox())!;
   await page.mouse.click(band.x + band.width / 2, band.y + band.height / 2);
   await idle(page);
-  expect(await page.evaluate(() => window.chromobench.log!.units.length)).toBe(u0 + 1);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.enlarger.time_s)).toBeCloseTo(15.12, 2);
+  expect(await units(page)).toBe(u0 + 1);
+  expect(await page.evaluate(() => window.chromobench.get('main.params.time_s'))).toBeCloseTo(15.12, 2);
 
   // ring-around: "+G (−M)" writes (+2, −4, +2) pt
   await page.keyboard.press('r');
   await expect(page.locator('.cb-ring-tile')).toHaveCount(11);
   await page.locator('.cb-ring-tile').filter({ hasText: '+G' }).getByRole('button').click();
-  const lights = await page.evaluate(() => window.chromobench.log!.committed.print.lights.logH);
+  const lights = (await get(page, 'lights.params.logH')) as number[];
   [0.05, -0.1, 0.05].forEach((v, i) => expect(lights[i]).toBeCloseTo(v, 9));
   await expect(page.locator('#history')).toContainText('Printer lights R 0 → +2, G 0 → −4, B 0 → +2 pt');
 
-  // masks: drag an ellipse → mask.set plus a burn through it; a dodge from the exposure list
+  // masks: drag an ellipse → a mask in the library plus a burn through it; a dodge from the darkroom layers
   await page.evaluate(() => window.chromobench.tool('mask-ellipse'));
   const box = (await page.locator('.ck-vp').first().boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
@@ -196,11 +200,12 @@ test('tools: test strip band, ring-around tile, masks and exposures, apply to se
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.55, { steps: 5 });
   await page.mouse.up();
   await idle(page);
-  const masks = await page.evaluate(() => Object.values(window.chromobench.log!.committed.masks).flatMap((m) => m.nodes.map((n) => n.op)));
-  expect(masks).toContain('mask.ellipse');
+  const masks = await page.evaluate(() => Object.values(window.chromobench.doc!.masks.items).flatMap((m) => Object.values(m.components.items).map((c) => c.kind)));
+  expect(masks).toContain('ellipse');
+  expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).some((e) => e.kind === 'layer' && e.op === 'burn' && !!e.mask))).toBe(true);
   await page.getByRole('button', { name: '+ dodge' }).click();
   await idle(page);
-  expect(await page.evaluate(() => window.chromobench.log!.committed.print.exposures.map((e) => e.kind))).toContain('dodge');
+  expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).map((e) => (e.kind === 'layer' ? e.op : e.kind)))).toContain('dodge');
   await expect(page.locator('.cb-script')).not.toBeEmpty();
   await page.evaluate(() => window.chromobench.tool(null));
 
@@ -215,7 +220,7 @@ test('tools: test strip band, ring-around tile, masks and exposures, apply to se
   await idle(page);
   const others = await page.evaluate(() => {
     const cb = window.chromobench;
-    return cb.studio.frames.all().filter((e) => e.id !== cb.studio.current).map((e) => e.log.committed.print.enlarger.time_s);
+    return cb.studio.frames.all().filter((e) => e.id !== cb.studio.current).map((e) => (cb.studio.doc(e.id)!.stages.darkroom.stack.items['main'] as unknown as { params: { time_s: number } }).params.time_s);
   });
   expect(others).toHaveLength(2);
   for (const t of others) expect(t).toBeCloseTo(15.12, 2);

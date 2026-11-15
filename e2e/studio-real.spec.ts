@@ -40,16 +40,16 @@ for (const engine of ['gpu', 'reference'] as const) {
     await open(page, engine);
     await expect(page.locator('#engine')).toHaveAttribute('data-engine', engine === 'gpu' ? /GPU/ : /reference/);
     expect(await page.evaluate(() => window.chromobench.layout)).toBe('classic');
-    // the first print: enlarger in 'real' mode, integrated to grey (recorded in print.lights.auto)
-    const r0 = await page.evaluate(() => window.chromobench.log!.state.print);
-    expect(r0.enlarger.mode).toBe('real');
-    expect(r0.lights.auto.method).toBe('integrate');
-    expect(r0.lights.auto.applied).toBe(true);
+    // the first print: enlarger in 'real' mode, integrated to grey (recorded as the printer lights' provenance)
+    const r0 = await page.evaluate(() => ({ mode: window.chromobench.get('stages.darkroom.medium.mode'), auto: window.chromobench.get('lights.source') as { method?: string; applied?: boolean } }));
+    expect(r0.mode).toBe('real');
+    expect(r0.auto.method).toBe('integrate');
+    expect(r0.auto.applied).toBe(true);
     const p0 = (await centre(page))!;
     expect(p0.every((v) => v >= 0 && v <= 1)).toBe(true);
 
     // a longer time prints darker
-    await page.evaluate(() => window.chromobench.set('print.enlarger.time_s', window.chromobench.log!.state.print.enlarger.time_s * 2, 'time +1 st'));
+    await page.evaluate(() => window.chromobench.set('main.params.time_s', (window.chromobench.get('main.params.time_s') as number) * 2, 'time +1 st'));
     await idle(page);
     const p1 = (await centre(page))!;
     expect(p1[1]!).toBeLessThan(p0[1]!);
@@ -81,7 +81,7 @@ for (const engine of ['gpu', 'reference'] as const) {
 
     // test strip: five bands of the real chain, each strip printed with its own time; clicking the last band
     // (+2/3 st) makes the print equal to that band where the band lay
-    const t0 = r0.enlarger.time_s;
+    const t0 = (await page.evaluate(() => window.chromobench.get('main.params.time_s'))) as number;
     await page.evaluate(() => window.chromobench.tool('test-strip'));
     await idle(page);
     await expect(page.locator('.cb-band')).toHaveCount(5);
@@ -93,7 +93,7 @@ for (const engine of ['gpu', 'reference'] as const) {
     await page.mouse.click(band.x + band.width / 2, band.y + band.height / 2);
     await idle(page);
     expect(await page.evaluate(() => window.chromobench.rt.store.peek(['ui', 'tool']))).toBeNull();
-    expect(await page.evaluate(() => window.chromobench.log!.state.print.enlarger.time_s)).toBeCloseTo(values[4]!, 3);
+    expect(await page.evaluate(() => (window.chromobench.get('main.params.time_s') as number))).toBeCloseTo(values[4]!, 3);
     expect(await page.evaluate(() => window.chromobench.pixel(88, 32))).toEqual(inBand);
     const darker = (await centre(page))!;
     expect(darker[1]!).toBeLessThan(p0[1]!);
@@ -105,11 +105,11 @@ for (const engine of ['gpu', 'reference'] as const) {
     expect(await page.evaluate(() => {
       const cb = window.chromobench;
       const f = cb.studio.current!;
-      return cb.studio.bridge.key({ $: 'cb.image', frame: f, recipe: cb.rt.store.peek(['recipes', f]), what: 'ringTile', args: { offset: [0, 0, 0] }, expr: '' } as never) === cb.printNode();
+      return cb.studio.bridge.key({ $: 'cb.image', frame: f, doc: cb.rt.store.peek(['docs', f]), what: 'ringTile', args: { offset: [0, 0, 0] }, expr: '' } as never) === cb.printNode();
     })).toBe(true);
-    const lb = await page.evaluate(() => window.chromobench.log!.state.print.lights.logH[2]);
+    const lb = await page.evaluate(() => (window.chromobench.get('lights.params.logH') as number[])[2]!);
     await page.locator('.cb-ring-tile').filter({ hasText: '+Y' }).getByRole('button').click();
-    expect(await page.evaluate(() => window.chromobench.log!.state.print.lights.logH[2])).toBeGreaterThan(lb);
+    expect(await page.evaluate(() => (window.chromobench.get('lights.params.logH') as number[])[2])).toBeGreaterThan(lb);
     await menu(page, 'Edit', 'edit.undo');
     await idle(page);
 
@@ -139,8 +139,8 @@ test('classic layout: the Roll module makes a roll, badges the strip and shows t
   await expect(page.locator('#roll-new')).toBeVisible();
   await page.locator('#roll-new').click();
   await expect(page.locator('#rolls li')).toContainText('first-printed', { timeout: 120_000 });
-  // the recipe names the roll
-  expect(await page.evaluate(() => window.chromobench.log!.state.roll)).toEqual({ id: 'roll-1' });
+  // the roll record lists the frame (documents do not name their roll: P7 makes that a link)
+  expect(await page.evaluate(() => (window.chromobench.state().roll.rolls['roll-1'].frames as string[]).includes(window.chromobench.studio.current!))).toBe(true);
   // the film strip's roll badge (the Library module shows the strip)
   await page.evaluate(() => window.chromobench.rt.go('library'));
   await expect(page.locator('.ck-thumb-badge').filter({ hasText: 'roll 1' }).first()).toBeVisible();

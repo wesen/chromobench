@@ -50,7 +50,7 @@ test('a camera RAW is guessed to be a photo, shot on film and printed on the GPU
   await opened(page, 1, 120_000);
   await expect(page.locator('#notes')).toHaveAttribute('title', /photo: camera RAW \(Synth Camera\) via LibRaw, photo mode/);
   await expect(page.locator('#notes')).toContainText('Synth Camera photo');
-  const s = await page.evaluate(() => ({ kind: window.chromobench.log!.state.kind, stock: window.chromobench.log!.state.capture?.stock, w: window.chromobench.size()!.width }));
+  const s = await page.evaluate(() => ({ kind: (window.chromobench.doc?.stages.scan ? 'negative-scan' : 'digital-raw'), stock: window.chromobench.get('stages.film.medium.stock'), w: window.chromobench.size()!.width }));
   expect(s).toEqual({ kind: 'digital-raw', stock: 'kodak_portra_400', w: 2 * W }); // demosaiced at the sensor resolution
   // brighter scene → brighter print along the ramp; the red object prints red
   const dark = (await page.evaluate(() => window.chromobench.pixel(120, 200)))!;
@@ -74,8 +74,8 @@ test('a photo\'s first print: the same Time and lights on the GPU and the CPU en
     await page.setInputFiles('#file', { name: 'scene.dng', mimeType: 'image/x-adobe-dng', buffer: Buffer.from(bayerDng(true)) });
     await opened(page, 1, 120_000);
     first.push(await page.evaluate(() => {
-      const p = window.chromobench.log!.state.print;
-      return { engine: window.chromobench.engineLabel, time: p.enlarger.time_s, lights: [...p.lights.logH] };
+      const cb = window.chromobench;
+      return { engine: cb.engineLabel, time: cb.get('main.params.time_s') as number, lights: [...(cb.get('lights.params.logH') as number[])] };
     }));
   }
   expect(first[0]!.engine).toMatch(/GPU/);
