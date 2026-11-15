@@ -132,3 +132,109 @@ The shell: the store's document tier is `store.log` (document `main` = the progr
 documents at paths: `store.open(id, doc, { at, kind })`); routes, adapters, mirror values, history parts,
 `History`, channels and snapshots are deleted; named preview layers and the gesture layer are both `Draft`s;
 `ctx.layer` → `ctx.draft`; the tx draft → `Writer`.
+
+## Step 2: The log, drafts, plan and diff in values
+
+The log is `packages/values/src/log.ts` (`Log`, `Draft`), the batch builder `plan.ts`, and the net change
+`diff.ts`. `Log` is an immutable value with a private state record; every operation builds the next one, so a
+refused commit simply returns nothing and the caller's log is untouched (atomicity for free, as with
+transactions). A step is "the entries of one commit or one approval"; the cursor counts steps, so a batch over
+twelve frames is one undo.
+
+`diff(before, after)` turned out to be the piece that makes drafts and the store simple: instead of accumulating
+the gesture's mutations and compressing them, the net change is computed from the two versions. It walks only
+where the versions differ by reference (copy-on-write versions share untouched subtrees), and it keeps item
+identity: an item in both versions is moved, never removed and re-inserted.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Implement the values half of P4 with property tests.
+
+**Inferred user intent:** A small robust core the studio, the agent and the links phases can all stand on.
+
+**Commit (code):** 102a455 — "CHB-037 P4: the document log in values (Log, Draft, plan, diff)"
+
+### What I did
+- `src/diff.ts`: three passes over a working copy, each mutation applied as it is made (checked, with positions of
+  the moment): (1) items whose place changed move into their new collection when it exists; (2) items that are gone
+  are removed, outermost first; (3) top-down over `after`: new items are inserted *without* the items they hold
+  that exist already (those then move in), reorders keep the longest increasing run and move the rest (each to just
+  after its predecessor), object keys are set or unset, arrays of equal length are compared by index, anything else
+  is set where it differs. Keys that are empty or hold a dot are refused (E_PATH): no path could address them.
+- `src/log.ts`: `Log.create/load`, `open/close`, `doc/initial/kind/ids/has`, `targets`, `draft`, `entries/entry/
+  last/steps/cursor/inEffect/pending/canUndo/canRedo/undoStep/redoStep/docsOf`, `commit(x, { merge })`,
+  `propose(x, { why })`, `approve(sel, { by, force })`, `reject(sel)`, `undo/redo`, `trail/why`, `toJSON`;
+  `Draft.of/apply/set/update/reset/mutations/changed/edit`.
+- `src/plan.ts`: `plan(targets, build, { id, label, by, source })`.
+- `E_STALE` added to `VALUE_ERROR_CODES` (the contract's code of the same meaning).
+- Tests: the random document generator moved from `properties.test.ts` to `test/gen.ts` (shared); `diff.test.ts`
+  (300 seeds: apply(diff(a, b)) = b, also against a JSON copy sharing nothing, diff(b, b) = [], survivors never
+  removed, and backwards; focused cases for drags, reorders, moves into old and new groups); `log.test.ts` (unit
+  tests per operation and two properties: 40 seeds × 60 random operations on three documents checking the fold
+  after every operation, save → load, undo-all = initial, redo-all, and that every E_STALE refusal is a real change
+  of the recomputed inverses; 60 seeds of deliberately staled proposals).
+- `pnpm exec vitest run packages/values` → 8 files, 68 passed; `pnpm exec tsc -p packages/values/tsconfig.json
+  --noEmit` green; `pnpm lint` green.
+
+### Why
+- An immutable log keeps the same discipline as documents and transactions (no listener plumbing in values; the
+  store, the host and the agent each hold the current log and replace it).
+- Undo applies stored inverses without re-running the rules: the state it returns to was valid when it was current,
+  and an undo that can fail is the "skip" machinery the shell had to have.
+
+### What worked
+- The random-sequence property passed on its first run once the test's own expectations were right; the fold check
+  after every operation is the invariant that catches every bookkeeping slip (cursor, redo tail, merge).
+
+### What didn't work
+- First version of diff removed an item and inserted it again when it moved into a *new* group; the property
+  "survivors are never removed" failed:
+  `AssertionError: expected true to be false` at `diff.test.ts:39`. A seeded debug test printed the case (seed 41:
+  `n2 a: stages.two.stack b: n3.stack`, where `n3` was inserted in the same walk). Fixed by inserting new items
+  without the items that already exist (`without`) and moving those in when pass 3 reaches the new collection.
+- While restructuring pass 3 with a Python replace I cut out the `sync` function:
+  `packages/values/src/diff.ts(171,32): error TS2304: Cannot find name 'sync'`; restored it.
+- `console.log` in a vitest test printed nothing with the default reporter (piped through `grep`); `--reporter=verbose`
+  shows stdout.
+- Two unit tests compared an undone document to the initial one with `toBe`; undo returns an *equal* document, not
+  the same object (`Received: serializes to the same string`). Changed to `toEqual`; identity is not part of the
+  contract.
+- `plan(log.targets(), (d: Frame) => …)`: TS does not infer the target type from the callback's annotation
+  (`Target<object>[]` not assignable to `Iterable<Target<{ main: … }>>`); `targets<D>()` is generic now and the
+  tests pass the type.
+
+### What I learned
+- Under `exactOptionalPropertyTypes`, contravariant rule types work out: the contract's
+  `TxOptions<Diagnostic, Document>` is assignable to `TxOptions<unknown, never>`, which is what `Rules` holds.
+
+### What was tricky to build
+- Positions in a reorder: `Coll.move`'s `at` is the position in the order *without* the item, and an item that is
+  leaving the collection (it moves to a collection synced later) may still sit there. Placing each moved or inserted
+  item directly after its predecessor in the target order is correct whatever else is in between; the longest
+  increasing run of what is already there stays put, so moving one item to the end is one move, not three.
+- `merge` (nudges): the merged transaction is `diff(state before the newest step, state after the new edit)`,
+  re-applied under the rules to get its inverses; if the net change is empty the step leaves the journal.
+- Approving a batch must re-apply its entries in sequence order on a working copy (two entries may edit the same
+  document), and the staleness test must be the same order; the property test recomputes it independently.
+
+### What warrants a second pair of eyes
+- `diff` pass 1/2 ordering arguments (comments in the file): an inserted item never contains an id still in the
+  working copy; a removal never takes an item that survives at the same place.
+- `Log.load` trusts entries outside the steps (pending, rejected) without replaying them; they are re-checked when
+  approved.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- Start at `packages/values/src/log.ts` (`commit`, `#merge`, `approve`, `undo`, `trail`, `load`), then `diff.ts`
+  and `plan.ts`; tests in `packages/values/test/log.test.ts` and `diff.test.ts`.
+- `pnpm exec vitest run packages/values && pnpm exec tsc -p packages/values/tsconfig.json --noEmit`.
+
+### Technical details
+- Step label: a batch's label, else the transaction's; plan gives every transaction the batch's id, label and author
+  (a builder returning a transaction by another author is refused, E_MUTATION).
+- `why(doc, path)` = last of `trail(doc, path)`; an entry is in the trail when the value read at `path` (id-anchored,
+  so it survives moves) differs before and after it.
