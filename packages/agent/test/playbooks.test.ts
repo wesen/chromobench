@@ -45,7 +45,7 @@ describe('playbooks', () => {
     const r = await p.dsl.eval({ code: 'const cells = await mem.testStrip({ steps: 5 })\nreturn { count: cells.length, best: mem.bestStep(cells, 0.755).cell }', frame: FRAME });
     expect(r.error, r.yaml).toBeUndefined();
     expect(r.yaml).toMatch(/^count: 5\nbest: \d/);
-    expect(r.looks).toHaveLength(1);
+    expect(r.shows).toHaveLength(1);
     const t = await p.dsl.eval({ code: 'return mem.stripTimes(12, 5, 1 / 3)', frame: FRAME });
     expect(first(t.yaml)).toBe('[7.56, 9.52, 12, 15.12, 19.05]');
     const t0 = await p.dsl.eval({ code: 'return mem.stripTimes()', frame: FRAME }); // around the main exposure's 10 s

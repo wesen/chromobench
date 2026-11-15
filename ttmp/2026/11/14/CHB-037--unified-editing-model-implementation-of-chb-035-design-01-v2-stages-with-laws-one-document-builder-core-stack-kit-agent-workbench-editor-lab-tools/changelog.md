@@ -131,3 +131,8 @@ P8b Step 2: editors for the stack kit's params panel (curve, levels, HSL, grade,
 
 P8b Step 3: editors as data ({ form, covers }) (commit 82aee84); merged the integration branch (no-op); checks green; browser 77 passed, with wgsl-check (P3b's) and one load timeout that passes alone
 
+
+## 2026-11-15
+
+P6b: the agent's workbench — wb in the DSL (commands, run as the agent under the mode, set, selectors, state, screen().explain(), layout(), layouts.build/use with layouts recorded in the sandbox as data and built by the studio's passes, use as a dialog), the two completeness tests green over every built layout, Look → Show (contract 1.3.0, CC-022), log.commit(x, { why }), frame.get through links, cb.looks.define, approval cards in the History's words (commits 2c29a21, 5d74cc3, 9b2f369, d6db290)
+

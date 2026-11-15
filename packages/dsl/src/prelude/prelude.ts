@@ -1,8 +1,15 @@
-// The prelude: guest code that runs inside QuickJS once per VM. It receives two host functions,
-// `host(name, json) → json` (synchronous) and `hostEval(id) → Promise<json>` (deferred), keeps them
-// in its closure (they are never globals), installs the globals — `cb`, `frame`, `units`, `mem`, `console`, the
-// builders `layer`, `group`, `mask`, `coll` and the changes `set`, `insert`, `remove`, `move` — and a seeded
-// `Math.random`, and returns the private hooks the session calls.
+// The prelude: guest code that runs inside QuickJS once per VM. It receives three host functions,
+// `host(name, json) → json` (synchronous), `hostEval(id) → Promise<json>` (deferred: a measurement) and
+// `hostCall(name, json) → Promise<json>` (deferred: the workbench), keeps them in its closure (they are never
+// globals), installs the globals — `cb`, `frame`, `units`, `mem`, `console`, `wb`, the builders `layer`, `group`,
+// `mask`, `coll` and the changes `set`, `insert`, `remove`, `move` — and a seeded `Math.random`, and returns the
+// private hooks the session calls.
+//
+// The workbench (`wb`, CHB-037 P6b) answers from the page, so every call is awaited. A layout the agent writes is
+// recorded, not run: `wb.layouts.build({ id, label, build: (ck, cb, env) => … })` calls build on recording proxies,
+// so every ck/cb call becomes data (a path of names and arguments) that the page replays on the real builders.
+// Functions cannot cross: a selector is `cb.sel.frame.print()`, a state path `cb.state.view.step`, a handler a
+// command id; `.with(fn)` runs fn on the recording (build time).
 //
 // Handle rules follow goja-cv pkg/gojamod/cv/prelude.js 1–14:
 // - `then` makes handles awaitable (Value → evaluated numbers, Image → a summary);
@@ -19,7 +26,7 @@
 //
 // Written as a plain string so it loads unchanged in Node and in the browser. It must not use
 // backticks or "${" (it lives inside a template literal).
-export const PRELUDE = String.raw`(function (host, hostEval) {
+export const PRELUDE = String.raw`(function (host, hostEval, hostCall) {
   'use strict';
   const JP = JSON.parse, JS = JSON.stringify;
   const PROBES = new Set(['constructor', 'inspect', '$$typeof', 'nodeType', 'asymmetricMatch', '@@__IMMUTABLE_ITERABLE__@@', 'prototype', 'length', 'name', 'call', 'apply', 'bind', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__proto__']);
@@ -84,6 +91,10 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
 
   function evaluate(info) {
     return hostEval(info.id).then((j) => { const r = JP(j); if (r.err) throw mkErr(r.err); return r.ok; });
+  }
+
+  function call(name, arg) {
+    return hostCall(name, JS(arg === undefined ? null : arg)).then((j) => { const r = JP(j); if (r.err) throw mkErr(r.err); return r.ok; });
   }
 
   function showRef(r) {
@@ -343,11 +354,140 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     },
     diff: (a, b) => H('looks.diff', { a: viewRef(a), b: viewRef(b) }),
     bake: (key, opts) => Object.freeze(H('looks.bake', { key: String(key), frame: opts && opts.frame !== undefined ? frameIdOf(opts.frame) : null, at: callerLine() })),
+    // an agent-written look (a .cblook.js source): registered here at once, and where the studio compiles (await it)
+    define: (src) => { const local = H('looks.define', { src: String(src), at: callerLine() }); return call('wb.defineLook', { src: String(src), local: local }); },
   }));
   function compare(pair, lbl) {
     if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(isHandle)) return H('argType', { what: 'cb.compare', expect: 'two image handles: cb.compare([a, b], label)' });
     return showRef(H('show', { ids: pair.map((h) => handles.get(h).id), frame: handles.get(pair[0]).frame, opts: { label: lbl === undefined ? 'compare' : String(lbl) }, at: callerLine() }));
   }
+  // ---- the layout recorder (wb.layouts.build) ---------------------------------------------------
+  const RECS = new WeakMap();      // recording proxy → its expression { $x: [root, step, …] }
+  let spreads = 0;
+  const isSpreadKey = (k) => k.slice(0, 7) === '$spread';
+  function layoutErr(message, hint, fix) {
+    const d = { code: 'E_LAYOUT', message: message };
+    if (hint) d.hint = hint;
+    if (fix) d.fix = fix;
+    return mkErr(d);
+  }
+  function exprText(x) {
+    let out = '';
+    for (const s of x.$x) out += typeof s === 'string' ? (out ? '.' : '') + s : '(…)';
+    return out;
+  }
+  function recData(v, depth, where) {
+    if (depth > 40) throw layoutErr('the layout is nested too deeply at ' + where);
+    if (v === undefined) return null;
+    if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+    if (typeof v === 'number') { if (!isFinite(v)) throw layoutErr(where + ' is not a finite number'); return v; }
+    if ((typeof v === 'object' || typeof v === 'function') && RECS.has(v)) return RECS.get(v);
+    if (typeof v === 'function') {
+      throw layoutErr('a function at ' + where + ': interaction lambdas do not cross the sandbox',
+        'a state lambda is a selector (cb.sel.frame.print(), cb.sel.doc.not()) or a state path (cb.state.view.step); a handler is a command id ("frame.pick" or ["frame.rate", 3]); build-time choices are plain JavaScript',
+        "cb.viewer(cb.sel.frame.print())");
+    }
+    if (isHandle(v) || isValue(v) || viewKeys.has(v) || shows.has(v)) throw layoutErr(where + ' is a DSL handle or value: a layout holds only data, selectors and command ids');
+    if (Array.isArray(v)) return v.map((x, i) => recData(x, depth + 1, where + '[' + i + ']'));
+    if (typeof v === 'object') {
+      const o = {};
+      for (const k of Object.keys(v)) {
+        if (v[k] === undefined) continue;
+        o[k] = isSpreadKey(k) ? v[k] : recData(v[k], depth + 1, where + '.' + k);
+      }
+      return o;
+    }
+    throw layoutErr(where + ': ' + typeof v + ' values cannot be part of a layout');
+  }
+  function rec(x) {
+    const key = '$spread' + (++spreads);
+    const p = new Proxy(() => {}, {
+      get(t, k) {
+        if (k === Symbol.iterator) return function* () { yield { $spread: x }; };
+        if (typeof k === 'symbol') {
+          if (k === Symbol.toPrimitive) return () => '[layout ' + exprText(x) + ']';
+          return undefined;
+        }
+        if (k === key) return x;
+        if (k === 'then' || k === 'toJSON') return undefined;
+        if (k === 'toString') return () => '[layout ' + exprText(x) + ']';
+        // build time: .with(fn) runs fn on the recording now; .with(value) is recorded
+        if (k === 'with') return function (f) { return typeof f === 'function' ? f(p) : rec({ $x: x.$x.concat(['with', { args: [recData(f, 0, exprText(x) + '.with()')] }]) }); };
+        return rec({ $x: x.$x.concat([k]) });
+      },
+      apply(t, self, args) {
+        const at = callerLine();
+        const where = exprText(x) + '()';
+        const step = { args: args.map((a, i) => recData(a, 0, where + ' argument ' + (i + 1))) };
+        if (at) step.line = at.line;
+        return rec({ $x: x.$x.concat([step]) });
+      },
+      set(t, k) { throw layoutErr('a layout value is immutable: ' + exprText(x) + '.' + String(k) + ' cannot be assigned'); },
+      ownKeys() { return [key]; },
+      getOwnPropertyDescriptor(t, k) { return k === key ? { value: x, enumerable: true, configurable: true, writable: false } : undefined; },
+    });
+    RECS.set(p, x);
+    return p;
+  }
+  const LAYOUT_ID = /^[a-z][a-z0-9-]{0,40}$/;
+  function recordLayout(src) {
+    let def = src;
+    if (typeof def === 'string') {
+      try { def = (0, eval)('(' + def + ')'); }
+      catch (e) { throw layoutErr('the layout source does not parse: ' + (e && e.message), 'pass { id, label, build: (ck, cb, env) => cb.studio(…)… } or its source text'); }
+    }
+    if (def && typeof def === 'object' && def.kind === 'layout' && def.tree) return def;
+    if (typeof def === 'function') def = { id: 'agent', label: 'Agent layout', build: def };
+    if (!def || typeof def !== 'object' || typeof def.build !== 'function') {
+      throw layoutErr('a layout is { id, label, build: (ck, cb, env) => cb.studio(…)… }', null, "wb.layouts.build({ id: 'mine', label: 'Mine', build: (ck, cb) => cb.studio('Mine').module(…) })");
+    }
+    const id = def.id === undefined ? 'agent' : def.id;
+    if (typeof id !== 'string' || !LAYOUT_ID.test(id)) throw layoutErr('a layout id is lower-case letters, digits and dashes: ' + JS(id), null, "{ id: 'my-layout', … }");
+    const env = Object.freeze({ params: Object.freeze({}), dev: false, hostVersion: 'agent' });
+    const out = def.build(rec({ $x: ['ck'] }), rec({ $x: ['cb'] }), env);
+    if (!out || !RECS.has(out)) throw layoutErr('build(ck, cb, env) must return the shell it builds (cb.studio(name)…)', null, "build: (ck, cb) => cb.studio('Mine').module(ck.module('main', { label: 'Main' }).center(cb.viewer(cb.sel.frame.print())))");
+    const data = { kind: 'layout', id: id, label: String(def.label === undefined ? id : def.label), tree: RECS.get(out) };
+    if (def.description !== undefined) data.description = String(def.description);
+    if (def.enlarger !== undefined) data.enlarger = def.enlarger;
+    return deepFreeze(JP(JS(data)));
+  }
+  function layoutOf(x) {
+    if (x && typeof x === 'object' && x.layout && x.layout.kind === 'layout') return x.layout;
+    if (x && typeof x === 'object' && x.kind === 'layout') return x;
+    return H('argType', { what: 'wb.layouts.use(layout)', expect: 'a layout from wb.layouts.build (its result, or its .layout)' });
+  }
+
+  // ---- wb: the workbench (every call is answered by the page: await it) ---------------------------
+  function withText(s) {
+    Object.defineProperty(s, 'explain', { value: () => s.text, enumerable: false });
+    return s;
+  }
+  const wbLayouts = guarded('wb.layouts', Object.freeze({
+    list: () => call('wb.layouts'),
+    build: (src) => { const l = recordLayout(src); return call('wb.build', { layout: l }).then((r) => Object.freeze(Object.assign({}, r, { layout: l }))); },
+    use: (layout, opts) => call('wb.use', { layout: layoutOf(layout), why: opts && opts.why !== undefined ? String(opts.why) : undefined }),
+  }));
+  const wbObj = guarded('wb', Object.freeze({
+    commands: (filter) => call('wb.commands', { filter: filter === undefined ? null : marshal(filter, 0) }),
+    run: function (id) {
+      const args = Array.prototype.slice.call(arguments, 1);
+      return call('wb.run', { id: String(id), args: marshal(args, 0), at: callerLine() });
+    },
+    set: (path, value, opts) => call('wb.set', { path: String(path), value: marshal(value, 0), why: opts && opts.why !== undefined ? String(opts.why) : undefined }),
+    selectors: () => call('wb.selectors'),
+    state: function (name) {
+      const args = Array.prototype.slice.call(arguments, 1);
+      return call('wb.state', { name: String(name), args: marshal(args, 0) });
+    },
+    screen: (opts) => {
+      const p = call('wb.screen', { module: opts && opts.module !== undefined ? String(opts.module) : null }).then(withText);
+      p.explain = () => p.then((s) => s.text);
+      return p;
+    },
+    layout: () => call('wb.layouts').then((x) => x.current),
+    layouts: wbLayouts,
+  }));
+
   const cbObj = {
     version: T.version,
     looks: looksObj,
@@ -404,6 +544,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
   def('units', units);
   def('mem', mem);
   def('console', Object.freeze(consoleObj));
+  def('wb', wbObj);
   def('layer', layer);
   def('group', group);
   def('mask', mask);

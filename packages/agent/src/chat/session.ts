@@ -13,7 +13,7 @@
 // approvals and reverts are methods the UI calls, which nothing the model produces can reach.
 import { toDiagnostic, type AgentMode, type Diagnostic, type EvalRequest, type EvalResult } from '@chromobench/contract';
 import { describeMutation } from '@chromobench/dsl';
-import { plan, transaction, type Edit, type Batch, type LogEntry, type Mutation } from '@chromobench/values';
+import { plan, transaction, type Edit, type Batch, type Log, type LogEntry, type Mutation } from '@chromobench/values';
 import type { AgentDocs } from '../worker/client.ts';
 import {
   ModelError, type ChatModel, type ContentBlockParam, type Effort, type MessageParam, type ModelReply, type ToolDef,
@@ -32,6 +32,11 @@ export interface ChatHost {
   docs: AgentDocs;
   /** Sets the mode; called only from setMode(), i.e. by the UI. */
   setMode(m: AgentMode): void;
+  /**
+   * One mutation in the photographer's words, on the document it changes (the studio's History words: "Time 7.94 →
+   * 10.0 s (+⅓ stop)"); without it the cards say the agent's words (describeChange). CHB-037 P6b.
+   */
+  describe?(m: Mutation, before: object, doc: string): string;
 }
 
 export interface ChatSessionOptions {
@@ -43,7 +48,7 @@ export interface ChatSessionOptions {
   maxSteps?: number;
 }
 
-export interface LookView {
+export interface ShowView {
   n: number;
   caption: string;
   mime: string;
@@ -74,7 +79,7 @@ export type ChatItem =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; text: string; thinking: string; model?: string; fallback?: string }
   | {
-      kind: 'step'; id: string; code: string; frame?: string; status: StepStatus; text?: string; looks: LookView[]; ms?: number;
+      kind: 'step'; id: string; code: string; frame?: string; status: StepStatus; text?: string; shows: ShowView[]; ms?: number;
       isError?: boolean; approval?: ApprovalView; applied?: { frame: string; seqs: number[] }; reverted?: boolean;
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string };
@@ -97,7 +102,7 @@ export type ChatEvent =
   | { t: 'thinking'; delta: string }
   | { t: 'step.code'; step: string; partial: string }
   | { t: 'step.started'; step: string; code: string }
-  | { t: 'step.done'; step: string; text: string; looks: LookView[]; ms: number; isError: boolean }
+  | { t: 'step.done'; step: string; text: string; shows: ShowView[]; ms: number; isError: boolean }
   | { t: 'approval'; step: string; pending: LogEntry[] }
   | { t: 'notice'; kind: 'fallback' | 'mode' | 'info'; detail: string }
   | { t: 'error'; kind: string; message: string }
@@ -126,10 +131,24 @@ export function describeChange(m: Mutation, inverse?: Mutation): string {
   return `${text} (${(m.value as number[]).map((v) => `${v >= 0 ? '+' : ''}${Math.round((v / 0.025) * 10) / 10}`).join(' / ')} pt)`;
 }
 
-/** The changes of log entries, one line each (prefixed with the frame when they span several). */
-export function changesOf(entries: readonly LogEntry[]): ChangeView[] {
+/**
+ * The changes of log entries, one line each (prefixed with the frame when they span several): in the host's words
+ * (`words`, on the document as it is in `log`) when it has them, else the agent's.
+ */
+export function changesOf(entries: readonly LogEntry[], words?: ChatHost['describe'], log?: Log): ChangeView[] {
   const many = new Set(entries.map((e) => e.doc)).size > 1;
-  return entries.flatMap((e) => e.tx.mutations.map((m, i) => ({ seq: e.seq, text: `${many ? `${e.doc}: ` : ''}${describeChange(m, e.tx.inverses[i])}` })));
+  const say = (e: LogEntry, m: Mutation, i: number): string => {
+    if (words && log?.has(e.doc)) {
+      try {
+        const t = words(m, log.doc(e.doc), e.doc);
+        if (t) return t;
+      } catch {
+        // the host has no words for it: the agent's
+      }
+    }
+    return describeChange(m, e.tx.inverses[i]);
+  };
+  return entries.flatMap((e) => e.tx.mutations.map((m, i) => ({ seq: e.seq, text: `${many ? `${e.doc}: ` : ''}${say(e, m, i)}` })));
 }
 
 export class ChatSession {
@@ -292,7 +311,7 @@ export class ChatSession {
           },
           toolStart: (id) => {
             partial.set(id, '');
-            this.st.items.push({ kind: 'step', id, code: '', status: 'writing', looks: [] });
+            this.st.items.push({ kind: 'step', id, code: '', status: 'writing', shows: [] });
             this.changed();
           },
           toolInput: (id, json) => {
@@ -383,7 +402,7 @@ export class ChatSession {
   private async runStep(call: ToolUseBlock, signal: AbortSignal): Promise<ToolResultBlockParam> {
     let it = this.item<'step'>(call.id);
     if (!it) {
-      it = { kind: 'step', id: call.id, code: '', status: 'writing', looks: [] };
+      it = { kind: 'step', id: call.id, code: '', status: 'writing', shows: [] };
       this.st.items.push(it);
     }
     const input = call.input as { code?: unknown; frame?: unknown } | null;
@@ -406,7 +425,7 @@ export class ChatSession {
     const t0 = Date.now();
     const res = await this.host.evaluate({ code, ...(frame ? { frame } : {}) }, signal);
     it.ms = Date.now() - t0;
-    it.looks = res.looks.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, bytes: l.image.bytes, width: l.image.width, height: l.image.height, numbers: l.numbers }));
+    it.shows = res.shows.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, bytes: l.image.bytes, width: l.image.width, height: l.image.height, numbers: l.numbers }));
     it.text = res.yaml;
     it.isError = !!res.error;
     if (this.stopped && res.error?.code === 'E_CANCELLED') {
@@ -419,7 +438,7 @@ export class ChatSession {
     const applied = res.transactions.filter((e) => e.tx.status === 'applied');
     if (applied.length) it.applied = { frame: applied[0]!.doc, seqs: applied.map((e) => e.seq) };
     if (pending.length) {
-      it.approval = { frame: pending[0]!.doc, seqs: pending.map((e) => e.seq), changes: changesOf(pending) };
+      it.approval = { frame: pending[0]!.doc, seqs: pending.map((e) => e.seq), changes: changesOf(pending, this.host.describe, this.host.docs.log()) };
       it.status = 'waiting';
       this.st.status = 'waiting';
       this.emit({ t: 'approval', step: call.id, pending });
@@ -427,8 +446,8 @@ export class ChatSession {
       note = this.decisionNote(it, how);
     }
     it.status = this.stopped ? 'stopped' : res.error ? 'error' : 'done';
-    this.emit({ t: 'step.done', step: call.id, text: res.yaml, looks: it.looks, ms: it.ms, isError: !!res.error });
-    const images = res.looks.map((l) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: l.image.mime, data: toBase64(l.image.bytes) } }));
+    this.emit({ t: 'step.done', step: call.id, text: res.yaml, shows: it.shows, ms: it.ms, isError: !!res.error });
+    const images = res.shows.map((l) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: l.image.mime, data: toBase64(l.image.bytes) } }));
     this.st.imagesSent += images.length;
     return { type: 'tool_result', tool_use_id: call.id, ...(res.error ? { is_error: true } : {}), content: [text(res.yaml + note), ...images] };
   }
@@ -537,7 +556,7 @@ export class ChatSession {
       return false;
     }
     it.reverted = true;
-    this.sinceLast.push(`the photographer reverted eval ${step} (${changesOf(entries).map((c) => c.text).join('; ')})`);
+    this.sinceLast.push(`the photographer reverted eval ${step} (${changesOf(entries, this.host.describe, this.host.docs.log()).map((c) => c.text).join('; ')})`);
     this.changed();
     return true;
   }

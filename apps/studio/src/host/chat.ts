@@ -10,11 +10,12 @@
 // memory, or in this browser's localStorage when they tick "remember"; never in the build or the document), or the
 // scripted demo (no network). Mode changes go through the studio's `agent.mode` command, so the chat, the
 // approvals panel and the studio's policy (studio.mode) agree.
-import type { AgentMode, EvalRequest } from '@chromobench/contract';
+import type { AgentMode, Document, EvalRequest } from '@chromobench/contract';
 import { AnthropicModel, BridgePageClient, ChatSession, createDslWorker, DEFAULT_MODEL, demoModel, DslWorkerClient, MODELS, type AgentDocs } from '@chromobench/agent';
 import type { ChatService } from '@chromobench/studio-kit/kits/chat';
 import type { Runtime } from '@chromobench/shell';
-import { frameName, type Studio } from '@chromobench/studio-kit';
+import { describe, frameName, modelAt, type Studio } from '@chromobench/studio-kit';
+import { createWorkbench, type LayoutHost } from './workbench.ts';
 
 const KEY_STORE = 'chromobench.chat.anthropic-key';
 
@@ -38,8 +39,13 @@ export interface StudioChat extends ChatService {
   devEval(code: string, o?: { frame?: string; timeoutMs?: number; signal?: AbortSignal }): ReturnType<DslWorkerClient['eval']>;
 }
 
-export function createStudioChat(studio: Studio): StudioChat {
+/**
+ * `layouts`: what main.ts knows of layouts (the one mounted, the ones to switch to, how to mount one): with it the
+ * agent's sessions get the workbench (`wb`, CHB-037 P6b).
+ */
+export function createStudioChat(studio: Studio, o: { layouts?: LayoutHost } = {}): StudioChat {
   let rt: Runtime | null = null;
+  const workbench = o.layouts ? createWorkbench(studio, () => rt, o.layouts) : undefined;
   const docs: AgentDocs = {
     log: () => studio.log,
     mode: () => studio.mode,
@@ -57,7 +63,7 @@ export function createStudioChat(studio: Studio): StudioChat {
   const dsl = (prefix: string): Promise<DslWorkerClient> => {
     let s = sessions.get(prefix);
     if (!s) {
-      s = DslWorkerClient.create({ spawn: createDslWorker, engine: studio.engine, docs, txPrefix: prefix });
+      s = DslWorkerClient.create({ spawn: createDslWorker, engine: studio.engine, docs, txPrefix: prefix, ...(workbench ? { workbench } : {}) });
       sessions.set(prefix, s);
     }
     return s;
@@ -67,6 +73,8 @@ export function createStudioChat(studio: Studio): StudioChat {
       evaluate: async (req: EvalRequest, signal: AbortSignal) => (await dsl('chat')).eval(req, { signal }),
       currentFrame: () => studio.current,
       docs,
+      // the approval card in the photographer's words (studio-kit's History: "Time 7.94 → 10.0 s (+⅓ stop)")
+      describe: (m, before) => describe(m, before as Document, (p, d) => modelAt(p, d) ?? undefined),
       setMode: (m: AgentMode) => {
         if (rt) rt.runCommand('agent.mode', null, m);
         else studio.mode = m;

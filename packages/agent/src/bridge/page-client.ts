@@ -15,7 +15,7 @@ export type BridgeToPage =
   | { t: 'eval.cancel'; id: string; reason: 'client' | 'timeout' | 'shutdown' }
   | { t: 'session.create'; id: string };
 
-export interface LookPayload {
+export interface ShowPayload {
   n: number;
   caption: string;
   mime: string;
@@ -26,7 +26,8 @@ export interface LookPayload {
 export type PageToBridge =
   | { t: 'hello'; page: string; app: string; catalogHash: string; focused: boolean; frame?: string; frames: { id: string; name: string; open: boolean }[]; mode: AgentMode }
   | { t: 'focus'; focused: boolean; frame?: string; frames: { id: string; name: string; open: boolean }[]; mode: AgentMode }
-  | { t: 'eval.result'; id: string; text: string; isError: boolean; looks: LookPayload[] }
+  /** `looks` is the Go hub's wire name for the eval's images (EvalResult.shows) */
+  | { t: 'eval.result'; id: string; text: string; isError: boolean; looks: ShowPayload[] }
   | { t: 'session.created'; id: string; session: string }
   | { t: 'session.error'; id: string; error: string };
 
@@ -188,7 +189,7 @@ export class BridgePageClient {
           const r = await (await s).eval({ code: m.req.code, ...(frame ? { frame } : {}), timeoutMs: m.req.timeoutMs }, { signal: ac.signal });
           if (ac.signal.aborted && r.error?.code === 'E_CANCELLED') return; // nobody waits for it any more
           this.evals++;
-          this.send({ t: 'eval.result', id: m.id, text: r.yaml, isError: !!r.error, looks: r.looks.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, base64: toBase64(l.image.bytes) })) });
+          this.send({ t: 'eval.result', id: m.id, text: r.yaml, isError: !!r.error, looks: r.shows.map((l) => ({ n: l.n, caption: l.caption, mime: l.image.mime, base64: toBase64(l.image.bytes) })) });
         } finally {
           this.running.delete(m.id);
         }

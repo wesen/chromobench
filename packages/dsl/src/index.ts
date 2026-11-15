@@ -10,6 +10,7 @@ export { assemble } from './results/assemble.ts';
 export { encodePng } from './results/png.ts';
 export { usageReport, formatUsage, type UsageReport } from './telemetry.ts';
 export { docsProvider } from './docs/provider.ts';
-export { defineLookSource, type LookSourceOptions } from './cblook.ts';
+export { defineLookSource, defineLookWith, type LookSourceOptions } from './cblook.ts';
+export { WB_METHODS, type Workbench, type WbActor, type WbBuild, type WbCommand, type WbControl, type WbDiagnostic, type WbLayoutData, type WbMethod, type WbRun, type WbScreen, type WbSelector, type WbUse } from './workbench.ts';
 export { VOCABULARY } from './docs/vocabulary.ts';
 export { genInstructions, genReference } from './docs/generate.ts';

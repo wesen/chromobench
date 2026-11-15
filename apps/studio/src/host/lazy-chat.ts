@@ -8,6 +8,7 @@ import type { Runtime } from '@chromobench/shell';
 import type { Studio } from '@chromobench/studio-kit';
 import type { ChatEffort, ChatProvider, ChatService, ChatSessionLike, ChatStateView } from '@chromobench/studio-kit/kits/chat';
 import type { StudioChat } from './chat.ts';
+import type { LayoutHost } from './workbench.ts';
 
 /** What a bridge client is to the page (BridgePageClient, structurally). */
 export interface BridgeLike {
@@ -24,7 +25,7 @@ export interface LazyChat extends ChatService {
 
 const EMPTY: ChatStateView = { status: 'idle', items: [], mode: 'ask', effort: 'medium', model: null, usage: { input: 0, output: 0, cacheRead: 0 }, imagesSent: 0 };
 
-export function lazyChat(studio: Studio, onError: (message: string, err: unknown) => void): LazyChat {
+export function lazyChat(studio: Studio, onError: (message: string, err: unknown) => void, o: { layouts?: LayoutHost } = {}): LazyChat {
   let real: StudioChat | null = null;
   let loading: Promise<StudioChat | null> | null = null;
   let rt: Runtime | null = null;
@@ -32,7 +33,7 @@ export function lazyChat(studio: Studio, onError: (message: string, err: unknown
   const load = (): Promise<StudioChat | null> =>
     (loading ??= import('./chat.ts').then(
       (m) => {
-        real = m.createStudioChat(studio);
+        real = m.createStudioChat(studio, o);
         if (rt) real.attach(rt);
         for (const f of listeners) real.session.on(f);
         for (const f of listeners) f({ t: 'changed' });

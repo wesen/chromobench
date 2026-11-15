@@ -60,9 +60,9 @@ describe('guide §6 examples on engine-mock', () => {
     const s = await setup();
     const r = await s.run(E1);
     expect(r.error, r.yaml).toBeUndefined();
-    expect(r.looks).toHaveLength(1);
-    expect(r.looks[0]!.image.mime).toBe('image/png');
-    expect(r.looks[0]!.numbers).toHaveProperty('mean');
+    expect(r.shows).toHaveLength(1);
+    expect(r.shows[0]!.image.mime).toBe('image/png');
+    expect(r.shows[0]!.numbers).toHaveProperty('mean');
     expect(r.yaml).toMatch(/^stock: kodak_portra_400\npaper: kodak_portra_endura\ntime_s: 10\nlights_pt: \[0, 0, 0\]\ngrey: \[0.94691, 0.80158, 0.58241\]/);
     s.session.dispose();
   });
@@ -72,7 +72,7 @@ describe('guide §6 examples on engine-mock', () => {
     const r = await s.run(E2);
     expect(r.error, r.yaml).toBeUndefined();
     expect(r.yaml.split('\n').slice(0, 2)).toEqual(['|', '  cell  D                               visual']);
-    expect((r.looks[0]!.numbers['cells'] as unknown[]).length).toBe(7);
+    expect((r.shows[0]!.numbers['cells'] as unknown[]).length).toBe(7);
     s.session.dispose();
   });
 
@@ -80,7 +80,7 @@ describe('guide §6 examples on engine-mock', () => {
     const s = await setup();
     const r = await s.run(E3);
     expect(r.error, r.yaml).toBeUndefined();
-    expect((r.looks[0]!.numbers['cells'] as unknown[]).length).toBe(9);
+    expect((r.shows[0]!.numbers['cells'] as unknown[]).length).toBe(9);
     s.session.dispose();
   });
 
@@ -105,7 +105,7 @@ describe('guide §6 examples on engine-mock', () => {
     expect(r.error, r.yaml).toBeUndefined();
     expect(r.transactions).toHaveLength(1);
     expect(r.transactions[0]!.tx.mutations.map((m) => (m.op === 'insert' ? m.coll : m.op))).toEqual(['masks', 'stages.darkroom.stack']);
-    expect(r.looks).toHaveLength(1);
+    expect(r.shows).toHaveLength(1);
     s.session.dispose();
   });
 });

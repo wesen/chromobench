@@ -46,7 +46,7 @@ export function agentSubmit(log: Log, s: Submission, mode: AgentMode): Submitted
   });
   const commit = mode === 'auto' && stale.length === 0;
   const before = log.entries.at(-1)?.seq ?? 0;
-  const after = commit ? log.commit(s.x) : log.propose(s.x, s.why ? { why: s.why } : {});
+  const after = commit ? log.commit(s.x, s.why ? { why: s.why } : {}) : log.propose(s.x, s.why ? { why: s.why } : {});
   return { log: after, entries: after.entries.filter((e) => e.seq > before), how: commit ? 'committed' : 'proposed', stale };
 }
 

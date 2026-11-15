@@ -1,5 +1,5 @@
 // The DOM half of the chat kit: the renderer of the `cb.chat` form (studio-kit's chat slot). It shows the
-// conversation with streaming text, thinking summaries, step cards (the eval code, its result and looks), approval
+// conversation with streaming text, thinking summaries, step cards (the eval code, its result and the images it showed), approval
 // cards with per-change checkboxes, Revert, notices; the composer with Send and Stop; the mode and effort settings,
 // which only the photographer changes; and the model setup (API key typed at runtime, or the scripted demo).
 //
@@ -7,14 +7,14 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
-import { chatServiceOf, EFFORT_LABELS, MODES, type ChatEffort, type ChatItemView, type ChatLook, type ChatService } from './kit.ts';
+import { chatServiceOf, EFFORT_LABELS, MODES, type ChatEffort, type ChatItemView, type ChatShow, type ChatService } from './kit.ts';
 
 const btn = (text: string, cls = '', attrs: Record<string, unknown> = {}) => h('button', { type: 'button', class: `ck-btn is-small ${cls}`, text, ...attrs });
 const STATUS: Record<string, string> = { idle: '', thinking: 'thinking…', running: 'running an eval…', waiting: 'waiting for your decision' };
 const STEP: Record<string, string> = { writing: 'writing', running: 'running', waiting: 'waiting for you', done: 'done', error: 'error', stopped: 'stopped', 'not-run': 'not run' };
 
 const urls = new WeakMap<Uint8Array, string>();
-function lookUrl(l: ChatLook): string {
+function showUrl(l: ChatShow): string {
   let u = urls.get(l.bytes);
   if (!u) {
     u = URL.createObjectURL(new Blob([l.bytes as BlobPart], { type: l.mime }));
@@ -65,9 +65,9 @@ function stepCard(it: Extract<ChatItemView, { kind: 'step' }>, svc: ChatService,
   const li = h('li', { class: ['cb-chat-step', `is-${it.status}`], 'data-step': it.id, 'data-status': it.status });
   li.append(h('div', { class: 'cb-chat-step-h' }, h('span', { text: 'eval' }), it.frame ? h('span', { class: 'cb-dim', text: ` · ${it.frame}` }) : null, h('span', { class: 'cb-chat-badge', text: STEP[it.status] ?? it.status }), it.ms !== undefined ? h('span', { class: 'cb-dim', text: ` ${it.ms} ms` }) : null));
   li.append(h('pre', { class: 'cb-chat-code', text: it.code || '…' }));
-  if (it.looks.length) {
+  if (it.shows.length) {
     const row = h('div', { class: 'cb-chat-looks' });
-    for (const l of it.looks) row.append(h('figure', { class: 'cb-chat-look' }, h('img', { src: lookUrl(l), alt: l.caption, width: String(Math.min(l.width, 340)) }), h('figcaption', { text: `look ${l.n}: ${l.caption}` })));
+    for (const l of it.shows) row.append(h('figure', { class: 'cb-chat-look' }, h('img', { src: showUrl(l), alt: l.caption, width: String(Math.min(l.width, 340)) }), h('figcaption', { text: `image ${l.n}: ${l.caption}` })));
     li.append(row);
   }
   if (it.text !== undefined) li.append(h('details', { class: 'cb-chat-result', ...(it.isError ? { open: true } : {}) }, h('summary', { text: it.isError ? 'error' : 'result' }), h('pre', { text: it.text })));

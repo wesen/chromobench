@@ -2,8 +2,7 @@
 // numbers it shows: measure.stats over its region, the measure.patches table for darkroom pictures, the
 // densitometer reading for an `at` option. Non-display domains go through a fixed transform:
 // print-xyz through output.display with the frame document's rendering, everything else as greyscale.
-// (The contract still calls a shown image a `Look`: EvalResult.looks.)
-import { DOMAINS, acceptsDomain, getOp, normaliseShape, type Box, type Document, type Graph, type ImageInfo, type Look, type Node } from '@chromobench/contract';
+import { DOMAINS, acceptsDomain, getOp, normaliseShape, type Box, type Document, type Graph, type ImageInfo, type Node, type Show } from '@chromobench/contract';
 import type { ShowRequest } from '../host.ts';
 import { burnNumber, encodePng } from './png.ts';
 import { fmtNum } from './yaml.ts';
@@ -88,7 +87,7 @@ async function renderOne(e: ShowEngine, id: string, req: ShowRequest, longSide: 
   return { rgb, width: img.width, height: img.height, numbers, node, region, scale };
 }
 
-export async function renderShow(e: ShowEngine, req: ShowRequest): Promise<Look> {
+export async function renderShow(e: ShowEngine, req: ShowRequest): Promise<Show> {
   const size = typeof req.opts['size'] === 'number' ? Math.min(LOOK_MAX_SIDE, Math.max(64, req.opts['size'] as number)) : LOOK_LONG_SIDE;
   const parts: Rendered[] = [];
   for (const id of req.ids) parts.push(await renderOne(e, id, req, req.ids.length > 1 ? size / 2 : size));

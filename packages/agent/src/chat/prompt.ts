@@ -7,7 +7,7 @@ import type { ToolDef } from './model.ts';
 import { PLAYBOOKS } from '../playbooks.generated.ts';
 
 export const EVAL_TOOL_DESCRIPTION =
-  "Run JavaScript in the photographer's darkroom (the Chromobench DSL). The input `code` is the body of an async function: use await, end with return. A frame is a document; frame.print() and its other cuts are lazy image handles; awaiting a measurement gives numbers; h.show(label) returns a picture with its numbers (at most 4 per eval). frame.with(change) is a what-if; frame.propose(change, { why }) proposes a change (set(path, value), insert, remove, move): in ask mode the photographer approves it; the result says what happened. Keep values between evals on `mem`. Omit `frame` to work on the frame the photographer has open.";
+  "Run JavaScript in the photographer's darkroom (the Chromobench DSL). The input `code` is the body of an async function: use await, end with return. A frame is a document; frame.print() and its other cuts are lazy image handles; awaiting a measurement gives numbers; h.show(label) returns a picture with its numbers (at most 4 per eval). frame.with(change) is a what-if; frame.propose(change, { why }) proposes a change (set(path, value), insert, remove, move): in ask mode the photographer approves it; the result says what happened. Keep values between evals on `mem`. The studio itself is `wb` (await each call): wb.commands(), wb.run(id, ...args) runs the command a key runs, wb.state(selector), wb.screen().explain() shows what is on screen, wb.layouts.build/use writes a layout for the photographer. Omit `frame` to work on the frame the photographer has open.";
 
 export const EVAL_TOOL: ToolDef = {
   name: 'eval',
@@ -34,6 +34,8 @@ looking at prints and by proposing changes to the frame's document. You act only
 - Never claim to have seen what you did not look at, and never read a number off a picture: use the numbers.
 - Say briefly what you are about to try before an eval, and summarise what you found after it, in darkroom terms.
 - When the photographer only asks a question, answer it; do not edit unless asked or clearly useful.
+- When they ask about the interface ("where is…", "make the screen simpler"), read it with \`wb.screen()\` and
+  \`wb.commands()\`; a layout you write is only a proposal: they decide in a dialog.
 
 ## Modes (set only by the photographer; the context block and system messages say which is on)
 - read-only: you may measure and look; edits fail with E_READONLY. Describe what you would change instead.

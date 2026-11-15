@@ -1,7 +1,7 @@
 // The text the agent reads (guide §5.10): value or error, edits, shown images, console, warnings,
 // context. Capped at 9000 characters; everything but the value is reserved, the value gets the
 // rest (at least 2000) and is cut with a note.
-import { EVAL_LIMITS, type ContextBlock, type Diagnostic, type Look } from '@chromobench/contract';
+import { EVAL_LIMITS, type ContextBlock, type Diagnostic, type Show } from '@chromobench/contract';
 import { fmtStr, renderYaml } from './yaml.ts';
 
 export const MIN_VALUE_CHARS = 2000;
@@ -12,7 +12,7 @@ export interface AssembleInput {
   errorWhere?: string;
   edits: string[];
   /** the images shown (h.show, cb.compare) */
-  shown: Look[];
+  shown: Show[];
   console: string[];
   warnings: Diagnostic[];
   context: ContextBlock;

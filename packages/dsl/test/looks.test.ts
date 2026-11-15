@@ -102,10 +102,11 @@ return JSON.stringify({ diff: v.diff, same: cb.looks.diff(frame, v), bluer: b.D[
     expect(listed).toEqual(expect.arrayContaining(['look warm-print', 'look crisp-warm', 'preset p-sky']));
     // link the frame's scan to the roll (the studio does this on New Roll), then read and print it through the link
     s.history.change((l) => l.commit({ doc: FRAME, tx: transaction({ id: 'r', label: 'Roll', by: 'auto', mutations: [linkMedium(l.doc<Document>(FRAME), 'scan', { roll: 'r1' }, roll!.media.scan!)] }) }));
-    const r = await s.run(`const d = await frame.print().measure.densitometer({ at: [48, 32] }); return JSON.stringify({ stock: frame.get('stages.scan.medium.overrides.stock') ?? null, D: d.D.length })`);
+    const r = await s.run(`const d = await frame.print().measure.densitometer({ at: [48, 32] }); return JSON.stringify({ stock: frame.get('stages.scan.medium.overrides.stock') ?? null, read: frame.get('stages.scan.medium.stock'), scanner: frame.get('stages.scan.medium.scanner'), D: d.D.length })`);
     expect(r.error, r.yaml).toBeUndefined();
     // the frame's own stock differs from the roll's: it is kept as its override (divergence), and it is what prints
-    expect(val(r)).toEqual({ stock: 'kodak_portra_400', D: 3 });
+    // frame.get of a linked medium field reads through the link: the override where there is one, else the roll's
+    expect(val(r)).toEqual({ stock: 'kodak_portra_400', read: 'kodak_portra_400', scanner: 'xt5-rgb-led', D: 3 });
     expect(r.context?.frame).toContain('kodak_portra_400');
     const p = await s.run(`return JSON.stringify(cb.looks.apply('p-sky'))`);
     expect(val(p)).toMatchObject({ frames: 1, layers: ['darkroom: burn {"stops":0.5}'] });

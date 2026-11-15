@@ -8,10 +8,12 @@
 // builders and frame.propose), show.ts (show, explain), named-looks.ts (cb.looks.*: looks as links), errors.ts (the prelude's
 // traps); words.ts and types.ts hold the shared helpers and records. Each native is a function of the Host.
 import {
-  AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind,
+  AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind, readField, storedPath,
   type Compiled, type Diagnostic, type Document, type Domain, type Graph, type LinkContext, type Node,
 } from '@chromobench/contract';
-import { getPath as getPathOf, type Log } from '@chromobench/values';
+import { getPath as getPathOf, type Log, type LogEntry } from '@chromobench/values';
+import type { QuickJSWASMModule } from 'quickjs-emscripten-core';
+import { defineLookWith } from './cblook.ts';
 import { describeMutation } from './describe.ts';
 import type { DslHistory } from './history.ts';
 import { callOp } from './host/calls.ts';
@@ -45,6 +47,10 @@ export class Host {
   states = new Map<string, FrameState>();
   views = new Map<string, View>();
   edits: QueuedEdit[] = [];
+  /** the log entries this eval's workbench commands made (wb.run, wb.set) */
+  wbEntries: LogEntry[] = [];
+  /** the QuickJS module, for looks written as code (cb.looks.define) */
+  qjs: QuickJSWASMModule | null = null;
   shows: ShowRequest[] = [];
   logs: LogLine[] = [];
   warnings: Diagnostic[] = [];
@@ -96,6 +102,7 @@ export class Host {
     this.views = new Map();
     this.viewCounter = 0;
     this.edits = [];
+    this.wbEntries = [];
     this.shows = [];
     this.logs = [];
     this.warnings = [];
@@ -150,6 +157,7 @@ export class Host {
       case 'looks.whatIf': return looksWhatIf(this, a);
       case 'looks.diff': return looksDiff(this, a);
       case 'looks.bake': return looksBake(this, a);
+      case 'looks.define': return looksDefine(this, String(a['src']));
       case 'help': return this.docs.help((a['name'] as string | null) ?? null);
       case 'docs': return this.docs.docs(a);
       case 'log': {
@@ -240,6 +248,8 @@ export class Host {
   private get(key: string, path: unknown): unknown {
     const v = this.view(key);
     if (typeof path !== 'string') throw new ChromobenchError(diag('E_ARG_TYPE', 'frame.get(path) takes a document path', { fix: `${v.expr}.get('main.params.time_s')` }));
+    // a field of a linked medium (a frame on a roll) reads through the link, as the compiler sees it (CHB-037 P6b)
+    if (storedPath(v.doc, path) !== path) return readField(v.doc, path, this.links());
     return getPathOrFix(v, path);
   }
 
@@ -315,6 +325,14 @@ function getPathOrFix(v: View, path: string): unknown {
   }
 }
 
+
+/** cb.looks.define(src): an agent-written look, registered in this realm at once (the page registers it too). */
+function looksDefine(h: Host, src: string): unknown {
+  if (!h.qjs) throw new ChromobenchError(diag('E_INTERNAL', 'the sandbox for looks is not loaded'));
+  h.vocabulary['cb.looks'] = (h.vocabulary['cb.looks'] ?? 0) + 1;
+  const d = defineLookWith(h.qjs, src, { file: `look-${h.evalId}.cblook.js` });
+  return { name: d.name, version: d.version, label: d.label, stages: [...d.stages], params: Object.keys(d.params) };
+}
 
 const EMPTY_DOCS: DocsProvider = {
   help: () => 'no reference loaded',
