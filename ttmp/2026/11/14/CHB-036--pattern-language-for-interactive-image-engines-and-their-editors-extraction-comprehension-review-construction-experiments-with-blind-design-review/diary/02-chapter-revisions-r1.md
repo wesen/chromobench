@@ -202,3 +202,113 @@ walk, evaluation memo beside a byte-bounded cache; …"
 
 ### Technical details
 - Word counts by `wc -w` (code and tables included, as for v1): 2,499.
+
+## Step 3: Chapter 4, Latest-Wins Render Slots
+
+Chapter 4 is the case where the chapter shaped the code without improving it: the reviewer told chapter runs from
+controls (0.75–0.90 against 0.15–0.30) but ranked a control best (impl-E, control-1, 28/35), and traced the chapter's
+harm to its sketch. Five of six runs copied the sketch's "release the old result, then present the new one"; impl-B
+(chapter-4) copied the lane on the slot and then misjudged `liveBusy` after a lane change; and the sketch's `close()`
+left four questions open, which the runs answered four ways. So the sketch was rewritten first, and the rest of the
+chapter follows it: the lane moves to the request and its render; each render has a `fate` (wanted, kept, aborted)
+decided at request time; an aborted render holds its slot until it settles; settle presents first and releases
+after; `close()` releases the shown result once; `idle()` waits for aborted renders.
+
+The star stays ★★. All six runs, the two controls included, converged on the same seams (slot map, one waiting and
+one running record, live-first pump, aborted flag, walls, adoption by key; slots-r1 `cross.generativity`). That is
+what ★★ claims: the shape is close to invariant. The chapter's problem was the sketch's details, not the pattern.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Fix chapter 4's defects named in RESULTS.md (lane, present order, close semantics),
+add the listed ideas, re-examine the star, add Validation.
+
+**Inferred user intent:** A chapter whose sketch an agent can copy literally and get a correct scheduler.
+
+**Commit (code):** 54d4d98 — "Chapter 4 rev1: lane on the request and its render, a fate per render (wanted, kept,
+aborted) decided at request time, …"
+
+### What I did
+- Solution rewritten: lane in the request; same-key adoption only for renders not aborted; "decide now: abort or
+  keep"; occupancy until settle; present only renders not aborted, present first then release; release every
+  result not shown exactly once.
+- Forces: "Aborting against wasting" and "Simplicity against starvation" replaced by "Aborting against occupying"
+  and "The scheduler against its callers" (the two forces the runs actually struggled with); freshness/progress
+  keeps the starvation point.
+- Structure: Slot without lane; new Render participant with its fate; thumbnail cache moved into note 10 (no run
+  built it, slots-r1 problems 4).
+- State diagram now has Kept and Aborted states and shows that aborted renders still hold the slot.
+- Sketch rewritten: `request`, `abort`, re-entrant-guarded `pump`, `settle`, `close`, `idle`, `chooseTarget`.
+- Notes: v1 1 rewritten (never backwards by structure, the comparison as the law); 2 extended with the fate; new 3
+  (lane on the request), 4 (aborted renders keep the slot; close; idle; engine caps), 5 (present first, release once,
+  boxed results), 6 (walls, re-entrancy, wake from events; v1 note 4 folded in), 7 (adoption rules; v1 note 8); v1 3
+  kept as 8; v1 5 and 7 merged as 9; v1 6 and 10 merged as 10; v1 11 extended with the fuzz laws as 11.
+- Variations: "Starvation by count" folded into "Tile-level refinement"; others tightened.
+
+### Why (evidence per change)
+- Lane on the request: slots-r1 `yardstick_problems` 1; impl-B (chapter-4) `src/index.ts:69, :118, :274`; A, C, E
+  keep it per request (`impl-A/src/index.ts:55`, `impl-F/src/index.ts:64` per render); change request 2 analyses
+  for B ("the lane has to move onto RunningJob first").
+- Present first, then release: slots-r1 problems 2 and ideas 1; impl-E (control-1) `src/index.ts:236-242`; the copy
+  in B `:193-194` and D `:185-187`.
+- close/idle semantics: slots-r1 problems 3; occupied-until-settle from impl-D (chapter-1) `:281`, impl-F
+  (chapter-2) `test/core.test.ts:406`; the overlap after reopen in impl-A `:320` and impl-C `:326` (smells); release
+  shown on close from impl-B `:312-318`, impl-F `:296-299`. "idle waits for aborted renders" is my decision: it is
+  the reading under which "idle" means every release has happened, and it is what occupancy implies.
+- The fate (must-present flag): slots-r1 ideas 2 and problems 5; impl-E `presentAnyway` `src/index.ts:67, :124,
+  :303`; change request 1 (a proof pass) maps onto it (impl-E change-request analysis "Most of the mechanism exists
+  already").
+- Walls around callbacks: ideas 5, impl-A `:119-125`, impl-B `:93-99`. Re-entrancy guard: ideas 6, impl-B
+  `:229-244`, impl-A `test/scheduler.test.ts:659`. Synchronous throw is a failure: ideas 7, impl-A `:179-182`.
+- Boxed results: ideas 8, impl-B `:75`, impl-E `:79`. Never adopt an aborted render: ideas 9, impl-B `:282`,
+  impl-C `test/scheduler.test.ts:772`. Aborted live render does not block background work: ideas 10, impl-F
+  `:151-152`.
+- Engine caps count aborted renders: change request 2 analyses (A and C undercount detached renders; D, E, F count
+  correctly because aborted renders stay in the slot).
+- Adoption reports the newer generation: impl-C smell `:297-305` and impl-E smell `:57, :63, :235` (present info
+  disagrees with what `request` returned).
+- Fuzz liveness law: ideas 11, impl-E `test/fuzz.test.ts:172-179`; per-slot concurrency across closes from the
+  weakened law in impl-C `test/invariants.test.ts:46` and the hidden overlap in impl-A.
+
+### What worked
+- Replacing the two booleans (`aborted`, `mustPresent`) of the first draft by one `fate` field: the present rule
+  became "fate ≠ aborted", the state diagram got one state per fate, and change request 1 became one assignment.
+
+### What didn't work
+- First draft: 2,902 words. Cut to 2,499 by merging notes and shortening Variations, Motivation and Known uses.
+- First draft of `request` kept a `mustPresent` flag that `settle` never read (the present rule was already "not
+  aborted"), which would have taught a dead field; replaced by `fate`.
+- The v1 sketch's adoption returned without clearing `s.waiting`; with a kept render and a different waiting key, a
+  later request for the running key would leave the older waiting request to run and be shown after the newest
+  one. The new sketch drops the waiting request on adoption. (My own finding while rewriting; no reviewer named it.)
+- `starved` in the v1 sketch had no "progressMs > 0" guard, so 0 meant "always starved" instead of "disabled".
+
+### What I learned
+- With strict occupancy, the generation comparison never decides anything; the decisions are made at request time.
+  The chapter now says so, and keeps the comparison as the law to assert and as the rule for designs that let two
+  renders of one slot be in flight.
+
+### What was tricky to build
+- Keeping three rules consistent: an aborted render holds its slot (for per-slot concurrency and engine caps), but
+  it does not make its lane busy (so background work is not blocked by something nobody wants), and `idle()` still
+  waits for it. The sketch expresses all three in `settle` (only place that frees the slot), `liveBusy` (comment:
+  live work not aborted) and `idle`.
+
+### What warrants a second pair of eyes
+- `idle()` waiting for aborted renders is a choice the task left open; an engine that never settles aborted work
+  would then never be idle. The note says "the engine is quiet", which is the intended meaning.
+- 2,499 words by `wc -w`.
+
+### What should be done in the future
+- Rerun the slots task with this version; the review should now show whether the chapter runs stop copying the
+  release order and the slot lane.
+
+### Code review instructions
+- `git diff c2e07f5 54d4d98 -- docs/patterns/04-latest-wins-render-slots.md`; check the sketch against
+  `docs/patterns/experiments/tasks/slots/TASK.md` requirements 1–8 and the state diagram.
+
+### Technical details
+- Present rule after the change: `fate ≠ aborted` → assert `gen > shownGen`, present, then release the old shown
+  result; `fate = aborted` → release; failure → report unless aborted.
