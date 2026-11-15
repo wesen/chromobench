@@ -1,6 +1,8 @@
 // @chromobench/values: the builder core (CHB-035 design §30, §24, §26). A dependency-free leaf: immutable values
 // and canonical JSON, modifiers, explain and call-site provenance, the collection idiom, the four mutations over a
-// JSON document with id-addressed paths, and transactions. It knows nothing about images or interfaces.
+// JSON document with id-addressed paths, transactions, the net change between two versions (diff), the document
+// log (one history: undo, proposals, batches, provenance, drafts) and the batch builder. It knows nothing about
+// images or interfaces.
 export { VALUE_ERROR_CODES, ValueError, type ValueDiag, type ValueErrorCode } from './errors.ts';
 export {
   assertJson, canonicalJSON, deepFreeze, equal, isDeepFrozen, isJson, isPlainObject, jsonProblem,
@@ -26,3 +28,10 @@ export {
   applyTransaction, invertTransaction, revertTransaction, transaction, tryTransaction,
   type Author, type Transaction, type TransactionInit, type TxApplied, type TxOptions, type TxResult, type TxStatus,
 } from './transactions.ts';
+export { diff } from './diff.ts';
+export {
+  Draft, LOG_VERSION, Log,
+  type Batch, type Edit, type LogData, type LogEntry, type LogOptions, type OpenOptions, type Rules, type Selector, type Skipped,
+  type Step, type Target, type Why,
+} from './log.ts';
+export { plan, type PlanMeta, type Planned } from './plan.ts';
