@@ -1,38 +1,98 @@
 # chromobench: handoff guide
 
-This guide is for a developer taking over chromobench. It explains what the project is, how to build, run and
-test it, how the work is organised, how to reproduce the RAW colour investigation on a Mac (CHB-033), how to find
-out why WebGPU might not work on an Apple Silicon Mac, and what to do next. Every claim that refers to code names
-the file; every number comes from a ticket diary you can open.
+This guide is for a developer taking over chromobench. It explains what the project is, the one editing model the
+studio is built on (CHB-037), how to build, run and test it, how the work is organised, how to reproduce the RAW
+colour investigation on a Mac (CHB-033), how to find out why WebGPU might not work on an Apple Silicon Mac, and what
+to do next. Every claim that refers to code names the file; every number comes from a ticket diary you can open.
 
-Written 2026-11-14, at commit `main` after CHB-031 round 2, CHB-032 and CHB-033 steps 1–5.
+Written 2026-11-15 at the end of CHB-037 (the unified editing model, phases P0–P9; branch
+`task/chb-037-unified-model`). The previous version (2026-11-14, after CHB-031…033) described the studio before the
+cut-off; it is in git history.
 
 ---
 
 ## 1. What chromobench is
 
-A browser application (a PWA, "the studio") that lets a photographer work like in a colour darkroom:
+A browser application (a PWA, "the studio") for a photographer who works with film:
 
-- it imports **digital camera RAWs** (Nikon NEF, DNG, …) and **scans of colour negatives** (DNG/TIFF from a flatbed
-  scanner);
+- it imports **scans of colour negatives** (DNG/TIFF from a flatbed scanner) and **digital camera RAWs** (Nikon NEF,
+  DNG, …) — the camera files are "shot on film" through a forward film simulation;
 - it prints them through a **physical model of film and paper** (spectral dye densities, the orange mask, an
   enlarger with time, aperture and filtration, paper curves), using stock data from spektrafilm (Andrea Volpato,
   CC BY-SA 4.0; see CHB-004 for the data pipeline and licence questions);
-- it offers darkroom tools (test strips, ring-arounds, dodging, density masks) and Lightroom-like library and
-  export functions.
+- around the darkroom it has the **digital tools of Lightroom and Photoshop** (from the "Editor lab" prototype):
+  curve, levels, HSL, colour grading, vibrance, channel mixer, clarity, sharpen, vignette, 16 blend modes, groups,
+  masks (gradients, brush, luminance and colour ranges), heal and clone;
+- a library, rolls (first print per roll, matching), looks and presets, export (16-bit TIFF, PNG, ICC).
 
 The intended user is a photographer (the owner's father; in the tickets he appears as the persona "Manfred",
 CHB-026 `reference/01-persona-manfred.md`). The goal is a professional replacement for his Lightroom + Negative Lab
-Pro + Dehancer workflow. A JavaScript DSL lets an LLM agent drive the app (recipes, layouts, playbooks); the
-photographer never sees the DSL.
+Pro + Dehancer workflow. An **agent with only `eval`** (a JavaScript DSL in a QuickJS sandbox) can do and see
+everything he can: edit any stage, run any command, read any state, build layouts; the photographer never sees the DSL.
 
 Two engines compute prints: a **WebGPU engine** (`packages/gpu`, fast, works at up to 4000 px) and a **CPU
-reference engine** (`packages/core`, f64, runs in a worker, previews at 640 px through tables, exports exact). The
-GPU engine is what the photographer should use; the CPU engine is the fallback ("Compatibility mode").
+reference engine** (`packages/core`, f64, runs in a worker, previews through tables, exports exact). The GPU engine
+is what the photographer should use; the CPU engine is the fallback ("Compatibility mode") and the oracle.
 
 ---
 
-## 2. Getting started
+## 2. The editing model (CHB-037, CHB-035 design 01 v2)
+
+The design is `ttmp/2026/11/14/CHB-035--…/design/01-digital-editing-in-chromobench.md`; the implementation plan and
+every phase's diary are in `ttmp/2026/11/14/CHB-037--…/`. There was a **hard cut-off**: no backwards compatibility,
+no migrations; edits saved by the earlier studio are cleared once at start (`resetStorage`, with a message).
+
+**A frame is a document** (`packages/contract/src/document.ts`, format 3): `source`, `stages`, `masks`, `probes`,
+`geometry` (orientation, straighten, crop), `output`. Collections are `Coll`s (ordered, id-keyed; ids are unique in
+the whole document). A negative scan has the stages `scan`, `darkroom`, `print`; a camera file has `scene`, `film`,
+`darkroom`, `print`.
+
+**Each stage is a medium and a stack** of entries: layers (an op of the catalogue with its parameters), groups and
+links. The stage's **law** (`packages/contract/src/stage-laws.ts`) says what amount, blend and order mean:
+`light` (the darkroom: every entry adds or modulates light on the paper — main exposure, printer lights, burns,
+dodges, flashes, preflash, filters, density "contrast" masks; amount scales time or density; the order does not
+change the print), `composite` (the print and the scene stage: layers apply from the top down, amount is opacity,
+16 W3C blend modes, in an encoding — `print-rgb`, `print-oklab`, … — the compiler inserts), `repair` (the scan:
+heal and clone spots in order). Any entry can use a mask from the document's mask library (one algebra: add, subtract,
+intersect; feather in mm on the print; range components read the stage input or a named cut).
+
+**Cuts and one compiler.** `CutName` (`source`, `scan`, `scene.input`, `scene`, `film`, `negative`, `darkroom.main`,
+`darkroom.H`, `print`, `finished`, `display`) names every point of the pipeline; the contract's compiler turns a
+document into a node graph up to a cut, and both engines evaluate the same graph (`packages/conformance` checks them:
+524/524 cases; `tools/goldens` holds 66 golden pictures of the reference engine that P2 used to prove the cut-off
+reproduced the old darkroom).
+
+**One history** (`packages/values`): the store's document log holds every frame's transactions with one cursor
+(`Log`; four mutations: set, insert, remove, move; batches over a roll are one step). Drafts carry a drag or a
+proposal; an agent's change in "ask" mode is a pending proposal approved on a card. The History panel shows a frame's
+steps in his words (`packages/studio-kit/src/model/history.ts`). Ratings are document-tier (undoable).
+
+**Links** (`packages/contract/src/links*.ts`): looks are versioned pure functions `(params, facts) → group` (built-in:
+warm/cool print, softer/more contrast, edge burn, crisp print, …); a link entry expands at compile; "bake" turns it into
+its plain group. A roll holds shared media; a frame's scan medium links to the roll and keeps its own changes as
+overrides (its divergence). Presets are looks without parameters; sync copies values or inserts the same link.
+
+**The UI is a program** in two immutable DSLs: `ck` (`packages/shell`, forms, modules, panels, state tiers, passes)
+and `cb` (`packages/studio-kit`, the studio's builders and kits). **The stack kit** (`cb.kits.stack`,
+`packages/studio-kit/kits/stack/`) gives every stage one layers panel, one params panel (with editors: curve, levels,
+HSL, colour grading wheels, mixer; the colour-range eyedropper), one masks panel, the "+ Layer" menu from the
+catalogue, mask tools and the `layer.*`/`mask.*`/`link.*` commands; the Enlarger, Exposures and Finish panels are
+specialised stack views. A stage policy pass warns when a module shows a stage it does not declare. Layouts are in
+`packages/studio-kit/layouts/*.js`: **classic** (Library, Roll, Scene, Print, Edit, Finish, Assistant, Output),
+**darkroom** ("Darkroom first": strip, print, Enlarger, Paper and a collapsed "Digital (after the print)" palette),
+simple, tiny, lab, roll, finish, looks. View ▸ Layout switches in place (open frames and the history stay).
+
+**The workbench** (`wb` in `packages/dsl`, served by `packages/studio-kit/kits/chat/src/workbench.ts` and
+`apps/studio/src/host/workbench.ts`): `wb.commands()`, `wb.run(id, …)` (the same command a key runs, under his
+mode: ask proposes, auto commits, read-only refuses), `wb.state(selector)`, `wb.screen().explain()` (the mounted
+layout with live values), `wb.layouts.build(src)` / `wb.layouts.use(layout)` (a layout written in the sandbox crosses
+as data, is checked by the passes and proposed in a dialog), `cb.looks.define(src)`. Layouts he accepted and looks the
+agent wrote are kept in the KV (`settings/agent-layouts`, `settings/agent-looks`). Two tests keep the surface
+complete (`packages/studio-kit/test/chat/workbench.test.ts`).
+
+---
+
+## 3. Getting started
 
 ### Requirements
 
@@ -54,11 +114,14 @@ pnpm exec playwright install chromium        # once, for the browser test suites
 pnpm --filter @chromobench/studio dev        # dev server, http://localhost:4173/
 pnpm --filter @chromobench/studio build      # production build into apps/studio/dist
 pnpm --filter @chromobench/studio preview    # serve the build, http://localhost:4173/
+node e2e/make-scenes.ts .playwright-mcp/synthetic   # synthetic test files (a negative, a roll, a camera RAW)
 ```
 
 Useful URL options (`apps/studio/DEMO.md`): `?engine=gpu|reference|mock`, `?long=N` (GPU working size, default
 4000; `0` = the file's own size), `?refLong=N` (CPU working size, default 640), `?refMode=exact`, `?canvas2d`,
-`?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?layout=`.
+`?nosw` (no service worker), `?fresh` (keep nothing in the browser), `?layout=` (a built-in id or a kept assistant
+layout). In the page, `window.chromobench` is the test and agent hook (`apps/studio/src/main.ts`, `makeHook`);
+`window.chromobench.eval(code)` runs agent DSL code.
 
 ### Checks (all must pass before merging)
 
@@ -66,79 +129,87 @@ Useful URL options (`apps/studio/DEMO.md`): `?engine=gpu|reference|mock`, `?long
 pnpm typecheck        # tsc over the workspace
 pnpm lint             # package-boundary and literal-colour checks
 pnpm gen:check        # generated docs and references are up to date (regenerate with: pnpm gen)
-pnpm test             # vitest: about 104 files, 2800 tests, about 70 s
-CI=1 pnpm test:browser   # Playwright: about 106 tests incl. GPU conformance 320/320, about 3 min
+pnpm test             # vitest: 137 files, ~3380 tests, ~30 s
+node tools/goldens/render.ts --check    # 66 golden pictures of the reference engine
+CI=1 pnpm test:browser   # Playwright: 146 tests incl. GPU conformance 524/524, ~8 min on SwiftShader
 ```
 
 When several people or agents run browser suites on one machine, give each run its own ports:
 `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 pnpm test:browser`.
 By default the `[chromium-webgpu]` and `[gpu-parity]` projects run WebGPU on **SwiftShader** (software), on any
-machine. `REAL_GPU=1` drops those flags so they get the machine's own adapter (Metal on a Mac, headless works);
-on the M1 Max the full suite passes there too (CHB-034).
+machine. `REAL_GPU=1` drops those flags so they get the machine's own adapter (Metal on a Mac; **headless works**, so
+never open a headed window on someone's desktop); on the M1 Max the full suite passes there in ~4 min. Benches are
+skipped unless `BENCH=1`. Several agents on one machine take a lock directory before a `REAL_GPU=1` run.
+`e2e/walkthrough.spec.ts` is the end-to-end tour (negative to export, darkroom arrangement, roll, camera file, the
+agent); `P9_SHOTS=<dir>` writes its screenshots there.
 
 ---
 
-## 3. Repository map
+## 4. Repository map
 
 | Path | What it is |
 |---|---|
-| `apps/studio/` | the studio PWA: `src/main.ts` (host: boot, menus wiring, open flow, dialogs, status line), `src/host/` (engines, decode, first print, export, worker), `src/status-text.ts` (plain wording) |
-| `packages/contract/` | the contract: types, op registry, parameter catalogue, recipes and edit log. Changes need a version bump and an entry in `CONTRACT-DECISIONS.md` |
-| `packages/core/` | the physics: spectral film and paper model, enlarger, CPU reference engine (`engine-ref.ts`), tables |
-| `packages/gpu/` | WebGPU engine (`engine-gpu.ts` + `engine/*`), parity tests against core |
+| `apps/studio/` | the studio PWA: `src/main.ts` (host: boot, layouts, open flow, dialogs, status line, the hook), `src/host/` (engines, decode, first print, export, worker, the assistant and its workbench), `src/status-text.ts` (plain wording) |
+| `packages/values/` | the builder core: immutable values, `Coll`, paths, the four mutations, `diff`, the document log (README) |
+| `packages/contract/` | document format 3, stages and laws, cuts, the compiler, the op catalogue (with `ui` labels and menus), masks, links and looks, bindings. Changes bump `CONTRACT_VERSION` (1.3.0) and add a CC entry to `CONTRACT-DECISIONS.md` |
+| `packages/core/` | the physics and the f64 reference engine (`engine-ref.ts`), tables, the composite ops |
+| `packages/gpu/` | WebGPU engine (`engine-gpu.ts`, `chain/`, WGSL with includes linked by `chain/wgsl-link.ts`), parity tests against core |
+| `packages/engine-mock/`, `packages/conformance/` | the mock engine and the engine conformance suite (+ goldens) |
 | `packages/ingest/` | decoders: TIFF, DNG, LibRaw (WebAssembly) for camera RAWs, scan conditioning (rebate, flare, frames on strips) |
-| `packages/output/` | export encoders (TIFF 16, PNG, ICC) |
+| `packages/output/` | export encoders (TIFF 16, PNG, ICC), exact tiled export |
 | `packages/data/` | data packs (film and paper stocks, cameras, lights) as safetensors + manifests (committed) |
-| `packages/shell/` | the UI shell ("CraftKit Shell" ported): store, history/undo, viewport, menus, panels, render queue |
-| `packages/studio-kit/` | the studio's UI DSL (`cb`) on top of the shell's (`ck`); layouts in `layouts/*.js`; kits (roll, looks, finish) |
-| `packages/dsl/` | the agent DSL run in a QuickJS sandbox |
-| `packages/agent/` | agent integration (chat, bridge client) |
-| `packages/engine-mock/`, `packages/conformance/` | the mock engine and the engine conformance suite |
+| `packages/shell/` | `ck`, the UI DSL: forms, modules, panels, dock, store (three tiers, one history), passes, DOM renderers (README) |
+| `packages/studio-kit/` | `cb`, the studio's DSL on `ck`; layouts in `layouts/*.js`; kits: `stack`, `roll`, `looks`, `finish`, `chat` |
+| `packages/dsl/` | the agent DSL run in a QuickJS sandbox (`frame`, transactions, `cb.looks`, `wb`); `generated/instructions.md` is what the agent reads |
+| `packages/agent/` | agent integration (chat transports, the worker client, the bridge client) |
 | `bridge/` | Go server for external agents (MCP) |
-| `e2e/` | Playwright specs for the studio |
-| `tools/` | doc generation, lint checks, fixtures, scripts (`tools/scripts/unused-exports.mjs`) |
-| `docs/reference/` | generated reference docs (ops, DSL) |
-| `ttmp/YYYY/MM/DD/CHB-NNN--…/` | tickets (see section 4) |
+| `e2e/` | Playwright specs for the studio; `scenes.ts` synthetic scenes |
+| `tools/` | doc generation, lint checks, goldens, fixtures, `wgsl-check`, scripts |
+| `docs/reference/` | generated reference docs (ops) |
+| `ttmp/YYYY/MM/DD/CHB-NNN--…/` | tickets (section 5) |
 
 ---
 
-## 4. How the work is organised
+## 5. How the work is organised
 
 ### Tickets and diaries (docmgr)
 
 All work is tracked as tickets under `ttmp/`, managed with the `docmgr` CLI (`docmgr ticket list`,
-`docmgr task list --ticket CHB-029`, `docmgr task check --ticket … --id …`, `docmgr doc add …`). A ticket folder
+`docmgr task list --ticket CHB-037`, `docmgr task check --ticket … --id …`, `docmgr doc add …`). A ticket folder
 has `index.md`, `tasks.md`, `changelog.md`, `design-doc/` (plans), `diary/`, `reference/`, `playbook(s)/`,
-`scripts/` (numbered, tracked) and `various/` (screenshots, measurements). If you don't have docmgr, the files
-are plain Markdown with YAML front matter; edit them by hand and keep the `<!-- t:id -->` task markers.
+`scripts/` (numbered, tracked), `sessions/` (persona sessions) and `various/` (screenshots, measurements). If you
+don't have docmgr, the files are plain Markdown with YAML front matter; edit them by hand and keep the
+`<!-- t:id -->` task markers.
 
 Every substantial piece of work has a **diary in the "investigation" format**: numbered steps, each opening with
 one or two paragraphs, then the sections *Prompt Context* (the request verbatim), *What I did*, *Why*, *What
 worked*, *What didn't work* (exact commands and errors), *What I learned*, *What was tricky to build*, *What
 warrants a second pair of eyes*, *What should be done in the future*, *Code review instructions*, *Technical
-details*. Read the latest steps of a ticket's diary before touching its code.
+details*. Read the latest steps of a ticket's diary before touching its code. CHB-037 has a main diary and one per
+phase (`diary/01…17`).
 
 ### Branches and merging
 
-Work happens on `task/chb-NNN-…` branches (often in git worktrees under `.claude/worktrees/`), merged into `main`
-with `--no-ff` after `typecheck`, `lint`, `gen:check`, `test` and `test:browser` pass. Regenerate snapshots
-(`npx vitest run <file> -u`) and generated docs (`pnpm gen`) instead of hand-merging them, and read their diffs.
+Work happens on `task/chb-NNN-…` branches (often in git worktrees), merged with `--no-ff` after `typecheck`, `lint`,
+`gen:check`, `test`, the goldens and `test:browser` pass. Regenerate snapshots (`npx vitest run <file> -u`) and
+generated docs (`pnpm gen`) instead of hand-merging them, and read their diffs.
 
 ### Privacy rules (important)
 
-The test material is the photographer's **private family photographs and scans**. Rules followed so far:
+The photographer's material is **private family photographs and scans**. Rules:
 
 - raw files (NEF, DNG, scans) are **never committed**; they live in the git-ignored `.playwright-mcp/` folder
   (`photos/`, `scans/`, `dng/`, `dngv/`);
 - browser profiles of test sessions are git-ignored (`ttmp/**/sessions/*/profile/`);
 - screenshots of the app showing these photos were committed **only inside ticket folders** (CHB-026 sessions,
-  CHB-033 `various/shots/`) while the repository had no remote. Treat the repository itself as private;
+  CHB-033 `various/shots/`) while the repository had no remote. Since CHB-037 sessions and walkthroughs use
+  **synthetic material only** (`e2e/scenes.ts`). Treat the repository itself as private;
 - nothing from the photos goes into public places (vault notes, issues, public repos);
 - committed test fixtures are synthetic.
 
 ---
 
-## 5. Test material
+## 6. Test material
 
 | What | Where on the owner's machines | Put it into |
 |---|---|---|
@@ -148,10 +219,11 @@ The test material is the photographer's **private family photographs and scans**
 | Adobe DNG Converter DNGs of 4 NEFs, Adobe's stage-3 and renders | Mac `~/chromobench-tools/dng-out/`, `~/chromobench-tools/dngv/` | `.playwright-mcp/dng/`, `.playwright-mcp/dngv/` |
 
 Ask the owner for access. The catalogue of what each file exercises is CHB-026 `reference/02-test-material.md`.
+For tests and persona sessions, prefer the synthetic files of `node e2e/make-scenes.ts <dir>`.
 
 ---
 
-## 6. WebGPU on an Apple Silicon Mac (M1 Pro): why it might not work
+## 7. WebGPU on an Apple Silicon Mac (M1 Pro): why it might not work
 
 The studio picks the GPU engine when WebGPU works and otherwise falls back to the CPU engine. The bottom-left pill
 shows "Fast (graphics card)" (GPU) or "Compatibility mode: slower (no WebGPU)" (`apps/studio/src/status-text.ts`); its tooltip has the technical reason after
@@ -195,9 +267,9 @@ Work through these in order:
 8. **Automated check.** CHB-027 has a smoke script that opens the studio in real Chrome and reports the engine:
    `ttmp/2026/11/12/CHB-027--…/scripts/mac-01-gpu-smoke.mjs` (and `mac-02-open-and-drag.mjs` for timings),
    described in `…/scripts/mac-README.md` and `…/playbook/01-real-gpu-browser-testing-on-the-m1-mac-over-ssh.md`.
-   On your own Mac you can run them locally against `http://localhost:<port>/`; Playwright must use the installed
-   Chrome (`channel: 'chrome'`) and **headed** mode (`headless: false`): headless and Playwright's bundled
-   Chromium may not get the Metal-backed adapter.
+   On your own Mac you can run them locally against `http://localhost:<port>/`. Since CHB-034, Playwright's
+   Chromium in **headless** mode gets the Metal adapter (`REAL_GPU=1 CI=1 pnpm test:browser` reports
+   `apple metal-3`); a headed window is not needed.
 9. **Low-level.** macOS version (WebGPU needs macOS 13+ in Chrome), low-power mode, and external display setups
    rarely matter on M1 Pro; if `chrome://gpu` shows "Metal" as the backend and WebGPU hardware accelerated but
    the app still says "requestDevice failed", report the message: it means a limit or feature the engine asks
@@ -208,7 +280,7 @@ handover was cause 1: the studio opened over plain http through Tailscale.
 
 ---
 
-## 7. The RAW colour investigation (CHB-033): reproduce and continue on a Mac
+## 8. The RAW colour investigation (CHB-033): reproduce and continue on a Mac
 
 Ticket: `ttmp/2026/11/12/CHB-033--raw-colour-against-adobe-dng-round-trip-forward-matrices-colour-chart-lightroom-reference/`.
 Read its `design-doc/01-plan-and-first-measurements.md` and `diary/01-diary.md` (steps 1–5) first.
@@ -291,59 +363,55 @@ must match is the **scene colour before the film**: white balance, camera RGB �
 
 ---
 
-## 8. Where the project stands and what's next
+## 9. Where the project stands and what's next
 
-### Recently done (2026-11-12…13)
+### Done (2026-11-14…15): CHB-037, the unified editing model
 
-- **CHB-026** cosplay usability testing: four sessions with a scripted photographer persona found F1–F44;
-  findings and verdicts in `CHB-026 …/various/02-findings.md`, sessions in `…/sessions/`.
-- **CHB-027** and **CHB-031** fixed those findings: real enlarger mode by default (Time and Aperture work), photo
-  first print (automatic exposure, as-shot white balance), Open As, the library, strip frames (orientation, size,
-  base from the gaps), the layout switch that keeps photos open, History in words, Actual Pixels, faster cold open
-  (29 s → ~7 s on the CPU), CPU previews through tables at 640 px.
-- **CHB-032** clean-up (closed): splits of large files, one TIFF writer, reference docs on undo and on which engine
-  computes what (`CHB-032 …/reference/`), 63 unused exports removed.
+Phases P0 (goldens), P1 (`packages/values`), P5a (one immutable UI DSL), P2 (contract 1.0, reference engine,
+conformance), P3/P3b (GPU on the contract: composite ops, blend modes, coalesced heal, GPU `output.frame`, exact
+tiled export with halos), P4 (one history), P5b (the stack kit, the stage policy pass, the arrangements), P6 (the
+agent's DSL and workbench), P7 (links: looks, rolls, presets, sync), P8 (Editor lab's tools in both engines and their
+editors), P9 (integration: the browser suite on SwiftShader and Metal, end-to-end walkthroughs, the persona session
+on the two arrangements, agent layouts and looks persisted, this guide). The integration report is
+`ttmp/2026/11/14/CHB-037--…/reference/02-integration-report.md`.
 
-### Decisions taken (2026-11-14)
+### Decisions taken
 
-- **First-print colour aim for scans** (CHB-026 F30): stays **neutral grey** (integrate to grey, `alpha: 1` in
-  `FIRST_PRINT_AIM`, `apps/studio/src/host/first-print.ts`), not the warmer Negative Lab Pro look. Still open: the
-  Roll module's `ALPHA = 0.75` (`packages/studio-kit/kits/roll/src/engine/constants.ts`) keeps a quarter of each
-  frame's cast, so a roll's first prints are not the studio's (CHB-028 task).
-- **RAW colour** (CHB-033): **ours stays** (the camera's colour matrix, 16–20 % more saturated than Adobe Standard's
-  look); no Adobe look table is applied.
+- **First-print colour aim for scans** (CHB-026 F30): neutral grey (`FIRST_PRINT_AIM` alpha 1,
+  `apps/studio/src/host/first-print.ts`). The Roll module's `ALPHA = 0.75` keeps a quarter of each frame's cast.
+- **RAW colour** (CHB-033): ours stays (the camera's colour matrix); no Adobe look table.
+- **No backwards compatibility** for saved edits across the CHB-037 cut-off (2026-11-14).
+
+### Open, for the owner (design §38 and the integration report)
+
+1. The default arrangement — the persona session's recommendation is in the integration report.
+2. Whether the scene stage for camera files is wanted (it exists: the Scene module in Classic).
+3. Whether selections are wanted.
+4. Whether "sync" defaults to copying values or to linking (today: copy).
+5. Whether the darkroom stack shows his order or groups by kind (today: the Enlarger groups by kind).
+6. Medium presets: the film-stock and grade looks were deleted with the cut-off (media have no group form).
 
 ### Next, in order
 
-1. **Real-GPU check on your Mac.** Run the browser suite (the `chromium-webgpu` and `gpu-parity` projects should
-   run on the GPU) and the CHB-027 `mac-0*.mjs` scripts; repeat the cosplay check of the photo first print and the
-   strips on the GPU engine. Everything after CHB-027 was tested on the CPU engine only.
-2. **CHB-029: UI DSL streamlining** (the next big ticket; plan in `design-doc/01-plan.md`): typed host
-   capabilities, one menu source, split `createCb()`, shared modules, status bar and dialogs in the DSL, a jobs
-   model with visible progress on the CPU engine, typed state, an "Advanced" flag in the catalogue (contract bump),
-   variant → layout naming. Order: items 1, 2, 4; then 5+6; then 8; then 3, 7, 9. Also its new tasks: the CPU 1:1
-   refine pass and the honest 1:1 label (session 03 F34, session 04 F40).
-3. **CHB-028 follow-ups**: exports at the file's own size on both engines (the CPU engine exports its 640 px
-   working image today); "Where is …?" blocks the File menu (F41); History details (F43); Real → Normalised
-   darkens a photo (F44); filtration first step too coarse (F37); portrait frames on a strip open sideways (F42).
-4. **CHB-030: agent-written layouts** in the QuickJS sandbox (after CHB-029 items 1, 4, 7, 9).
-5. **CHB-033** continuation (section 7).
-6. Other open tickets, each with its own plan and tasks: CHB-004 (data pipeline, licence; not public in this
-   version), CHB-008 (agent integration), CHB-010 (darkroom printing), CHB-011 (output and colour management),
-   CHB-013 (calibration with the photographer's own setup), CHB-020 (roll workflow), CHB-021 (looks and presets),
-   CHB-022 (finish and retouch). CHB-014 (B&W) and CHB-015 (extensions) are parked.
+1. The CHB-037 tasks added by P9 (`docmgr task list --ticket CHB-037`): the persona session's findings.
+2. Exact export speed on the GPU: the 4000 px darkroom export doubled with exact tiling (~1650 ms); plan haloed tiles
+   from the DAG's real peak of live textures and build an export's fields in one pass (P3b diary, "future").
+3. CHB-033 continuation (section 8); CHB-013 calibration with the photographer's own setup.
+4. Other open tickets, each with its own plan and tasks: CHB-004 (data pipeline, licence), CHB-008 (agent
+   integration), CHB-010, CHB-011 (output and colour management), CHB-020/021/022 leftovers. CHB-014 (B&W) and
+   CHB-015 (extensions) are parked.
 
-After each user-visible change, a **cosplay session** (CHB-026 `playbooks/01-cosplay-session-protocol.md`) with a
-scripted persona on the private photos has been the way to find what a photographer would trip over.
+After each user-visible change, a **persona session** (CHB-026 `playbooks/01-cosplay-session-protocol.md`) has been
+the way to find what a photographer would trip over.
 
 ---
 
-## 9. Things that live outside the repository
+## 10. Things that live outside the repository
 
 | What | Where | How to recreate |
 |---|---|---|
-| Private photos and scans | owner's machines | ask the owner (section 5) |
-| Adobe DNG Converter, `dng_validate`, `acr3-tone.json` | owner's Mac `~/chromobench-tools/`, `.playwright-mcp/dng/` | section 7 |
+| Private photos and scans | owner's machines | ask the owner (section 6) |
+| Adobe DNG Converter, `dng_validate`, `acr3-tone.json` | owner's Mac `~/chromobench-tools/`, `.playwright-mcp/dng/` | section 8 |
 | Camera Raw test sidecar and script | `ttmp/…/CHB-033…/scripts/acr/` (in the repo) | needs a licensed Photoshop |
 | Obsidian project note | the owner's vault | not needed to work |
 | Preview builds for testers (`apps/studio/dist-current/`) | git-ignored | `pnpm --filter @chromobench/studio exec vite build --outDir dist-current` |
