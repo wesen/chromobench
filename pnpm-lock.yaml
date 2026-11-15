@@ -95,6 +95,9 @@ importers:
       '@chromobench/dsl':
         specifier: workspace:*
         version: link:../dsl
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:../values
     devDependencies:
       '@chromobench/engine-mock':
         specifier: workspace:*
@@ -154,6 +157,9 @@ importers:
       '@chromobench/contract':
         specifier: workspace:*
         version: link:../contract
+      '@chromobench/values':
+        specifier: workspace:*
+        version: link:../values
       '@jitl/quickjs-wasmfile-release-sync':
         specifier: 0.32.0
         version: 0.32.0

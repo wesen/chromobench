@@ -1,28 +1,41 @@
-// The worker side of the DSL session (protocol.ts): a DslSession on an engine proxy and mirror logs.
+// The worker side of the DSL session (protocol.ts): a DslSession on an engine proxy and a copy of the page's log.
 //
 //   // dsl.worker.ts
 //   serveDsl(self as unknown as Endpoint);
 //
-// The proxy engine forwards adopt/measure/evaluate to the page; open/prepare are not reachable from the DSL.
+// The proxy engine forwards adopt/measure/evaluate to the page; open/prepare are not reachable from the DSL. The
+// copy of the log is loaded from the page's snapshot (Log.load replays and checks it); the session submits to it
+// through the same door as the page (agentSubmit), and the submission goes back with the result for the page to
+// make on its own log.
 import {
-  ChromobenchError, EditLog, diag, toDiagnostic,
-  type EditLogData, type Engine, type EngineCaps, type EngineId, type EvalTarget, type ImageResult, type Measurement,
-  type MeasureSpec, type Mutation, type NodeDef, type NodeRef, type SourceInfo, type LoggedMutation, type AgentMode,
+  ChromobenchError, LOG_RULES, diag, toDiagnostic,
+  type AgentMode, type Engine, type EngineCaps, type EngineId, type EvalTarget, type ImageResult, type Measurement,
+  type MeasureSpec, type NodeDef, type NodeRef, type SourceInfo,
 } from '@chromobench/contract';
-import { DslSession, docsProvider } from '@chromobench/dsl';
-import type { Endpoint, FromWorker, ImagePayload, ProposalCall, ToWorker } from './protocol.ts';
+import { agentSubmit, DslSession, docsProvider, type DslHistory, type Submission } from '@chromobench/dsl';
+import { Log } from '@chromobench/values';
+import type { DocsSnapshot, Endpoint, FromWorker, ImagePayload, ToWorker } from './protocol.ts';
 
-/** A copy of the page's log; propose() also records the call so the page can replay it on the real log. */
-class MirrorLog extends EditLog {
-  private readonly outbox: ProposalCall[];
-  constructor(data: EditLogData, mode: AgentMode, outbox: ProposalCall[]) {
-    super(data, { mode });
-    this.outbox = outbox;
+/** The worker's copy of the page's log; a submission is applied to it and kept for the page. */
+class MirrorHistory implements DslHistory {
+  private current = Log.create({ rules: LOG_RULES });
+  private m: AgentMode = 'ask';
+  submission: Submission | null = null;
+  log(): Log {
+    return this.current;
   }
-  override propose(ms: readonly Mutation[], meta: { tx: string; why?: string; label?: string; batch?: string }): LoggedMutation[] {
-    const entries = super.propose(ms, meta);
-    this.outbox.push({ frame: this.frame, ms: structuredClone([...ms]), meta: { ...meta } });
-    return entries;
+  mode(): AgentMode {
+    return this.m;
+  }
+  load(s: DocsSnapshot): void {
+    this.current = Log.load(s.log, { rules: LOG_RULES });
+    this.m = s.mode;
+  }
+  submit(s: Submission): ReturnType<DslHistory['submit']> {
+    const r = agentSubmit(this.current, s, this.m);
+    this.current = r.log;
+    this.submission = structuredClone(s);
+    return { entries: r.entries, how: r.how, stale: r.stale };
   }
 }
 
@@ -105,7 +118,8 @@ export function serveDsl(ep: Endpoint): () => void {
   let session: DslSession | null = null;
   let engine: ProxyEngine | null = null;
   let booting: Promise<void> | null = null;
-  const outbox: ProposalCall[] = [];
+  const history = new MirrorHistory();
+  const frames = new Map<string, string>();
   const send = (m: FromWorker, transfer?: Transferable[]): void => ep.postMessage(m, transfer);
   let current: number | null = null;
   const queue: ToWorker[] = [];
@@ -114,7 +128,7 @@ export function serveDsl(ep: Endpoint): () => void {
     switch (m.t) {
       case 'init': {
         engine = new ProxyEngine(m.engine.id, m.engine.caps, send);
-        booting = DslSession.create({ engine, docs: docsProvider(), ...(m.limits ? { limits: m.limits } : {}) }).then((s) => {
+        booting = DslSession.create({ engine, history, docs: docsProvider(), ...(m.limits ? { limits: m.limits } : {}), ...(m.txPrefix ? { txPrefix: m.txPrefix } : {}) }).then((s) => {
           session = s;
           send({ t: 'ready' });
         });
@@ -145,22 +159,28 @@ export function serveDsl(ep: Endpoint): () => void {
 
   const run = async (m: ToWorker): Promise<void> => {
     const s = session!;
-    if (m.t === 'frames') {
-      for (const [id, f] of Object.entries(m.set)) s.addFrame(id, { log: new MirrorLog(f.data, f.mode, outbox), source: f.source, ...(f.name !== undefined ? { name: f.name } : {}) });
+    if (m.t === 'docs') {
+      history.load(m.snapshot);
+      for (const [id, f] of Object.entries(m.snapshot.frames)) {
+        const key = `${f.source.sha256}|${f.name ?? ''}`;
+        if (frames.get(id) === key) continue;
+        s.addFrame(id, { source: f.source, ...(f.name !== undefined ? { name: f.name } : {}) });
+        frames.set(id, key);
+      }
       return;
     }
     if (m.t !== 'eval') return;
     current = m.id;
-    outbox.length = 0;
+    history.submission = null;
     try {
       const result = await s.eval(m.req);
       const transfer = [...new Set(result.looks.map((l) => l.image.bytes.buffer))].filter((b): b is ArrayBuffer => b instanceof ArrayBuffer);
-      send({ t: 'result', id: m.id, result, proposals: [...outbox] }, transfer);
+      send({ t: 'result', id: m.id, result, ...(history.submission ? { submission: history.submission } : {}) }, transfer);
     } catch (e) {
       send({ t: 'failed', id: m.id, error: toDiagnostic(e) });
     } finally {
       current = null;
-      outbox.length = 0;
+      history.submission = null;
     }
   };
 

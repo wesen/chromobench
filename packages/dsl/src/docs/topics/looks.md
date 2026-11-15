@@ -2,7 +2,7 @@
 
 ## Looks are the studio's presets
 
-`cb.looks` is the photographer's library of looks: named treatments such as "warm print" or "grade 3", some with parameters. A look resolves, per frame, to ordinary recipe changes. Applying one proposes those changes like `frame.edit` does; nothing is stored symbolically.
+`cb.looks` is the photographer's library of named looks: treatments such as "warm print" or "grade 3", some with parameters. A look resolves, per frame, to ordinary changes of the document. Applying one proposes those changes like `frame.propose` does.
 
 ```js
 return cb.looks.list().map((l) => ({ name: l.name, group: l.group, params: Object.keys(l.params).join(', ') }))
@@ -10,7 +10,7 @@ return cb.looks.list().map((l) => ({ name: l.name, group: l.group, params: Objec
 
 ## Try a look without changing anything
 
-`cb.looks.whatIf(frame, name, params, { amount })` is a what-if: its `print()` is a handle you can measure or look at, and `diff` says what would change, in darkroom units. `amount` is 0 to 2 (1 = the look as made, 0.5 = half way).
+`cb.looks.whatIf(frame, name, params, { amount })` is a what-if: a view of the document with the look, whose cuts you can measure or show; `diff` says what would change, in darkroom units. `amount` is 0 to 2 (1 = the look as made, 0.5 = half way).
 
 ```js
 const v = cb.looks.whatIf(frame, 'warm print', { warmth: 6 }, { amount: 0.5 })
@@ -26,7 +26,7 @@ return cb.looks.diff(frame, cb.looks.whatIf(frame, 'grade 3'))
 
 ## Apply a look
 
-`cb.looks.apply(name, params, { amount, to, where, why })` proposes the look on every target frame as one batch. The photographer approves it on one card (and may untick frames). `to` is the bound frame by default, a frame id, an array of ids, `'all'`, or `{ roll: id }`; `where` filters the frames, for example the ones nobody has edited yet.
+`cb.looks.apply(name, params, { amount, to, where, why })` proposes the look on every target frame as one batch: the photographer approves or rejects it on one card, and one undo takes it back. `to` is the bound frame by default, a frame id, an array of ids or `'all'`; `where` filters the frames, for example the ones nobody has edited yet.
 
 ```js
 return cb.looks.apply('warm print', { warmth: 4 }, { amount: 0.6, to: 'all', where: (x) => x.unedited, why: 'warm print at 60 % on the unedited frames' })

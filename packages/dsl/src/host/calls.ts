@@ -1,6 +1,7 @@
-// Op calls on handles (split from host.ts, CHB-032): literal options, recipe-backed defaults, and contract
-// errors re-targeted at the agent's own receiver.
-import { ChromobenchError, diag, FRAME_ACCESSORS, formatValue, getOp, getPath, nodeArgs, PRINT_OPTIONS, recipeBackedArgs, type FrameRecipe, type OpDef } from '@chromobench/contract';
+// Op calls on handles (CHB-032 split; contract 1.0): literal options, the op's own defaults, and contract errors
+// re-targeted at the agent's own receiver. A handle op is a raw node of the graph: it reads nothing from the
+// document (a what-if of the document is frame.with(change)).
+import { ChromobenchError, CUTS, diag, documentKind, formatValue, getOp, nodeArgs, type OpDef } from '@chromobench/contract';
 import type { Host } from '../host.ts';
 import { suggest, isDslOp } from './words.ts';
 import type { HandleInfo, At } from './types.ts';
@@ -24,6 +25,7 @@ export function unmarshal(h: Host, op: OpDef, raw: unknown, recvExpr: string): R
   return out;
 }
 
+/** A marshalled guest value as plain data: numbers restored, builder values as their data; handles and functions refused. */
 export function literal(h: Host, where: string, key: string, v: unknown): unknown {
   if (v && typeof v === 'object') {
     if ('__node' in v) {
@@ -34,7 +36,9 @@ export function literal(h: Host, where: string, key: string, v: unknown): unknow
         fix: hd ? `(await ${hd.expr})${field ? `.${field}` : ''}` : '(await …).…', path: `${where}.${key}`,
       }));
     }
-    if ('__fn' in v || '__look' in v) throw new ChromobenchError(diag('E_ARG_TYPE', `${where}: option "${key}" must be a literal value`, { path: `${where}.${key}` }));
+    if ('__fn' in v) throw new ChromobenchError(diag('E_ARG_TYPE', `${where}: option "${key}" is a function; options and documents hold data only`, { path: `${where}.${key}`, hint: 'compute the value in your code, then pass it' }));
+    if ('__show' in v || '__frame' in v) throw new ChromobenchError(diag('E_ARG_TYPE', `${where}: option "${key}" must be a literal value`, { path: `${where}.${key}` }));
+    if ('__value' in v) return literal(h, where, key, (v as unknown as { data: unknown }).data);
     if ('__num' in v) return Number((v as { __num: string }).__num);
     if (Array.isArray(v)) return v.map((x) => literal(h, where, key, x));
     return Object.fromEntries(Object.entries(v).map(([a, b]) => [a, literal(h, where, key, b)]));
@@ -42,22 +46,10 @@ export function literal(h: Host, where: string, key: string, v: unknown): unknow
   return v;
 }
 
-export function recipeOf(h: Host, frame: string | null): FrameRecipe | null {
-  return frame ? h.state(frame).base : null;
-}
-
 export function callOp(h: Host, opName: string, recv: HandleInfo, rawArgs: unknown, at: At): HandleInfo {
   const op = getOp(opName);
   if (!isDslOp(op)) throw unknownMethodErr(h, recv, op.area, opName.slice(op.area.length + 1));
   const args = unmarshal(h, op, rawArgs, recv.expr);
-  const r = recipeOf(h, recv.frame);
-  if (r) {
-    for (const { arg, path } of recipeBackedArgs(op)) {
-      if (arg in args) continue;
-      const v = getPath(r, path);
-      if (v !== undefined && v !== null) args[arg] = v;
-    }
-  }
   const callText = `${recv.expr}.${opName}(${Object.keys(rawArgs as object).length ? formatValue(rawArgs) : ''})`;
   try {
     const n = h.intern(opName, [recv.id], args, at);
@@ -67,21 +59,23 @@ export function callOp(h: Host, opName: string, recv: HandleInfo, rawArgs: unkno
   }
 }
 
-/** Re-targets contract fixes at the agent's own receiver (E_DOMAIN, E_UNKNOWN_OPTION). */
+/** `frame.print()` for one-word cuts, `frame.cut('darkroom.H')` for the others. */
+export function cutExpr(frameExpr: string, cut: string): string {
+  return /^\w+$/.test(cut) ? `${frameExpr}.${cut}()` : `${frameExpr}.cut('${cut}')`;
+}
+
+/** Re-targets contract fixes at the agent's own receiver (E_DOMAIN, E_UNKNOWN_OPTION, E_ARG_RANGE). */
 export function rewrite(h: Host, e: unknown, op: OpDef, recv: HandleInfo, raw: Record<string, unknown>): unknown {
   if (!(e instanceof ChromobenchError)) return e;
   const d = { ...e.diag };
-  const fx = h.frameExpr(recv.frame);
   if (d.code === 'E_DOMAIN' && recv.domain) {
-    const macroOpt = Object.entries(PRINT_OPTIONS).find(([, [o]]) => o === op.name && op.name !== 'print.expose');
-    if (recv.domain === 'film-dyes' && macroOpt) {
-      const argVal = raw[macroOpt[1][1]];
-      d.fix = `${fx}.negative().print(${argVal !== undefined ? formatValue({ [macroOpt[0]]: argVal }) : '{ … }'})`;
-      d.hint = `${op.name} works on paper exposure (paper-logH); from a negative, set it through print({ ${macroOpt[0]} })`;
-    } else {
-      const acc = FRAME_ACCESSORS.find((x) => op.domainIn === 'any' || (Array.isArray(op.domainIn) ? op.domainIn.includes(x.domain) : op.domainIn === x.domain));
-      if (acc) d.fix = `${fx}.${acc.name}().${op.name}(${Object.keys(raw).length ? formatValue(raw) : ''})`;
-      else if (op.domainIn === 'paper-logH') d.fix = `${fx}.negative().print.expose().${op.name}(${Object.keys(raw).length ? formatValue(raw) : ''})`;
+    const fx = h.frameExpr(recv.frame);
+    const kind = recv.frame ? documentKind(h.state(recv.frame).base) : null;
+    const accepts = (dom: string): boolean => op.domainIn === 'any' || (Array.isArray(op.domainIn) ? op.domainIn.includes(dom as never) : op.domainIn === dom);
+    const c = CUTS.find((x) => x.name !== 'darkroom.main' && (kind === null || x.kinds.includes(kind)) && accepts(x.domain));
+    if (c) {
+      d.fix = `${cutExpr(fx, c.name)}.${op.name}(${Object.keys(raw).length ? formatValue(raw) : ''})`;
+      d.hint = `${op.name} takes ${Array.isArray(op.domainIn) ? op.domainIn.join(' or ') : op.domainIn}; the ${c.name} cut is ${c.domain}`;
     }
     return new ChromobenchError(d);
   }

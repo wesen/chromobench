@@ -73,7 +73,8 @@ describe('AnthropicModel', () => {
     const s = systemPrompt({ houseNotes: 'Say "cast", not "tint".' });
     expect(s).toContain('# You are the darkroom assistant in Chromobench');
     expect(s).toContain('# Chromobench DSL: instructions');
-    expect(s).toContain('frame.edit(');
+    expect(s).toContain('frame.propose(');
+    expect(s).toContain('## Stages');
     expect(s).toContain('Say "cast", not "tint".');
     expect(s.length).toBeGreaterThan(20000);
     expect(EVAL_TOOL.input_schema).toMatchObject({ required: ['code'], additionalProperties: false });

@@ -1,8 +1,8 @@
-// The text the agent reads (guide §5.10): value or error, edits, looks, console, warnings,
+// The text the agent reads (guide §5.10): value or error, edits, shown images, console, warnings,
 // context. Capped at 9000 characters; everything but the value is reserved, the value gets the
 // rest (at least 2000) and is cut with a note.
-import { EVAL_LIMITS, formatValue, type ContextBlock, type Diagnostic, type Look } from '@chromobench/contract';
-import { fmtNum, fmtStr, renderYaml } from './yaml.ts';
+import { EVAL_LIMITS, type ContextBlock, type Diagnostic, type Look } from '@chromobench/contract';
+import { fmtStr, renderYaml } from './yaml.ts';
 
 export const MIN_VALUE_CHARS = 2000;
 
@@ -11,7 +11,8 @@ export interface AssembleInput {
   error?: Diagnostic;
   errorWhere?: string;
   edits: string[];
-  looks: Look[];
+  /** the images shown (h.show, cb.compare) */
+  shown: Look[];
   console: string[];
   warnings: Diagnostic[];
   context: ContextBlock;
@@ -60,10 +61,10 @@ export function assemble(inp: AssembleInput): { yaml: string; cut: boolean } {
   const cap = inp.cap ?? EVAL_LIMITS.yamlChars;
   const tail: string[] = [];
   if (inp.edits.length) tail.push('', 'edits:', ...inp.edits.map((e) => `  - ${fmtStr(e)}`));
-  if (inp.looks.length) {
-    tail.push('', 'looks:');
-    for (const l of inp.looks) {
-      tail.push(`  - look: ${fmtStr(`[look ${l.n}: ${l.caption}]`)}`);
+  if (inp.shown.length) {
+    tail.push('', 'shown:');
+    for (const l of inp.shown) {
+      tail.push(`  - image: ${fmtStr(`[image ${l.n}: ${l.caption}]`)}`);
       tail.push('    numbers:');
       for (const line of numbersYaml(l.numbers)) tail.push(`      ${line}`);
     }
@@ -99,19 +100,4 @@ export function assemble(inp: AssembleInput): { yaml: string; cut: boolean } {
   }
   const yaml = [...head, ...tail, ...warnBlock(), ...ctx].join('\n');
   return { yaml, cut };
-}
-
-/** "set print.lights.logH = [-0.1125, -0.0125, 0.125] (was [0, 0, 0])" */
-export function describeMutation(m: { op: string; path?: string; value?: unknown; exposure?: Record<string, unknown>; id?: string }, was: unknown): string {
-  switch (m.op) {
-    case 'set': return `set ${m.path} = ${formatValue(m.value)}${was !== undefined ? ` (was ${formatValue(was)})` : ''}`;
-    case 'exposure.add': {
-      const e = m.exposure ?? {};
-      const bits = Object.entries(e).filter(([k, v]) => k !== 'id' && v !== null && v !== undefined).map(([k, v]) => `${k} ${typeof v === 'number' ? fmtNum(v) : formatValue(v)}`);
-      return `exposure.add ${String(e['id'])} (${bits.join(', ')})`;
-    }
-    case 'exposure.remove': return `exposure.remove ${m.id}`;
-    case 'mask.set': return `mask.set ${m.id}`;
-    default: return m.op;
-  }
 }

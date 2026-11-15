@@ -1,27 +1,18 @@
-// The DSL worker protocol (CHB-007 task 44uo, done in CHB-008): the DslSession and its QuickJS VM run in a Web
-// Worker; the page keeps the engine and the frames' EditLogs. The worker reaches the engine only through
-// adopt (node closures, fire-and-forget), measure and evaluate (request/response); it reads recipes from mirror
-// copies of the logs the page sends before each eval, and its proposals are replayed on the page's real logs
-// through EditLog.propose, which stays the one door for agent mutations.
-import type {
-  AgentMode, Diagnostic, EditLogData, EngineCaps, EngineId, EvalRequest, EvalResult, EvalTarget, MeasureSpec,
-  Mutation, NodeDef, NodeRef, SourceInfo,
-} from '@chromobench/contract';
-import type { DslLimits } from '@chromobench/dsl';
+// The DSL worker protocol (CHB-007 task 44uo, done in CHB-008; contract 1.0 in CHB-037 P6a): the DslSession and its
+// QuickJS VM run in a Web Worker; the page keeps the engine and the document log. The worker reaches the engine only
+// through adopt (node closures, fire-and-forget), measure and evaluate (request/response); it reads documents from a
+// copy of the page's log (the log's own serialisation, sent when it changed, before an eval), and the submission an
+// eval makes there is made again on the page's log through the same door (agentSubmit), which stays the one way
+// in for the agent's edits.
+import type { AgentMode, Diagnostic, EngineCaps, EngineId, EvalRequest, EvalResult, EvalTarget, MeasureSpec, NodeDef, NodeRef, SourceInfo } from '@chromobench/contract';
+import type { DslLimits, Submission } from '@chromobench/dsl';
+import type { LogData } from '@chromobench/values';
 
-/** One frame as the worker mirrors it. */
-export interface FrameSnapshot {
-  data: EditLogData;
+/** The page's documents as the worker copies them: the log, the mode, the frames the agent may open. */
+export interface DocsSnapshot {
+  log: LogData;
   mode: AgentMode;
-  source: SourceInfo;
-  name?: string;
-}
-
-/** A propose() call the session made on a mirror log, replayed on the page. */
-export interface ProposalCall {
-  frame: string;
-  ms: Mutation[];
-  meta: { tx: string; why?: string; label?: string; batch?: string };
+  frames: Record<string, { source: SourceInfo; name?: string }>;
 }
 
 /** ImageResult without its lazy read(): the samples travel with the reply (transferred). */
@@ -39,8 +30,8 @@ export interface ImagePayload {
 }
 
 export type ToWorker =
-  | { t: 'init'; engine: { id: EngineId; caps: EngineCaps }; limits?: Partial<DslLimits> }
-  | { t: 'frames'; set: Record<string, FrameSnapshot> }
+  | { t: 'init'; engine: { id: EngineId; caps: EngineCaps }; limits?: Partial<DslLimits>; txPrefix?: string }
+  | { t: 'docs'; snapshot: DocsSnapshot }
   | { t: 'eval'; id: number; req: EvalRequest }
   | { t: 'interrupt'; id: number }
   | { t: 'engine.reply'; call: number; ok?: unknown; err?: Diagnostic };
@@ -51,7 +42,8 @@ export type FromWorker =
   | { t: 'engine'; call: number; method: 'measure'; node: NodeRef; spec: Omit<MeasureSpec, 'signal'> }
   | { t: 'engine'; call: number; method: 'evaluate'; node: NodeRef; target: Omit<EvalTarget, 'signal'> }
   | { t: 'engine.cancel'; call: number }
-  | { t: 'result'; id: number; result: EvalResult; proposals: ProposalCall[] }
+  /** the eval's result as the worker's copy of the log saw it, and the submission to make on the page's log */
+  | { t: 'result'; id: number; result: EvalResult; submission?: Submission }
   | { t: 'failed'; id: number; error: Diagnostic };
 
 /** The part of Worker / MessagePort / DedicatedWorkerGlobalScope both sides use. */

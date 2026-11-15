@@ -3,21 +3,26 @@
 // promises (deferred, DR-2: the sync variant), and enforces the interrupt deadline (interpreter
 // time) and the wall-clock deadline (time waiting on the engine).
 //
-// v0 runs the VM on the calling thread. Everything the VM touches synchronously is session-local
-// (registry, graph, recipe snapshot); the engine is reached only through `evaluate`, with node
-// closures shipped by `engine.adopt` (§3), so moving the VM into a Web Worker is a transport change.
+// Contract 1.0: the session reads documents from the host's document log (DslHistory: the studio store's log, or a
+// log of its own) as it is when an eval starts, compiles them with the one compiler into its graph, and submits the
+// eval's edits at its end as one Submission (an Edit, or a Batch from plan(…, { by: 'agent' })): ask mode proposes,
+// auto mode commits, read-only refuses. The engine is reached only through `evaluate`, with node closures shipped
+// by `engine.adopt` (§3), so the VM can live in a Web Worker (packages/agent).
 import { DefaultIntrinsics, newQuickJSWASMModuleFromVariant, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from 'quickjs-emscripten-core';
 import SYNC_VARIANT from '@jitl/quickjs-wasmfile-release-sync';
 import {
-  ChromobenchError, Graph, diag, nodeId, sha256Hex, toDiagnostic as contractDiag,
-  type AgentMode, type Box, type ContextBlock, type Diagnostic, type EditLog, type Engine, type EvalRequest, type EvalResult,
-  type FrameRecipe, type ImageInfo, type LoggedMutation, type Look, type NodeDef, type SourceInfo,
+  ChromobenchError, Graph, LOG_RULES, canonicalJSON, diag, documentKind, isLinked, nodeId, sha256Hex, toDiagnostic as contractDiag,
+  type AgentMode, type Box, type ContextBlock, type Diagnostic, type Document, type Engine, type EvalRequest, type EvalResult,
+  type ImageInfo, type Look, type NodeDef,
 } from '@chromobench/contract';
-import { Host, type DocsProvider, type LooksProvider, type FrameEntry, type QueuedEdit } from './host.ts';
+import { equal, plan, transaction, tryTransaction, type Batch, type Edit, type Log, type LogEntry, type Mutation } from '@chromobench/values';
+import { describeMutation, touched } from './describe.ts';
+import type { DslHistory, Submission } from './history.ts';
+import { Host, type DocsProvider, type FrameEntry, type LooksProvider } from './host.ts';
 import { PRELUDE } from './prelude/prelude.ts';
-import { assemble, describeMutation } from './results/assemble.ts';
+import { assemble } from './results/assemble.ts';
 import { locate, toDiagnostic, topLevelNames, type GuestError } from './results/diagnostics.ts';
-import { renderLook, type LookEngine } from './results/looks.ts';
+import { renderShow, type ShowEngine } from './results/show.ts';
 import { docLine, params } from './results/yaml.ts';
 
 export const WRAP_PREFIX = '(async function () {\n';
@@ -29,28 +34,28 @@ export interface DslLimits {
   defaultTimeoutMs: number;
   maxTimeoutMs: number;
   yamlChars: number;
-  looks: number;
+  /** images per eval (h.show, cb.compare) */
+  shows: number;
 }
 
 export const DEFAULT_LIMITS: DslLimits = Object.freeze({
-  memoryBytes: 64 * 1024 * 1024, stackBytes: 1024 * 1024, defaultTimeoutMs: 30_000, maxTimeoutMs: 120_000, yamlChars: 9000, looks: 4,
+  memoryBytes: 64 * 1024 * 1024, stackBytes: 1024 * 1024, defaultTimeoutMs: 30_000, maxTimeoutMs: 120_000, yamlChars: 9000, shows: 4,
 });
 
-export interface DslFrame {
-  log: EditLog;
-  /** The decoded source, so the session's graph can infer source.open sizes. */
-  source: SourceInfo;
-  /** Untrusted display name (printed quoted). */
-  name?: string;
-}
+/** A frame the session may open; its document is the log's (kind 'frame'). */
+export type DslFrame = FrameEntry;
 
 export interface DslSessionOptions {
   engine: Engine;
+  /** the document log, the mode and the door for the agent's edits */
+  history: DslHistory;
   frames?: Record<string, DslFrame>;
   limits?: Partial<DslLimits>;
   docs?: DocsProvider;
-  /** cb.looks.* (CHB-021): the studio's looks registry */
+  /** cb.looks.* (CHB-021): the studio's named looks */
   looks?: LooksProvider;
+  /** prefix of this session's transaction ids (`chat-eval-3`); unique per session in one log */
+  txPrefix?: string;
 }
 
 /** Extra per-eval data for the harness (CHB-008 telemetry, §5.13). */
@@ -63,7 +68,7 @@ export interface EvalTrace {
   vocabulary: Record<string, number>;
   errors: string[];
   warnings: string[];
-  looks: number;
+  shows: number;
   edits: number;
 }
 
@@ -84,9 +89,10 @@ export function loadQuickJS(): Promise<QuickJSWASMModule> {
   return modulePromise;
 }
 
+/** One eval's submission, followed in later context blocks. */
 interface Proposal {
-  tx: string;
-  frame: string;
+  id: string;
+  frames: string[];
   seqs: number[];
 }
 
@@ -96,7 +102,9 @@ export class DslSession {
   readonly host: Host;
   readonly traces: EvalTrace[] = [];
   private readonly engine: Engine;
+  private readonly history: DslHistory;
   private readonly frameEntries = new Map<string, FrameEntry>();
+  private readonly txPrefix: string;
   private QJS!: QuickJSWASMModule;
   private rt!: QuickJSRuntime;
   private vm!: QuickJSContext;
@@ -119,8 +127,10 @@ export class DslSession {
 
   private constructor(opts: DslSessionOptions) {
     this.engine = opts.engine;
+    this.history = opts.history;
+    this.txPrefix = opts.txPrefix ? `${opts.txPrefix}-` : '';
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
-    this.host = new Host(this.graph, this.frameEntries);
+    this.host = new Host(this.graph, this.frameEntries, this.history);
     if (opts.docs) this.host.docs = opts.docs;
     if (opts.looks) this.host.looksProvider = opts.looks;
     for (const [id, f] of Object.entries(opts.frames ?? {})) this.addFrame(id, f);
@@ -133,9 +143,10 @@ export class DslSession {
     return s;
   }
 
+  /** Registers a frame (its decoded source, for the graph's source.open sizes); its document is the log's. */
   addFrame(id: string, f: DslFrame): void {
     this.graph.registerSource(f.source);
-    this.frameEntries.set(id, { log: f.log, ...(f.name !== undefined ? { name: f.name } : {}) });
+    this.frameEntries.set(id, { source: f.source, ...(f.name !== undefined ? { name: f.name } : {}) });
   }
 
   private initVm(): void {
@@ -268,7 +279,7 @@ export class DslSession {
       if (!n) throw new ChromobenchError(diag('E_NO_NODE', `unknown node ${id.slice(0, 12)}`));
       if (n.info.kind === 'Image') {
         const i = n.info as ImageInfo;
-        return JSON.stringify({ ok: { node: `#${id.slice(0, 4)}`, op: n.op, domain: i.domain, width: i.width, height: i.height, channels: i.channels, note: 'an image summary: pixels never enter the DSL; use .measure.stats(), .measure.patches() or .look()' } });
+        return JSON.stringify({ ok: { node: `#${id.slice(0, 4)}`, op: n.op, domain: i.domain, width: i.width, height: i.height, channels: i.channels, note: 'an image summary: pixels never enter the DSL; use .measure.stats(), .measure.patches() or .show()' } });
       }
       this.ship(id);
       const m = await this.engine.measure(n, { signal });
@@ -364,19 +375,19 @@ export class DslSession {
     const t0 = performance.now();
     this.evalSeq += 1;
     const n = this.evalSeq;
-    const evalId = `eval-${n}`;
+    const evalId = `${this.txPrefix}eval-${n}`;
     this.sources.set(n, req.code);
     this.sources.delete(n - 50);
     const frame = req.frame ?? null;
-    this.host.begin(n, frame);
+    this.host.begin(n, evalId, frame);
     this.running = true;
     this.cancelled = false;
     let outcome: Outcome;
-    if (frame !== null && !this.frameEntries.has(frame)) {
-      outcome = { ok: false, error: diag('E_NO_FRAME', `no frame "${frame}"`, { valid: [...this.frameEntries.keys()] }) };
+    if (frame !== null && !this.host.frameIds().includes(frame)) {
+      outcome = { ok: false, error: diag('E_NO_FRAME', `no frame "${frame}"`, { valid: this.host.frameIds() }) };
     } else {
-      const stateHash = frame ? this.frameEntries.get(frame)!.log.stateHash : '';
-      const seed = parseInt(sha256Hex(stateHash + req.code).slice(0, 8), 16) | 0;
+      const docText = frame ? canonicalJSON(this.host.state(frame).base) : '';
+      const seed = parseInt(sha256Hex(docText + req.code).slice(0, 8), 16) | 0;
       this.deadline = Date.now() + 1000;
       const fH = frame === null ? this.vm.null : this.vm.newString(frame);
       const sH = this.vm.newNumber(seed);
@@ -404,52 +415,26 @@ export class DslSession {
       if (!this.probe()) this.restart();
     }
     // edits: submitted together at the end of a successful eval (DR-3)
-    const mutations: LoggedMutation[] = [];
-    const editLines: string[] = [];
-    const changed: string[] = [];
     const edits = this.host.edits;
-    if (outcome.ok && edits.length) {
-      const byFrame = new Map<string, QueuedEdit[]>();
-      for (const e of edits) byFrame.set(e.frame, [...(byFrame.get(e.frame) ?? []), e]);
-      for (const [fid, qs] of byFrame) {
-        const log = this.frameEntries.get(fid)!.log;
-        const ms = qs.flatMap((q) => q.mutations);
-        const why = qs.map((q) => q.why).filter((w): w is string => !!w).join('; ');
-        try {
-          const batch = qs.find((q) => q.batch)?.batch;
-          const entries = log.propose(ms, { tx: evalId, ...(why ? { why } : {}), label: `agent ${evalId}`, ...(batch ? { batch } : {}) });
-          mutations.push(...entries);
-          this.proposals.push({ tx: evalId, frame: fid, seqs: entries.map((e) => e.seq) });
-          let k = 0;
-          for (const q of qs) {
-            const mine = entries.slice(k, k + q.mutations.length);
-            k += q.mutations.length;
-            const status = mine[0]?.status ?? 'pending';
-            editLines.push(`${q.id} ${status}: ${q.mutations.map((m, i) => describeMutation(m as never, q.was[i])).join('; ')}${q.why ? `; why: ${q.why}` : ''}`);
-          }
-        } catch (e) {
-          const d = contractDiag(e);
-          warnings.push(diag('CONFLICT', `edits for ${fid} were not submitted: ${d.code} ${d.message}`));
-        }
-      }
-      for (const e of edits) for (const m of e.mutations) changed.push(m.op === 'set' ? m.path : m.op === 'exposure.add' ? `print.exposures.${m.exposure.id}` : m.op === 'exposure.remove' ? `print.exposures.${m.id}` : m.op === 'mask.set' ? `masks.${m.id}` : m.op);
-    } else if (edits.length) {
+    const { transactions, lines: editLines } = outcome.ok && edits.length ? this.submit(evalId, warnings) : { transactions: [], lines: [] };
+    if (!outcome.ok && edits.length) {
       warnings.push(diag('EDITS_DROPPED', `the eval failed, so its edits were not submitted: ${edits.map((e) => e.id).join(', ')}`, { hint: 'fix the error and run the edits again' }));
     }
-    // looks: at most four, in creation order
+    const changed = outcome.ok ? [...new Set(edits.flatMap((e) => e.mutations.map(touched)))] : [];
+    // images: at most `shows`, in creation order
     const looks: Look[] = [];
-    const reqs = this.host.looks;
-    if (reqs.length > this.limits.looks) {
-      const extra = reqs.slice(this.limits.looks);
-      warnings.push(diag('LOOKS', `${reqs.length} looks were made; only the first ${this.limits.looks} are delivered. Dropped: ${extra.map((l) => `look ${l.n}${l.line !== undefined ? ` (line ${l.line})` : ''}`).join(', ')}`));
+    const reqs = this.host.shows;
+    if (reqs.length > this.limits.shows) {
+      const extra = reqs.slice(this.limits.shows);
+      warnings.push(diag('LOOKS', `${reqs.length} images were shown; only the first ${this.limits.shows} are delivered. Dropped: ${extra.map((l) => `image ${l.n}${l.line !== undefined ? ` (line ${l.line})` : ''}`).join(', ')}`));
     }
-    const le = this.lookEngine();
-    for (const r of reqs.slice(0, this.limits.looks)) {
+    const se = this.showEngine();
+    for (const r of reqs.slice(0, this.limits.shows)) {
       try {
-        looks.push(await renderLook(le, r));
+        looks.push(await renderShow(se, r));
       } catch (e) {
         const d = contractDiag(e);
-        warnings.push(diag('LOOKS', `look ${r.n} could not be rendered: ${d.code} ${d.message}`));
+        warnings.push(diag('LOOKS', `image ${r.n} could not be rendered: ${d.code} ${d.message}`));
       }
     }
     const context = this.context(frame, changed);
@@ -472,18 +457,56 @@ export class DslSession {
       ...(outcome.ok ? { value: outcome.value } : {}),
       ...(error ? { error } : {}),
       ...(errorWhere ? { errorWhere } : {}),
-      edits: editLines, looks, console: consoleLines, warnings, context, cap: this.limits.yamlChars,
+      edits: editLines, shown: looks, console: consoleLines, warnings, context, cap: this.limits.yamlChars,
     });
     const ms = Math.round(performance.now() - t0);
     const allWarnings = cut ? [...warnings, diag('CUT', 'the returned value was cut')] : warnings;
     this.traces.push({
       evalId, ms, resultChars: yaml.length, cut, ops: { ...this.host.ops }, vocabulary: { ...this.host.vocabulary },
-      errors: error ? [error.code] : [], warnings: allWarnings.map((w) => w.code), looks: looks.length, edits: edits.length,
+      errors: error ? [error.code] : [], warnings: allWarnings.map((w) => w.code), shows: looks.length, edits: edits.length,
     });
-    return { yaml, looks, warnings: allWarnings, context, mutations, ...(error ? { error } : {}), trace: { ms, ops: { ...this.host.ops } } };
+    return { yaml, looks, warnings: allWarnings, context, transactions, ...(error ? { error } : {}), trace: { ms, ops: { ...this.host.ops } } };
   }
 
-  private lookEngine(): LookEngine {
+  /**
+   * The eval's queued edits as one submission: per frame one transaction of its mutations in order; one frame is an
+   * Edit, several frames (or a named look) a Batch from plan(…, { by: 'agent' }).
+   */
+  private submit(evalId: string, warnings: Diagnostic[]): { transactions: LogEntry[]; lines: string[] } {
+    const edits = this.host.edits;
+    const frames = [...new Set(edits.map((e) => e.frame))];
+    const of = (f: string, k: 'mutations' | 'inverses'): Mutation[] => edits.filter((e) => e.frame === f).flatMap((e) => e[k]);
+    const why = [...new Set(edits.map((e) => e.why).filter((w): w is string => !!w))].join('; ');
+    const looks = [...new Set(edits.map((e) => e.look).filter((l): l is string => !!l))];
+    const label = edits.find((e) => e.label)?.label ?? `agent ${evalId}`;
+    const source = { kind: 'agent', eval: evalId, ...(why ? { why } : {}), ...(looks.length ? { looks } : {}) };
+    let x: Edit | Batch;
+    if (frames.length === 1 && !looks.length) {
+      x = { doc: frames[0]!, tx: transaction({ id: evalId, label, by: 'agent', source, mutations: of(frames[0]!, 'mutations') }) };
+    } else {
+      x = plan(this.host.log.targets<Document>(frames), (_d, id) => of(id, 'mutations'), { id: evalId, label, by: 'agent', source });
+      for (const s of x.skipped) warnings.push(diag('CONFLICT', `the edits for ${s.doc} were left out: ${contractDiag(s.error).message}`));
+    }
+    const sub: Submission = { x, ...(why ? { why } : {}), read: Object.fromEntries(frames.map((f) => [f, of(f, 'inverses')])) };
+    let status = 'not submitted';
+    let transactions: LogEntry[] = [];
+    try {
+      const r = this.history.submit(sub);
+      transactions = [...r.entries];
+      status = r.how === 'committed' ? 'applied' : 'pending';
+      if (r.stale.length) {
+        warnings.push(diag('CONFLICT', `${r.stale.join(', ')} changed while the eval ran: the edits wait for the photographer's approval`, { hint: 'the next context block says what they decided' }));
+      }
+      if (transactions.length) this.proposals.push({ id: evalId, frames, seqs: transactions.map((e) => e.seq) });
+    } catch (e) {
+      const d = contractDiag(e);
+      warnings.push(diag('CONFLICT', `the edits were not submitted: ${d.code} ${d.message}`, d.hint ? { hint: d.hint } : {}));
+    }
+    const lines = edits.map((q) => `${q.id} ${status}: ${q.mutations.map((m, i) => describeMutation(m, q.inverses[i])).join('; ')}${q.why ? `; why: ${q.why}` : ''}`);
+    return { transactions, lines };
+  }
+
+  private showEngine(): ShowEngine {
     return {
       graph: this.graph,
       intern: (op, inputs, args) => this.graph.intern(op, inputs, args).node,
@@ -497,7 +520,7 @@ export class DslSession {
         this.ship(id);
         return (await this.engine.measure(this.graph.get(id)!)).value;
       },
-      recipe: (f) => (f ? this.host.state(f).base : null),
+      doc: (f) => (f && this.host.log.has(f) ? this.host.state(f).base : null),
     };
   }
 
@@ -518,27 +541,38 @@ export class DslSession {
     }
   }
 
-  private proposalStatus(p: Proposal): string {
-    const log = this.frameEntries.get(p.frame)?.log;
-    if (!log) return 'unknown';
-    const es = p.seqs.map((s) => log.entries[s - 1]!).filter(Boolean);
-    if (es.every((e) => e.status === 'rejected')) return 'rejected';
-    if (es.every((e) => e.status === 'applied')) return es.some((e) => e.approvedBy) ? 'approved' : 'applied';
-    const r = log.committed;
-    const stale = es.find((e) => e.status === 'pending' && e.m.op === 'set' && e.m.expect !== undefined && JSON.stringify(getAt(r, e.m.path)) !== JSON.stringify(e.m.expect));
-    if (stale && stale.m.op === 'set') return `stale, not applied (the photographer changed ${stale.m.path})`;
+  /** What became of a submission: pending (or stale), approved, applied, rejected or undone. */
+  private proposalStatus(p: Proposal, log: Log): string {
+    const es = p.seqs.map((s) => log.entry(s)).filter((e): e is LogEntry => !!e);
+    if (!es.length) return 'undone';
+    if (es.every((e) => e.tx.status === 'rejected')) return 'rejected';
+    if (es.every((e) => e.tx.status === 'applied')) {
+      const live = new Set(log.inEffect().map((e) => e.seq));
+      if (!es.every((e) => live.has(e.seq))) return 'undone';
+      return es.some((e) => e.approvedBy) ? 'approved' : 'applied';
+    }
+    for (const e of es.filter((x) => x.tx.status === 'pending')) {
+      const rules = LOG_RULES[log.kind(e.doc)];
+      const r = tryTransaction(log.doc(e.doc), { ...e.tx, inverses: [] }, (rules ?? {}) as never);
+      if (!r.ok) return `stale, not applied (it no longer applies to ${e.doc}: ${contractDiag(r.error).message})`;
+      const i = r.tx.inverses.findIndex((m, k) => !equal(m, e.tx.inverses[k]));
+      if (i >= 0) return `stale, not applied (the photographer changed ${touched(e.tx.mutations[i]!)})`;
+    }
     return 'pending';
   }
 
   private context(frame: string | null, changed: string[]): ContextBlock {
     let frameLine: string | undefined;
-    let mode: AgentMode = 'ask';
-    if (frame && this.frameEntries.has(frame)) {
-      const f = this.frameEntries.get(frame)!;
-      const r: FrameRecipe = f.log.committed;
-      mode = f.log.mode;
-      const stock = r.scan?.stock ?? r.capture?.stock ?? '?';
-      frameLine = `${f.name && f.name !== frame ? `${frame} (${f.name})` : frame} · ${r.kind} · ${stock} → ${r.print.paper} · mode ${mode}`;
+    const mode: AgentMode = this.history.mode();
+    const log = this.history.log();
+    if (frame && this.host.frameIds().includes(frame)) {
+      const d = this.host.state(frame).base;
+      const name = this.host.frameName(frame);
+      const film = (d.stages.scan ?? d.stages.film)?.medium;
+      const stock = film && !isLinked(film) ? (film as { stock: string }).stock : 'roll';
+      const dm = d.stages.darkroom.medium;
+      const paper = isLinked(dm) ? 'roll' : dm.paper;
+      frameLine = `${name !== frame ? `${frame} (${name})` : frame} · ${documentKind(d)} · ${stock} → ${paper} · mode ${mode}`;
     }
     const mem = this.memInfo();
     const memLine = mem.map((m) => `${m.key} (${m.kind === 'handle' ? m.label : m.kind === 'array' ? `array of ${m.n}` : m.kind})`);
@@ -554,20 +588,10 @@ export class DslSession {
         this.seenFns.set(m.key, m.src);
       }
     }
-    const proposals = this.proposals.filter((p) => !frame || p.frame === frame).slice(-5).map((p) => `${p.tx} ${this.proposalStatus(p)}`);
-    return { ...(frameLine ? { frame: frameLine } : {}), mode, changed: [...new Set(changed)], proposals, mem: memLine, functions, newFunctions };
+    const proposals = this.proposals.filter((p) => !frame || p.frames.includes(frame)).slice(-5).map((p) => `${p.id} ${this.proposalStatus(p, log)}`);
+    return { ...(frameLine ? { frame: frameLine } : {}), mode, changed, proposals, mem: memLine, functions, newFunctions };
   }
 
   /** Where an error points, for tests and transports. */
   static locate = locate;
-}
-
-function getAt(r: unknown, path: string): unknown {
-  let cur: unknown = r;
-  for (const seg of path.split('.')) {
-    if (Array.isArray(cur)) cur = cur.find((e) => e && typeof e === 'object' && (e as { id?: string }).id === seg);
-    else if (cur && typeof cur === 'object') cur = (cur as Record<string, unknown>)[seg];
-    else return undefined;
-  }
-  return cur;
 }

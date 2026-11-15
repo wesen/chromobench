@@ -13,12 +13,24 @@ mem.at = [48, 32]
 return mem.at
 ```
 
-## Lazy nodes, then data
+## A frame is a document
 
-Calls such as `frame.print()` build nodes and compute nothing. `await` on a measurement computes it and gives plain numbers.
+A frame's edit is a document: its stages (a scan or a scene and a film, the darkroom, the print), each a medium (the settings of the physical process) and a stack of layers; a library of masks; the geometry. `frame.explain()` summarises it; `frame.get(path)` reads one value; `frame.doc` is the whole document, read-only, as it was when the eval started.
 
 ```js
-const print = frame.print()                       // a handle: nothing computed yet
+return frame.explain()
+```
+
+```js
+return { paper: frame.get('stages.darkroom.medium.paper'), time_s: frame.get('main.params.time_s'), lights_pt: units.toPt(frame.get('lights.params.logH')) }
+```
+
+## Cuts are lazy nodes, then data
+
+`frame.print()` is the print cut of the compiled document: a handle, nothing computed yet. `await` on a measurement computes it and gives plain numbers.
+
+```js
+const print = frame.print()
 const grey = await print.measure.densitometer({ at: mem.at, aperture_px: 15 })
 return grey.D
 ```
@@ -36,20 +48,11 @@ const g = frame.print().measure.densitometer({ at: mem.at })
 return g.D
 ```
 
-## Looks come with numbers
+## Images come with numbers
 
-`h.look(label)` queues an image for you, at most four per eval. Each look carries the numbers it shows: read those, not the picture.
+`h.show(label)` sends you an image, at most four per eval. Each carries the numbers it shows: read those, not the picture.
 
-```js looks=1
-frame.print().look('current print')
-return 'see look 1'
-```
-
-## The recipe
-
-`frame.recipe` is a read-only snapshot of the frame's settings at the start of the eval.
-
-```js
-const r = frame.recipe
-return { paper: r.print.paper, time_s: r.print.enlarger.time_s, lights_pt: units.toPt(r.print.lights.logH) }
+```js shows=1
+frame.print().show('current print')
+return 'see image 1'
 ```

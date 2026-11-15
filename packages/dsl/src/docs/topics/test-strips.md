@@ -4,13 +4,13 @@
 
 `cb.testStrip(frame, { vary, steps, step })` prints bands across the frame. `vary: 'time'` steps in stops around the current time.
 
-```js looks=1
+```js shows=1
 const strip = cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })
-strip.look('time test strip')
+strip.show('time test strip')
 return (await strip.measure.patches({ cols: 7 })).cells
 ```
 
-Its look carries one reading per band, so you do not need to measure it yourself.
+Its image carries one reading per band, so you do not need to measure it yourself.
 
 ## Other strips
 
@@ -31,17 +31,17 @@ return cb.testStrip(frame, { vary: 'time', steps: 7, step: 5 })
 
 ## A ring-around
 
-```js looks=1
+```js shows=1
 const ring = cb.ringAround(frame, { step_pt: 4 })
-ring.look('ring-around, 4 points')
-return 'nine prints; see the look numbers'
+ring.show('ring-around, 4 points')
+return 'nine prints; see the image numbers'
 ```
 
 ## Side by side
 
-`cb.compare([a, b], label)` makes one look with both halves; each half carries its own numbers.
+`cb.compare([a, b], label)` makes one image with both halves; each half carries its own numbers.
 
-```js looks=1
-cb.compare([frame.print(), frame.print({ time_s: 12.6 })], 'now vs +1/3 stop')
+```js shows=1
+cb.compare([frame.print(), frame.with(set('main.params.time_s', 12.6)).print()], 'now vs +1/3 stop')
 return 'compare'
 ```

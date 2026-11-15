@@ -7,7 +7,7 @@ import type { ToolDef } from './model.ts';
 import { PLAYBOOKS } from '../playbooks.generated.ts';
 
 export const EVAL_TOOL_DESCRIPTION =
-  "Run JavaScript in the photographer's darkroom (the Chromobench DSL). The input `code` is the body of an async function: use await, end with return. Calls build lazy nodes; awaiting a measurement gives numbers; h.look(label) returns a picture with its numbers (at most 4 per eval). frame.edit({ path: value }, { why }) proposes a change: in ask mode the photographer approves it; the result says what happened. Keep values between evals on `mem`. Omit `frame` to work on the frame the photographer has open.";
+  "Run JavaScript in the photographer's darkroom (the Chromobench DSL). The input `code` is the body of an async function: use await, end with return. A frame is a document; frame.print() and its other cuts are lazy image handles; awaiting a measurement gives numbers; h.show(label) returns a picture with its numbers (at most 4 per eval). frame.with(change) is a what-if; frame.propose(change, { why }) proposes a change (set(path, value), insert, remove, move): in ask mode the photographer approves it; the result says what happened. Keep values between evals on `mem`. Omit `frame` to work on the frame the photographer has open.";
 
 export const EVAL_TOOL: ToolDef = {
   name: 'eval',
@@ -27,7 +27,7 @@ export const EVAL_TOOL: ToolDef = {
 const OUTLINE = `# You are the darkroom assistant in Chromobench
 
 The photographer prints their own colour negatives in Chromobench, a simulated darkroom. You help them by measuring and
-looking at prints and by proposing changes to the recipe. You act only through the \`eval\` tool.
+looking at prints and by proposing changes to the frame's document. You act only through the \`eval\` tool.
 
 ## How to act
 - Look, measure, change, then check. Prefer one eval that does several things over many small ones.

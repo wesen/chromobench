@@ -1,6 +1,6 @@
 // Every js block of every topic page, and every OpDef.examples entry, runs against engine-mock
 // (port of goja-cv pkg/cvsession/docs_test.go). Info strings: `js` (no error, no warnings),
-// `js warns=CODE`, `js error=CODE`, `js looks=N`, `js fragment` (skipped). A floor on the block
+// `js warns=CODE`, `js error=CODE`, `js shows=N` (N images shown), `js fragment` (skipped). A floor on the block
 // count keeps a broken extractor from passing silently.
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -56,7 +56,7 @@ describe('topic pages', () => {
           if (t['warns']) expect(codes, label).toContain(t['warns']);
           else expect(codes, label).toEqual([]);
         }
-        if (t['looks']) expect(r.looks.length, label).toBe(Number(t['looks']));
+        if (t['shows']) expect(r.looks.length, label).toBe(Number(t['shows']));
       }
       s.session.dispose();
     });
@@ -64,16 +64,17 @@ describe('topic pages', () => {
 });
 
 describe('OpDef.examples', () => {
-  const examples = allOps().flatMap((o) => (o.examples ?? []).map((code) => ({ op: o.name, code })));
-  for (const ex of examples) {
-    it(`${ex.op}: ${ex.code}`, async () => {
-      const s = await setup();
+  // the catalogue's own DSL snippets (contract 1.0 ships none; an op that adds one is run here)
+  it('every example runs without an error', async () => {
+    const examples = allOps().flatMap((o) => (o.examples ?? []).map((code) => ({ op: o.name, code })));
+    const s = await setup();
+    for (const ex of examples) {
       const r = await s.run(ex.code);
-      expect(r.error, r.yaml).toBeUndefined();
+      expect(r.error, `${ex.op}: ${ex.code}\n${r.yaml}`).toBeUndefined();
       executed++;
-      s.session.dispose();
-    });
-  }
+    }
+    s.session.dispose();
+  });
 });
 
 describe('instructions', () => {

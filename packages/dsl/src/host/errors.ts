@@ -1,27 +1,29 @@
-// Structured errors of the prelude's traps (split from host.ts, CHB-032): unknown members, lazy nodes used as
-// numbers, assignments to immutable handles and recipes.
-import { ChromobenchError, diag, settablePaths } from '@chromobench/contract';
+// Structured errors of the prelude's traps (CHB-032 split; contract 1.0): unknown members, lazy nodes used as
+// numbers, assignments to immutable handles and documents.
+import { ChromobenchError, diag, type Document } from '@chromobench/contract';
+import { Coll, canonicalPath, isPlainObject } from '@chromobench/values';
 import type { Host } from '../host.ts';
-import { HANDLE_MEMBERS, suggest, dslOps, editFix } from './words.ts';
+import { HANDLE_MEMBERS, suggest, dslOps, proposeFix } from './words.ts';
 import type { HandleInfo } from './types.ts';
 
 export function unknownMethodErr(h: Host, info: HandleInfo, area: string | null, key: string): ChromobenchError {
+  const accepts = (o: ReturnType<typeof dslOps>[number]): boolean =>
+    !!info.domain && (o.domainIn === 'any' || (Array.isArray(o.domainIn) ? o.domainIn.includes(info.domain) : o.domainIn === info.domain));
   if (area) {
     const all = dslOps().filter((o) => o.area === area);
-    const ok = all.filter((o) => info.domain && (o.domainIn === 'any' || (Array.isArray(o.domainIn) ? o.domainIn.includes(info.domain) : o.domainIn === info.domain)));
+    const ok = all.filter(accepts);
     const names = (ok.length ? ok : all).map((o) => o.name.slice(area.length + 1));
     const guess = suggest(key, names);
     return new ChromobenchError(diag('E_UNKNOWN_METHOD', `${area}.${key} is not an op`, {
       ...(guess ? { hint: `Did you mean "${guess}"?`, fix: `${info.expr}.${area}.${guess}(…)` } : {}), valid: names.map((n) => `${area}.${n}`),
     }));
   }
-  const ops = dslOps().filter((o) => o.on !== 'none' && info.domain && (o.domainIn === 'any' || (Array.isArray(o.domainIn) ? o.domainIn.includes(info.domain) : o.domainIn === info.domain)));
-  const areas = [...new Set(ops.map((o) => o.area))];
-  if (info.domain === 'film-dyes' && !areas.includes('print')) areas.push('print');
+  const areas = [...new Set(dslOps().filter((o) => o.on !== 'none' && accepts(o)).map((o) => o.area))];
   const valid = [...areas, ...HANDLE_MEMBERS];
   const guess = suggest(key, valid);
+  void h;
   return new ChromobenchError(diag('E_UNKNOWN_METHOD', `a ${info.domain ?? info.kind} handle has no member "${key}"`, {
-    ...(guess ? { hint: `Did you mean "${guess}"?`, fix: `${info.expr}.${guess}${HANDLE_MEMBERS.includes(guess) && guess !== 'look' && guess !== 'explain' ? '' : '(…)'}` } : {}), valid,
+    ...(guess ? { hint: `Did you mean "${guess}"?`, fix: `${info.expr}.${guess}${HANDLE_MEMBERS.includes(guess) && guess !== 'show' && guess !== 'explain' ? '' : '(…)'}` } : {}), valid,
   }));
 }
 
@@ -38,6 +40,7 @@ export function unknownMember(h: Host, a: Record<string, unknown>): never {
 }
 
 export function notAwaited(h: Host, info: HandleInfo, key: string | null): never {
+  void h;
   if (info.kind === 'Image') {
     throw new ChromobenchError(diag('E_NOT_AWAITED', `${info.op}() is an image node; it has no number value`, {
       hint: 'images never become numbers; measure them', fix: `(await ${info.expr}.measure.stats()).mean`, path: info.label,
@@ -52,22 +55,49 @@ export function notAwaited(h: Host, info: HandleInfo, key: string | null): never
   }));
 }
 
+/** The id-anchored paths of a document whose last segment is `key` (an entry's param, a medium field). */
+export function leafPaths(doc: Document, key: string): string[] {
+  const out: string[] = [];
+  const walk = (v: unknown, path: string, depth: number): void => {
+    if (depth > 8) return;
+    if (Coll.is(v)) {
+      for (const [id, x] of Coll.entries(v as Coll<unknown>)) walk(x, id, depth + 1);
+      return;
+    }
+    if (!isPlainObject(v)) return;
+    for (const [k, x] of Object.entries(v)) {
+      const p = path ? `${path}.${k}` : k;
+      if (k === key && !isPlainObject(x)) out.push(p);
+      else walk(x, p, depth + 1);
+    }
+  };
+  walk(doc, '', 0);
+  return out;
+}
+
 export function immutable(h: Host, info: HandleInfo | null, key: string, value: unknown): never {
+  const frame = info?.frame ?? h.bound;
   const leaf = key.split('.').pop()!;
-  const exact = settablePaths().filter((p) => !p.includes('*') && (p === key || p.endsWith(`.${leaf}`)));
-  const path = exact[0];
-  const fx = h.frameExpr(info?.frame ?? h.bound);
+  const paths = frame ? leafPaths(h.state(frame).base, leaf) : [];
+  const fx = h.frameExpr(frame);
   throw new ChromobenchError(diag('E_IMMUTABLE', `${info ? info.label : key.split('.')[0]} is immutable: assigning ${key} changes nothing`, {
-    hint: 'handles are what-ifs; change the recipe with frame.edit, or build a new node with literal options',
-    ...(path && value !== undefined ? { fix: editFix(fx, path, value) } : {}),
-    ...(exact.length > 1 ? { valid: exact } : {}),
+    hint: 'handles are what-ifs: view the change with frame.with(change), propose it with frame.propose(change)',
+    ...(paths[0] && value !== undefined ? { fix: proposeFix(fx, paths[0], value) } : {}),
+    ...(paths.length > 1 ? { valid: paths } : {}),
   }));
 }
 
-export function immutableRecipe(h: Host, frame: string, path: string, value: unknown): never {
+/** An assignment into frame.doc: the path as the frozen view saw it (collections as order/items). */
+export function immutableDoc(h: Host, frame: string, phys: string, value: unknown): never {
   const fx = h.frameExpr(frame);
-  throw new ChromobenchError(diag('E_IMMUTABLE', `frame.recipe is a read-only snapshot: assigning ${path} changes nothing`, {
-    hint: 'propose the change with frame.edit; the photographer approves it in ask mode',
-    ...(value !== undefined ? { fix: editFix(fx, path, value) } : {}),
+  let path = phys.split('.').filter((s, i, all) => !(s === 'items' && i > 0) && !(s === 'order' && i === all.length - 2)).join('.');
+  try {
+    path = canonicalPath(h.state(frame).base, path);
+  } catch {
+    // a path the document does not have: show it as written
+  }
+  throw new ChromobenchError(diag('E_IMMUTABLE', `frame.doc is a read-only snapshot: assigning ${path} changes nothing`, {
+    hint: 'propose the change with frame.propose(set(path, value)); in ask mode the photographer approves it',
+    ...(value !== undefined ? { fix: proposeFix(fx, path, value) } : {}),
   }));
 }

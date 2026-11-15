@@ -9,7 +9,11 @@ return frame.negative().pirnt({ time_s: 12 })
 ```
 
 ```js error=E_UNKNOWN_OPTION
-return frame.print({ time: 12 })
+return layer('burn', { stop: 1 })
+```
+
+```js error=E_UNKNOWN_OPTION
+frame.propose(set('main.params.time', 12))
 ```
 
 ## Options are literal values
@@ -18,7 +22,7 @@ Await a measurement and pass the number:
 
 ```js error=E_ARG_TYPE
 const p = frame.print()
-return frame.print({ time_s: p.measure.stats() })
+return frame.with(set('main.params.time_s', p.measure.stats()))
 ```
 
 ## No network, files or timers
@@ -36,13 +40,17 @@ await new Promise((r) => setTimeout(r, 500))   // ReferenceError: there are no t
 Values outside the usual range work, with a `RANGE` warning:
 
 ```js warns=RANGE
-return (await frame.print({ time_s: 500 }).measure.densitometer({ at: [48, 32] })).visual
+return (await frame.with(set('main.params.time_s', 500)).print().measure.densitometer({ at: [48, 32] })).visual
 ```
 
 ## Getting help
 
 ```js
-return cb.help('print.expose')
+return cb.help('burn')
+```
+
+```js
+return cb.help('measure.stats')
 ```
 
 ```js
