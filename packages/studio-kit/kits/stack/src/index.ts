@@ -3,4 +3,5 @@ export { createStackKit, STACK_FORMS, type LayersOptions, type StackKit } from '
 export * from './model.ts';
 export { STACK_STATE, selectedIn, type StackView } from './state.ts';
 export { stagePolicy, stagesShown, walk } from './passes.ts';
-export { MASK_TOOLS, maskTools, stackCommands } from './commands.ts';
+export { MASK_TOOLS, maskTools, stackCommands, eyedropper } from './commands.ts';
+export * from './editors.ts';

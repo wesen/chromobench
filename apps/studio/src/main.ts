@@ -125,6 +125,8 @@ interface Host {
   settings: HostSettings | null;
   /** The roll kit's physics service; the mock engine has none (the Roll panels say so). */
   rollPhysics?: unknown;
+  /** The stack kit's editors' numbers (core's curve, levels and encodings); the mock engine has none. */
+  editorMath?: unknown;
   /** Opens a file as a photo, a negative or as guessed (CHB-027); the mock engine opens everything as a negative. */
   opener?: SourceOpener;
   /** What the pixels of an open file look like (the guess), for the "looks like a negative" hint (F15). */
@@ -170,6 +172,7 @@ async function startEngine(): Promise<Host> {
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,
+    editorMath: h.editorMath,
     opener: (src, as) => se.openAs(src, as, askOpen),
     guess: (sha) => se.notes.get(sha)?.guess ?? null,
   };
@@ -241,7 +244,7 @@ async function main(): Promise<void> {
 
   root.innerHTML = '';
   bootTheme.dispose();
-  const mountOpts = { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}) };
+  const mountOpts = { presenter, save, chat, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}) };
   /**
    * Mounts a built layout with the studio's services and renderers, then attaches the studio (studio-kit's
    * mountStudio, in two halves): `adopt` takes over the log and the mounted documents of the runtime before (View ▸

@@ -12,6 +12,7 @@ import {
   type LinkEntry, type MaskComponent, type MaskComponentKind, type OpDef, type Params, type StageLaw, type StageName,
 } from '@chromobench/contract';
 import { entriesOf, findEntry, mainExposure, newDarkroomLayer, nextId, paramsOf, type Placed } from '../../../src/model/doc.ts';
+import { listDefault } from './editors.ts';
 
 // ---- the law, in words ------------------------------------------------------------------------------------------
 
@@ -205,14 +206,18 @@ export function opWord(op: string): string {
   return label && !label.includes(' ') ? label : op.replace(/^\w/, (c) => c.toUpperCase()).replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
-/** A new layer of an op at its usual starting values: the darkroom's (½ stop burn, 2 s flash, …), else the ArgSpec defaults. */
-export function newLayer(op: string, o: { name?: string; mask?: Id | null } = {}): Layer {
+/**
+ * A new layer of an op at its usual starting values: the darkroom's (½ stop burn, 2 s flash, …), else the ArgSpec
+ * defaults. A list argument's default becomes a Coll whose items are named after the layer (`curve1p1`, `hsl1b3`:
+ * ids are unique in the whole document), so a new curve has its two end points and a new HSL layer its eight bands.
+ */
+export function newLayer(op: string, o: { name?: string; mask?: Id | null; id?: Id } = {}): Layer {
   if (DARKROOM_STARTERS.has(op)) return newDarkroomLayer(op as 'burn', { ...(o.name ? { name: o.name } : {}), mask: o.mask ?? null });
   const def = getOp(op);
   const params: Record<string, Json> = {};
   for (const [k, spec] of Object.entries(def.args)) {
     if (spec.default === undefined || spec.type === 'Image' || spec.type === 'Mask') continue;
-    params[k] = (spec.type === 'list' ? Coll.empty() : spec.default) as Json;
+    params[k] = (spec.type === 'list' ? (o.id ? listDefault(o.id, k, spec) : Coll.empty()) : spec.default) as Json;
   }
   return layerEntry(op, params as Params, { name: o.name ?? opWord(op), mask: o.mask ?? null });
 }
@@ -240,7 +245,7 @@ export function addLayer(doc: Document, stage: StageName, op: string, o: { after
   if (!getOp(op).stages?.includes(stage)) throw new Error(`${op} does not live in the ${stage} stage`);
   const id = o.id ?? idFor(doc, op);
   const to = placeAfter(doc, stage, o.after);
-  return { id, mutations: [insert(to.into, id, newLayer(op, { mask: o.mask ?? null }), to.at)] };
+  return { id, mutations: [insert(to.into, id, newLayer(op, { mask: o.mask ?? null, id }), to.at)] };
 }
 
 // ---- structural edits ----------------------------------------------------------------------------------------------
@@ -278,7 +283,15 @@ export function duplicateEntry(doc: Document, id: Id): { id: Id; mutations: Muta
     return probe;
   };
   const nid = fresh(id);
-  const map = new Map<Id, Id>(collIds(p.entry).map((x) => [x, fresh(x)]));
+  // items named after the layer (a curve's points, HSL bands) are named after the copy
+  const own = (x: Id): Id | null => {
+    if (!x.startsWith(id) || x === id) return null;
+    const probe = `${nid}${x.slice(id.length)}`;
+    if (findAnyId(doc, probe) || taken.has(probe)) return null;
+    taken.add(probe);
+    return probe;
+  };
+  const map = new Map<Id, Id>(collIds(p.entry).map((x) => [x, own(x) ?? fresh(x)]));
   const copy = { ...renameIds(p.entry, map), name: `${p.entry.name} copy`, source: { kind: 'user' } } as Entry;
   const c = p.parent ? (findEntry(doc, p.parent)!.entry as Group).stack : doc.stages[p.stage]!.stack;
   return { id: nid, mutations: [insert(collOf(p.stage, p.parent), nid, copy, Coll.indexOf(c, id) + 1)] };

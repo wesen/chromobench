@@ -22,6 +22,7 @@ import { LOOKS_RENDERERS } from '../kits/looks/src/dom.ts';
 import '../kits/looks/src/looks.css';
 import { plantedStrip } from '@chromobench/ingest';
 import { rollPhysics } from './roll-physics.ts';
+import { editorMath } from './editor-math.ts';
 import fixtureUrl from '../../../fixtures/synthetic/m1-negative-96x64.tif?url';
 
 const q = new URLSearchParams(location.search);
@@ -115,7 +116,7 @@ async function main(): Promise<void> {
     a.href = cv.toDataURL('image/png');
     a.click();
   };
-  const { rt } = await mountStudio(built.app, root, studio, { save, rollPhysics: rollPhysics(), renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS } });
+  const { rt } = await mountStudio(built.app, root, studio, { save, rollPhysics: rollPhysics(), editorMath: editorMath(), renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS } });
   if (def.id === 'roll') {
     for (const fr of plantedRoll()) await studio.open(fr.bytes, fr.name);
   } else {
