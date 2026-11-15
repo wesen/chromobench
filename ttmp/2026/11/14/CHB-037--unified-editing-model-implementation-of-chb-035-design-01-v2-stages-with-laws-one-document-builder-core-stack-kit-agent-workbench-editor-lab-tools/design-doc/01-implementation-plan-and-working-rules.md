@@ -274,3 +274,22 @@ consumer breakage.
   A difference above float rounding is a semantic change to explain, never a reason to widen the tolerance. Masks in
   the recipes are node closures (some embed the fixture hash and, once, the main exposure chain); the translation
   rebuilds them as mask values.
+
+### Amendments after P1 (main agent, from the P1 report)
+
+- **Use the values API as built** (`packages/values/README.md`): `defineValue` for value kinds (chain methods are
+  modifiers on the value's data), `Coll.*`, the path grammar (first segment an item id or a root key; `order`/`items`
+  never appear in paths; ids may not equal root keys), `applyMutation`/`applyTransaction` with the `validate` and
+  `validateTransaction` hooks (per mutation, and per transaction for rules that may break midway such as "exactly one
+  main"), `unset` for deleting object keys, normal forms and inverses.
+- **P2a**: one error class. Values throws `ValueError` (Diagnostic-shaped); the contract's `ChromobenchError` and
+  `toDiagnostic` must treat it as the same thing (make one extend or alias the other; values cannot import the
+  contract); add `E_DOCUMENT` to `ERROR_CODES`; `bindArgs` rejects non-finite numbers before they reach
+  `canonicalJSON`. Call `libraryRoot(import.meta.url)` in the contract's builder modules so call sites point at the
+  caller. The document's rules go into `validate`/`validateTransaction`.
+- **P5a**: replace the shell's own `site`/`libraryRoot`/`CallSite` (`packages/shell/src/core/diag.ts`) with the values
+  versions (one library-root set); implement node `with` through `toModifier(x, patch).run(node)`; open the
+  studio-kit boundary rule to `@chromobench/values`.
+- **P4**: a pending transaction is stale when its inverses, recomputed at apply time, differ from the stored ones.
+- **Known flake fixed on the integration branch** (e349b96): roll batch ids were `Date.now()` in base 36, so two
+  batches in one millisecond collided; ids now carry a counter.

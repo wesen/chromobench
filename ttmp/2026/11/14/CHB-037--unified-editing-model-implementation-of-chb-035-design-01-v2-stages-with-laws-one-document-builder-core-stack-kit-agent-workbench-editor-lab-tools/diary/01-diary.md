@@ -141,3 +141,60 @@ from its report.
 
 ### Technical details
 - P0 diary: `diary/02-phase-p0-goldens.md` (Steps 1–3).
+
+## Step 3: P1 merged — the builder core; a pre-existing flake fixed
+
+`packages/values` is on the integration branch: immutable values with modifiers and explain, collections, four
+mutations with exact inverses, transactions, and `canonicalJSON` moved out of the contract with every node hash
+unchanged. The merge hit a changelog conflict, and the first test run exposed a flaky roll test that predates CHB-037.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P1, keep the integration branch green, prepare wave 2.
+
+**Inferred user intent:** Progress on a sound base.
+
+**Commit (code):** fde975c — "Merge P1 values (builder core …)"; e349b96 — "Roll kit: batch ids carry a counter beside
+the clock …"
+
+### What I did
+- `git merge --no-ff task/chb-037-p1-values` → "Automatic merge failed" on the ticket's `changelog.md` (both branches
+  appended entries); resolved by keeping both sides (a small script removing the markers), committed.
+- Checks on the merge: install, typecheck, lint, gen:check rc=0; vitest run 1: "1 failed | 2849 passed | 19 skipped",
+  run 2: "2850 passed | 19 skipped".
+- The failure: `packages/studio-kit/test/roll/kit.test.ts:80`, `expected 'roll:match-frame_c4f7e0f9-mwh7otym' not to be
+  'roll:match-frame_c4f7e0f9-mwh7otym'`. Cause: `kits/roll/src/engine/lower.ts:161,180` build batch ids from
+  `Date.now().toString(36)`; two `roll.alpha` re-plans in one millisecond get one id. Fixed with a counter
+  (`batchStamp()`: clock, a dot, a sequence number); the roll tests passed 3 of 3 runs afterwards.
+- Plan amendments for P2a, P5a and P4 from the P1 report.
+
+### Why
+- The P1 agent had seen one unexplained failure in four runs; it was this flake, not P1.
+
+### What worked
+- Node ids byte-identical after moving `canonicalJSON` (the P1 agent ran the suite with only that change: 105/2797).
+
+### What didn't work
+- The first merge attempt stopped on the changelog conflict (expected with parallel docmgr changelog updates; phase
+  agents will keep hitting it, and keeping both sides is always right for the changelog).
+
+### What I learned
+- Time-based ids are a recurring trap here (also in looks: `look:<eval>-<n>` is sequence-based and fine).
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- P1 added `@chromobench/values` to `packages/shell/package.json` as well as the contract's and the root's, so P5a
+  needs no lockfile change: outside P1's listed files, accepted.
+
+### What should be done in the future
+- Launch P5a and P2a in parallel.
+
+### Code review instructions
+- `packages/values/README.md`; `pnpm exec vitest run packages/values`.
+
+### Technical details
+- Vitest after the merge: 113 files, 2850 passed, 19 skipped. P1 diary: `diary/03-phase-p1-values.md`.
