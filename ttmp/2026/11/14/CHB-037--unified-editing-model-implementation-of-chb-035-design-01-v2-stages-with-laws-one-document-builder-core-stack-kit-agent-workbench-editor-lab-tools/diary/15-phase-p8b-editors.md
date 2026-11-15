@@ -32,12 +32,15 @@ RelatedFiles:
       Note: New layers' lists as Colls named after the layer
     - Path: repo://packages/studio-kit/test/browser/editors.spec.ts
       Note: Browser spec per editor
+    - Path: repo://packages/studio-kit/test/stack/editors.test.ts
+      Note: Unit tests of the editors, the lists as Colls and the eyedropper
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T02:44:06.041194-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 
@@ -305,3 +308,77 @@ engine's own numbers.
 - Steps per gesture: a curve click (add) or drag (move) or drag-off/double-click (delete), a channel click, a
   levels handle drag, a run of arrow keys on one control, a typed value, a wheel drag, a puck double-click, a mixer
   cell drag or typed value, the monochrome switch, Reset, an eyedropper click — one step each.
+
+## Step 3: Editors as data; the browser suites; the merge; what is left
+
+A look back at decision 1 made me change it. With an editor as `{ covers, node }`, the `stack.params` node carried
+functions in a build-time prop. P6b is making layouts that cross from the agent's sandbox as data, and functions
+cannot make that trip. An editor is now plain data, `{ form, covers }`, and the params panel mounts
+`makeNode(form, { entry, stage })` itself. That also removed a latent bug. A `stack.params` node made without the
+kit's builder fell back to plain objects shaped like nodes, and `mount` does not accept them (`isNode` checks the
+vocabulary's brand), so they would have rendered as empty text. After that I ran the full browser suites, merged the
+integration branch (a no-op: nothing new since 112d9c4) and reran every check.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Close the phase: the acceptance checks, the merge, the report.
+
+**Inferred user intent:** The main agent can merge P8b, and P9 knows what to check.
+
+**Commit (code):** 82aee84 — "CHB-037 P8b: an editor is data ({ form, covers }), so a layout built in a sandbox
+carries its editors across; the params panel mounts the form with entry and stage"
+
+### What I did
+- `editors.ts`: `Editor = { form, covers }`, `EDITOR_FORMS` (the built-in ones), `editorOf(form, covers)`;
+  `defaultEditors` and the θ `node` function deleted. `kit.ts`: `stack.editors = EDITOR_FORMS`,
+  `stack.editor(form, covers)`. `dom.ts`: mounts `makeNode(ed.form, { entry, stage })`. The unit test checks that
+  the editors survive a JSON round trip and that every built-in form is registered.
+- Browser run 1 (at 5b5bd71) and run 2 (after the merge):
+  `STUDIO_PORT=5541 STUDIO_KIT_PORT=5542 SHELL_DEMO_PORT=5543 GPU_PARITY_PORT=5544 CI=1 pnpm test:browser --project
+  studio-kit --project chromium-webgpu`.
+- `git merge task/chb-037-unified-model`: "Already up to date".
+
+### Why
+- A layout is data (CHB-030; P6b's `wb.layouts.build`). An editor that is a form name and a list of arguments
+  crosses as data and can be checked against the registered forms.
+
+### What worked
+- After the merge: `pnpm typecheck` 0 errors; `pnpm lint` (473 boundary checks, 184 colour files); `pnpm gen:check`
+  ok (26 files); `pnpm exec vitest run` → 134 files, 3194 passed, 19 skipped.
+- Browser run 1: 78 passed, 1 failed. The failure is `tools/wgsl-check/check.spec.ts:45`, the known
+  `combine.wgsl`/`wkMix` failure that comes with the integration branch and is P3b's. Run 2: 77 passed, the same
+  wgsl-check failure, and one timeout in a beforeEach hook under load (Technical details).
+
+### What didn't work
+- N/A for this step, beyond the known wgsl-check failure above.
+
+### What I learned
+- `mount` accepts only nodes of a vocabulary (`isNode` checks the `NODE` brand). A renderer that builds a node at
+  interaction time uses `makeNode` from `@chromobench/shell`.
+
+### What was tricky to build
+- N/A (a small refactor and validation).
+
+### What warrants a second pair of eyes
+- The build does not check that a layout's editor `form` is registered. A typo mounts the shell's `[form]`
+  placeholder in the params panel.
+
+### What should be done in the future
+- P9: a build-time check that each editor of a `stack.params` node names a registered form, and that `covers`
+  names arguments of the op (both are data now).
+- P9: the scene stage's editors (camera files) are covered only by the unit tests' shared code. The studio-kit host
+  opens negatives only, so no browser spec opens a camera file and edits its scene stack.
+- P3b: MockEngine pass-throughs for P8a's ops. P3b: `tools/wgsl-check`.
+
+### Code review instructions
+- `git diff 112d9c4..HEAD -- packages apps e2e`; start at `kits/stack/src/editors.ts`.
+- The commands under "What I did" in Steps 2 and 3.
+
+### Technical details
+- Browser run 2 (after the merge): 77 passed, 2 failed. The first is the known `tools/wgsl-check/check.spec.ts:45`.
+  The second is `arrangements.spec.ts:25`: "Test timeout of 60000ms exceeded while running "beforeEach" hook", the
+  browser failing to start under the suite's load, as P5b-2 saw with `roll.spec.ts`. Alone, with
+  `--repeat-each=2`, `arrangements.spec.ts` passes 8/8. The editors' own specs are
+  `packages/studio-kit/test/browser/editors.spec.ts` (6) and `e2e/studio-editors.spec.ts` (1).

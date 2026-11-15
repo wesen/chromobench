@@ -126,3 +126,8 @@ P7 links: look functions, presets, bake, rolls on linked media, looks kit on lin
 
 P8b Step 2: editors for the stack kit's params panel (curve, levels, HSL, grade, mixer), the colour-mask eyedropper, editorMath service, shell curvePlane/wheelDisc widgets (commits 580d454, 5b5bd71)
 
+
+## 2026-11-15
+
+P8b Step 3: editors as data ({ form, covers }) (commit 82aee84); merged the integration branch (no-op); checks green; browser 77 passed, with wgsl-check (P3b's) and one load timeout that passes alone
+
