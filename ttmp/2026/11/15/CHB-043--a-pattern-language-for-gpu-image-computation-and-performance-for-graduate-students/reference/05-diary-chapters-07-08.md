@@ -76,7 +76,7 @@ Chapter 7:
 - Before: error text and ×9: `D41:101-103`; live 507 of 512 MiB, textures 328 live + 19 free, buffers 160 free:
   `D41:98-99`; three holders: `D41:108-116`. After: peak 199/215 MiB, textures 47 MiB, free buffers 48 MiB, the same
   under `?gpuBudget=512`: `D41:409-416`. Ten 2400 × 1600 scans: peak 109 MiB, 69 MiB kept, 7 MiB on screen: `D41:205-206`.
-- My arithmetic: 4000 × 2686 × 16 = 171,904,000 B = 163.9 MiB; 536,870,912 − 525,083,680 = 11,787,232 B = 11.2 MiB;
+- My arithmetic (working size superseded in Step 5: 4000 × 2674): 4000 × 2686 × 16 = 171,904,000 B = 163.9 MiB; 536,870,912 − 525,083,680 = 11,787,232 B = 11.2 MiB;
   14,192,640 B = 13.5 MiB; 160 × 107 = 17,120 px of 10,744,000; 6000 × 4000 × 16 = 384,000,000 B = 366.2 MiB, ten =
   3.58 GiB; 3000 × 2000 × 16 = 96,000,000 B = 91.6 MiB.
 - One ledger across pools: `CB/packages/gpu/src/pool.ts:34-89` (`Budget`, `makeRoom` 74-80, `trimFree` 82-88, shared
@@ -233,3 +233,74 @@ for an open image and says "owner"), and word counts with a script that strips f
 ### Overview change recommended
 - None required. Optional: the overview's one-line sketch for 7 (`budget = clamp(deviceMemory / 8, 512 MiB, 2 GiB)`)
   omits the `maxBufferSize` cap and the software-adapter cap; it is a fair summary.
+
+## Step 5: Revision after review
+
+The coordinator relayed a fresh reviewer's lessons from chapters 2 and 6 (recompute numbers; bounds versus
+measurements; derived models; precise device semantics; MiB; Solution as the invariant only; no internal IDs; sketch
+hygiene; glosses; no duplicate exercises; cut material duplicated with the modular volume). I applied them to both
+chapters. No mermaid-cli run in this step (the coordinator renders diagrams).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1); relayed by the coordinator: "Revision round. A fresh reviewer (first-year
+PhD reader) reviewed chapters 2 and 6 and found errors that generalise. Apply these lessons to your chapters 7 and 8.
+…"
+
+**Assistant interpretation:** Revise chapters 7 and 8 against the general lessons, prose ≤ 2,900 words each, and
+record the changes here.
+
+**Inferred user intent:** Chapters a first-year PhD reader can check line by line.
+
+### What I did
+- **Working size corrected.** The camera files' working image is 4000 × 2674, not 4000 × 2686: CHB-034's diary
+  (`CB/ttmp/2026/11/14/CHB-034*/diary/01-diary.md:303`, "Portraits come out 2674 × 4000 (GPU)") and the 4000-px
+  default (`CB/apps/studio/src/host/engines.ts:112`). CHB-041's diary used 2686. My arithmetic: 4000 × 2674 × 16 =
+  171,136,000 B = 163.2 MiB per texture (two: 326.4 MiB; the measured 328 MiB of live textures includes small ones);
+  10,696,000 px; the f32 RGB staging buffer 4000 × 2674 × 3 × 4 = 128,352,000 B = 122.4 MiB
+  (`CB/packages/gpu/src/engine/textures.ts:77-84`, `bytes = w·h·c·4`). Chapter 7 now says the raw files are decoded
+  to a 4000-px working image and uses 163 MiB.
+- **Chapter 7.** Rewrote the whole file. Motivation now carries the staging story (chapter 6 points here). Solution
+  cut to five sentences of invariant. A new note models the peak as max(R + W + F), with the measured split: at rest
+  after the second file R = 328, F = 179 (160 buffers + 19 textures), 5 MiB free, and the texture pool could trim only
+  its own 19 MiB, so any render needing more than 24 MiB failed (my arithmetic from `D41:98-99`). After the fix,
+  215 − 47 − 48 ≈ 120 MiB of working set (my subtraction, labelled as such). The same note covers why a byte count is
+  not placeable memory (alignment, retired-but-pending units, fragmentation). The budget note now derives each term,
+  with worked machines (32 GiB → 2 GiB, 8 GiB → 1 GiB). Bound (≈ 2× full size per owner) and measurement (109 MiB
+  peak in 512 MiB) are separated. The task ID and the CHB names are gone. Leases, pins, proxies, staging buffers, the
+  software adapter, the journal and error scopes are glossed. Recovery and leases now link to the modular chapter
+  instead of repeating it. The PostgreSQL and Android/iOS known uses were dropped (the modular chapter has them).
+- **Chapter 7 sketch.** Guards added: a non-positive or missing `memory`, `override` or `maxBuffer`; an empty
+  render; an allocation larger than the whole budget (refused as "too-large" and not retried, since no eviction can
+  help). `run` is now defined and releases its output. `upload` is defined, and its staging buffer is discarded after
+  the copy. `Ledger.release` ignores a unit retired meanwhile. `ledger.rule` replaces a free variable, and `unlease`
+  cannot go negative.
+- **Chapter 7 exercises.** The old Exercise 3 (f32 grid exactness) duplicated chapter 3's exercises 1–2, and the old
+  2(b) overlapped chapter 9's exercise 1. They are replaced by fragmentation (first fit, a counterexample, Robson's
+  bounds, *JACM* 1971, cited from memory) and owner-level against unit-level eviction (proxy sizes 0.26 MiB =
+  160 × 107 × 16 B and 22.9 MiB = 1500 × 1000 × 16 B). Exercise 1 keeps the textbook's worked budget, with the
+  parameters given.
+- **Chapter 8.** WebGPU's guarantees are stated against what implementations decide: `submit` validation (§19.2),
+  the `destroy()` note (§6.1.4, a non-normative note), and `writeBuffer` and `submit` both issuing steps on the queue
+  timeline (§19.2). That the queue timeline runs in call order is my reading of the spec's timeline model; I found no
+  single sentence that says it. One line each was added for Vulkan (commands must complete before destroy; fences,
+  deletion queues), Direct3D 12 (fence values) and CUDA (`cudaFreeAsync` stream order; events or PyTorch
+  `record_stream` across streams). New notes give the happens-before chain for destroy and reuse, and explain why
+  per-resource counts are needed: batches are numbered at begin and submitted after awaits, and several queues
+  complete out of order. "CHB-038 diary" became "the fix's own notes". The never-resurrect and forced-interleaving
+  notes were merged and link to the modular chapter. The journal and lease are glossed. "Label every resource" moved
+  out of the Solution, which is now the invariant only. The Simplicity force was merged into Precise tracking.
+- **Chapter 8 sketch.** `record` is defined in a comment line, and `release` guards against a double release.
+- **Chapter 8 exercises.** Exercise 1 extends chapter 10's fake device instead of duplicating it, with parameters
+  (2 ms completion, Poisson arrivals, 5 ms mean tasks, four 16 MiB resources, ρ from 0.2 to 3). Exercise 2(a), which
+  the new note 3 now answers, became the two-queue extension.
+
+### Word counts (script strips fenced code; headings, tables and list markers counted)
+- `07-budgeted-residency.md`: raw 3,950; prose 2,896.
+- `08-retire-after-the-fence.md`: raw 3,451; prose 2,885.
+
+### What warrants a second pair of eyes
+- Chapter 7's peak split (R, F, W) mixes a measurement at rest with an error message taken mid-render (500.8 MiB
+  live then, 507 MiB at rest). The note uses the at-rest numbers and says so.
+- Chapter 8, note 2's "call order" claim for the queue timeline (see above).
+- The diagram text in chapter 8 is unchanged since it was rendered in Step 3.
