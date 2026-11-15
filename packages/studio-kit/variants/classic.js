@@ -9,10 +9,10 @@ export const toolsPanel = ck =>
     { title: 'Tools' },
     ck.row(
       { class: 'cb-tools' },
-      ck.ui.command('tool.probe', { text: 'Densitometer', small: true }),
-      ck.ui.command('tool.test-strip', { text: 'Test strip', small: true }),
-      ck.ui.command('tool.ring-around', { text: 'Ring-around', small: true }),
-      ck.ui.command('view.beforeAfter', { text: 'Before / after', small: true }),
+      ck.ui.button({ run: 'tool.probe', text: 'Densitometer', small: true }),
+      ck.ui.button({ run: 'tool.test-strip', text: 'Test strip', small: true }),
+      ck.ui.button({ run: 'tool.ring-around', text: 'Ring-around', small: true }),
+      ck.ui.button({ run: 'view.beforeAfter', text: 'Before / after', small: true }),
     ),
   );
 

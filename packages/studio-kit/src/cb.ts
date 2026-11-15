@@ -10,7 +10,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { defaultRecipe, getPath, type FrameRecipe, type Vec3 } from '@chromobench/contract';
-import { libraryRoot, type Ck, type CommandTable, type NodeData, type ToolTable } from '@chromobench/shell';
+import { isProps, libraryRoot, type Ck, type CommandTable, type NodeData, type ToolTable } from '@chromobench/shell';
 import { argModel, argProblem, parseStep, stepUnits, STRIPPABLE } from './kit/args.ts';
 import { CB_FORMS } from './kit/forms.ts';
 import { frameRef, isImageHandle, type FrameRef, type ImageHandle } from './handles.ts';
@@ -667,7 +667,7 @@ export function createCb(ck: Ck) {
       } as any,
     );
     const parts: any[] = [];
-    if (views) parts.push(ck.ui.segmented(views.map(v => ({ value: v, label: VIEW_LABELS[v] ?? v, ...(VIEW_TIPS[v] ? { tip: VIEW_TIPS[v] } : {}) })), { bind: (s: any) => s.view.view, label: 'View', small: true } as any));
+    if (views) parts.push(ck.ui.segmented({ options: views.map(v => ({ value: v, label: VIEW_LABELS[v] ?? v, ...(VIEW_TIPS[v] ? { tip: VIEW_TIPS[v] } : {}) })), bind: (s: any) => s.view.view, label: 'View', small: true } as any));
     parts.push(node('cb.ribbon', {}));
     const ring = o.tools?.includes('ring-around');
     const centre = ring ? ck.match((s: any) => (s.ui?.tool === 'ring-around' ? 'ring' : 'view'), { view: vp, ring: ring_({}) }, { of: ['view', 'ring'] }) : vp;
@@ -681,7 +681,7 @@ export function createCb(ck: Ck) {
       ck.column(
         { class: `cb-ring-tile${t.id === 'current' ? ' is-current' : ''}` },
         ck.view.thumb({ image: (s: any) => frame(s)?.ringTile(t.offset) ?? null, max: o.size ?? 200 } as any),
-        t.id === 'current' ? ck.ui.command('tool.none', { text: 'Keep this one', small: true }) : ck.ui.button(t.label, { run: ['ring.apply', t.offset, `Ring-around ${t.label}`], small: true } as any),
+        t.id === 'current' ? ck.ui.button({ run: 'tool.none', text: 'Keep this one', small: true }) : ck.ui.button({ label: t.label, run: ['ring.apply', t.offset, `Ring-around ${t.label}`], small: true } as any),
       );
     const at = (r: number, c: number) => tiles.find(t => t.row === r && t.col === c);
     const colour = [0, 1, 2].flatMap(r => [0, 1, 2].map(c => at(r, c))).map(t => (t ? tile(t) : ck.spacer()));
@@ -746,12 +746,15 @@ export function createCb(ck: Ck) {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
     const sections = a.groups.map(g =>
-      ck.section(g.title, {}, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, wrap: true })] : [])),
+      ck.section({ title: g.title }, ...g.paths.map(p => arg(p, p === 'print.lights.logH' ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const r = cb.recipe(s); return r ? g.note!(r) : ''; }, { dim: true, wrap: true })] : [])),
     );
     return ck.panel.define(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
-  /** the children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
-  const ifFrame = (...kids: any[]): any => ck.when((s: any) => !!cb.recipe(s), ck.column({}, ...kids), ck.text(NO_FRAME, { dim: true, wrap: true }));
+  /** a container: its children while a frame is selected, else an empty state (CHB-031 F19: no live sliders without a frame) */
+  const ifFrame = (...args: any[]): any => {
+    const props = isProps(args[0]) ? args.shift() : {};
+    return ck.when((s: any) => !!cb.recipe(s), ck.column(props, ...args), ck.text(NO_FRAME, { dim: true, wrap: true }));
+  };
   const panel = (form: string, id: string, title: string) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
     return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, rest));
@@ -776,7 +779,6 @@ export function createCb(ck: Ck) {
         } as any)
         .use(core),
     arg,
-    nudge: (path: string, o: Record<string, unknown> = {}): any => node('cb.arg', { path, widget: 'nudge', ...o }),
     viewer,
     view: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_ },
     views: { library: libraryViews },
@@ -804,7 +806,8 @@ export function createCb(ck: Ck) {
     approvals: (o: Record<string, unknown> = {}) => node('cb.approvals', o),
     hud: { readout: () => node('cb.readout', {}) },
     bar: {
-      steps: (steps: string[], labels: Record<string, string> = {}) => node('cb.steps', { steps, labels }),
+      /** the steps bar: (steps, { labels }) */
+      steps: (steps: string[], props: { labels?: Record<string, string> } = {}) => node('cb.steps', { steps, labels: {}, ...props }),
       filter: () => node('cb.filter', {}),
     },
     keys: {

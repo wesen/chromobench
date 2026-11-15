@@ -14,7 +14,7 @@ export default {
       .module(
         ck
           .module('main', { label: 'Chromobench' })
-          .top(cb.bar.steps(['pick', 'print', 'save'], { pick: '① Pick', print: '② Print', save: '③ Save' }))
+          .top(cb.bar.steps(['pick', 'print', 'save'], { labels: { pick: '① Pick', print: '② Print', save: '③ Save' } }))
           .center(
             ck.match(
               s => s.view.step,
@@ -25,11 +25,11 @@ export default {
                   cb.viewer(s => cb.frame(s)?.print() ?? null, { id: 'main', tools: ['ring-around'] }),
                   ck.column(
                     { width: 320, class: 'cb-simple-side' },
-                    cb.nudge('print.enlarger.time_s', { labels: ['Lighter', 'Darker'], step: '1/3 st' }),
-                    cb.nudge('print.lights.logH', { labels: ['Warmer', 'Cooler'], axis: 'yellow-blue', step: '2 pt' }),
-                    cb.nudge('print.lights.logH', { labels: ['Greener', 'More magenta'], axis: 'magenta-green', step: '2 pt' }),
-                    cb.nudge('print.grade', { labels: ['Softer', 'Harder'], step: 0.5 }),
-                    ck.ui.command('tool.ring-around', { text: 'Which looks best?', primary: true }),
+                    cb.arg('print.enlarger.time_s', { widget: 'nudge', labels: ['Lighter', 'Darker'], step: '1/3 st' }),
+                    cb.arg('print.lights.logH', { widget: 'nudge', labels: ['Warmer', 'Cooler'], axis: 'yellow-blue', step: '2 pt' }),
+                    cb.arg('print.lights.logH', { widget: 'nudge', labels: ['Greener', 'More magenta'], axis: 'magenta-green', step: '2 pt' }),
+                    cb.arg('print.grade', { widget: 'nudge', labels: ['Softer', 'Harder'], step: 0.5 }),
+                    ck.ui.button({ run: 'tool.ring-around', text: 'Which looks best?', primary: true }),
                     cb.approvals({ compact: true }),
                   ),
                 ),

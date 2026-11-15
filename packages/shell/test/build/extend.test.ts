@@ -44,7 +44,7 @@ describe('kits and fragments', () => {
     const ratings = ratingsKit(ck);
     // the kit's fragment methods are registered before the nodes are made; the method is a modifier
     ck.extend(ratings);
-    const slider = ck.ui.slider(0, 100, { bind: (s: any) => s.dev.vibrance }).stepped(5);
+    const slider = ck.ui.slider({ min: 0, max: 100, bind: (s: any) => s.dev.vibrance }).stepped(5);
     expect(slider.props['step']).toBe(5);
     expect(Object.isFrozen(slider) && Object.isFrozen(slider.props)).toBe(true);
     const app = ck
@@ -84,15 +84,15 @@ describe('kits and fragments', () => {
       }
       throw new Error('did not throw');
     };
-    const typo = thrown(() => (ck.ui.slider(0, 9, { bind: (s: any) => s.t, unit: 's' }) as any).testStip());
+    const typo = thrown(() => (ck.ui.slider({ min: 0, max: 9, bind: (s: any) => s.t, unit: 's' }) as any).testStip());
     expect(typo.code).toBe('CK-X120');
     expect(typo.fix).toBe('Did you mean .testStrip() (kit strip)?');
     expect(typo.at?.file).toBe('build/extend.test.ts');
     const other = thrown(() => (ck.ui.number({ bind: (s: any) => s.t }) as any).testStrip());
     expect(other.code).toBe('CK-X120');
     expect(other.facts![0]).toMatch(/exists for slider/);
-    expect(thrown(() => (ck.ui.slider(0, 9, { bind: (s: any) => s.g }) as any).testStrip()).code).toBe('CK-X121');
-    expect((ck.ui.slider(0, 9, { bind: (s: any) => s.t, unit: 's' }) as any).testStrip().props['aside'].$).toBe('text');
+    expect(thrown(() => (ck.ui.slider({ min: 0, max: 9, bind: (s: any) => s.g }) as any).testStrip()).code).toBe('CK-X121');
+    expect((ck.ui.slider({ min: 0, max: 9, bind: (s: any) => s.t, unit: 's' }) as any).testStrip().props['aside'].$).toBe('text');
   });
   it('X110: two kits adding the same method, naming both', () => {
     const ck = createCk();
@@ -149,7 +149,7 @@ describe('kits and fragments', () => {
       .shell('x')
       .state({ ui: { frame: null as string | null } })
       .use(kit)
-      .module(one(ck, ck.column({}, ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time_s }), ck.ui.slider(1, 60, { bind: (s: any) => s.recipes[s.ui.frame].print.time }))))
+      .module(one(ck, ck.column({}, ck.ui.slider({ min: 1, max: 60, bind: (s: any) => s.recipes[s.ui.frame].print.time_s }), ck.ui.slider({ min: 1, max: 60, bind: (s: any) => s.recipes[s.ui.frame].print.time }))))
       .build();
     const d = app.diagnostics.list.filter(x => x.code === 'CK-B114');
     expect(d.length).toBe(1);
@@ -206,7 +206,7 @@ describe('explain', () => {
   });
   it('a node, a kit, a pass', () => {
     const ck = createCk();
-    expect(ck.explain(ck.ui.slider(-5, 5, { bind: (s: any) => s.dev.light.exposure, label: 'Exposure', step: 0.05 }))).toBe('slider -5…5 "Exposure"  bind dev.light.exposure  step 0.05');
+    expect(ck.explain(ck.ui.slider({ min: -5, max: 5, bind: (s: any) => s.dev.light.exposure, label: 'Exposure', step: 0.05 }))).toBe('slider -5…5 "Exposure"  bind dev.light.exposure  step 0.05');
     expect(ck.explain(ratingsKit(ck))).toMatch(/^kit ratings@0.1\n {2}state ratings \(view: shown\)/);
     expect(ck.explain(ck.pass('p', { on: 'ui', after: 'keys' }, () => {}))).toBe('pass p on ui after keys');
   });

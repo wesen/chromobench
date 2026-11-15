@@ -8,7 +8,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Modifier } from '@chromobench/values';
-import { diag, libraryRoot, site, Diagnostics, type CallSite, type Diag, type DiagExtra } from '../core/diag.ts';
+import { BuildError, diag, libraryRoot, site, Diagnostics, type CallSite, type Diag, type DiagExtra } from '../core/diag.ts';
 import { chordLabel, parseChord } from '../core/keys.ts';
 import { OTHER, type Platform } from '../core/util.ts';
 import { MIXED, monotone, parseValue, UNITS } from '../core/math.ts';
@@ -106,14 +106,11 @@ export function createCk<S = any>(options: CkOptions = {}) {
       const props = isProps(args[0]) ? (args.shift() as Record<string, unknown>) : {};
       return node(form, props, args, at);
     });
-  const withLabel = <F extends string>(form: F, extra: Record<string, unknown> = {}) =>
-    ctor(form, (label: unknown, opts?: Record<string, unknown>) => {
-      const at = site();
-      if (isProps(label)) return node(form, { ...extra, ...label }, [], at);
-      return node(form, { ...extra, label, ...(opts || {}) }, [], at);
-    }) as ((label: Traced<S, string> | P<F, S>, opts?: P<F, S>) => FormNode<F, S>) & { form: F };
-  const valued = <F extends string, V>(form: F, key: string) =>
-    ctor(form, (value: V, opts?: Record<string, unknown>) => node(form, { [key]: value, ...(opts || {}) }, [], site())) as ((value: V, opts?: P<F, S>) => FormNode<F, S>) & { form: F };
+  /** a leaf: (value, props?) → node, the value under `key` */
+  const leaf = <F extends string, V>(form: F, key: string) =>
+    ctor(form, (value: V, props?: Record<string, unknown>) => node(form, { [key]: value, ...(props || {}) }, [], site())) as ((value: V, props?: P<F, S>) => FormNode<F, S>) & { form: F };
+  /** a control: (props) → node, one props object */
+  const control = <F extends string>(form: F) => ctor(form, (props?: Record<string, unknown>) => node(form, props || {}, [], site())) as ((props?: P<F, S>) => FormNode<F, S>) & { form: F };
 
   const ck = {
     platform,
@@ -149,55 +146,49 @@ export function createCk<S = any>(options: CkOptions = {}) {
         return node('panel', { id, ...p }, kids, at);
       },
     }),
-    section(title: Traced<S, string>, opts?: P<'section', S> | Child, ...kids: Child[]): FormNode<'section', S> {
-      const at = site();
-      let props: Record<string, unknown> = {};
-      if (isProps(opts)) props = opts as Record<string, unknown>;
-      else if (opts !== undefined) kids.unshift(opts as Child);
-      return node('section', { title, ...props }, kids, at);
-    },
+    // containers: (props?, ...children)
+    section: box('section'),
     row: box('row'),
     column: box('column'),
-    stack: box('column'),
     bar: box('bar'),
     scroll: box('scroll'),
-    grid: ctor('grid', (opts: P<'grid', S> | number, ...kids: Child[]) => node('grid', isProps(opts) ? (opts as Record<string, unknown>) : { cols: opts }, kids, site())) as ((opts: P<'grid', S> | number, ...kids: Child[]) => FormNode<'grid', S>) & { form: 'grid' },
+    grid: box('grid'),
     cell: box('cell'),
-    spacer: (size?: number): FormNode<'spacer', S> => node('spacer', size ? { size } : {}, [], site()),
-    divider: (opts?: P<'divider', S>): FormNode<'divider', S> => node('divider', opts || {}, [], site()),
-    tabs: (tabs: Record<string, NodeData>, opts?: P<'tabs', S>): FormNode<'tabs', S> => node('tabs', { tabs, ...(opts || {}) }, [], site()),
-    toolbar: (items: (string | NodeData)[], opts?: P<'toolbar', S>): FormNode<'toolbar', S> => node('toolbar', { items, ...(opts || {}) }, [], site()),
-    statusline: (value: Traced<S, string>, opts?: P<'statusline', S>): FormNode<'statusline', S> => node('statusline', { value, ...(opts || {}) }, [], site()),
-    hud: (opts: P<'hud', S>, value: Traced<S, string>): FormNode<'hud', S> => node('hud', { ...opts, value }, [], site()),
     dock: {
-      column: ctor('dockcol', (props?: P<'dockcol', S> | Child, ...kids: Child[]) => {
-        const at = site();
-        if (!isProps(props)) {
-          if (props !== undefined) kids.unshift(props as Child);
-          props = {};
-        }
-        return node('dockcol', props as Record<string, unknown>, kids, at);
-      }) as ((props?: P<'dockcol', S> | Child, ...kids: Child[]) => FormNode<'dockcol', S>) & { form: 'dockcol' },
-      tabs: (ids: string[], opts?: P<'docktabs', S>): FormNode<'docktabs', S> => node('docktabs', { panels: ids, ...(opts || {}) }, [], site()),
+      column: box('dockcol'),
+      tabs: leaf<'docktabs', string[]>('docktabs', 'panels'),
     },
+    // leaves: (value, props?)
+    spacer: (size?: number, props?: P<'spacer', S>): FormNode<'spacer', S> => node('spacer', { ...(size ? { size } : {}), ...(props || {}) }, [], site()),
+    divider: (props?: P<'divider', S>): FormNode<'divider', S> => node('divider', props || {}, [], site()),
+    tabs: leaf<'tabs', Record<string, NodeData>>('tabs', 'tabs'),
+    toolbar: leaf<'toolbar', (string | NodeData)[]>('toolbar', 'items'),
+    statusline: leaf<'statusline', Traced<S, string>>('statusline', 'value'),
+    hud: leaf<'hud', Traced<S, string>>('hud', 'value'),
 
     // ── show: text, glyphs, numbers ──
-    text: valued<'text', Traced<S, unknown>>('text', 'value'),
-    label: valued<'text', Traced<S, unknown>>('text', 'value'),
-    icon: valued<'glyph', Traced<S, string>>('glyph', 'name'),
-    stat: valued<'stat', Traced<S, unknown>>('stat', 'value'),
-    kbd: (chord: string): FormNode<'kbd', S> => node('kbd', { chord }, [], site()),
-    keys: (chords: string | string[]): FormNode<'keys', S> => node('keys', { chords }, [], site()),
-    html: (make: (m: any) => unknown, opts?: P<'html', S>): FormNode<'html', S> => node('html', { make, ...(opts || {}) }, [], site()),
+    text: leaf<'text', Traced<S, unknown>>('text', 'value'),
+    icon: leaf<'glyph', Traced<S, string>>('glyph', 'name'),
+    stat: leaf<'stat', Traced<S, unknown>>('stat', 'value'),
+    kbd: leaf<'kbd', string>('kbd', 'chord'),
+    keys: leaf<'keys', string | string[]>('keys', 'chords'),
+    html: leaf<'html', (m: any) => unknown>('html', 'make'),
 
     // ── choose: τ structure ──
-    match: (on: (s: S) => unknown, cases: Record<string, NodeData | ((v: any) => NodeData)>, opts?: { of?: string[] }): FormNode<'match', S> => node('match', { on, cases, ...(opts || {}) }, [], site()),
-    when(cond: ((s: S) => boolean) | boolean, a?: NodeData, b?: NodeData): any {
-      if (typeof cond === 'function') return node('when', { cond, then: a ?? null, else: b ?? null }, [], site());
-      return cond ? (a === undefined ? true : a) : b === undefined ? null : b;
+    match: (on: (s: S) => unknown, cases: Record<string, NodeData | ((v: any) => NodeData)>, props?: { of?: string[] }): FormNode<'match', S> => node('match', { on, cases, ...(props || {}) }, [], site()),
+    /** an interaction node: a while cond(state) holds, else b (a build-time choice is plain JS, or .with(ck.mod.when(bool, m))) */
+    when(cond: (s: S) => boolean, a?: NodeData, b?: NodeData): FormNode<'when', S> {
+      const at = site();
+      if (typeof cond !== 'function')
+        throw new BuildError(diag('CK-L120', 'ck.when takes a lambda of state', { at, facts: [`got ${typeof cond}: ck.when is an interaction node, re-evaluated as the state changes`], fix: 'Choose at build time with plain JavaScript (cond ? a : b), or .with(ck.mod.when(cond, modifier)); ck.when(s => …, a, b) follows the state.' }));
+      return node('when', { cond, then: a ?? null, else: b ?? null }, [], at);
     },
     each: <T>(list: readonly T[] | null | undefined, fn: (x: T, i: number) => Child): Child[] => (list || []).map((x, i) => fn(x, i)),
-    pick: <V>(v: ((s: S) => string) | string, map: Record<string, V>): V | ((s: S) => V | undefined) => (typeof v === 'function' ? (s: S) => map[v(s)] : (map[v] as V)),
+    /** a selector: s => map[key(s)] */
+    pick: <V>(key: (s: S) => string, map: Record<string, V>): ((s: S) => V | undefined) => {
+      if (typeof key !== 'function') throw new BuildError(diag('CK-L121', 'ck.pick takes a lambda of state', { at: site(), facts: [`got ${typeof key}`], fix: 'ck.pick(s => s.view.mode, { … }) is a selector; at build time index the map yourself: map[key].' }));
+      return (s: S) => map[key(s)];
+    },
     eq: (a: unknown, b: unknown) => a === b,
     gt: (a: number, b: number) => a > b,
     lt: (a: number, b: number) => a < b,
@@ -208,28 +199,20 @@ export function createCk<S = any>(options: CkOptions = {}) {
       return o;
     },
 
-    // ── widgets (forms + habits) ──
+    // ── controls: one props object (forms + habits) ──
     ui: {
-      slider: ctor('slider', (min: number, max: number, opts?: Record<string, unknown>) => node('slider', { min, max, ...(opts || {}) }, [], site())) as ((min: number, max: number, opts?: P<'slider', S>) => FormNode<'slider', S>) & { form: 'slider' },
-      number: ctor('number', (opts?: Record<string, unknown>) => node('number', opts || {}, [], site())) as ((opts?: P<'number', S>) => FormNode<'number', S>) & { form: 'number' },
-      textField: ctor('textField', (opts?: Record<string, unknown>) => node('textField', opts || {}, [], site())) as ((opts?: P<'textField', S>) => FormNode<'textField', S>) & { form: 'textField' },
-      search: (opts?: P<'textField', S>): FormNode<'textField', S> => node('textField', { search: true, commit: 'live', ...(opts || {}) }, [], site()),
-      segmented: ctor('segmented', (options: unknown[], opts?: Record<string, unknown>) => node('segmented', { options, ...(opts || {}) }, [], site())) as ((options: unknown[], opts?: P<'segmented', S>) => FormNode<'segmented', S>) & { form: 'segmented' },
-      select: ctor('select', (options: unknown, opts?: Record<string, unknown>) => node('select', { options, ...(opts || {}) }, [], site())) as ((options: Traced<S, unknown[]>, opts?: P<'select', S>) => FormNode<'select', S>) & { form: 'select' },
-      checkbox: withLabel('checkbox'),
-      toggle: withLabel('checkbox', { switch: true }),
-      stepper: ctor('stepper', (opts?: Record<string, unknown>) => node('stepper', opts || {}, [], site())) as ((opts?: P<'stepper', S>) => FormNode<'stepper', S>) & { form: 'stepper' },
-      color: ctor('color', (opts?: Record<string, unknown>) => node('color', opts || {}, [], site())) as ((opts?: P<'color', S>) => FormNode<'color', S>) & { form: 'color' },
-      button: ctor('button', (label: unknown, opts?: Record<string, unknown>) => {
-        const at = site();
-        if (isProps(label)) return node('button', label, [], at);
-        return node('button', { label, ...(opts || {}) }, [], at);
-      }) as ((label: Traced<S, string> | P<'button', S>, opts?: P<'button', S>) => FormNode<'button', S>) & { form: 'button' },
-      /** a command's button: label, tip with its key and enabled-with-why come from the table */
-      command: (id: string, opts?: P<'button', S>): FormNode<'button', S> => node('button', { run: id, ...(opts || {}) }, [], site()),
-      iconButton: (iconName: string, opts?: P<'button', S>): FormNode<'button', S> => node('button', { icon: iconName, quiet: true, ...(opts || {}) }, [], site()),
-      curve: ctor('curve', (opts?: Record<string, unknown>) => node('curve', opts || {}, [], site())) as ((opts?: P<'curve', S>) => FormNode<'curve', S>) & { form: 'curve' },
-      wheel: ctor('wheel', (opts?: Record<string, unknown>) => node('wheel', opts || {}, [], site())) as ((opts?: P<'wheel', S>) => FormNode<'wheel', S>) & { form: 'wheel' },
+      slider: control('slider'),
+      number: control('number'),
+      textField: control('textField'),
+      segmented: control('segmented'),
+      select: control('select'),
+      checkbox: control('checkbox'),
+      stepper: control('stepper'),
+      color: control('color'),
+      /** a button; with run: 'command.id' its label, tip with its key and enabled-with-why come from the command */
+      button: control('button'),
+      curve: control('curve'),
+      wheel: control('wheel'),
     },
     view: {
       list: (items: Traced<S, unknown[]>, opts?: P<'listview', S>): FormNode<'listview', S> => node('listview', { items, ...(opts || {}) }, [], site()),
@@ -237,7 +220,7 @@ export function createCk<S = any>(options: CkOptions = {}) {
       filmstrip: (items: Traced<S, unknown[]>, opts?: P<'filmstrip', S>): FormNode<'filmstrip', S> => node('filmstrip', { items, ...(opts || {}) }, [], site()),
       tree: (items: Traced<S, unknown[]>, opts?: P<'treeview', S>): FormNode<'treeview', S> => node('treeview', { items, ...(opts || {}) }, [], site()),
       histogram: (data: Traced<S, unknown>, opts?: P<'histogram', S>): FormNode<'histogram', S> => node('histogram', { data, ...(opts || {}) }, [], site()),
-      thumb: (opts?: P<'thumb', S>): FormNode<'thumb', S> => node('thumb', opts || {}, [], site()),
+      thumb: control('thumb'),
     },
     /** the canvas: a τ lambda returning a renderable the host's render bridge accepts */
     viewport: ctor('viewport', (image: unknown, opts?: Record<string, unknown>) => node('viewport', { image, ...(opts || {}) }, [], site())) as ((image: Traced<S, unknown>, opts?: P<'viewport', S>) => FormNode<'viewport', S>) & { form: 'viewport' },

@@ -111,15 +111,15 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       ck.text((s: any) => caption(s, l), { dim: true, class: 'cb-look-caption' } as any),
       ck.row(
         { class: 'cb-look-actions' },
-        ck.ui.button('Preview', { run: ['looks.pick', l.id], small: true } as any),
-        o.survey ? ck.ui.button('Apply', { run: ['looks.apply', l.id], small: true, primary: true } as any) : ck.ui.button('Survey ±', { run: ['looks.survey.toggle', l.id], small: true } as any),
+        ck.ui.button({ label: 'Preview', run: ['looks.pick', l.id], small: true } as any),
+        o.survey ? ck.ui.button({ label: 'Apply', run: ['looks.apply', l.id], small: true, primary: true } as any) : ck.ui.button({ label: 'Survey ±', run: ['looks.survey.toggle', l.id], small: true } as any),
       ),
     );
   const library = (o: { groups?: string[]; size?: number; id?: string; title?: string } = {}) =>
     ck.panel.define(
       o.id ?? 'looks-library',
       { title: o.title ?? 'Looks' },
-      ck.ui.segmented([{ value: null, label: 'All' }, ...(o.groups ?? ['Print', 'Contrast', 'Film', 'Mine']).map((g) => ({ value: g, label: g }))], { bind: (s: any) => s.looksView.group, label: 'Group', small: true } as any),
+      ck.ui.segmented({ options: [{ value: null, label: 'All' }, ...(o.groups ?? ['Print', 'Contrast', 'Film', 'Mine']).map((g) => ({ value: g, label: g }))], bind: (s: any) => s.looksView.group, label: 'Group', small: true } as any),
       ck.view.grid((s: any) => looksOf(s).filter((l) => (!looksView(s).group || l.group === looksView(s).group) && (!o.groups || o.groups.includes(l.group))), {
         id: `${o.id ?? 'looks-library'}-grid`,
         cell: lookCell({ size: o.size ?? 96 }),
@@ -140,12 +140,12 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       ck.row(
         { class: 'cb-looks-survey-bar' },
         ck.text((s: any) => `Survey: ${surveyLooks(s).length} ${looksView(s).survey === 'ring' ? 'ring-around prints' : 'looks'} of ${s.catalog?.frames?.[cb.current(s) ?? '']?.name ?? 'no frame'} at ${looksView(s).amount} %`, { strong: true } as any),
-        ck.ui.segmented([{ value: 'set', label: 'Chosen looks' }, { value: 'ring', label: 'Ring-around' }], { bind: (s: any) => s.looksView.survey, label: 'Survey', small: true } as any),
-        ck.ui.command('looks.survey.open', { text: 'Back to the print', small: true } as any),
+        ck.ui.segmented({ options: [{ value: 'set', label: 'Chosen looks' }, { value: 'ring', label: 'Ring-around' }], bind: (s: any) => s.looksView.survey, label: 'Survey', small: true } as any),
+        ck.ui.button({ run: 'looks.survey.open', text: 'Back to the print', small: true } as any),
       ),
       ck.view.grid((s: any) => surveyLooks(s), { id: o.id ?? 'looks-survey', cell: lookCell({ size: o.size ?? 220, survey: true }), key: (l: Look) => l.id, size: () => (o.size ?? 220) + 30, empty: 'Add looks to the survey (Survey ± in the library)' } as any),
     );
   /** a one-row choice of looks for a simple variant: a button per look applies it at the current Amount */
-  const choiceRow = (ids: string[]) => ck.row({ class: 'cb-looks-choice' }, ...ids.map((id) => ck.ui.button(lookById({}, id)?.name ?? id, { run: ['looks.apply', id], small: true } as any)));
+  const choiceRow = (ids: string[]) => ck.row({ class: 'cb-looks-choice' }, ...ids.map((id) => ck.ui.button({ label: lookById({}, id)?.name ?? id, run: ['looks.apply', id], small: true } as any)));
   return { panel, paramsModel, amountModel, diffModel, compareModel, cardModel, groupsModel, presetsModel, lookCell, library, survey, choiceRow };
 }

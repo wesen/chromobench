@@ -14,7 +14,7 @@ describe('the counter (guide §5.2)', () => {
       .use(counter)
       .menus(ck.menu('Edit', ['count.up']))
       .keys({ 'Mod+ArrowUp': 'count.up' })
-      .module(ck.module('main').center(ck.column({}, ck.text(s => `Count: ${s.count}`), ck.ui.command('count.up'))))
+      .module(ck.module('main').center(ck.column({}, ck.text(s => `Count: ${s.count}`), ck.ui.button({ run: 'count.up' }))))
       .build();
     expect(app.errors).toEqual([]);
     const rt = app.start({ clock: manualClock() });
@@ -37,14 +37,14 @@ describe('the binding typo (guide §2.1)', () => {
     const app = ck
       .shell('Develop demo')
       .state({ dev: { light: { exposure: 0, contrast: 0 } }, ui: {} })
-      .module(ck.module('main').right(ck.panel.define('basic', { title: 'Basic' }, ck.ui.slider(-5, 5, { label: 'Exposure', bind: s => s.dev.light.exposur, step: 0.05, reset: 0 }))).center(ck.text('x')))
+      .module(ck.module('main').right(ck.panel.define('basic', { title: 'Basic' }, ck.ui.slider({ min: -5, max: 5, label: 'Exposure', bind: s => s.dev.light.exposur, step: 0.05, reset: 0 }))).center(ck.text('x')))
       .build();
     const d = app.diagnostics.list.find(x => x.code === 'CK-B110')!;
     expect(d).toBeDefined();
     expect(d.facts).toEqual(['s.dev.light.exposur does not exist.', 'dev.light has: exposure, contrast']);
     expect(d.fix).toBe('Did you mean s.dev.light.exposure?');
     expect(d.at?.file).toMatch(/build\.test\.ts$/);
-    expect(d.at?.line).toBe(40); // the ck.ui.slider(...) line above
+    expect(d.at?.line).toBe(40); // the ck.ui.slider({ min: ... }) line above
   });
 });
 
@@ -139,7 +139,7 @@ describe('build checks', () => {
   const build = (f: (ck: Ck) => { build(): BuiltApp }): BuiltApp => f(ck).build();
   const main = (ck: Ck, center: unknown, right?: unknown) => (right ? ck.module('main').center(center as any).right(right as any) : ck.module('main').center(center as any));
   it('B130 unknown option with a suggestion, B140 lambda in a β slot', () => {
-    const app = build(ck => ck.shell('x').state({ v: 0 }).module(main(ck, ck.ui.slider(0, 1, { bind: (s: any) => s.v, stpe: 0.1 } as any), ck.ui.slider((() => 0) as any, 1, { bind: (s: any) => s.v }))));
+    const app = build(ck => ck.shell('x').state({ v: 0 }).module(main(ck, ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.v, stpe: 0.1 } as any), ck.ui.slider({ min: (() => 0) as any, max: 1, bind: (s: any) => s.v }))));
     const b130 = app.diagnostics.list.find(d => d.code === 'CK-B130')!;
     expect(b130.fix).toBe("Did you mean 'step'?");
     expect(app.codes('error')).toContain('CK-B140');
@@ -149,7 +149,7 @@ describe('build checks', () => {
       ck
         .shell('x')
         .state({ dev: {} as Record<string, { e: number }>, ui: { sel: null as string | null } })
-        .module(main(ck, ck.column({}, ck.ui.slider(0, 1, { bind: (s: any) => s.dev[s.ui.sel!]!.e }), ck.ui.slider(0, 1, { bind: () => { throw new Error('boom'); } })))),
+        .module(main(ck, ck.column({}, ck.ui.slider({ min: 0, max: 1, bind: (s: any) => s.dev[s.ui.sel!]!.e }), ck.ui.slider({ min: 0, max: 1, bind: () => { throw new Error('boom'); } })))),
     );
     expect(app.codes('warning')).toContain('CK-B111');
     expect(app.codes('error')).toContain('CK-B112');
@@ -172,7 +172,7 @@ describe('build checks', () => {
     expect(app.diagnostics.list.find(d => d.code === 'CK-B150')!.fix).toBe("Did you mean 'edit.undo'?");
   });
   it('B160 unknown form, B170 unknown icon, B180 unlabelled icon button', () => {
-    const app = build(ck => ck.shell('x').module(main(ck, ck.column({}, ck.node('sliderr', {}), ck.ui.iconButton('flg'), ck.icon('flag')))));
+    const app = build(ck => ck.shell('x').module(main(ck, ck.column({}, ck.node('sliderr', {}), ck.ui.button({ icon: 'flg', quiet: true }), ck.icon('flag')))));
     expect(app.codes()).toEqual(expect.arrayContaining(['CK-B160', 'CK-B170', 'CK-B180']));
     expect(app.diagnostics.list.find(d => d.code === 'CK-B170')!.fix).toBe("Did you mean 'flag'?");
   });
@@ -184,6 +184,24 @@ describe('build checks', () => {
     expect(appB.codes()).toContain('CK-B160');
     const appA = a.shell('a').use(onlyA).module(a.module('main').center(a.node('only.a', {}))).build();
     expect(appA.codes()).not.toContain('CK-B160');
+  });
+  it('uniform signatures: containers (props?, ...kids), leaves (value, props?), controls one props object; when and pick are interaction forms', () => {
+    const sec = ck.section({ title: 'Light', reset: true }, ck.text('a'));
+    expect([sec.props['title'], sec.kids.length]).toEqual(['Light', 1]);
+    expect(ck.hud(s => String(s), { id: 'h' }).props).toEqual({ value: expect.any(Function), id: 'h' });
+    expect(ck.ui.slider({ min: 0, max: 5, step: 1 }).props).toEqual({ min: 0, max: 5, step: 1 });
+    expect(ck.ui.button({ run: 'edit.undo' }).props).toEqual({ run: 'edit.undo' });
+    const off = ck.ui.button({ run: 'edit.undo' }).enabled(() => false, 'Nothing to undo');
+    expect([typeof off.props['enabled'], off.props['why']]).toEqual(['function', 'Nothing to undo']);
+    expect(ck.when((s: any) => !!s.x, ck.text('a'), ck.text('b')).$).toBe('when');
+    expect(() => ck.when(true as any, ck.text('a'))).toThrow(/CK-L120/);
+    // a build-time choice is plain JavaScript, or a modifier chosen with ck.mod.when
+    const compact = ck.mod.props({ density: 'compact' });
+    expect(ck.text('x').with(ck.mod.when(true, compact)).props['density']).toBe('compact');
+    expect(ck.text('x').with(ck.mod.when(false, compact)).props['density']).toBeUndefined();
+    const pick = ck.pick((s: any) => s.mode, { a: 1, b: 2 });
+    expect(pick({ mode: 'b' } as any)).toBe(2);
+    expect(() => ck.pick('a' as any, { a: 1 })).toThrow(/CK-L121/);
   });
   it('builders are immutable values: every chain method returns a new one; unknown methods throw CK-X120', () => {
     const ck = createCk();

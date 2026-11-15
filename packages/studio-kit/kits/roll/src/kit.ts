@@ -449,7 +449,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
       { grow: 1, class: 'cb-roll-sheet' },
       ck.row(
         { class: 'cb-roll-sheet-bar' },
-        ck.ui.segmented([{ value: 'balanced', label: 'Each frame balanced' }, { value: 'single', label: 'One time and pack' }], { bind: (s: any) => s.rollView.contact.mode, label: 'Contact sheet', small: true } as any),
+        ck.ui.segmented({ options: [{ value: 'balanced', label: 'Each frame balanced' }, { value: 'single', label: 'One time and pack' }], bind: (s: any) => s.rollView.contact.mode, label: 'Contact sheet', small: true } as any),
         node('roll.progress', {}),
       ),
       ck.view.grid((s: any) => rollFrames(s), {
