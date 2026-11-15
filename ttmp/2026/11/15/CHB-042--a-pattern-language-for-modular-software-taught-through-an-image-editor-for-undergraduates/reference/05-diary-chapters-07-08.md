@@ -351,3 +351,106 @@ could not verify.
 
 ### Technical details
 - Word counts (prose, code and markup excluded): chapter 7 ≈ 2,700; chapter 8 ≈ 2,740.
+
+## Step 5: Revision after review
+
+A fresh reader, playing a second-year student with no image or GPU background, reviewed chapter 8. I applied its ten
+findings to chapter 8 and the general lessons to both chapters. The main changes: one meaning for each word, units in
+MiB throughout, a paragraph explaining the GPU model behind the first bug, a sketch with no mechanism that exists only
+in a comment, and the correctness hole the reviewer found (a released unit that had already been retired going back
+on the free list).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1); relayed by the coordinator: "Revision round: a fresh reader (playing a
+second-year CS student with no image/GPU knowledge) reviewed chapter 8. Apply these findings to chapter 8, then apply
+the GENERAL lessons at the end to both your chapters (7 and 8). … Edit only your two chapters and your diary (add a
+\"Revision after review\" step). Do not commit. Report changes and word counts before/after."
+
+**Assistant interpretation:** Apply findings 1–10 to chapter 8 and the general lessons (no § references, gloss or cut
+terms, one meaning per word, consistent units, a general Solution, a self-contained sketch, a non-image mapping, doable
+exercises, 15–20 % shorter notes) to both.
+
+**Inferred user intent:** Chapters a student can read without the project's history.
+
+### What I did
+- Chapter 8:
+  - "frame" → "image"/"open image" everywhere; Vulkan known use now says "the work using it"; Exercise 4 recast as the
+    textures of the objects the player can see.
+  - Added the GPU model (record, submit, run later; destroyed between recording and submission fails) and glossed
+    "in flight", "high-water mark", "texture of ones", "buffer"; "paused for a shader" → "paused while its GPU program
+    was prepared".
+  - Units: everything in MiB. The log line explained: 536870912 − 525083680 = 11787232 B = 11.2 MiB left;
+    14192640 B = 13.5 MiB needed (checked by arithmetic). 4000 × 2686 × 16 B = 171.9 MB = 163.9 MiB. The measurement
+    scripts' "MB" is `x / 2 ** 20` (`tools/scripts/console-capture.ts:61`, `apps/studio/src/host/capture.ts:30`), so
+    every diary figure (160, 328, 47, 512, 215, 32) is MiB. The grain's "171 MB" in the CHB-041 diary is the same
+    size in decimal units; the chapter now says "as large as a source texture again" instead of a second number.
+  - Solution: one bold paragraph, core first sentence, budget "from what the platform does report (total memory, the
+    largest allowed allocation)"; recovery is "everything it keeps, pinned and leased included" in Solution,
+    Collaborations and sketch alike.
+  - Sketch rewritten: `Residency` with `get/put/lease/unlease/pin/evict`, a `run(task)` that leases and unleases, a
+    `retire` that lowers `live` and records the unit, `trimFree(target)` documented as a target for `live`, and
+    `release` ignoring a retired unit. Checked against the code: `Pool.release` (pool.ts 157–160) returns when the
+    object is not among the pool's live entries, and `discard` (204–212) removes it from them, so an evicted unit is
+    never put back on a free list. Note 5 says so; Consequences no longer claims use-after-destroy "disappears as a
+    class".
+  - Note 7 justifies the eighth (room for the system, browser, other tabs), the floor (the budget it already ran in,
+    `DEFAULT_BUDGET`, device.ts 25), and says the rule matters more than the figures; 16 MiB, four proxies and 32 MiB
+    each got a reason (four proxies: residency.ts 28, "the thumbnail, the draft and the screen grid, plus one").
+  - Applicability: a paragraph for connection pools (count connections, wait with a timeout, retire = close after the
+    transaction, shares of one limit plus an administration reserve); Structure merged to eight participants plus a
+    one-line connection-pool mapping.
+  - Cut: Editor lab §6.3 sentence, note 6's arithmetic detail, note 7's device/adapter sentence, note 9's §8.9
+    sentence, the Proxy-cousin line. Note 8's debt kept in two sentences ("should be removed or made the one"), which
+    reconciles it with the Intent's "one fixed, bounded procedure".
+  - Variations: "darktable counts cache lines" dropped (its only source was the third-party book) → "some caches
+    count entries".
+  - Exercise 3 gives a fake: a buffer object with a `destroyed` flag, `use()` throws, work queued and run by
+    `submit()`. Exercise 1 asks for shares and a reserve.
+- Chapter 7:
+  - "holder (the opaque frame around the film)" → "opaque carrier", and "roll"/"frames" glossed once, so "frame" has
+    one meaning; "texture inside the box" → "local variation" (no clash with GPU textures); "orange mask" → "the
+    orange tint every colour negative has"; "smooth steps" → "mapped onto 0–1 by a smooth ramp"; "residual" glossed;
+    the solver's stop codes replaced by words; "film stock" glossed.
+  - Numbers given meaning: 0.25 D (nearly a factor of two), 0.002 D (half a percent), 0.03 D (7 %; one film within
+    about 0.01 D, roll-base.ts 3–4), 0.08 D (20 %), 0.5 (midpoint of the scale), 200 px (about 14 × 14), 0.3 (below the
+    threshold).
+  - Removed Editor lab's "§3.5" reference (kept the magic wand as the contrast).
+  - Sketch: a comment defines every helper; the fallback uses the same helpers instead of an undefined
+    `thinnestEvenRegion`; `share` replaced by an explicit count; `recipe` and `roll` explained.
+  - Structure: a one-line spam-filter mapping.
+  - Notes shortened (the strip lesson, the percentile fallback, the solver, the reasons-as-strings debt) with every
+    lesson kept; the claim "enough to see a film edge a few millimetres wide" was drafted and removed as unverified.
+
+### Why
+- The reviewer's findings, and the coordinator's general lessons.
+
+### What worked
+- Word counts (prose, excluding code blocks and markup tokens; raw `wc -w` in brackets):
+  - Chapter 7: 2,698 [3,241] → 2,611 [3,226]; implementation notes 791 → 650 (−18 %).
+  - Chapter 8: 2,745 [3,240] → 2,793 [3,526]; implementation notes 807 → 661 (−18 %). The raw count grew because the
+    sketch now shows leases, retirement and `trimFree` instead of naming them in comments.
+- No line over 120 characters outside tables; privacy grep (DSC, NEF, raw0) empty; links unchanged.
+
+### What didn't work
+- N/A
+
+### What I learned
+- The release-after-eviction hole was real in my sketch and absent from the code: chromobench's pools only accept a
+  release of a unit they still count as live.
+
+### What was tricky to build
+- Keeping the sketch under control while making leases real: `run(task)` is the smallest task that shows a lease, an
+  acquisition and a release.
+
+### What warrants a second pair of eyes
+- Chapter 8's prose is now 2,793 words, close to the 2,800 ceiling.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- Diff both chapters against Step 4's versions; check the sketch's `release` against pool.ts 157–160.
+
+### Technical details
+- Notes count: `sed -n '/^## Implementation notes/,/^## Variations/p' FILE | wc -w`.

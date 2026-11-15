@@ -20,15 +20,15 @@ Honest estimator; estimate with provenance; graded result; value with diagnostic
 chromobench opens scans of colour negatives. To print one it must know the **film base**: how much light the film
 stops where it received no exposure (the orange of a colour negative). Every colour is measured relative to it. It is
 read on the **rebate**, the unexposed edge of the film outside the picture. But a scan also shows the **holder** (the
-opaque frame around the film) and the **open gate** (light passing beside the film or through its **sprocket holes**,
-the perforations along its edge).
+opaque carrier around the film) and the **open gate** (light passing beside the film or through its **sprocket holes**,
+the perforations along its edge). A **roll** is one length of film, often thirty-six photographs, called **frames**.
 
 The first version used a simple rule: the base is the brightest 5 % of the columns. Four things went wrong.
 
 1. **A wrong answer looked like a right one.** On a scan that shows sprocket holes, the brightest columns are the
    holes: the light itself, not the film. On a synthetic test strip the rule misses the base by more than 0.25 D
-   (**density**, D, is the base-10 logarithm of how much the film dims the light; 0.3 D is half the light). Every
-   colour shifts. Nothing crashes. The print is just wrong.
+   (**density**, D, is the base-10 logarithm of how much the film dims the light; 0.3 D is a factor of two, so 0.25 D
+   is nearly one). Every colour shifts. Nothing crashes. The print is just wrong.
 2. **There was no way to say "I don't know".** A scan cropped inside the picture has no film edge at all. The rule
    still returned a "base", taken from the brightest part of the picture.
 3. **The caller could not choose.** The roll's base, taken over all its frames, should use the good frames and skip
@@ -87,8 +87,8 @@ Do not use it when:
 - the function computes a defined result (a sum, a blend, a format conversion): a confidence on arithmetic is noise;
 - the user supplied the answer: a rebate box the photographer picked is not a guess (chromobench gives it
   confidence 1 and moves on);
-- the tool is exact by contract: Editor lab's magic wand selects exactly the pixels within the user's tolerance (its
-  book, §3.5); it does not guess;
+- the tool is exact by contract: Editor lab's magic wand selects exactly the pixels within the user's tolerance; it
+  does not guess;
 - nobody will ever read the confidence. Then a plain refusal is simpler.
 
 ## Structure
@@ -103,6 +103,9 @@ Do not use it when:
 | **Aggregator** | combines several estimates by a robust centre, checks they agree, names the ones that do not |
 | **Consumer** | acts by threshold: use, propose, combine or refuse |
 | **Reporter** | shows reasons in the user's words; keeps the codes for developers |
+
+In a spam filter the same parts are: the classifier (estimator), a simpler rule list (fallback), a vote of several
+filters (aggregator), and the mail client that files, flags or delivers (consumer).
 
 ## Collaborations
 
@@ -142,18 +145,20 @@ mad(xs) → (centre, spread):
   m ← median(xs)
   return (m, 1.4826 · median([|x − m| for x in xs]))
 
--- one estimator: a physical fact measured on a bounded working copy
+-- one estimator: a physical fact measured on a bounded working copy. Helpers, not the point here:
+--   shrink (average down to a size), holder, openGate, picture (regions found in the image), thin (the least dense
+--   pixels), largestCluster (the biggest group of similar colour), largestRectangle, evenness (1 = no local variation)
 estimateBase(scan, threshold: 0.5) → Estimate:
   work ← shrink(scan, longSide: 512)                 -- the fact is visible at this size
   film ← pixels(work) − holder(work) − openGate(work) -- set aside what looks like the answer
   -- main method: thin, even film outside the picture
-  box ← largestRectangle(largestCluster(thin(film) outside picture(work), by: colour ratio))
+  box ← largestRectangle(largestCluster(thin(film) outside picture(work)))
   if box exists:
     confidence ← 0.5 · min(1, area(box) / 200) + 0.5 · evenness(box)
     if confidence ≥ threshold:
       return Estimate(median(scan in box), confidence, from: "edge", evidence: box, reasons: [])
   -- fallback: unexposed film inside the picture, weaker evidence, capped confidence
-  blank ← thinnestEvenRegion(film)
+  blank ← largestRectangle(largestCluster(thin(film)))   -- anywhere, inside the picture too
   if blank exists:
     return Estimate(median(scan in blank), min(0.3, area(blank) / 2000), from: "blank", evidence: blank,
                     reasons: [Reason("base-from-blank", "No film edge beside the picture; read on blank film.",
@@ -168,13 +173,14 @@ combine(estimates, threshold: 0.5, tolerance: 0.03) → Estimate:
   if used is empty and have is not empty:
     used ← have
     reasons ← [Reason("all-weak", "No confident estimate; the median of weak ones.")]
-  centre ← median([log(e.value) for e in used])       -- per channel
+  centre ← median([log(e.value) for e in used])       -- per colour channel, in density (log) units
   outliers ← [e for e in have if |log(e.value) − centre| > tolerance]
   if outliers not empty:
     reasons ← reasons ++ [Reason("inconsistent", "These disagree: " ++ names(outliers))]
-  return Estimate(exp(centre), share(used, estimates), from: "median", evidence: used, reasons)
+  confidence ← count(used) / count(estimates)          -- the share of estimates that were confident
+  return Estimate(exp(centre), confidence, from: "median", evidence: used, reasons)
 
--- the pattern in use
+-- the pattern in use (recipe: the settings for this picture; roll: combine over the roll's frames)
 b ← estimateBase(scan)
 match b.from:
   "edge":  recipe.base ← b.value
@@ -186,50 +192,43 @@ match b.from:
 
 1. **Name the bug the pattern fixes.** This is the bug chromobench shipped in its first demonstration: the
    brightest-columns rule took sprocket holes or a gap in the holder for the film base. A synthetic-strip test keeps
-   the old rule's failure on record (it must miss by more than 0.25 D) beside the new estimator's success (within
-   0.002 D). The old rule is still the last fallback, but the notes now say so: "no rebate found: the base is the
-   brightest 5 % of columns".
-2. **Find the look-alikes first.** The fix was not a better threshold. chromobench's film-layout estimator first finds
-   what can be mistaken for the base and removes it: the open gate, as a population brighter than all the film by at
-   least 0.2 D that lacks the orange mask, and the holder, as dark pixels connected to the border. Then it searches
-   the film that remains. Model what fools you.
-3. **Work on a copy sized for the fact.** The film layout and the strip-frame finder work on at most 512 pixels on the
-   long side. Boxes are mapped back to the input rounded *inwards*, so they never reach past the region measured. The
-   cost no longer depends on the file's size.
-4. **Build the confidence from parts you can name.** The rebate's confidence is half area (full credit at 200 working
-   pixels) and half evenness (the texture inside the box against the film around it). The threshold is 0.5. A base read
-   on blank film inside the picture is capped at 0.3, so it never passes for an edge. These are rules, not
-   probabilities; do not call them probabilities until calibrated.
-5. **Use statistics that a minority cannot move.** The veil (stray light the scanner adds everywhere) is the
-   per-channel median of the holder. Dust detection estimates noise with the median absolute deviation (× 1.4826, so it
-   equals the standard deviation for normal noise). Means are taken only inside a region already shown to be even.
-6. **Make every fallback say what it costs.** chromobench's earlier rebate search falls back to a bright percentile
-   with confidence 0, and its warning says what that does downstream: "densities read too high, blank film is
-   under-counted and below-base pixels vanish". A reason that names the consequence tells the user whether to care.
-   (The film layout has replaced that search, which survives only in a test: two estimators of one fact is a debt.)
-7. **Aggregate, then name the outliers.** The roll's base is the median, in log units, of the frames whose rebate has
-   confidence 0.5 or more. Every frame with a value, confident or not, is then measured against it. Beyond 0.03 D the
-   warning names the frames and their distances. On a synthetic roll of twelve frames with one base offset, exactly
-   that frame is named. When no frame is confident, the median of the weak ones is used and a warning says so.
-8. **Confidence is not correctness: check against an independent estimate.** On one scan of a strip of several frames,
-   the "film edge" the layout found lay on the thin first frame, and the base read 0.08 D too dense. An estimator's
-   score measures how good its evidence looks, not whether it is the right evidence. The host now compares the rebate
-   box with the frame boxes
-   found by a second estimator; when they overlap by more than a quarter, the base is read from the gaps between the
-   frames instead, and the notes say why.
-9. **Score each property separately, then multiply.** A dust speck's score is the product of three smooth steps: its
-   contrast against local noise, its sharpness, and its **neutrality** (dust blocks all colours equally; grain and
-   image detail do not). A speck that fails any one scores low. chromobench's tests plant coloured blobs of the same
-   contrast as dust and keep a variant with neutrality switched off: the real detector must reject the blobs, the
-   broken variant must accept them.
-10. **Solvers are estimators too.** chromobench's iterative solver returns the answer, the residual, the number of
-    iterations and passes, and why it stopped: `tolerance`, `gtol`, `maxIterations`, `noImprovement` or `stall`. The
-    lookup-table builder stores the residual beside every entry and counts entries that hit the cap; a failing test
-    prints the residual and the stop reason.
-11. **Keep reasons as data until the last moment.** Here chromobench has a debt. The host turns its notes into strings
-    (`code: message`), and the status line reads them back with regular expressions to build "film base read on the
-    film edge". Renaming one message breaks it silently. Keep codes and fields structured up to the reporter, and
-    declare the codes once ([Chapter 2](02-one-declaration-many-readers.md)), as chromobench's contract already does.
+   the old rule's failure on record (more than 0.25 D off) beside the new estimator's result (within 0.002 D, half a
+   percent of light). The old rule is still the last fallback, and the notes now say when it is used.
+2. **Find the look-alikes first.** The fix was not a better threshold. The estimator first removes what can pass for
+   the base: the open gate (a population far brighter than any film, without the orange tint every colour negative
+   has) and the holder (dark pixels connected to the border). Then it searches the film that remains. Model what
+   fools you.
+3. **Work on a copy sized for the fact.** The estimators work on at most 512 pixels on the long side, so their cost
+   does not depend on the file's size. Boxes are mapped back rounded *inwards*, so they never reach past the region
+   measured.
+4. **Build the confidence from parts you can name.** Half is area (full credit at 200 working pixels, about a 14 × 14
+   patch) and half evenness (local variation inside the box against the film around it). The threshold, 0.5, is the
+   midpoint of the scale. Blank film inside the picture is capped at 0.3, below the threshold, so it never passes for
+   an edge. These are scores, not probabilities, until calibrated against measured truth.
+5. **Use statistics that a minority cannot move.** The veil (stray light the scanner adds everywhere) is the median of
+   the holder; dust detection measures noise with the median absolute deviation. Means are taken only inside a region
+   already shown to be even.
+6. **Make every fallback say what it costs.** An earlier rebate search fell back to a bright percentile with
+   confidence 0 and a warning naming the damage downstream: "densities read too high". It survives only in a test now:
+   two estimators of one fact is a debt.
+7. **Aggregate, then name the outliers.** The roll's base is the median of the frames whose confidence is 0.5 or more.
+   Every frame is then measured against it, and the warning names those beyond 0.03 D (7 % of the light; frames of
+   one film agree within about 0.01 D). On a synthetic roll of twelve frames with one base offset, exactly that frame
+   is named.
+8. **Confidence is not correctness.** On one strip scan the "film edge" found lay on a thin frame, and the base read
+   0.08 D (20 %) too dense. A score measures how good the evidence looks, not whether it is the right evidence. The
+   host now checks the rebate against frame boxes found by a second estimator, and reads the base between the frames
+   when they overlap.
+9. **Score each property separately, then multiply.** A dust speck's score multiplies three parts, each mapped onto
+   0–1 by a smooth ramp: contrast against local noise, sharpness, and **neutrality** (dust blocks all colours
+   equally; the film's own grain and the picture do not). Tests plant coloured blobs of dust's contrast: the detector must reject
+   them, and a variant with neutrality switched off must accept them.
+10. **Solvers are estimators too.** chromobench's iterative solver returns its answer with the **residual** (how far the
+    answer is from fitting the data), the number of iterations, and why it stopped: close enough, no further progress,
+    or the iteration limit. A failing test prints the residual and the reason.
+11. **Keep reasons as data until the last moment.** A debt: chromobench turns its notes into strings, and the status
+    line reads them back with regular expressions, so renaming one message breaks it silently. Keep codes and fields
+    structured up to the reporter, and declare the codes once ([Chapter 2](02-one-declaration-many-readers.md)).
 
 ## Variations
 
@@ -237,8 +236,9 @@ match b.from:
   loses a weak value it could have used.
 - **Interval or distribution.** Return a range or a probability (a GPS fix with an accuracy radius). Better for later
   arithmetic; meaningful only if calibrated.
-- **Ranked candidates.** Return the best few with their scores, as OCR engines offer alternatives. chromobench's film
-  stock ranking warns when the top two fit within 0.025 D and asks the user to name the stock.
+- **Ranked candidates.** Return the best few with their scores, as OCR engines offer alternatives. chromobench's
+  guess of the film stock (the brand and type of film) warns when the top two fit within 0.025 D and asks the user to
+  choose.
 - **Propose, do not apply.** The estimate becomes a pending edit that the user accepts or changes. Slower for the user,
   and never silently wrong.
 
@@ -250,8 +250,8 @@ match b.from:
   single caller. That is what makes the code habitable: a bug report that says "from: blank, confidence 0.28" tells the
   next programmer where to look.
 - − Every caller handles three cases (strong, weak, none) instead of one.
-- − Confidence scales are home-made. A number like 0.5 looks more precise than it is, and two estimators' scales are not
-  comparable.
+- − Confidence scales are home-made. A number like 0.5 looks more precise than it is, and two estimators' scales are
+  not comparable.
 - − The fallback paths are code too, and need tests as good as the main path's.
 - − Reasons can flood the user; a summarising layer is needed.
 
@@ -274,7 +274,7 @@ match b.from:
 ## Related chapters
 
 - [Chapter 1 · One Contract, Several Engines](01-one-contract-several-engines.md) completes this one: an estimator
-  needs a careful twin. chromobench's synthetic strips, with a planted base, veil and frame, are that twin.
+  needs a careful twin. chromobench's synthetic strips, with a planted base and film edge, are that twin.
 - [Chapter 2 · One Declaration, Many Readers](02-one-declaration-many-readers.md) keeps reason codes in one list.
 - [Chapter 5 · Solve Once, Apply Many](05-solve-once-apply-many.md): the base is estimated once per scan or roll and
   applied to every pixel.
