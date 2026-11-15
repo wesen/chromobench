@@ -60,7 +60,7 @@ test('F21: Remove from Library on the open frame does not open "Where is …?" f
   await emptyLibrary(page);
   await page.setInputFiles('#file', [A, B]);
   await opened(page, 2, 120_000);
-  await page.waitForTimeout(1500); // the shell's autosave (debounced)
+  await page.evaluate(() => window.chromobench.rt.save()); // the shell's autosave, flushed (no wait on its debounce)
   await page.reload();
   await ready(page);
   await expect(page.locator('#status')).toContainText('2 frames in the library');
@@ -92,7 +92,7 @@ test('F18: File ▸ Open As shows in the status line, resets at the next start, 
   await menu(page, 'File', 'file.openAs.photo', 'Open As');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveText('Opening as photos');
-  await page.waitForTimeout(1500); // autosave
+  await page.evaluate(() => window.chromobench.rt.save()); // the shell's autosave, flushed (no wait on its debounce)
   await page.reload();
   await ready(page);
   // a new start: Guess again
@@ -102,7 +102,7 @@ test('F18: File ▸ Open As shows in the status line, resets at the next start, 
   await menu(page, 'File', 'file.openAs.negative', 'Open As');
   await menu(page, 'File', 'file.openAs.keep', 'Open As');
   expect(await page.evaluate(() => window.chromobench.state().prefs.openAsKeep)).toBe(true);
-  await page.waitForTimeout(1500);
+  await page.evaluate(() => window.chromobench.rt.save()); // the shell's autosave, flushed (no wait on its debounce)
   await page.reload();
   await ready(page);
   await expect(pill).toHaveText('Opening as negatives');
