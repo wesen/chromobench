@@ -651,3 +651,62 @@ medium with per-frame overrides; sync copies values or inserts one link; the DSL
 
 ### Technical details
 - Running: P5b-2 (stack kit), P3b (engines).
+
+## Step 12: P5b-2 merged — the stack kit and the arrangements
+
+The stack kit gives every stage one layers panel, one params panel, one masks panel, a "+ Layer" menu from the
+catalogue, mask tools and a command table; the Enlarger, Exposures and finish views are specialised stack views; the
+stage policy pass replaces CB-F101; the classic layout has Edit and Scene modules and the darkroom arrangement a
+collapsed digital palette; ratings are undoable again and the History jump asks before crossing other frames.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the stack kit; specify the remaining UI and agent phases.
+
+**Inferred user intent:** One cohesive layer UI over every stage, reconfigurable by layouts.
+
+**Commit (code):** 8ef7767 — "Merge P5b-2 stack kit (…)"
+
+### What I did
+- My first merge attempt (before P5b-2 had merged P7/P8a) stopped on a real conflict in
+  `studio-kit/test/__snapshots__/layouts.test.ts.snap`; the agent was being resumed with my request to merge the
+  integration branch itself, so I ran `git merge --abort` and waited. It merged (8304266), regenerated and reviewed
+  the snapshot, adapted its arrangements spec to the now-present Scene module.
+- Merged 66f6d69 with `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 133 files / 3186 passed /
+  19 skipped, goldens 66/66.
+- Sent P3b the `tools/wgsl-check` failure (P8a's kernel dependency) and permission to edit
+  `apps/studio/src/host/studio-engine.ts` now that P5b-2 is done.
+- Wave 5 specs: P8b (editors) and P6b (workbench).
+
+### Why
+- The integration branch must never hold a resolution a phase agent should have made with its own context.
+
+### What worked
+- P7's studio-kit edits merged beside P5b-2's without conflicts.
+
+### What didn't work
+- `git merge` of P5b-2 before its own catch-up merge: "REAL CONFLICT: packages/studio-kit/test/__snapshots__/
+  layouts.test.ts.snap" — aborted.
+
+### What I learned
+- Phase agents that run long should merge the integration branch before handing back; the spec should say so (it
+  does for later phases).
+
+### What was tricky to build
+- N/A (coordination).
+
+### What warrants a second pair of eyes
+- P5b-2's decisions: rows in document order with a caption explaining the law; selection per frame in view state;
+  deleting an entry deletes its now-unused mask; a mask tool with nothing selected creates a darkroom burn through the
+  new mask; media controls do not count for the stage policy.
+
+### What should be done in the future
+- Launch P8b and P6b; merge P3b; then P9 (integration, browser and real-GPU runs, persona session).
+
+### Code review instructions
+- `packages/studio-kit/kits/stack/`; `diary/12-phase-p5b2-stack.md`.
+
+### Technical details
+- Browser on the P5b-2 branch after its merge: 123 passed, 2 skipped, `film.spec.ts` load timeout, `tools/wgsl-check`.
