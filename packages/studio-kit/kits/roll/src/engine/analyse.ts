@@ -5,7 +5,8 @@
 import { canonicalJSON, set } from '@chromobench/values';
 import { documentKind, edit, type Box, type Diagnostic, type Document, type Engine, type Graph, type Vec3 } from '@chromobench/contract';
 import { read, withEnlargerMode } from '../../../../src/model/doc.ts';
-import { ALPHA, ANALYSIS_LONG, STOCK_AMBIGUOUS_D, UNDER_BLANK } from './constants.ts';
+import { ANALYSIS_LONG, STOCK_AMBIGUOUS_D, UNDER_BLANK } from './constants.ts';
+import { firstPrintLights, NEUTRALISE } from '../../../../src/model/aim.ts';
 import { totalOf } from './lower.ts';
 import { measureExposure, readSource, type Pixels } from './measure.ts';
 import { meanVec, r6v, type FrameAnalysis, type FrameBaseLike, type FrameId, type RollAnalysis, type RollPhysics } from './model.ts';
@@ -102,6 +103,21 @@ export function analysePixels(px: Pixels, recipe: Document | null, physics: Roll
   };
 }
 
+/** core's integrate-to-grey with aim 0, as the first print's aim takes it */
+const aimOf = (physics: Pick<RollPhysics, 'integrateToGrey'>) => (latd: Vec3, alpha: number): Vec3 => physics.integrateToGrey(latd, { latd: [0, 0, 0], lights: [0, 0, 0] }, alpha);
+
+/**
+ * The analysis with its frames' first-print lights for another Neutralise amount (D8): the auto lights come from each
+ * frame's LATD, so a new amount needs no new measurement. The same analysis when the amount is the one it has.
+ */
+export function withNeutralise(a: RollAnalysis, neutralise: number, physics: Pick<RollPhysics, 'integrateToGrey'>): RollAnalysis {
+  if (Math.abs(a.alpha - neutralise) < 1e-9) return a;
+  const frames: Record<FrameId, FrameAnalysis> = {};
+  for (const [f, fa] of Object.entries(a.frames)) frames[f] = { ...fa, auto: r6v(firstPrintLights(aimOf(physics), fa.latd, neutralise)) };
+  const autos = Object.values(frames).map((x) => x.auto);
+  return { ...a, alpha: neutralise, frames, rollMean: a.rollMean && autos.length >= 2 ? r6v(meanVec(autos)!) : a.rollMean };
+}
+
 /** A frame's analysis: pixels, then the integrated exposure under its own rebate box and a real enlarger. */
 export async function analyseFrame(engine: Engine, e: AnalyseEntry, physics: RollPhysics, o: AnalyseOptions = {}): Promise<FrameAnalysis> {
   const long = o.long ?? ANALYSIS_LONG;
@@ -113,7 +129,8 @@ export async function analyseFrame(engine: Engine, e: AnalyseEntry, physics: Rol
   const X = await measureExposure(engine, e.graph, r, { area: p.layout.crop, ...(o.signal ? { signal: o.signal } : {}) });
   const t = totalOf(r);
   const latd = r6v(X.map((x, k) => -(x - t[k]!)));
-  const auto = r6v(physics.integrateToGrey(latd, { latd: [0, 0, 0], lights: [0, 0, 0] }, o.alpha ?? ALPHA));
+  // the first print's one aim (D8): the same function the studio's first print calls
+  const auto = r6v(firstPrintLights(aimOf(physics), latd, o.alpha ?? NEUTRALISE));
   const under = canonicalJSON({ stock: read(r, 'stages.scan.medium.stock') ?? null, scanner: read(r, 'stages.scan.medium.scanner') ?? null, rebate: read(r, 'stages.scan.medium.rebate') ?? null, crop: r.geometry.crop ?? null, long });
   return { id: e.id, sha256: e.sha256, ...p, latd, auto, under };
 }
@@ -151,7 +168,7 @@ export async function analyseRoll(engine: Engine, entries: readonly AnalyseEntry
     o.onProgress?.(++done, entries.length, e.id);
   }
   return summarise(frames, entries.map((e) => e.id), physics, {
-    long: o.long ?? ANALYSIS_LONG, alpha: o.alpha ?? ALPHA, at: (o.now ?? Date.now)(),
+    long: o.long ?? ANALYSIS_LONG, alpha: o.alpha ?? NEUTRALISE, at: (o.now ?? Date.now)(),
     ...(o.rejected ? { rejected: o.rejected } : {}), ...(o.stocks ? { stocks: o.stocks } : {}),
   });
 }

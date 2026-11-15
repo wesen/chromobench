@@ -15,7 +15,7 @@ import { renderArg } from '../../../src/dom/arg.ts';
 import { WHO } from '../../../src/model/history.ts';
 import { sel } from '../../../src/sel.ts';
 import {
-  amountHint, amountTrack, blendChoices, blendWord, COMBINE_WORDS, combines, componentKinds, entryDetail, formatAmount, HINT_WORDS, KIND_WORDS, lawOf,
+  amountHint, amountTrack, blendChoices, blendWord, COMBINE_WORDS, combines, componentKinds, entryDetail, formatAmount, HINT_WORDS, KIND_WORDS, kindBadge, kindSummary, lawOf,
   linkWords, maskOf, maskUsers, opWord, provenance, readsChoices, rowsOf, addableOps, addMenu, type StackRow,
 } from './model.ts';
 import { selectedIn } from './state.ts';
@@ -151,8 +151,10 @@ function drawRow(m: MountCtx, frame: (s: any) => string | null, r: Pick<StackRow
     run(m, 'layer.collapse', id);
   });
   const name = h('span', { class: 'cb-stack-name' });
+  // D5 (CHB-046): a darkroom row says its kind (Burn, Dodge, Flash, …) whatever he named it
+  const badge = h('span', { class: 'cb-stack-kind', hidden: r.stage !== 'darkroom' });
   const detail = h('span', { class: 'cb-stack-detail' });
-  const text = h('div', { class: 'cb-stack-text' }, name, detail);
+  const text = h('div', { class: 'cb-stack-text' }, h('span', { class: 'cb-stack-title' }, name, badge), detail);
   listen(m.scope, name, 'dblclick', (e: MouseEvent) => {
     e.stopPropagation();
     rename(m, name, id);
@@ -201,6 +203,8 @@ function drawRow(m: MountCtx, frame: (s: any) => string | null, r: Pick<StackRow
     el.classList.toggle('is-sel', v.sel);
     el.setAttribute('aria-selected', v.sel ? 'true' : 'false');
     name.textContent = entryName(e);
+    badge.textContent = r.stage === 'darkroom' ? (id === 'lights' ? 'Printer lights' : kindBadge(e)) : '';
+    badge.hidden = r.stage !== 'darkroom' || badge.textContent === name.textContent;
     detail.textContent = entryDetail(v.d, p);
     blend.value = e.blend;
     tw.textContent = v.collapsed ? '▸' : '▾';
@@ -294,7 +298,25 @@ const layers: Renderer = (n, m) => {
     });
     foot.append(add);
   }
-  el.append(caption, list, empty, foot);
+  // D5 (CHB-046): 'choice' lists his order unless he asks for the darkroom by kind; a one-line summary by kind stays
+  const orderOf = (s: any): 'stack' | 'kind' => (p['order'] === 'choice' ? (s?.stack?.darkroomOrder === 'kind' ? 'kind' : 'stack') : (p['order'] ?? 'stack'));
+  if (p['order'] === 'choice') {
+    const summary = h('p', { class: 'cb-stack-kinds cb-dim' });
+    const byKind = btn('By kind', 'cb-stack-bykind', { 'aria-pressed': 'false', 'data-tip': 'List the darkroom by kind (a view: the print is the same in any order)' });
+    listen(m.scope, byKind, 'click', () => run(m, 'stack.byKind'));
+    m.cell((s: any) => {
+      const f = frameOf(n, s);
+      const d = f ? sel.doc(s, f) : undefined;
+      return { text: kindSummary(d, stage), on: s?.stack?.darkroomOrder === 'kind' };
+    }, (v) => {
+      summary.textContent = v.text;
+      summary.hidden = !v.text;
+      byKind.setAttribute('aria-pressed', v.on ? 'true' : 'false');
+      byKind.classList.toggle('is-on', v.on);
+    }, { equals: (a: any, b: any) => a.text === b.text && a.on === b.on });
+    foot.append(byKind);
+    el.append(caption, summary, list, empty, foot);
+  } else el.append(caption, list, empty, foot);
   const views = new Map<Id, RowView>();
   const rowFn = p['row'] as ((r: StackRow) => unknown) | undefined;
   const mountRow = (r: StackRow): RowView => {
@@ -311,7 +333,7 @@ const layers: Renderer = (n, m) => {
     const f = frame(s);
     const d = f ? sel.doc(s, f) : undefined;
     const has = !!d?.stages[stage];
-    const rows = rowsOf(d, stage, { order: p['order'] ?? 'stack', filter: p['filter'] ?? null, collapsed: s.stack?.collapsed ?? {} });
+    const rows = rowsOf(d, stage, { order: orderOf(s), filter: p['filter'] ?? null, collapsed: s.stack?.collapsed ?? {} });
     const library = sel.library(s).length > 0;
     return { f, has, rows, open: !!d, library, key: `${f}|${!!d}|${library}|${has}|${rows.map((r) => `${r.key}|${r.collapsed}|${r.kids}`).join(',')}` };
   }, (v) => {
@@ -353,7 +375,7 @@ const layers: Renderer = (n, m) => {
     const s = m.store.readonly();
     const f = frame(s);
     const d = f ? sel.doc(s, f) : undefined;
-    const rows = rowsOf(d, stage, { order: p['order'] ?? 'stack', filter: p['filter'] ?? null, collapsed: (s as any).stack?.collapsed ?? {} });
+    const rows = rowsOf(d, stage, { order: orderOf(s), filter: p['filter'] ?? null, collapsed: (s as any).stack?.collapsed ?? {} });
     const cur = rows.findIndex((r) => r.id === selectedIn(s, f));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();

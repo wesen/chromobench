@@ -42,7 +42,7 @@ const layersWords = (n: NodeData): string => {
 export const STACK_FORMS: FormSpec[] = [
   spec('stack.layers', {
     stage: b<StageName>('the stage whose stack this is (scan, scene, darkroom, print)'),
-    order: b<'stack' | 'kind'>("'stack' (the document's order) or 'kind' (an order-free law: by kind)"),
+    order: b<'stack' | 'kind' | 'choice'>("'stack' (the document's order), 'kind' (an order-free law: by kind) or 'choice' (his order unless he lists it by kind; D5)"),
     density: b<'compact' | 'comfortable'>(),
     row: i<(row: model.StackRow) => unknown>('θ: the node for a row (stack.row(r) is the standard one)'),
     filter: i<(p: unknown) => boolean>('θ: which entries show (a group shows when one of its children does)'),
@@ -96,7 +96,7 @@ export interface LayersOptions {
   title?: string;
   /** θ: the node of a row (default stack.row(r)) */
   row?: (r: model.StackRow) => unknown;
-  order?: 'stack' | 'kind';
+  order?: 'stack' | 'kind' | 'choice';
   /** θ: which entries show */
   filter?: (p: any) => boolean;
   density?: 'compact' | 'comfortable';
@@ -159,11 +159,13 @@ export function createStackKit(ck: Ck, cb: Cb) {
     });
   /**
    * The Enlarger: the main exposure's controls in its row and the printer lights' pad in theirs, every other
-   * darkroom entry a standard row; ordered by kind (the light law is order-free).
+   * darkroom entry a standard row with its kind as a badge. D5 (CHB-046): in his order (the order he made them; the
+   * light law is order-free, so the print is the same in any order), with the darkroom by kind as a one-line summary and
+   * a "By kind" view.
    */
   const enlarger = (o: Omit<LayersOptions, 'row' | 'order'> = {}): any =>
     layers('darkroom', {
-      id: 'enlarger', title: 'Enlarger', order: 'kind', ...o,
+      id: 'enlarger', title: 'Enlarger', order: 'choice', ...o,
       row: (r: model.StackRow) =>
         r.op === 'expose'
           ? ck.column({ class: 'cb-stack-main' }, row(r), cb.arg('stages.darkroom.medium.mode'), cb.arg('main.params.time_s').testStrip({ step: '1/3 st' }), cb.arg('main.params.fstop'), cb.arg('main.params.filtration'))

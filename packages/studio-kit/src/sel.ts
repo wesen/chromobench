@@ -79,6 +79,8 @@ export interface CbPrefs {
   openAsKeep?: boolean;
   /** heal dust on open */
   dust?: boolean;
+  /** D8 (CHB-046): how much of each frame's colour cast a first print takes out, in percent (default 75) */
+  neutralise: number;
 }
 /**
  * The state cb.core declares (the kits add their slices: roll, rollView, finish, looks, looksView). `docs.<frame>` is

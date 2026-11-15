@@ -28,6 +28,23 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     const l = pickedLook(ctx.state);
     return d && l ? appliedKey(d, l) : null;
   };
+  /** D4: the Sync dialog (copy values by default; Link as the explicit choice); runs looks.sync with the choice */
+  const askSync = async (ctx: any): Promise<unknown> => {
+    const f = sel.current(ctx.state);
+    const r = f ? committed(ctx, f) : undefined;
+    if (!f || !r) return null;
+    const to = selection(ctx.state).filter((x) => x !== f);
+    const groups = looksView(ctx.state).groups;
+    const lines = copyLines(copyValues(r, groups, linksFor(ctx, f)), copiedLinks(r, groups), r);
+    let choice: SyncMode = 'copy';
+    const body = (el: HTMLElement): Node => syncBody(el, { from: nameOf(ctx, f), to: to.map((x) => nameOf(ctx, x)), groups, lines, choose: (x) => (choice = x) });
+    const yes = await ctx.rt.chrome.dialog({
+      title: `Sync the settings of ${nameOf(ctx, f)}?`,
+      body,
+      buttons: [{ label: 'Cancel', value: 'cancel' }, { label: `Sync ${to.length} frame${to.length === 1 ? '' : 's'}`, value: 'sync', primary: true }],
+    }).result;
+    return yes === 'sync' ? ctx.run('looks.sync', choice) : null;
+  };
   /** the frame's looks: applied, with one Amount each */
   const hasLooks = { enabled: (s: any) => !!sel.current(s) && appliedLooks((s.docs?.[sel.current(s)!] ?? null) as Document ?? ({ stages: {} } as any)).length > 0, why: 'This frame has no looks' };
   return {
@@ -231,16 +248,19 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       run: (ctx: any, mode?: SyncMode) => setView(ctx, 'syncMode', mode ?? (looksView(ctx.state).syncMode === 'link' ? 'copy' : 'link')),
     },
     'looks.sync': {
-      label: 'Sync Settings to Selection',
+      label: 'Sync Settings to Selection…',
       enabled: (s: any) => (s.ui?.selection?.ids?.length ?? 0) > 1,
       why: 'Select the frames to sync to, with the source as primary',
       /**
        * copy: the source's values and looks are copied (each frame on its own afterwards). link: the source's layers of
        * the chosen groups become one preset that the source and every target link (they stay together: re-saving the
        * preset changes all of them); the values (paper, time, lights) are copied. One step either way.
+       * D4 (CHB-046): without a mode (the Settings menu, Mod+Shift+S) it asks in the page first: it says that it copies
+       * values, from which frame onto which, and offers Link as the explicit other choice. Copy is always the default.
        */
       run: (ctx: any, mode?: SyncMode) => {
-        const m = mode ?? looksView(ctx.state).syncMode;
+        if (mode === undefined) return askSync(ctx);
+        const m = mode;
         if (m === 'copy') {
           ctx.run('looks.copy');
           return ctx.run('looks.paste');
@@ -447,4 +467,43 @@ function regroup(ctx: any, b: AgentBatch, approve: readonly string[], keep: read
     return next;
   }, `Approve ${b.why}`);
   return keepId;
+}
+
+/**
+ * The Sync dialog's text (D4): it copies values (each frame on its own afterwards), what it copies and from where; Link
+ * is the other, explicit choice (the frames stay together: a later change to the shared preset reaches all of them).
+ */
+function syncBody(el: HTMLElement, o: { from: string; to: string[]; groups: readonly string[]; lines: string[]; choose(m: SyncMode): void }): Node {
+  const doc = el.ownerDocument;
+  const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] => {
+    const x = doc.createElement(tag);
+    if (text) x.textContent = text;
+    if (cls) x.className = cls;
+    return x;
+  };
+  const box = mk('div', undefined, 'cb-sync-dialog');
+  box.append(
+    mk('p', `Sync copies the values of ${o.from} onto ${o.to.length === 1 ? o.to[0] : `${o.to.length} frames (${o.to.join(', ')})`}: ${o.groups.join(', ') || 'no groups chosen'}.`),
+    mk('p', o.lines.length ? `Copied: ${o.lines.join(', ')}.` : 'Nothing differs from the defaults in these groups.', 'cb-dim'),
+  );
+  const group = mk('div', undefined, 'cb-sync-choice');
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', 'Sync by');
+  const choices: [SyncMode, string, string][] = [
+    ['copy', 'Copy values', 'Each frame is on its own afterwards (as in Lightroom).'],
+    ['link', 'Link', 'The frames share one preset made from this frame’s layers: a later change to it reaches all of them.'],
+  ];
+  for (const [m, label, tip] of choices) {
+    const r = mk('input');
+    r.type = 'radio';
+    r.name = 'cb-sync-mode';
+    r.value = m;
+    r.checked = m === 'copy';
+    r.addEventListener('change', () => r.checked && o.choose(m));
+    const l = mk('label');
+    l.append(r, ` ${label} `, mk('span', `— ${tip}`, 'cb-dim'));
+    group.append(l);
+  }
+  box.append(group);
+  return box;
 }

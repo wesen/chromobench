@@ -182,6 +182,56 @@ export function trackRange(sc: { min: number; max: number; step: number; hard: {
   return { min: Number(min.toFixed(6)), max: Number(max.toFixed(6)) };
 }
 
+// ── how a slider answers the hand (CHB-046, CHB-037 P9-6, CHB-028 F37) ──
+// The session found the sliders coarse: 60 px of Time were 2 stops, 40 px of Filtration Y were −43 CC, and the first
+// filtration step was 20 CC. A drag on a track now moves the value by a fixed amount per pixel for each kind of control
+// (relative to where the drag started, not to where the track is), Alt makes it ten times finer (the shell's fine
+// modifier: Shift is ×10 and Alt ×0.1 in its scrub and nudge), and the arrow keys step in his units.
+
+/** Alt while dragging: ten times finer (packages/shell modStep's Alt) */
+export const FINE_DRAG = 0.1;
+
+/** A control's feel, in the slider's own scale (stops for a time, CC, printer points, else display units). */
+export interface Feel {
+  /** what one pixel of drag moves */
+  perPx: number;
+  /** an arrow key; Shift + arrow; Alt + arrow */
+  key: number;
+  bigKey: number;
+  smallKey: number;
+  /** what the units are called, for a test or a tip */
+  unit: 'st' | 'CC' | 'pt' | null;
+}
+
+/**
+ * The feel of a control. Time: 60 px of drag = ½ stop, the keys ⅓ stop (Shift 1 stop, Alt ⅙ stop, the slider's grid).
+ * Filtration: 40 px = 10 CC, the keys 5 CC (Shift 20, Alt 1). Printer lights: 40 px = 4 pt, the keys 1 pt (Shift 4,
+ * Alt ½). Anything else: its usual range over 300 px, the keys its step (Shift ×3, Alt ×⅓). `span` is the slider's
+ * usual range in its scale.
+ */
+export function feelOf(m: ControlModel, span: number): Feel {
+  if (m.storageUnit === 's' && m.scale === 'log2') return { perPx: 1 / 120, key: 1 / 3, bigKey: 1, smallKey: 1 / 6, unit: 'st' };
+  if (m.storageUnit === 'CC') return { perPx: 0.25, key: 5, bigKey: 20, smallKey: 1, unit: 'CC' };
+  if (m.displayUnit === 'point') return { perPx: 0.1, key: 1, bigKey: 4, smallKey: 0.5, unit: 'pt' };
+  return { perPx: Math.abs(span) / 300 || m.step, key: m.step, bigKey: m.step * 3, smallKey: m.step / 3, unit: null };
+}
+
+/** the key step for the modifiers held (Shift: bigger, Alt: smaller) */
+export const keyStepOf = (f: Feel, mods: { shiftKey?: boolean; altKey?: boolean }): number => (mods.shiftKey ? f.bigKey : mods.altKey ? f.smallKey : f.key);
+
+/**
+ * Where a drag of `dx` px from `x0` (the value where the drag started, in the slider's scale) lands: `perPx` per pixel,
+ * ten times finer with Alt, in whole steps of the slider from where it started (a tenth of a step with Alt), within
+ * `hard`.
+ */
+export function dragTo(f: Feel, x0: number, dx: number, o: { fine?: boolean; step: number; hard: { min: number; max: number } }): number {
+  const k = o.fine ? FINE_DRAG : 1;
+  const grid = o.step * k;
+  const d = dx * f.perPx * k;
+  const x = x0 + (grid > 0 ? Math.round(d / grid) * grid : d);
+  return Number(Math.min(o.hard.max, Math.max(o.hard.min, x)).toFixed(9));
+}
+
 /** the paths .testStrip() applies to (the main exposure's time, its filtration and the filtration's components) */
 export const STRIPPABLE = new Set([TIME_PATH, FILTRATION_PATH, `${FILTRATION_PATH}.c`, `${FILTRATION_PATH}.m`, `${FILTRATION_PATH}.y`]);
 export { LIGHTS_PATH };

@@ -11,10 +11,10 @@ import { h, listen, type MountCtx } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
 import { storedPath, type Document } from '@chromobench/contract';
 import { unset } from '@chromobench/values';
-import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
+import { argModel, dragTo, feelOf, keyStepOf, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
-import { exposureStep, isInert, linksOf, read, storePath, TIME_PATH } from '../model/doc.ts';
+import { exposureStep, isInert, linksOf, MODE_PATH, read, storePath, TIME_PATH } from '../model/doc.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import { sel } from '../sel.ts';
 
@@ -76,6 +76,8 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   // an inert control never writes (it is hidden; this also holds for a key or script reaching it)
   const commitSet = (f: string, v: unknown, lab = label) => {
     if (now.inert) return;
+    // the enlarger mode keeps the print: its shift goes into the printer lights (CHB-046, F44)
+    if (model.path === MODE_PATH) return void rt.runCommand('print.enlargerMode', null, v);
     m.rctx().tx(lab, (t: any) => t.$set(pathOf(f), v), { source: { kind: 'control', control: model.path } });
   };
   /** a key press, a wheel step, a stepper or a nudge: one transaction; a run of them on this control is one step */
@@ -127,8 +129,58 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       return k === null ? y : withComponent(model.type, now.v, k, y);
     };
     let dragging = false;
-    listen(m.scope, input, 'pointerdown', () => {
+    const feel = feelOf(model, sc.max - sc.min);
+    // a drag moves the value by the control's feel per pixel from where it started, Alt ten times finer (CHB-046,
+    // P9-6); a click without a drag puts the thumb where it was clicked, as the native track does
+    listen(m.scope, input, 'pointerdown', (e: PointerEvent) => {
+      if (e.button !== 0 || !now.f) return;
+      e.preventDefault();
+      input.focus({ preventScroll: true });
+      const f = now.f;
+      const x0 = Number(input.value);
+      const cx = e.clientX;
+      let moved = false;
       dragging = true;
+      try {
+        input.setPointerCapture(e.pointerId);
+      } catch {
+        /* a synthetic event has no active pointer */
+      }
+      const move = (ev: PointerEvent): void => {
+        const dx = ev.clientX - cx;
+        if (!moved && Math.abs(dx) < 3) return;
+        moved = true;
+        const x = dragTo(feel, x0, dx, { fine: ev.altKey, step: sc.step, hard: sc.hard });
+        const r = trackRange(sc, x);
+        input.min = String(r.min);
+        input.max = String(r.max);
+        input.value = String(x);
+        st.preview(pathOf(f), valueOf(x));
+      };
+      const up = (ev: PointerEvent): void => {
+        input.removeEventListener('pointermove', move);
+        input.removeEventListener('pointerup', up);
+        input.removeEventListener('pointercancel', cancel);
+        dragging = false;
+        if (!moved) {
+          const b = input.getBoundingClientRect();
+          const lo = Number(input.min), hi = Number(input.max);
+          const at = lo + (hi - lo) * Math.min(1, Math.max(0, (ev.clientX - b.left) / Math.max(1, b.width)));
+          st.preview(pathOf(f), valueOf(Math.round(at / sc.step) * sc.step));
+        }
+        if (st.previewing) st.commit(label, txOpts());
+      };
+      const cancel = (): void => {
+        input.removeEventListener('pointermove', move);
+        input.removeEventListener('pointerup', up);
+        input.removeEventListener('pointercancel', cancel);
+        dragging = false;
+        st.cancel();
+        set(now.v, true);
+      };
+      input.addEventListener('pointermove', move);
+      input.addEventListener('pointerup', up);
+      input.addEventListener('pointercancel', cancel);
     });
     listen(m.scope, input, 'input', () => {
       if (!now.f) return;
@@ -149,7 +201,10 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       e.stopPropagation();
       const base = st.peek(pathOf(now.f)) ?? now.v;
       const kk = { ...a, component: k };
-      burst(now.f, stepValue(kk, k === null ? base : base, dir * (e.shiftKey ? 3 : e.altKey ? 1 / 3 : 1), step));
+      // steps in his units (CHB-046): ⅓ stop of time, 5 CC of filtration, 1 printer point; Shift bigger, Alt smaller.
+      // A layout's own step (cb.arg(…, { step })) is the plain arrow's.
+      const n = step && !e.shiftKey && !e.altKey ? step.value : keyStepOf(feel, e);
+      burst(now.f, stepValue(kk, base, dir, { value: n, unit: step?.unit ?? null }));
     });
     // typed values (CHB-027 F8): a bad entry says why and stays red only while the box has the focus; out of
     // range is held to the limit and said; a relative entry (+, −) says what it did

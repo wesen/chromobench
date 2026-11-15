@@ -5,8 +5,10 @@
 import type { Vec3 } from '@chromobench/contract';
 import type { CommandTable } from '@chromobench/shell';
 import { sel, type CbState } from '../sel.ts';
-import { DOCS, LIGHTS_PATH, nextId, storePath } from '../model/doc.ts';
-import { copySettings } from '../model/settings.ts';
+import { DOCS, LIGHTS_PATH, linksOf, MODE_PATH, nextId, storePath, type EnlargerMode } from '../model/doc.ts';
+import { modeSwitch, referenceOpticsShift, type DarkroomMath } from '../model/enlarger-mode.ts';
+import { copySettings, settingsPlan, type SettingCopy } from '../model/settings.ts';
+import { modelAt } from '../kit/args.ts';
 import { ringLights } from '../model/tools.ts';
 import { docOf, needFrame, setDoc, studioOf } from './env.ts';
 
@@ -43,20 +45,67 @@ export const printCommands = (): CommandTable<CbState> => ({
     },
   },
   'print.applyToSelection': {
-    label: 'Apply Print Settings to Selection',
+    label: 'Apply Print Settings to Selection…',
     enabled: (s: any) => sel.selection(s).length > 1,
     why: 'Select the frames to copy the settings to (and the source as primary)',
-    run: ctx => {
+    /**
+     * The print settings of the frame shown (the selection's primary, outlined in the film strip) onto the other
+     * selected frames, one undo step. CHB-046 (P9-9): it used to copy at once from whichever frame was clicked last and
+     * overwrote a corrected frame; it now says in the page which frame it copies from, what it copies and onto which
+     * frames, and copies only when he says so. `{ ask: false }` (an agent, a test) copies without asking.
+     */
+    run: async (ctx, o: { ask?: boolean } = {}) => {
       const cur = sel.current(ctx.state)!;
       const src = docOf(ctx, cur);
-      if (!src) return;
-      ctx.tx('Apply Print Settings', (t: any) => {
-        for (const id of sel.selection(ctx.state)) {
+      if (!src) return null;
+      const name = (f: string): string => ctx.state.catalog?.frames?.[f]?.name ?? f;
+      const targets = sel.selection(ctx.state).filter((id) => id !== cur && !!docOf(ctx, id));
+      const plan = settingsPlan(src, targets.map((id) => ({ name: name(id), doc: docOf(ctx, id)! })), (p) => modelAt(p, src));
+      if (!plan.length) {
+        ctx.toast(`The selected frames already print like ${name(cur)}`, { kind: 'info' });
+        return null;
+      }
+      if (o.ask !== false) {
+        const yes = await ctx.rt.chrome.dialog({
+          title: `Apply the print settings of ${name(cur)}?`,
+          body: (el: HTMLElement) => applyBody(el, name(cur), targets.map(name), plan),
+          buttons: [{ label: 'Cancel', value: 'cancel' }, { label: `Apply to ${targets.length} frame${targets.length === 1 ? '' : 's'}`, value: 'apply', primary: true }],
+        }).result;
+        if (yes !== 'apply') return null;
+      }
+      // the documents as they are now (the dialog was open a while), one step over every target frame
+      const from = docOf(ctx, cur);
+      if (!from) return null;
+      ctx.tx(`Apply print settings of ${name(cur)}`, (t: any) => {
+        for (const id of targets) {
           const to = docOf(ctx, id);
-          if (id === cur || !to) continue;
-          for (const m of copySettings(src, to)) if (m.op === 'set') t.$set(storePath(id, to, m.path), m.value);
+          if (!to) continue;
+          for (const m of copySettings(from, to)) if (m.op === 'set') t.$set(storePath(id, to, m.path), m.value);
         }
       });
+      return { from: cur, to: targets, copied: plan.map((x) => x.label) };
+    },
+  },
+  'print.enlargerMode': {
+    label: 'Enlarger Mode',
+    palette: false,
+    ...needFrame,
+    /**
+     * Real or normalised enlarger, the print kept (CHB-046, CHB-028 F44): the mode's shift goes into the printer lights
+     * (core's numbers through services.darkroomMath; the optics alone without them), one step.
+     */
+    run: (ctx, mode: EnlargerMode) => {
+      const f = sel.current(ctx.state)!;
+      const d = docOf(ctx, f);
+      if (!d || (mode !== 'real' && mode !== 'normalised')) return null;
+      const math = (ctx.services as { darkroomMath?: DarkroomMath }).darkroomMath;
+      const r = modeSwitch(d, mode, (x) => (math ? math.modeShift(x) : referenceOpticsShift(x)), linksOf(ctx.state));
+      if (!r.mutations.length) return null;
+      ctx.tx(mode === 'real' ? 'Real enlarger (the print kept)' : 'Normalised enlarger (the print kept)', (t: any) => {
+        for (const m of r.mutations) if (m.op === 'set') t.$set(storePath(f, d, m.path), m.value);
+      }, { source: { kind: 'control', control: MODE_PATH } });
+      if (r.lost) ctx.toast(`The printer lights are at their limit: the print is ${Math.abs(r.lost / Math.log10(2)).toFixed(1)} stops ${r.lost > 0 ? 'lighter' : 'darker'} than before`, { kind: 'warn' });
+      return { mode, shift: r.shift };
     },
   },
   'probe.pin': {
@@ -95,3 +144,26 @@ export const printCommands = (): CommandTable<CbState> => ({
     },
   },
 });
+
+/** The confirmation's text: which frame the settings come from, onto which frames, and what is copied (in his units). */
+function applyBody(el: HTMLElement, from: string, to: string[], plan: SettingCopy[]): Node {
+  const doc = el.ownerDocument;
+  const p = (text: string, cls?: string): HTMLElement => {
+    const x = doc.createElement('p');
+    x.textContent = text;
+    if (cls) x.className = cls;
+    return x;
+  };
+  const box = doc.createElement('div');
+  box.className = 'cb-apply-settings';
+  box.append(p(`From ${from}: the frame shown, outlined in the film strip.`), p(`Onto ${to.length === 1 ? to[0] : `${to.length} frames: ${to.join(', ')}`}.`));
+  const ul = doc.createElement('ul');
+  for (const c of plan) {
+    const li = doc.createElement('li');
+    li.dataset['path'] = c.path;
+    li.textContent = `${c.label}: ${c.value}${c.changes.length < to.length ? ` (changes ${c.changes.join(', ')})` : ''}`;
+    ul.append(li);
+  }
+  box.append(p('These settings are copied; the frames keep their other edits:'), ul, p('One undo takes it back.', 'cb-dim'));
+  return box;
+}

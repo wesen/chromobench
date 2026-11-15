@@ -108,6 +108,10 @@
 .ck-filmstrip .cb-cell { padding: 4px 4px 1px; gap: 0; }
 .ck-coll-cell:hover .cb-cell, .ck-coll-cell.is-sel .cb-cell { background: var(--cellsel); }
 .ck-coll-cell.is-primary .cb-cell { background: var(--cellhi); }
+/* the frame shown (the selection's primary: what Apply Print Settings copies from) is outlined (CHB-046, P9-9) */
+.ck-coll-cell.is-primary .cb-cell { box-shadow: inset 0 0 0 2px var(--selline); }
+.cb-apply-settings ul { margin: 4px 0 8px; padding-left: 18px; }
+.cb-apply-settings p { margin: 4px 0; }
 .cb-cell .ck-thumb { width: 100%; flex: 1 1 0; min-height: 0; }
 .cb-cell .ck-text { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--text2); line-height: 16px; flex: none; }
 .ck-coll-cell.is-primary .cb-cell .ck-text { color: var(--text); }

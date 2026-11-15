@@ -6,11 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canonicalJSON, plan, set } from '@chromobench/values';
 import { compile, edit, Graph, newDocument, resolveLinks, type Box, type Document, type Vec3 } from '@chromobench/contract';
-import { read } from '../../src/index.ts';
+import { firstPrintLights, NEUTRALISE, read } from '../../src/index.ts';
 import { openSourceSync, orientedToSensorBox, region } from '@chromobench/ingest';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import {
-  analysePixels, analyseRoll, autoOf, divergence, firstPrintBatch, linkFrame, matchBatch, newRoll, previewOf, rollTotals, sharedOf, splitTotal, totalOf,
+  analysePixels, analyseRoll, autoOf, withNeutralise, divergence, firstPrintBatch, linkFrame, matchBatch, newRoll, previewOf, rollTotals, sharedOf, splitTotal, totalOf,
   type FrameAnalysis, type Roll, type RollAnalysis,
 } from '../../kits/roll/src/index.ts';
 import { OFFSETS, openRoll, physics, tiffOf, type RollStudio } from './fixtures.ts';
@@ -34,6 +34,21 @@ describe('roll analysis of a planted 12-frame roll (stage 1)', () => {
     r = await openRoll(OFFSETS);
     a = await analyseRoll(r.studio.engine, entriesOf(r), physics(), { now: () => 1 });
   }, 60_000);
+  it('D8 (CHB-046): one first-print aim, neutralise 75 %, through the function the studio calls; a new amount needs no new measurement', () => {
+    expect(a.alpha).toBe(NEUTRALISE);
+    const aim0 = (latd: Vec3, alpha: number): Vec3 => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3;
+    for (const fa of Object.values(a.frames)) {
+      firstPrintLights(aim0, fa.latd).forEach((v, k) => expect(fa.auto[k]!).toBeCloseTo(v, 6));
+      // a quarter of the cast stays: the colour part of the lights is ¾ of the full neutralisation's
+      const full = aim0(fa.latd, 1);
+      const m = (full[0] + full[1] + full[2]) / 3;
+      fa.auto.forEach((v, k) => expect(v - m).toBeCloseTo(0.75 * (full[k]! - m), 5));
+    }
+    const grey = withNeutralise(a, 1, physics());
+    expect(grey.alpha).toBe(1);
+    for (const [f, fa] of Object.entries(grey.frames)) aim0(a.frames[f]!.latd, 1).forEach((v, k) => expect(fa.auto[k]!).toBeCloseTo(v, 6));
+    expect(withNeutralise(a, NEUTRALISE, physics())).toBe(a);
+  });
   it('recovers the planted base within 0.005 D (median offset 0.005 D) and flags exactly the mixed frame', () => {
     const truth = r.strips[0]!.truth.baseT.map((t) => t * 10 ** -0.005);
     expect(a.base.used.length).toBe(12);

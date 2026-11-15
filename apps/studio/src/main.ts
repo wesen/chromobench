@@ -11,15 +11,15 @@
 //
 // CHB-037 P5b-1: a frame's edit is its format-3 document in the store's log (docs.<frame>); the first print, dust
 // and export work on documents; the stored data of earlier versions is cleared once at start (resetStorage).
-import { closest, edit, type Document, type Engine } from '@chromobench/contract';
-import { insert, type Mutation } from '@chromobench/values';
+import { closest, edit, type Document, type Engine, type Graph } from '@chromobench/contract';
+import { insert, set, type Mutation } from '@chromobench/values';
 import { MockEngine } from '@chromobench/engine-mock';
 import { documentPayload, pickerAvailable } from '@chromobench/output';
 import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import {
-  buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, mainExposure, memoryKV, modelAt, read, resetStorage, sel, setKnownValues,
-  STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
+  buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, LIGHTS, LIGHTS_PATH, mainExposure, memoryKV, modelAt, NEUTRALISE, neutraliseOf, read,
+  resetStorage, sel, setKnownValues, STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
   type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
@@ -139,11 +139,18 @@ interface Host {
   rollPhysics?: unknown;
   /** The stack kit's editors' numbers (core's curve, levels and encodings); the mock engine has none. */
   editorMath?: unknown;
+  /** The enlarger modes' shift (core's), so Real ↔ Normalised keeps the print; the mock engine has none. */
+  darkroomMath?: unknown;
   /** Opens a file as a photo, a negative or as guessed (CHB-027); the mock engine opens everything as a negative. */
   opener?: SourceOpener;
   /** What the pixels of an open file look like (the guess), for the "looks like a negative" hint (F15). */
   guess(sha: string): OpenGuess | null;
+  /** D8 (CHB-046): a document's first print anew (the first print's aim with the Neutralise amount now) */
+  reprint?(d: Document, g: Graph): Promise<Document>;
 }
+
+/** The photographer's Neutralise amount (prefs.neutralise) for the first prints the host makes; set once a layout is mounted. */
+let neutraliseNow: () => number = () => NEUTRALISE;
 
 /** Asks the photographer when a guess is unsure; set for the length of one open batch (one question per batch). */
 let askOpen: AskOpenMode | undefined;
@@ -176,17 +183,19 @@ async function startEngine(): Promise<Host> {
       const doc = n?.kind === 'digital-raw' ? photoDocument(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
       // CHB-034 fusz: metered on the file's analysis image, so both engines propose the same Time
       const kind = doc.stages.scan ? 'negative-scan' : 'digital-raw';
-      const fp = await firstPrint(se, g, doc, { integrate: h.integrate, aim: firstPrintAim(kind, (k) => q.get(k)), analysis: se.analysisOf(doc.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
+      const fp = await firstPrint(se, g, doc, { integrate: h.integrate, aim: firstPrintAim(kind, (k) => q.get(k), neutraliseNow()), analysis: se.analysisOf(doc.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });
       // Heal Dust: the specks the decode found are scan-stage heal layers in a Dust group (a strip frame takes the
       // specks on its own frame), so the photographer sees them, turns them off and undoes them
       const crop = fp.geometry.crop;
       const spots = (n?.dust ?? []).filter((p) => !crop || (p.x >= crop.x - p.r && p.y >= crop.y - p.r && p.x <= crop.x + crop.w + p.r && p.y <= crop.y + crop.h + p.r));
       return spots.length && fp.stages.scan ? edit(fp, [insert('stages.scan.stack', DUST, h.dustGroup(spots))]).doc : fp;
     },
+    reprint: (d, g) => firstPrint(se, g, d, { integrate: h.integrate, aim: firstPrintAim(d.stages.scan ? 'negative-scan' : 'digital-raw', (k) => q.get(k), neutraliseNow()), analysis: se.analysisOf(d.source.sha256) }),
     notes: (sha) => se.notes.get(sha)?.notes ?? [],
     settings: h.settings,
     rollPhysics: h.rollPhysics,
     editorMath: h.editorMath,
+    darkroomMath: h.darkroomMath,
     opener: (src, as) => se.openAs(src, as, askOpen),
     guess: (sha) => se.notes.get(sha)?.guess ?? null,
   };
@@ -306,7 +315,7 @@ async function main(): Promise<void> {
     openFiles: (files, as) => openFiles(files, { as }),
     settings: () => ({ dust: host.settings?.dust ?? null, engine: q.get('engine') ?? 'auto', debug: journal.debugOn }),
   });
-  const mountOpts = { presenter, save, chat, journal, diagnostics, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS, ...DIAGNOSTICS_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}) };
+  const mountOpts = { presenter, save, chat, journal, diagnostics, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS, ...DIAGNOSTICS_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}), ...(host.darkroomMath ? { darkroomMath: host.darkroomMath } : {}) };
   /**
    * Mounts a built layout with the studio's services and renderers, then attaches the studio (studio-kit's
    * mountStudio, in two halves): `adopt` takes over the log and the mounted documents of the runtime before (View ▸
@@ -325,6 +334,7 @@ async function main(): Promise<void> {
   // wired to a runtime is registered with eachMount, which runs it now and again for the next runtime (F24)
   let rt = mounted.rt;
   rtNow = rt;
+  neutraliseNow = () => neutraliseOf(rtNow?.store.peek([]));
   if (storageReset) rt.chrome.toast(STORAGE_RESET_MESSAGE, { kind: 'info', ms: 12000 });
   const perMount: (() => void)[] = [];
   const eachMount = (f: () => void): void => {
@@ -531,7 +541,8 @@ async function main(): Promise<void> {
             const asked = asking && r.entries.some((x) => x.id === asking) ? asking : null;
             if (asked) asking = null;
             rt.runCommand('frame.select', null, asked ?? r.entry.id);
-            if (rt.app.ir.modules.some((m) => m.id === 'print') && rt.module !== 'print') rt.go('print');
+            // D1 (CHB-046): an opened file is shown in Print, not in the Library it opened from
+            if (rt.module !== 'print') intoPrint(true);
           }
         } catch (err) {
           // in his words (WS-C's explainError), the technical text in the tooltip
@@ -739,6 +750,17 @@ async function main(): Promise<void> {
     },
     folder: lastDir?.name ?? null,
     exportPrint: () => exportDialog(),
+    // D8: the current negative printed anew with the Neutralise amount now: its time, printer lights and their record
+    firstPrint: async (f: string) => {
+      const e = studio.frames.get(f);
+      const d = studio.doc(f);
+      if (!e || !d || !host.reprint) return;
+      status(`printing ${e.name} anew…`);
+      const out = await host.reprint(d, e.graph);
+      const ms = [TIME_PATH, LIGHTS_PATH, `${LIGHTS}.source`].filter((p) => JSON.stringify(read(out, p)) !== JSON.stringify(read(d, p))).map((p) => set(p, read(out, p)));
+      if (ms.length) studio.commit(f, ms, `First print (neutralise ${Math.round(neutraliseNow() * 100)} %)`);
+      status(`${e.name}: first print, neutralise ${Math.round(neutraliseNow() * 100)} %`);
+    },
     saveDocument: () => {
       const r = documentJson();
       if (r) download(new Blob([r.json], { type: 'application/json' }), r.fileName);
@@ -811,10 +833,23 @@ async function main(): Promise<void> {
       for (const d of built.app.diagnostics.list) if (d.level === 'warning') journal.warn('ui', d.message, { code: d.code });
       journal.info('ui', `layout: ${def.label}`, { code: 'LAYOUT', data: { id: def.id } });
       const open = studio.frames.all().length;
+      // D1 (CHB-046): with frames open, a layout that starts on its first module (Classic's Library) shows the print
+      if (open) intoPrint();
       status(`layout: ${def.label}${open ? ` · ${open} frame${open > 1 ? 's' : ''} open` : ''}`);
     } finally {
       switching = false;
     }
+  }
+
+  /**
+   * D1 (CHB-046): Classic is the default arrangement and a file opens into its Print module, not the Library. After an
+   * open (`always`) the layout goes to Print; after a layout switch with frames open only when it starts on its first
+   * module (a module he chose, such as Finish or Edit, stays).
+   */
+  function intoPrint(always = false): void {
+    const mods = rt.app.ir.modules;
+    if (!mods.some((m) => m.id === 'print') || rt.module === 'print') return;
+    if (always || rt.module === mods[0]?.id) rt.go('print');
   }
 
   /** File ▸ Export…: format and colour space, then where to (the picker) */

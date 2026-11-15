@@ -238,6 +238,12 @@ export function stackCommands(): CommandTable {
       label: 'Collapse Group', palette: false,
       run: (ctx: any, id: Id) => ctx.set({ stack: { collapsed: { [id]: !view(ctx.state).collapsed[id] } } }),
     },
+    'stack.byKind': {
+      label: 'List the Darkroom by Kind',
+      checked: (s: any) => view(s).darkroomOrder === 'kind',
+      /** D5 (CHB-046): the Enlarger in his order (default) or by kind; a view only, the print does not change */
+      run: (ctx: any, on?: boolean) => ctx.set({ stack: { darkroomOrder: (on ?? view(ctx.state).darkroomOrder !== 'kind') ? 'kind' : 'stack' } }),
+    },
     // ── masks ──
     'mask.new': {
       label: 'New Mask', ...needEntry,
@@ -307,16 +313,35 @@ export function stackCommands(): CommandTable {
 /** the mask tool ids, for a viewer's `tools` (the radial tool draws an ellipse until P8a's radial component exists) */
 export const MASK_TOOLS = ['mask-linear', 'mask-radial', 'mask-paint', 'mask-luminance', 'mask-colour'] as const;
 
-function drawn(ctx: any, kind: MaskComponentKind, params: Params): void {
+/** the gesture's component into the selected layer's mask (or a new layer with it); the layer it went to, or null */
+function drawn(ctx: any, kind: MaskComponentKind, params: Params): Id | null {
   const studio = studioOf(ctx);
   const fr = frame(ctx);
   const e = fr ? studio.frames.get(fr.f) : undefined;
-  if (!fr || !e) return;
+  if (!fr || !e) return null;
   const t = selectedIn(ctx.state);
   const feather_mm = kind === 'luminance' || kind === ('colour' as MaskComponentKind) ? 0 : Number(((8 * pitches(fr.d, e.graph).paper) / 1000).toFixed(4));
   const r = maskGesture(fr.d, t, kind, params, { combine: view(ctx.state).mask.combine, feather_mm });
-  if (commit(ctx, fr.f, r.mutations, r.label)) select(ctx, fr.f, r.layer);
+  if (!commit(ctx, fr.f, r.mutations, r.label)) return null;
+  select(ctx, fr.f, r.layer);
+  return r.layer;
 }
+
+// CHB-046 (P9-1): a mask tool used to stay armed after its gesture, so a later click anywhere on the picture drew a
+// gradient into whatever layer was selected by then. Now a tool makes one mask and goes back to no tool; the gradient
+// tools need a drag (a click does nothing); the brush keeps painting the layer it was armed for and disarms when
+// another layer (or frame) is selected.
+
+/** a press that moves less than this (screen px) is a click: the linear and radial tools need a drag */
+export const MIN_DRAG_PX = 4;
+const isDrag = (e: { sx: number; sy: number }, g: { sx0: number; sy0: number }): boolean => Math.hypot(e.sx - g.sx0, e.sy - g.sy0) >= MIN_DRAG_PX;
+/** back to no tool (the default): the next click on the picture is a click again */
+const disarm = (ctx: any): void => {
+  if (ctx.state?.ui?.tool) ctx.run('tool.none');
+};
+/** the frame and layer selected now: what the brush paints on */
+const armedHere = (ctx: any): { f: string | null; layer: Id | null } => ({ f: sel.current(ctx.state), layer: selectedIn(ctx.state) });
+const armBrush = (ctx: any, at: { f: string | null; layer: Id | null } = armedHere(ctx)): void => ctx.set({ stack: { mask: { armedFor: at } } });
 /**
  * The eyedropper: the colour under (x, y) (document px) of the cut the selected layer's mask reads, in OkLab as the
  * colour component measures it (core's encodeTransform through the host's editorMath), written in one step into the
@@ -355,15 +380,16 @@ export async function eyedropper(ctx: any, x: number, y: number): Promise<boolea
     if (ctx.state?.ui?.tool === 'mask-colour') ctx.run('tool.none');
     return commit(ctx, fr.f, [set(`${armed}.params.colour`, lab)], `Sample the colour of ${now!.mask.name}`);
   }
-  drawn(ctx, 'colour' as MaskComponentKind, { ...componentDefaults('colour' as MaskComponentKind), colour: lab });
-  return true;
+  const made = drawn(ctx, 'colour' as MaskComponentKind, { ...componentDefaults('colour' as MaskComponentKind), colour: lab });
+  if (made) disarm(ctx);
+  return !!made;
 }
 
-const shape = (ctx: any, s: MaskShape): void => {
+const shape = (ctx: any, s: MaskShape): Id | null => {
   const [kind, params] = maskComponent(s);
   // the radial component (a soft ellipse) where the catalogue has it; the hard ellipse before
   if (kind === 'ellipse' && hasKind('radial')) return drawn(ctx, 'radial' as MaskComponentKind, { ...params, feather: 0.5 });
-  drawn(ctx, kind, params);
+  return drawn(ctx, kind, params);
 };
 
 const svg = (g: any, tag: string, a: Record<string, string | number>): any => {
@@ -402,43 +428,70 @@ export function maskTools(): ToolTable {
       label: 'Linear Gradient Mask', icon: 'linear', cursor: 'crosshair', ...needFrame,
       overlay: outline('linear'),
       on: {
-        down: (e: any) => ({ x0: e.x, y0: e.y }),
+        down: (e: any) => ({ x0: e.x, y0: e.y, sx0: e.sx, sy0: e.sy }),
         drag: track,
-        up: (e: any, ctx: any, g: any) => shape(ctx, { kind: 'linear', from: [g.x0, g.y0], to: [e.x, e.y] }),
+        // a click is not a gradient: nothing happens and the tool stays for the drag
+        up: (e: any, ctx: any, g: any) => {
+          if (!isDrag(e, g)) return;
+          if (shape(ctx, { kind: 'linear', from: [g.x0, g.y0], to: [e.x, e.y] })) disarm(ctx);
+        },
       },
     },
     'mask-radial': {
       label: 'Radial Mask', icon: 'radial', key: 'M', cursor: 'crosshair', ...needFrame,
       overlay: outline('radial'),
       on: {
-        down: (e: any) => ({ x0: e.x, y0: e.y }),
+        down: (e: any) => ({ x0: e.x, y0: e.y, sx0: e.sx, sy0: e.sy }),
         drag: track,
-        up: (e: any, ctx: any, g: any) => shape(ctx, { kind: 'ellipse', cx: (g.x0 + e.x) / 2, cy: (g.y0 + e.y) / 2, rx: Math.max(2, Math.abs(e.x - g.x0) / 2), ry: Math.max(2, Math.abs(e.y - g.y0) / 2) }),
+        up: (e: any, ctx: any, g: any) => {
+          if (!isDrag(e, g)) return;
+          if (shape(ctx, { kind: 'ellipse', cx: (g.x0 + e.x) / 2, cy: (g.y0 + e.y) / 2, rx: Math.max(2, Math.abs(e.x - g.x0) / 2), ry: Math.max(2, Math.abs(e.y - g.y0) / 2) })) disarm(ctx);
+        },
       },
     },
     'mask-paint': {
       label: 'Brush Mask', icon: 'brush', key: 'K', cursor: 'crosshair', ...needFrame,
       overlay: outline('paint'),
       on: {
-        down: (e: any) => ({ points: [[e.x, e.y, e.pressure || 1]] }),
+        enter: (ctx: any) => armBrush(ctx),
+        exit: (ctx: any) => ctx.set({ stack: { mask: { armedFor: null } } }),
+        // strokes go to the layer the brush was armed for; another layer selected since: the brush goes, nothing is painted
+        down: (e: any, ctx: any) => {
+          const a = view(ctx.state).mask.armedFor;
+          const now = armedHere(ctx);
+          if (a && (a.f !== now.f || a.layer !== now.layer)) {
+            disarm(ctx);
+            return false;
+          }
+          return { points: [[e.x, e.y, e.pressure || 1]] };
+        },
         drag: (e: any, _ctx: any, g: any) => {
           g.points.push([e.x, e.y, e.pressure || 1]);
           return g;
         },
-        up: (_e: any, ctx: any, g: any) => shape(ctx, { kind: 'stroke', points: g.points, radius: view(ctx.state).mask.radius, hardness: 0.5, mode: 'add' }),
+        up: (_e: any, ctx: any, g: any) => {
+          const layer = shape(ctx, { kind: 'stroke', points: g.points, radius: view(ctx.state).mask.radius, hardness: 0.5, mode: 'add' });
+          // the first stroke with no layer selected made one: the brush now paints that one
+          if (layer) armBrush(ctx, { f: sel.current(ctx.state), layer });
+        },
       },
     },
     'mask-luminance': {
       label: 'Luminance Range Mask', icon: 'luma', cursor: 'crosshair', ...needFrame,
       // a click adds a luminance range (the highlights by default); its band is set in the masks panel
-      on: { down: (_e: any, ctx: any) => void drawn(ctx, 'luminance', { ...componentDefaults('luminance'), above: 0.5, softness: 0.1 }) },
+      on: {
+        down: (_e: any, ctx: any) => {
+          if (drawn(ctx, 'luminance', { ...componentDefaults('luminance'), above: 0.5, softness: 0.1 })) disarm(ctx);
+          return false;
+        },
+      },
     },
     'mask-colour': {
       label: 'Colour Range Mask (eyedropper)', icon: 'colorrange', cursor: 'crosshair',
       enabled: (s: any) => hasKind('colour') && !!sel.doc(s),
       why: 'Colour ranges arrive with the colour mask component (mask.colour)',
       // a click samples the colour under it from the image the mask reads: into the armed component (Sample in the
-      // masks panel), else a new colour range on the selected layer's mask
+      // masks panel), else a new colour range on the selected layer's mask; one sample, then no tool
       on: { down: (e: any, ctx: any) => void (hasKind('colour') && eyedropper(ctx, e.x, e.y)) },
     },
   };

@@ -250,7 +250,7 @@ describe('copy, paste, sync; presets', () => {
     rt.runCommand('looks.apply', null);
     s.select(ids, ids[0]!);
     const n = s.steps().length;
-    expect((rt.runCommand('looks.sync', null) as any).mode).toBe('copy');
+    expect((rt.runCommand('looks.sync', null, 'copy') as any).mode).toBe('copy');
     for (const f of [ids[1]!, ids[2]!]) {
       expect(grade(s, f)).toBe(3.5);
       expect(lights(s, f)).toEqual([0.05, 0, -0.05]);
@@ -268,8 +268,7 @@ describe('copy, paste, sync; presets', () => {
     const node = (x: string) => studio.bridge.lower({ $: 'cb.image', frame: x, doc: 'committed', what: 'print', args: {}, expr: 'x' } as any).shown.id;
     const before = node(f);
     s.select(ids, f);
-    rt.runCommand('looks.syncMode', null, 'link');
-    const r = rt.runCommand('looks.sync', null) as any;
+    const r = rt.runCommand('looks.sync', null, 'link') as any;
     expect(r).toMatchObject({ mode: 'link', frames: 3 });
     const p = st().looks.presets[r.preset];
     expect(p.stacks.darkroom.order).toEqual(['b1']);
@@ -280,6 +279,30 @@ describe('copy, paste, sync; presets', () => {
     rt.run('edit.undo');
     expect(st().looks.presets[r.preset]).toBeUndefined();
     expect(studio.doc(f)!.stages.darkroom.stack.order).toEqual(['main', 'lights', 'b1']);
+  });
+  it('D4 (CHB-046): Sync from the menu asks in the page: it says it copies values, Copy is the default, Link the explicit choice', async () => {
+    const s = await startedLooks(3);
+    const { rt, studio, ids } = s;
+    studio.commit(ids[0]!, [set('stages.darkroom.medium.grade', 3.5)], 'Work');
+    s.select(ids, ids[0]!);
+    const chrome = rt.chrome as any;
+    const n0 = s.steps().length;
+    // Cancel: nothing changes
+    const p0 = rt.runCommand('looks.sync', null) as Promise<unknown>;
+    const d0 = chrome.dialogs.at(-1);
+    expect(d0.spec.title).toMatch(/^Sync the settings of /);
+    expect(d0.spec.buttons.map((b: any) => b.label)).toEqual(['Cancel', 'Sync 2 frames']);
+    d0.close('cancel');
+    expect(await p0).toBeNull();
+    expect(grade(s, ids[1]!)).not.toBe(3.5);
+    // Sync with the default choice: values copied, no preset, one step
+    const p1 = rt.runCommand('looks.sync', null) as Promise<unknown>;
+    chrome.dialogs.at(-1).close('sync');
+    expect(await p1).toMatchObject({ mode: 'copy' });
+    expect(grade(s, ids[1]!)).toBe(3.5);
+    expect(grade(s, ids[2]!)).toBe(3.5);
+    expect(Object.keys(s.st().looks.presets ?? {})).toEqual([]);
+    expect(s.steps().length).toBe(n0 + 1);
   });
   it('save as preset → export → delete → import round-trips; it applies like any look; save a look as a preset', async () => {
     const s = await startedLooks(2);

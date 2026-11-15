@@ -72,6 +72,8 @@ export interface StudioHost {
   setLayout?(id: string): unknown;
   /** a library frame whose file is not open in this session (after a reload): read it again */
   relink?(id: string): unknown;
+  /** D8 (CHB-046): print a negative anew with the first print's aim (Neutralise), one step */
+  firstPrint?(frame: string): unknown;
 }
 
 /** What the host publishes into the state (ui.host) for labels and menus: the folder, the layouts. Its actions are
