@@ -1,13 +1,13 @@
-// retouch.heal on the GPU (CHB-022): heal and clone spots composited on the output grid, the f32 twin of
-// core's print/retouch.ts `retouch()`. Each grid pixel is computed at the full-resolution pixel centre it
-// samples (outMap, as pointwise.wgsl), so a draft, a screen render and every tile of an export see the same
-// spot. Sources are read from an atlas of full-resolution windows of the receiver (the image before
-// retouching), one window per spot; the seam correction's Fourier coefficients come from core's
-// healCoefficients() on the CPU (f64), so only the per-pixel sum runs here.
+// heal and clone on the GPU (contract 1.0; CHB-022's per-pixel formula): spots composited in order on a grid.
+// Each grid pixel is computed at the full-resolution pixel centre it samples (outMap, as pointwise.wgsl), so a
+// draft, a screen render and every tile of an export see the same spot. Sources are read from an atlas of
+// full-resolution windows, one per spot, each the image as the spots before it left it (src/retouch.ts); the seam
+// correction's Fourier coefficients come from core's healCoefficients() on the CPU (f64), so only the per-pixel
+// sum runs here. The seam correction is a gain in a linear domain and an additive offset in a log (density) one.
 //
 // Spot record (22 × vec4, see src/retouch.ts):
 //   v0  target x, y, r, inner = r(1 − feather)      v1  source x, y, opacity, heal (1) / clone (0)
-//   v2  window x, y, w, h (frame px)                v3  atlas x, y, R = r + 1.5, channels with the gain
+//   v2  window x, y, w, h (frame px)                v3  atlas x, y, R = r + 1.5, additive seam (1: density)
 //   v4 + 2n, v5 + 2n: a_n, b_n (xyz), n = 0 … 8
 
 const M: u32 = 8u;
@@ -86,8 +86,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
     if (dist > v0.w) { a = v1.z * (1.0 - smoothstep(v0.w, v0.z, dist)); }
     var pv = bilinear(s, v1.xy + d);
     if (v1.w > 0.5) {
-      let gain = exp(offset(s, d, S[s * STRIDE + 3u].z));
-      pv = vec4<f32>(pv.xyz * gain, pv.w);
+      let v3 = S[s * STRIDE + 3u];
+      let u = offset(s, d, v3.z);
+      if (v3.w > 0.5) { pv = vec4<f32>(pv.xyz + u, pv.w); } else { pv = vec4<f32>(pv.xyz * exp(u), pv.w); }
     }
     out = vec4<f32>(mix(out.xyz, pv.xyz, a), out.w);
   }

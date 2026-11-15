@@ -6,32 +6,36 @@ import type { Segment } from '../chain/program.ts';
 import { FILM_OPS } from '../film.ts';
 
 export const GPU_OPS = [
-  'source.open', 'source.pattern', 'scan.flare', 'scan.density', 'invert.dyes', 'retouch.heal', 'print.expose', 'print.lights', 'print.develop',
+  'source.open', 'source.pattern', 'scan.flare', 'scan.density', 'invert.dyes', 'print.expose', 'print.develop',
   'view.reflect', 'view.flare', 'view.adapt', 'output.display', 'film.grain',
   'measure.stats', 'measure.histogram', 'measure.patches', 'measure.densitometer',
-  // CHB-010: multi-exposure printing, masks and density masks
-  'print.combine', 'print.densityMask', 'mask.luminance', 'mask.gradient', 'mask.ellipse', 'mask.paint', 'mask.feather', 'mask.and', 'mask.or', 'mask.not',
+  // the darkroom's light law (contract 1.0: one print.combine with terms, densities, filters, preflash) and masks
+  'print.combine', 'print.densityMask',
+  'mask.luminance', 'mask.linear', 'mask.ellipse', 'mask.paint', 'mask.constant', 'mask.combine', 'mask.feather', 'mask.invert',
+  // the composite and repair laws: an entry's mix, coalesced heal and clone runs, clarity on the print
+  'composite.mix', 'heal', 'clone', 'clarity',
   // CHB-012: the forward film path (src/film.ts)
   'source.xyz', 'capture.expose', 'film.couple', 'film.halation', 'film.develop',
 ] as const;
 
-/** Multi-input or spatial ops: always materialised, computed from materialised inputs (combine.wgsl, blur.wgsl). */
-export const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.and', 'mask.or', 'retouch.heal', ...FILM_OPS]);
-/** Masks from coordinates (or strokes): their receiver's values are never read. */
-export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.gradient', 'mask.ellipse', 'mask.paint']);
-/** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run several passes. */
+/**
+ * Multi-input or spatial ops: materialised, computed from materialised inputs (combine.wgsl, blur.wgsl, retouch.wgsl).
+ * print.combine is one only when a term reads a texture (engine/light.ts combineIsPointwise); otherwise it fuses.
+ */
+export const BARRIER_OPS: ReadonlySet<string> = new Set(['print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', ...FILM_OPS]);
+/** Masks from coordinates, strokes or a constant: their receiver's values are never read. */
+export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.ellipse', 'mask.paint', 'mask.constant']);
+/** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run on a downsampled field (engine/textures.ts gaussianBlur). */
 export const MAX_PASS_SIGMA = 32;
 export const COMBINE_WGSL = combineCode;
-export const COMBINE = Object.freeze({ EXP: 0, ADD: 1, LOG: 2, MIN: 3, MAX: 4, TRANSMITTANCE: 5, DENSITY_MASK: 6, COPY: 7, FLASH: 8, HOLD: 9, TRANSMITTANCE_X: 10 });
 
 /** The output grid every materialised texture of one evaluation shares. */
-export interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export'; umOut: number }
+export interface GridTarget { outW: number; outH: number; frameW: number; frameH: number; region: Box; precision: 'preview' | 'export' }
 /** How one materialised node is computed: a barrier from its inputs, or a pointwise tail from a root. */
 export type Plan =
   | { kind: 'barrier'; reads: string[] }
   | { kind: 'tail'; reads: string[]; nodes: Node[]; from: number; root: 'source' | 'texture' | 'none'; rootId?: string };
 
-export const DEFAULT_UM_PER_PX = 6;
 export const PACK16_WGSL: string = pack16Code;
 
 /**

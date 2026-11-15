@@ -166,7 +166,8 @@ export class FilmGpu {
     const a = n.args as Record<string, unknown>;
     const info = n.info as ImageInfo;
     const scale = t.outW / t.region.w;
-    const umOut = filmUmPerPx(info, t.frameW, t.frameH) / scale;
+    // the pitch only where a size is physical (couple, halation, grain): pointwise film ops need none, as in core
+    const um = (): number => filmUmPerPx(info) / scale;
     switch (n.op) {
       case 'source.xyz': {
         const sha = ctx.up('source.open')?.args['source'] as string | undefined;
@@ -195,7 +196,7 @@ export class FilmGpu {
         const K = inhibitorKernel(dir);
         let blurred = inh;
         if (K.length) {
-          blurred = await this.mixture(inh, K.map((k) => ({ w: [k.w, k.w, k.w], sigma: [k.sigma_um / umOut, k.sigma_um / umOut, k.sigma_um / umOut] })));
+          blurred = await this.mixture(inh, K.map((k) => ({ w: [k.w, k.w, k.w], sigma: [k.sigma_um / um(), k.sigma_um / um(), k.sigma_um / um()] })));
           this.rt.textures.release(inh);
         }
         const out = await this.one('axpy', recv, { g: [-1, -1, -1] }, { b: blurred });
@@ -211,8 +212,8 @@ export class FilmGpu {
           const ch = [0, 1, 2] as const;
           cur = await this.mixture(E, [
             { w: ch.map(() => 1 - sc.amount), sigma: [0, 0, 0] },
-            { w: ch.map((k) => sc.amount * (1 - sc.tailWeight[k])), sigma: ch.map((k) => (sc.core_um[k] * sc.scale) / umOut) },
-            ...EXP_GAUSSIANS.map(([w, r]) => ({ w: ch.map((k) => sc.amount * sc.tailWeight[k] * w), sigma: ch.map((k) => (r * sc.tail_um[k] * sc.scale) / umOut) })),
+            { w: ch.map((k) => sc.amount * (1 - sc.tailWeight[k])), sigma: ch.map((k) => (sc.core_um[k] * sc.scale) / um()) },
+            ...EXP_GAUSSIANS.map(([w, r]) => ({ w: ch.map((k) => sc.amount * sc.tailWeight[k] * w), sigma: ch.map((k) => (r * sc.tail_um[k] * sc.scale) / um()) })),
           ]);
           this.rt.textures.release(E);
         }
@@ -224,7 +225,7 @@ export class FilmGpu {
           const norm = amt.map((v) => (hp.renormalise ? 1 + v : 1));
           const next = await this.mixture(cur, [
             { w: norm.map((v) => 1 / v), sigma: [0, 0, 0] },
-            ...dec.map((d, i) => ({ w: amt.map((v, k) => (v * d) / ds / norm[k]!), sigma: [0, 1, 2].map((k) => (hp.sigma_um[k as 0] * hp.scale * Math.sqrt(i + 1)) / umOut) })),
+            ...dec.map((d, i) => ({ w: amt.map((v, k) => (v * d) / ds / norm[k]!), sigma: [0, 1, 2].map((k) => (hp.sigma_um[k as 0] * hp.scale * Math.sqrt(i + 1)) / um()) })),
           ]);
           this.rt.textures.release(cur);
           cur = next;
@@ -236,7 +237,7 @@ export class FilmGpu {
       case 'film.grain': {
         const { spec, sub } = grainAt(ctx, a);
         if (spec.amount === 0) return this.one('axpy', recv, { g: [0, 0, 0] }, { b: recv });
-        const { N, od } = crystals(sub, spec, umOut);
+        const { N, od } = crystals(sub, spec, um());
         const span = [0, 1, 2].map((ch) => Math.max(1e-6, sub.d[ch as 0][sub.d[ch as 0].length - 1]!));
         const data = new Float32Array(9 * SUB_N + 27);
         for (let ch = 0; ch < 3; ch++) for (let sl = 0; sl < 3; sl++) for (let i = 0; i < SUB_N; i++) {
@@ -248,7 +249,7 @@ export class FilmGpu {
           data[q + 1] = N[sl]![ch]!;
           data[q + 2] = sub.dmin[sl]![ch]!;
         }
-        const tab = this.buffer(`grain:${filmOf(ctx)}:${spec.particleArea_um2}:${umOut}`, () => data);
+        const tab = this.buffer(`grain:${filmOf(ctx)}:${spec.particleArea_um2}:${um()}`, () => data);
         // print-grid keys: frame pixels at scale 1, the preview grid's own pixels below (guide §5.4 decision (c))
         const origin = [Math.round(t.region.x * scale), Math.round(t.region.y * scale)];
         const fields = await this.pass('grainDraw', recv, { m: [span as [number, number, number], [...spec.uniformity] as [number, number, number], [0, 0, 0]], u: [SUB_N, 0, spec.seed >>> 0], o: origin }, { tab, outputs: 3 });

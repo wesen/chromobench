@@ -54,9 +54,9 @@ async function scanToDisplay(space: OutputSpaceId, w: number, h: number): Promis
   const info = await gpu.open({ kind: 'file', sha256: '', bytes: tiff });
   g.registerSource(info);
   const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => g.intern(op, inputs, args).node;
-  const src = I('source.open', [], { source: info.sha256, encoding: 'linear' });
+  const src = I('source.open', [], { source: info.sha256, encoding: 'linear', umPerPx: 6 });
   const dyes = I('invert.dyes', [I('scan.density', [src.id], { rebate: { x: 0, y: 0, w: REBATE_W, h } }).id], { stock: S.film, scanner: S.scanner });
-  const xyz = I('view.reflect', [I('print.develop', [I('print.lights', [I('print.expose', [dyes.id], { paper: S.paper }).id], { logH: [0, 0, 0] }).id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
+  const xyz = I('view.reflect', [I('print.develop', [I('print.expose', [dyes.id], { paper: S.paper }).id], { paper: S.paper, grade: 2 }).id], { illuminant: 'D50' });
   const display = I('output.display', [I('view.adapt', [I('view.flare', [xyz.id], { flare: 0 }).id], { to: 'D65' }).id], { rendering: 'scan-of-print', knee: 'oklch', space });
   gpu.adopt(g.closure(display.id));
   return { gpu, display, T };

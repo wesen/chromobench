@@ -1,5 +1,5 @@
 // Texture work of GpuEngine (split from engine-gpu.ts, CHB-032): synthetic sources, the 16-bit source upload and
-// export readback (kernels/pack16.wgsl), one combine.wgsl pass, and multi-pass Gaussian blurs.
+// export readback (kernels/pack16.wgsl), one combine.wgsl pass, and Gaussian blurs of any σ.
 import { DOMAINS, type Box, type ImageInfo, type Node } from '@chromobench/contract';
 import type { GpuRuntime } from '../device.ts';
 import type { Blur } from '../spatial.ts';
@@ -112,19 +112,32 @@ export async function readU16(rt: GpuRuntime, tex: GPUTexture, w: number, h: num
   return out;
 }
 
-/** A Gaussian blur of σ output px (several passes beyond MAX_PASS_SIGMA: σ² adds); a new texture. */
-export async function gaussianBlur(rt: GpuRuntime, blur: Blur, src: GPUTexture, sigma: number, copy: (t: GPUTexture) => Promise<GPUTexture>): Promise<GPUTexture> {
+/** σ of the blur on a field downsampled s × s that, with the box average and the bilinear read back, makes σ (tiles.ts). */
+export const fieldSigma = (sigma: number, s: number): number => Math.sqrt(Math.max(sigma * sigma - (s * s - 1) / 12 - (s * s) / 6, 0)) / s;
+
+/**
+ * A Gaussian blur of σ output px, clamp-to-edge, as one Gaussian (core gaussianBlur1): one pass up to MAX_PASS_SIGMA;
+ * beyond it on a field downsampled by s = ⌈σ / MAX_PASS_SIGMA⌉ — the box average of the clamp-extended image on a
+ * field padded by the blur's reach, one blur pass of the compensated σ, bilinear read back with f32 weights — so the
+ * edge rule is the frame's, as in core. Repeated passes would clamp at the edge once per pass (several Gaussians with
+ * clamping are not one: 28 % off core near the edge of a small frame at σ = 94 px, CHB-037 P3) and cost a pass per
+ * 32 px of σ (clarity's 10 mm is σ ≈ 200 px at 48 µm/px). `channel`: blur that one only. A new texture.
+ */
+export async function gaussianBlur(rt: GpuRuntime, blur: Blur, src: GPUTexture, sigma: number, copy: (t: GPUTexture) => Promise<GPUTexture>, channel?: number): Promise<GPUTexture> {
   if (!(sigma > 0)) return copy(src);
-  const passes = Math.max(1, Math.ceil((sigma / MAX_PASS_SIGMA) ** 2));
-  const s = sigma / Math.sqrt(passes);
-  let cur = await blur.gaussian(src, [s, s, s, s]);
-  for (let i = 1; i < passes; i++) {
-    const next = await blur.gaussian(cur, [s, s, s, s]);
-    rt.textures.release(cur);
-    cur = next;
-  }
-  return cur;
+  const sig = (x: number) => [0, 1, 2, 3].map((c) => (channel === undefined || c === channel ? x : 0));
+  if (sigma <= MAX_PASS_SIGMA) return blur.gaussian(src, sig(sigma));
+  const s = Math.ceil(sigma / MAX_PASS_SIGMA);
+  const fs = fieldSigma(sigma, s);
+  const pad = Math.ceil(3 * fs) + 1; // the blur's reach (and the read back's neighbour) stays inside the padded field
+  const down = await blur.downsamplePadded(src, s, pad);
+  const field = await blur.gaussian(down, sig(fs));
+  rt.textures.release(down);
+  const out = await blur.upsample(field, s, pad, src.width, src.height);
+  rt.textures.release(field);
+  return out;
 }
+
 
 /** One pass of kernels/combine.wgsl on output-grid textures; returns a new texture (release it). */
 export async function combinePass(rt: GpuRuntime, dummy: GPUTexture, mode: number, a: GPUTexture, b: GPUTexture | null = null, m: GPUTexture | null = null, flags = 0, w: number[] = []): Promise<GPUTexture> {
