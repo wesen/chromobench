@@ -539,10 +539,10 @@ the specs that changed and why.
   time). The gpu-parity project alone: 46 passed, 1 skipped, 1 failed — the same test, `Test timeout of 180000ms
   exceeded while running "beforeEach" hook` (the parity page did not get ready in a parallel worker);
   `film.spec.ts` alone: 5 passed. A load-dependent timeout in packages/gpu's parity page, not in the studio.
-  Tests per project: chromium-webgpu 48 (all passed, 1 skipped on WebGPU adapter), gpu-parity 48, shell-demo 3,
+  Tests per project: chromium-webgpu 48 (all passed), gpu-parity 48 (the skipped one is the BENCH-gated bench), shell-demo 3,
   studio-kit 9, all passed except that one.
 - `pnpm typecheck` (the whole repository) clean; `pnpm lint` ok; `pnpm gen:check` ok (26 files); vitest of
-  studio-kit and apps/studio 28 files, 277 passed, 1 skipped.
+  studio-kit and apps/studio 28 files, 277 passed, 1 skipped; the whole vitest suite 2935 passed, 19 skipped.
 
 ### What didn't work
 - First full run on the old specs: 31 failed, 83 passed, 1 skipped (every failure in chromium-webgpu), e.g.
