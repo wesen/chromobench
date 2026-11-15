@@ -82,3 +82,13 @@ P3 (GPU on contract 1.0): light law fused or as passes, composite.mix, mask alge
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p3/packages/gpu/src/engine/light.ts — the light law on the GPU
 
+
+## 2026-11-15
+
+P6a: the DSL and the agent on contract 1.0 and the values log — frames are views of documents, cuts are compile(doc) nodes, what-ifs frame.with(change), edits values submitted through one door (ask proposes, auto commits, stale → proposal), batches via plan; h.show; MirrorLog deleted (commits 933bc7f, 879b5d7, ef29fc2)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/agent/src/worker/client.ts — AgentDocs, docs snapshots, replay
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/dsl/src/history.ts — The agent's door into the log
+

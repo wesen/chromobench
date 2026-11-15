@@ -57,7 +57,7 @@ describe('host promises (DR-2: sync variant, deferred promises)', () => {
     const s = await setup();
     const r = await s.run(`const p = frame.print()
 const a = await p.measure.stats()
-const [b, c] = await Promise.all([p.measure.densitometer({ at: [48, 32] }), frame.print({ time_s: 20 }).measure.densitometer({ at: [48, 32] })])
+const [b, c] = await Promise.all([p.measure.densitometer({ at: [48, 32] }), frame.with(set('main.params.time_s', 20)).print().measure.densitometer({ at: [48, 32] })])
 return { a: a.clipHigh, darker: c.D.every((d, k) => d > b.D[k]) }`);
     expect(r.error).toBeUndefined();
     expect(r.yaml).toMatch(/^a: 0\ndarker: true/);
@@ -93,7 +93,7 @@ describe('the global surface (§5.5, §5.11)', () => {
 });
 
 describe('determinism', () => {
-  it('the same eval on the same recipe gives byte-identical text; Math.random is seeded and frozen', async () => {
+  it('the same eval on the same document gives byte-identical text; Math.random is seeded and frozen', async () => {
     const code = 'const xs = [Math.random(), Math.random()]\ntry { Math.random = () => 0 } catch (e) {}\nreturn { xs, still: Math.random() !== 0 }';
     const a = await setup();
     const b = await setup();
@@ -143,7 +143,8 @@ describe('leaks', () => {
       'return frame.negative().nope',
       'mem.n = (mem.n ?? 0) + 1; return { n: mem.n, h: frame.print() }',
       'await new Promise(() => {})',
-      'frame.print().look("x"); return [1, 2, 3]',
+      'frame.print().show("x"); return [1, 2, 3]',
+      "frame.with(set('main.params.time_s', 12)).finished(); return frame.get('main.params.time_s')",
     ];
     for (let i = 0; i < 1000; i++) await s.run(codes[i % codes.length]!);
     expect(() => s.session.dispose()).not.toThrow();

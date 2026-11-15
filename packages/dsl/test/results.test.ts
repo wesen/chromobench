@@ -1,4 +1,4 @@
-// Stage 3 (guide §5.10): number formatting, compact tables, the cap, looks and the context block.
+// Stage 3 (guide §5.10): number formatting, compact tables, the cap, shown images and the context block.
 import { describe, expect, it } from 'vitest';
 import { docLine, fmtNum, params, renderYaml } from '../src/index.ts';
 import { setup } from './helpers.ts';
@@ -46,29 +46,30 @@ describe('the cap', () => {
   });
 });
 
-describe('looks', () => {
+describe('shown images', () => {
   it('at most four per eval in creation order, duplicates once, a LOOKS warning names the rest', async () => {
     const s = await setup();
     const r = await s.run(`const p = frame.print()
-p.look('a')
-p.look('a')
-frame.print({ time_s: 12 }).look('b')
-frame.print({ time_s: 14 }).look('c')
-frame.negative().look('d')
-frame.scan().look('e')
+p.show('a')
+p.show('a')
+frame.with(set('main.params.time_s', 12)).print().show('b')
+frame.with(set('main.params.time_s', 14)).print().show('c')
+frame.negative().show('d')
+frame.scan().show('e')
 return 1`);
     expect(r.looks.map((l) => l.n)).toEqual([1, 2, 3, 4]);
     expect(r.looks.map((l) => l.caption.split(' — ')[0])).toEqual(['a', 'b', 'c', 'd']);
     const w = r.warnings.find((x) => x.code === 'LOOKS')!;
-    expect(w.message).toMatch(/Dropped: look 5 \(line 7\)/);
-    // a film-dyes look renders as greyscale; PNG signature
+    expect(w.message).toMatch(/Dropped: image 5 \(line 7\)/);
+    expect(r.yaml).toMatch(/^# nothing returned|^1\n\nshown:\n {2}- image: '\[image 1: a — frame_m1 print-xyz/);
+    // a film-dyes image renders as greyscale; PNG signature
     expect(Array.from(r.looks[3]!.image.bytes.slice(0, 4))).toEqual([137, 80, 78, 71]);
     s.session.dispose();
   });
 
-  it('a look with box and at carries the region stats and the densitometer reading', async () => {
+  it('an image with box and at carries the region stats and the densitometer reading', async () => {
     const s = await setup();
-    const r = await s.run("frame.print().look({ label: 'patch', box: [40, 24, 16, 16], at: [48, 32] })\nreturn 1");
+    const r = await s.run("frame.print().show({ label: 'patch', box: [40, 24, 16, 16], at: [48, 32] })\nreturn 1");
     const l = r.looks[0]!;
     expect(l.region).toEqual({ x: 40, y: 24, w: 16, h: 16 });
     expect(l.image.width).toBe(16);
@@ -77,18 +78,18 @@ return 1`);
     s.session.dispose();
   });
 
-  it('cb.compare: one side-by-side look whose halves carry their own numbers', async () => {
+  it('cb.compare: one side-by-side image whose halves carry their own numbers', async () => {
     const s = await setup();
-    const r = await s.run("cb.compare([frame.print(), frame.print({ time_s: 20 })], 'time 10 vs 20')\nreturn 1");
+    const r = await s.run("cb.compare([frame.print(), frame.with(set('main.params.time_s', 20)).print()], 'time 10 vs 20')\nreturn 1");
     expect(r.looks).toHaveLength(1);
     expect(r.looks[0]!.numbers).toHaveProperty('left');
     expect(r.looks[0]!.numbers).toHaveProperty('right');
     s.session.dispose();
   });
 
-  it('a looked-at image is downscaled to 750 px on the long side by default', async () => {
+  it('a shown image is downscaled to 750 px on the long side by default, or to size', async () => {
     const s = await setup();
-    const r = await s.run("frame.print().look({ label: 'small', size: 64 })\nreturn 1");
+    const r = await s.run("frame.print().show({ label: 'small', size: 64 })\nreturn 1");
     expect(r.looks[0]!.image.width).toBe(64);
     expect(r.looks[0]!.scale).toBeCloseTo(64 / 96, 6);
     s.session.dispose();
@@ -98,10 +99,26 @@ return 1`);
 describe('context block', () => {
   it('lists mem keys by kind, without running getters, and quotes untrusted frame names', async () => {
     const s = await setup();
-    const r = await s.run("Object.defineProperty(mem, 'g', { get() { throw new Error('ran') }, enumerable: true })\nmem.h = frame.print()\nmem.a = [1, 2]\nreturn 1");
+    const r = await s.run("Object.defineProperty(mem, 'g', { get() { throw new Error('ran') }, enumerable: true })\nmem.h = frame.print()\nmem.a = [1, 2]\nmem.b = layer('burn', { stops: 1 })\nreturn 1");
     expect(r.error).toBeUndefined();
-    expect(r.context.mem).toEqual([expect.stringMatching(/^g \(accessor\)$/), expect.stringMatching(/^h \(\[print-xyz #[0-9a-f]{4} view\.adapt\]\)$/), 'a (array of 2)']);
+    expect(r.context.mem).toEqual([expect.stringMatching(/^g \(accessor\)$/), expect.stringMatching(/^h \(\[print-xyz #[0-9a-f]{4} view\.adapt\]\)$/), 'a (array of 2)', 'b ([layer burn])']);
     expect(r.yaml).toMatch(/ {2}frame: 'frame_m1 \(M1 test negative\)/);
+    // values survive between evals on mem; views do not (they are of one eval's documents)
+    const again = await s.run("const w = frame.with(set('main.params.time_s', 12))\nmem.w = w\nreturn mem.b.amount(0.5).data.amount");
+    expect(again.yaml.split('\n')[0]).toBe('0.5');
+    const stale = await s.run('return mem.w.print()');
+    expect(stale.error?.code).toBe('E_NO_FRAME');
+    expect(stale.error?.hint).toMatch(/keep the change on mem/);
+    s.session.dispose();
+  });
+
+  it('returning values: a layer, a mask and a change print as their data', async () => {
+    const s = await setup();
+    const r = await s.run("return { l: layer('burn', { stops: 1 }).amount(0.5), c: set('main.params.time_s', 12), m: mask('Sky').add('c1', 'linear', { from: [0, 0], to: [0, 10] }) }");
+    expect(r.error, r.yaml).toBeUndefined();
+    expect(r.yaml).toMatch(/^l:\n {2}kind: layer\n {2}op: burn\n {2}params:\n {4}stops: 1\n {2}name: burn\n {2}enabled: true\n {2}amount: 0.5/);
+    expect(r.yaml).toMatch(/\nc:\n {2}mutations:\n {4}- op: set\n {6}path: main\.params\.time_s\n {6}value: 12/);
+    expect(r.yaml).toMatch(/\nm:\n {2}name: Sky\n {2}components:/);
     s.session.dispose();
   });
 });

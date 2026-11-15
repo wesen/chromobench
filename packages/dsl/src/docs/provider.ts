@@ -1,16 +1,16 @@
 // cb.help and cb.docs (guide §5.12): the reference from the registry, topics from Markdown pages
 // bundled at generation time (topics.generated.ts), read the way goja-cv's cv.docs works.
-import { argPath, getOp, hasOp, type OpDef } from '@chromobench/contract';
+import { getOp, hasOp, type OpDef } from '@chromobench/contract';
 import type { DocsProvider } from '../host.ts';
-import { dslOps, suggest } from '../host.ts';
+import { dslOps, layerOps, suggest } from '../host.ts';
 import { TOPICS, type Topic } from './topics.generated.ts';
 import { VOCABULARY } from './vocabulary.ts';
 
 export function opLine(op: OpDef): string {
   const args = Object.keys(op.args).join(', ');
   const out = op.returns === 'Image' || op.returns === 'Mask' ? op.domainOut ?? '' : 'value';
-  const recv = op.on === 'none' ? 'cb' : 'h';
-  return `${recv}.${op.name}({ ${args} }) → ${out} — ${op.doc.split(/(?<=\.)\s/)[0]}`;
+  const head = op.stages?.length && !op.name.includes('.') ? `layer('${op.name}', { ${args} }) in ${op.stages.join(', ')}` : `h.${op.name}({ ${args} }) → ${out}`;
+  return `${head} — ${op.doc.split(/(?<=\.)\s/)[0]}`;
 }
 
 export function argLines(op: OpDef): string[] {
@@ -20,8 +20,6 @@ export function argLines(op: OpDef): string[] {
     if (s.min !== undefined || s.max !== undefined) bits.push(`[${s.min ?? '-∞'}, ${s.max ?? '∞'}]`);
     if (s.default !== undefined) bits.push(`default ${JSON.stringify(s.default)}`);
     if (s.optional) bits.push('optional');
-    const p = argPath(op, n, s);
-    if (p) bits.push(`recipe ${p}`);
     return `  ${n}: ${bits.join(', ')} — ${s.doc}`;
   });
 }
@@ -44,7 +42,7 @@ export function docsProvider(topics: readonly Topic[] = TOPICS): DocsProvider {
   return {
     help(name) {
       if (name === null) {
-        return ['Globals: cb, frame, units, mem, console. Call cb.help("print.expose") for one op, cb.docs.list() for topics.',
+        return ['Globals: cb, frame, units, mem, console; builders layer, group, mask, coll; changes set, insert, remove, move. Call cb.help("burn") for a layer op, cb.help("measure.stats") for a handle op, cb.docs.list() for topics.',
           'Vocabulary:', ...VOCABULARY.map((v) => `  ${v.call} — ${v.doc}`)].join('\n');
       }
       const voc = VOCABULARY.find((v) => v.name === name || v.call.startsWith(`${name}(`));
@@ -53,7 +51,7 @@ export function docsProvider(topics: readonly Topic[] = TOPICS): DocsProvider {
         const op = getOp(name);
         return [opLine(op), ...argLines(op), ...(op.fields ? [`  returns: ${op.fields.map((f) => f.name).join(', ')}`] : [])].join('\n');
       }
-      const names = [...dslOps().map((o) => o.name), ...VOCABULARY.map((v) => v.name)];
+      const names = [...dslOps().map((o) => o.name), ...layerOps().map((o) => o.name), ...VOCABULARY.map((v) => v.name)];
       const g = suggest(name, names);
       return `no entry "${name}"${g ? `; did you mean ${g}?` : ''}`;
     },

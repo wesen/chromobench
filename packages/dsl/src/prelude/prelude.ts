@@ -1,7 +1,8 @@
 // The prelude: guest code that runs inside QuickJS once per VM. It receives two host functions,
 // `host(name, json) → json` (synchronous) and `hostEval(id) → Promise<json>` (deferred), keeps them
-// in its closure (they are never globals), installs the globals `cb`, `frame`, `units`, `mem`,
-// `console` and a seeded `Math.random`, and returns the private hooks the session calls.
+// in its closure (they are never globals), installs the globals — `cb`, `frame`, `units`, `mem`, `console`, the
+// builders `layer`, `group`, `mask`, `coll` and the changes `set`, `insert`, `remove`, `move` — and a seeded
+// `Math.random`, and returns the private hooks the session calls.
 //
 // Handle rules follow goja-cv pkg/gojamod/cv/prelude.js 1–14:
 // - `then` makes handles awaitable (Value → evaluated numbers, Image → a summary);
@@ -10,6 +11,11 @@
 // - an unknown member throws E_UNKNOWN_METHOD with a did-you-mean; a handle passed as a literal
 //   option is E_ARG_TYPE (checked by the host);
 // - generic probes (constructor, inspect, $$typeof, toJSON, Symbol.toStringTag …) pass through.
+//
+// Builder values (contract 1.0, design §30–§31) are data with chain methods: `layer('burn', { stops: 0.5 })` holds the
+// layer's data, and `.amount(0.5)` asks the host for new data (the contract's modifier). Nothing in them is a
+// function the host keeps, so they cross into documents as data and survive between evals on mem. Frames and
+// what-ifs are views: `frame.with(change)` is the document with a change; its cuts are handles.
 //
 // Written as a plain string so it loads unchanged in Node and in the browser. It must not use
 // backticks or "${" (it lives inside a template literal).
@@ -38,6 +44,13 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     if (r.err) throw mkErr(r.err);
     return r.ok;
   }
+  function deepFreeze(v) {
+    if (v !== null && typeof v === 'object' && !Object.isFrozen(v)) {
+      Object.freeze(v);
+      for (const k of Object.keys(v)) deepFreeze(v[k]);
+    }
+    return v;
+  }
 
   const T = H('tables');
   const AREAS = new Set(T.areas);
@@ -45,17 +58,22 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
   // ---- handles -------------------------------------------------------------------------------
   const handles = new WeakMap();   // proxy → info
   let cache = new Map();           // id|frame → proxy (hash-consed nodes are === within an eval)
-  const looks = new WeakSet();
+  const shows = new WeakSet();
+  const values = new WeakMap();    // value proxy → { kind, data, trail }
+  const viewKeys = new WeakMap();  // frame or what-if object → view key
 
   function isHandle(x) { return (typeof x === 'object' || typeof x === 'function') && x !== null && handles.has(x); }
+  function isValue(x) { return (typeof x === 'object' || typeof x === 'function') && x !== null && values.has(x); }
 
   function marshal(v, depth) {
-    if (depth > 20) return null;
+    if (depth > 30) return null;
     if (isHandle(v)) return { __node: handles.get(v).id };
+    if (isValue(v)) return { __value: values.get(v).kind, data: values.get(v).data };
     if (typeof v === 'function') return { __fn: true };
     if (Array.isArray(v)) return v.map((x) => marshal(x, depth + 1));
     if (v !== null && typeof v === 'object') {
-      if (looks.has(v)) return { __look: v.look };
+      if (shows.has(v)) return { __show: v.show };
+      if (viewKeys.has(v)) return { __frame: viewKeys.get(v) };
       const o = {};
       for (const k of Object.keys(v)) { const x = v[k]; if (x !== undefined) o[k] = marshal(x, depth + 1); }
       return o;
@@ -68,12 +86,14 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     return hostEval(info.id).then((j) => { const r = JP(j); if (r.err) throw mkErr(r.err); return r.ok; });
   }
 
-  function lookOf(info, opts) {
-    const o = typeof opts === 'string' ? { label: opts } : (opts || {});
-    const r = H('look', { ids: [info.id], frame: info.frame, opts: marshal(o, 0), at: callerLine() });
-    const obj = { look: r.look, caption: r.caption, toString: () => '[look ' + r.look + ': ' + r.caption + ']' };
-    looks.add(obj);
+  function showRef(r) {
+    const obj = { show: r.show, caption: r.caption, toString: () => '[image ' + r.show + ': ' + r.caption + ']' };
+    shows.add(obj);
     return Object.freeze(obj);
+  }
+  function showOf(info, opts) {
+    const o = typeof opts === 'string' ? { label: opts } : (opts || {});
+    return showRef(H('show', { ids: [info.id], frame: info.frame, opts: marshal(o, 0), at: callerLine() }));
   }
 
   function wrap(info) {
@@ -81,13 +101,12 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     const hit = cache.get(key);
     if (hit) return hit;
     const nsCache = new Map();
-    const isValue = info.kind !== 'Image';
+    const isValueNode = info.kind !== 'Image';
     const prim = function (hint) {
       if (hint === 'string') return info.label;
       return H('notAwaited', { info: info, key: null, at: callerLine() });
     };
-    const target = isValue ? {} : {};
-    const p = new Proxy(target, {
+    const p = new Proxy({}, {
       get(t, k) {
         if (typeof k === 'symbol') {
           if (k === Symbol.toPrimitive) return prim;
@@ -98,13 +117,13 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
         if (k === 'toString' || k === 'toJSON') return () => info.label;
         if (k === 'valueOf') return () => prim('number');
         if (PROBES.has(k)) return undefined;
-        if (isValue) return H('notAwaited', { info: info, key: k, at: callerLine() });
+        if (isValueNode) return H('notAwaited', { info: info, key: k, at: callerLine() });
         if (k === 'id') return info.id;
         if (k === 'domain') return info.domain;
         if (k === 'kind') return info.kind;
         if (k === 'width') return info.width;
         if (k === 'height') return info.height;
-        if (k === 'look') return (opts) => lookOf(info, opts);
+        if (k === 'show') return (opts) => showOf(info, opts);
         if (k === 'explain') return () => H('explain', { id: info.id });
         if (AREAS.has(k)) {
           let ns = nsCache.get(k);
@@ -138,26 +157,8 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
         if (T.ops[op]) return (args) => wrap(H('call', { op: op, recv: info, args: marshal(args === undefined ? {} : args, 0), at: callerLine() }));
         return H('unknown', { where: 'namespace', info: info, area: area, key: k });
       },
-      apply(t, self, argv) {
-        return wrap(H('macro', { name: area, recv: info, opts: marshal(argv[0] === undefined ? {} : argv[0], 0), at: callerLine() }));
-      },
+      apply() { return H('macro', { name: area, recv: info, at: callerLine() }); },
       set(t, k, v) { return H('immutable', { info: info, key: area + '.' + String(k), value: marshal(v, 0) }); },
-    });
-  }
-
-  // ---- read-only recipe views ----------------------------------------------------------------
-  function frozenView(obj, path, frameId) {
-    if (obj === null || typeof obj !== 'object') return obj;
-    return new Proxy(obj, {
-      get(t, k) {
-        if (typeof k === 'symbol') return t[k];
-        const v = t[k];
-        if (v !== null && typeof v === 'object') return frozenView(v, path ? path + '.' + k : k, frameId);
-        return v;
-      },
-      set(t, k, v) { return H('immutableRecipe', { frame: frameId, path: path ? path + '.' + String(k) : String(k), value: marshal(v, 0) }); },
-      deleteProperty(t, k) { return H('immutableRecipe', { frame: frameId, path: path ? path + '.' + String(k) : String(k) }); },
-      defineProperty(t, k) { return H('immutableRecipe', { frame: frameId, path: path ? path + '.' + String(k) : String(k) }); },
     });
   }
 
@@ -172,40 +173,128 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     });
   }
 
-  // ---- frames --------------------------------------------------------------------------------
+  // ---- builder values: layer, group, mask, change ---------------------------------------------
+  const METHODS = {
+    layer: ['amount', 'mask', 'blend', 'name', 'enabled', 'params'],
+    group: ['amount', 'mask', 'blend', 'name', 'enabled'],
+    mask: ['add', 'feather', 'invert', 'reads', 'name'],
+    change: [],
+  };
+  function label(kind, data) {
+    if (kind === 'layer') return '[layer ' + data.op + ']';
+    if (kind === 'group') return '[group ' + JS(data.name) + ']';
+    if (kind === 'mask') return '[mask ' + JS(data.name) + ']';
+    const m = data.mutations[0];
+    return '[' + m.op + ' ' + (m.op === 'set' ? m.path : m.id) + ']';
+  }
+  function mkValue(kind, data, trail) {
+    deepFreeze(data);
+    const rec = { kind: kind, data: data, trail: trail };
+    const p = new Proxy({}, {
+      get(t, k) {
+        if (typeof k === 'symbol') {
+          if (k === Symbol.toPrimitive) return () => label(kind, data);
+          return undefined;
+        }
+        if (k === 'kind') return kind;
+        if (k === 'data') return data;
+        if (k === 'toJSON') return () => data;
+        if (k === 'toString') return () => label(kind, data);
+        if (k === 'explain') return () => ({ kind: kind, built: trail, data: data });
+        if (k === 'then') return undefined;
+        if (METHODS[kind].indexOf(k) >= 0) return function () {
+          const at = callerLine();
+          const args = Array.prototype.slice.call(arguments);
+          const step = (at ? 'line ' + at.line + ': ' : '') + k + '(' + args.map((a) => { try { return JS(marshal(a, 0)); } catch (e) { return '?'; } }).join(', ') + ')';
+          return mkValue(kind, H('value', { kind: kind, data: data, method: k, args: marshal(args, 0), at: at }), trail.concat([step]));
+        };
+        if (PROBES.has(k)) return undefined;
+        return H('unknown', { where: label(kind, data), key: k, valid: METHODS[kind].concat(['data', 'kind', 'explain']) });
+      },
+      set(t, k, v) { return H('immutable', { info: null, key: label(kind, data) + '.' + String(k), value: marshal(v, 0) }); },
+      deleteProperty(t, k) { return H('immutable', { info: null, key: label(kind, data) + '.' + String(k) }); },
+      defineProperty(t, k) { return H('immutable', { info: null, key: label(kind, data) + '.' + String(k) }); },
+      ownKeys() { return []; },
+    });
+    values.set(p, rec);
+    return p;
+  }
+  function built(what, arg) {
+    const at = callerLine();
+    arg.what = what;
+    arg.at = at;
+    const step = (at ? 'line ' + at.line + ': ' : '') + what;
+    return { data: H('build', arg), trail: [step] };
+  }
+  function builder(kind, what, mk) {
+    return function () {
+      const b = built(what, mk.apply(null, arguments));
+      return mkValue(kind, b.data, b.trail);
+    };
+  }
+  const layer = builder('layer', 'layer', (op, params) => ({ op: op, params: marshal(params, 0) }));
+  const group = builder('group', 'group', (name, entries) => ({ name: name, entries: marshal(entries, 0) }));
+  const mask = builder('mask', 'mask', (name) => ({ name: name }));
+  const set = builder('change', 'set', (path, value) => ({ path: path, value: marshal(value, 0) }));
+  const insert = builder('change', 'insert', (c, id, item, pos) => ({ coll: c, id: id, item: marshal(item, 0), pos: pos }));
+  const remove = builder('change', 'remove', (id) => ({ id: id }));
+  const move = builder('change', 'move', (id, to) => ({ id: id, to: marshal(to, 0) }));
+  const coll = function (items) { return deepFreeze(built('coll', { items: marshal(items, 0) }).data); };
+
+  // ---- read-only document views --------------------------------------------------------------
+  function frozenView(obj, path, frameId) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    return new Proxy(obj, {
+      get(t, k) {
+        if (typeof k === 'symbol') return t[k];
+        const v = t[k];
+        if (v !== null && typeof v === 'object') return frozenView(v, path ? path + '.' + k : k, frameId);
+        return v;
+      },
+      set(t, k, v) { return H('immutableDoc', { frame: frameId, path: path ? path + '.' + String(k) : String(k), value: marshal(v, 0) }); },
+      deleteProperty(t, k) { return H('immutableDoc', { frame: frameId, path: path ? path + '.' + String(k) : String(k) }); },
+      defineProperty(t, k) { return H('immutableDoc', { frame: frameId, path: path ? path + '.' + String(k) : String(k) }); },
+    });
+  }
+
+  // ---- frames and what-ifs -------------------------------------------------------------------
   let BOUND = null;
   let frameCache = new Map();
+  function changeArg(c) { return marshal(c, 0); }
+  function viewObj(v, frame, extra) {
+    const key = v.key;
+    let docCache;
+    const o = {
+      id: v.frame, kind: v.kind,
+      get: (path) => H('get', { view: key, path: path }),
+      cut: (name, opts) => wrap(H('cut', { view: key, name: String(name), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() })),
+      with: (c) => viewObj(H('with', { view: key, change: changeArg(c), at: callerLine() }), null, null),
+      explain: () => H('explainView', { view: key, at: callerLine() }),
+      toString: () => frame ? '[frame ' + v.frame + ']' : '[what-if of ' + v.frame + ']',
+    };
+    Object.defineProperty(o, 'doc', { enumerable: true, get() { if (docCache === undefined) docCache = frozenView(H('doc', { view: key }), '', v.frame); return docCache; } });
+    for (const c of T.cuts) o[c] = (opts) => wrap(H('cut', { view: key, name: c, opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() }));
+    if (frame) {
+      o.name = frame.name;
+      o.propose = (c, opts) => receipt(H('propose', { frame: v.frame, change: changeArg(c), why: opts && opts.why, label: opts && opts.label, at: callerLine() }));
+      o.why = (path) => H('why', { frame: v.frame, path: path });
+      o.pending = () => H('pending', { frame: v.frame });
+    }
+    if (extra) for (const k of Object.keys(extra)) o[k] = extra[k];
+    const g = guarded(frame ? 'frame' : 'what-if', o);
+    viewKeys.set(g, key);
+    return g;
+  }
   function frameObj(id) {
     const hit = frameCache.get(id);
     if (hit) return hit;
     const f = H('frame', { id: id });
-    const vocab = (name, opts) => wrap(H('vocab', { name: name, frame: id, opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() }));
-    const editFn = function (changes, opts) { return receipt(H('edit', { frame: id, kind: 'set', changes: marshal(changes, 0), why: opts && opts.why, at: callerLine() })); };
-    editFn.exposure = guarded('frame.edit.exposure', {
-      add: (e, opts) => receipt(H('edit', { frame: id, kind: 'exposure.add', exposure: marshal(e, 0), why: opts && opts.why, at: callerLine() })),
-      remove: (eid, opts) => receipt(H('edit', { frame: id, kind: 'exposure.remove', id: eid, why: opts && opts.why, at: callerLine() })),
-    });
-    editFn.mask = guarded('frame.edit.mask', {
-      set: (mid, mask, opts) => receipt(H('edit', { frame: id, kind: 'mask.set', id: mid, mask: marshal(mask, 0), why: opts && opts.why, at: callerLine() })),
-    });
-    const obj = guarded('frame', {
-      id: f.id, name: f.name, kind: f.kind,
-      recipe: frozenView(f.recipe, '', id),
-      source: () => vocab('source'),
-      scan: () => vocab('scan'),
-      negative: () => vocab('negative'),
-      print: (opts) => vocab('print', opts),
-      display: () => vocab('display'),
-      edit: editFn,
-      why: (path) => H('why', { frame: id, path: path }),
-      pending: () => H('pending', { frame: id }),
-      toString: () => '[frame ' + f.id + ']',
-    });
+    const obj = viewObj({ key: f.view, frame: f.id, kind: f.kind }, f, null);
     frameCache.set(id, obj);
     return obj;
   }
   function receipt(r) {
-    return Object.freeze({ id: r.id, status: r.status, mutations: r.mutations, preview: wrap(r.preview), note: r.note });
+    return Object.freeze({ id: r.id, status: r.status, changes: r.changes, preview: viewObj(r.preview, null, null), note: r.note });
   }
 
   // ---- globals -------------------------------------------------------------------------------
@@ -225,28 +314,21 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     search: (text) => H('docs', { op: 'search', text: String(text) }),
     read: (id, opts) => H('docs', { op: 'read', id: String(id), section: opts && opts.section }),
   }));
-  // ---- cb.looks (CHB-021): the studio's looks, resolved per frame into proposed edits (one batch, one card) ----
-  const whatIfs = new WeakMap();
+  // ---- cb.looks (CHB-021): the studio's named looks, resolved per frame into proposed edits (one batch, one card) ----
   function toIds(to) {
     if (Array.isArray(to)) return to.map((x) => (x && typeof x === 'object' && typeof x.id === 'string' ? x.id : x));
-    if (to && typeof to === 'object' && typeof to.id === 'string' && !('roll' in to)) return to.id;
+    if (to && typeof to === 'object' && typeof to.id === 'string') return to.id;
     return to;
   }
-  function lookRef(x) {
-    if (x && typeof x === 'object' && whatIfs.has(x)) return { whatIf: whatIfs.get(x) };
-    if (typeof x === 'string') return { frame: x };
-    if (x && typeof x === 'object' && typeof x.id === 'string' && !isHandle(x)) return { frame: x.id };
+  function viewRef(x) {
+    if (x && typeof x === 'object' && viewKeys.has(x)) return { __frame: viewKeys.get(x) };
+    if (typeof x === 'string') return { __frame: '@' + x };
     return H('argType', { what: 'cb.looks.diff', expect: 'two frames or what-ifs: cb.looks.diff(frame, cb.looks.whatIf(frame, name))' });
   }
   const looksObj = guarded('cb.looks', Object.freeze({
     list: () => H('looks.list'),
     apply: (name, params, opts) => {
       const o = Object.assign({}, opts || {});
-      if (o.to && typeof o.to === 'object' && !Array.isArray(o.to) && typeof o.to.where === 'function') {
-        o.where = o.to.where;
-        o.to = Object.assign({}, o.to);
-        delete o.to.where;
-      }
       if (typeof o.where === 'function') {
         const pred = o.where;
         const cands = H('looks.targets', { to: marshal(o.to === undefined ? 'all' : toIds(o.to), 0) });
@@ -257,13 +339,14 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     },
     whatIf: (f, name, params, opts) => {
       const r = H('looks.whatIf', { frame: frameIdOf(f), name: String(name), params: marshal(params === undefined ? {} : params, 0), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() });
-      const h = wrap(r.preview);
-      const obj = Object.freeze({ look: r.look, label: r.label, frame: r.frame, diff: r.diff, mutations: r.mutations, skipped: r.skipped, print: () => h, toString: () => '[what-if ' + r.label + ' on ' + r.frame + ']' });
-      whatIfs.set(obj, r.key);
-      return obj;
+      return viewObj(r, null, { look: r.look, label: r.label, diff: r.diff, changes: r.changes, skipped: r.skipped });
     },
-    diff: (a, b) => H('looks.diff', { a: lookRef(a), b: lookRef(b) }),
+    diff: (a, b) => H('looks.diff', { a: viewRef(a), b: viewRef(b) }),
   }));
+  function compare(pair, lbl) {
+    if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(isHandle)) return H('argType', { what: 'cb.compare', expect: 'two image handles: cb.compare([a, b], label)' });
+    return showRef(H('show', { ids: pair.map((h) => handles.get(h).id), frame: handles.get(pair[0]).frame, opts: { label: lbl === undefined ? 'compare' : String(lbl) }, at: callerLine() }));
+  }
   const cbObj = {
     version: T.version,
     looks: looksObj,
@@ -271,18 +354,16 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     frame: (id) => frameObj(H('frameId', { id: id })),
     help: (name) => H('help', { name: name === undefined ? null : (isHandle(name) ? handles.get(name).op : String(name)) }),
     docs: docs,
-    explain: (h) => isHandle(h) ? H('explain', { id: handles.get(h).id }) : H('unknown', { where: 'cb.explain', key: 'argument', valid: ['a handle'] }),
-    compare: (pair, label) => {
-      if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(isHandle)) return H('argType', { what: 'cb.compare', expect: 'two image handles: cb.compare([a, b], label)' });
-      const r = H('look', { ids: pair.map((h) => handles.get(h).id), frame: handles.get(pair[0]).frame, opts: { label: label === undefined ? 'compare' : String(label) }, at: callerLine() });
-      const obj = { look: r.look, caption: r.caption, toString: () => '[look ' + r.look + ': ' + r.caption + ']' };
-      looks.add(obj);
-      return Object.freeze(obj);
+    explain: (x) => {
+      if (isHandle(x)) return H('explain', { id: handles.get(x).id });
+      if (isValue(x) || (x && typeof x === 'object' && viewKeys.has(x))) return x.explain();
+      return H('unknown', { where: 'cb.explain', key: 'argument', valid: ['a handle', 'a frame or what-if', 'a layer, group, mask or change'] });
     },
-    testStrip: (f, opts) => wrap(H('vocab', { name: 'testStrip', frame: frameIdOf(f), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() })),
-    ringAround: (f, opts) => wrap(H('vocab', { name: 'ringAround', frame: frameIdOf(f), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() })),
+    compare: compare,
+    testStrip: (f, opts) => wrap(H('strip', { name: 'testStrip', frame: frameIdOf(f), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() })),
+    ringAround: (f, opts) => wrap(H('strip', { name: 'ringAround', frame: frameIdOf(f), opts: marshal(opts === undefined ? {} : opts, 0), at: callerLine() })),
   };
-  Object.defineProperty(cbObj, 'mode', { get: () => H('mode', { frame: BOUND }), enumerable: true });
+  Object.defineProperty(cbObj, 'mode', { get: () => H('mode', {}), enumerable: true });
   function frameIdOf(f) {
     if (f && typeof f === 'object' && typeof f.id === 'string' && !isHandle(f)) return f.id;
     if (typeof f === 'string') return f;
@@ -298,6 +379,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
         const a = arguments[i];
         if (typeof a === 'string') parts.push(a);
         else if (isHandle(a)) parts.push(handles.get(a).label);
+        else if (isValue(a)) parts.push(label(values.get(a).kind, values.get(a).data));
         else { try { parts.push(JS(marshal(a, 0))); } catch (e) { parts.push(String(a)); } }
       }
       host('log', JS({ level: lvl, text: parts.join(' '), at: callerLine() }));
@@ -321,6 +403,14 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
   def('units', units);
   def('mem', mem);
   def('console', Object.freeze(consoleObj));
+  def('layer', layer);
+  def('group', group);
+  def('mask', mask);
+  def('coll', coll);
+  def('set', set);
+  def('insert', insert);
+  def('remove', remove);
+  def('move', move);
   Object.defineProperty(G, 'frame', {
     get() { if (BOUND === null) return H('noFrame', {}); return frameObj(BOUND); },
     set(v) { H('immutable', { info: null, key: 'frame', value: null }); },
@@ -335,8 +425,10 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
     if (typeof v === 'bigint') return String(v);
     if (typeof v === 'symbol') return String(v);
     if (isHandle(v)) return { __h: handles.get(v).label };
+    if (isValue(v)) return shape(values.get(v).data, depth, seen);
     if (typeof v === 'function') return { __fn: describeFn(v.name || 'function', v) };
-    if (looks.has(v)) return { __look: v.look, caption: v.caption };
+    if (shows.has(v)) return { __show: v.show, caption: v.caption };
+    if (viewKeys.has(v)) return { __h: String(v) };
     if (depth > 12) return '[too deep]';
     if (seen.indexOf(v) >= 0) return '[circular]';
     seen.push(v);
@@ -378,6 +470,7 @@ export const PRELUDE = String.raw`(function (host, hostEval) {
         const v = d.value;
         if (typeof v === 'function') out.push({ key: k, kind: 'function', src: describeFn(k, v).src });
         else if (isHandle(v)) out.push({ key: k, kind: 'handle', label: handles.get(v).label });
+        else if (isValue(v)) out.push({ key: k, kind: 'handle', label: label(values.get(v).kind, values.get(v).data) });
         else if (Array.isArray(v)) out.push({ key: k, kind: 'array', n: v.length });
         else if (v === null) out.push({ key: k, kind: 'null' });
         else out.push({ key: k, kind: typeof v });

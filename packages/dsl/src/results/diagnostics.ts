@@ -59,7 +59,7 @@ export function toDiagnostic(e: GuestError, evalN: number, topLevelNames: Readon
     if (topLevelNames.has(name)) {
       return { code: 'ReferenceError', message: e.message + older, hint: 'top-level const/let do not survive between evals; keep values on mem', fix: `mem.${name}`, ...where };
     }
-    return { code: 'ReferenceError', message: e.message + older, hint: 'keep values between evals on mem; the globals are cb, frame, units, mem and console', ...where };
+    return { code: 'ReferenceError', message: e.message + older, hint: 'keep values between evals on mem; the globals are cb, frame, units, mem, console and the builders layer, group, mask, coll, set, insert, remove, move', ...where };
   }
   return { code: e.name || 'Error', message: e.message + older, ...where };
 }

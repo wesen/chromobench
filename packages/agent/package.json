@@ -10,7 +10,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.123.0",
     "@chromobench/contract": "workspace:*",
-    "@chromobench/dsl": "workspace:*"
+    "@chromobench/dsl": "workspace:*",
+    "@chromobench/values": "workspace:*"
   },
   "devDependencies": {
     "@chromobench/engine-mock": "workspace:*"

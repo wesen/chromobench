@@ -1,6 +1,6 @@
 // Deterministic YAML for the agent (guide §5.10). No dependency: the format is part of the
 // contract with the model, so every byte is decided here. Values arrive "shaped" by the prelude:
-// handles as {__h}, functions as {__fn}, looks as {__look}, non-finite numbers as {__num},
+// handles as {__h}, functions as {__fn}, shown images as {__show}, non-finite numbers as {__num},
 // undefined as {__undef}.
 //
 // Compact tables follow goja-cv pkg/cvsession/tables.go: an array of ≥ 2 flat records renders as
@@ -36,7 +36,7 @@ function special(v: Record<string, unknown>): string | undefined {
   if ('__h' in v) return fmtStr(String(v['__h']));
   if ('__num' in v) return String(v['__num']);
   if ('__undef' in v) return '~';
-  if ('__look' in v) return fmtStr(`[look ${String(v['__look'])}: ${String(v['caption'] ?? '')}]`);
+  if ('__show' in v) return fmtStr(`[image ${String(v['__show'])}: ${String(v['caption'] ?? '')}]`);
   if ('__err' in v) return fmtStr(String(v['__err']));
   if ('__fn' in v) {
     const f = v['__fn'] as { name: string; src: string };

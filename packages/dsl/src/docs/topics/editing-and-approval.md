@@ -1,42 +1,57 @@
 # Editing and approval
 
-## Proposals, not changes
+## Changes
 
-Building nodes never changes anything. To change the recipe, `frame.edit` proposes changes by recipe path. They are submitted together when the eval succeeds, as one unit the photographer can undo. In ask mode they wait for approval; the next context block reports the outcome.
+A change is one of four mutations of the document: `set(path, value)`, `insert(coll, id, item, at?)`, `remove(id)`, `move(id, { into, at })`. Several changes are an array, applied in order. Paths start at an item id (`main.params.time_s`) or at a root key (`stages.darkroom.medium.grade`).
 
 ```js
-const e = frame.edit({ 'print.enlarger.time_s': 12.6 }, { why: 'the grey card prints too light' })
-return { id: e.id, status: e.status, note: e.note }
+return [set('main.params.time_s', 12), remove('b1')]
+```
+
+## Proposals, not changes
+
+Building values and what-ifs never changes anything. `frame.propose(change, { why })` checks the change at once and submits it when the eval succeeds, as one unit the photographer can undo. In ask mode it waits for approval; the next context block reports the outcome.
+
+```js
+const e = frame.propose(set('main.params.time_s', 12.6), { why: 'the grey card prints too light' })
+return { id: e.id, status: e.status, changes: e.changes, note: e.note }
 ```
 
 ## The receipt's preview
 
-`frame.recipe` and `frame.print()` keep showing the state at the start of the eval. To see an edit's effect, use `receipt.preview`:
+`frame` keeps showing the document as the eval started. The receipt's `preview` is a what-if with the eval's proposals so far:
 
-```js looks=1
-const e = frame.edit({ 'print.lights.logH': units.pt([2, 0, 0]) }, { why: 'a little warmer' })
-e.preview.look('proposed')
-return (await e.preview.measure.densitometer({ at: [48, 32] })).D
+```js shows=1
+const e = frame.propose(set('lights.params.logH', units.pt([2, 0, 0])), { why: 'a little warmer' })
+e.preview.print().show('proposed')
+return (await e.preview.print().measure.densitometer({ at: [48, 32] })).D
+```
+
+## Layers, groups and masks
+
+Layers, groups and masks are values: `layer(op, params)`, `group(name, { id: entry })`, `mask(name).add(…)`, each with chain methods that return a new value. A dodge through a feathered gradient is a mask in the library and a layer that uses it:
+
+```js
+const sky = mask('Sky').add('g', 'linear', { from: [48, 0], to: [48, 40] }).feather(0.4)
+const e = frame.propose([insert('masks', 'sky', sky), insert('stages.darkroom.stack', 'd1', layer('dodge', { stops: 0.5 }).mask('sky'))], { why: 'hold the sky back' })
+return e.changes
+```
+
+A group fades or masks several entries as one:
+
+```js
+const g = group('Edges', { b1: layer('burn', { stops: 0.3 }), b2: layer('burn', { stops: 0.6 }) }).amount(0.5)
+return (await frame.with(insert('stages.darkroom.stack', 'edges', g)).print().measure.stats()).mean
 ```
 
 ## Who set what
 
 ```js
-return frame.why('print.enlarger.time_s')
+return frame.why('main.params.time_s')
 ```
 
 ```js
 return frame.pending().length
-```
-
-## Exposures and masks
-
-A dodge or burn is an exposure through a mask. A mask handle passed to `frame.edit.exposure.add` is stored with the frame.
-
-```js
-const sky = frame.source().mask.gradient({ from: [48, 0], to: [48, 40] }).mask.feather({ radius_px: 8 })
-const e = frame.edit.exposure.add({ id: 'sky', kind: 'dodge', mask: sky, stops: 0.5 }, { why: 'hold the sky back' })
-return e.mutations.map((m) => m.op)
 ```
 
 ## Mistakes
@@ -44,19 +59,25 @@ return e.mutations.map((m) => m.op)
 A wrong path gives the corrected call:
 
 ```js error=E_PATH
-frame.edit({ 'print.light.logH': [0.1, 0, 0] })
+frame.propose(set('main.param.time_s', 12))
 ```
 
-Assigning to the recipe or a handle changes nothing and says how to edit instead:
+Ids are unique in the whole document; a taken id is refused with a free one:
+
+```js error=E_MUTATION
+frame.propose(insert('stages.darkroom.stack', 'main', layer('burn', { stops: 1 })))
+```
+
+Assigning to the document or a handle changes nothing and says how to propose instead:
 
 ```js error=E_IMMUTABLE
-frame.recipe.print.enlarger.time_s = 12
+frame.doc.stages.darkroom.medium.grade = 3
 ```
 
-If the eval fails, its edits are dropped:
+If the eval fails, its proposals are dropped:
 
 ```js error=E_NOT_AWAITED
-frame.edit({ 'print.grade': 3 })
+frame.propose(set('stages.darkroom.medium.grade', 3))
 const v = frame.print().measure.stats()
 return v.mean
 ```

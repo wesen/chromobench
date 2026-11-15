@@ -2,7 +2,7 @@
 
 ## Densitometer
 
-`h.measure.densitometer({ at, aperture_px })` reads densities at a point in source pixels. On a print it also gives the visual density.
+`h.measure.densitometer({ at, aperture_px })` reads densities at a point in document pixels. On a print it also gives the visual density.
 
 ```js
 const d = await frame.print().measure.densitometer({ at: [48, 32], aperture_px: 15 })
@@ -38,7 +38,8 @@ Measurements run concurrently under `Promise.all`.
 
 ```js
 const at = [48, 32]
-const [a, b] = await Promise.all([frame.print({ time_s: 8 }).measure.densitometer({ at }), frame.print({ time_s: 16 }).measure.densitometer({ at })])
+const t = (s) => frame.with(set('main.params.time_s', s)).print().measure.densitometer({ at })
+const [a, b] = await Promise.all([t(8), t(16)])
 return { t8: a.visual, t16: b.visual }
 ```
 
@@ -54,5 +55,5 @@ return await mem.greyD(frame.print())
 ```
 
 ```js
-return await mem.greyD(frame.print({ filtration: { c: 0, m: 0, y: 10 } }))
+return await mem.greyD(frame.with(set('main.params.filtration', { c: 0, m: 0, y: 10 })).print())
 ```

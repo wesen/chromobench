@@ -1,27 +1,22 @@
 // The chat step loop on a scripted model, the DSL session in an in-thread worker and engine-mock (guide §8 "Chat loop
 // tests"): tool round trips with an append-only history, approvals inside the step, Stop, cut tool calls, refusals,
-// the step limit, mode changes as appended system messages, revert, bad tool input and looks as image blocks.
+// the step limit, mode changes as appended system messages, revert, bad tool input and images as image blocks.
 import { describe, expect, it } from 'vitest';
-import type { AgentMode } from '@chromobench/contract';
 import { ChatSession, ScriptedModel, lastToolResult, type ChatHost, type MessageParam, type ModelRequest } from '../src/index.ts';
-import { FRAME, page, type Page } from './helpers.ts';
+import { FRAME, page, param, type Page } from './helpers.ts';
 
 const MEASURE = `const d = await frame.print().measure.densitometer({ at: [48, 32], aperture_px: 15 })
 return { D: d.D }`;
-const EDIT = `frame.edit({ 'print.enlarger.time_s': 12.6 }, { why: 'a third of a stop darker' })
+const EDIT = `frame.propose(set('main.params.time_s', 12.6), { why: 'a third of a stop darker' })
 return 'proposed'`;
+const TIME = 'set main.params.time_s = 12.6 (was 10)';
 
 function hostOf(p: Page): ChatHost {
-  let mode: AgentMode = p.log.mode;
   return {
     evaluate: (req, signal) => p.dsl.eval(req, { signal }),
     currentFrame: () => FRAME,
-    frames: p.frames,
-    mode: () => mode,
-    setMode: (m) => {
-      mode = m;
-      p.log.setMode(m);
-    },
+    docs: p.docs,
+    setMode: (m) => p.docs.setMode(m),
   };
 }
 
@@ -92,33 +87,38 @@ describe('ChatSession', () => {
     await until(() => chat.state.status === 'waiting');
     const step = chat.state.items.find((i) => i.kind === 'step')!;
     if (step.kind !== 'step') throw new Error('no step');
-    expect(step.approval?.changes.map((c) => c.text)).toEqual(['print.enlarger.time_s 10 → 12.6']);
-    expect(p.log.committed.print.enlarger.time_s).toBe(10);
+    expect(step.approval?.changes.map((c) => c.text)).toEqual([TIME]);
+    expect(param(p, 'main', 'time_s')).toBe(10);
     chat.decide(step.id, step.approval!.seqs, 'approve');
     await turn;
-    expect(p.log.committed.print.enlarger.time_s).toBe(12.6);
-    expect(p.log.why('print.enlarger.time_s').at(-1)).toMatchObject({ by: 'agent', approvedBy: 'user' });
-    expect(lastToolResult(model.requests[1]!)).toContain('[the photographer approved 1 change(s): print.enlarger.time_s 10 → 12.6]');
+    expect(param(p, 'main', 'time_s')).toBe(12.6);
+    expect(p.docs.log().why(FRAME, 'main.params.time_s')).toMatchObject({ by: 'agent', approvedBy: 'user' });
+    expect(lastToolResult(model.requests[1]!)).toContain(`[the photographer approved 1 change(s): ${TIME}]`);
     expect(step.approval?.outcome).toEqual({ approved: step.approval!.seqs, rejected: [], pending: [] });
     p.dsl.dispose();
   });
 
-  it('partial approval: the unticked change is rejected; a decision in another panel also resumes the step', async () => {
+  it('an unticked step is rejected; a stale approval shows its problem; a decision in another panel resumes the step', async () => {
     const p = await page({ mode: 'ask' });
-    const two = `frame.edit({ 'print.enlarger.time_s': 12.6 })\nframe.edit({ 'print.lights.logH': [0.05, 0, 0] })\nreturn 2`;
+    const two = `frame.propose([set('main.params.time_s', 12.6), set('lights.params.logH', [0.05, 0, 0])])\nreturn 2`;
     const model = new ScriptedModel([{ evals: [{ code: two }, { code: EDIT }] }, { text: 'ok' }]);
     const chat = chatOf(p, model);
     const turn = chat.send('two changes');
     await until(() => chat.state.status === 'waiting');
     const s1 = chat.state.items.find((i) => i.kind === 'step')! as Extract<(typeof chat.state.items)[number], { kind: 'step' }>;
-    chat.decide(s1.id, [s1.approval!.seqs[1]!], 'approve');
+    // one transaction: two changes on one card
+    expect(s1.approval!.changes.map((c) => c.text)).toEqual([TIME, 'set lights.params.logH = [0.05, 0, 0] (was [0, 0, 0]) (+2 / +0 / +0 pt)']);
+    chat.decide(s1.id, [], 'approve'); // nothing ticked: the step is rejected
     await until(() => (chat.state.items.filter((i) => i.kind === 'step')[1] as { status?: string } | undefined)?.status === 'waiting');
-    expect(p.log.committed.print.lights.logH).toEqual([0.05, 0, 0]);
-    expect(p.log.committed.print.enlarger.time_s).toBe(10);
-    expect(s1.approval?.outcome?.rejected).toEqual([s1.approval!.seqs[0]]);
-    // the second step's card is decided in the studio's approvals panel instead (EditLog.reject directly)
+    expect(s1.approval?.outcome?.rejected).toEqual(s1.approval!.seqs);
+    expect(param(p, 'main', 'time_s')).toBe(10);
+    // the photographer overtakes the second proposal; approving it is refused as stale and the card says why
     const s2 = chat.state.items.filter((i) => i.kind === 'step')[1]! as typeof s1;
-    p.log.reject(s2.approval!.seqs);
+    p.userEdit({ op: 'set', path: 'main.params.time_s', value: 11 });
+    chat.decide(s2.id, s2.approval!.seqs, 'approve');
+    expect(s2.approval?.problems?.[0]?.code).toBe('E_STALE');
+    // then it is decided in the studio's approvals panel instead (the log directly)
+    p.docs.change((l) => l.reject(s2.approval!.seqs));
     await turn;
     expect(lastToolResult(model.requests[1]!)).toContain('rejected 1');
     p.dsl.dispose();
@@ -133,7 +133,7 @@ describe('ChatSession', () => {
     const s = chat.state.items.find((i) => i.kind === 'step')!;
     chat.decide(s.id, [], 'later');
     await turn;
-    expect(p.log.pending()).toHaveLength(1);
+    expect(p.docs.log().pending()).toHaveLength(1);
     expect(lastToolResult(model.requests[1]!)).toContain('1 still pending (they will decide later)');
     p.dsl.dispose();
   });
@@ -152,7 +152,7 @@ describe('ChatSession', () => {
     const model = new ScriptedModel([{ evals: [{ code: EDIT }], stop: 'max_tokens', cutAt: 20 }, { text: 'ok' }]);
     const chat = chatOf(p, model);
     await chat.send('darker');
-    expect(p.log.entries).toHaveLength(0);
+    expect(p.docs.log().entries).toHaveLength(0);
     expect(chat.state.items.at(-1)).toMatchObject({ kind: 'notice', text: 'The reply was cut off mid-code; the cut eval was not run.' });
     await chat.send('try again');
     const next = userBlocks(model.requests[1]!.messages.at(-1));
@@ -178,7 +178,7 @@ describe('ChatSession', () => {
 
   it('Stop during an eval interrupts it; the stopped tool_result is carried into the next message', async () => {
     const p = await page({ mode: 'auto' });
-    const slow = `frame.edit({ 'print.enlarger.time_s': 14 })\nfor (let i = 0; ; i++) await frame.print({ time_s: 10 + (i % 5) }).measure.densitometer({ at: [48, 32] })`;
+    const slow = `frame.propose(set('main.params.time_s', 14))\nfor (let i = 0; ; i++) await frame.with(set('main.params.time_s', 10 + (i % 5))).print().measure.densitometer({ at: [48, 32] })`;
     const model = new ScriptedModel([{ evals: [{ code: slow }] }, { text: 'ok' }]);
     const chat = chatOf(p, model);
     const turn = chat.send('loop');
@@ -186,7 +186,7 @@ describe('ChatSession', () => {
     await new Promise((r) => setTimeout(r, 50));
     chat.stop();
     await turn;
-    expect(p.log.entries).toHaveLength(0);
+    expect(p.docs.log().entries).toHaveLength(0);
     const step = chat.state.items.find((i) => i.kind === 'step')!;
     expect(step.kind === 'step' && step.status).toBe('stopped');
     await chat.send('what happened?');
@@ -214,13 +214,13 @@ describe('ChatSession', () => {
     const chat = chatOf(p, model);
     await chat.send('hi');
     chat.setMode('auto');
-    expect(p.log.mode).toBe('auto');
+    expect(p.docs.mode()).toBe('auto');
     await chat.send('darker, go ahead');
     expectAppendOnly(model.requests);
     const msgs = model.requests[1]!.messages;
     expect(msgs.at(-2)!.role).toBe('user');
     expect(msgs.at(-1)).toEqual({ role: 'system', content: 'The photographer set the agent to auto mode: edits apply at once (they stay undoable).' });
-    expect(p.log.committed.print.enlarger.time_s).toBe(12.6); // auto: applied, no card
+    expect(param(p, 'main', 'time_s')).toBe(12.6); // auto: applied, no card
     p.dsl.dispose();
   });
 
@@ -230,10 +230,12 @@ describe('ChatSession', () => {
     const chat = chatOf(p, model);
     await chat.send('darker');
     const step = chat.state.items.find((i) => i.kind === 'step')!;
-    expect(p.log.committed.print.enlarger.time_s).toBe(12.6);
+    expect(param(p, 'main', 'time_s')).toBe(12.6);
     expect(chat.revertStep(step.id)).toBe(true);
-    expect(p.log.committed.print.enlarger.time_s).toBe(10);
-    expect(p.log.why('print.enlarger.time_s').at(-1)!.by).toBe('user');
+    expect(param(p, 'main', 'time_s')).toBe(10);
+    expect(p.docs.log().why(FRAME, 'main.params.time_s')).toMatchObject({ by: 'user', label: 'revert agent step' });
+    expect(p.docs.log().steps).toHaveLength(2); // the agent's step and the revert: both undoable
+    expect(chat.revertStep(step.id)).toBe(false);
     await chat.send('ok?');
     expect(JSON.stringify(model.requests[2]!.messages.at(-1))).toContain(`the photographer reverted eval ${step.id}`);
     p.dsl.dispose();
@@ -252,9 +254,9 @@ describe('ChatSession', () => {
     p.dsl.dispose();
   });
 
-  it('looks travel as image blocks inside the tool_result and are counted', async () => {
+  it('shown images travel as image blocks inside the tool_result and are counted', async () => {
     const p = await page();
-    const model = new ScriptedModel([{ evals: [{ code: "frame.print().look('print')\nreturn 1" }] }, { text: 'ok' }]);
+    const model = new ScriptedModel([{ evals: [{ code: "frame.print().show('print')\nreturn 1" }] }, { text: 'ok' }]);
     const chat = chatOf(p, model);
     await chat.send('show me');
     const tr = userBlocks(model.requests[1]!.messages.at(-1))[0] as unknown as { content: { type: string; source?: { media_type: string; data: string } }[] };

@@ -15,11 +15,8 @@ export interface UsageReport {
   unusedOps: string[];
 }
 
-/** Vocabulary counter keys used by the host → VOCABULARY names. */
-const VOCAB_KEYS: Record<string, string> = {
-  source: 'frame.source', scan: 'frame.scan', negative: 'frame.negative', print: 'frame.print', display: 'frame.display',
-  'neg.print': 'neg.print', 'frame.edit': 'frame.edit', testStrip: 'cb.testStrip', ringAround: 'cb.ringAround',
-};
+/** The VOCABULARY words the host counts (its counter keys are their names). */
+const COUNTED = new Set(VOCABULARY.filter((v) => v.counted).map((v) => v.name));
 
 const sorted = (m: Map<string, number>): [string, number][] => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
@@ -33,8 +30,7 @@ export function usageReport(traces: readonly EvalTrace[]): UsageReport {
     }
     return m;
   };
-  const vocab = new Map<string, number>();
-  for (const [k, n] of count((t) => t.vocabulary)) vocab.set(VOCAB_KEYS[k] ?? k, (vocab.get(VOCAB_KEYS[k] ?? k) ?? 0) + n);
+  const vocab = count((t) => t.vocabulary);
   const ops = count((t) => t.ops);
   return {
     evals: traces.length,
@@ -42,7 +38,7 @@ export function usageReport(traces: readonly EvalTrace[]): UsageReport {
     errors: sorted(count((t) => t.errors)),
     warnings: sorted(count((t) => t.warnings)),
     vocabulary: sorted(vocab),
-    unusedVocabulary: VOCABULARY.map((v) => v.name).filter((n) => !vocab.has(n) && Object.values(VOCAB_KEYS).includes(n)),
+    unusedVocabulary: [...COUNTED].filter((n) => !vocab.has(n)),
     ops: sorted(ops),
     unusedOps: dslOps().map((o) => o.name).filter((n) => !ops.has(n)),
   };

@@ -1,5 +1,5 @@
 // A minimal PNG encoder (8-bit RGB, stored deflate blocks) and a 3×5 digit font for burning the
-// look number into a corner. No dependency, same bytes in Node and the browser.
+// image number into a corner. No dependency, same bytes in Node and the browser.
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);

@@ -1,21 +1,22 @@
-// Looks (guide §5.10): rendered after the eval on the host. Every look carries the numbers it
-// shows: measure.stats over its region, the measure.patches table for darkroom pictures, the
+// Shown images (guide §5.10; h.show, cb.compare): rendered after the eval on the host. Every image carries the
+// numbers it shows: measure.stats over its region, the measure.patches table for darkroom pictures, the
 // densitometer reading for an `at` option. Non-display domains go through a fixed transform:
-// print-xyz through output.display with the frame's rendering, everything else as greyscale.
-import { DOMAINS, acceptsDomain, getOp, normaliseShape, type Box, type FrameRecipe, type Graph, type ImageInfo, type Look, type Node } from '@chromobench/contract';
-import type { LookRequest } from '../host.ts';
+// print-xyz through output.display with the frame document's rendering, everything else as greyscale.
+// (The contract still calls a shown image a `Look`: EvalResult.looks.)
+import { DOMAINS, acceptsDomain, getOp, normaliseShape, type Box, type Document, type Graph, type ImageInfo, type Look, type Node } from '@chromobench/contract';
+import type { ShowRequest } from '../host.ts';
 import { burnNumber, encodePng } from './png.ts';
 import { fmtNum } from './yaml.ts';
 
 export const LOOK_LONG_SIDE = 750;
 export const LOOK_MAX_SIDE = 1568;
 
-export interface LookEngine {
+export interface ShowEngine {
   graph: Graph;
   intern(op: string, inputs: string[], args: Record<string, unknown>): Node;
   evaluate(id: string, region: Box, scale: number): Promise<{ data: ArrayLike<number>; width: number; height: number; channels: number }>;
   measure(id: string): Promise<Record<string, unknown>>;
-  recipe(frame: string | null): FrameRecipe | null;
+  doc(frame: string | null): Document | null;
 }
 
 interface Rendered {
@@ -54,7 +55,7 @@ function patchGrid(n: Node): { cols: number; rows: number } | null {
   return null;
 }
 
-async function renderOne(e: LookEngine, id: string, req: LookRequest, longSide: number): Promise<Rendered> {
+async function renderOne(e: ShowEngine, id: string, req: ShowRequest, longSide: number): Promise<Rendered> {
   const node = e.graph.get(id)!;
   const info = node.info as ImageInfo;
   const full: Box = { x: 0, y: 0, w: info.width, h: info.height };
@@ -64,8 +65,8 @@ async function renderOne(e: LookEngine, id: string, req: LookRequest, longSide: 
   let shown = node;
   let display = info.domain === 'display-rgb';
   if (info.domain === 'print-xyz') {
-    const r = e.recipe(req.frame);
-    shown = e.intern('output.display', [node.id], r ? { space: 'srgb', rendering: r.view.output.rendering, knee: r.view.output.display.knee.method } : { space: 'srgb' });
+    const d = e.doc(req.frame);
+    shown = e.intern('output.display', [node.id], d ? { space: 'srgb', rendering: d.output.rendering, knee: d.output.display.knee.method } : { space: 'srgb' });
     display = true;
   }
   const img = await e.evaluate(shown.id, region, scale);
@@ -87,7 +88,7 @@ async function renderOne(e: LookEngine, id: string, req: LookRequest, longSide: 
   return { rgb, width: img.width, height: img.height, numbers, node, region, scale };
 }
 
-export async function renderLook(e: LookEngine, req: LookRequest): Promise<Look> {
+export async function renderShow(e: ShowEngine, req: ShowRequest): Promise<Look> {
   const size = typeof req.opts['size'] === 'number' ? Math.min(LOOK_MAX_SIDE, Math.max(64, req.opts['size'] as number)) : LOOK_LONG_SIDE;
   const parts: Rendered[] = [];
   for (const id of req.ids) parts.push(await renderOne(e, id, req, req.ids.length > 1 ? size / 2 : size));
