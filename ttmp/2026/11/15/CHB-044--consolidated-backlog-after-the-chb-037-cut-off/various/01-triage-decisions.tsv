@@ -1,0 +1,200 @@
+CHB-004	spah	DONE	done: packages/data/src/pack.ts:190 (E_DATA_HASH), manifest.ts:67 (E_DATA_GRID), tensors.ts:23-31 (E_DATA_SCHEMA), core/src/data/interim.ts:39 (E_STOCK_UNKNOWN); packages/data/test/loader.test.ts (hashes, grids, schema, unknown stocks, the fetch() source); the studio opens the packs in the browser on every e2e run
+CHB-004	3n63	OPEN
+CHB-004	8egr	OPEN	now: one of the six sets exists (fixtures/synthetic/neutral-wedge, packages/data/test/synthetic.test.ts); five remain
+CHB-004	urgj	OPEN	now: after t:8egr; the studio's synthetic scenes (e2e/make-scenes.ts) already cover the decoders for browser tests
+CHB-004	6qfb	OPEN	now: the push 1 and push 2 profiles are exported and used (packs/spektrafilm@0.3.2+3bb2c2d/stocks/kodak_portra_800_push1/2, core/src/ops/film.ts:43); remaining: check the exposure-index convention against Kodak's datasheet
+CHB-004	7w8x	OPEN	now: an owner decision, listed in CHB-044's backlog
+CHB-008	ch9a	OPEN	(check: still wanted? the in-app chat calls api.anthropic.com directly with the photographer's key; bridge/README.md lists the proxy under "Not yet")
+CHB-008	u7mw	OPEN	(check: a privacy counter exists, packages/agent/src/chat/session.ts:96; no image-privacy setting and no task evaluations yet)
+CHB-008	saxi	SUP	superseded by CHB-037 P6a: a transaction's source is { kind: 'agent', eval } (packages/dsl/src/session.ts:558) and the transport stays in the transaction id prefix (packages/agent/CONTRACT-REQUESTS.md, status note R2)
+CHB-008	7v7v	DONE	done: CHB-037 P6a, agentSubmit proposes instead of committing in auto mode when the inverses the eval read are stale (packages/dsl/src/history.ts:42-49)
+CHB-008	kbxw	OPEN	now: the chat's context block says what happened 'since your last turn' (packages/agent/src/chat/session.ts:247); remaining: the same in worker and MCP eval results, and an agent-level golden
+CHB-008	3hb1	OPEN
+CHB-008	kd8u	OPEN
+CHB-008	qur1	OPEN	(check: the KV 'threads' store, studio-kit/src/bridge/kv.ts:5, is still unused)
+CHB-008	5yyv	OPEN
+CHB-008	eqyx	OPEN
+CHB-008	vg50	OPEN
+CHB-010	j9cj	OPEN	(check: measure a filtration drag on the GPU engine first; the fast path was designed for table rebuilds on the CPU engine)
+CHB-010	88wp	OPEN	now: after t:j9cj
+CHB-010	mj68	OPEN	now: time strips (geometric) and signed-CC filtration strips exist (studio-kit/src/model/tools.ts:13-54) and render on every engine through documents; remaining: seconds mode, density hold, tiles, the per-step table
+CHB-010	fx3n	OPEN	now: the lights ring-around (studio-kit/src/model/tools.ts:62-104) and the roll contact sheet render on every engine through documents; remaining: filter-move tiles with density hold (see CHB-037 P9-18), and the darkroom.contactSheet op is still a mock stub
+CHB-010	dotm	OPEN	now: the preflash is a light-law term (contract/src/stage-laws.ts:173, contract/src/pixel.ts:56, gpu/src/engine/light.ts); remaining: the reciprocity (Schwarzschild) hook
+CHB-010	f1kv	OPEN	now: with t:mj68
+CHB-010	i3wj	DONE	done: real is the catalogue default (contract/src/catalog/capture-film-print.ts:69, 'the default since contract 0.4, CHB-031')
+CHB-010	gynm	OPEN	now: print.densityMask has polarity positive|same (contract/src/catalog/capture-film-print.ts:127); remaining: highlight (threshold) masks
+CHB-010	odj8	OPEN	now: compileExposures and its W_PREVIEW_APPROX for base flashes were deleted with CHB-037; only the comment core/src/print/densityMask.ts:12-13 is stale (same polarity exists)
+CHB-011	s4tf	OPEN	now: the f64 cam16-ucs knee exists (core/src/print/gamut.ts); remaining: the WGSL kernel (gpu/src/engine/lower.ts:87 falls back to oklch with W_PREVIEW_APPROX) and its parity
+CHB-011	069x	OPEN	now: the lcms proofing transform (output/src/icc/lcms/api.ts:31,100) and document.output.display.proof (contract/src/document.ts:335) exist; the 33³ table and its wiring into the output kernel do not
+CHB-011	joib	OPEN	now: document.output.printer (PrinterSettings, contract/src/document.ts:336) exists but the export does not use it
+CHB-011	l2dd	DONE	done: output/src/export/run.ts:6-8,129-181 (signal checked per tile, sink aborted, E_CANCELLED; consistency is structural, one immutable node); output/test/export.test.ts:50 (tiles equal one pass bit for bit) and :92 (cancellation); exact tiled export with halos on the GPU (CHB-037 P3b, gpu/test/browser/output.spec.ts)
+CHB-011	6luo	DONE	done: OutputSettings is document.output (contract/src/document.ts:339), output.display and output.encode OpDefs (contract/src/catalog/view-output-mask.ts:37,58); contract changes are CC entries in CONTRACT-DECISIONS.md, not CHB-002's changelog
+CHB-011	bk2k	OPEN	(check: output/src/spaces.ts:38-44 still flags the cICP values as unverified)
+CHB-013	59ma	OPEN	now: known since 2026-11-12: Epson V600 via VueScan 9 (DNG Linear Raw 16-bit), Negative Lab Pro positives as references, camera files are his own digital photos; still to ask: light source settings, stocks, B&W, print target, desktop vs browser
+CHB-013	4mux	OPEN
+CHB-013	blc5	OPEN	now: CHB-038's report zip can carry originals with his consent
+CHB-013	b5wo	OPEN
+CHB-013	510r	OPEN
+CHB-013	fg72	OPEN
+CHB-013	249h	OPEN	now: after CHB-004 t:3n63
+CHB-013	vv47	OPEN
+CHB-013	ggj9	OPEN
+CHB-013	51gg	OPEN
+CHB-013	gizl	OPEN	now: darkroom notes as a real-enlarger document (format 3) instead of a recipe
+CHB-013	yjor	OPEN
+CHB-013	1rnt	OPEN	now: CHB-038's report zip (journal, environment, documents, optional pictures and originals) is the session bundle; remaining: tools/beta-analysis over reports
+CHB-013	m4we	OPEN
+CHB-013	5bpf	OPEN	now: to CONTRACT-DECISIONS.md and the DSL docs (CHB-002's changelog is no longer used)
+CHB-013	ehco	OPEN	now: the photographer's own camera files open (CHB-026, CHB-033); remaining: public samples (X-Trans, two-illuminant DNG, non-zero sensor margins)
+CHB-013	gb3u	DUP	duplicate of CHB-013 t:59ma (its facts are carried in 59ma's note)
+CHB-013	5yc4	DUP	duplicate of CHB-013 t:59ma (its facts are carried in 59ma's note)
+CHB-014	z31q	OPEN
+CHB-014	kwm4	OPEN
+CHB-014	nkhw	OPEN
+CHB-014	ljur	OPEN
+CHB-014	pwkk	OPEN
+CHB-014	jd32	OPEN
+CHB-014	okza	OPEN
+CHB-014	u7ag	OPEN
+CHB-014	yhkc	OPEN
+CHB-014	hbus	OPEN
+CHB-014	pzmo	OPEN
+CHB-014	t7vb	OPEN
+CHB-014	dv3n	OPEN	now: as a CC entry in CONTRACT-DECISIONS.md (contract 1.x), not to CHB-002
+CHB-014	719o	OPEN	now: per-component terms of the darkroom light law (contract/src/stage-laws.ts) and a one-channel path in the GPU engine
+CHB-014	z23c	OPEN	now: grade and head controls in the Enlarger stack view
+CHB-014	n6qt	OPEN
+CHB-014	o8ev	OPEN
+CHB-015	1h6y	SUP	superseded by CHB-037's document format 3: digital layers are print-stage entries under the composite law, compiled before output.display (contract/src/document.ts, contract/src/stage-laws.ts)
+CHB-015	e4p0	OPEN	now: sharpen, clarity, HSL, vibrance and colour grading exist as print-stage layers (CHB-037 P8a); remaining: dye saturation, grain reduction, guided-filter tone ops, bloom as catalogue ops
+CHB-015	aubb	SUP	superseded by CHB-037 P8a and contract 1.0: clarity and sharpen radii are in mm on the print (contract/src/catalog/layers.ts:8,127; adjust.ts:3), mask feather in mm; identity and parity tests came with P8a
+CHB-015	jwpu	OPEN
+CHB-015	33j6	OPEN
+CHB-015	w7wg	OPEN
+CHB-015	hamr	OPEN
+CHB-015	uv0e	OPEN
+CHB-015	8fki	OPEN
+CHB-015	k5rh	OPEN
+CHB-015	wyd3	OPEN
+CHB-015	pe3o	OPEN
+CHB-015	m1yn	OPEN
+CHB-015	xgx0	OPEN
+CHB-020	mv3s	OPEN	now: the cull keys (studio-kit/src/cb.ts:361, kits/roll/src/kit.ts:530), roll.cull.sweep (kits/roll/src/kit.ts:468) and undoable document-tier ratings exist; remaining: the peek spring
+CHB-020	wb5j	OPEN	now: the roll's per-channel flare from the holder's veil exists (kits/roll/src/kit.ts:193-197); remaining: CHB-013's fitted scanner model (t:ggj9) and lights to filtration; contract additions as CC entries
+CHB-020	qvyu	OPEN	now: with CHB-037 P10-18 (measure reads the image back as f32; reductions on the device)
+CHB-020	j972	OPEN
+CHB-021	7hew	OPEN	now: snapshots exist (studio-kit/src/commands/print.ts:20-40); remaining: virtual copies (looks.virtualCopy is a disabled stub, kits/looks/src/commands.ts:392)
+CHB-021	ji7o	OPEN	now: looks.setReference exists; looks.match is a disabled stub (kits/looks/src/commands.ts:393); Roll ▸ Print the Roll Like the Reference covers rolls
+CHB-021	fco9	DONE	done: kits/looks/src/panels.ts:105-132 (groups, thumbnails, favourites, Preview), looks.saveAsPreset, looks.param, looks.amount (kits/looks/src/commands.ts)
+CHB-021	44cg	DONE	done: .cbpreset.json export and import with a needs-review state (kits/looks/src/dom.ts:227, commands.ts:353-372); .cblook.js evaluated in the sandbox (CHB-037 P7); no migrate pass after the cut-off
+CHB-021	xw53	SUP	superseded by CHB-037 P7 (CC-021): film-stock looks were deleted, looks are link functions; medium presets are an open owner decision (docs/HANDOFF.md §9)
+CHB-021	eoll	DONE	done: the looks kit is in the layouts ("variant" is now layout: layouts/looks.js, Settings menu in classic.js and darkroom.js), studio-kit/test/browser/looks.spec.ts, e2e/walkthrough.spec.ts walkthroughs 1 and 3
+CHB-021	v253	SUP	superseded by CHB-037 P7 and P6b: looks are registered in the contract's link registry, the agent reaches them through links and cb.looks.define (apps/studio/src/host/chat.ts:59, host/workbench.ts:57)
+CHB-021	kzh2	OPEN	now: keyed per (look, params, document hash)
+CHB-021	8neb	OPEN	(check: still wanted? the looks panel already shows a diff against the compare source)
+CHB-022	5v8b	SUP	superseded by CHB-037 P5b-2: Finish is a stack view with controls from ArgSpecs; CB-F110 crop-valid (kits/finish/src/state.ts:127) and CB-F102 (kits/finish/src/passes.ts); spot order is the repair stage law
+CHB-022	z8nq	OPEN	now: GPU output.frame exists with a bilinear straighten (gpu/src/frame.ts, CHB-037 P3b) and exact tiled export covers it; remaining: a Lanczos-3 (or better) resampler for export
+CHB-022	7llb	SUP	superseded by CHB-037's masks (contract 1.0 mask library: linear, radial, ellipse, paint components; stack kit mask tools, P2a/P5b-2): a local tone is any layer with a mask
+CHB-022	w2q3	SUP	superseded by CHB-037 P6b: the agent edits document geometry with frame.propose and runs the crop commands with wb.run, the same command the UI runs
+CHB-022	5krk	OPEN
+CHB-026	jqqs	OBS	obsolete: scenarios of the studio before the CHB-037 cut-off; persona sessions now follow each user-visible change (CHB-037 P9 session)
+CHB-026	d48l	DONE	done: F1-F4 became CHB-027 and CHB-031; the CHB-037 integration report §5 reproduces F1, F5, F7/F8 and F24 as fixed
+CHB-028	fj9p	OPEN
+CHB-028	sy6a	OPEN	now: with CHB-035 design 02 P4 (open-loop bench)
+CHB-028	r414	OPEN	now: the reach checks exist (shell/src/build/checks.ts:322,341) but no test covers them
+CHB-028	39pe	OPEN	now: frame.keywords exists (studio-kit/src/commands/frame.ts:25, not in the palette); remaining: collections and a keyword-editing UI
+CHB-028	bxp0	OPEN	now: in the per-layout Playwright smokes
+CHB-028	hcts	OPEN	now: document (format 3) sidecars: write <name>.chromobench.json beside an export (File ▸ Save Document exists, apps/studio/src/main.ts:844; the export passes document: 'none', host/export.ts:69) and read one on open
+CHB-028	pb6c	OPEN
+CHB-028	nbof	OPEN	(check: still three sliders plus Lighter/Darker, studio-kit/src/dom/arg.ts:245-262)
+CHB-028	d552	OPEN
+CHB-028	v4fu	OPEN	now: a developer help topic 'Writing a layout' (the agent's version exists in dsl/src/docs/topics/workbench.md:42)
+CHB-028	0x4k	OPEN	now: hot reload of layouts
+CHB-028	qfae	OPEN	now: with CHB-037 P9-14 (export size)
+CHB-028	5vfk	OPEN	(check: apps/studio/src/main.ts:617-621 closes the dialog when the file opens another way; whether the File menu reacts while it is up)
+CHB-028	6lah	OPEN	(check against the CHB-037 History panel, studio-kit/src/model/history.ts)
+CHB-028	8nfh	OPEN
+CHB-028	czh4	OPEN	now: with CHB-037 P9-6 (coarse sliders)
+CHB-028	itds	OPEN
+CHB-028	5wjl	OPEN	now: an owner decision (kits/roll/src/engine/constants.ts:9 ALPHA 0.75 vs FIRST_PRINT_AIM in apps/studio/src/host/first-print.ts:64), listed in CHB-044's backlog
+CHB-029	kyfu	DONE	done: StudioHost capabilities (studio-kit/src/studio.ts:49-55), commands declare requires: (shell/src/core/commands.ts:25-29); hostHas and hostRun are gone
+CHB-029	9d5c	DONE	done: commands have no menu field, menus are views of the command table (shell/src/core/commands.ts:2); CK-B150 for unknown commands in menus and CK-I011 for unreachable commands (shell/src/build/checks.ts:218-230,341)
+CHB-029	wvz2	DONE	done: per-area command tables in studio-kit/src/commands/ (agent, env, frame, host, print, view)
+CHB-029	8sk0	DONE	done: cb.modules.* and cb.menus.* (studio-kit/src/cb.ts:367,417); layouts/*.js import nothing
+CHB-029	5tv9	OPEN	(check: the status line is still host DOM, apps/studio/src/main.ts:61-117)
+CHB-029	7fk7	OPEN	(check: a viewport busy badge exists, shell/src/dom/viewport.ts:45; no jobs slice, list or cancel)
+CHB-029	ahix	DONE	done: studio-kit/src/sel.ts (typed state and selectors, cb.sel.*), studio-kit/test/sel.test.ts
+CHB-029	xthl	DONE	done: OpUi label, menu and order (contract/src/registry.ts:39), ArgSpec ui.advanced under "More" (kits/stack/src/dom.ts:416,504), contract 1.x
+CHB-029	ydsk	DONE	done: CHB-037 renamed variant to layout (packages/studio-kit/layouts/*.js, ?layout=, View ▸ Layout)
+CHB-029	vde3	OPEN	now: after t:7fk7
+CHB-029	kzxz	OPEN
+CHB-029	rir6	DUP	duplicate of CHB-029 t:kzxz (or label 1:1 honestly on the CPU engine)
+CHB-030	cfpi	DONE	done: decided in CHB-037 P6b (diary 16, decision 4): layouts are recorded on proxies in the sandbox and cross as data; selectors are declarative chains (cb.sel.frame.print())
+CHB-030	vqrd	DONE	done: wb and the layout surface in the generated agent docs (packages/dsl/generated/instructions.md, reference.md; dsl/src/docs/topics/workbench.md)
+CHB-030	kdx1	DONE	done: wb.layouts.build checks with the passes and explains, wb.layouts.use asks in a dialog, accepted layouts are kept in the KV and listed under View ▸ Layout, ?layout= reloads them (apps/studio/src/host/workbench.ts; CHB-037 P9 f1007f5); removing a kept layout is CHB-037 t:1qlj
+CHB-030	3yd4	DONE	done: wb.layouts.build/use and wb.screen().explain() (studio-kit/test/chat/workbench.test.ts:98-124); the agent's 'Writing a layout' topic (dsl/src/docs/topics/workbench.md:42) serves as the playbook
+CHB-030	t7ql	OPEN	now: E_LAYOUT for functions is tested; remaining: layouts that throw at build or run time, runaway selectors, memory
+CHB-030	sd56	DONE	done: e2e/walkthrough.spec.ts walkthrough 5 ("a simpler screen"), named CHB-030's acceptance in the CHB-037 integration report §2; a session with a live model was not run
+CHB-033	m6ak	DONE	done: diary Step 2 and scripts/02-cm-vs-fm-same-adaptation.ts (same white, Bradford adaptation and exposure; saturation factor 0.55)
+CHB-033	jzl6	OPEN
+CHB-033	s66f	OPEN	now: only if the chart (t:jzl6) says Adobe is closer; the owner kept our colour on 2026-11-14
+CHB-033	y8dh	OPEN
+CHB-033	xvhd	OPEN
+CHB-034	4o9y	OPEN	(check: the roll kit was rewritten in CHB-037; whether the flake still occurs)
+CHB-034	szeo	OPEN	now: with CHB-035 design 02 P2 (engine-independent analysis levels)
+CHB-034	3nod	OPEN
+CHB-034	ayqx	OPEN	now: kits/roll/src/engine/measure.ts readSource evaluates the source cut on the engine's working image; with CHB-035 design 02 P2
+CHB-034	alwi	OPEN	now: with CHB-035 design 02 P2
+CHB-035	qyx4	OPEN	now: the merged list of open decisions is in CHB-044's backlog
+CHB-035	4yny	DONE	done: CHB-037 (phases P0-P9, merged on task/chb-037-unified-model)
+CHB-035	2xtd	OPEN	now: CHB-041 did P1's source residency and P2's memory half (proxies); still to do: P4, P1's presentation from GPU textures (CHB-037 P10-24), P2's area-averaged pyramid, P3 checkpoints
+CHB-037	crj2	OPEN
+CHB-037	hqwh	OPEN	(check: the mask tools' up handlers in kits/stack/src/commands.ts:399-445 still commit on any click)
+CHB-037	h0zb	OPEN
+CHB-037	btm4	OPEN
+CHB-037	ig9q	OPEN
+CHB-037	936y	OPEN	(check: studio-kit/src/dom/panels.ts:357 still says export comes with CHB-011)
+CHB-037	eo25	OPEN
+CHB-037	6cgv	OPEN
+CHB-037	tkue	OPEN
+CHB-037	baq3	OPEN	(check: output/src/export/run.ts:109 refuses jpeg; sizes are the working image's, apps/studio/src/host/export.ts:5-6)
+CHB-037	vktj	OPEN
+CHB-037	n1nz	OPEN
+CHB-037	siez	OPEN
+CHB-037	3606	OPEN
+CHB-037	b91y	OPEN
+CHB-037	qv4l	DUP	duplicate of CHB-035 t:qyx4 (question 1); the recommendation and the conditions are in CHB-044's backlog
+CHB-037	mr9z	OPEN
+CHB-037	1qlj	OPEN
+CHB-037	iwwa	OPEN
+CHB-037	7uba	OPEN
+CHB-037	xshr	OPEN
+CHB-037	4abm	OPEN
+CHB-037	t3aq	OPEN
+CHB-037	zj23	OPEN
+CHB-037	bqhj	OPEN
+CHB-037	1dv4	OPEN
+CHB-037	dpba	OPEN
+CHB-037	nin8	OPEN
+CHB-037	o20c	OPEN
+CHB-037	pen5	OPEN
+CHB-037	qad6	OPEN
+CHB-037	g1a0	OPEN
+CHB-037	fzfg	OPEN
+CHB-037	irmc	OPEN
+CHB-037	3g6k	OPEN
+CHB-037	inb4	OPEN
+CHB-037	9cri	OPEN
+CHB-037	olsy	OPEN
+CHB-037	xsqv	OPEN
+CHB-037	5g4o	OPEN
+CHB-037	fd6s	OPEN
+CHB-037	j0jt	OPEN
+CHB-037	yxmy	OPEN
+CHB-037	cdo6	OPEN
+CHB-037	ivj6	OPEN
+CHB-040	f4vl	OPEN
+CHB-040	x79l	OPEN
+CHB-040	srjo	OPEN
+CHB-040	oyhm	OPEN
+CHB-040	k2zs	OPEN
