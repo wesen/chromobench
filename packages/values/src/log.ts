@@ -338,12 +338,13 @@ export class Log {
   }
 
   /**
-   * Apply an edit or a batch as one step (all or nothing across its documents). Throws what the rules throw.
+   * Apply an edit or a batch as one step (all or nothing across its documents). Throws what the rules throw. A
+   * transaction without mutations is no edit; nothing to commit returns this log.
    * `merge`: fold it into the newest step as the net change, when that step is at the cursor and changes the same
    * documents once each (nudges of one control); a net change of nothing removes the step.
    */
   commit(x: Edit | Batch, o: { merge?: boolean } = {}): Log {
-    const edits = isBatch(x) ? x.edits : [x];
+    const edits = (isBatch(x) ? x.edits : [x]).filter((e) => e.tx.mutations.length > 0);
     if (!edits.length) return this;
     if (isBatch(x)) for (const e of edits) if (e.tx.batch !== x.id) fail('E_MUTATION', `transaction ${e.tx.id} is not in batch ${x.id}`);
     const values = new Map(this.#s.values);
@@ -393,7 +394,7 @@ export class Log {
    * documents, and stored with the inverses it has now; the documents do not change.
    */
   propose(x: Edit | Batch, o: { why?: string } = {}): Log {
-    const edits = isBatch(x) ? x.edits : [x];
+    const edits = (isBatch(x) ? x.edits : [x]).filter((e) => e.tx.mutations.length > 0);
     if (!edits.length) return this;
     if (isBatch(x)) for (const e of edits) if (e.tx.batch !== x.id) fail('E_MUTATION', `transaction ${e.tx.id} is not in batch ${x.id}`);
     const checked = this.#applyAll(edits, new Map(this.#s.values));
