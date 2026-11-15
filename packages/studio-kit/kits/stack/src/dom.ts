@@ -83,8 +83,12 @@ function maskChip(m: MountCtx, frame: (s: any) => string | null, id: Id): HTMLEl
     const d = f ? sel.doc(s, f) : undefined;
     const mid = d ? findEntry(d, id)?.entry.mask : null;
     const mk = d && mid ? Coll.get(d.masks, mid) : undefined;
-    return mid ? `${mk?.name ?? mid}${mk?.invert ? ' (inverted)' : ''}` : '';
-  }, (name) => {
+    // the overlay shows this entry's mask now: the chip says so
+    const shown = !!mid && !!overlayReason(s) && selectedIn(s, f) === id;
+    return mid ? `${shown ? '1' : '0'}${mk?.name ?? mid}${mk?.invert ? ' (inverted)' : ''}` : '';
+  }, (v) => {
+    const name = v.slice(1);
+    chip.classList.toggle('is-overlay', v[0] === '1');
     chip.textContent = name ? `◐ ${name}` : '+ mask';
     chip.classList.toggle('is-empty', !name);
     chip.setAttribute('aria-label', name ? `Mask ${name}` : 'Add a mask');

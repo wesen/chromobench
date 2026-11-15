@@ -22,7 +22,7 @@ import { sel } from '../../../src/sel.ts';
 import { printingScript } from '../../../src/model/doc.ts';
 import { formatSeconds } from '../../../src/model/units.ts';
 import { stackCommands, maskTools, MASK_TOOLS } from './commands.ts';
-import { overlayCommands, maskCover, OVERLAY_MODES, OVERLAY_COLOURS } from './overlay.ts';
+import { overlayCommands, maskCover, overlayOf, overlayReason, OVERLAY_MODES, OVERLAY_COLOURS } from './overlay.ts';
 import { stagePolicy, stagesShown } from './passes.ts';
 import { selectedIn, STACK_STATE } from './state.ts';
 import * as model from './model.ts';
@@ -212,6 +212,11 @@ export function createStackKit(ck: Ck, cb: Cb) {
       ops: model.byOps,
       /** the selected entry's id on the current frame (or null) */
       selected: (s: any) => selectedIn(s),
+      /** the mask overlay: on, mode, colour, opacity, and why it shows now ('on', 'tool', 'drag' or null) */
+      overlay: (s: any) => {
+        const { live: _l, ...o } = overlayOf(s);
+        return { ...o, shown: overlayReason(s) };
+      },
     },
     lib: { ...model, addItems, stagesShown, STACK_STATE, MASK_TOOLS, OVERLAY_MODES, OVERLAY_COLOURS },
     /** the mask overlay for a viewer's shown handle (cb.viewer's default cover) */

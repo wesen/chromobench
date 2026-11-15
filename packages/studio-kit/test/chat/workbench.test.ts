@@ -79,6 +79,21 @@ describe('wb over the studio', () => {
     expect([u.error?.code, u.error?.fix]).toEqual(['E_WORKBENCH', "wb.run('frame.rate')"]);
   });
 
+  it('the mask overlay is view state the agent reaches: wb.run(\'mask.overlay.*\') even read-only, wb.state(\'stack.overlay\')', async () => {
+    const b = await bench();
+    b.studio.mode = 'read-only';
+    const v = val(await b.run(`
+      const on = await wb.run('mask.overlay.toggle');
+      const mode = await wb.run('mask.overlay.mode', 'mask');
+      await wb.run('mask.overlay.colour', 'green');
+      await wb.run('mask.overlay.opacity', 0.7);
+      return JSON.stringify({ on, mode, state: await wb.state('stack.overlay') });`));
+    expect(v.on).toMatchObject({ ok: true, how: 'none', result: true });
+    expect(v.mode).toMatchObject({ ok: true, result: 'mask' });
+    expect(v.state).toEqual({ on: true, mode: 'mask', colour: 'green', opacity: 0.7, shown: 'on' });
+    expect(b.studio.log.inEffect(b.f)).toHaveLength(0);
+  });
+
   it('an agent builds a layout in the sandbox, the passes check it, and use proposes it', async () => {
     const b = await bench();
     b.studio.mode = 'ask';
