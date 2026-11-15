@@ -50,3 +50,12 @@ P2a Step 3: laws read params with defaults; final checks (commit b7a973f)
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p2a/packages/contract/src/compile.ts — LawContext.args binds params
 
+
+## 2026-11-14
+
+P2b: reference engine, mock and conformance on contract 1.0; goldens as format-3 documents, 60/60 (commits 97d1cb6, bde2495)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p2b/tools/goldens/translate.ts — The golden translation
+

@@ -26,14 +26,13 @@ RelatedFiles:
       Note: Validation through the values hooks (commit 1dade2e)
     - Path: repo://packages/contract/test/light-law.test.ts
       Note: Light law equals combinePixel (property) (commit 1dade2e)
-    - Path: repo://packages/core/src/print/exposures.ts
-      Note: combinePixel, the formula the light law reproduces
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-14T21:38:33.544697-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary
