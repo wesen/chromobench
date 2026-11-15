@@ -2,6 +2,7 @@
 // realms (DSL worker, GPU worker) rebuild the same ids from NodeDefs: send closure(id), call adopt().
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { canonicalJSON } from '@chromobench/values';
 import { DOMAINS, type Domain, type ImageInfo } from './domains.ts';
 import { fail, type Diagnostic } from './errors.ts';
 import type { Node, NodeDef, NodeInfo, ValueInfo } from './graph-types.ts';
@@ -11,23 +12,8 @@ import type { SourceInfo } from './source.ts';
 import type { Box } from './spec.ts';
 
 export type { Node, NodeDef, NodeInfo, NodeRef, ValueInfo, FieldSpec } from './graph-types.ts';
-
-/** Canonical JSON: object keys sorted, arrays in order, numbers via JSON.stringify (−0 → 0). */
-export function canonicalJSON(v: unknown): string {
-  if (v === null || typeof v !== 'object') {
-    if (typeof v === 'number') {
-      if (!Number.isFinite(v)) fail('E_ARG_RANGE', `canonicalJSON: non-finite number ${v}`);
-      return JSON.stringify(Object.is(v, -0) ? 0 : v);
-    }
-    if (v === undefined) return 'null';
-    return JSON.stringify(v);
-  }
-  if (Array.isArray(v)) return `[${v.map(canonicalJSON).join(',')}]`;
-  if (ArrayBuffer.isView(v)) fail('E_INTERNAL', 'canonicalJSON: typed arrays are not canonical values');
-  const o = v as Record<string, unknown>;
-  const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJSON(o[k])}`).join(',')}}`;
-}
+/** Canonical JSON (one implementation, in @chromobench/values): the string node ids hash. */
+export { canonicalJSON };
 
 export function sha256Hex(s: string | Uint8Array): string {
   return bytesToHex(sha256(typeof s === 'string' ? utf8ToBytes(s) : s));
