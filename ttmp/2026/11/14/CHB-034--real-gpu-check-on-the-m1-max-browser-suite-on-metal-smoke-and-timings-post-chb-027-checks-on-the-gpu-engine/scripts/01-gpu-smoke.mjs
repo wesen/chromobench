@@ -1,8 +1,9 @@
-// CHB-034: CHB-027's mac-01 run on the Mac itself (no tunnel): launches the installed Chrome, headed.
+// CHB-034: CHB-027's mac-01 run on the Mac itself (no tunnel): the installed Chrome, headless (Metal WebGPU works
+// headless here; --headed shows a window, which takes the focus).
 // Usage: node 01-gpu-smoke.mjs [url]   (default http://localhost:4811/?engine=gpu&fresh)
 import { chromium } from '@playwright/test';
 const url = process.argv[2] ?? 'http://localhost:4811/?engine=gpu&fresh';
-const browser = await chromium.launch({ channel: 'chrome', headless: false });
+const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed') });
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 try {
   await page.goto(url);

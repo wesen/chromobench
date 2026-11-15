@@ -13,7 +13,7 @@ export const OP = Object.freeze({
   AFFINE: 16,
 });
 export const MAXOPS = 12;
-/** Table lookup modes: hardware trilinear (preview), manual tetrahedral (export), manual trilinear, broken (no half-texel). */
+/** Table lookup modes: hardware trilinear (parity tests only: 8-bit weights on real GPUs), manual tetrahedral (export), manual trilinear (preview, CHB-034), broken (no half-texel). */
 export const LOOKUP = Object.freeze({ hw: 0, tetra: 1, trilinear: 2, noHalfTexel: 3 });
 
 export const PROG = defineStruct('Prog', [

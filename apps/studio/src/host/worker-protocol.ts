@@ -38,6 +38,8 @@ export interface DecodeJob {
   /** Working image long side (0 = the file's own size). */
   long: number;
   dust: boolean;
+  /** The first print's analysis image's long side (CHB-034 fusz; decode.ts withAnalysis); absent: none. */
+  analysisLong?: number;
   /**
    * 'register': the pixels stay in the worker (no copy back) until a 'register' message makes them the engine's
    * source (StudioEngine.openAs may decode twice, or forget the old decode first); 'return': they come back (the GPU

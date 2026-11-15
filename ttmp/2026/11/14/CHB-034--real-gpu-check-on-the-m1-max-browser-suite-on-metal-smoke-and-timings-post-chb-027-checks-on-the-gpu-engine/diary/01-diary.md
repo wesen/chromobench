@@ -442,3 +442,331 @@ against a bound of 2.5e-6 under SwiftShader. Both are fixed; the default suite p
 
 ### Technical details
 - N/A
+
+## Step 8: What exact interpolation costs, and the preview switched to it
+
+The open decision of Step 3 (task `vcma`) was whether the preview should keep reading its 3-D tables through the
+hardware filter, with looser parity bounds on real GPUs, or switch to the kernel's manual trilinear lookup and keep
+the tight bounds. The rule agreed with the owner: measure the cost first; if it is noise, take the exact lookup. A
+new parity-page scenario, `chain:lookup-bench`, times the preview display chain at the GPU engine's working size for
+the three lookup modes. At 4000 × 2674 on the M1 Max the hardware lookup takes 5.3 ms, manual trilinear 6.4 ms,
+manual tetrahedral 5.9 ms (medians of 15 interleaved rounds). The 1.1 ms difference is under 1 % of the ~200 ms a
+Time drag takes to settle (Step 4), so the preview now uses manual trilinear on every adapter; on SwiftShader, whose
+filter weights are already exact, nothing changes.
+
+### Prompt Context
+**User prompt (verbatim):** "merged, what's next?" then "go ahead. Commit at appropriate intervals, and write a frequent and detailed diary, see ~/.codex/skills. Subagents should write their own diary with the same format / skill."
+**Assistant interpretation:** Finish CHB-034: measure the lookup cost and decide by the agreed rule, make the
+real-GPU suite pass, then the GPU-open stall; delegate the first-print Time stability (task `fusz`) to a subagent
+with its own diary (`diary/02-diary-first-print-time.md`); commit and write the diary as I go.
+**Inferred user intent:** Close the GPU follow-ups with evidence, in reviewable commits.
+**Commit (code):** a60fa6c — "CHB-034: preview tables through manual trilinear (exact weights; Metal's filter quantises to 1/256), +1.1 ms per 4000 px preview; lookup bench scenario and script; caps and output.display tests adapter-aware (Metal bounds 1.5x measured)"
+
+### What I did
+- Branch `task/chb-034-gpu-followups` from `main` at b4494e5.
+- Delegated task `fusz` to a subagent in its own worktree (branch `task/chb-034-first-print-time`, own diary).
+  Agreed a GPU lock for anything that uses the real GPU, so timings do not overlap:
+  `mkdir <scratchpad>/gpu.lock` (retry every 30–60 s), owner name inside, `rm -rf` after the run.
+- `packages/gpu/src/parity/chain-tests.ts`: `lookupBench` / scenario `chain:lookup-bench` (options `w`, `h`,
+  `rounds`, `warmup`). It tiles the 96 × 64 synthetic Gold 200 scan to the requested size (building it per pixel at
+  10 MP would take long on the CPU), uploads it once, and runs `ChainRunner.run` on `scanChain(…, 'display')` with
+  `precision: 'preview'` and each `lookup`, round-robin, 3 warm-up rounds, each sample from
+  `queue.onSubmittedWorkDone()` before to `onSubmittedWorkDone()` after.
+- `scripts/05-lookup-bench.mjs`: opens the parity page (served by
+  `pnpm --filter @chromobench/gpu exec vite --config parity-page/vite.config.ts --port 4185 --strictPort`) in
+  bundled Chromium without SwiftShader flags (or with `--swiftshader`) and prints one JSON line per size.
+- `packages/gpu/src/chain/run.ts:78`: preview default `LOOKUP.hw` → `LOOKUP.trilinear` (comment with the numbers);
+  `program.ts` doc comment of `LOOKUP` updated. `LOOKUP.hw` stays for the `lookup:hw` parity test.
+
+### Why
+- A decision between tolerance and exactness should rest on what exactness costs, measured where it runs.
+- Trilinear, not tetrahedral: core's tabulated reference (`look3`) is trilinear, so manual trilinear reproduces it
+  to 1e-6 (`lookup:trilinear` test); tetrahedral is more accurate against the exact solve but would not equal core's
+  preview reference.
+
+### What worked
+- `node scripts/05-lookup-bench.mjs --rounds 15` (Metal):
+
+  | Size | hw | trilinear | tetra |
+  |---|---|---|---|
+  | 4000 × 2674 | 5.3 ms (p10 5.2, p90 5.6) | 6.4 ms (6.1, 6.6) | 5.9 ms (5.7, 6.3) |
+  | 2000 × 1337 | 2.3 ms (2.2, 2.4) | 2.5 ms (2.4, 2.8) | 2.5 ms (2.3, 2.7) |
+
+- After the switch, `REAL_GPU=1 CI=1 pnpm exec playwright test --project=gpu-parity`: 40/40 (with Step 9's test
+  changes); the four chain tests of Step 3 pass on Metal.
+- `e2e/studio-photo.spec.ts`, `studio-real.spec.ts`, `studio-decoders.spec.ts` (the GPU-engine studio specs): 8/8 on
+  SwiftShader and 8/8 on Metal.
+
+### What didn't work
+- N/A
+
+### What I learned
+- The hardware filter's advantage is real but small: one filtered sample against eight `textureLoad`s costs ~20 % of
+  this kernel and ~1 ms per 10-MP frame.
+- Tetrahedral (four loads) is cheaper than manual trilinear (eight) and more accurate against the exact solve; it is
+  the better lookup in absolute terms, only not the one core's preview reference uses.
+
+### What was tricky to build
+- Chrome's `performance.now()` is coarsened to 0.1 ms in a page without cross-origin isolation, so per-run times
+  are quantised; medians over 15 rounds and the interleaving make the 1.1 ms difference unambiguous (the p10–p90
+  ranges do not overlap at 4000 px).
+- `ChainRunner.run` returns once the work is queued; the sample must wait for `onSubmittedWorkDone()`, and wait for
+  it also before starting, so earlier queued work is not counted.
+
+### What warrants a second pair of eyes
+- The bench measures one segment (the scan display chain). The darkroom's multi-exposure chains do more lookups per
+  pixel; their cost scales with the number of lookups, still in milliseconds, but not measured.
+
+### What should be done in the future
+- If core's tabulated reference ever moves to tetrahedral interpolation, switch the GPU preview to `LOOKUP.tetra`
+  (cheaper and more accurate).
+
+### Code review instructions
+- `packages/gpu/src/chain/run.ts:78`, `packages/gpu/src/parity/chain-tests.ts` (`lookupBench`).
+- Validate: serve the parity page on 4185, `node ttmp/…/CHB-034…/scripts/05-lookup-bench.mjs`; then
+  `REAL_GPU=1 CI=1 pnpm exec playwright test --project=gpu-parity`.
+
+### Technical details
+- Adapter in the bench output: `{"vendor":"apple","architecture":"metal-3","fallback":false}`.
+
+## Step 9: The adapter-aware tests, and the display transform's error located
+
+Two GPU-parity tests could not pass on a real GPU whatever the lookup: the capability test asserted SwiftShader, and
+the display-transform test had bounds measured on SwiftShader. Before setting a bound for Metal I looked at where the
+Metal error is. Steps 3 and the vault report attributed it to Metal's `pow`/`exp`/`log`; that was an inference, not
+a measurement, and it was wrong as stated: on both adapters the worst pixel of every output space and rendering sits
+at G ≈ 1, the top of the RGB cube, where the spec's own comment already locates SwiftShader's outliers (the f32
+bisection for the OkLCh knee's C_max is ill-conditioned there). Metal's f32 arithmetic enlarges the same weak spot.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 8)
+**Assistant interpretation:** Make `REAL_GPU=1` pass with bounds that say something.
+**Inferred user intent:** A real-GPU run that is a routine check, not a list of known failures.
+**Commit (code):** a60fa6c (with Step 8)
+
+### What I did
+- `<scratchpad>/outdisp.mjs`: ran `output:display` (knee oklch) on Metal and on SwiftShader and printed each
+  space/rendering's `maxLin`, `maxCodes16`, `worstRef`, `worstGpu`.
+- `packages/gpu/test/browser/output.spec.ts`: the oklch test asks `caps` for `adapter.fallback`; SwiftShader keeps
+  0.2 % / 2e-5 / 1 code; a real GPU gets 0.5 % / 4.5e-5 / 6 codes (1.5× the Metal measurement), with the reason in a
+  comment.
+- `packages/gpu/test/browser/tables.spec.ts`: stage 1 expects `fallback === true` without `REAL_GPU`, `false` with it.
+
+### Why
+- A bound is a statement about an adapter; writing which adapter it is about keeps both runs meaningful.
+
+### What worked
+- Worst pixels (reference display RGB), Metal vs SwiftShader, e.g. sRGB scan-of-print both at
+  (0.9815, 1.0000, 0.5786); the largest Metal error ProPhoto scan-of-print at (0.9335, 0.9999, 0.1911), 2.98e-5,
+  4 codes. Totals: Metal 0.340 % > 2e-6, max 2.98e-5, 4 codes; SwiftShader 0.127 %, 8.2e-6, 1 code.
+- `CI=1 pnpm exec playwright test --project=gpu-parity`: 40/40 on SwiftShader (3.1 min) and with `REAL_GPU=1` on
+  Metal (14 s).
+
+### What didn't work
+- My earlier explanation (Metal transcendentals) in Step 3 and in the vault report: not supported by the data.
+  Corrected here; the vault report is corrected in its own commit.
+
+### What I learned
+- Check where an error is before naming its cause. Here the location (G ≈ 1, every space) was enough to tie it to
+  the known ill-conditioned spot.
+
+### What was tricky to build
+- The output spec had no access to the adapter; it now runs the `caps` scenario first on the same page.
+
+### What warrants a second pair of eyes
+- The real-GPU bounds come from one GPU (M1 Max). Another vendor's f32 could land elsewhere; the comment says where
+  the numbers come from.
+
+### What should be done in the future
+- A better-conditioned C_max search near G = 1 would shrink the error on every adapter (not needed for display:
+  4 codes of 65535).
+
+### Code review instructions
+- `packages/gpu/test/browser/output.spec.ts` (oklch test), `packages/gpu/test/browser/tables.spec.ts` (stage 1).
+
+### Technical details
+- Real-GPU bounds: `over2e6 / values < 0.005`, `maxLin < 4.5e-5`, `maxCodes16 ≤ 6`.
+
+## Step 10: The stall in every GPU open, profiled and removed
+
+Step 4 measured one main-thread stall of 100–200 ms in each GPU open and none on the CPU engine (task `5un4`). A
+sampling CPU profile, aligned with a rAF probe, named two causes. The first film of a session fitted core's fallback
+RGB → spectrum table on the main thread (112 ms in `sigmoidSpectraTable`'s Gauss–Newton `fit`/`eval3`); the CPU engine
+does the same work in its worker, which is why it never stalled. The second was the source upload: a JavaScript loop
+expanding 10.7 M RGB floats into a 171 MB RGBA array before `writeTexture` (95 ms in `ChainRunner.upload`). The fit
+now runs in a one-shot module worker when the GPU engine is created, and its result seeds core's cache; f32 sources
+go to the GPU as they are and a compute pass (`unpackF32`) writes the RGBA texture. In the production build, every
+open on the GPU engine is now free of stalls over 100 ms and 4–19 % faster.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 8)
+**Assistant interpretation:** Task `5un4`: find and remove the stall.
+**Inferred user intent:** A GPU engine that never freezes the window.
+**Commit (code):** 523ad8a — "CHB-034: no main-thread stall on a GPU open — f32 sources uploaded as they are and expanded on the GPU (pack16.wgsl unpackF32; was a 95 ms JS loop), core's fallback spectra fitted in a worker at engine creation (was 112 ms at the first film); upload parity test; profiling script; GPU opens 4–19 % faster"
+
+### What I did
+- `scripts/06-open-stall-profile.mjs`: opens a file in the studio (dev server, unminified) in bundled Chromium on the
+  machine's adapter, records a CDP sampling profile (`Profiler.setSamplingInterval` 200 µs) and a rAF probe (gaps
+  > 100 ms), and for each gap aggregates the samples inside it by leaf function and by stack. Profile timestamps are
+  anchored to page time by a `performance.now()` taken right after `Profiler.start`.
+- Before (DSC_8559.NEF, GPU engine): a 217 ms gap with 126.7 ms busy, 111.8 ms self in `eval3`
+  (`packages/core/src/film/upsample.ts`) under `renderGraph > execute > run > exposerAt > film > cached > … >
+  fallbackSpectra > sigmoidSpectraTable > fit > eval3`; then a 183 ms gap with 142.5 ms busy, 94.6 ms in `upload`
+  (`execute > sourceTexture > upload`) and 11 ms in the first print's `integratedExposure`/`keptPixels`.
+- Node microbenchmark of the RGB → RGBA loop (10.7 M pixels): existing 129–140 ms; a loop specialised for three
+  channels 45–48 ms, most of it the allocation and fill of the 171 MB array.
+- `packages/gpu/kernels/pack16.wgsl`: entry point `unpackF32` (bindings 7–9: uniform size (w, h, c), the source as
+  `array<f32>`, an rgba32float storage texture), the CPU loop's channel rules.
+- `packages/gpu/src/engine/textures.ts`: `uploadF32(rt, data, w, h, c, label, cpu)`: `writeBuffer` of the source's
+  bytes, one dispatch; falls back to `cpu()` when the data exceeds `maxStorageBufferBindingSize` or `maxBufferSize`.
+  `engine-gpu.ts`: `sourceTexture` and the two measure uploads (`uploadMeasured`) use it.
+- `packages/gpu/src/chain/run.ts`: `ChainRunner.upload` (still the fallback and used by parity tests) has the
+  three-channel loop without branches.
+- `packages/core/src/film/forward.ts`: `seedFallbackSpectra(data, table)` (kept only when nothing is cached and the
+  table is the 64² sigmoid fit). `packages/gpu/src/tables/spectra-worker.ts`: runs `sigmoidSpectraTable(cmf, 64)` and
+  transfers the data. `GpuEngine.create` calls `prefitSpectra(data)` (not awaited; skipped without `Worker`).
+- `packages/gpu/src/parity/chain-tests.ts` scenario `upload:f32` and a test in `chain.spec.ts`: `uploadF32` and the
+  CPU loop give bitwise equal textures for 1, 3 and 4 channels (37 × 23).
+
+### Why
+- A stall over 100 ms is visible as a frozen window; the GPU engine exists to stay responsive.
+- Worker plus cache seeding instead of making `exposerAt` asynchronous: the film model is reached synchronously deep in
+  the chain lowering; the table depends only on the CMFs, so it can be ready before the first open.
+
+### What worked
+- After (dev server, profile script): DSC_8559.NEF and raw010.dng, no gap over 100 ms.
+- Production build, `scripts/02-open-and-drag.mjs` on the GPU engine (Step 4 → now; JSON in `various/timings-after/`):
+
+  | File | open ms | worst open stall | drag ms | worst drag stall |
+  |---|---|---|---|---|
+  | DSC_8559.NEF | 6570 → 6309 | 200 → 0 | 203 → 204 | 0 → 0 |
+  | DSC_8655.NEF | 6596 → 6298 | 200 → 0 | 206 → 206 | 0 → 0 |
+  | DSC_8541.NEF | 6489 → 6298 | 200 → 0 | 206 → 206 | 0 → 0 |
+  | raw010.dng | 1139 → 1045 | 108 → 0 | 212 → 204 | 108 → 0 |
+  | roll-102 raw000.dng | 2250 → 1830 | 200 → 0 | 205 → 207 | 0 → 0 |
+
+  The drag times include Step 8's manual trilinear lookup: no change at this resolution of measurement.
+- `--project=gpu-parity`: 41/41 on SwiftShader and on Metal (with the new upload test). GPU studio specs
+  (`studio-photo`, `studio-real`, `studio-decoders`): 8/8 on Metal; on SwiftShader 7/8 once (below), then 6/6 for the
+  failing spec alone.
+
+### What didn't work
+- First wiring of the prefit was `if ((opts.workers ?? 0) > 0)`: the studio creates the engine as
+  `GpuEngine.create({ data, cacheLimit: 24 })` (`apps/studio/src/host/engines.ts:175`), without workers, so the
+  prefit would never have run there. Now unconditional (when `Worker` exists).
+- The first edit script for `engine-gpu.ts` asserted two identical measure-upload lines; they differ in indentation
+  (`AssertionError` at the count check); applied separately.
+- `e2e/studio-decoders.spec.ts` "tiff" failed once on SwiftShader after 5 ms, in a run that took 3.7 min instead of
+  1.7 min while the subagent was also working; alone it passed 6/6. Not reproduced.
+- `pnpm test`: `packages/studio-kit/test/roll/kit.test.ts` "the roll flow through commands" failed in 2 of 6 full runs
+  and passed alone and in the 4 others; its code path (core in Node, the mock engine) does not include anything
+  changed here. Its error text was not captured (the runs that kept the log passed). Recorded as a task.
+
+### What I learned
+- The CPU engine had been hiding the spectra fit in its worker all along; only the GPU engine, running core's film
+  model on the main thread, exposed it.
+- Allocation of a 171 MB typed array is itself tens of milliseconds; the fix had to avoid the array, not only
+  speed up the loop.
+
+### What was tricky to build
+- Aligning the profile with the probe: CDP's `startTime` is in µs of a monotonic clock that is not
+  `performance.now()`; anchoring both at the moment the profile starts was enough to attribute each gap.
+- `writeBuffer` with a typed array view: passing `data.buffer, data.byteOffset, bytes` uploads only the view, which
+  matters for a sub-rectangle copied into a new array and for decoders that return views.
+
+### What warrants a second pair of eyes
+- `seedFallbackSpectra` trusts that the worker ran the same `sigmoidSpectraTable` on the same CMFs; it checks size and
+  source label only. The worker imports the same core module, so it is the same code.
+- `uploadF32`'s fallback condition uses the negotiated limits; an adapter with a small `maxStorageBufferBindingSize`
+  (128 MiB default) takes the CPU path for sources above 11 MP at 3 channels.
+
+### What should be done in the future
+- `uploadU16` (16-bit scans) still expands to RGBA on the CPU (a smaller loop; no stall over 100 ms measured).
+- The measure path reads a result back and uploads it again for the reduction; it could reduce the texture directly.
+- Capture the roll test's error when it next fails (task).
+
+### Code review instructions
+- `packages/gpu/kernels/pack16.wgsl` (`unpackF32`), `packages/gpu/src/engine/textures.ts` (`uploadF32`),
+  `packages/gpu/src/engine-gpu.ts` (`sourceTexture`, `uploadMeasured`, `prefitSpectra`), `packages/core/src/film/forward.ts`
+  (`seedFallbackSpectra`), `packages/gpu/src/tables/spectra-worker.ts`.
+- Validate: `REAL_GPU=1 CI=1 pnpm exec playwright test --project=gpu-parity`; profile with
+  `node ttmp/…/scripts/06-open-stall-profile.mjs .playwright-mcp/photos/<file>` against the dev server on 4173.
+
+### Technical details
+- Stacks before (ms of samples): 106.6 `renderGraph > execute > run > exposerAt > film > cached > (anonymous) >
+  spectra > fallbackSpectra > sigmoidSpectraTable > fit > eval3`; 94.6 `execute > sourceTexture > upload`.
+
+## Step 11: The subagent's first-print fix reviewed, merged and checked; measurement scripts headless
+
+Task `fusz` (the first print proposing a different Time on the two engines) was delegated to a subagent in its own
+worktree; its diary is `diary/02-diary-first-print-time.md`, Steps 1–3. Its finding corrects my guess of Step 5: the
+difference was never the GPU's preview precision but the resolution of the metered image (CPU 640 px, GPU 4000 px;
+the metered log-mean exposure falls as resolution rises, through detail, grain and DIR). Its fix meters every engine
+on a 640 px analysis image built from the linear file as a 640 px decode builds it. I reviewed the code, merged it
+into this branch with two integration fixes, and re-measured the ten private files with my own script: the Time is
+now identical on both engines for all 15 frames. The user asked the subagent why Chrome kept stealing focus; the
+headed measurement scripts were the cause, and they now run headless with identical results.
+
+### Prompt Context
+**User prompt (verbatim):** (see Step 8)
+**Assistant interpretation:** Integrate the delegated task, verify it independently, keep the branch green.
+**Inferred user intent:** All four follow-ups done, in one reviewable branch.
+**Commit (code):** 0371aac — "Merge task/chb-034-first-print-time (fusz: the first print meters a 640 px analysis image on every engine)"; scripts headless in the commit of this step.
+
+### What I did
+- Read `git diff main...task/chb-034-first-print-time` for `decode.ts`, `first-print.ts`, `studio-engine.ts`
+  (14 files, +827/−27): `withAnalysis` / `scanWorking` in decode, `ANALYSIS_LONG = 640`, `analysisSha`,
+  `StudioEngine.analysisOf`, `onAnalysis(recipe, analysis)` moving crop, rebate and open gate into analysis px,
+  `firstPrint` metering on its own `Graph` with the analysis source registered.
+- `git merge --no-ff task/chb-034-first-print-time`: conflicts only in `tasks.md` and `changelog.md` (both sides
+  appended); kept every line, with `5un4` and `fusz` both checked.
+- Renumbered the subagent's `scripts/05-first-print-metering.ts` → `07-…` (05 is the lookup bench) and its references
+  in diary 02.
+- Corrected two doc comments in `studio-engine.ts` (`Decoded.analysis`, `ANALYSIS_LONG`) that still described the
+  subagent's first, discarded approach ("area-averaged from its own working image"); its diary Step 2 shows that
+  version left 0.0015 log H because it blurs twice.
+- Rebuilt, ran `scripts/03-first-print-gpu-vs-cpu.ts` on both engines (under the GPU lock).
+- Scripts 01, 02, 03, 07: `headless: !process.argv.includes('--headed')`. Verified headless with 01 and 02.
+- Saved a memory for future sessions: measurements on this Mac run headless.
+
+### Why
+- A delegated result is checked against the code and against an independent measurement before it is merged.
+- A visible Chrome window per file and engine took the user's focus for no benefit.
+
+### What worked
+- Script 03 after the merge (GPU vs CPU; Time, Δ of log10(time) + mean lights): all 15 frames the same Time;
+  DSC_8559 6.3 / 6.3 (was 5.612 / 6.3), Δ −0.0004; the other NEFs Δ −0.0001 to −0.0003; raw010 −0.0027 per frame,
+  raw000 −0.0012, raw007 −0.0034, roll-102 0.0000. These equal the subagent's table.
+- Checks on the merged tree: typecheck, lint, gen:check; `pnpm test` 105 files, 2797 passed, 19 skipped;
+  `CI=1 pnpm test:browser` 108/108 on SwiftShader (4.3 min) and with `REAL_GPU=1` 108/108 on Metal (57 s).
+- Headless Chrome: `"engine": "GPU · apple metal-3 · 4000 px"`; DSC_8559 open 6307 ms (headed 6309), stall 0, drag
+  204 ms, 8 renders.
+
+### What didn't work
+- N/A
+
+### What I learned
+- My Step 5 explanation (an engine-dependent measurement near a rounding boundary, possibly through the hardware
+  filter) was half right: the boundary was right, the cause was resolution. At equal size the engines agree to 4e-6.
+- The GPU's DSC_8559 print is now 1.3 levels darker than before (luma 103.7): it meters 0.0054 log H more exposure, as
+  the CPU engine does. Its remaining difference to the CPU's luma (105.1) is rendering at 4000 vs 640 px, not metering.
+
+### What was tricky to build
+- Bookkeeping conflicts: docmgr writes whole task lines, so both branches' check marks had to be merged per task id.
+
+### What warrants a second pair of eyes
+- `onAnalysis` maps a strip frame's crop by finding the same box among the working-image frames; when the two decodes
+  find a different number of frames it scales the crop instead (the subagent's tests cover both).
+- Strips open ~0.3 s slower on the GPU engine (a second conditioning at 640 px, in the worker).
+
+### What should be done in the future
+- The subagent's follow-ups: `szeo` (a negative's base depends on the working size), `3nod` (CPU and GPU at 4000 px
+  still 0.0026 apart), `ayqx` (the roll kit meters the working image too), `alwi` (0.0004 binned vs demosaic).
+
+### Code review instructions
+- `apps/studio/src/host/first-print.ts` (`onAnalysis`, `firstPrint`), `decode.ts` (`withAnalysis`, `scanWorking`),
+  `studio-engine.ts` (`analysisOf`), `apps/studio/test/first-print-analysis.test.ts`, `e2e/studio-photo.spec.ts`.
+- Validate: `pnpm test`; `CI=1 pnpm exec playwright test e2e/studio-photo.spec.ts --project=chromium-webgpu`.
+
+### Technical details
+- Subagent branch commits: 3628f3a, 9c6739f, 7ec3684, 53e8c94, b6e4111.

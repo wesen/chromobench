@@ -31,3 +31,26 @@ fn pack(@builtin(global_invocation_id) gid: vec3<u32>) {
   dstU[i] = pack2x16unorm(v.rg);
   dstU[i + 1u] = pack2x16unorm(vec2<f32>(v.b, 1.0));
 }
+
+// `unpackF32` (CHB-034): an f32 source of c channels per pixel, uploaded as it is into a storage buffer, into the
+// rgba32float texture the chain reads. Expanding it to four channels on the CPU (a 171 MB array at 4000 × 2674)
+// held the main thread ~95 ms per open. Same rules as ChainRunner.upload's CPU path: one channel spread to grey,
+// missing channels 0, alpha 1.
+@group(0) @binding(7) var<uniform> F: P;  // size = (w, h, c, 0)
+@group(0) @binding(8) var<storage, read> srcC: array<f32>;
+@group(0) @binding(9) var dstC: texture_storage_2d<rgba32float, write>;
+
+@compute @workgroup_size(8, 8)
+fn unpackF32(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x >= F.size.x || gid.y >= F.size.y) { return; }
+  let c = F.size.z;
+  let i = (gid.y * F.size.x + gid.x) * c;
+  var v = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  if (c == 1u) {
+    let g = srcC[i];
+    v = vec4<f32>(g, g, g, 1.0);
+  } else {
+    for (var k = 0u; k < min(c, 4u); k++) { v[k] = srcC[i + k]; }
+  }
+  textureStore(dstC, vec2<i32>(gid.xy), v);
+}

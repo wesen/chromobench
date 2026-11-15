@@ -1,4 +1,4 @@
-// Stages 1–3 in headless Chromium on SwiftShader: runtime caps, compile diagnostics, device loss,
+// Stages 1–3 in headless Chromium (SwiftShader; the machine's GPU with REAL_GPU=1): runtime caps, compile diagnostics, device loss,
 // table parity against core's f64 tables (each with a broken variant that must fail), the worker
 // pool's bitwise equality, the OPFS cache across a reload, and the wqul integer/accuracy probe.
 import { expect, test, type Page } from '@playwright/test';
@@ -18,7 +18,10 @@ test.beforeEach(async ({ page }) => {
 test('stage 1: caps report a granted device within the adapter limits', async ({ page }) => {
   const r = await run(page, 'caps');
   expect(r.caps.available).toBe(true);
-  expect(r.caps.adapter.fallback).toBe(true); // SwiftShader
+  // SwiftShader by default; REAL_GPU=1 gets the machine's adapter (CHB-034). Either way the runtime reports which.
+  expect(typeof r.caps.adapter.fallback).toBe('boolean');
+  if (!process.env['REAL_GPU']) expect(r.caps.adapter.fallback).toBe(true);
+  else expect(r.caps.adapter.fallback).toBe(false);
   for (const k of ['maxTextureDimension2D', 'maxBufferSize', 'maxStorageBufferBindingSize', 'maxComputeWorkgroupStorageSize']) {
     expect(r.caps.limits[k]).toBeLessThanOrEqual(r.adapterLimits[k]);
   }

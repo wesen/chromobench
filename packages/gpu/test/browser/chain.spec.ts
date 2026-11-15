@@ -102,3 +102,11 @@ test('lookups between nodes: hw ≤ 1.6e-4 rms, manual trilinear = look3, tetrah
   expect(tri.rms / tet.rms).toBeGreaterThan(1.3); // textbook: 1.9× at N = 33
   expect(bad.rms).toBeGreaterThan(10 * hw.rms);
 });
+
+test('an f32 source uploaded on the GPU (unpackF32) equals the CPU expansion bit for bit, 1, 3 and 4 channels', async ({ page }) => {
+  const r = await run(page, 'upload:f32');
+  for (const c of ['c1', 'c3', 'c4']) {
+    expect(r[c].values).toBe(37 * 23 * 4);
+    expect(r[c].differing).toBe(0);
+  }
+});

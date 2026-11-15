@@ -20,13 +20,16 @@ test.beforeEach(async ({ page }) => {
 // scan-of-print paper white exactly 65,535. Measured (SwiftShader): 99.85 % of values within 2e-6, the
 // rest up to 1.3e-5, all near the top of the cube (G ≈ 1) where the f32 bisection's C_max is
 // ill-conditioned; never more than 1 code in 16 bits. The tolerance moved accordingly (written reason).
+// A real GPU (CHB-034, REAL_GPU=1 on an M1 Max, Metal): the worst pixels are the same ones, at G ≈ 1, with larger
+// errors: 0.34 % beyond 2e-6, 3.0e-5 at most, 4 codes in 16 bits (ProPhoto, scan-of-print). Bounds 1.5× that.
 test('output.display: GPU oklch knee and TRC match core f64 in all five spaces and both renderings', async ({ page }) => {
+  const fallback = (await run(page, 'caps')).caps.adapter.fallback as boolean;
   const r = await run(page, 'output:display', { knee: 'oklch' });
   expect(r.outside).toBe(0);
   expect(r.paperWhiteScan.every((v: number) => v === 65535)).toBe(true);
-  expect(r.over2e6 / r.values).toBeLessThan(0.002);
-  expect(r.maxLin).toBeLessThan(2e-5);
-  expect(r.maxCodes16).toBeLessThanOrEqual(1);
+  expect(r.over2e6 / r.values).toBeLessThan(fallback ? 0.002 : 0.005);
+  expect(r.maxLin).toBeLessThan(fallback ? 2e-5 : 4.5e-5);
+  expect(r.maxCodes16).toBeLessThanOrEqual(fallback ? 1 : 6);
 });
 
 test('output.display: clip and tanh shoulder match core f64', async ({ page }) => {

@@ -20,7 +20,7 @@ import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import { decodeFile } from './decode.ts';
 import { referenceEngine, type RefLike } from './engine-serve.ts';
 import type { IntegrateToGrey } from './first-print.ts';
-import { StudioEngine, type HostServices } from './studio-engine.ts';
+import { ANALYSIS_LONG, StudioEngine, type HostServices } from './studio-engine.ts';
 import { WorkerClient, WorkerEngine } from './worker-engine.ts';
 
 export type EngineChoice = 'auto' | 'gpu' | 'reference';
@@ -210,8 +210,10 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const inEngine = primary instanceof WorkerEngine ? primary : null;
   const host: HostServices = {
     decode: (bytes, sha, name, mode) => {
-      if (client) return client.decode(bytes, sha, name, mode, { long, dust: settings.dust, keep: inEngine ? 'register' : 'return' });
-      return decodeFile(bytes, sha, name, mode, { long, dust: settings.dust, roll, raw: LAZY_LIBRAW });
+      // with the first print's analysis image when the working size is not its size (CHB-034 fusz: every engine
+      // meters the same ANALYSIS_LONG image, so the first print's Time does not depend on the engine)
+      if (client) return client.decode(bytes, sha, name, mode, { long, dust: settings.dust, keep: inEngine ? 'register' : 'return', analysisLong: ANALYSIS_LONG });
+      return decodeFile(bytes, sha, name, mode, { long, dust: settings.dust, roll, raw: LAZY_LIBRAW, analysisLong: ANALYSIS_LONG });
     },
     prior: (name) => openPrior({ name }),
     forget: (e, sha) => (e as { forgetSource?: (s: string) => void }).forgetSource?.(sha),
