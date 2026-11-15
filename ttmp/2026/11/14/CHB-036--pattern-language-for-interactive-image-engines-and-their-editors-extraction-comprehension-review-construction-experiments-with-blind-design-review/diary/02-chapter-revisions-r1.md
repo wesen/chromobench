@@ -427,3 +427,114 @@ should not refuse where the contract says "complete".
 - Variance terms in the sketch: `var(decimate, s)` (box of s: (s² − 1)/12 per axis), `var(upsample, s)` (bilinear),
   `var(preblur)`; residual in reduced pixels `/ s`. Constraint `s ≤ σf / 2` keeps the reduced kernel at least two
   reduced pixels wide.
+
+## Step 5: Chapter 9, Vector Edit Document
+
+Chapter 9's core was the most generative of the four: all six document runs stored crop and spot centres as frame
+fractions converted once at the tool boundary, validated in one dispatch, made batches atomic by working on a copy,
+and kept an append-only journal beside a separate undo structure (document-r1 `cross.generativity`). The review's
+complaints were about the machinery the chapter prescribed on top: inverse-recording transactions where replay
+(impl-B, chapter-4; impl-E, control-1) or snapshots (impl-C, control-2) were simpler and as correct; per-field paths
+(`spots.s7.r`) and unit tags with nothing to attach to; and "migrate, then validate" with the edit schema, which made
+impl-A (chapter-3) refuse old documents. So the Solution now says: strict edits, lenient reads; undo as a cursor over
+applied units with the state rebuilt by replay or snapshots; inverses only where they pay. The migration chain stays
+and is stressed: impl-A was the only design in which version 3 composes.
+
+The star stays ★★ for the same reason as chapters 1 and 4: the core shape was built by every run, the controls
+included. The undo mechanism, which did vary, is now a choice inside the pattern, not part of its definition.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Apply RESULTS.md's chapter 9 list (soften inverses, per-field addressing and unit tags;
+split strict edits from lenient reads; keep and stress the migration table; add the six listed ideas).
+
+**Inferred user intent:** A document chapter that asks for the machinery a document needs and no more, and that
+never refuses an edit the editor once saved.
+
+**Commit (code):** 33233a6 — "Chapter 9 rev1: strict edits and lenient reads, undo by replay or snapshots with
+inverses only where they pay, …"
+
+### What I did
+- Solution: lengths in one stated unit with a rule for anisotropic renderings; ids never reused; source reference
+  beside the document; strict mutation validation and lenient reading; all-or-nothing units, append-only journal,
+  undo cursor; replay or snapshots unless the document is too large; migrations as a chain.
+- Forces: "Free-form against validated" replaced by "Strict edits against faithful loads".
+- Structure: Transaction participant removed; Source reference added; Field schema becomes "the one list of
+  fields" with rule, reader, default and unit.
+- Collaborations: proposals validated at propose and at approve; compile-and-cache (v1 note 9) moved here.
+- Sketch rewritten: `apply` (strict, on a copy), `state` (replay), `edit`, `propose`, `approve`, `reject`, `push`,
+  `undo`/`redo`, `preview`/`commitPreview` (net diff), the spot tool with `freshRecordId`, `load` with a migration
+  chain and a lenient reader.
+- Notes: v1 1 and 3 kept (tightened); v1 2 rewritten (lengths need a rule; unit tags only with a catalogue); v1 4
+  rewritten (whole-record addressing, ids never reused, object-machinery ids refused); new 5 (strict edits, lenient
+  reads); v1 7 + 8 merged (6: chain, defaults belong to the version); v1 5 extended (7: proposals checked twice);
+  new 8 (replay, snapshots or inverses, and history laws); v1 10 extended (9: net diff); v1 6 extended (10: source
+  outside the mutable state); new 11 (schema as the one list of fields).
+- Variations: "Normalised coordinates" and "Snapshot history" removed (both now in the Solution); "Inverse-recording
+  transactions" added.
+- GoF line: Command (mutations), Memento (snapshots).
+- The Editor lab file reference (`src/workspace.js:410` in its archive) dropped from Motivation: it points into a
+  private archive and does not help a reader of a portable chapter.
+
+### Why (evidence per change)
+- Inverses softened: document-r1 `yardstick_problems` 4 and `cross.worse_is_better` (B 600 lines and E 642 reach
+  A's 945-line quality "with replay-based undo ... no inverses, MISSING sentinel, recordPathOf or diffStates").
+- Per-field addressing: problems 3, impl-A `src/index.ts:371-403`, impl-D (chapter-1) `:292-307`; smells
+  "speculative generality" in A and D, and impl-F's crop field paths `:226-238`.
+- Unit tags without a catalogue: problems 2, impl-A `:322` ("ornamental strings").
+- Strict edits, lenient reads: problems 1 and ideas 3; impl-A rejects v1 spots outside the frame
+  (`:750-752`); split readers in impl-B `:172-175`, impl-D `:372-376`, impl-F `:296`.
+- Migration chain stressed: `cross.worse_is_better` and every change request 2 analysis (only A composes v1 → v2 →
+  v3; B, C, D, E, F "no chain").
+- Net diff on commit: ideas 1, impl-A `:483-507, :631`.
+- Ids never reused: ideas 2, impl-C `:569-594`, impl-D `:478-494`.
+- Proposals checked twice: ideas 4, impl-E `:464-465`, impl-A `:561-563`; impl-E's edge-case test "approving a
+  proposal against a deleted spot".
+- Source outside the mutable state: ideas 5, impl-E `:95-100, :379`.
+- Length rule: ideas 6 and problems 5, impl-E `:594` (shorter side), impl-F `:670, :687` (√(sx·sy)).
+- `__proto__` ids: ideas 7, impl-B `:204-212`, impl-E `:156-158`.
+- History laws: ideas 9, impl-A `test/fuzz.test.ts:25-117`.
+- Schema as the one list of fields: every change request 1 analysis ("spelled out in about seven/eight places" in
+  A–F; impl-A "cloneState and diffStates list fields by hand, in parallel with the schema").
+- Not taken: "snap derived pixels to 1e-6" (ideas 8) is a numerical detail of the task's one-pixel tolerance, not a
+  property of edit documents. The "Compiler out of scope" problem (6) is task-specific: the chapter is about
+  documents that compile into Chapter 1's graph, so the Compiler stays.
+
+### What worked
+- Writing undo as a cursor over a list of unit ids separate from the journal made approve after undo, redo
+  discarding and "undone entries stay in the journal" fall out of one `push`.
+
+### What didn't work
+- First draft 2,694 words; cut to 2,500 by compressing the notes and the Motivation.
+- First sketch said "the same document at three resolutions" above two lines; fixed. `approve` first read
+  `s.journal[id]` without saying the entry must be pending; now `pending entry id`.
+
+### What I learned
+- The reviewers' "mixed units force an anisotropic rule" (problems 5) is right that a rule is needed, but not that
+  mixed units are the problem: a fraction of the width needs the same rule as soon as a rendering's aspect differs.
+  The chapter now asks for a stated rule whatever the unit.
+
+### What was tricky to build
+- Replay revalidates each unit's mutations against the state it replays onto. That is deterministic (same base,
+  same units) and keeps one validator, but it means a stored base read leniently must never be re-checked as a whole
+  by the strict schema; `apply` checks only the mutated paths, which is why the sketch validates mutation values,
+  not whole documents.
+
+### What warrants a second pair of eyes
+- Note 8's claim of when inverses pay (large documents, long histories, undo against a state others changed) is
+  argued, not measured in the experiment.
+- 2,500 words by `wc -w`, at the limit.
+
+### What should be done in the future
+- Rerun the document task with this version and both change requests (gradient mask, version 3) as hidden tests,
+  since piecemeal growth was where all six designs were weakest.
+
+### Code review instructions
+- `git diff c957e8f 33233a6 -- docs/patterns/09-vector-edit-document.md`; check the sketch against
+  `docs/patterns/experiments/tasks/document/TASK.md` requirements 4–7.
+
+### Technical details
+- Undo model: `journal` (every entry, append-only), `units` (ids of applied entries in undo order), `cursor`;
+  `push` truncates `units` at the cursor, so redo is discarded while the entries stay in the journal.
