@@ -1046,3 +1046,58 @@ actually"
 
 ### Technical details
 - Keys: O show/hide, Shift+O colour, Alt+O mode; masks panel Overlay section; chip Shift-click/Alt-click.
+
+## Step 19: CHB-038 merged — diagnostics, bug reports, the owner's WebGPU error fixed; CHB-041 started
+
+The diagnostics journal, GPU error capture with labels, Help ▸ Report a Problem (one zip), the Diagnostics panel and
+badge, File ▸ Open Report and `wb.diagnostics()` are on the integration branch. The owner's "Destroyed texture …
+160×107 RGBA32Float used in a submit" was a use-after-destroy in the GPU film grain's cached texture of ones
+(`packages/gpu/src/film.ts`), raced by a thumbnail and the viewer rendering a camera file's grain together; fixed by
+deferring the destruction of textures while engine work is in flight (`GpuRuntime.busy()/retire()`), with a
+regression test that fails on the old code with the owner's exact message. The journal then found a second problem:
+E_GPU_OOM with two 24 MP NEFs (≈ 171 MB per open camera file in a 512 MB budget) — CHB-041.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 18)
+
+**Assistant interpretation:** Merge the diagnostics and the fix; start the memory fix the journal revealed.
+
+**Inferred user intent:** A studio that works with real files, and evidence when it does not.
+
+**Commit (code):** f96c135 — "Merge CHB-038 diagnostics and bug reports (…)"; CHB-041 25f5384 (ticket, spec)
+
+### What I did
+- Merged with the recreated `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 141 files / 3412
+  passed / 19 skipped, goldens 66/66; the dev server keeps serving the integration worktree.
+- CHB-041 (GPU memory residency) ticket, spec and phase agent, branch from f96c135.
+
+### Why
+- The OOM breaks the owner's two-NEF test; it also covers CHB-037 P9-11.
+
+### What worked
+- The journal earned its keep at once: the OOM was invisible before (renders failed quietly or showed the previous
+  picture).
+
+### What didn't work
+- The destroyed-texture race never showed headless on Metal, even on the old code; only the synthetic interleaving test
+  reproduces it deterministically.
+
+### What I learned
+- Timing races in WebGPU need deterministic interleaving tests, not end-to-end replays.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- CHB-038: reopening a report writes its edits into the owner's storage for those files, replacing his own edits of the
+  same files.
+
+### What should be done in the future
+- Merge CHB-041; the owner should hard-reload (the service worker changed; `sw.js` now answers a version request).
+
+### Code review instructions
+- `e2e/diagnostics.spec.ts` ("the interleaving itself"); `packages/gpu/src/film.ts`; CHB-038 diary Steps 1–6.
+
+### Technical details
+- Report zip: `README.txt`, `journal.txt`, `environment.json`, `report.json`, documents, previews, optional originals.
