@@ -710,3 +710,108 @@ collapsed digital palette; ratings are undoable again and the History jump asks 
 
 ### Technical details
 - Browser on the P5b-2 branch after its merge: 123 passed, 2 skipped, `film.spec.ts` load timeout, `tools/wgsl-check`.
+
+## Step 13: P8b merged — editors for Editor lab's tools
+
+The stack kit's params panel has editors for curve, levels, HSL, grade and mixer, and the colour-mask eyedropper; each
+gesture is one undo step. Editors are data (`{ form, covers }`), so layouts built in the agent's sandbox can carry
+them. Merged; all checks green.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the editors.
+
+**Inferred user intent:** Lightroom-grade controls for the new layer tools.
+
+**Commit (code):** 528b537 — "Merge P8b editors (…)"
+
+### What I did
+- Merged with `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 134 files / 3194 passed / 19
+  skipped, goldens 66/66.
+
+### Why
+- N/A
+
+### What worked
+- The curve is drawn with core's own `toneCurve`/`evalCurve`, reaching studio-kit through an injected `editorMath`
+  service (studio-kit may not import core).
+
+### What didn't work
+- On the P8b branch: `tools/wgsl-check` (P3b's) and a load timeout in `arrangements.spec.ts` (passes 8/8 alone).
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P8b's notes for P9: the mock engine still lacks P8a's ops (P3b), editor validation (registered form, real
+  argument names) does not exist, scene-stage editors are unit-tested only, data colours use CSS `oklch()` that the
+  colour lint does not count.
+
+### What should be done in the future
+- Merge P3b and P6b; then P9.
+
+### Code review instructions
+- `packages/studio-kit/kits/stack/` editors; `diary/15-phase-p8b-editors.md`.
+
+### Technical details
+- N/A
+
+## Step 14: P6b merged — an agent with only `eval` drives the whole workbench
+
+`wb` in the DSL lists and runs every command (under the photographer's mode: ask proposes, auto commits, read-only
+refuses), writes view state like a bound control, reads typed selectors, explains the live screen including what
+each control writes, and builds a layout in the sandbox that crosses as data and is proposed as a dialog. The two
+completeness tests pass over all eight built layouts. "Look" now means one thing (the eval image is a `Show`).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1; the requirement "also agent manipulatable / an agent having only eval can
+basically cover all the necessary functionality and introspection into the workbench" is from the design request)
+
+**Assistant interpretation:** Merge the workbench; verify the completeness claims.
+
+**Inferred user intent:** The agent is a first-class user of the same studio.
+
+**Commit (code):** 8bc2e39 — "Merge P6b agent workbench (…)"
+
+### What I did
+- Merged with `merge-phase.sh` (no conflicts beyond the changelog, although P6b and P8b both touched
+  `apps/studio/src/main.ts`); checks: typecheck 0, lint, gen:check (26), vitest 137 files / 3215 passed / 19 skipped,
+  goldens 66/66; contract 1.3.0 with CC-019…CC-022 all present.
+
+### Why
+- N/A
+
+### What worked
+- Completeness tests (`studio-kit/test/chat/workbench.test.ts`): every command a key, menu, toolbar or button reaches
+  is in `wb.commands()`; every control (100+) maps to a document path, a state path or a command.
+
+### What didn't work
+- N/A
+
+### What I learned
+- Layouts cross the sandbox by recording: `build` runs on recording proxies in the sandbox and the studio replays the
+  recording on fresh `ck`/`cb`, where the passes run — no function crosses.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P6b's open items: agent layouts and agent looks last only the page session (a reload breaks a document linking an
+  agent look with E_LINK — persist both); a command's writes after its first `await` are attributed to the user; the
+  Go hub's wire field is still `looks`.
+
+### What should be done in the future
+- Merge P3b; then P9 (full browser incl. REAL_GPU=1, persona session incl. "a simpler screen" through
+  `wb.layouts.build`).
+
+### Code review instructions
+- `packages/dsl` `wb`, `packages/studio-kit/kits/chat` `studioWorkbench`; `diary/16-phase-p6b-workbench.md`.
+
+### Technical details
+- N/A

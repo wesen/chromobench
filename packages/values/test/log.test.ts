@@ -59,6 +59,13 @@ describe('the log', () => {
     expect(log.undo().undo().undo().cursor).toBe(0); // nothing more to undo: the same log
   });
 
+  it('commit keeps the reason on its entries (auto mode), as a proposal does; it survives serialisation', () => {
+    const log = base().commit(edit('f1', tx('a1', [set('main.time', 13)], 'agent')), { why: 'the print is light' });
+    expect(log.inEffect('f1').at(-1)!.why).toBe('the print is light');
+    expect(Log.load(log.toJSON()).inEffect('f1').at(-1)!.why).toBe('the print is light');
+    expect(base().commit(edit('f1', tx('u1', [set('main.time', 12)]))).inEffect('f1').at(-1)!.why).toBeUndefined();
+  });
+
   it('rules: a refused edit leaves the log as it was; unknown kinds and documents are refused', () => {
     const log = base();
     expect(code(() => log.commit(edit('f1', tx('bad', [set('main.time', -1)]))))).toBe('E_ARG_RANGE');

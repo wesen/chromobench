@@ -342,8 +342,9 @@ export class Log {
    * transaction without mutations is no edit; nothing to commit returns this log.
    * `merge`: fold it into the newest step as the net change, when that step is at the cursor and changes the same
    * documents once each (nudges of one control); a net change of nothing removes the step.
+   * `why`: the author's one-line reason, kept on the entries as a proposal keeps it (an agent's edit in auto mode).
    */
-  commit(x: Edit | Batch, o: { merge?: boolean } = {}): Log {
+  commit(x: Edit | Batch, o: { merge?: boolean; why?: string } = {}): Log {
     const edits = (isBatch(x) ? x.edits : [x]).filter((e) => e.tx.mutations.length > 0);
     if (!edits.length) return this;
     if (isBatch(x)) for (const e of edits) if (e.tx.batch !== x.id) fail('E_MUTATION', `transaction ${e.tx.id} is not in batch ${x.id}`);
@@ -356,7 +357,7 @@ export class Log {
       if (merged) return merged;
     }
     const at = this.#s.opts.now();
-    const added = applied.map((tx, i) => freeze<LogEntry>({ seq: this.#s.next + i, doc: edits[i]!.doc, tx, at }));
+    const added = applied.map((tx, i) => freeze<LogEntry>({ seq: this.#s.next + i, doc: edits[i]!.doc, tx, at, ...(o.why === undefined ? {} : { why: o.why }) }));
     const step: Step = { seqs: added.map((e) => e.seq), label, ...(batch === undefined ? {} : { batch }) };
     return this.#pushStep(step, [...this.#s.entries, ...added], values).#with({ next: this.#s.next + added.length });
   }

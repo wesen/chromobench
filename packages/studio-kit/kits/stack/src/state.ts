@@ -1,5 +1,5 @@
 // cb.kits.stack: the kit's view state (never undone, never saved with a document): the selected entry per frame
-// (the params and masks panels follow it), the collapsed groups, the mask tools' options.
+// (the params and masks panels follow it), the collapsed groups, the mask tools' options, the HSL editor's property.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MaskCombine } from '@chromobench/contract';
 import type { Id } from '@chromobench/values';
@@ -11,10 +11,15 @@ export interface StackView {
   selected: Record<string, Id | null>;
   /** groups shown closed in the panels */
   collapsed: Record<Id, boolean>;
-  /** the mask tools: how a drawn component combines with the mask, the brush radius (document px) */
-  mask: { combine: MaskCombine; radius: number };
+  /**
+   * the mask tools: how a drawn component combines with the mask, the brush radius (document px), and the colour
+   * range component the eyedropper samples into (null: a click adds a new colour range)
+   */
+  mask: { combine: MaskCombine; radius: number; sample: Id | null };
+  /** what the HSL editor's sliders change */
+  hsl: 'hue_deg' | 'saturation' | 'lightness';
 }
-export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12 } } };
+export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12, sample: null }, hsl: 'saturation' } };
 
 /** the selected entry of a frame (the current one by default), when it is still in its document */
 export function selectedIn(s: any, f: string | null = sel.current(s)): Id | null {

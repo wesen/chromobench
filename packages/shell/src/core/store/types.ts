@@ -22,6 +22,19 @@ export interface TxOpts {
   keepPreview?: boolean;
 }
 
+/** Who acts while Store.acting runs: an agent's command through the workbench (CHB-037 P6b). */
+export interface Actor {
+  by: Author;
+  /** added to every transaction's source ({ kind: 'agent', eval, command }) */
+  source?: JsonObject;
+  /** the agent's reason, kept on the log entries */
+  why?: string;
+  /** document edits become proposals (ask mode) */
+  propose?: boolean;
+  /** document edits are refused with this message (read-only) */
+  refuse?: string;
+}
+
 export interface WriteInfo {
   label?: string;
   tier?: 'document' | 'view';

@@ -21,6 +21,7 @@ import type { NodeData } from '../ir/node.ts';
 import { isNode } from '../ir/node.ts';
 import type { ModuleDef, ToolSpec } from '../build/types.ts';
 import { explainApp } from '../build/explain.ts';
+import { commandTable, controlsOf, reachableCommands, type CommandRow, type ControlRow, type Reach } from './introspect.ts';
 import { withDefaults } from '../build/checks.ts';
 import type { BuiltApp } from './built-app.ts';
 import { assemble, menuIndex } from './assemble.ts';
@@ -648,8 +649,11 @@ export class Runtime<S = any> {
     };
   }
 
-  /** the app as text; { live: true } evaluates τ props and command labels against the current state */
-  explain(o: { live?: boolean; at?: boolean } = {}): string {
+  /**
+   * the app as text; { live: true } evaluates τ props and command labels against the current state; { module } shows
+   * that module only (without the command list): what is on screen
+   */
+  explain(o: { live?: boolean; at?: boolean; module?: string } = {}): string {
     const st = this.store.readonly();
     const menus = menuIndex(this.app.ir.menus);
     const rows = this.programCommands().map(c => {
@@ -665,8 +669,20 @@ export class Runtime<S = any> {
     return explainApp(
       this.app.ir,
       { commands: this.commands.map.size, bindings: this.keymap.bindings.length, scopes: new Set(this.keymap.bindings.map(b => b.scope)).size, passes: this.app.passOrder.length, diagnostics: this.diagnostics, commandRows: rows, platform: this.platform },
-      { ...(o.live ? { live: st } : {}), ...(o.at ? { at: true } : {}), store: this.store },
+      { ...(o.live ? { live: st } : {}), ...(o.at ? { at: true } : {}), ...(o.module ? { module: o.module } : {}), store: this.store },
     );
+  }
+  /** the command table as data (introspect.ts): labels, arguments, keys, menus, enabled and why, in the current state */
+  commandTable(): CommandRow[] {
+    return commandTable(this);
+  }
+  /** the controls of the program (introspect.ts) with their live values; { module } one module only */
+  controls(o: { module?: string } = {}): ControlRow[] {
+    return controlsOf(this.app.ir, { store: this.store, live: this.store.readonly(), ...(o.module ? { module: o.module } : {}) });
+  }
+  /** every command a key, a menu, a toolbar or a button can run now */
+  reachable(): Reach[] {
+    return reachableCommands(this);
   }
   /** commands the program and its kits define (not the built-ins) */
   programCommands(): ReturnType<Commands<S>['all']> {

@@ -74,3 +74,64 @@ button.cb-stack-chip:hover { border-color: var(--accent); color: var(--text); }
 
 /* a mask tool's gesture drawn on the print */
 .cb-stack-gesture { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+
+/* the editors of the params panel (curve, levels, HSL, grading, mixer): the shell's planes and the one number control
+   in the panel's rhythm — a bar (a segmented choice, Reset), the plane, a dim readout and hint */
+.cb-stack-editor { padding: 2px 10px 4px; }
+.cb-ed { display: flex; flex-direction: column; gap: 6px; }
+.cb-ed-bar { display: flex; align-items: center; gap: 6px; }
+.cb-ed-bar .cb-ed-seg { flex: 1; }
+.cb-ed-bar .cb-ed-reset { margin-left: auto; }
+.cb-ed-hint { margin: 0; font-size: 11px; line-height: 1.3; }
+.cb-ed-read { color: var(--text2); font-size: 11px; text-align: center; font-variant-numeric: tabular-nums; min-height: 14px; }
+.cb-ed .ck-curve-g { max-width: 260px; align-self: center; cursor: crosshair; }
+.cb-ed .cb-stack-num { padding: 1px 0; }
+.cb-ed .cb-stack-adv > summary { padding: 2px 0; }
+
+/* levels: the stage input's histogram, the transfer, the three handles under it */
+.cb-ed-hist { width: 100%; height: 72px; display: block; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius, 2px); }
+.cb-ed-hist-a { fill: var(--text3); opacity: .35; }
+.cb-ed-hist-t { fill: none; stroke: var(--text); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.cb-ed-handles { position: relative; height: 12px; margin: -4px 0 0; }
+.cb-ed-handle { position: absolute; top: 0; width: 0; height: 0; margin-left: -6px; border: 6px solid transparent; border-top: 0; border-bottom: 10px solid var(--text2); cursor: ew-resize; outline: none; touch-action: none; }
+.cb-ed-handle { filter: drop-shadow(0 0 .6px var(--text2)); }
+.cb-ed-handle.is-black { border-bottom-color: var(--text); }
+.cb-ed-handle.is-gamma { border-bottom-color: var(--text3); }
+.cb-ed-handle.is-white { border-bottom-color: var(--panel); }
+.cb-ed-handle:focus-visible { filter: drop-shadow(0 0 2px var(--accent)); }
+
+/* HSL: a band per row, its swatch and a track of what the slider does */
+.cb-ed-swatch { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line2); }
+.cb-ed-swatch.is-big { width: 16px; height: 16px; border-radius: var(--radius, 3px); }
+.cb-ed-band .cb-stack-num-l { min-width: 4.2em; }
+.cb-stack-num.has-track .cb-range { -webkit-appearance: none; appearance: none; height: 14px; background: transparent; }
+.cb-stack-num.has-track .cb-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--cb-track); }
+.cb-stack-num.has-track .cb-range::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -3px; border-radius: 50%; background: var(--panel); border: 1px solid var(--text2); }
+.cb-stack-num.has-track .cb-range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--cb-track); }
+.cb-stack-num.has-track .cb-range::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 1px solid var(--text2); }
+
+/* colour grading: three wheels side by side (the shell's colour wheel, on OkLCh hues) */
+.cb-ed-wheels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.cb-ed-wheel { align-items: stretch; }
+.cb-ed-wheel .ck-wheel-l, .cb-ed-wheel .cb-ed-read { text-align: center; }
+.cb-ed-wheel .ck-wheel-d { align-self: center; }
+.cb-ed-disc { background: radial-gradient(circle closest-side, var(--panel3), transparent 100%), conic-gradient(from 0deg, oklch(70% .13 0), oklch(70% .13 60), oklch(70% .13 120), oklch(70% .13 180), oklch(70% .13 240), oklch(70% .13 300), oklch(70% .13 360)); }
+.cb-ed-lum .cb-num { width: 3.2em; font-size: 11px; }
+.cb-ed-lum .cb-range { min-width: 30px; }
+
+/* the channel mixer: a grid of cells, the row sums */
+.cb-ed-grid { display: grid; grid-template-columns: 4.2em repeat(3, minmax(0, 1fr)) 3em; gap: 2px 4px; align-items: center; }
+.cb-ed-gh { color: var(--text3); font-size: 11px; text-align: center; }
+.cb-ed-gl { color: var(--text2); }
+.cb-ed-grid [hidden] { display: none; }
+.cb-ed-cell { width: 100%; text-align: center; cursor: ew-resize; border-color: var(--line); background: var(--field); }
+.cb-ed-cell:focus { cursor: text; }
+.cb-ed-cell.is-zero { color: var(--text3); }
+.cb-ed-sum { color: var(--text3); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.cb-ed-sum.is-off { color: var(--text); }
+.cb-ed-switch { display: inline-flex; align-items: center; gap: 4px; color: var(--text2); }
+
+/* a colour range's colour: its swatch, OkLab numbers and Sample (the eyedropper) */
+.cb-ed-colour { gap: 6px; }
+.cb-ed-lab { flex: 1; min-width: 0; }
+.cb-stack-sample.is-on { background: var(--accent); border-color: var(--accent); color: var(--onaccent); }

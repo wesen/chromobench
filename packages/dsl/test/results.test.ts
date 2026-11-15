@@ -47,7 +47,7 @@ describe('the cap', () => {
 });
 
 describe('shown images', () => {
-  it('at most four per eval in creation order, duplicates once, a LOOKS warning names the rest', async () => {
+  it('at most four per eval in creation order, duplicates once, a SHOWS warning names the rest', async () => {
     const s = await setup();
     const r = await s.run(`const p = frame.print()
 p.show('a')
@@ -57,20 +57,20 @@ frame.with(set('main.params.time_s', 14)).print().show('c')
 frame.negative().show('d')
 frame.scan().show('e')
 return 1`);
-    expect(r.looks.map((l) => l.n)).toEqual([1, 2, 3, 4]);
-    expect(r.looks.map((l) => l.caption.split(' — ')[0])).toEqual(['a', 'b', 'c', 'd']);
-    const w = r.warnings.find((x) => x.code === 'LOOKS')!;
+    expect(r.shows.map((l) => l.n)).toEqual([1, 2, 3, 4]);
+    expect(r.shows.map((l) => l.caption.split(' — ')[0])).toEqual(['a', 'b', 'c', 'd']);
+    const w = r.warnings.find((x) => x.code === 'SHOWS')!;
     expect(w.message).toMatch(/Dropped: image 5 \(line 7\)/);
     expect(r.yaml).toMatch(/^# nothing returned|^1\n\nshown:\n {2}- image: '\[image 1: a — frame_m1 print-xyz/);
     // a film-dyes image renders as greyscale; PNG signature
-    expect(Array.from(r.looks[3]!.image.bytes.slice(0, 4))).toEqual([137, 80, 78, 71]);
+    expect(Array.from(r.shows[3]!.image.bytes.slice(0, 4))).toEqual([137, 80, 78, 71]);
     s.session.dispose();
   });
 
   it('an image with box and at carries the region stats and the densitometer reading', async () => {
     const s = await setup();
     const r = await s.run("frame.print().show({ label: 'patch', box: [40, 24, 16, 16], at: [48, 32] })\nreturn 1");
-    const l = r.looks[0]!;
+    const l = r.shows[0]!;
     expect(l.region).toEqual({ x: 40, y: 24, w: 16, h: 16 });
     expect(l.image.width).toBe(16);
     expect(l.numbers).toHaveProperty('at');
@@ -81,17 +81,17 @@ return 1`);
   it('cb.compare: one side-by-side image whose halves carry their own numbers', async () => {
     const s = await setup();
     const r = await s.run("cb.compare([frame.print(), frame.with(set('main.params.time_s', 20)).print()], 'time 10 vs 20')\nreturn 1");
-    expect(r.looks).toHaveLength(1);
-    expect(r.looks[0]!.numbers).toHaveProperty('left');
-    expect(r.looks[0]!.numbers).toHaveProperty('right');
+    expect(r.shows).toHaveLength(1);
+    expect(r.shows[0]!.numbers).toHaveProperty('left');
+    expect(r.shows[0]!.numbers).toHaveProperty('right');
     s.session.dispose();
   });
 
   it('a shown image is downscaled to 750 px on the long side by default, or to size', async () => {
     const s = await setup();
     const r = await s.run("frame.print().show({ label: 'small', size: 64 })\nreturn 1");
-    expect(r.looks[0]!.image.width).toBe(64);
-    expect(r.looks[0]!.scale).toBeCloseTo(64 / 96, 6);
+    expect(r.shows[0]!.image.width).toBe(64);
+    expect(r.shows[0]!.scale).toBeCloseTo(64 / 96, 6);
     s.session.dispose();
   });
 });

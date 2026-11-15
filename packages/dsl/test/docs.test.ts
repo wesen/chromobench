@@ -56,7 +56,7 @@ describe('topic pages', () => {
           if (t['warns']) expect(codes, label).toContain(t['warns']);
           else expect(codes, label).toEqual([]);
         }
-        if (t['shows']) expect(r.looks.length, label).toBe(Number(t['shows']));
+        if (t['shows']) expect(r.shows.length, label).toBe(Number(t['shows']));
       }
       s.session.dispose();
     });

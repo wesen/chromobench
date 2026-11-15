@@ -25,7 +25,7 @@
 import { Log, type Author, type Batch, type Edit, type JsonObject, type OpenOptions, type Rules, type Step } from '@chromobench/values';
 import { isObj, pathStr, parsePath, getIn, setIn, prefixOf, type Key, type Path } from './util.ts';
 import type { DerivedSource } from './track.ts';
-import type { Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
+import type { Actor, Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
 import { strip, readonlyView } from './store/readonly.ts';
 import { PathIndex } from './store/path-index.ts';
 import { Derived } from './store/derived.ts';
@@ -34,7 +34,7 @@ import { snapshotOf } from './store/snapshot.ts';
 import { Writer } from './store/writer.ts';
 import { MAIN, changedPaths, project } from './store/project.ts';
 
-export type { Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
+export type { Actor, Write, TxOpts, WriteInfo, MountDecl } from './store/types.ts';
 export { strip } from './store/readonly.ts';
 export { PathIndex } from './store/path-index.ts';
 export { Draft } from './store/drafts.ts';
@@ -105,6 +105,8 @@ export class Store implements DerivedSource {
   private readonly coalesceMs: number;
   /** the step the last coalescing transaction made, and when */
   private lastCoalesce: { key: string; at: number; step: Step } | null = null;
+  /** who acts while `acting` runs (an agent through the workbench) */
+  private actor: Actor | null = null;
 
   constructor(init: object = {}, opts: StoreOpts = {}) {
     this.viewPrefixes = (opts.view || DEFAULT_VIEW).map(p => parsePath(p));
@@ -400,8 +402,9 @@ export class Store implements DerivedSource {
     const id = `s${++this.txSeq}`;
     const drafts = new Map<string, ReturnType<Log['draft']>>();
     const view: Write[] = [];
-    const by: Author = opts.by ?? 'user';
-    const source: JsonObject = { ...opts.source, ...(opts.detail !== undefined ? { detail: opts.detail } : {}) };
+    const actor = this.actor;
+    const by: Author = actor?.by ?? opts.by ?? 'user';
+    const source: JsonObject = { ...opts.source, ...(opts.detail !== undefined ? { detail: opts.detail } : {}), ...actor?.source };
     let next = this.log;
     try {
       for (const w of writes) {
@@ -417,10 +420,17 @@ export class Store implements DerivedSource {
       const edits: Edit[] = [...drafts.values()].filter(d => d.changed).map(d => d.edit({ id: `${id}:${d.doc}`, label, by, source, ...(drafts.size > 1 ? { batch: id } : {}) }));
       if (edits.length) {
         const x: Edit | Batch = edits.length === 1 && drafts.size === 1 ? edits[0]! : { id, label, by, source, edits, skipped: [] };
-        const key = opts.coalesce ?? null;
+        if (actor?.refuse) throw Object.assign(new Error(actor.refuse), { code: 'E_READONLY' });
+        if (actor?.propose) {
+          // the agent in ask mode: the document edits wait for approval; view-tier writes land now
+          const proposed = this.log.propose(x, actor.why !== undefined ? { why: actor.why } : {});
+          this.replace(proposed, { label, tx: true, tier: 'document' }, view);
+          return null;
+        }
+        const key = actor ? null : (opts.coalesce ?? null);
         const c = this.lastCoalesce;
         const merge = !!key && !!c && c.key === key && this.now() - c.at < this.coalesceMs && this.log.undoStep === c.step;
-        next = this.log.commit(x, { merge });
+        next = this.log.commit(x, { merge, ...(actor?.why !== undefined ? { why: actor.why } : {}) });
         this.lastCoalesce = key && next.undoStep ? { key, at: this.now(), step: next.undoStep } : null;
       }
     } catch (e) {
@@ -433,6 +443,22 @@ export class Store implements DerivedSource {
     if (next === this.log && !view.length) return null;
     this.replace(next, { label, tx: true, tier: next === this.log ? 'view' : 'document' }, view);
     return next === this.log ? null : next.undoStep;
+  }
+
+  /**
+   * Runs fn with another author (the agent running a command through the workbench, CHB-037 P6b): its transactions
+   * are by `as.by` with `as.source` added to theirs; `propose` turns their document edits into proposals (ask mode);
+   * `refuse` refuses them with E_READONLY and that message (read-only); view-tier writes land in every case. Only what
+   * fn writes synchronously is covered.
+   */
+  acting<T>(as: Actor, fn: () => T): T {
+    const prev = this.actor;
+    this.actor = as;
+    try {
+      return fn();
+    } finally {
+      this.actor = prev;
+    }
   }
 
   // ── undo / redo ──

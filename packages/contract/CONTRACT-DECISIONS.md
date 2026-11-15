@@ -491,6 +491,19 @@ tests:     packages/contract/test/links-looks.test.ts (expansion at the law's am
            look as preset = same graph, linked media: overrides, divergence, follow, reads and writes, unlink)
 ```
 
+```text
+CC-022  the eval surface says "show" for an image; the workbench's codes (CHB-037 P6b; contract 1.3.0)
+class:     breaking for the eval's consumers (dsl, agent, the chat kit: all changed together; hard cut-off), additive otherwise
+changes:   eval.ts: Look → Show, EvalResult.looks → EvalResult.shows, EVAL_LIMITS.looks → EVAL_LIMITS.shows ("look" now
+           means only a named look, a link); warning LOOKS → SHOWS; new codes E_WORKBENCH (no workbench in the session,
+           an unknown command or selector, a command that failed) and E_LAYOUT (an agent-written layout that cannot be
+           built: a lambda where a selector, a path or a command id belongs, an unknown builder, a build error)
+consumers: dsl (session, results), agent (worker, chat session, bridge page client: the Go hub's wire field stays
+           `looks`), studio-kit chat kit (ChatShow)
+migration: none
+tests:     packages/dsl/test/results.test.ts (SHOWS), packages/dsl/test/workbench.test.ts (E_WORKBENCH, E_LAYOUT)
+```
+
 ## Contract 1.1 (CHB-037 P8a: Editor lab's tools in the engine)
 
 `CONTRACT_VERSION = '1.1.0'`. Design: CHB-035 design 01 v2 Part I §3–§8, §22 (encodings), §23 (the op table); plan

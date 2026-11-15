@@ -194,7 +194,8 @@ value: every operation returns a new log and leaves the old one as it was, so a 
   the step before the cursor, `redo()` applies the one at it; both are exact (stored inverses and normal-form
   mutations) and never re-run the rules. A commit after undo drops the redo tail from the journal.
   `commit(x, { merge: true })` folds the edit into the newest step as the net change (nudges of one control); a net
-  change of nothing removes the step. Invariant: each document is the fold of `inEffect(doc)` over `initial(doc)`.
+  change of nothing removes the step. `commit(x, { why })` keeps the author's reason on the entries, as a proposal
+  does (an agent's edit in auto mode). Invariant: each document is the fold of `inEffect(doc)` over `initial(doc)`.
 - **Proposals.** `propose(x, { why })` checks the edit or batch on the current documents and stores it `pending`
   with the inverses it has now. `approve(sel, { by, force })` applies it again as one step and refuses with E_STALE
   when the recomputed inverses differ (the document changed under what it would undo); `reject(sel)` marks it

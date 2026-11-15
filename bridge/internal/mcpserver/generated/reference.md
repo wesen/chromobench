@@ -279,6 +279,28 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
   - tolerance: number, [0, 1], default 0.1 — OkLab distance ΔE within which the mask is 1.
   - softness: number, [0, 1], default 0.05 — Distance over which it falls to 0 beyond the tolerance (a smoothstep).
 
+## Workbench
+
+The studio, as the photographer sees and drives it. Every `wb` call is answered by the studio: `await` it. A command
+you run is the one a key runs, by you: in ask mode its changes to a document wait for approval, in auto mode they
+apply (undoable), read-only refuses them; its effect shows in your next eval's reads and at once in `wb.state`.
+
+- `await wb.commands(filter?)` — every command: `{ id, label, args, keys: [{ chord, args }], menu, enabled, why, hidden, checked }`
+- `await wb.run(id, ...args)` — runs it: `{ ok, why, how: committed | proposed | refused | none, entries, module, frame }`
+- `await wb.set(statePath, value)` — writes a state path as a bound control does (`view.view`, `finish.spot.r`)
+- `await wb.selectors()`, `await wb.state(name, ...args)` — the typed selectors (`current`, `frame`, `doc`, `library`, `roll.frames`, …)
+- `await wb.screen({ module? })` — `{ layout, module, modules, frame, tool, text, controls }`; each control says what it writes: `path` (+ `frame`: frame.propose(set(path, v))), `state` (wb.set) or `command` (+ `args`: wb.run); `await wb.screen().explain()` is the live text
+- `await wb.layout()`, `await wb.layouts.list()` — the layout on screen; the ones to switch to (`wb.run('view.layout', id)` where the studio has it)
+- `await wb.layouts.build({ id, label, description, build: (ck, cb, env) => cb.studio(name)… })` — `{ ok, errors, warnings, explain, controls, layout }`: the build runs here on recording proxies (the same ck and cb as the studio's layouts), the studio builds the recording and runs its passes
+- `await wb.layouts.use(layout, { why })` — asks the photographer to switch to it (a dialog); keep `layout` on `mem` to revise it
+- `await cb.looks.define(src)` — registers a look written as a `.cblook.js` source (`defineLook({ name, version, label, params, stages, fn })`) here and in the studio; then `cb.looks.apply(name)`
+
+In a layout, functions do not cross: a state lambda is a selector `cb.sel.frame.print()` (calls after the name apply
+to its result; `.not()`, `.eq(v)`, `.or(v)`, `.where({ field: v })` combine), a state path `cb.state.view.step`, a
+handler a command id (`'frame.pick'`, `['frame.rate', 3]`); `.with(x => …)` and plain JavaScript (`map`, `?:`) run
+at build time. A function where an option goes is E_LAYOUT. A module declares its stages (`stages: ['darkroom']`).
+
+
 ## Handles in camera-linear
 
 - **mask**

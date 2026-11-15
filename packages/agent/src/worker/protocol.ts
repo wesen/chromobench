@@ -5,7 +5,7 @@
 // eval makes there is made again on the page's log through the same door (agentSubmit), which stays the one way
 // in for the agent's edits.
 import type { AgentMode, Diagnostic, EngineCaps, EngineId, EvalRequest, EvalResult, EvalTarget, MeasureSpec, NodeDef, NodeRef, SourceInfo } from '@chromobench/contract';
-import type { DslLimits, DslLinks, Submission } from '@chromobench/dsl';
+import type { DslLimits, DslLinks, Submission, WbMethod } from '@chromobench/dsl';
 import type { LogData } from '@chromobench/values';
 
 /** The page's documents as the worker copies them: the log, the mode, the frames the agent may open. */
@@ -32,11 +32,13 @@ export interface ImagePayload {
 }
 
 export type ToWorker =
-  | { t: 'init'; engine: { id: EngineId; caps: EngineCaps }; limits?: Partial<DslLimits>; txPrefix?: string }
+  /** workbench: the page has one (the studio); the worker's `wb` calls go to it (CHB-037 P6b) */
+  | { t: 'init'; engine: { id: EngineId; caps: EngineCaps }; limits?: Partial<DslLimits>; txPrefix?: string; workbench?: boolean }
   | { t: 'docs'; snapshot: DocsSnapshot }
   | { t: 'eval'; id: number; req: EvalRequest }
   | { t: 'interrupt'; id: number }
-  | { t: 'engine.reply'; call: number; ok?: unknown; err?: Diagnostic };
+  | { t: 'engine.reply'; call: number; ok?: unknown; err?: Diagnostic }
+  | { t: 'wb.reply'; call: number; ok?: unknown; err?: Diagnostic };
 
 export type FromWorker =
   | { t: 'ready' }
@@ -44,6 +46,8 @@ export type FromWorker =
   | { t: 'engine'; call: number; method: 'measure'; node: NodeRef; spec: Omit<MeasureSpec, 'signal'> }
   | { t: 'engine'; call: number; method: 'evaluate'; node: NodeRef; target: Omit<EvalTarget, 'signal'> }
   | { t: 'engine.cancel'; call: number }
+  /** a workbench call (wb.*, cb.looks.define), answered by the page's Workbench */
+  | { t: 'wb'; call: number; method: WbMethod; args: unknown[] }
   /** the eval's result as the worker's copy of the log saw it, and the submission to make on the page's log */
   | { t: 'result'; id: number; result: EvalResult; submission?: Submission }
   | { t: 'failed'; id: number; error: Diagnostic };

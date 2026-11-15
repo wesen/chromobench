@@ -1,5 +1,6 @@
 // The eval contract between agent transports (CHB-008), the DSL runtime (CHB-007) and the host.
-// Shapes follow goja-cv's cvsession result processor; Look and ContextBlock per CHB-007/008.
+// Shapes follow goja-cv's cvsession result processor; Show and ContextBlock per CHB-007/008. "Look" means only a named
+// look (a link, design §27): an image the eval returns is a show (CHB-037 P6b).
 import type { Domain } from './domains.ts';
 import type { Diagnostic } from './errors.ts';
 import type { LogEntry } from '@chromobench/values';
@@ -16,9 +17,9 @@ export interface EvalRequest {
   timeoutMs?: number;
 }
 
-/** An image returned to the agent, always paired with the numbers it shows. */
-export interface Look {
-  /** Look number, burned into the image band. */
+/** An image returned to the agent (h.show, cb.compare), always paired with the numbers it shows. */
+export interface Show {
+  /** Image number, burned into the image band. */
   n: number;
   /** What it shows: node path, crop, scale. */
   caption: string;
@@ -47,8 +48,8 @@ export interface ContextBlock {
 export interface EvalResult {
   /** Returned value, ≤ 9000 chars, compact tables for record arrays. */
   yaml: string;
-  /** ≤ 4 images. */
-  looks: Look[];
+  /** ≤ 4 images (h.show, cb.compare). */
+  shows: Show[];
   /** With line numbers. */
   warnings: Diagnostic[];
   context: ContextBlock;
@@ -59,4 +60,4 @@ export interface EvalResult {
   trace?: { ms: number; ops: Record<string, number> };
 }
 
-export const EVAL_LIMITS = Object.freeze({ yamlChars: 9000, looks: 4 });
+export const EVAL_LIMITS = Object.freeze({ yamlChars: 9000, shows: 4 });

@@ -19,6 +19,8 @@ export { applyTheme, themeHandle, type ThemeHandle } from './theme.ts';
 export { h, append, svgEl, icon, hasIcon, listen, clear, drag } from './h.ts';
 export * as habits from './habits.ts';
 export { resettables } from './forms/container.ts';
+export { curvePlane, wheelDisc } from './forms/plane.ts';
+export type { CurvePt, CurveEdit, CurvePlane, CurvePlaneOptions, WheelValue, WheelDisc, WheelDiscOptions } from './forms/plane.ts';
 export { mountViewport, ZOOMS } from './viewport.ts';
 export type { DomViewport } from './viewport.ts';
 export { Canvas2DPresenter } from './presenter-2d.ts';

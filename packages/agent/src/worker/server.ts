@@ -12,7 +12,7 @@ import {
   type AgentMode, type Engine, type EngineCaps, type EngineId, type EvalTarget, type ImageResult, type Measurement,
   type MeasureSpec, type NodeDef, type NodeRef, type SourceInfo,
 } from '@chromobench/contract';
-import { agentSubmit, DslSession, docsProvider, type DslHistory, type DslLinks, type Submission } from '@chromobench/dsl';
+import { agentSubmit, DslSession, docsProvider, WB_METHODS, type DslHistory, type DslLinks, type Submission, type Workbench } from '@chromobench/dsl';
 import { Log } from '@chromobench/values';
 import type { DocsSnapshot, Endpoint, FromWorker, ImagePayload, ToWorker } from './protocol.ts';
 
@@ -116,10 +116,39 @@ class ProxyEngine implements Engine {
   }
 }
 
+/** The page's workbench as the worker reaches it: every method a request answered by the page (wb.reply). */
+class ProxyWorkbench {
+  private calls = 0;
+  private readonly waiting = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
+  readonly api: Workbench;
+  constructor(send: (m: FromWorker) => void) {
+    const call = (method: (typeof WB_METHODS)[number], args: unknown[]): Promise<never> => {
+      const id = ++this.calls;
+      return new Promise((resolve, reject) => {
+        this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject });
+        send({ t: 'wb', call: id, method, args: structuredClone(args) });
+      });
+    };
+    this.api = Object.fromEntries(WB_METHODS.map((m) => [m, (...args: unknown[]) => call(m, args)])) as unknown as Workbench;
+  }
+  reply(call: number, ok: unknown, err: unknown): void {
+    const w = this.waiting.get(call);
+    if (!w) return;
+    this.waiting.delete(call);
+    if (err) w.reject(new ChromobenchError(err as never));
+    else w.resolve(ok);
+  }
+  dispose(): void {
+    for (const w of this.waiting.values()) w.reject(new ChromobenchError(diag('E_CANCELLED', 'the DSL worker is shutting down')));
+    this.waiting.clear();
+  }
+}
+
 /** Serves one DslSession on an endpoint (the worker's global scope, or a MessagePort in tests). Returns a stop function. */
 export function serveDsl(ep: Endpoint): () => void {
   let session: DslSession | null = null;
   let engine: ProxyEngine | null = null;
+  let wb: ProxyWorkbench | null = null;
   let booting: Promise<void> | null = null;
   const history = new MirrorHistory();
   const frames = new Map<string, string>();
@@ -131,7 +160,8 @@ export function serveDsl(ep: Endpoint): () => void {
     switch (m.t) {
       case 'init': {
         engine = new ProxyEngine(m.engine.id, m.engine.caps, send);
-        booting = DslSession.create({ engine, history, docs: docsProvider(), links: () => history.links, ...(m.limits ? { limits: m.limits } : {}), ...(m.txPrefix ? { txPrefix: m.txPrefix } : {}) }).then((s) => {
+        wb = m.workbench ? new ProxyWorkbench(send) : null;
+        booting = DslSession.create({ engine, history, ...(wb ? { workbench: wb.api } : {}), docs: docsProvider(), links: () => history.links, ...(m.limits ? { limits: m.limits } : {}), ...(m.txPrefix ? { txPrefix: m.txPrefix } : {}) }).then((s) => {
           session = s;
           send({ t: 'ready' });
         });
@@ -139,6 +169,9 @@ export function serveDsl(ep: Endpoint): () => void {
       }
       case 'engine.reply':
         engine?.reply(m.call, m.ok, m.err);
+        return;
+      case 'wb.reply':
+        wb?.reply(m.call, m.ok, m.err);
         return;
       case 'interrupt':
         if (current === m.id) session?.interrupt();
@@ -177,7 +210,7 @@ export function serveDsl(ep: Endpoint): () => void {
     history.submission = null;
     try {
       const result = await s.eval(m.req);
-      const transfer = [...new Set(result.looks.map((l) => l.image.bytes.buffer))].filter((b): b is ArrayBuffer => b instanceof ArrayBuffer);
+      const transfer = [...new Set(result.shows.map((l) => l.image.bytes.buffer))].filter((b): b is ArrayBuffer => b instanceof ArrayBuffer);
       send({ t: 'result', id: m.id, result, ...(history.submission ? { submission: history.submission } : {}) }, transfer);
     } catch (e) {
       send({ t: 'failed', id: m.id, error: toDiagnostic(e) });
@@ -193,6 +226,7 @@ export function serveDsl(ep: Endpoint): () => void {
   return () => {
     ep.removeEventListener?.('message', onMessage);
     engine?.dispose();
+    wb?.dispose();
     (session as DslSession | null)?.dispose();
   };
 }
