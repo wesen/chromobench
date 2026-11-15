@@ -1,0 +1,745 @@
+{
+ "expected": {
+  "document": 16,
+  "graph": 19,
+  "tiling": 9,
+  "slots": 17
+ },
+ "runs": [
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 43,
+   "own_total": 43,
+   "diary_steps": 6,
+   "src_lines": 304,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 `settle` presents only when `work.gen > slot.shownGen` (the chapter's note-1 guard) and `shownGen` only moves on presentation, so a slot's shown generations are strictly increasing; aborted renders that resolve late are released, never presented (tests: burst, late older result, real-timer drag).",
+     "2": "met \u2014 a slot holds exactly one `running` work and one `waiting` request (newer requests overwrite `waiting`), `pumpSlot` starts only when `running` is null, and an aborted render keeps the slot occupied until its promise settles, so a burst of 5+ requests yields at most one extra render and never two in flight (per-slot in-flight maximum asserted).",
+     "3": "met \u2014 a newer request with a different key/pass calls `controller.abort()` synchronously inside `request()` and marks the work aborted; its rejection is not reported and its late result is released.",
+     "4": "met \u2014 the lane travels on the work item, `liveBusy()` is true while any slot has a live waiting request or live running render, and `pumpSlot` refuses background work while it is; running background renders are not preempted, and separate live slots pump independently in the same pass.",
+     "5": "met \u2014 `progressMs > 0 && pass === 'draft' && running && now() - shownAt >= progressMs` keeps the running render alive, it is presented when it completes, then the newest request runs; `screen`/`refine` always abort, `shownAt` is refreshed by each presentation, and 0/absent/negative/non-finite disables the rule.",
+     "6": "met \u2014 a request whose key and pass equal the running render's adopts it (bumps `running.gen` to the new generation, drops the superseded waiting request, starts nothing), so the running result is presented at the newer generation without a second render.",
+     "7": "met \u2014 `running` is cleared in every settle path and `pumpAll` always follows, failures go to `onError` (a synchronous throw from `render` is turned into a rejection), aborts and abort-shaped rejections are not reported, and the newest waiting request still runs after a failure.",
+     "8": "met \u2014 every result flows through one `settle` function: stale, aborted-but-resolved and closed-slot results are released, and a presented result is released just before a newer one replaces it, each exactly once (asserted with a settled-guard harness and de-duplicated release list)."
+    },
+    "own_tests": {
+     "files": 5,
+     "passed": 43,
+     "failed": 0
+    },
+    "design_summary": "One factory with a map of slots, each holding a generation counter, a shown generation with its result and timestamp, one waiting request and one running render; a single `settle` function owns every present/release/error decision, `pumpSlot` is the only place a render starts, and a re-entrant `pumpAll` enforces live-before-background. Superseded renders are aborted through their own AbortController and stay 'running' until they settle, so the newest waiting request starts on that completion event (at most one in-flight render per slot, at most two renders per burst). Progress, adoption of identical running work, failure reporting and release-once bookkeeping are all decided in `request`/`settle`, with an injectable clock so the progress rule is testable.",
+    "chapter_used": [
+     "Solution + Sketch: slot with generation, shownGen, one waiting request, one running render, `present` gated by `job.gen > s.shownGen`",
+     "Sketch: `starved` progress rule and `s.shownAt` initialised at slot creation",
+     "Sketch: `close` = drop waiting, abort running; pump off completion events only",
+     "Implementation notes 1 (defensive present-by-generation), 2 (progressMs threshold, screen/refine still abort), 3 (no background preemption by default), 4 (no polling from idle callbacks), 8 (adopt the running render for the same key), 9 (clear running in every path, report only real failures, release stale and replaced results)",
+     "Collaborations 2\u20135 for the order of operations inside `request`",
+     "Structure table (Slot / Request / Queue) as the module's vocabulary; Consequences (discard-by-design needs a progress rule)"
+    ],
+    "chapter_unclear": [
+     "The state diagram's `Aborting --> Running: start waiting request` assumes an abort stops the render instantly; with requirement 2 ('at most one render runs per slot at any time') it is contradictory whenever the engine keeps going after `signal.abort()`.",
+     "The chapter never says whether an aborted render's slot is free again, nor whether `close` releases the currently presented result ('release what will not be shown' is not defined).",
+     "The chapter's key is produced by a render bridge out of renderable + pass + max side + region; this API hands the scheduler one opaque `key` plus `pass`, so pass identity vs key identity is ambiguous (requirement 6 resolves it as key AND pass).",
+     "The lane is on the slot in the chapter but optional per request in the API, so what happens when a slot changes lane is unspecified.",
+     "`shownAt` starting at slot creation exists only in the sketch, not in prose, which makes 'has presented nothing for at least progressMs' ambiguous for a fresh slot.",
+     "Note 6 ('keep finished results when you can') contradicts the task's requirement 8, which mandates releasing them."
+    ],
+    "deviations": [
+     "Abort-then-wait instead of abort-then-start: an aborted render keeps the slot occupied until its promise settles, so the newest request starts on that completion event; this follows requirement 2 literally and bounds render starts per burst (documented limitation: an engine that ignores aborts and never settles wedges the slot and `idle()`).",
+     "The lane is stored on the work item (running render and waiting request) and only mirrored on the slot, because the API allows a lane per request.",
+     "No render bridge, no target chooser and no bounded thumbnail cache: `key` is opaque and the caller chooses the pass, so those chapter participants live outside this module.",
+     "Superseded results are always released, never kept as cache entries (chapter note 6), because requirement 8 requires a release for every result that is not shown.",
+     "`close` keeps the slot record (generation and shown generation survive) so generations stay strictly increasing and 'never backwards' still holds if the view is re-opened; `close` does not release the already-presented result since requirement 8 only mandates release of presented results replaced by a newer one.",
+     "`present`, `release` and `onError` are wrapped in try/catch and a rejection whose `name` is `AbortError` is not reported as a failure; the chapter does not discuss user callbacks or self-identifying aborts."
+    ],
+    "confidence": 0.84
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 45,
+   "own_total": 45,
+   "diary_steps": 6,
+   "src_lines": 314,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 each slot tracks shownGeneration and presents only when running.generation > shownGeneration (results that resolve after being aborted, closed or stale are released instead), verified by hand tests plus a 4000-step randomized interleaving test.",
+     "2": "met \u2014 a slot holds exactly one waiting request (every newer request replaces it) and starts a render only when it has none running; an aborted render keeps its slot busy until its promise settles, so two renders never overlap.",
+     "3": "met \u2014 a newer request with a different (key, pass) aborts the running render through its AbortController, subject to the progress rule and without reporting the abort as an error.",
+     "4": "met \u2014 each request carries a lane; pump refuses background work while any live slot has (non-cancelled) running or waiting work, pumpAll runs live lanes first, and completions/closes wake background slots.",
+     "5": "met \u2014 with progressMs > 0, a newer draft request does not abort a render when now() - shownAt >= progressMs; that render is presented and then the newest request runs, while screen/refine always abort.",
+     "6": "met \u2014 a request whose key and pass equal the running render's adopts it (generation bumped, stale waiting request dropped, result presented for the newer generation); same key with another pass renders anew.",
+     "7": "met \u2014 the running entry is cleared before reporting, onError is called only for non-aborted failures, and the table is pumped afterwards so a failure never wedges the slot.",
+     "8": "met \u2014 aborted, stale and closed results are released exactly once, a presented result is released when a newer one replaces it or when the slot closes, and double close() does not release twice."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 45,
+     "failed": 0
+    },
+    "design_summary": "A scheduler over a table of slots, each with a monotonic generation counter, one waiting request, one running render, and the generation/result currently on screen. request() bumps the generation, adopts an identical running render, otherwise replaces the waiting request and aborts the running one unless the progress rule protects it; pump() starts work only for an idle slot and background only when no live slot has work, and every completion path clears the running entry, presents-if-newer with exact release accounting, and re-pumps the table. close() drops waiting work, aborts the running render and releases what is on screen, and idle() resolves once no slot has work the scheduler still wants.",
+    "chapter_used": [
+     "Chapter 4 Intent/Problem: slots per display place, requests faster than answers",
+     "Solution paragraph (generation counter, one waiting + one running per slot, present only if newer generation)",
+     "Structure table (Slot / Request / Queue responsibilities)",
+     "Sketch: request/pump/close pseudocode and the state diagram (Running --> Aborting --> Running)",
+     "Collaborations 3\u20135 (abort superseded, pump idle slot, present then pump again)",
+     "Implementation note 1 (present by generation, not arrival)",
+     "Implementation note 2 (progressMs threshold; screen/refine still abort)",
+     "Implementation note 4 (wake waiting work from completion events, no idle-callback polling)",
+     "Implementation note 8 (same key, no restart \u2014 adopt the running render for the newer generation)",
+     "Implementation note 9 (failures, aborts and memory: clear running in every case, report only real failures, release stale and replaced results)",
+     "Implementation note 11 (drive tests with events on a clock rather than awaiting each render)"
+    ],
+    "chapter_unclear": [
+     "The chapter's key includes pass and maxSide, while the API exposes key and pass separately; it does not say whether identity is key alone or key+pass (requirement 6's wording resolved it to key+pass here).",
+     "The sketch's adopt branch returns before touching s.waiting, so an older waiting request stays behind and later renders a result that is immediately dropped as stale \u2014 this contradicts 'only the newest request may start'.",
+     "Nothing says whether a cancelled (aborted, not yet settled) live render still counts as 'live busy' and whether idle() must wait for it; I chose 'no' for both.",
+     "The chapter makes lane a slot property ('the requester chooses the lane'), but the API takes lane per request, so it is undefined what a slot's lane is when a later request omits it.",
+     "The chapter assumes a render bridge, target chooser and thumbnail cache; the API has none of these, so their responsibilities had to be assigned to the caller."
+    ],
+    "deviations": [
+     "Adopting a running render also clears the waiting request (chapter leaves it in place), because otherwise an older render would start after the adopted one, violating requirement 2.",
+     "liveBusy() and idle()'s work check ignore renders that have been aborted, while an aborted render still occupies its own slot until it settles: 'running' as physically-in-flight and 'running' as still-wanted are different predicates.",
+     "A request that omits lane inherits the slot's previous lane (live for a new slot) instead of resetting to live, so background slots stay background across requests.",
+     "close() keeps the slot entry (with closed=true) rather than deleting it, so generations stay strictly increasing per slot even after a view goes away.",
+     "Omitted the chapter's target chooser, render bridge keys, thumbnail cache, preemptBackground and cache-reuse-of-aborted-results: they belong to the caller or are outside this API; aborted work is always released, never cached.",
+     "Made present/release/onError calls exception-safe (swallowed) so a throwing callback cannot leave the state machine half-updated, which the chapter does not consider."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 3,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 32,
+   "own_total": 32,
+   "diary_steps": 6,
+   "src_lines": 350,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 a result is presented only when its generation exceeds the slot's shown generation (`job.generation <= slot.shownGeneration` results are released, never presented), so the screen cannot step backwards even when an abort lands after completion.",
+     "2": "met \u2014 a slot has one `waiting` field (overwritten by each request) and one `running` field; `pump()` refuses while a render is running, so at most one render runs per slot and only the newest request starts when it ends.",
+     "3": "met \u2014 a request with a different key/pass aborts the running render through its AbortController, unless requirement 5's progress rule protects it.",
+     "4": "met \u2014 `canStartBackground()` scans all slots for live running or waiting work and `pumpAll()` starts live slots first, so background work starts only when live work is done; live slots pump independently (a running background render is not preempted, which the requirement does not ask for).",
+     "5": "met \u2014 `starved = pass === 'draft' && progressMs > 0 && now() - shownAt >= progressMs` protects the running render, which is presented before the newest request is pumped; `screen`/`refine` and `progressMs` of 0/absent always abort.",
+     "6": "met \u2014 a request whose key and pass equal the running render's is adopted (its generation is bumped) and no second render starts; the presented info carries the newer generation.",
+     "7": "met \u2014 failures clear the running render and call `onError` (also for synchronous throws), aborts are never reported, and the slot pumps again so later requests render normally.",
+     "8": "met \u2014 stale, aborted-but-resolved and closed-slot results go through `release`, and the previously shown result is released when a newer one replaces it; the result still on screen is not released by `close()` (per the `release` docstring: 'exactly once for every result that is not shown, or that a newer shown result replaces'), which is documented as an interpretation choice."
+    },
+    "own_tests": {
+     "files": 1,
+     "passed": 32,
+     "failed": 0
+    },
+    "design_summary": "One slot per display place holding a generation counter, the shown generation, the currently shown result, `shownAt`, one waiting request and one running render; `request()` bumps the generation, adopts a running render with the same key+pass, otherwise stores the single waiting request and aborts the running one unless the `progressMs` starvation rule protects it. Renders are pumped live-lane-first with a global 'no background work while any live slot is busy' predicate, and completion presents only when the result is not aborted and its generation is newer than what is shown, releasing everything else and always pumping again so nothing wedges. `idle()` keys off an in-flight counter plus slot busyness, so it resolves exactly when no slot has running or waiting work, even after `close()` detaches a render that never settles.",
+    "chapter_used": [
+     "Solution (slot with generation counter, one waiting request, one running render, present only if newer)",
+     "Sketch: `request` / `pump` / `close` pseudocode, including `starved` and the adopt branch `s.running.gen \u2190 s.gen`",
+     "Implementation note 1 (present by generation, not by arrival; a render may complete before its abort lands)",
+     "Implementation note 2 (progress guarantee via `progressMs`; screen/refine still abort)",
+     "Implementation note 3 (background preemption off by default)",
+     "Implementation note 8 (same key, no restart \u2014 adopting the running render)",
+     "Implementation note 9 (failures, aborts and memory: clear running in every case, report only real failures, release stale and replaced results)",
+     "Structure table (Slot / Request / Queue responsibilities) and the per-slot state diagram",
+     "Forces ('freshness against progress', 'foreground against background') and Consequences (work discarded by design)"
+    ],
+    "chapter_unclear": [
+     "`shownAt` is initialised to `now()` when the slot is created, but the sketch's starvation check then never protects the very first render if a draft arrives before `progressMs` elapsed: the first render is aborted at the first pointer event, so with an abort-aware engine nothing is ever shown during a drag. The chapter's 'nothing is shown at all' motivation is therefore only fixed once a render survives until the window elapses; unclear whether the intended rule is time-based or count-based.",
+     "Whether the result currently on screen is released when its slot is closed: the Solution/close sketch says 'release what will not be shown', while the `release` contract in TASK.md enumerates only not-shown results and replaced shown results.",
+     "Lane is per request in TASK.md's API but a slot property in the chapter's structure table; unclear which lane decides background eligibility, and what happens when one slot alternates lanes.",
+     "The sketch's adopt branch returns without touching `s.waiting`, leaving an older waiting request alive; unclear whether it should be dropped or kept.",
+     "What `info.generation` should be when a render is adopted for a newer request (the generation it was started for, or the newest one it serves)."
+    ],
+    "deviations": [
+     "A running background render is not aborted when live work arrives; requirement 4 only forbids *starting* background work, and chapter note 3 keeps `preemptBackground` off.",
+     "The shown result is not released by `close()` (the chapter's close sketch suggests releasing everything the slot will no longer show); I followed TASK.md's stricter `release` docstring and noted it in NOTES.md.",
+     "Adopting a running render also drops the slot's waiting request, since that request is now older than the adopted generation; the chapter sketch leaves it in place, which would start a useless render afterwards.",
+     "`close()` detaches an aborted in-flight render: it no longer counts for `idle()` or for the one-render-per-slot invariant, so a reopened slot name can render immediately instead of being wedged by an engine that never settles (documented as a known deviation).",
+     "No target chooser, thumbnail cache or cooperative in-render cancellation: the API passes `pass`/`lane` from the caller, so those chapter participants live in the viewer/engine, not in the queue."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 4,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 39,
+   "own_total": 39,
+   "diary_steps": 8,
+   "src_lines": 330,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 results are presented only when the job's (possibly adopted) generation exceeds the slot's shownGeneration, and aborted/closed renders are never presented even if they resolve late.",
+     "2": "met \u2014 slot.running is cleared only when the promise settles and tryStart refuses to start while it is set, so a slot has at most one in-flight render and exactly one waiting slot holding only the newest request.",
+     "3": "met \u2014 a newer request with a different key or pass aborts the running render through its own AbortController signal (unless the progress rule of requirement 5 applies).",
+     "4": "met \u2014 pumpPass starts all idle live slots first and only starts background slots when no non-closed live slot has running or waiting work; background progress is driven by completion events, never polling.",
+     "5": "met \u2014 with progressMs > 0 a newer draft request does not abort a running render once now()-shownAt >= progressMs; that render completes and is presented, then the newest request runs, while screen/refine requests still abort at once.",
+     "6": "met \u2014 a request whose key and pass equal the running (non-aborted) render's is adopted: its generation is bumped, the waiting request dropped, and the running result is presented for the newer generation.",
+     "7": "met \u2014 a non-abort rejection is reported once through onError, running is cleared and the slot pumps again, while a rejection caused by our own abort is not reported.",
+     "8": "met \u2014 aborted-but-resolved, stale and closed-slot results are released when they settle, a presented result is released when a newer one replaces it and when its slot is closed, and release is never called twice for the same result."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 39,
+     "failed": 0
+    },
+    "design_summary": "The scheduler keeps one slot per display place holding a generation counter, the shown generation and result, at most one waiting request and at most one running render with its abort controller, exactly as in the chapter's structure and pump sketch. request() bumps the generation, adopts a running render with the same key and pass, otherwise stores the newest waiting request and aborts the running render unless the progressMs/ draft exception applies; pump runs live slots first and only then background slots, and every settle path releases, presents by generation or releases as stale, then pumps again. close() drops waiting work, aborts and later releases the running render, releases the shown result, and idle() resolves once no non-closed slot has running or waiting work.",
+    "chapter_used": [
+     "Structure table (Slot / Request / Queue responsibilities) \u2014 the slot state fields and the queue's four duties",
+     "Solution paragraph \u2014 at most one waiting and one running render, replace the waiting request, present only newer generations, background only when no live slot is busy",
+     "Sketch \u2014 request/pump pseudocode, including `starved`, 'adopt it' for an equal key, and the close sketch",
+     "Collaborations + state diagram \u2014 Running\u2192Aborting\u2192Running transitions on supersede",
+     "Implementation note 1 \u2014 present by generation and keep the check even with reliable aborts",
+     "Implementation note 2 \u2014 the progressMs threshold ('a slot that has shown nothing for that long lets the running render finish when the new request is another draft')",
+     "Implementation note 3 \u2014 no background preemption by default, only 'background does not start while live is busy'",
+     "Implementation note 4 \u2014 never poll from idle callbacks; wake waiting work from completion events",
+     "Implementation note 8 \u2014 adopt the running render for the newer generation instead of restarting it",
+     "Implementation note 9 \u2014 clear the running render in every settle path, report only real failures, release stale and replaced results",
+     "Implementation note 11 \u2014 drive tests with a clock and measure age of what is on screen (real-clock drag test)"
+    ],
+    "chapter_unclear": [
+     "The chapter's request key includes pixel size and region, but TASK.md's request() takes only slot, key, opts, so 'same render' collapses to key + pass.",
+     "close() never says what happens to the result currently on screen; requirement 8's 'closed slot' example and its 'released when a newer result replaces it' clause pull in different directions (resolved by releasing on close, documented in NOTES and diary step 6).",
+     "The chapter says a completed-but-superseded render is a valid cache entry (note 6), which contradicts requirement 8's mandatory release; the task wins, so such results are released instead of cached.",
+     "liveBusy() is undefined about closed slots, and it is unclear whether a closed slot's still-running aborted render should keep idle() pending.",
+     "Requirement 5's 'has presented nothing for at least progressMs' has no stated anchor for a slot that never presented; I anchor at slot creation as the chapter's `shownAt = now()` does.",
+     "The `renderable`/Render bridge/Target chooser/Thumbnail cache participants have no counterpart in this API, so the chapter's key derivation and draft pixel budget are out of scope here."
+    ],
+    "deviations": [
+     "Background renders are not preempted by new live requests: requirement 4 only forbids starting background work while live work exists, and the chapter keeps preemptBackground off by default.",
+     "A closed slot no longer counts as live work for requirement 4 and does not keep idle() pending, so an engine that ignores its abort cannot wedge idle(); its late result is still released.",
+     "close() releases the result the slot was showing (and drops the reference first so a reopen cannot double-release), because release is contracted for every result that is not shown any more; the chapter's close sketch is silent on this.",
+     "Generations are kept per slot name across close() and reopen so 'strictly increasing per slot' never regresses and presentation stays monotone.",
+     "Progress protection is keyed only on the new request's pass (as the chapter says), so a draft can be made to wait for a slow screen render when nothing has been shown for progressMs; the viewer's target chooser normally prevents that.",
+     "The number of in-flight renders per slot is capped at one including aborted-but-unsettled renders, which relies on the documented contract that an abort makes the render reject; a render that never settles holds its slot."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "control",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 34,
+   "own_total": 34,
+   "diary_steps": 6,
+   "src_lines": 334,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 one render per slot and a staleness test (slot.generation !== run.servedGeneration) mean results are only presented in start order, so an older result can never follow a newer one; verified by unit and 12-seed fuzz tests.",
+     "2": "met \u2014 slot.running is cleared only when the render's promise settles and slot.waiting holds just the newest request, so only the newest request starts when the running render ends.",
+     "3": "met \u2014 a newer non-draft (or in-window draft) request aborts the running render's AbortSignal immediately, except under progress mode.",
+     "4": "met \u2014 pump starts live waiting work first and only starts background work when no live-lane render is running or waiting anywhere; live slots render concurrently.",
+     "5": "met \u2014 with progressMs > 0, a newer draft arriving at least progressMs after the slot's last presentation (or slot creation) sets presentAnyway instead of aborting, so that render completes and is presented before the newest request runs; screen/refine still abort.",
+     "6": "met \u2014 a request whose key and pass equal the running render's is absorbed via the servedGeneration watermark, without aborting or starting a second render.",
+     "7": "met \u2014 settle always clears the slot and pumps (even for synchronous throws from render), onError fires only for non-aborted failures, and later requests render normally.",
+     "8": "met \u2014 every produced result is either presented (and released when a newer result replaces it) or released exactly once; close aborts running work, drops waiting work and releases late/stale results."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 34,
+     "failed": 0
+    },
+    "design_summary": "Each slot keeps a generation counter, at most one running render (cleared only on settle), at most one waiting request, the last presentation time and the currently presented result; a request either dedups into the running render, aborts it (or arms progress mode), and becomes the single newest waiting entry. A global pump starts live waiting work first and background work only when no live work remains, and a settle either presents (when not stale/aborted/closed, or when progress mode demands it) or releases the result, then pumps again. Release discipline is exactly-once per produced result, presented results are released when replaced, and idle() resolves only when no slot has running or waiting work.",
+    "confidence": 0.85
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "control",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 38,
+   "own_total": 38,
+   "diary_steps": 6,
+   "src_lines": 339,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 per-slot serialisation plus a presentedGeneration guard in finish(); stale/aborted results are released, never presented, and presentations are asserted strictly increasing in generation.",
+     "2": "met \u2014 one Run per slot and a single overwritable waiting request; a replacement starts only when the running render's promise settles, with the fuzz test asserting max concurrency 1 per slot.",
+     "3": "met \u2014 a newer non-duplicate, non-exempted request aborts the running render through its own AbortController signal.",
+     "4": "met \u2014 maybeStart() refuses to start background work while any open slot has a live running or waiting request, and starts it (including on close) when live work drains; live slots are per-slot serialised independently.",
+     "5": "met \u2014 with progressMs>0 a newer draft request is queued instead of aborting when the slot has presented nothing for progressMs (measured from the last presentation, or slot creation); that render is presented and then the newest request runs, while screen/refine always abort.",
+     "6": "met \u2014 a non-aborted running render with equal key and pass serves the newer request (no second render, no abort), and any older queued request is dropped; an aborted run never counts as a duplicate.",
+     "7": "met \u2014 non-aborted rejections (including a synchronously throwing render) go to onError; aborted rejections are silent; either way the slot is cleared and pending/later requests render normally.",
+     "8": "met \u2014 every unshown result is released exactly once and a presented result is released exactly once when a newer result replaces it; following the release doc comment literally, the still-on-screen result is not released by close()."
+    },
+    "own_tests": {
+     "files": 3,
+     "passed": 38,
+     "failed": 0
+    },
+    "design_summary": "Each slot keeps a generation counter, at most one running render (with its own AbortController) and at most one newest waiting request, so bursts coalesce and at most one render per slot runs; request(), close() and finish() are the only mutation points and all end in a re-entrancy-safe pump() that starts eligible work (gating background lanes behind live work) and settles idle() waiters. Presentation is guarded by a presentedGeneration water mark plus aborted/closed flags, so stale results are released instead of shown, and the presented result is released exactly once when replaced. The progress rule queues newer drafts instead of aborting when a slot has shown nothing for progressMs, while screen/refine requests still abort.",
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "chapter",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": true,
+    "wide: a wide blur followed by a narrow one": true,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 9,
+   "hidden_total": 9,
+   "own_passed": 25,
+   "own_total": 25,
+   "diary_steps": 7,
+   "src_lines": 866,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 whenever a haloed tile fits the budget (coreSide = floor(sqrt(maxTilePixels)) - 2\u00b7\u03a3radii \u2265 1) and the estimated tap work is \u2264 1.2e9, the exact plan runs and is bit-identical to renderWhole (tests assert < 1e-5 for chains of up to three blurs with pointwise ops between them at several budgets); only feasible-but-thrashing plans (e.g. 1-px cores) fall back to the field path, whose error there is ~1e-4.",
+     "2": "met \u2014 every buffer goes through one allocation helper that calls onBuffer, all reported buffers are \u2264 maxTilePixels (asserted for every report), and tile write-rectangles cover the image exactly once (asserted pixel-by-pixel), with read rectangles containing each write rectangle.",
+     "3": "met \u2014 with a 128\u00d7128 budget on 256\u00d7256 scans of five image characters (white noise, smooth field, mixed, stripes, step) and \u03c3 = 40\u2026400 px, max error \u2264 0.002 and mean \u2264 0.0004 per pixel against the 0.025/0.005 limits, all inside the budget; moderate \u03c3 = 10\u202622 px with 64\u00d764/100\u00d7100 budgets stay at max \u2264 0.006, and a 700\u00d7500 scan with \u03c3=400+\u03b3+\u03c3=250 at max \u2264 0.002.",
+     "4": "met \u2014 cores are as large as the budget allows, so \u03a3(readW\u00b7readH) is 1.00\u20131.65\u00d7 the image for small neighbourhoods (asserted \u2264 3\u00d7 in tests), and the field path reads 1.00\u00d7.",
+     "5": "met \u2014 reaches are physical (\u03c3 = sigmaUm/umPerPx, kernel radius ceil(3\u03c3)); the same chain at 2 \u00b5m/px and 4 \u00b5m/px agrees after box downsampling (max < 0.02 overall, < 0.005 away from the clamped border), for renderWhole and renderTiled."
+    },
+    "own_tests": {
+     "files": 3,
+     "passed": 25,
+     "failed": 0
+    },
+    "design_summary": "The chain is compiled into pointwise steps and separable Gaussian blur steps that carry their kernel, and the planner converts each blur's reach from micrometres to pixels and sums the radii to get the tile halo. If the haloed tile fits the budget (and the estimated work is sane) each tile evaluates the whole chain on its read rectangle, which reproduces the definition bit-for-bit; otherwise blurs too wide for any halo become global fields \u2014 a box-downsampled image blurred with a variance-corrected residual sigma and upsampled bilinearly. Because a wide kernel's out-of-range taps weight a single border pixel, each field also carries the exact clamped tail decomposition (zero-padded interior plus tail weights times the zero-padded convolutions of the four border lines), with a two-sided mass correction, which brings wide-blur error down to ~1e-4\u20131e-3.",
+    "chapter_used": [
+     "Intent / Solution: every neighbourhood op declares its reach in the medium's units; planner converts reach to pixels and sums it into a halo",
+     "Implementation note 1 (declare reach in the medium's units): sigma in micrometres converted with the frame's \u00b5m/px, so results survive resolution changes",
+     "Implementation note 2 (chains add): reaches of successive blurs are summed; pointwise ops have reach 0",
+     "Solution + Collaborations step 4 and sketch: wide kernels within a halo budget are local, others become global fields with a power-of-two downsample and residual blur, sampled by tiles",
+     "Implementation note 4 (fields need variance bookkeeping): residual sigma = sqrt(\u03c3\u00b2 \u2212 sampling variance)/s",
+     "Implementation note 7 (refuse, do not degrade silently): the exact plan is rejected when it would thrash and the field plan is produced instead",
+     "Consequences/Applicability: tiling is used only when the image does not fit, and the plan depends on the device budget"
+    ],
+    "chapter_unclear": [
+     "The chapter's field description (downsample by the largest power of two that keeps the kernel at least two pixels wide) does not say how to handle the clamped borders, which for wide kernels is the dominant error term; I had to derive the exact tail decomposition myself.",
+     "It assumes wide kernels are always 'smooth enough' to compute at reduced resolution; for a wide Gaussian on white noise this is true in the interior but false at the borders (measured 0.1 error) \u2014 the chapter's variance bookkeeping alone was not sufficient.",
+     "The halo-budget rule ('r \u2264 haloBudget, else field') gives no criterion for kernels that are feasible but only with 1-pixel cores; I replaced it with an explicit work estimate.",
+     "Halo alignment ('round up to 8') is a GPU concern that has no meaning in this CPU/typed-array task, so it was dropped.",
+     "'One pixel for bilinear safety' was unnecessary here because read rectangles are clipped to the image, not sampled."
+    ],
+    "deviations": [
+     "No power-of-two tile alignment or +1 pixel of halo: tiles are cut to the largest core whose haloed footprint fits maxTilePixels exactly, which is what the budget and the 3\u00d7 read requirement ask for.",
+     "Instead of a fixed halo budget I decide exact vs wide from feasibility plus an estimated tap-work limit (1.2e9), so a feasible exact plan is never traded for an approximation unless it would thrash.",
+     "The field path keeps pointwise ops and moderate blurs at full resolution (the chapter blurs the whole chain at reduced resolution) and adds an exact clamped-tail decomposition plus a mass rescaling, because fields alone failed requirement 3 on noisy and border-dominated images.",
+     "There is no planner diagnostic object/refusal API in the required interface, so 'refuse' is expressed as automatically choosing the field plan instead of emitting a diagnostic."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": true,
+    "wide: a wide blur followed by a narrow one": true,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 9,
+   "hidden_total": 9,
+   "own_passed": 20,
+   "own_total": 20,
+   "diary_steps": 11,
+   "src_lines": 739,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 renderTiled is bit-exact (measured \u22641e-6, tests assert \u22641e-5) against an independent implementation of the definition whenever the summed reach fits the budget, when the whole frame fits, and for the last wide blur via an exact streamed vertical pass; tiled and whole rendering share one chain runner so they cannot drift.",
+     "2": "met \u2014 every allocation goes through one reported allocator sized from the plan (tiles `(cw+2h)\u00b2 \u2264 maxTilePixels`, fields `(\u2308W/s\u2309+2\u00b7pad)\u00b2 \u2264 maxTilePixels`, field blur `(core+2R')\u00b2 \u2264 maxTilePixels`, with a degradation ladder for tiny budgets); a 65-case sweep from 1 px to 40 000 px found no buffer above the budget, and tests mark every written pixel to prove the tiles cover the frame exactly once.",
+     "3": "met \u2014 chains whose halo cannot fit switch the offending blur to a global field (anti-aliased box downsample + residual-\u03c3 blur + bilinear sampling, with a ring of unblurred clamped edge values); measured error is ~1e-4 max on 128\u00d7128 budgets with \u03c3 = 200\u2013400 px, and a 216-case sweep (\u03c3 up to 400, white noise, discs, stripes) stays inside 0.025 max / 0.005 mean except three extreme high-frequency-stripe cases at a 48\u00d748 budget (mean 0.0055\u20130.0059).",
+     "4": "met \u2014 the planner minimises `\u03a3 readW\u00b7readH` over all feasible grids (balanced so no sliver row/column); measured ratios are 1.0 for pointwise-only chains, 1.07\u20131.48 for \u03c3 \u2264 4 px at 128\u00d7128/256\u00d7256 budgets and 2.0\u20132.5 for \u03c3 = 8\u201316 px at a 128\u00d7128 budget, which is the structural floor `(\u221aB/(\u221aB\u22122h))\u00b2`.",
+     "5": "met \u2014 every reach is converted from micrometres with the scan's umPerPx and nothing else depends on resolution (field reduction included); two resolution tests sample one analytic scene at two pitch values and match to \u22640.01."
+    },
+    "own_tests": {
+     "files": 1,
+     "passed": 20,
+     "failed": 0
+    },
+    "design_summary": "A planner sums the pixel reaches (ceil(3\u03c3) from micrometres) of the operations that are still local, uses the sum as the tile halo, and picks the largest balanced grid whose haloed footprint fits maxTilePixels while minimising input reads. A blur whose halo cannot fit becomes a global field computed once at reduced resolution (anti-alias pre-blur, box downsample, residual-\u03c3 blur with variance bookkeeping, ring of clamped edge values) which later tiles sample bilinearly, and the last wide blur of a chain may instead be streamed exactly over full-width strips because the clamped horizontal and vertical passes commute. Both entry points share one chain runner, so tiled results are identical to the definition whenever the budget allows, and every buffer is reported and bounded.",
+    "chapter_used": [
+     "Intent/Solution: reach declared in physical units, converted to pixels at plan time, summed along chains into a halo",
+     "Solution + Collaborations 3: halo = sum of local reaches, rounded/derived from the budget instead of a fixed 32 px",
+     "Solution + Implementation note 4: wide smooth kernels become global fields computed once at reduced resolution and sampled by frame coordinates, with residual-\u03c3 variance bookkeeping (downsample + bilinear variance subtracted)",
+     "Structure table: spatial kernel declaration, frame, device caps (the pixel budget), planner, tile core/read rectangle, global field, tile executor",
+     "Problem force 'small tiles against large tiles' and note 9: tile size is planned from the budget rather than tuned by hand",
+     "Consequences: fields are approximations that need parity tests against the exact kernel (I measured them against the definition)",
+     "Variations (demand-driven regions) informed the exact streamed strip pass",
+     "GoF Strategy: local halo versus global field chosen per kernel"
+    ],
+    "chapter_unclear": [
+     "The chapter's haloBudget is a fixed 32 px and its planner refuses when a local kernel reads more than a quarter of a tile; the task instead forbids any buffer above maxTilePixels, which turns the halo bound into (1+2\u03a3R)\u00b2 \u2264 maxTilePixels \u2014 the chapter never states this inequality or what to do when a *small* blur (not a wide one) cannot be haloed.",
+     "The chapter's field is computed 'on a downsampled image' and implicitly kept whole in memory; it does not say what to do when even the downsampled image (plus its padding) does not fit the budget, which is exactly what requirement 2 demands.",
+     "No guidance on the clamped-edge semantics of a field: the chapter's variance bookkeeping implies box downsample + bilinear upsample inside the frame only, and its suggestion to 'add one pixel for bilinear safety' does not describe the much larger error that comes from reusing an edge *cell* as the outside value.",
+     "Implementation note 8 mentions a pyramid shortens arithmetic but not the apron; it does not say that the apron can be avoided entirely by streaming the vertical pass (which is what makes some wide blurs exact)."
+    ],
+    "deviations": [
+     "Local vs wide is decided by the memory budget (halo must fit (1+2h)\u00b2 \u2264 maxTilePixels) rather than by a fixed 32-px halo budget, because the task's hard constraint is the buffer size.",
+     "Fields carry a two-cell ring of clamped edge values and are padded, because the definition replicates the frame's edge before blurring; without it every border-reaching pixel is biased by up to 0.07 (DIARY Step 3).",
+     "Field reduction factors are small integers (1..64) plus powers of two, not only powers of two, and plans are ranked by resolvability, haloability and then by edge-ring availability with cost caps, because a pure power-of-two rule lost an order of magnitude of accuracy on tight budgets.",
+     "Added an exact streamed vertical pass for the last wide blur instead of always using fields: the chapter's field is an approximation, and the task asks for exactness wherever the budget permits, so a strip buffer of W\u00d7(ch+2R) wins when the frame is narrower than the kernel diameter.",
+     "Instead of refusing with a diagnostic when the budget is degenerate (the chapter's step 7), the planner degrades predictably (fewer ring cells, then point-sampled cells), because the API has no diagnostic channel and requirement 2 must still hold; the residual impossibility is documented in NOTES.md.",
+     "Tile rectangles do not include the one-reduced-cell bilinear footprint in their reported read rectangle for field sources: reporting it shrank the tiles by the whole field scale and produced 65 536 tiles and 961\u00d7 reads (DIARY Step 6)."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "chapter",
+   "n": 3,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": true,
+    "wide: a wide blur followed by a narrow one": true,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 9,
+   "hidden_total": 9,
+   "own_passed": 23,
+   "own_total": 23,
+   "diary_steps": 6,
+   "src_lines": 935,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 the exact tiers (whole image / exact haloed tiles / exact in-place streaming with a 2R+1 ring) implement the definition verbatim with clamped borders and agree with renderWhole to <1e-6 (measured 0) for pointwise chains, several blurs with pointwise ops between them, reach beyond the tile halo, and whole-image cases.",
+     "2": "met \u2014 every buffer goes through one alloc path that refuses > maxTilePixels and reports it via onBuffer (fields, tiles, intermediates, reduced accumulators), and tiles reported via onTile are a disjoint grid covering the image exactly once with read rectangles inside the image and containing the core, asserted for budgets 49..16384.",
+     "3": "met \u2014 wide kernels are exact when a (2R+1) ring fits the budget, otherwise the field path measured \u22643.4e-4 max and \u22641.6e-4 mean for \u03c3 = 300 px at budgets 256/1024/16384 (bounds 0.025/0.005); only degenerate oblong shapes with absurd budgets (e.g. 400\u00d724 at 100 px) exceed the average bound, which is documented.",
+     "4": "met \u2014 the halo equals the chain's summed reach whenever it fits and the core is the largest that does, so reads are 1.0\u20131.7\u00d7 the image pixels for small neighbourhoods (asserted \u22643\u00d7 on four chains plus an oblong 301\u00d797 case).",
+     "5": "met \u2014 blur \u03c3 is converted from micrometres at plan time only, and the same physical chain at 1 and 2 \u00b5m/px reproduces the picture (2\u00d72-downsampled fine render vs coarse render differs by \u22648e-7 for a wide blur and \u22645e-4 for a 4-op chain)."
+    },
+    "own_tests": {
+     "files": 1,
+     "passed": 23,
+     "failed": 0
+    },
+    "design_summary": "renderTiled compiles the chain to ops with \u03c3 in pixels and a planner picks one of four tiers: whole image in one tile, exact haloed tiles (halo = summed reach, core = largest that fits, ROI propagated backwards so no buffer exceeds the haloed read rectangle), an exact in-place streaming pass using only a (2R+1) ring per blur, or reduced-resolution fields for kernels too wide for all of these. Fields are built by evaluating the full-resolution prefix exactly per tile, averaging it into a clamped, aspect-preserving cell grid whose outer cells carry edge-line values, blurring there with the variance-corrected residual \u03c3, and sampling bilinearly per tile. Every allocation is size-checked and reported, and every tile rectangle is reported so the written cores partition the image exactly.",
+    "chapter_used": [
+     "Intent/Solution: reaches declared in resolution-free units (\u00b5m on the film), converted to pixels by the planner",
+     "Collaborations 1\u20133: chains add their reaches, the maximum over chains is the halo, tile = core + halo clipped to the frame",
+     "Solution/notes 4 and 5: wide kernels become one global field with variance bookkeeping and one downsample per field group",
+     "Structure table: Spatial kernel declaration, Frame, Planner, Tile, Global field, Tile executor (implemented as InternOp, Env, planRender, Rect, FieldImage, evalStage)",
+     "Implementation note 1 (physical units survive resolution changes) drove requirement 5; note 8 (a pyramid shortens arithmetic, not the apron) motivated the field tier instead of haloed wide kernels",
+     "Variations/demand-driven regions influenced the backward ROI propagation that keeps every intermediate small"
+    ],
+    "chapter_unclear": [
+     "The '+1 pixel for bilinear safety' and rounding the halo to 8 are GPU-texture concerns; with pixel-centre-exact samplers they would only waste reads, so the halo is exactly the reach.",
+     "The plan's `refuse(\"halo-too-wide\")` diagnostic has no counterpart in an API that returns an image, so the task's contract (complete within the budget) contradicts it.",
+     "haloBudget = 32 px is a fixed constant in the sketch, but the task ties the halo to maxTilePixels; the chapter does not say how to derive one from the other, nor how the halo interacts with the requirement that overlap reads stay within 3\u00d7.",
+     "The field residual `sqrt(\u03c3\u00b2 \u2212 downsampleVariance \u2212 upsampleVariance)/s` does not say how the field's border should behave; ignoring the clamped border (the task's boundary condition) is what made my first field implementation wrong.",
+     "Nothing in the chapter says what a tile's 'read rectangle' means when the executor does not read the input at all (a field-first chain), so the reported rect is a policy choice."
+    ],
+    "deviations": [
+     "Added an exact streaming tier (pointwise in place in the output, blur passes sliding a (2R+1) ring of original samples) that the chapter does not have: without it every kernel only slightly wider than a tile halo had to be approximated (measured 0.03\u20130.3 error), while this tier is exact and needs only 2R+1 pixels because the output buffer is exempt from the budget.",
+     "Fields are built from the full-resolution evaluation of the chain prefix instead of from a downsampled input: the chapter's recipe puts pointwise ops on the coarse grid, which is badly wrong for gamma near zero.",
+     "The reduced grid keeps the image's aspect ratio, spans the image domain exactly (fractional step) and its outer cells hold edge-line averages rather than block averages \u2014 required to represent the clamped border of a kernel wider than the image.",
+     "No refusal diagnostics: an impossible plan degrades to a field (still bounded in memory and within the 0.025/0.005 error bounds) instead of throwing, because the API must return an image.",
+     "Tile size is a square whose side is `sqrt(budget) \u2212 2h` rather than a power of two, and the halo is not rounded to 8 or padded by 1 px, since there is no GPU texture involved and requirement 4 measures reads.",
+     "Wide blurs are split into a local truncated Gaussian plus a field (\u03c3_field = sqrt(\u03c3\u00b2 \u2212 \u03c3_local\u00b2)) so even a field chain keeps a halo-sized exact part, instead of moving whole kernels to fields."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "chapter",
+   "n": 4,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": true,
+    "wide: a wide blur followed by a narrow one": true,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 9,
+   "hidden_total": 9,
+   "own_passed": 56,
+   "own_total": 56,
+   "diary_steps": 10,
+   "src_lines": 729,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 every affordable exact plan is bit-identical to renderWhole (measured max difference 0 for chains of up to five ops with pointwise ops between them), with the one documented exception that a plan estimated above 3e9 multiply-adds promotes its widest blur to a field instead of running for tens of seconds.",
+     "2": "met \u2014 all buffers are created through a single allocator that reports size to onBuffer, the planner keeps every one of them (tile buffers, ping-pong temporaries, field chunks, window buffers) at or below maxTilePixels, and the T\u00d7T tile grid covers each pixel exactly once with onTile reporting the core and its read rectangle.",
+     "3": "met \u2014 blur chains too wide for any halo complete inside the budget; on the task's own example (sigma of hundreds of pixels, 128\u00d7128 budget) the max error is 0.0003 and the mean 0.00015, and a sweep of sigma 4\u2013300 px over 32\u00d732/64\u00d764/128\u00d7128 budgets stays at or below 0.010 max / 0.0014 mean.",
+     "4": "met \u2014 the tile side is the largest that fits, so small halos read 1.0\u20132.4\u00d7 the image pixels (tests assert \u2264 3\u00d7; e.g. a 320\u00d7240 scan with a 128\u00d7128 budget reads 1.06\u00d7), and wide blurs read the input exactly once because their halo lives in the field.",
+     "5": "met \u2014 reaches are converted from micrometres with umPerPx, so the same chain on a 2\u00d7 finer scan of the same film gives the same picture scaled (tested for both renderWhole and the tiled path with a wide blur)."
+    },
+    "own_tests": {
+     "files": 8,
+     "passed": 56,
+     "failed": 0
+    },
+    "design_summary": "Reach-declared tiling: each blur's reach is ceil(3*sigmaUm/umPerPx), local reaches are summed along the chain into a halo, and the tile core is the largest square whose haloed footprint fits maxTilePixels, with each tile evaluating only the chain segment after the last field and writing its core. Blurs whose halo cannot fit any tile (or whose exact plan would cost more than 3e9 multiply-adds) become global fields: the prefix chain is box-downsampled by a power of two that keeps the kernel at least two pixels wide, stored as a chunked reduced image with a clamped-extension margin, blurred with the residual sigma from variance bookkeeping, and sampled bilinearly by every tile. renderWhole and the exact tile path share the same clamped separable convolution (Float64 accumulation, Float32 storage), so exactness up to the tolerance is structural rather than numerical.",
+    "chapter_used": [
+     "Intent / Motivation \u2014 tiling with halos rather than one fixed halo or pixel-unit reaches",
+     "Solution \u2014 declare reach in resolution-free units, sum reaches along a chain, convert at plan time, use global fields for kernels beyond the halo budget",
+     "Collaborations 2\u20133 \u2014 reaches to pixels, halo = max over chains of the summed local reaches",
+     "Implementation note 1 \u2014 microsecond reaches converted with the frame's \u00b5m per pixel (resolution independence)",
+     "Implementation note 2 \u2014 chains add their reaches (linear chain here, so no branch maximum needed)",
+     "Implementation note 4 \u2014 field variance bookkeeping, residual sigma after subtracting downsample and upsample variances",
+     "Implementation note 5 \u2014 downsample chosen as the largest power of two that keeps the kernel at least two pixels wide",
+     "Implementation notes 7\u20138 \u2014 do not silently thrash: a plan whose halo dominates is replaced by fields (cost valve)",
+     "Structure table \u2014 Frame, Planner, Tile (core vs read), Global field",
+     "Variations / Known uses \u2014 demand-driven versus global fields (Halide 'tiles with overlap', darktable's skip-tiling) justified the local-halo or global-field strategy per kernel"
+    ],
+    "chapter_unclear": [
+     "The '+1 px for bilinear safety' and 'round the halo up to 8' are GPU alignment concerns; on a CPU they only add read overlap, so the mapping to the task's maxTilePixels was left to me.",
+     "The sketch's haloBudget of 32 px is a fixed constant, whereas this task's budget is maxTilePixels; the conversion (1 + 2*reach <= floor(sqrt(maxTilePixels))) had to be derived.",
+     "The field rule 'downsample by the largest power of two that keeps the kernel at least two pixels wide' assumes the reduced image fits the device; it does not say what to do when even that reduced image exceeds the budget (I chunk it) or why the residual formula subtracts 'downsampleVariance(s) + upsampleVariance(s)' without naming the filters (I used the box (s\u00b2\u22121)/12s\u00b2 and the bilinear 1/6).",
+     "The chapter's field is described as computed 'once per evaluation' and sampled 'by frame coordinates' but the sampling convention (block centres, half-block anchoring) is not specified, and it is what decides the border accuracy."
+    ],
+    "deviations": [
+     "The reduced field is stored as a set of budget-sized chunks instead of one buffer: requirement 2 bounds each buffer, and chunking keeps the field's resolution (and therefore the wide-blur accuracy) independent of the budget.",
+     "The chapter's diagnostic 'halo-too-wide' refusal became an automatic promotion of the widest local blur to a field, because the API has no diagnostics channel and the export must still complete; the promotion fires only above 3e9 estimated multiply-adds.",
+     "No +1 pixel of bilinear safety and no 8-pixel halo alignment: on the CPU the halo is exactly the summed reach, which keeps reads minimal for requirement 4.",
+     "Only the last wide blur is sampled by the tiles (earlier wide blurs are used while building later fields); the chapter does not discuss chains containing several fields.",
+     "No field groups: each wide blur gets its own downsample and residual instead of sharing one group per field id, because the chain has no field-id declarations.",
+     "Fields with s = 1 (sigma < 4 px) are computed at full resolution, which makes those 'wide' blurs exact \u2014 an option the chapter does not mention."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "control",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": false,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": false,
+    "wide: a wide blur followed by a narrow one": false,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 6,
+   "hidden_total": 9,
+   "own_passed": 31,
+   "own_total": 31,
+   "diary_steps": 8,
+   "src_lines": 1019,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 the additive-halo per-tile region render and the staged whole-buffer render share the exact kernel/convolution code with renderWhole, so chains with several blurs and pointwise ops between them match the definition (0 difference; \u22641e-7 when summation order differs) for any budget with (2R+1)\u00b2 \u2264 maxTilePixels, verified at 1e-5 across many sizes, budgets and umPerPx.",
+     "2": "met \u2014 every allocation (tile regions, row/column strips, reduced images, block-mean bands, accumulators) goes through one reporting helper and is at most maxTilePixels pixels, even for budgets of 1\u20133 pixels; tiles are reported once each and their rectangles partition the image exactly (coverage counted per pixel in the tests).",
+     "3": "met \u2014 wide blurs are computed from a block-mean image of the whole scan plus an exact decomposition of the clamped borders into edge-strip and corner terms: for \u03c3 of 100\u2013400 px with a 128\u00d7128 budget the worst error measured is 3e-4 with mean 8e-5 (limits 0.025 / 0.005); only budgets smaller than the kernel diameter itself (e.g. 64 pixels total) can exceed the bounds, which is documented as a limitation.",
+     "4": "met \u2014 the per-tile grid is searched to minimise the exact read total (it matches an exhaustive search on 168 configurations); reads are 1.4\u20132.9\u00d7 the image pixels for halos up to ~25% of the budget side, and a pointwise-only chain reads every input pixel exactly once.",
+     "5": "met \u2014 \u03c3 is sigmaUm/umPerPx, so the same chain on the same film at another resolution gives the same picture: tests render analytic film content at two resolutions (including through the reduced-image path) and compare after box downsampling (\u22640.01 / \u22640.04)."
+    },
+    "own_tests": {
+     "files": 6,
+     "passed": 31,
+     "failed": 0
+    },
+    "design_summary": "Blur chains have an additive influence radius H = \u03a3 ceil(3\u03c3_px), so a tile can be computed exactly from the input expanded by H (per-tile region render, with a halo-minimising tile grid), or \u2014 when H is large \u2014 by staging the chain operation by operation over the output buffer using a ring of 2R+1 input samples for the horizontal pass and a rolling 2R+1-row window over column strips for the vertical pass, both exact and bounded. When a blur's neighbourhood cannot fit the budget at all, the clamped convolution is split exactly into an interior term from a block-mean image of the whole scan at the finest fitting scale plus exact edge-strip and corner terms, then operations after that blur are still evaluated exactly per tile. All buffers are allocated through a single reporting helper bounded by maxTilePixels, and tiles partition the image while reporting the influence region they depend on.",
+    "confidence": 0.85
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "control",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": false,
+    "wide: a wide blur followed by a narrow one": false,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 7,
+   "hidden_total": 9,
+   "own_passed": 29,
+   "own_total": 29,
+   "diary_steps": 7,
+   "src_lines": 660,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 the exact tiled path shares the arithmetic with renderWhole (same kernel, same summation order, float64 buffers), so it is bit-identical (max diff 0, asserted \u22641e-5) for chains with several blurs, pointwise ops between them, non-integer umPerPx and budgets down to 1 pixel.",
+     "2": "met \u2014 every allocated buffer is a tile/reduced image or the single 1-D scratch line, each reported once through onBuffer and sized so w*h \u2264 maxTilePixels (asserted on every reported buffer); tile rectangles reported through onTile cover the image exactly once (verified with a coverage map).",
+     "3": "met \u2014 the reduced-resolution path completes within the budget for \u03c3 of hundreds of pixels at 128\u00d7128 (and even 8\u00d78); measured on white noise: [300] 7e-6, [\u03b32,300] 6e-6, [300,\u03b3.5] 2e-6, [300,10] 2e-4, [40,60] 1.3e-3, [10,300] 3e-3 max, all within 0.025 max / 0.005 mean; a 168-combination sweep passes at maxTilePixels \u2265 1024 except chains whose blur is as large as the image itself (documented).",
+     "4": "met \u2014 chooseTile minimises \u03a3 readW\u00b7readH = SX(tw)\u00b7SY(th), giving ~1.0\u20131.6\u00d7 the image's pixels for small neighbourhoods (tests assert \u22643\u00d7); no-blur chains read exactly W\u00b7H.",
+     "5": "met \u2014 \u03c3 is defined in film units and nothing depends on the pixel grid; the same film sampled at 1 and 0.5 \u00b5m/px matches after box-reducing the finer render, on both the exact and the wide-blur path (max < 0.02, mean < 0.004)."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 29,
+     "failed": 0
+    },
+    "design_summary": "One set of primitives (pointwise ops plus in-place separable Gaussian blur on a strided buffer with clamped edges and a single 1-D scratch line) backs three paths: whole-image when the image fits the budget, exact overlap tiling when the cumulative radius 2\u00b7\u03a3ceil(3\u03c3) fits a padded tile (the central region is then exactly the definition), and an integer resolution reduction with a Gaussian anti-aliasing pre-filter, exact variance matching and padded borders when a blur is too wide to tile. The reduced path clamps the first blur of the chain on the padded ring (which converges to the pure edge pixel) and every later blur on the true border, reproducing the definition's per-pass border dilution, and keeps pointwise ops at full resolution. tile size is chosen to minimise redundant reads, and all buffers are reported through onBuffer and stay within maxTilePixels.",
+    "confidence": 0.82
+   }
+  }
+ ]
+}

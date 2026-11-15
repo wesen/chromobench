@@ -808,3 +808,61 @@ document from v1, tiling and slots from v2).
 ### Technical details
 - Scores: `<scratchpad>/pattern-eval-v2/results.json`, `<scratchpad>/pattern-eval/results.json`; analysis
   `<scratchpad>/pattern-analysis-v2/`; review workspaces and prompts `<scratchpad>/pattern-review/`.
+
+## Step 12: The blind reviews — chapters shape the code everywhere, improve it in two of four
+
+Four Opus subagents reviewed the four tasks blind (graph 5 runs, document, slots and tiling 6 each), each with the
+chapter as yardstick and the rubric of the playbook §6, read-only inside its review directory. Unblinded with the
+keys, the results say the chapters are recognisable in every task and better in two.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 11)
+
+**Assistant interpretation:** Collect, unblind and combine the reviews with the tests.
+
+**Inferred user intent:** Know which chapters work and how to fix the others.
+
+**Commit (code):** (this step's commit) — RESULTS.md, reviews/, results-v1/v2.json, extract.py, unblind.py
+
+### What I did
+- The reviewers return their report through the hand-back tool, not as message text; `extract.py` reads the last
+  fenced JSON from the agent's transcript, including tool-call inputs (the first version looked only at text and
+  printed "no json block found").
+- `unblind.py` joins each review with its key; `RESULTS.md` combines tests, reviews and the per-chapter changes.
+
+### Why
+- Pass rates alone could not tell three of four tasks apart; the design review was the planned second instrument.
+
+### What worked
+- Reviewer guesses separated chapter runs from controls perfectly in all four tasks (chapter runs 0.75–0.97, controls
+  0.10–0.30).
+- Graph: all chapter runs above the control. Tiling: all chapter runs above both controls (and only the controls
+  fail hidden tests). Document: mixed (one chapter run last, below both controls). Slots: mixed (a control has the
+  highest score, 28/35).
+- Each review lists concrete chapter defects and ideas the chapters lack, with file:line evidence (RESULTS.md).
+
+### What didn't work
+- The first extraction attempt (text only) found no JSON; fixed as above.
+
+### What I learned
+- A chapter can be recognisable and still not help: in slots, chapter 4's sketch put the lane on the slot and
+  released before presenting, and the runs that copied it inherited both defects.
+- Chapters with sketches teach their sketch's mistakes; Implementation notes that are GPU- or project-specific
+  (power-of-two tiles, halo multiples of 8) are applied where they do not fit.
+
+### What was tricky to build
+- Reading scores across reviewers: each reviewer's scale differs, so comparisons are within a task, not across.
+
+### What warrants a second pair of eyes
+- One reviewer per task: a second seed per task would measure reviewer agreement before large chapter rewrites.
+
+### What should be done in the future
+- Revise chapters 1, 4, 8 and 9 from RESULTS.md (keep the old versions), then rerun the same tasks on the revised
+  chapters with harness v2 (playbook §7).
+
+### Code review instructions
+- `docs/patterns/experiments/RESULTS.md`; `python3 -I unblind.py <review-dir> <task>`.
+
+### Technical details
+- Reviews: `docs/patterns/experiments/reviews/<task>-r1.answer.json` with `<task>-r1.key.json`.
