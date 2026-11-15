@@ -1,8 +1,10 @@
-// cb.core's frame commands (CHB-029 item 3: one declarative table per area): flag, rate and label, select and step through the library, re-open as photo or negative, remove, rotate and flip.
+// cb.core's frame commands (CHB-029 item 3: one declarative table per area): flag, rate, label and keywords (the
+// ratings: the document tier, one undo step each), select and step through the library, re-open as photo or
+// negative, remove, rotate and flip.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CommandTable } from '@chromobench/shell';
 import { sel, type CatalogFrame, type CbState } from '../sel.ts';
-import { flag, needFrame, openFrame, orientCurrent, reopenAs, step, studioOf } from './env.ts';
+import { flag, needFrame, openFrame, orientCurrent, rate, reopenAs, step, studioOf } from './env.ts';
 
 export const frameCommands = (): CommandTable<CbState> => ({
   'frame.pick': { label: 'Flag as Pick', ...needFrame, run: ctx => flag(ctx, 'pick', 'Flag as Pick') },
@@ -12,20 +14,19 @@ export const frameCommands = (): CommandTable<CbState> => ({
     label: 'Set Stars',
     palette: false,
     ...needFrame,
-    run: (ctx, n: number) =>
-      ctx.tx(`${n} Stars`, (t: any) => {
-        for (const id of sel.targets(ctx.state)) if (t.catalog.frames[id]) t.catalog.frames[id].stars = n;
-      }),
+    run: (ctx, n: number) => rate(ctx, `${n} Stars`, sel.targets(ctx.state), () => ({ stars: n })),
   },
   'frame.label': {
     label: 'Set Colour Label',
     palette: false,
     ...needFrame,
-    run: (ctx, colour: string | null) =>
-      ctx.tx(`Label ${colour ?? 'none'}`, (t: any) => {
-        const id = sel.current(ctx.state)!;
-        if (t.catalog.frames[id]) t.catalog.frames[id].label = t.catalog.frames[id].label === colour ? null : colour;
-      }),
+    run: (ctx, colour: string | null) => rate(ctx, `Label ${colour ?? 'none'}`, [sel.current(ctx.state)!], r => ({ label: r.label === colour ? null : colour })),
+  },
+  'frame.keywords': {
+    label: 'Set Keywords',
+    palette: false,
+    ...needFrame,
+    run: (ctx, keywords: string[]) => rate(ctx, `Keywords ${keywords.join(', ') || 'none'}`, sel.targets(ctx.state), () => ({ keywords: [...keywords] })),
   },
   'frame.select': {
     label: 'Select Frame',

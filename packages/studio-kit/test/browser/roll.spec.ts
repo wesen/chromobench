@@ -39,14 +39,20 @@ test('roll: new roll, first print, cull, reference, match, approve, undo', async
   await expect(page.locator('#roll-inspector-table tr')).toHaveCount(7);
   // the planted mixed frame (5) is named
   await expect(page.locator('.cb-roll-setup [data-row="base"]')).toContainText('mixed: roll-05.tif');
+  // every frame's scan links to the roll: the roll holds the shared base and veil, a frame only its own fields; the
+  // mixed frame keeps its own base as an override (its divergence)
+  const scans = await hook<{ link: { roll: string }; overrides: Record<string, unknown> }[]>(page, `cb.state().roll.rolls['roll-1'].frames.map((f) => cb.doc(f).stages.scan.medium)`);
+  expect(scans.map((m) => m.link.roll)).toEqual(Array(6).fill('roll-1'));
+  expect(scans.map((m) => 'baseT' in m.overrides)).toEqual([false, false, false, false, true, false]);
+  expect(await hook<unknown>(page, `cb.state().roll.rolls['roll-1'].media.scan.baseT`)).not.toBeNull();
 
   // cull with the keys on the contact sheet: reject frame 5, pick frame 1
   await select(page, 4);
   await page.keyboard.press('x');
-  await expect.poll(() => hook<string | null>(page, `cb.state().catalog.frames[cb.state().roll.rolls['roll-1'].frames[4]].flag`)).toBe('reject');
+  await expect.poll(() => hook<string | null>(page, `cb.state().ratings[cb.state().roll.rolls['roll-1'].frames[4]]?.flag`)).toBe('reject');
   await select(page, 0);
   await page.keyboard.press('p');
-  await expect.poll(() => hook<string | null>(page, `cb.state().catalog.frames[cb.state().roll.rolls['roll-1'].frames[0]].flag`)).toBe('pick');
+  await expect.poll(() => hook<string | null>(page, `cb.state().ratings[cb.state().roll.rolls['roll-1'].frames[0]]?.flag`)).toBe('pick');
 
   // reference: frame 3 (R), then match (M): previewed on one card, nothing applied yet
   await select(page, 2);

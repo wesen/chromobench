@@ -53,7 +53,6 @@ export const CB_FORMS: FormSpec[] = [
   panelSpec('cb.approvals', 'One card per pending agent proposal: Show · Approve (the checked changes) · Reject; Approve all; Apply anyway on E_STALE'),
   panelSpec('cb.why', 'Why the focused control has its value (the log\'s trail of the path)'),
   panelSpec('cb.snapshots', 'Named versions of the frame\'s document; restore is one step'),
-  panelSpec('cb.exposures', 'The darkroom layers (main, burns, dodges, flashes, preflash, density masks, filters) and the printing script'),
   panelSpec('cb.journal', 'The log\'s journal for the frame: seq, status, by, transaction, mutations'),
   panelSpec('cb.nodes', 'The display closure with node ids and evaluation counts'),
   panelSpec('cb.explain', 'This studio, explained'),

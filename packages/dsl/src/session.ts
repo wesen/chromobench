@@ -11,14 +11,14 @@
 import { DefaultIntrinsics, newQuickJSWASMModuleFromVariant, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from 'quickjs-emscripten-core';
 import SYNC_VARIANT from '@jitl/quickjs-wasmfile-release-sync';
 import {
-  ChromobenchError, Graph, LOG_RULES, canonicalJSON, diag, documentKind, isLinked, nodeId, sha256Hex, toDiagnostic as contractDiag,
+  ChromobenchError, Graph, LOG_RULES, canonicalJSON, diag, documentKind, nodeId, readField, sha256Hex, toDiagnostic as contractDiag,
   type AgentMode, type Box, type ContextBlock, type Diagnostic, type Document, type Engine, type EvalRequest, type EvalResult,
   type ImageInfo, type Look, type NodeDef,
 } from '@chromobench/contract';
 import { equal, plan, transaction, tryTransaction, type Batch, type Edit, type Log, type LogEntry, type Mutation } from '@chromobench/values';
 import { describeMutation, touched } from './describe.ts';
 import type { DslHistory, Submission } from './history.ts';
-import { Host, type DocsProvider, type FrameEntry, type LooksProvider } from './host.ts';
+import { Host, type DocsProvider, type DslLinks, type FrameEntry } from './host.ts';
 import { PRELUDE } from './prelude/prelude.ts';
 import { assemble } from './results/assemble.ts';
 import { locate, toDiagnostic, topLevelNames, type GuestError } from './results/diagnostics.ts';
@@ -52,8 +52,8 @@ export interface DslSessionOptions {
   frames?: Record<string, DslFrame>;
   limits?: Partial<DslLimits>;
   docs?: DocsProvider;
-  /** cb.looks.* (CHB-021): the studio's named looks */
-  looks?: LooksProvider;
+  /** the shared data a frame's links resolve against (rolls, presets), read per eval; looks are registered (CHB-037 P7) */
+  links?: () => DslLinks;
   /** prefix of this session's transaction ids (`chat-eval-3`); unique per session in one log */
   txPrefix?: string;
 }
@@ -132,7 +132,7 @@ export class DslSession {
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
     this.host = new Host(this.graph, this.frameEntries, this.history);
     if (opts.docs) this.host.docs = opts.docs;
-    if (opts.looks) this.host.looksProvider = opts.looks;
+    if (opts.links) this.host.linkSource = opts.links;
     for (const [id, f] of Object.entries(opts.frames ?? {})) this.addFrame(id, f);
   }
 
@@ -568,10 +568,8 @@ export class DslSession {
     if (frame && this.host.frameIds().includes(frame)) {
       const d = this.host.state(frame).base;
       const name = this.host.frameName(frame);
-      const film = (d.stages.scan ?? d.stages.film)?.medium;
-      const stock = film && !isLinked(film) ? (film as { stock: string }).stock : 'roll';
-      const dm = d.stages.darkroom.medium;
-      const paper = isLinked(dm) ? 'roll' : dm.paper;
+      const stock = String(readField(d, d.stages.scan ? 'stages.scan.medium.stock' : 'stages.film.medium.stock', this.host.links()) ?? 'roll');
+      const paper = String(readField(d, 'stages.darkroom.medium.paper', this.host.links()) ?? 'roll');
       frameLine = `${name !== frame ? `${frame} (${name})` : frame} · ${documentKind(d)} · ${stock} → ${paper} · mode ${mode}`;
     }
     const mem = this.memInfo();

@@ -2,19 +2,29 @@
 // state through these, never by hand: `cb.sel.current(s)` is the one current frame, `cb.sel.frame(s)` its handle.
 // Kits add their own (`cb.kits.roll.sel.*`, `cb.kits.looks.sel.*`); headless and DOM code import this module.
 import type { Document } from '@chromobench/contract';
+import { strip } from '@chromobench/shell';
 import { frameRef, type FrameRef } from './handles.ts';
 import type { ViewMode } from './model/settings.ts';
 import type { OpenAs } from './bridge/frames.ts';
 import type { HostFlags, LogView, Proposal } from './studio.ts';
 
-export interface CatalogFrame {
-  id: string;
-  sha256: string;
-  name: string;
+/**
+ * The photographer's ratings of a frame: the document tier (`ratings.<frame>` in the program's own document), so a
+ * mis-rating is one undo step; library membership (`catalog`) stays the view tier (opening a file is not an edit).
+ */
+export interface Rating {
   flag: 'pick' | 'reject' | null;
   stars: number;
   label: string | null;
   keywords: string[];
+}
+export const NO_RATING: Rating = Object.freeze({ flag: null, stars: 0, label: null, keywords: Object.freeze([]) as unknown as string[] });
+
+/** A library frame as the panels read it: its catalog entry with its rating (sel.library, sel.entry merge both). */
+export interface CatalogFrame extends Rating {
+  id: string;
+  sha256: string;
+  name: string;
   /** how the file is open: as a photo or as a negative (CHB-027) */
   kind?: 'photo' | 'negative';
   /** a small JPEG of the last print (data URL), so the library shows the frame after a reload (F5) */
@@ -22,6 +32,9 @@ export interface CatalogFrame {
   /** a frame of a strip (CHB-027 WS-D): the file's name (`name` adds the frame's place, "raw010.dng · 2/3") */
   file?: string;
 }
+/** What the catalog stores for a frame (the view tier): everything but the rating. */
+export type CatalogEntry = Omit<CatalogFrame, keyof Rating>;
+
 export interface Selection {
   ids: string[];
   primary: string | null;
@@ -73,7 +86,9 @@ export interface CbPrefs {
  * the view tier: opening a file is not an edit.
  */
 export interface CbState {
-  catalog: { frames: Record<string, CatalogFrame>; order: string[] };
+  catalog: { frames: Record<string, CatalogEntry>; order: string[] };
+  /** the photographer's ratings by frame id (document tier: undoable) */
+  ratings: Record<string, Rating>;
   snapshots: Record<string, Snapshot[]>;
   docs: Record<string, Document>;
   view: CbView;
@@ -88,6 +103,20 @@ type St = Partial<CbState> | null | undefined;
 /** the frame shown (the selection's primary), or null */
 const current = (s: St): string | null => s?.ui?.selection?.primary ?? null;
 
+/** a catalog entry with its rating; the same object while neither changes (views key their cells on identity) */
+const MERGED = new WeakMap<object, { r: Rating | undefined; out: CatalogFrame }>();
+function merged(c0: CatalogEntry, r0: Rating | undefined): CatalogFrame {
+  // a cell reads the state through a tracking proxy: key on the stored objects behind it
+  const c = strip(c0);
+  const r = r0 === undefined ? undefined : strip(r0);
+  const hit = MERGED.get(c);
+  if (hit && hit.r === r) return hit.out;
+  // read through the proxies, so a cell that asked depends on the fields
+  const out = Object.freeze({ ...(c0 as object), ...NO_RATING, ...(r0 ? { ...r0, keywords: [...r0.keywords] } : {}) }) as CatalogFrame;
+  MERGED.set(c, { r, out });
+  return out;
+}
+
 /** the frames of the catalog in roll order, after the library filter, including those not open in this session
  *  (CHB-027 F5: listed with their saved thumbnail; selecting one asks the host to read its file again) */
 function library(s: St): CatalogFrame[] {
@@ -95,8 +124,9 @@ function library(s: St): CatalogFrame[] {
   if (!c) return [];
   const f = s?.view?.filter ?? { text: '', flag: null };
   const text = String(f.text ?? '').toLowerCase();
+  const ratings = s?.ratings ?? {};
   return c.order
-    .map(id => c.frames[id])
+    .map(id => (c.frames[id] ? merged(c.frames[id]!, ratings[id]) : undefined))
     .filter((x): x is CatalogFrame => !!x)
     .filter(x => (!text || x.name.toLowerCase().includes(text) || x.keywords.some(k => k.toLowerCase().includes(text))) && (!f.flag || (f.flag === 'unflagged' ? !x.flag : x.flag === f.flag)));
 }
@@ -131,8 +161,14 @@ export const sel = {
   },
   /** a frame's document (the current one by default), as the state shows it (with a gesture's preview) */
   doc: (s: St, id?: string | null): Document | undefined => s?.docs?.[id ?? current(s) ?? ''],
-  /** a frame's catalog entry (the current one by default) */
-  entry: (s: St, id?: string | null): CatalogFrame | undefined => s?.catalog?.frames?.[id ?? current(s) ?? ''],
+  /** a frame's catalog entry with its rating (the current one by default) */
+  entry: (s: St, id?: string | null): CatalogFrame | undefined => {
+    const f = id ?? current(s) ?? '';
+    const c = s?.catalog?.frames?.[f];
+    return c ? merged(c, s?.ratings?.[f]) : undefined;
+  },
+  /** a frame's rating (flag, stars, colour label, keywords) */
+  rating: (s: St, id?: string | null): Rating => s?.ratings?.[id ?? current(s) ?? ''] ?? NO_RATING,
   /** a frame's name in the library (the current one by default), or '' */
   name: (s: St, id?: string | null): string => s?.catalog?.frames?.[id ?? current(s) ?? '']?.name ?? '',
   library,

@@ -11,9 +11,11 @@ import {
   Coll, getPath, indexOf, isPlainObject, resolvePath, type Id, type Mutation,
 } from '@chromobench/values';
 import {
-  documentKind, getOp, isLinked, layerEntry, newDocument, stagesOf, termSeconds,
-  type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type StageName, type Vec3,
+  documentKind, getOp, isLinked, layerEntry, newDocument, readField, stagesOf, storedPath, termSeconds,
+  type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type LinkContext, type Preset, type Roll,
+  type StageName, type Vec3,
 } from '@chromobench/contract';
+import { strip } from '@chromobench/shell';
 
 export type { Document };
 
@@ -29,19 +31,56 @@ export const DUST = 'dust';
 /** The store's mount: frames are documents at docs.<frameId>. */
 export const DOCS = 'docs';
 
-/** The value at a document path, or undefined when the path does not exist in this document (another kind, an id it lacks). */
-export function read(doc: Document | null | undefined, path: string): unknown {
+/**
+ * The value at a document path, or undefined when the path does not exist in this document (another kind, an id it
+ * lacks). A field of a linked medium (a frame on a roll: `stages.scan.medium.stock`) reads through the link with
+ * `links` (linksOf(state)); without them only the frame's own overrides are known.
+ */
+export function read(doc: Document | null | undefined, path: string, links?: LinkContext): unknown {
   if (!doc) return undefined;
   try {
-    return getPath(doc, path);
+    return links ? readField(doc, path, links) : isLinkedField(doc, path) ? readField(doc, path) : getPath(doc, path);
   } catch {
     return undefined;
   }
 }
+const isLinkedField = (doc: Document, path: string): boolean => storedPath(doc, path) !== path;
 
-/** The physical path of a document path in the document's tree (where the store holds it). Throws E_PATH. */
+/**
+ * The physical path of a document path in the document's tree (where the store holds it). A field of a linked medium
+ * is stored as the frame's override (contract storedPath). Throws E_PATH.
+ */
 export function physical(doc: Document, path: string): (string | number)[] {
-  return [...resolvePath(doc, path, indexOf(doc)).phys];
+  return [...resolvePath(doc, storedPath(doc, path), indexOf(doc)).phys];
+}
+
+/** The shared data of the studio's state that links resolve against, as data (it crosses to the agent's worker). */
+export interface LinkData {
+  rolls?: Readonly<Record<string, Roll>>;
+  presets?: Readonly<Record<string, Preset>>;
+}
+let lastLinks: { data: LinkData; ctx: LinkContext } | null = null;
+/**
+ * The link data of the studio's state (CHB-037 P7): the rolls (the roll kit's `roll.rolls`) and the presets (the
+ * looks kit's `looks.presets`). The same object while both are unchanged.
+ */
+export function linkDataOf(s: any): LinkData { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
+  const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.data;
+  return linkEntry(rolls, presets).data;
+}
+function linkEntry(rolls: Record<string, Roll> | undefined, presets: Record<string, Preset> | undefined): { data: LinkData; ctx: LinkContext } {
+  const data: LinkData = { ...(rolls ? { rolls } : {}), ...(presets ? { presets } : {}) };
+  lastLinks = { data, ctx: { rolls: (id) => rolls?.[id], presets: (id) => presets?.[id] } };
+  return lastLinks;
+}
+/** The links of the studio's state as a LinkContext; the same object while the data is unchanged, so caches hold. */
+export function linksOf(s: any): LinkContext { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
+  const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.ctx;
+  return linkEntry(rolls, presets).ctx;
 }
 
 /** The store path of a document path of frame f: ['docs', f, ...physical]. */
@@ -243,62 +282,11 @@ export function withoutInert(doc: Document, ms: readonly Mutation[]): Mutation[]
   return out;
 }
 
-// ---- darkroom rows (the Exposures panel, the printing script) -------------------------------------------------
-
-export interface ExposureRow {
-  id: string;
-  op: string;
-  name: string;
-  enabled: boolean;
-  amount: number;
-  mask: string | null;
-  /** stops relative to the main exposure ('—' when given in seconds or for the main) */
-  change: string;
-  /** what a printer counts: '+4.97 s', '−1.91 s', '12.0 s' */
-  seconds: string;
-  /** seconds of light (withheld for a dodge) */
-  t: number;
-  filtration: string;
-  note: string;
-}
-
-const fmtCmy = (f: { c: number; m: number; y: number }): string => `${Number(f.c.toFixed(1))} / ${Number(f.m.toFixed(1))} / ${Number(f.y.toFixed(1))}`;
+// ---- the printing script (the Exposures panel's footer) -------------------------------------------------------
 
 /** Seconds the light law gives a darkroom contribution (termSeconds of the contract's light law), amount applied. */
 export function layerSeconds(l: Layer, tMain: number): number {
   return termSeconds(l.op, paramsOf(l), tMain) * l.amount;
-}
-
-/** The darkroom's exposures as rows: the main exposure, then every burn, dodge, flash, preflash, density mask and filter. */
-export function exposureRows(doc: Document, fmt: { seconds: (t: number) => string; stops: (s: number) => string }): ExposureRow[] {
-  const main = mainExposure(doc);
-  const rows: ExposureRow[] = [];
-  for (const p of entriesOf(doc, 'darkroom')) {
-    const e = p.entry;
-    if (e.kind !== 'layer') continue;
-    const pr = paramsOf(e);
-    const base = { id: p.id, op: e.op, name: e.name, enabled: e.enabled, amount: e.amount, mask: e.mask };
-    if (e.op === 'expose') {
-      rows.push({ ...base, change: '—', seconds: `${fmt.seconds(main.time_s)} s`, t: main.time_s, filtration: fmtCmy(main.filtration), note: '' });
-    } else if (e.op === 'burn' || e.op === 'dodge' || e.op === 'flash') {
-      const t = layerSeconds(e, main.time_s);
-      const stops = typeof pr['stops'] === 'number' ? (pr['stops'] as number) : null;
-      const change = stops === null ? '—' : `${fmt.stops(e.op === 'dodge' ? -stops : stops)} st`;
-      const seconds = e.op === 'dodge' ? `−${fmt.seconds(t)} s` : e.op === 'burn' ? `+${fmt.seconds(t)} s` : `${fmt.seconds(t)} s`;
-      const pack = pr['filtration'] as Cmy | undefined;
-      const filtration = e.op === 'dodge' || !pack ? "(main's)" : fmtCmy(pack);
-      const note = e.op === 'dodge' ? 'held back during main' : e.op === 'burn' ? (pack ? 'own filtration' : 'after main') : 'no negative';
-      rows.push({ ...base, change, seconds, t, filtration, note });
-    } else if (e.op === 'preflash') {
-      rows.push({ ...base, change: '—', seconds: `${Number(((pr['fraction'] as number) * 100).toFixed(1))} %`, t: 0, filtration: '—', note: 'of the grey card, before the main' });
-    } else if (e.op === 'densityMask') {
-      rows.push({ ...base, change: '—', seconds: '—', t: 0, filtration: '—', note: `${pr['polarity'] === 'same' ? 'unsharp' : 'contrast'} mask γ ${pr['gamma']} · ${pr['radius_um']} µm` });
-    } else if (e.op === 'filter') {
-      const l = pr['logH'] as number[];
-      rows.push({ ...base, change: '—', seconds: '—', t: 0, filtration: `${l.map((x) => (x / PT >= 0 ? '+' : '') + Number((x / PT).toFixed(1))).join(' / ')} pt`, note: p.id === LIGHTS ? 'printer lights' : 'filter' });
-    }
-  }
-  return rows;
 }
 
 /** "Expose 12.0 s, hold back face for 1.91 s; burn sky 4.97 s; flash 2.0 s." */
@@ -309,7 +297,8 @@ export function printingScript(doc: Document, fmt: { seconds: (t: number) => str
   for (const p of entriesOf(doc, 'darkroom')) {
     const e = p.entry;
     if (e.kind !== 'layer' || !e.enabled || e.amount === 0) continue;
-    const where = e.mask ?? 'the sheet';
+    // where: the mask's name in the library (what the photographer called it), else the whole sheet
+    const where = e.mask ? (Coll.get(doc.masks, e.mask)?.name ?? e.mask) : 'the sheet';
     if (e.op === 'dodge') head.push(`hold back ${where} for ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'burn') parts.push(`burn ${where} ${fmt.seconds(layerSeconds(e, main.time_s))} s`);
     else if (e.op === 'flash') parts.push(`flash ${fmt.seconds(layerSeconds(e, main.time_s))} s`);

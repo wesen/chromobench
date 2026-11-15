@@ -467,6 +467,28 @@ consumers: core (every new or changed op, golden parity: P2b), engine-mock (pass
 migration: none (Decision D8): stored studio state is cleared once; frames reopen from their sources
 tests:     packages/contract/test: light law = combinePixel (property, n = 300), order-free, composite identities,
            coalescing, mask algebra laws, validation errors, compile identities, cuts, links (bake), bindings (upstream)
+
+CC-021  links: look functions, presets, linked media helpers, bake of a whole link (CHB-037 P7; contract 1.2.0;
+        numbered CC-020 on its branch, renumbered at the merge because P8a's CC-020 landed first)
+class:     additive (minor), except bakeLink's signature (breaking for its one caller, the contract's tests)
+changes:   links.ts: defineLook / getLook / allLooks / lookParams / lookSkip (registered, versioned, pure look functions
+           (params, { kind, facts, doc, size }) → { stacks per stage, masks }); the look and preset resolvers; Preset
+           (format chromobench.preset version 3: stacks and masks), validatePreset, makePreset, lookAsPreset;
+           LinkContext gains presets and size (compile passes the source size from the graph: linkContext());
+           a link entry's expansion brings the look's masks with ids `<linkId>--<maskId>`; insertLink (one entry per
+           stage, ids `<key>-<stage>`, source.link = key), linksOf, linkSiblings, keyOf, setLinkAmount (clamped per law),
+           setLinkParams, removeLink; bakeLink(doc, key, ctx) → Mutation[] (every stage of the key, masks inserted;
+           was (doc, id, stage) → Mutation); linked media: storedPath / storedMutations (a set of a medium field on a
+           linked medium is an override), readField (reads through the link), linkMedium, unlinkMedium, divergence,
+           followLink; resolveMedium(doc, stage, ctx) (was (stage, medium, ctx)). links-looks.ts: the built-in looks
+           (balance, neutral, warm-print, cool-print, print-density, soft-contrast, more-contrast, edge-burn,
+           crisp-print, crisp-warm), registered on import.
+consumers: studio-kit looks and roll kits, the studio's reads and writes of linked media (model/doc.ts), the render
+           bridge and every compile site that may see a roll or preset link (LinkContext), dsl (named looks)
+migration: none
+tests:     packages/contract/test/links-looks.test.ts (expansion at the law's amount, amount 0 = no look, params,
+           two stages one key, a look reading the document, masks and size, kinds, bake = same graph, presets,
+           look as preset = same graph, linked media: overrides, divergence, follow, reads and writes, unlink)
 ```
 
 ## Contract 1.1 (CHB-037 P8a: Editor lab's tools in the engine)

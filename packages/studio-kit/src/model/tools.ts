@@ -1,10 +1,10 @@
 // Darkroom tool arithmetic (guide §5.9; contract 1.0): the test strip and the ring-around vary the main exposure
-// and the printer lights of the document; the burn and dodge tools make a mask in the document's library and a
-// darkroom layer through it. Each tool turns a click into one transaction of the document log.
-import { Coll, insert, set, type Mutation } from '@chromobench/values';
-import { mask as maskValue, pitches, type Document, type Graph, type MaskComponentKind, type Params, type Vec3 } from '@chromobench/contract';
+// and the printer lights of the document; a mask tool's shape becomes a mask component (the stack kit's mask tools
+// put it into the selected entry's mask). Each tool turns a click into one transaction of the document log.
+import { Coll, set } from '@chromobench/values';
+import type { Document, MaskComponentKind, Params, Vec3 } from '@chromobench/contract';
 import {
-  exposureStep, FILTRATION_PATH, isNormalised, LIGHTS_PATH, lightsOf, mainExposure, newDarkroomLayer, nextId, shiftLights, TIME_PATH,
+  exposureStep, FILTRATION_PATH, isNormalised, LIGHTS_PATH, lightsOf, mainExposure, shiftLights, TIME_PATH,
 } from './doc.ts';
 import { formatSeconds, formatStops, PT, signed, stopsBetween, timeAtStops } from './units.ts';
 
@@ -143,31 +143,6 @@ export function maskComponent(shape: MaskShape, strokeId = 's1'): [MaskComponent
   if (shape.kind === 'linear') return ['linear', { from: { x: shape.from[0], y: shape.from[1] }, to: { x: shape.to[0], y: shape.to[1] } }];
   const stroke = { points: simplify(shape.points).map((p) => [Number(p[0].toFixed(2)), Number(p[1].toFixed(2)), Number(p[2].toFixed(3))]), radius: shape.radius, hardness: shape.hardness, mode: shape.mode };
   return ['paint', { strokes: Coll.of([[strokeId, stroke]]) as unknown as Params[string] }];
-}
-
-/** A feather given in document pixels, as mm on the print (the mask library stores physical sizes). */
-export function featherMm(d: Document, g: Graph, px: number): number {
-  return Number(((px * pitches(d, g).paper) / 1000).toFixed(4));
-}
-
-/**
- * The mutations of a burn (or dodge) through a new mask: the mask (one component from the shape, feathered) goes
- * into the document's library, the layer into the darkroom stack with it. Ids are fresh in the document.
- */
-export function maskedLayer(d: Document, g: Graph, shape: MaskShape, o: { op?: 'burn' | 'dodge'; featherPx?: number } = {}): { mask: string; layer: string; mutations: Mutation[] } {
-  const op = o.op ?? 'burn';
-  const mid = nextId(d, 'm');
-  const lid = nextId(d, op);
-  const [kind, params] = maskComponent(shape, `${mid}s1`);
-  const m = maskValue(`Mask ${mid.slice(1)}`, [`${mid}c1`, kind, params]).feather(featherMm(d, g, o.featherPx ?? 8));
-  const layer = newDarkroomLayer(op, { mask: mid, name: `${op === 'burn' ? 'Burn' : 'Dodge'} ${lid.slice(op.length)}` });
-  return { mask: mid, layer: lid, mutations: [insert('masks', mid, m), insert('stages.darkroom.stack', lid, layer)] };
-}
-
-/** The darkroom layer of a kind at its usual values, as one insert (Exposures panel: + burn, + dodge, …). */
-export function addDarkroomLayer(d: Document, op: 'burn' | 'dodge' | 'flash' | 'preflash' | 'densityMask'): { id: string; mutations: Mutation[] } {
-  const id = nextId(d, op === 'densityMask' ? 'contrast' : op);
-  return { id, mutations: [insert('stages.darkroom.stack', id, newDarkroomLayer(op))] };
 }
 
 export { set };

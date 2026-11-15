@@ -197,5 +197,6 @@ test('8iv8: the darkroom layout with no frame shows one empty-state text, no emp
   await expect(page.locator('.ck-panel:visible')).toContainText('No photos yet');
   await page.setInputFiles('#file', A);
   await opened(page, 1, 120_000);
-  for (const p of ['history', 'enlarger', 'paper', 'exposures']) await expect(page.locator(`.ck-panel[data-panel="${p}"]`)).toBeVisible();
+  // the Enlarger is the darkroom stack (its exposures are rows of it); the digital palette is the print stage
+  for (const p of ['history', 'enlarger', 'paper', 'digital']) await expect(page.locator(`.ck-panel[data-panel="${p}"]`)).toBeVisible();
 });

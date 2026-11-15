@@ -591,3 +591,122 @@ stage now exist in the contract, the reference engine and the GPU engine, at par
 ### Technical details
 - Timings (P8a, M1 Max, 4000 × 2674): one exposure layer 22–23 ms preview / 256–263 ms export; six fused layers 23–24
   / 274–276 ms; plus one masked curve 49–52 / 369–391 ms.
+
+## Step 11: P7 merged — rolls, looks, presets and sync as one link mechanism
+
+Looks are now registered, versioned look functions that return groups; a link entry expands at compile with the
+stage law's amount; bake turns a link into its plain group; presets are parameterless looks; a roll links the scan
+medium with per-frame overrides; sync copies values or inserts one link; the DSL's named looks are link inserts and
+`.cblook.js` files run in their own sandbox. With P8a and P7 merged, every check is green.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P7, keep the contract's record straight, flag feature changes for the owner.
+
+**Inferred user intent:** Shared content stays shared, and nothing the photographer used silently disappears.
+
+**Commit (code):** f9d599a — "Merge P7 links (…)"; (this step's commit) — CC-021 renumbering, contract 1.2.0, docs
+
+### What I did
+- Merged with `merge-phase.sh`. Git merged `CONTRACT-DECISIONS.md` without a conflict but with two notes numbered
+  CC-020 (P8a's composite op set at line 509, P7's links at 471): P8a landed first and keeps CC-020; P7's became
+  CC-021 (contract 1.2.0, additive); `CONTRACT_VERSION` 1.1.0 → 1.2.0; `pnpm gen` regenerated `op-args.ts` and the
+  catalogue snapshot.
+- Checks: typecheck 0 errors; lint; gen:check (26); vitest 129 files, 3161 passed, 19 skipped; goldens 66/66;
+  `contract:check`: 118 changes, 75 breaking (against the 0.4 baseline, as expected for the cut-off).
+
+### Why
+- Parallel phases that each add a change note will collide on numbers; the merge is where numbering is settled.
+
+### What worked
+- P7's whole-repo checks were green on its branch, and P5b-2's parallel work did not get in its way.
+
+### What didn't work
+- A silent duplicate: git cannot see two independent "next number" choices as a conflict.
+
+### What I learned
+- Check `CONTRACT-DECISIONS.md` numbering after every merge that touches the contract.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- **Feature removed by P7, to raise with the owner**: the film looks ("Portra on Endura", "Gold 200") and the grade
+  looks were parameter edits of media (stock, paper, grade), which have no group form, so they were deleted; contrast
+  looks became darkroom light (density masks, preflash). The design allows linked media (`Linked<M>`, §27); a
+  "medium preset" (a link on a stage's medium, with overrides) would bring them back within the one mechanism.
+- A roll links only the scan medium; printing choices stay per frame (`roll.setShared` copies them).
+
+### What should be done in the future
+- Ask the owner about medium presets for film/paper looks.
+- P5b-2 must merge P7's studio-kit edits (`model/doc.ts`, `render-bridge.ts`, `studio.ts`, `dom/arg.ts`,
+  `bridge/frames.ts`, `model/history.ts`, `apps/studio` `main.ts` and `host/chat.ts`); show a link as one row (name,
+  Amount, Bake, Remove) and roll fields with a follow/override badge; read roll fields through
+  `read(…, linksOf(state))`.
+
+### Code review instructions
+- `packages/contract/src/links.ts`, `links-looks.ts`; `diary/13-phase-p7-links.md`.
+
+### Technical details
+- Running: P5b-2 (stack kit), P3b (engines).
+
+## Step 12: P5b-2 merged — the stack kit and the arrangements
+
+The stack kit gives every stage one layers panel, one params panel, one masks panel, a "+ Layer" menu from the
+catalogue, mask tools and a command table; the Enlarger, Exposures and finish views are specialised stack views; the
+stage policy pass replaces CB-F101; the classic layout has Edit and Scene modules and the darkroom arrangement a
+collapsed digital palette; ratings are undoable again and the History jump asks before crossing other frames.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the stack kit; specify the remaining UI and agent phases.
+
+**Inferred user intent:** One cohesive layer UI over every stage, reconfigurable by layouts.
+
+**Commit (code):** 8ef7767 — "Merge P5b-2 stack kit (…)"
+
+### What I did
+- My first merge attempt (before P5b-2 had merged P7/P8a) stopped on a real conflict in
+  `studio-kit/test/__snapshots__/layouts.test.ts.snap`; the agent was being resumed with my request to merge the
+  integration branch itself, so I ran `git merge --abort` and waited. It merged (8304266), regenerated and reviewed
+  the snapshot, adapted its arrangements spec to the now-present Scene module.
+- Merged 66f6d69 with `merge-phase.sh`; checks: typecheck 0, lint, gen:check (26), vitest 133 files / 3186 passed /
+  19 skipped, goldens 66/66.
+- Sent P3b the `tools/wgsl-check` failure (P8a's kernel dependency) and permission to edit
+  `apps/studio/src/host/studio-engine.ts` now that P5b-2 is done.
+- Wave 5 specs: P8b (editors) and P6b (workbench).
+
+### Why
+- The integration branch must never hold a resolution a phase agent should have made with its own context.
+
+### What worked
+- P7's studio-kit edits merged beside P5b-2's without conflicts.
+
+### What didn't work
+- `git merge` of P5b-2 before its own catch-up merge: "REAL CONFLICT: packages/studio-kit/test/__snapshots__/
+  layouts.test.ts.snap" — aborted.
+
+### What I learned
+- Phase agents that run long should merge the integration branch before handing back; the spec should say so (it
+  does for later phases).
+
+### What was tricky to build
+- N/A (coordination).
+
+### What warrants a second pair of eyes
+- P5b-2's decisions: rows in document order with a caption explaining the law; selection per frame in view state;
+  deleting an entry deletes its now-unused mask; a mask tool with nothing selected creates a darkroom burn through the
+  new mask; media controls do not count for the stage policy.
+
+### What should be done in the future
+- Launch P8b and P6b; merge P3b; then P9 (integration, browser and real-GPU runs, persona session).
+
+### Code review instructions
+- `packages/studio-kit/kits/stack/`; `diary/12-phase-p5b2-stack.md`.
+
+### Technical details
+- Browser on the P5b-2 branch after its merge: 123 passed, 2 skipped, `film.spec.ts` load timeout, `tools/wgsl-check`.

@@ -22,33 +22,23 @@ export const TIME_MAX_S = 120;
 export const ROLL_TX = 'roll:';
 
 /**
- * Settings shared by every frame of a roll (decision record 1: copied into each document, tracked by the roll; phase 7
- * turns them into a roll link on the media). The scan medium's flare and baseT are the roll's measured veil and
- * base; a frame whose base the analysis flags as mixed keeps its own baseT. Not shared: the rebate (a box in one
- * frame's pixels), the geometry, dust, the printer lights and the time (each frame's own exposure and colour),
- * darkroom layers and masks.
+ * What a roll shares (CHB-037 P7, design §27): the fields of the scan medium that every scan of one piece of film has
+ * in common — scanner, stock, format, flat field, open gate, and the measured flare (veil) and base. The roll record
+ * holds them (`media.scan`); each frame's scan medium links to the roll (`{ link: { roll }, overrides }`), so a roll
+ * change reaches every frame that has not overridden it, and divergence is the overrides. Not shared: the pitch and the
+ * rebate (one frame's pixels), the geometry, dust, and every printing choice (paper, grade, mode, time, lights, pack:
+ * the first print and the match set them per frame; a sync copies them).
  */
-export const SHARED_PATHS = [
-  'stages.scan.medium.scanner',
-  'stages.scan.medium.stock',
-  'stages.scan.medium.format',
-  'stages.scan.medium.flat',
-  'stages.scan.medium.openGate',
-  'stages.scan.medium.flare',
-  'stages.scan.medium.baseT',
-  'stages.darkroom.medium.paper',
-  'stages.darkroom.medium.aim',
-  'stages.darkroom.medium.mode',
-  'stages.darkroom.medium.lamp',
-  'main.params.filtration',
-  'main.params.fstop',
-  'stages.darkroom.medium.grade',
-] as const;
+export const ROLL_FIELDS = ['scanner', 'stock', 'format', 'flat', 'openGate', 'flare', 'baseT'] as const;
+export type RollField = (typeof ROLL_FIELDS)[number];
+/** The document paths of the roll's fields. */
+export const SHARED_PATHS = ROLL_FIELDS.map((f) => `stages.scan.medium.${f}` as const);
 export type SharedPath = (typeof SHARED_PATHS)[number];
-/** The key of a shared path in a roll's fragment (a roll record is part of the main document, whose keys are never
- *  dotted paths): the path's last segment. */
-export type SharedKey = 'scanner' | 'stock' | 'format' | 'flat' | 'openGate' | 'flare' | 'baseT' | 'paper' | 'aim' | 'mode' | 'lamp' | 'filtration' | 'fstop' | 'grade';
-export const sharedKey = (p: SharedPath | string): SharedKey => p.split('.').pop() as SharedKey;
+/** The roll field of a shared path (`stages.scan.medium.stock` → `stock`), or null. */
+export const rollField = (p: string): RollField | null => {
+  const f = /^stages\.scan\.medium\.(\w+)$/.exec(p)?.[1];
+  return f && (ROLL_FIELDS as readonly string[]).includes(f) ? (f as RollField) : null;
+};
 
 /** Paths a "hand edit" touches: a frame with such a user entry is skipped by a match (guide §8.7). */
 export const LIGHTS_PATHS = ['lights.params.logH', 'main.params.time_s'];

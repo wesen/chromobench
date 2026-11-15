@@ -168,6 +168,8 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
       const it = m.item as { kind?: string; op?: string; name?: string; params?: { stops?: number; time_s?: number } } | undefined;
       if (m.coll === 'masks') return 'Mask drawn';
       if (m.coll === 'probes') return `Probe ${m.id} placed`;
+      // a look's or a preset's link (CHB-037 P7): one entry per stage it touches
+      if (it?.kind === 'link') return `Added the look ${it.name ?? m.id}`;
       if (it?.kind === 'layer' || it?.kind === 'group') {
         const w = entryWord(it as { kind: string });
         const pr = it.params ?? {};
@@ -288,3 +290,16 @@ function short(v: unknown): string {
 }
 
 export { getPath };
+
+/**
+ * What a jump of the log's one cursor to `to` crosses besides frame f: the other documents' steps it undoes (or
+ * redoes) on the way, with their names. One cursor serves every frame (P4), so a jump back on this frame also
+ * takes back later changes on other frames: the History panel says so before it does it.
+ */
+export function jumpCrosses(log: Log, f: string, to: number, nameOf: (doc: string) => string): { count: number; names: string[]; redo: boolean } {
+  const redo = to > log.cursor;
+  const [a, b] = redo ? [log.cursor, to] : [to, log.cursor];
+  const others = log.steps.slice(a, b).filter(st => log.docsOf(st).some(d => d !== f));
+  const names = [...new Set(others.flatMap(st => log.docsOf(st).filter(d => d !== f)).map(nameOf))];
+  return { count: others.length, names, redo };
+}

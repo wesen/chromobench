@@ -764,7 +764,8 @@ async function main(): Promise<void> {
   }
   async function exportFrame(f: string, to: 'picker' | 'memory', o: { format?: ExportFormat; space?: typeof exportState.space } = {}) {
     const e = studio.frames.get(f);
-    const doc = studio.doc(f);
+    // links resolved (a roll's scan settings, looks as groups): the export and its sidecar stand on their own
+    const doc = studio.resolved(f);
     if (!e || !doc) return null;
     const format = o.format ?? exportState.format;
     const sp = o.space ?? exportState.space;

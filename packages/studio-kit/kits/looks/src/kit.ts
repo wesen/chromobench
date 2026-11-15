@@ -10,31 +10,49 @@
 //   ck.module('p').left(looks.panels.library()).center(cb.viewer(looks.sel.print, { compare: { before: looks.sel.before } }))
 //     .right(ck.dock.column({}, looks.panels.params(), looks.panels.amount(), looks.panels.diff(), looks.panels.card()))
 //
-// A look resolves, per frame, to plain `set` mutations on document paths (re-run concretely when a parameter or the
-// Amount moves). A user apply commits one batch of the values batch builder (`plan`: one transaction per frame with
-// the batch id, one step of the log); an agent apply proposes such a batch, and the card here shows the pending
-// entries of a batch as one approval with partial approval by frame, E_STALE, Apply anyway and Skip.
+// CHB-037 P7: a look is a link. The library is the contract's registered look functions (pure, versioned: they return
+// groups of ordinary layers — filters, preflash, density masks, burns in the darkroom; clarity on the print) and the
+// photographer's presets (stored groups and masks). Applying one inserts its link entries on every target frame (one
+// per stage it touches, one key, one Amount: the stage law's amount), or adjusts the frame's link of it; the compiler
+// expands the link, so the look stays one removable, fadeable, bakeable unit. A user apply commits one batch of the
+// values batch builder (`plan`: one transaction per frame with the batch id, one step of the log); an agent apply
+// proposes such a batch, and the card here shows the pending entries of a batch as one approval with partial
+// approval by frame, E_STALE, Apply anyway and Skip. A sync copies values (each frame on its own afterwards) or links
+// one preset made from the source's layers (they stay together): the photographer chooses, the panel says which.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { toDiagnostic, type Diagnostic } from '@chromobench/contract';
 import { slot, type Ck, type FormSpec, type NodeData } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
+import { defineLook, type ArgSpec, type LookDef } from '@chromobench/contract';
 import { diffDocs, summary } from './engine/diff.ts';
-import { add, bake, choice, fromPreset, look, mul, pt, set, slider, type Look } from './engine/look.ts';
-import { planLook } from './engine/plan.ts';
-import { axis, ring } from './engine/sweep.ts';
-import { looksProvider } from './engine/provider.ts';
+import { lookItem, planLook, type LookItem } from './engine/looks.ts';
+import { lookLines } from './engine/describe.ts';
+import { along, ring } from './engine/sweep.ts';
 import { LOOKS_STATE, looksView, agentBatches } from './state.ts';
 import { createLooksModel } from './model.ts';
 import { looksCommands } from './commands.ts';
 import { createLooksPanels } from './panels.ts';
 
 const LOOKS_DOCS = `## cb.kits.looks
-Presets (data: path entries set / add / mul) and looks (a JS function with ArgSpec-shaped parameters) resolve per
-frame to plain \`set\` mutations; Amount (0–200 %) scales them by a rule chosen from each path's unit — stops for
-times and f-numbers, mired for colour temperature, a threshold for enums and stock ids, linear otherwise. Diffs are
-in darkroom units. Apply to the selection commits one batch (one undo step); to the roll or the library it is
-planned on one card first. Agent applies (cb.looks.apply) arrive as one card per batch with partial approval.`;
+Looks are links (CHB-037): registered look functions (pure, versioned, with ArgSpec parameters) and presets (stored
+groups and masks) that a frame links. A look's link expands at compile into ordinary layers — light in the darkroom
+(filters, preflash, density masks, burns), print layers on the print — and its Amount is the stage's own fade: time
+and density in the darkroom (0–200 %), opacity on the print (up to 100 %). Apply to the selection commits one batch
+(one undo step); to the roll or the library it is planned on one card first; re-applying adjusts the frame's link.
+Bake turns a link into its plain layers. Sync copies values or links one shared preset. Agent applies
+(cb.looks.apply) arrive as one card per batch with partial approval.`;
+
+const UNITS: Record<string, ArgSpec['unit']> = { pt: 'point', point: 'point', st: 'stop', stop: 'stop', s: 's', K: 'K', CC: 'CC', D: 'D', none: 'none', fraction: 'fraction', '%': 'percent', mm: 'mm' };
+/** A number parameter of a look: an ArgSpec (its control is generated from it). */
+export function slider(min: number, max: number, o: { unit?: string; default?: number; step?: number; label?: string; doc?: string } = {}): ArgSpec {
+  const unit = o.unit ? UNITS[o.unit] : undefined;
+  return Object.freeze({ type: 'number' as const, ...(unit ? { unit } : {}), min, max, default: o.default ?? Math.min(max, Math.max(min, 0)), ui: { widget: 'slider' as const, ...(o.step !== undefined ? { step: o.step } : {}), ...(o.label ? { label: o.label } : {}) }, doc: o.doc ?? o.label ?? '' });
+}
+/** An enum parameter of a look. */
+export function choice(values: string[], o: { default?: string; label?: string } = {}): ArgSpec {
+  return Object.freeze({ type: 'enum' as const, values: [...values], default: o.default ?? values[0], ui: { widget: 'segmented' as const, ...(o.label ? { label: o.label } : {}) }, doc: o.label ?? '' });
+}
 
 export function createLooksKit(ck: Ck, cb: Cb) {
   const M = createLooksModel(cb);
@@ -45,10 +63,10 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   const spec = (name: string, slots: FormSpec['slots'], doc: string): FormSpec => ({ name, slots: { model: tr<unknown>('the form’s model, computed by the kit'), ...slots }, doc, kind: 'cb' });
   const FORMS: FormSpec[] = [
     spec('looks.params', { look: tr<string | null>('the look whose parameters to show (default: the picked one)') }, 'Generated sliders of the picked look (ArgSpec: unit, range, step)'),
-    spec('looks.amount', { range: bt<[number, number]>('[0, 200]'), showDiff: bt<boolean>(), apply: bt<boolean>() }, 'Amount 0–200 % and the result in darkroom units; Apply to selection / roll / library'),
+    spec('looks.amount', { range: bt<[number, number]>('[0, 200]'), showDiff: bt<boolean>(), apply: bt<boolean>() }, 'Amount 0–200 % and what the look does in darkroom units; Apply to selection / roll / library; the frame’s looks with one Amount each, Bake, Remove'),
     spec('looks.diff', { against: bt<string>("'before' · 'defaults' · 'snapshot' · 'reference' (default: the compare source)") }, 'What differs from the compare source, in darkroom units, by sync group'),
     spec('looks.card', {}, 'The planned apply (roll, library) and agent look batches: one card each, partial approval by frame, Apply anyway, Skip'),
-    spec('looks.groups', {}, 'Sync groups an apply, copy or paste keeps'),
+    spec('looks.groups', {}, 'Sync groups a copy keeps; sync by copy (values) or by link (one shared preset)'),
     spec('looks.presets', {}, 'The library presets: export, delete, needs review; save the current frame as a preset'),
     spec('looks.compare', {}, 'The compare source: before, defaults, a snapshot, the reference frame'),
   ];
@@ -147,7 +165,7 @@ export function createLooksKit(ck: Ck, cb: Cb) {
       looks: () =>
         ck.menu('Looks', [
           'looks.apply', 'looks.applyToRoll', 'looks.applyToLibrary', '-', 'looks.survey.open', 'looks.preview', 'looks.setReference', 'looks.snapshot', '-',
-          'looks.copy', 'looks.paste', 'looks.sync', '-', 'looks.saveAsPreset', 'looks.bake', '-', 'looks.virtualCopy', 'looks.match',
+          'looks.bake', 'looks.remove', '-', 'looks.copy', 'looks.paste', 'looks.sync', 'looks.syncMode', '-', 'looks.saveAsPreset', 'looks.saveLookAsPreset', '-', 'looks.virtualCopy', 'looks.match',
         ]),
     },
     keys,
@@ -167,23 +185,17 @@ export function createLooksKit(ck: Ck, cb: Cb) {
       state: LOOKS_STATE,
       tile,
       caption,
-      // authoring
-      look,
+      // authoring: a look function (registered in the contract, so every compile site expands it) and its library item
+      defineLook: (def: LookDef): LookItem => (defineLook(def), lookItem(def.name)),
       slider,
       choiceParam: choice,
-      set,
-      add,
-      mul,
-      pt,
-      fromPreset,
-      bake,
-      register: (l: Look) => (extra.set(l.id, l), l),
-      sweep: { ring, axis },
+      register: (l: LookItem) => (extra.set(l.id, l), l),
+      item: lookItem,
+      sweep: { ring, along },
       diffDocs,
       summary,
       planLook,
-      /** the DSL's LooksProvider (cb.looks.* for the agent), over the same registry */
-      provider: (getState: () => any) => looksProvider(() => looksOf(getState())),
+      lookLines,
       errors: (e: unknown): Diagnostic => toDiagnostic(e),
     },
     whenAbsent: missing,

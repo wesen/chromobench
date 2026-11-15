@@ -119,6 +119,10 @@ ck.shell('Studio')
 | state | a kit's `.state(key, { init })`; the program's own `.state(init, opts)` | — |
 | modules | `ck.module(id, props)` values (kits offer theirs: `kit.modules.*`) | the shell's `.module(m)` |
 
+A module may declare the editing stages it shows (`ck.module('edit', { label: 'Edit', stages: ['print'] })` or
+`.stages('darkroom', 'print')`); the shell only records them (and `explain` prints them), a kit's pass checks them
+(studio-kit's stage policy, CB-S101).
+
 **What a kit offers a layout** is one shape, `ck.product(kit, parts)`: `{ kit, panels, views, modules, menus, keys,
 sel, lib }` plus `tools` and `commands` (the ids it declares) and `docs`.
 

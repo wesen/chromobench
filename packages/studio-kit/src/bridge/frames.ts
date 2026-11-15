@@ -10,9 +10,9 @@
 // strip, and each becomes a frame of its own — same file and source (the whole strip, so the strip's base and veil
 // are shared), its document cropped to its box (geometry.crop), identity (sha, mode, index): id
 // `frame_<sha8>-<n>`, save key `<sha>:<mode>:<n>`. A file with one frame keeps its id and key without an index.
-import { fail, Graph, sha256Hex, type Box, type Document, type Engine, type FrameKind, type Orientation, type SourceInfo, type SourceRef } from '@chromobench/contract';
+import { fail, Graph, sha256Hex, storedPath, type Box, type Document, type Engine, type FrameKind, type Orientation, type SourceInfo, type SourceRef } from '@chromobench/contract';
 import { stripOrientation } from '../model/orient.ts';
-import { defaultDocument, kindOfDoc } from '../model/doc.ts';
+import { defaultDocument, kindOfDoc, read } from '../model/doc.ts';
 import { isFrameSave, type FrameSave } from './saved.ts';
 import type { KV } from './kv.ts';
 
@@ -142,8 +142,9 @@ export function rescaleStrip(doc: Document, initial: Document, box: Box, W: numb
     return { x, y, w: Math.max(1, Math.min(W - x, Math.round(b.w * kx))), h: Math.max(1, Math.min(H - y, Math.round(b.h * ky))) };
   };
   const out: { op: 'set'; path: string; value: Box }[] = [{ op: 'set', path: 'geometry.crop', value: scale(crop) }];
-  const rebate = (doc.stages.scan?.medium as { rebate?: Box | null } | undefined)?.rebate;
-  if (rebate) out.push({ op: 'set', path: 'stages.scan.medium.rebate', value: scale(rebate) });
+  // the frame's own rebate (on a roll: its override of the linked scan medium)
+  const rebate = read(doc, 'stages.scan.medium.rebate') as Box | null | undefined;
+  if (rebate) out.push({ op: 'set', path: storedPath(doc, 'stages.scan.medium.rebate'), value: scale(rebate) });
   return out;
 }
 

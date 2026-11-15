@@ -5,11 +5,11 @@
 //
 // This file keeps the per-eval state, the dispatcher, frames, views and node handles. The natives live by vocabulary
 // area in host/ (CHB-032): calls.ts (op calls on handles), cuts.ts (frame views, cuts, what-ifs), edits.ts (the
-// builders and frame.propose), show.ts (show, explain), named-looks.ts (cb.looks.*), errors.ts (the prelude's
+// builders and frame.propose), show.ts (show, explain), named-looks.ts (cb.looks.*: looks as links), errors.ts (the prelude's
 // traps); words.ts and types.ts hold the shared helpers and records. Each native is a function of the Host.
 import {
   AREAS, ChromobenchError, CONTRACT_VERSION, DOMAINS, LOG10_2, LOGH_PER_POINT, diag, documentKind,
-  type Compiled, type Diagnostic, type Document, type Domain, type Graph, type Node,
+  type Compiled, type Diagnostic, type Document, type Domain, type Graph, type LinkContext, type Node,
 } from '@chromobench/contract';
 import { getPath as getPathOf, type Log } from '@chromobench/values';
 import { describeMutation } from './describe.ts';
@@ -18,21 +18,23 @@ import { callOp } from './host/calls.ts';
 import { CUT_METHODS, cut, strip, withChange } from './host/cuts.ts';
 import { build, propose, valueMethod } from './host/edits.ts';
 import { immutable, immutableDoc, notAwaited, unknownMember } from './host/errors.ts';
-import { lookFrameInfo, looksApply, looksDiff, looksWhatIf, lookTargets, needLooks } from './host/named-looks.ts';
+import { lookFrameInfo, looksApply, looksBake, looksDiff, looksList, looksWhatIf, lookTargets } from './host/named-looks.ts';
 import { explain, explainView, show } from './host/show.ts';
-import type { At, DocsProvider, FrameEntry, FrameState, HandleInfo, LogLine, LooksProvider, QueuedEdit, ShowRequest, View } from './host/types.ts';
+import type { At, DocsProvider, DslLinks, FrameEntry, FrameState, HandleInfo, LogLine, QueuedEdit, ShowRequest, View } from './host/types.ts';
 import { dslOps, short, suggest } from './host/words.ts';
 
-export type { DocsProvider, FrameEntry, HandleInfo, LogLine, LooksProvider, QueuedEdit, ShowRequest, View } from './host/types.ts';
+export type { DocsProvider, DslLinks, FrameEntry, HandleInfo, LogLine, QueuedEdit, ShowRequest, View } from './host/types.ts';
 export { dslOps, HANDLE_MEMBERS, isDslOp, layerOps, suggest } from './host/words.ts';
+
+const NO_LINK_DATA: DslLinks = Object.freeze({});
 
 export class Host {
   readonly graph: Graph;
   /** @internal the frames the session may open (their sources and names) */
   readonly frames: Map<string, FrameEntry>;
   readonly history: DslHistory;
-  /** @internal one compile per document version, in this session's graph */
-  readonly compiledDocs = new WeakMap<Document, Compiled>();
+  /** @internal one compile per document version and link context, in this session's graph */
+  private readonly compiled = new WeakMap<LinkContext, WeakMap<Document, Compiled>>();
   // per-eval state
   /** the log as it was when the eval started: every read of the eval is of it */
   log: Log;
@@ -54,14 +56,35 @@ export class Host {
   /** @internal the handle of each node id seen in this session (host/calls.ts) */
   readonly exprs = new Map<string, HandleInfo>();
   docs: DocsProvider = EMPTY_DOCS;
-  /** cb.looks.* (CHB-021): the studio's named looks, injected by the host; null = no looks */
-  looksProvider: LooksProvider | null = null;
+  /** the shared data links resolve against (rolls, presets): the host's, read per call (CHB-037 P7) */
+  linkSource: () => DslLinks = () => NO_LINK_DATA;
+  private lastLinks: { data: DslLinks; ctx: LinkContext } | null = null;
 
   constructor(graph: Graph, frames: Map<string, FrameEntry>, history: DslHistory) {
     this.graph = graph;
     this.frames = frames;
     this.history = history;
     this.log = history.log();
+  }
+
+  /** the host's link data (rolls, presets) */
+  linkData(): DslLinks {
+    return this.linkSource();
+  }
+  /** the link context every compile of this session uses: the same object while the host's data is unchanged */
+  links(): LinkContext {
+    const data = this.linkSource();
+    if (this.lastLinks?.data === data) return this.lastLinks.ctx;
+    const ctx: LinkContext = { rolls: (id) => data.rolls?.[id], presets: (id) => data.presets?.[id] };
+    this.lastLinks = { data, ctx };
+    return ctx;
+  }
+  /** @internal the compiled documents under the current link context */
+  compiledDocs(): WeakMap<Document, Compiled> {
+    const ctx = this.links();
+    let m = this.compiled.get(ctx);
+    if (!m) this.compiled.set(ctx, (m = new WeakMap()));
+    return m;
   }
 
   begin(evalN: number, evalId: string, frame: string | null): void {
@@ -121,11 +144,12 @@ export class Host {
       case 'show': return show(this, a['ids'] as string[], (a['frame'] as string | null) ?? null, (a['opts'] ?? {}) as Record<string, unknown>, at);
       case 'explain': return explain(this, a['id'] as string);
       case 'strip': return strip(this, a['name'] as 'testStrip' | 'ringAround', String(a['frame']), a['opts'], at);
-      case 'looks.list': return needLooks(this).list();
+      case 'looks.list': return looksList(this);
       case 'looks.targets': return lookTargets(this, a['to'], null).map((id) => lookFrameInfo(this, id));
       case 'looks.apply': return looksApply(this, a);
       case 'looks.whatIf': return looksWhatIf(this, a);
       case 'looks.diff': return looksDiff(this, a);
+      case 'looks.bake': return looksBake(this, a);
       case 'help': return this.docs.help((a['name'] as string | null) ?? null);
       case 'docs': return this.docs.docs(a);
       case 'log': {

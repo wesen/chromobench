@@ -539,3 +539,48 @@ Owns `packages/core/`, `packages/gpu/`, `packages/engine-mock/`, `packages/outpu
    kernel.
 - Acceptance: core, gpu, mock, output typecheck and vitest; goldens 66/66; `[gpu-parity]` on SwiftShader (ports
   5521–5524) and Metal (GPU lock); timings before/after for preview and export.
+
+### Amendments after P7 and P5b-2 (main agent)
+
+- Links (diary `13-phase-p7-links.md`): `defineLook`, `insertLink`, `bakeLink(doc, key, ctx)`, presets, rolls linking
+  the scan medium (`linkMedium`, `divergence`, `readField`, `storedPath`), sync copy|link; the DSL's
+  `cb.looks.apply/whatIf/diff/bake/list`, `defineLookSource` for `.cblook.js`; contract 1.2.0 (CC-021). The film-stock
+  and grade looks were deleted (media have no group form) — owner decision pending on medium presets.
+- Stack kit (diary `12-phase-p5b2-stack.md`): `cb.kits.stack` panels (`layers`, `params`, `masks`, `exposures`,
+  `enlarger`, `finish`), commands `layer.*`, `link.*`, `mask.*`, mask tools, the stage policy pass (CB-S101/S102),
+  `ModuleProps.stages`; ratings in `ratings.<frame>` (document tier); the History jump confirmation. The params panel
+  skips list arguments (curve points, HSL bands) and has no wheel widgets yet; the colour mask tool cannot sample.
+- Integration at 8ef7767: typecheck 0, lint, gen:check (26), vitest 133 files / 3186, goldens 66/66. Browser on the
+  P5b-2 branch after merging: 123 passed, 2 skipped, 1 load timeout, and `tools/wgsl-check` failing (P8a's
+  `combine.wgsl` uses `wkMix` from `working.wgsl`; the check compiles files alone) — assigned to P3b.
+
+## 9. Wave 5 specifications
+
+### P8b — editors for Editor lab's tools (the stack kit's params panel)
+
+Owns `packages/studio-kit/kits/stack/`, the shell's DOM widgets it needs (`packages/shell/src/dom/` widget
+renderers for `ck.ui.curve`, `ck.ui.wheel`), the stack kit's browser specs. An `editors` option (or per-op editor
+registry) on `stack.panels.params`: a curve editor (control points on a Coll with per-layer id prefixes, channel
+segmented L/R/G/B, monotone cubic preview drawn from the same function core uses), HSL bands (eight Lightroom bands,
+hue/sat/lightness per band, band widths under Advanced), grade wheels (shadows/midtones/highlights, hue + strength,
+balance under Advanced), levels with a histogram of the stage input, mixer as a 3×3 grid with monochrome toggle; the
+colour-mask eyedropper (sample the cut the mask reads, convert with core's `encodeTransform` via the engine/host,
+write the component's colour); each gesture one undo step through drafts. Acceptance: typecheck, lint, gen:check,
+vitest, browser specs for each editor headless on SwiftShader (ports 5541–5544); one look and feel with the existing
+rows and controls.
+
+### P6b — the agent's workbench (design §34)
+
+Owns `packages/dsl/`, `packages/agent/`, the contract's `eval.ts`, `packages/values` (`log.commit(x, { why })` only),
+`packages/studio-kit/kits/chat/`, `apps/studio/src/host/chat.ts` and a host adapter for the workbench, and in
+`packages/shell` only what introspection needs (the runtime's live explain, the command table listing). Deliver:
+`wb` in the DSL — `wb.commands()` (id, args, keys, enabled/why), `wb.run(id, args)` (the same command a key runs,
+agent provenance), `wb.state(sel)` through typed selectors, `wb.screen().explain()` (the mounted layout with live
+values), `wb.layout()` and `wb.layouts.build(src)` / `wb.layouts.use(layout)` (CHB-030: a layout built in the
+sandbox crosses as data; interaction lambdas only as registered selectors/command ids/path expressions; checked by the
+passes; `use` is a proposal), `h.show` already done; the two completeness tests (every command reachable from a key,
+menu or button is in `wb.commands()`; every control in every built layout maps to a document path or a command); the
+renames P6a asked for (eval `Look` → show words: `EvalResult.shows`, `EVAL_LIMITS.shows`, warning code); 
+`log.commit(x, { why })`; the chat approval card in words (studio-kit's history `describe`); `frame.get` reads through
+links (`readField`); `cb.looks.define(src)` for agent-written looks. Acceptance: whole-repo typecheck, lint, gen:check,
+vitest, the chat/agent browser specs headless (ports 5551–5554), the two completeness tests.

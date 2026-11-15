@@ -1,17 +1,18 @@
-// CHB-021 stages 4–5 through commands on the booted 'looks' layout (MockEngine, six M1-derived frames; CHB-037:
-// documents in the store's log): user apply as one batch (one transaction per frame with the batch id, one step of
-// the log), the roll plan with partial approval, E_STALE and Apply anyway (recomputed), an agent's look batch (the
-// kit's provider resolves it, the values batch builder makes it, the log holds it pending) on one card, snapshot
-// restore, compare sources, survey tiles = main view node ids, copy/paste/sync, presets round trip.
+// CHB-021 stages 4–5 through commands on the booted 'looks' layout (MockEngine, six M1-derived frames; CHB-037 P7:
+// looks are links): a user apply is one batch of link inserts (one step of the log), re-applying adjusts, the frame's
+// looks have one Amount each, bake and remove; the roll plan with partial approval (a link is never stale: it is
+// placed against the frame's current document); an agent's look batch (link inserts proposed as one batch) on one
+// card; a look applied over a roll is one undo; snapshots, compare sources, survey tiles = main view node ids; sync
+// by copy and by link (one preset); presets round trip.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'vitest';
 import { canonicalJSON, plan, set } from '@chromobench/values';
-import type { Document } from '@chromobench/contract';
+import { linksOf, resolveLinks, type Document } from '@chromobench/contract';
 import { m1Codes, M1, MockEngine } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import { manualClock } from '@chromobench/shell/testing';
-import { buildLayout, createStudio, defineLayout, lightsOf, memoryKV, read } from '../../src/index.ts';
-import { agentBatches, looksView, warmPrint } from '../../kits/looks/src/index.ts';
+import { buildLayout, createStudio, defineLayout, lightsOf, linksOf as stateLinks, memoryKV, read } from '../../src/index.ts';
+import { agentBatches, appliedLooks, lookItem, looksView, planLook } from '../../kits/looks/src/index.ts';
 import { LAYOUTS } from '../../layouts/index.js';
 
 function frames(n: number): Uint8Array[] {
@@ -48,14 +49,24 @@ async function startedLooks(n = 6) {
 type S = Awaited<ReturnType<typeof startedLooks>>;
 const lights = (s: S, f: string) => lightsOf(s.studio.doc(f)!);
 const grade = (s: S, f: string) => read(s.studio.doc(f)!, 'stages.darkroom.medium.grade');
+/** the frame's look links: key → amount */
+const looksOn = (s: S, f: string) => Object.fromEntries(appliedLooks(s.studio.doc(f)!).map((x) => [x.key, x.amount]));
+/** the filters the light law sees on a frame (its links resolved) */
+const filters = (s: S, f: string) => {
+  const d = resolveLinks(s.studio.doc(f)!, s.studio.links());
+  const out: number[][] = [];
+  const walk = (c: any, k: number): void => { for (const e of Object.values(c.items) as any[]) { if (e.kind === 'group') walk(e.stack, k * e.amount); else if (e.op === 'filter' && e.source?.kind === 'look') out.push(e.params.logH.map((x: number) => Number((x * k * e.amount).toFixed(6)))); } };
+  walk(d.stages.darkroom.stack, 1);
+  return out;
+};
 
-/** what an agent's look apply does on the host (the DSL is P6a's): the kit's provider resolves the look per frame,
- *  the values batch builder makes one batch, the log holds it pending */
+/** what an agent's look apply does on the host: link inserts planned per frame, proposed as one batch */
 async function agentLook(s: S, look: string, params: Record<string, unknown>, o: { amount?: number; why: string }): Promise<string> {
-  const { rt, studio, ids, looks } = s;
-  const pr = looks.lib.provider(() => rt.store.peek([]));
+  const { studio, ids } = s;
   const id = `look:agent-${look}`;
-  const b = plan(studio.log.targets<Document>(ids), (d, f) => pr.resolve(look, { id: f, doc: d }, params, { amount: o.amount ?? 1 }).mutations, { id, label: o.why, by: 'agent', source: { kind: 'agent', turn: 1 } });
+  const p = planLook(lookItem(look), params, ids.map((f) => ({ frame: f, doc: studio.doc(f)! })), { amount: o.amount ?? 1 });
+  const by = new Map(p.frames.map((f) => [f.frame, f.mutations]));
+  const b = plan(studio.log.targets<Document>(ids), (_d, f) => by.get(f) ?? null, { id, label: o.why, by: 'agent', source: { kind: 'agent', turn: 1 } });
   studio.change((log) => log.propose(b, { why: o.why }));
   await studio.flush();
   return id;
@@ -70,124 +81,125 @@ describe('cb.kits.looks in layouts', () => {
 });
 
 describe('apply (guide §6, §9)', () => {
-  it('pick → Amount 60 % → result line → apply to the selection: one batch, one undo step for every frame', async () => {
+  it('pick → Amount 60 % → what it does → apply to the selection: one batch of links, one undo step; re-apply adjusts', async () => {
     const s = await startedLooks();
-    const { rt, ids, looks, st } = s;
+    const { rt, ids, st } = s;
     s.select(ids);
     rt.runCommand('looks.pick', null, 'warm-print');
     rt.runCommand('looks.amount', null, 60);
     const before = s.recipes();
     const r = rt.runCommand('looks.apply', null) as any;
-    expect(r.label).toBe('Look: warm print at 60 %');
-    expect(r.frames.every((f: any) => f.diff.map((d: any) => d.shown).join() === 'lights R −1.2 pt, B +1.2 pt')).toBe(true);
+    expect(r.label).toBe('Look: Warm print at 60 %');
+    expect(r.frames.every((f: any) => f.diff.join() === 'Warmth R −1.2 pt, B +1.2 pt')).toBe(true);
     for (const f of ids) {
       expect(s.inEffect(f).length).toBe(1);
       expect(s.inEffect(f).every((e) => e.tx.batch === r.id && e.tx.by === 'user')).toBe(true);
-      expect(lights(s, f)[2]).toBeCloseTo(0.03, 9);
+      expect(looksOn(s, f)).toEqual({ 'warm-print1': 0.6 });
+      expect(lights(s, f)).toEqual([0, 0, 0]); // the frame's own lights are untouched: the look is its own filter
+      expect(filters(s, f)).toEqual([[-0.03, 0, 0.03]]);
     }
-    expect(s.steps()).toEqual(['Look: warm print at 60 %']);
+    expect(s.steps()).toEqual(['Look: Warm print at 60 %']);
     rt.run('edit.undo');
     expect(s.recipes()).toEqual(before);
     rt.run('edit.redo');
-    expect(lights(s, ids[3]!)[0]).toBeCloseTo(-0.03, 9);
+    // apply again at 80 %: the frames' links adjust (one more step), no second copy
+    rt.runCommand('looks.amount', null, 80);
+    rt.runCommand('looks.apply', null);
+    for (const f of ids) expect(looksOn(s, f)).toEqual({ 'warm-print1': 0.8 });
+    expect(s.steps().length).toBe(2);
     expect(looksView(st()).preview).toBe(false);
   });
-  it('the roll: unedited frames only, planned on one card, a frame unticked, a frame changed meanwhile → E_STALE → Apply anyway recomputes', async () => {
+  it('the frame\'s looks: one Amount over every stage, bake into plain layers, remove', async () => {
+    const s = await startedLooks(1);
+    const { rt, studio, ids } = s;
+    s.select(ids);
+    rt.runCommand('looks.pick', null, 'crisp-warm');
+    rt.runCommand('looks.apply', null);
+    const f = ids[0]!;
+    rt.runCommand('looks.setAmount', null, 'crisp-warm1', 50);
+    expect(linksOf(studio.doc(f)!).map((l) => [l.id, l.entry.amount])).toEqual([['crisp-warm1-darkroom', 0.5], ['crisp-warm1-print', 0.5]]);
+    const node = (d: Document) => studio.bridge.lower({ $: 'cb.image', frame: f, doc: d, what: 'print', args: {}, expr: 'x' } as any).shown.id;
+    const linked = node(studio.doc(f)!);
+    rt.runCommand('looks.bake', null, 'crisp-warm1');
+    expect(linksOf(studio.doc(f)!)).toEqual([]);
+    expect(studio.doc(f)!.stages.print.stack.items['crisp-warm1-print']).toMatchObject({ kind: 'group', source: { kind: 'baked', link: 'crisp-warm1' } });
+    expect(node(studio.doc(f)!)).toBe(linked); // the same picture
+    expect(s.steps().at(-1)).toBe('Bake Crisp and warm');
+    rt.run('edit.undo');
+    rt.runCommand('looks.remove', null, 'crisp-warm1');
+    expect(studio.doc(f)!.stages.print.stack.order).toEqual([]);
+  });
+  it('the roll: unedited frames only, planned on one card, a frame unticked; one undo takes the look off the roll', async () => {
     const s = await startedLooks();
-    const { rt, ids, studio, st } = s;
+    const { rt, ids, st } = s;
     await rt.runCommand('roll.fromFrames', null, { analyse: false });
-    const n0 = (f: string) => s.inEffect(f).length;
-    const base = new Map(ids.map((f) => [f, n0(f)]));
-    // frame 2 has been worked on
+    // the roll's links are by auto: every frame is still unedited; frame 2 has been worked on
     s.userEdit(ids[1]!, 'stages.darkroom.medium.grade', 3, 'Grade');
     rt.runCommand('looks.pick', null, 'warm-print');
     rt.runCommand('looks.param', null, 'warmth', 8);
     rt.runCommand('looks.applyToRoll', null);
     const p = looksView(st()).pending!;
     expect(p.frames.map((f) => f.frame)).toEqual([ids[0], ids[2], ids[3], ids[4], ids[5]]);
-    expect(p.aggregate).toEqual([{ path: 'lights.params.logH', label: 'lights', frames: 5, short: 'R −4.0 pt, B +4.0 pt' }]);
-    // nothing applied yet
-    expect(n0(ids[0]!)).toBe(base.get(ids[0]!));
+    expect(p.aggregate).toEqual([{ text: 'Warmth R −4.0 pt, B +4.0 pt', frames: 5 }]);
+    expect(looksOn(s, ids[0]!)).toEqual({});
     rt.runCommand('looks.pending.toggle', null, ids[5]);
-    // the photographer nudges frame 4's lights while the card waits
+    // the photographer nudges frame 4's lights while the card waits: the look goes on top (it is its own filter)
     s.userEdit(ids[3]!, 'lights.params.logH', [0.01, 0, 0], 'Lights');
-    const res = rt.runCommand('looks.pending.approve', null) as any;
-    expect(Array.isArray(res)).toBe(true);
-    expect(res[0].code).toBe('E_STALE');
-    expect(looksView(st()).stale[0]!.message).toContain('frame-4.tif: lights.params.logH changed');
-    expect(n0(ids[0]!)).toBe(base.get(ids[0]!));
-    // Apply anyway: frame 4 is recomputed against its current lights (an offset on top of the nudge)
-    expect(rt.runCommand('looks.pending.approve', null, true)).toBe(true);
-    expect(lights(s, ids[3]!)).toEqual([-0.09, 0, 0.1]);
-    expect(lights(s, ids[0]!)).toEqual([-0.1, 0, 0.1]);
-    expect(n0(ids[5]!)).toBe(base.get(ids[5]!)); // unticked
-    expect(lights(s, ids[1]!)).toEqual([0, 0, 0]); // edited: not unedited
-    expect(looksView(st()).pending).toBeNull();
-    // one undo takes the look off all four frames
-    rt.run('edit.undo');
-    for (const f of [ids[0]!, ids[2]!, ids[4]!]) expect(lights(s, f)).toEqual([0, 0, 0]);
+    expect(rt.runCommand('looks.pending.approve', null)).toBe(true);
     expect(lights(s, ids[3]!)).toEqual([0.01, 0, 0]);
-  });
-  it('a film look on scans: every frame skipped with the reason, nothing written', async () => {
-    const s = await startedLooks(2);
-    s.select(s.ids);
-    s.rt.runCommand('looks.pick', null, 'portra-400-endura');
-    const r = s.rt.runCommand('looks.apply', null) as any;
-    expect(r.frames.map((f: any) => f.skipped.hint)).toEqual(['This look needs a digital RAW', 'This look needs a digital RAW']);
-    expect(s.inEffect(s.ids[0]!).length).toBe(0);
+    for (const f of [ids[0]!, ids[2]!, ids[3]!, ids[4]!]) expect(filters(s, f)).toEqual([[-0.1, 0, 0.1]]);
+    expect(looksOn(s, ids[5]!)).toEqual({}); // unticked
+    expect(looksOn(s, ids[1]!)).toEqual({}); // edited: not unedited
+    expect(looksView(st()).pending).toBeNull();
+    // one undo takes the look off all four frames of the roll (their scans stay linked to the roll)
+    const n = s.steps().length;
+    rt.run('edit.undo');
+    expect(s.rt.store.log.cursor).toBe(n - 1);
+    for (const f of ids) expect(looksOn(s, f)).toEqual({});
+    for (const f of ids) expect(s.studio.doc(f)!.stages.scan!.medium).toMatchObject({ link: { roll: 'roll-1' } });
+    expect(lights(s, ids[3]!)).toEqual([0.01, 0, 0]);
   });
 });
 
 describe('agent apply: one card per batch (approval scope)', () => {
-  it('an agent look batch → one card → frame 3 nudged → approve the others → Apply anyway', async () => {
+  it('an agent look batch of links → one card → a frame nudged meanwhile is not stale (the look is its own filter) → one step', async () => {
     const s = await startedLooks(4);
     const { rt, studio, ids, st } = s;
-    await agentLook(s, 'warm print', { warmth: 4 }, { amount: 0.6, why: 'warm print at 60 %' });
+    await agentLook(s, 'warm-print', { warmth: 4 }, { amount: 0.6, why: 'warm print at 60 %' });
     const bs = agentBatches(st());
     expect(bs.length).toBe(1);
     expect(bs[0]!.frames.length).toBe(4);
     expect(bs[0]!.why).toBe('warm print at 60 %');
-    expect(bs[0]!.aggregate[0]!.short).toBe('R −1.2 pt, B +1.2 pt');
-    // while the card waits, the user nudges frame 3
+    expect(bs[0]!.aggregate[0]).toMatchObject({ label: 'look Warm print', short: 'added', frames: 4 });
+    // while the card waits, the user nudges frame 3's lights: the agent's link does not overwrite them
     s.userEdit(ids[2]!, 'lights.params.logH', [0, 0.025, 0], 'Lights');
     const n = s.steps().length;
     const res = rt.runCommand('looks.batch.approve', null, bs[0]!.batch) as any;
-    expect(res.approved.length).toBe(3);
-    expect(res.refused.map((x: any) => x.frame)).toEqual([ids[2]]);
-    expect(s.steps().length).toBe(n + 1); // the three approvals are one step
-    await studio.flush();
-    const left = agentBatches(st());
-    expect(left.length).toBe(1);
-    expect(looksView(st()).batchStale[left[0]!.batch]![0]!.code).toBe('E_STALE');
-    expect(lights(s, ids[0]!)[2]).toBeCloseTo(0.03, 9);
-    // the card now holds frame 3 only: Approve refuses it again; Apply anyway approves it as proposed
-    expect(left[0]!.frames.map((f) => f.frame)).toEqual([ids[2]]);
-    expect((rt.runCommand('looks.batch.approve', null, left[0]!.batch) as any).approved).toEqual([]);
-    rt.runCommand('looks.batch.approve', null, left[0]!.batch, true);
+    expect(res.approved.length).toBe(4);
+    expect(res.refused).toEqual([]);
+    expect(s.steps().length).toBe(n + 1); // the approvals are one step
     await studio.flush();
     expect(agentBatches(st())).toEqual([]);
-    expect(s.inEffect(ids[2]!).filter((e) => e.tx.by === 'agent').every((e) => e.approvedBy === 'user')).toBe(true);
-    // one undo takes the frame-3 approval back, the next the other three
-    rt.run('edit.undo');
+    for (const f of ids) expect(looksOn(s, f)).toEqual({ 'warm-print1': 0.6 });
     expect(lights(s, ids[2]!)).toEqual([0, 0.025, 0]);
     rt.run('edit.undo');
-    expect(lights(s, ids[0]!)).toEqual([0, 0, 0]);
+    for (const f of ids) expect(looksOn(s, f)).toEqual({});
   });
   it('partial approval leaves unticked frames pending; Reject rejects them', async () => {
     const s = await startedLooks(3);
     const { rt, studio, ids, st } = s;
-    await agentLook(s, 'strong grade 4', {}, { why: 'Look: strong grade 4' });
+    await agentLook(s, 'more-contrast', {}, { why: 'Look: more contrast' });
     const b = agentBatches(st())[0]!;
     rt.runCommand('looks.batch.toggle', null, b.batch, ids[1]);
     rt.runCommand('looks.batch.approve', null, b.batch);
     await studio.flush();
-    expect(grade(s, ids[0]!)).toBe(4);
+    expect(looksOn(s, ids[0]!)).toEqual({ 'more-contrast1': 1 });
     expect(rt.store.log.pending(ids[1]!).length).toBe(1);
     const left = agentBatches(st())[0]!;
     expect(left.frames.map((f) => f.frame)).toEqual([ids[1]]);
     rt.runCommand('looks.batch.reject', null, left.batch);
     expect(rt.store.log.pending(ids[1]!).length).toBe(0);
-    expect(grade(s, ids[1]!)).toBe(2);
+    expect(looksOn(s, ids[1]!)).toEqual({});
   });
 });
 
@@ -207,51 +219,72 @@ describe('snapshots, compare, survey (guide §5)', () => {
     rt.run('edit.undo');
     expect(grade(s, f)).toBe(3);
   });
-  it('the same recipe in both panes is the same node; a tile is the main view’s node once the look is applied', async () => {
+  it('a tile is the main view’s node once the look is applied; the ring’s centre is the print itself', async () => {
     const s = await startedLooks(2);
     const { rt, studio, ids, looks, st } = s;
     s.select([ids[0]!]);
-    const id = (h: any) => studio.bridge.lower(h).named.id;
-    // compare with the frame itself as reference: identical node
+    const id = (h: any) => studio.bridge.lower(h).shown.id;
     rt.runCommand('looks.compare', null, { frame: ids[0] });
     expect(id(looks.sel.before(st()))).toBe(id(looks.sel.print(st())));
-    // a survey tile for warm print equals the main view after applying it
     rt.runCommand('looks.pick', null, 'warm-print');
-    const tile = id(looks.lib.tile(st(), warmPrint));
+    const tile = id(looks.lib.tile(st(), looks.sel.byId(st(), 'warm-print')));
     expect(id(looks.sel.print(st()))).toBe(tile); // previewed
     rt.runCommand('looks.apply', null);
     expect(id(looks.sel.print(st()))).toBe(tile); // applied
-    // compare with the other frame: its own print
     rt.runCommand('looks.compare', null, { frame: ids[1] });
     expect(looks.sel.before(st()).frame).toBe(ids[1]);
-    // the ring sweep's centre is the current print
     const ring = looks.lib.sweep.ring();
-    expect(id(looks.lib.tile(st(), ring.find((l: any) => l.id === 'ring-current')))).toBe(id(looks.sel.print(st())));
-    // a look that does not apply has no tile and says why
-    expect(looks.lib.tile(st(), looks.sel.byId(st(), 'portra-400-endura'))).toBeNull();
-    expect(looks.lib.caption(st(), looks.sel.byId(st(), 'portra-400-endura'))).toBe('This look needs a digital RAW');
+    rt.runCommand('looks.preview', null, false);
+    expect(id(looks.lib.tile(st(), ring.find((l: any) => l.id === 'ring-D+1')))).not.toBe(id(looks.sel.print(st())));
+    expect(looks.lib.caption(st(), ring.find((l: any) => l.id === 'ring-D+1'))).toBe('Balance +1/3 st');
   });
 });
 
 describe('copy, paste, sync; presets', () => {
-  it('sync copies the default groups from the primary to the selection as one step; crop is not copied', async () => {
+  it('sync by copy: the default groups and the looks from the primary to the selection as one step; crop is not copied', async () => {
     const s = await startedLooks(3);
     const { rt, studio, ids } = s;
     studio.commit(ids[0]!, [set('stages.darkroom.medium.grade', 3.5), set('lights.params.logH', [0.05, 0, -0.05]), set('geometry.crop', { x: 10, y: 5, w: 50, h: 40 })], 'Work');
+    s.select([ids[0]!]);
+    rt.runCommand('looks.pick', null, 'warm-print');
+    rt.runCommand('looks.apply', null);
     s.select(ids, ids[0]!);
     const n = s.steps().length;
-    rt.runCommand('looks.sync', null);
+    expect((rt.runCommand('looks.sync', null) as any).mode).toBe('copy');
     for (const f of [ids[1]!, ids[2]!]) {
       expect(grade(s, f)).toBe(3.5);
       expect(lights(s, f)).toEqual([0.05, 0, -0.05]);
       expect(read(studio.doc(f)!, 'geometry.crop')).toBeNull();
+      expect(looksOn(s, f)).toEqual({ 'warm-print1': 1 });
     }
     expect(s.steps().length).toBe(n + 1);
   });
-  it('save as preset → export → delete → import round-trips; it applies like any look', async () => {
+  it('sync by link: the primary\'s layers become one preset the frames link (the source prints the same); one undo', async () => {
+    const s = await startedLooks(3);
+    const { rt, studio, ids, st } = s;
+    const f = ids[0]!;
+    studio.commit(f, [set('stages.darkroom.medium.grade', 3)], 'Grade');
+    studio.commit(f, [{ op: 'insert', coll: 'stages.darkroom.stack', id: 'b1', item: { kind: 'layer', op: 'burn', params: { stops: 0.5 }, name: 'Burn', enabled: true, amount: 1, mask: null, blend: 'normal', source: { kind: 'user' } } }], 'Burn');
+    const node = (x: string) => studio.bridge.lower({ $: 'cb.image', frame: x, doc: 'committed', what: 'print', args: {}, expr: 'x' } as any).shown.id;
+    const before = node(f);
+    s.select(ids, f);
+    rt.runCommand('looks.syncMode', null, 'link');
+    const r = rt.runCommand('looks.sync', null) as any;
+    expect(r).toMatchObject({ mode: 'link', frames: 3 });
+    const p = st().looks.presets[r.preset];
+    expect(p.stacks.darkroom.order).toEqual(['b1']);
+    for (const x of ids) expect(looksOn(s, x)).toEqual({ [`${r.preset}-link`]: 1 });
+    expect(studio.doc(f)!.stages.darkroom.stack.order).toEqual(['main', 'lights', `${r.preset}-link-darkroom`]);
+    expect(node(f)).toBe(before); // the source prints as before: its burn now comes through the link
+    expect(grade(s, ids[2]!)).toBe(3); // values are copied
+    rt.run('edit.undo');
+    expect(st().looks.presets[r.preset]).toBeUndefined();
+    expect(studio.doc(f)!.stages.darkroom.stack.order).toEqual(['main', 'lights', 'b1']);
+  });
+  it('save as preset → export → delete → import round-trips; it applies like any look; save a look as a preset', async () => {
     const s = await startedLooks(2);
     const { rt, studio, ids, st } = s;
-    s.userEdit(ids[0]!, 'stages.darkroom.medium.grade', 4.5, 'Grade');
+    studio.commit(ids[0]!, [{ op: 'insert', coll: 'stages.darkroom.stack', id: 'b1', item: { kind: 'layer', op: 'burn', params: { stops: 1 }, name: 'Burn', enabled: true, amount: 1, mask: null, blend: 'normal', source: { kind: 'user' } } }], 'Burn');
     s.select([ids[0]!]);
     const p = rt.runCommand('looks.saveAsPreset', null, 'Hard') as any;
     expect(Object.keys(st().looks.presets)).toEqual([p.id]);
@@ -262,13 +295,13 @@ describe('copy, paste, sync; presets', () => {
     expect(r.status).toBe('ok');
     expect(canonicalJSON(st().looks.presets[p.id])).toBe(canonicalJSON(p));
     s.select([ids[1]!]);
-    rt.runCommand('looks.pick', null, p.id);
+    rt.runCommand('looks.pick', null, `preset:${p.id}`);
     rt.runCommand('looks.apply', null);
-    expect(grade(s, ids[1]!)).toBe(4.5);
-    // bake the picked built-in look with its parameters
+    expect(looksOn(s, ids[1]!)).toEqual({ [`${p.id}1`]: 1 });
+    expect(resolveLinks(studio.doc(ids[1]!)!, stateLinks(st())).stages.darkroom.stack.items[`${p.id}1-darkroom`]).toMatchObject({ kind: 'group' });
     rt.runCommand('looks.pick', null, 'warm-print');
     rt.runCommand('looks.param', null, 'warmth', 6);
-    const baked = rt.runCommand('looks.bake', null) as any;
-    expect(st().looks.presets[baked.id].name).toBe('warm print (warmth 6, density 0)');
+    const saved = rt.runCommand('looks.saveLookAsPreset', null) as any;
+    expect(st().looks.presets[saved.id].name).toBe('Warm print (warmth 6, density 0)');
   });
 });

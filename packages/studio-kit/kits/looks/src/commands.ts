@@ -1,21 +1,35 @@
-// cb.kits.looks: the command table (split from kit.ts, CHB-032): pick, parameters, Amount, apply to the selection,
-// the roll or the library, planned and agent batches, survey, compare, snapshots, copy / paste / sync, presets.
+// cb.kits.looks: the command table (split from kit.ts, CHB-032; CHB-037 P7: looks are links): pick, parameters,
+// Amount, apply to the selection, the roll or the library, planned and agent batches, survey, compare, snapshots, the
+// frame's looks (Amount, bake, remove), copy / paste / sync (copy values or link one preset), presets.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonicalJSON, transaction, type Batch, type Log } from '@chromobench/values';
-import type { Document } from '@chromobench/contract';
+import { canonicalJSON, remove, set, transaction, type Batch, type Log, type Mutation } from '@chromobench/values';
+import { bakeLink, insertLink, lookAsPreset, removeLink, setLinkAmount, type Document, type Entry, type Preset } from '@chromobench/contract';
 import type { Cb } from '../../../src/cb.ts';
 import { read } from '../../../src/model/doc.ts';
 import { sel } from '../../../src/sel.ts';
 import { presetToFile, readPresetFile } from './engine/files.ts';
-import { bake, fromPreset, lookFrame, type AmountBase, type Look, type Preset } from './engine/look.ts';
-import { changing, newBatchId } from './engine/plan.ts';
+import { appliedKey, changing, newBatchId, type LookItem } from './engine/looks.ts';
+import { appliedLooks } from './engine/describe.ts';
 import type { CommandTable } from '@chromobench/shell';
-import { type AgentBatch, type CompareSource, plain, looksView, agentBatches } from './state.ts';
+import { type AgentBatch, type CompareSource, type SyncMode, plain, looksView, agentBatches } from './state.ts';
 import type { LooksModel } from './model.ts';
+
+const slug = (n: string): string => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'preset';
 
 /** the looks kit's command table */
 export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
-  const { studioOf, paramsOf, committed, selection, rollFrameIds, plan, commit, setView, showPending, pickedLook, needLook, lookArg, copyEntries, presetFrom } = M;
+  const { studioOf, paramsOf, committed, selection, rollFrameIds, plan, commit, commitFrames, setView, showPending, pickedLook, needLook, lookArg, linksFor, copyValues, copiedLinks, pasteMutations, copyLines, presetFrom, presetsOf } = M;
+  const nameOf = (ctx: any, f: string): string => ctx.state.catalog?.frames?.[f]?.name ?? f;
+  /** the key of a look on the current frame: given, or the picked look's link there */
+  const keyArg = (ctx: any, key?: string | null): string | null => {
+    if (key) return key;
+    const f = sel.current(ctx.state);
+    const d = f ? committed(ctx, f) : undefined;
+    const l = pickedLook(ctx.state);
+    return d && l ? appliedKey(d, l) : null;
+  };
+  /** the frame's looks: applied, with one Amount each */
+  const hasLooks = { enabled: (s: any) => !!sel.current(s) && appliedLooks((s.docs?.[sel.current(s)!] ?? null) as Document ?? ({ stages: {} } as any)).length > 0, why: 'This frame has no looks' };
   return {
     'looks.pick': {
       label: 'Pick Look',
@@ -34,7 +48,6 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       },
     },
     'looks.amount': { label: 'Look Amount', palette: false, run: (ctx: any, pct: number) => setView(ctx, 'amount', Math.max(0, Math.min(200, Number(pct)))) },
-    'looks.from': { label: 'Amount From', palette: false, run: (ctx: any, from: AmountBase | null) => setView(ctx, 'from', from) },
     'looks.preview': {
       label: 'Preview Look',
       checked: (s: any) => looksView(s).preview,
@@ -44,15 +57,15 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       label: 'Apply Look to Selection',
       ...needLook,
       enabled: (s: any) => !!sel.current(s) && !!pickedLook(s),
-      run: (ctx: any, id?: string | Look, o: { to?: unknown; where?: any; params?: Record<string, unknown>; amount?: number; why?: string } = {}) => {
+      run: (ctx: any, id?: string | LookItem, o: { to?: unknown; where?: any; params?: Record<string, unknown>; amount?: number; why?: string } = {}) => {
         const l = lookArg(ctx, id);
         if (!l) return null;
         const p = plan(ctx, l, o);
-        const res = commit(ctx, p);
+        commit(ctx, p);
         const bad = p.frames.filter((f) => f.skipped);
         if (bad.length && !changing(p).length) ctx.toast(bad[0]!.skipped!.hint ?? bad[0]!.skipped!.message, { kind: 'error' });
         setView(ctx, 'preview', false);
-        return res === true ? p : res;
+        return p;
       },
     },
     'looks.applyToSelection': { label: 'Apply Look to Selected Frames', palette: false, ...needLook, run: (ctx: any) => ctx.run('looks.apply', null, { to: 'selection' }) },
@@ -90,14 +103,11 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       palette: false,
       enabled: (s: any) => !!looksView(s).pending,
       why: 'Nothing planned',
-      run: (ctx: any, force = false) => {
+      // a planned look is never stale: each frame's link is placed against its document at approval
+      run: (ctx: any) => {
         const p = plain(looksView(ctx.state).pending);
         if (!p) return null;
-        const res = commit(ctx, p, { force: !!force, off: looksView(ctx.state).off });
-        if (res !== true) {
-          setView(ctx, 'stale', res);
-          return res;
-        }
+        commit(ctx, p, { off: looksView(ctx.state).off });
         showPending(ctx, null);
         return true;
       },
@@ -190,7 +200,9 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
         const r = committed(ctx, f);
         if (!r) return null;
         const groups = looksView(ctx.state).groups;
-        const clip = { from: f, entries: copyEntries(r, groups), groups };
+        const values = copyValues(r, groups, linksFor(ctx, f));
+        const links = copiedLinks(r, groups);
+        const clip = { from: f, values, links, groups, lines: copyLines(values, links, r) };
         setView(ctx, 'clipboard', clip);
         return clip;
       },
@@ -199,23 +211,67 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       label: 'Paste Settings',
       enabled: (s: any) => !!looksView(s).clipboard && !!sel.current(s),
       why: 'Copy the settings of a frame first',
+      // copy semantics: the values are set and the looks inserted on each frame, which is on its own afterwards
       run: (ctx: any) => {
-        const clip = looksView(ctx.state).clipboard;
+        const clip = plain(looksView(ctx.state).clipboard);
         if (!clip) return null;
-        const name = ctx.state.catalog?.frames?.[clip.from]?.name ?? clip.from;
-        const l = fromPreset(presetFrom(`paste-${clip.from}`, `settings of ${name}`, plain(clip.entries)));
-        const p = plan(ctx, l, { to: selection(ctx.state).filter((f) => f !== clip.from), amount: 1, id: newBatchId('paste') });
-        const res = commit(ctx, { ...p, label: `Paste settings of ${name}` });
-        return res === true ? p : res;
+        const frames = new Map<string, Mutation[]>();
+        for (const f of selection(ctx.state).filter((x) => x !== clip.from)) {
+          const d = committed(ctx, f);
+          if (d) frames.set(f, pasteMutations(d, clip.values, clip.links as any, linksFor(ctx, f)));
+        }
+        const n = commitFrames(ctx, { id: newBatchId(`paste-${clip.from}`), label: `Paste settings of ${nameOf(ctx, clip.from)}`, source: { kind: 'sync', mode: 'copy', from: clip.from }, frames });
+        return { mode: 'copy', frames: n };
       },
+    },
+    'looks.syncMode': {
+      label: 'Sync Mode',
+      palette: false,
+      checked: (s: any) => looksView(s).syncMode === 'link',
+      run: (ctx: any, mode?: SyncMode) => setView(ctx, 'syncMode', mode ?? (looksView(ctx.state).syncMode === 'link' ? 'copy' : 'link')),
     },
     'looks.sync': {
       label: 'Sync Settings to Selection',
       enabled: (s: any) => (s.ui?.selection?.ids?.length ?? 0) > 1,
       why: 'Select the frames to sync to, with the source as primary',
-      run: (ctx: any) => {
-        ctx.run('looks.copy');
-        return ctx.run('looks.paste');
+      /**
+       * copy: the source's values and looks are copied (each frame on its own afterwards). link: the source's layers of
+       * the chosen groups become one preset that the source and every target link (they stay together: re-saving the
+       * preset changes all of them); the values (paper, time, lights) are copied. One step either way.
+       */
+      run: (ctx: any, mode?: SyncMode) => {
+        const m = mode ?? looksView(ctx.state).syncMode;
+        if (m === 'copy') {
+          ctx.run('looks.copy');
+          return ctx.run('looks.paste');
+        }
+        const f = sel.current(ctx.state)!;
+        const r = committed(ctx, f);
+        if (!r) return null;
+        const groups = looksView(ctx.state).groups;
+        const n = Object.keys(presetsOf(ctx.state)).filter((k) => k.startsWith(`sync-${slug(nameOf(ctx, f))}`)).length + 1;
+        const id = `sync-${slug(nameOf(ctx, f))}-${n}`;
+        const p = presetFrom(r, id, `Synced from ${nameOf(ctx, f)}${n > 1 ? ` (${n})` : ''}`, groups, linksFor(ctx, f));
+        const values = copyValues(r, groups, linksFor(ctx, f));
+        const linked = Object.values(p.stacks).reduce((a, c) => a + (c?.order.length ?? 0), 0);
+        const frames = new Map<string, Mutation[]>();
+        const key = `${id}-link`;
+        if (linked) {
+          // the source: its own entries go into the preset, the link takes their place (the print does not change)
+          const own = Object.values(p.stacks).flatMap((c) => c?.order ?? []);
+          const lessOwn = own.map((x) => remove(x));
+          frames.set(f, [...lessOwn, ...insertLink(stripEntries(r, own), { preset: id }, { key, name: p.name, source: { kind: 'preset', sync: true } }, { presets: () => p })]);
+        }
+        for (const t of selection(ctx.state).filter((x) => x !== f)) {
+          const d = committed(ctx, t);
+          if (!d) continue;
+          const ms = pasteMutations(d, values, [], linksFor(ctx, t));
+          frames.set(t, linked ? [...ms, ...insertLink(d, { preset: id }, { key, name: p.name, source: { kind: 'preset', sync: true } }, { presets: () => p })] : ms);
+        }
+        const label = linked ? `Sync (linked) from ${nameOf(ctx, f)}` : `Sync settings of ${nameOf(ctx, f)}`;
+        commitFrames(ctx, { id: newBatchId(`sync-${f}`), label, source: { kind: 'sync', mode: 'link', from: f, preset: id }, frames, ...(linked ? { main: [set(`looks.presets.${id}`, plain(p))] } : {}) });
+        ctx.toast(linked ? `Linked ${frames.size} frames to “${p.name}” (${linked} layer${linked === 1 ? '' : 's'}); ${values.length} values copied` : `Nothing to link: ${values.length} values copied`, { kind: 'info' });
+        return { mode: 'link', preset: linked ? id : null, frames: frames.size, values: values.length };
       },
     },
     'looks.saveAsPreset': {
@@ -226,22 +282,62 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
         const f = sel.current(ctx.state)!;
         const r = committed(ctx, f);
         if (!r) return null;
-        const n = name ?? `${ctx.state.catalog?.frames?.[f]?.name ?? f} settings`;
-        const id = `p-${n.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.replace(/-+$/, '');
-        const p = presetFrom(id, n, copyEntries(r, looksView(ctx.state).groups));
-        ctx.tx(`Save preset "${n}"`, (t: any) => t.$set(['looks', 'presets', id], p));
+        const n = name ?? `${nameOf(ctx, f)} settings`;
+        const p = presetFrom(r, `p-${slug(n)}`, n, looksView(ctx.state).groups, linksFor(ctx, f));
+        ctx.tx(`Save preset "${n}"`, (t: any) => t.$set(['looks', 'presets', p.id], plain(p)));
         return p;
       },
     },
-    'looks.bake': {
+    'looks.saveLookAsPreset': {
       label: 'Save Look as Preset',
       ...needLook,
       run: (ctx: any) => {
         const l = pickedLook(ctx.state)!;
         const f = sel.current(ctx.state)!;
-        const p = bake(l, lookFrame(f, committed(ctx, f)!), paramsOf(ctx.state, l));
-        ctx.tx(`Save preset "${p.name}"`, (t: any) => t.$set(['looks', 'presets', p.id], p));
+        if (!('look' in l.ref)) return null;
+        const p = lookAsPreset(committed(ctx, f)!, l.ref, { ...paramsOf(ctx.state, l), ...(l.fixed ?? {}) }, { id: `p-${slug(l.id)}-${Object.keys(presetsOf(ctx.state)).length + 1}` }, linksFor(ctx, f));
+        ctx.tx(`Save preset "${p.name}"`, (t: any) => t.$set(['looks', 'presets', p.id], plain(p)));
         return p;
+      },
+    },
+    'looks.setAmount': {
+      label: 'Look Amount on This Frame',
+      palette: false,
+      ...hasLooks,
+      // one Amount for a look over every stage it touches (each clamped to its law)
+      run: (ctx: any, key: string, pct: number) => {
+        const f = sel.current(ctx.state)!;
+        const d = committed(ctx, f);
+        if (!d) return null;
+        const ms = setLinkAmount(d, key, Math.max(0, Number(pct)) / 100);
+        return ms.length ? studioOf(ctx).commit(f, ms, `${appliedLooks(d).find((x) => x.key === key)?.name ?? key} at ${Math.round(Number(pct))} %`) : null;
+      },
+    },
+    'looks.bake': {
+      label: 'Bake Look into Layers',
+      ...hasLooks,
+      // the link becomes the plain group it expands to (its source recorded): the look's own layers, detached
+      run: (ctx: any, key?: string) => {
+        const f = sel.current(ctx.state)!;
+        const d = committed(ctx, f);
+        const k = keyArg(ctx, key);
+        if (!d || !k) return null;
+        const name = appliedLooks(d).find((x) => x.key === k)?.name ?? k;
+        studioOf(ctx).commit(f, bakeLink(d, k, linksFor(ctx, f)), `Bake ${name}`);
+        return k;
+      },
+    },
+    'looks.remove': {
+      label: 'Remove Look',
+      ...hasLooks,
+      run: (ctx: any, key?: string) => {
+        const f = sel.current(ctx.state)!;
+        const d = committed(ctx, f);
+        const k = keyArg(ctx, key);
+        if (!d || !k) return null;
+        const name = appliedLooks(d).find((x) => x.key === k)?.name ?? k;
+        studioOf(ctx).commit(f, removeLink(d, k), `Remove ${name}`);
+        return k;
       },
     },
     'looks.deletePreset': {
@@ -260,7 +356,7 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
       run: (ctx: any, text: string) => {
         const r = readPresetFile(text);
         ctx.tx(`Import preset "${r.preset.name}"`, (t: any) => {
-          t.$set(['looks', 'presets', r.preset.id], r.preset);
+          t.$set(['looks', 'presets', r.preset.id], plain(r.preset));
           t.$set(['looks', 'review', r.preset.id], r.status === 'needs-review' ? r.diags.map((d) => d.message) : []);
         });
         return r;
@@ -296,6 +392,17 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     'looks.virtualCopy': { label: 'Virtual Copy', enabled: () => false, why: 'Virtual copies need a catalog field and a stack display (CHB-019/020)', run: () => null },
     'looks.match': { label: 'Match to Reference', enabled: () => false, why: 'Match measures both frames (measure.stats); not built yet — use Roll ▸ Print the Roll Like the Reference', run: () => null },
   };
+}
+
+/** the document without some entries (the sync's source, whose layers move into the preset it then links) */
+function stripEntries(d: Document, ids: readonly string[]): Document {
+  const stages: Record<string, unknown> = {};
+  for (const [k, st] of Object.entries(d.stages) as [string, { medium: unknown; stack: { order: readonly string[]; items: Readonly<Record<string, Entry>> } } | undefined][]) {
+    if (!st) continue;
+    const order = st.stack.order.filter((x: string) => !ids.includes(x));
+    stages[k] = { ...st, stack: { order, items: Object.fromEntries(order.map((x) => [x, st.stack.items[x]])) } };
+  }
+  return { ...d, stages: stages as unknown as Document['stages'] };
 }
 
 /** A frame of an agent batch whose proposal is stale: a value it would undo is no longer the one it saw. */

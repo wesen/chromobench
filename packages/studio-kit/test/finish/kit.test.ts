@@ -2,7 +2,8 @@
 // straighten by dragging outside, move, resize with the aspect lock, keep-inside, Esc, one undo step per gesture;
 // spots placed, moved, deleted and undone as heal and clone layers of the document (print stage, group Retouch),
 // stored in document px so a crop or a turn never moves them; dust mode (scan stage, group Dust); clarity as a
-// print-stage layer; the passes (CB-F101, CB-F102) and the agent edits (the worked example as mutations).
+// print-stage layer added with the stack kit's + Layer; the passes (CB-S101 stage policy, CB-F102) and the agent edits
+// (the worked example as mutations).
 import { describe, expect, it } from 'vitest';
 import { applyTransaction, transaction, type Mutation } from '@chromobench/values';
 import { DOCUMENT_RULES, newDocument, type Document } from '@chromobench/contract';
@@ -245,28 +246,29 @@ describe('the spot tool (guide §5.5, §6.2)', () => {
     expect(doc().stages.print.stack.order).toEqual([]);
   });
 
-  it('clarity is a print-stage layer made on first use; Before / after turns the print stage and the dust off', async () => {
+  it('clarity is a print-stage layer added from + Layer; Before / after turns the print stage and the dust off', async () => {
     const { rt, f, doc } = await finishStudio();
-    await rt.runCommand('finish.addClarity', null);
-    expect(doc().stages.print.stack.order).toEqual([CLARITY]);
-    expect((doc().stages.print.stack.items[CLARITY] as any).op).toBe('clarity');
-    rt.ctx().tx('Clarity', (t: any) => t.$set(['docs', f, 'stages', 'print', 'stack', 'items', CLARITY, 'params', 'strength'], 0.4));
-    expect((doc().stages.print.stack.items[CLARITY] as any).params.strength).toBe(0.4);
-    await rt.runCommand('finish.resetTones', null);
-    expect((doc().stages.print.stack.items[CLARITY] as any).params.strength).toBe(0);
+    const id = await rt.runCommand('layer.add', null, 'clarity', 'print');
+    expect(id).toBe('clarity1');
+    expect(doc().stages.print.stack.order).toEqual(['clarity1']);
+    expect((doc().stages.print.stack.items['clarity1'] as any).op).toBe('clarity');
+    rt.ctx().tx('Clarity', (t: any) => t.$set(['docs', f, 'stages', 'print', 'stack', 'items', 'clarity1', 'params', 'strength'], 0.4));
+    expect((doc().stages.print.stack.items['clarity1'] as any).params.strength).toBe(0.4);
+    // the agent's common edit names the well-known id
+    expect(edits.clarity(doc(), 0.2)[0]).toMatchObject({ op: 'insert', id: CLARITY });
     const off = withoutFinishing(doc());
-    expect((off.stages.print.stack.items[CLARITY] as any).enabled).toBe(false);
-    expect((doc().stages.print.stack.items[CLARITY] as any).enabled).toBe(true);
+    expect((off.stages.print.stack.items['clarity1'] as any).enabled).toBe(false);
+    expect((doc().stages.print.stack.items['clarity1'] as any).enabled).toBe(true);
   });
 });
 
 describe('passes and agent edits (guide §9.4–9.5)', () => {
   const warn = (def: unknown, code: string) => buildLayout(def).app.diagnostics.list.filter((d) => d.code === code).map((d) => `${d.level} ${d.fix ?? ''}`);
-  it('CB-F101: a finishing control in a module labelled Print; CB-F102: finish tools without the kit', () => {
-    const bad = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('print', { label: 'Print' }).right(ck.panel.define('p', {}, cb.arg('clarity.params.strength')))) });
-    expect(warn(bad, 'CB-F101')).toEqual(['warning move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module']);
-    const ok = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('finish', { label: 'Finish' }).right(cb.kits['finish'].panels.tones())) });
-    expect(warn(ok, 'CB-F101')).toEqual([]);
+  it('CB-S101: a print-stage control in a module that declares the darkroom only; CB-F102: finish tools without the kit', () => {
+    const bad = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(ck.module('print', { label: 'Print', stages: ['darkroom'] }).right(ck.panel.define('p', {}, cb.arg('clarity.params.strength')))) });
+    expect(warn(bad, 'CB-S101')).toEqual([`warning ck.module('print', { …, stages: ['darkroom', 'print'] })`]);
+    const ok = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['finish'].kit).module(cb.kits['finish'].modules.finish()) });
+    expect(warn(ok, 'CB-S101')).toEqual([]);
     const nokit = defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('m', { label: 'M' }).center(cb.viewer((s: any) => cb.sel.frame(s)?.print() ?? null, { tools: ['crop'] }))) });
     expect(warn(nokit, 'CB-F102')).toEqual(['error .use(cb.kits.finish.kit) on the studio']);
   });

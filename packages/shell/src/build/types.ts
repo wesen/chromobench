@@ -130,6 +130,8 @@ export interface ModuleDef<S = any> {
   txOpts?: ((s: S) => TxOpts) | TxOpts;
   onEnter?: KeyTarget;
   onEscape?: KeyTarget;
+  /** the editing stages the module shows (ModuleProps.stages) */
+  stages?: readonly string[];
   source?: string | undefined;
 }
 
