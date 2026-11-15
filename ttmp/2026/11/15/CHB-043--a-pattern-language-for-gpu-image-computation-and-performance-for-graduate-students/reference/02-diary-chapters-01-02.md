@@ -473,3 +473,146 @@ characters, counted in characters) and word counts, and traced both sketches by 
 ### Technical details
 
 - N/A
+
+## Step 5: Revision after review
+
+A first-year PhD reviewer with a numerics background checked chapter 2's figures in Python. I applied its twelve
+findings to chapter 2 and its general lessons to both chapters. The largest changes: the summation claim (a constant
+input is degenerate), the prepared value's key (no readback on a hit), a new note on the conditioning of the apply, a
+derived stopping test, the bisection's condition number, the half-float subnormal caveat, approximations as operators
+accepted alone and together, and a new Solution.
+
+### Prompt Context
+
+**User prompt (verbatim):** (the coordinator's revision message; the brief and findings 1–12 with general lessons,
+relayed during Step 4's hand-back)
+
+**Assistant interpretation:** Fix every finding in chapter 2, apply the general lessons to both chapters, edit only
+the two chapters and this diary, do not commit, report changes and word counts.
+
+**Inferred user intent:** Chapters a numerics-trained reader can check line by line.
+
+### What I did
+
+- Recomputed the sums with a 2-D model of the GPU's blocks (16 × 16 workgroups on the 4,000 × 2,674 grid, zeros
+  outside; 42,000 partials), against `math.fsum` of the f32 inputs (exact sum):
+
+```text
+const 0.18   sequential f32: mean 0.157324, relative −0.12598   two-level: relative 0 (vs the sum of fl(0.18))
+                                                                fl(0.18) vs 0.18: relative 3.97e-8
+U[0, 0.36]   sequential f32: relative −1.585e-3 (0.16 % low)    two-level: relative −5.70e-12
+```
+
+  My earlier "2.3e-10" came from a 1-D blocking against `np.sum` in f64, a pairwise sum, not the exact one; the
+  reviewer was right that the constant case is exact. The chapter now gives the uniform numbers and explains the
+  constant as degenerate.
+- My arithmetic (marked): 3.0e-5 × 65,535 = 1.97 codes ("about two codes" in linear RGB; the four codes are the
+  test's separate `maxCodes16` on the encoded file, `output.spec.ts:16-31`). Amplification 0.0134 / 4.84e-4 = 27.7
+  (≈ 28). Bits: log2(27.9 / 2e-4) = 17.09 → 18; log2(27.9 / 1e-4) = 18.09 → 19 (the reviewer's figures confirmed).
+  Half-float normal minimum 2⁻¹⁴ = 6.10e-5, subnormal spacing 2⁻²⁴, half-spacing 2⁻²⁵ = 2.98e-8; one 16-bit code
+  1/65,535 = 1.53e-5. 4,000⁸ = 6.55e28. `log2 10` − 3.32 = 1.93e-3; × 3 × ln 2 = 4.0e-3 (0.4 %). 4,000 × 2,674 × 16 B
+  = 163.2 MiB; 42,000 × 64 B = 2.56 MiB (MiB = 2²⁰ bytes throughout).
+- Verified new source facts: GPU working image long side 4,000 px by default (`CB/apps/studio/src/host/engines.ts:34,
+  112`); the dye solve's gradient test is absolute, `max |g_i| < gtol` with `gtol: 1e-9`
+  (`CB/packages/core/src/scan/solve.ts:144, 180`); WGSL floors before logs: `log10 max(A, 1e-8)`
+  (`CB/packages/gpu/kernels/combine.wgsl:12, 57`), `log2(max(raw, 0) + 1e-10)` (`film.wgsl:86, 136`); the heal
+  seam's centring, scaling (`t = min(ρ/R, 1)`) and angle-addition recurrence (`CB/packages/core/src/print/retouch.ts:
+  118-135`).
+- Chapter 2 changes by finding:
+  1. Note 6 rewritten with the uniform numbers and the degenerate constant; Motivation 1 gives both inputs.
+  2. Sketch `prepare(stage, args, receiverKey, readInputs)`: key = name, version, args, receiver content key,
+     `precision: "f64"`; `readInputs()` only on a miss. Collaborations 1 says so.
+  3. Motivation 2: "about two codes of a 16-bit file [in linear RGB]; measured on the encoded file, the worst value is
+     four codes off."
+  4. `partials` zeroes pixels outside `box`; comment says one channel and the sum are shown, the real record is 64 B.
+  5. Note 8: subnormal caveat (2⁻¹⁴, 2⁻²⁵, one 16-bit code subnormal, WGSL may flush subnormals); the scene figure is
+     a tight tolerance, not amplification; growth is scene → display (film/paper curves on log exposure, display
+     encoding's slope ≤ 12.92), not separated by the test. Motivation 4 rewritten to match.
+  6. Approximations are operators (`roundSlot`, table in slot); `accept` uses `budget.margin · measured`; `acceptAll`
+     with every approximation in place; note 4 and 10 say "measured maximum with a margin".
+  7. New note 3 on the conditioning of the apply: `(κ_c + κ_x + K) · u₃₂`, the seam correction as the good example,
+     a degree-8 monomial polynomial in pixel coordinates as the bad one, remedies.
+  8. Note 5 derives the gradient's rounding error and recommends a scaled test (MINPACK's `gtol`, added to Known
+     uses); sketch `converged`. Note 4 gives bisection's condition number `|δg| / |∂g/∂C|` and why `∂g/∂C` is small
+     near the top of the cube (green carries most lightness; at fixed lightness chroma changes it slowly). That
+     explanation is mine, consistent with the test comment "near the top of the cube (G ≈ 1) where the f32
+     bisection's C_max is ill-conditioned", not stated in the source.
+  9. Sketch device "M1 Max" now says "f16 measured 0.0116 on this device"; note 10 labels each tolerance (dye amounts
+     per pixel at export 5e-6 vs the dye table's entries 3e-6); the budget's `table: 0` is explained as an export
+     budget.
+  10. Solution replaced (six sentences, adapted from the reviewer's text with the subtitle as first sentence).
+  11. Cuts: D6 quote to one sentence; note 2's debt sentence and P10-1; DSGESV paragraph in Structure (replaced by a
+      molecular-dynamics line); Goldberg/Higham and texture formats in Known uses; note 7's spectra sentence; all task
+      and decision IDs. Glosses added for chroma, lightness and hue, RGB cube, output knee, gamut, film dyes, 33³,
+      tetrahedral interpolation, printing density, separable blends, heal and seam, tabulated mode, software adapter,
+      parity suite, catalogue op (OkLab is glossed in chapter 1, linked from note 10).
+  12. Note 10 ends with the nonsmooth-output sentence; Exercise 1 notes the 256-thread default limit and two-stage
+      reduction; 2(a) states exact f32→f64 conversion and the base case (my bound: `log2(n/(8b)) + 7` f64 roundings,
+      since the base case adds up to 8 values in sequence; the reviewer's "~3" differs, and I kept my derivation);
+      2(b) is a linearised estimate for the budget and for the share; Exercise 3 says how to build `A` and defines
+      the target backward error.
+- Chapter 1 (general lessons):
+  - Recomputed every number. Dropped "a third of an 8-bit level" for the 1.1e-4: it comes from the test comment
+    (`digital.spec.ts:30-32`) but 1.1e-4 × 255 = 0.03 of a level, so I could not reproduce it; the chapter now says
+    "1.1 × 10⁻⁴ in OkLab units".
+  - Note 6 gives the cube root's absolute conditioning `δ / (3x^(2/3))`, says bounds from tests are measured maxima
+    with margins, and adds the nonsmooth sentence (a thresholded mask measured by the share of pixels that flip).
+  - Note 3 adds the WGSL reason for the floor before log10 (implementations may assume no infinities or NaNs).
+  - Removed P10-9; glossed EV, chroma, gamut, RGB cube, LMS, pointwise pass, printing density.
+
+### Why
+
+- The reviewer's checks were right except where noted (base-case roundings).
+
+### What worked
+
+- Word counts (prose outside code blocks, tokens with a letter or digit): chapter 1 2,977 (raw 3,501); chapter 2
+  2,995 (raw 3,922).
+- Coordinator's consistency note: working image 4,000 × 2,674 (`engines.ts:112`), one `rgba32float` texture
+  171,136,000 B = 163 MiB. Chapter 2 already used both; Motivation now states the size as "4,000 × 2,674, 10.7
+  million pixels" instead of "a 3:2 frame" ("frame" is reserved for film frames). Maximum line length 120 in chapter 1, 118 in chapter 2.
+
+### What didn't work
+
+- A first section-replacement script failed (`ValueError: substring not found`) because the last section has no
+  following `## `; the file was untouched. I wrote a small helper in the scratchpad (`sections.py`) that handles the
+  end of file.
+
+### What I learned
+
+- A constant input exercises sequential summation's worst case and tree summation's best case at once: useless for
+  comparing them.
+
+### What was tricky to build
+
+- Staying under 3,000 words while adding three derivations: Variations, Known uses, Forces and Related chapters were
+  shortened to make room.
+
+### What warrants a second pair of eyes
+
+- Note 4's explanation of why the bisection is ill-conditioned near G ≈ 1 (mine, qualitative).
+- WGSL statements from my knowledge of the specification: implementations may assume no infinities or NaNs, may flush
+  subnormals; accuracy of `exp2`/`log2` stated in ulps and absolute error.
+- MINPACK-1 user guide citation (ANL-80-74, 1980) and its cosine `gtol`.
+- The chapter 2 mermaid diagram is still not render-checked (Step 3).
+
+### What should be done in the future
+
+- Possible chromobench debt (not in the chapters): `combine.wgsl:64` (density-mask mode 7) takes `log2` of the
+  blurred transmittance without a floor; it relies on `T > 0`, which a flushed subnormal would break.
+- The source comment "1.1e-4 in OkLab, a third of an 8-bit level" (`digital.spec.ts:31`) looks wrong by a factor of
+  about ten; worth correcting there.
+
+### Code review instructions
+
+- Diff the two chapters against Step 4's state; rerun the summation model (Technical details).
+
+### Technical details
+
+```python
+img = np.pad(y.reshape(2674, 4000), ((0, 14), (0, 0)))         # 2674 → 2688 rows, zeros outside
+blocks = img.reshape(168, 16, 250, 16).transpose(0, 2, 1, 3).reshape(-1, 256)
+t = blocks                                                      # f32 tree, 8 levels
+while t.shape[1] > 1: h = t.shape[1] // 2; t = (t[:, :h] + t[:, h:]).astype(np.float32)
+two_level = np.sum(t[:, 0].astype(np.float64)); exact = math.fsum(y.astype(np.float64).tolist())
+```

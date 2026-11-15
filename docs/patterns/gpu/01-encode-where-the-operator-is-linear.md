@@ -28,8 +28,8 @@ operation on whatever numbers it is given, and fails in three ways.
 1. **An average of encoded values is not an average of light.** Editor lab's pyramid (the image halved repeatedly,
    for fast previews) averages sRGB values. A fine black-and-white pattern averages to sRGB 0.5, which is 0.21 in
    linear light instead of 0.5. Its exposure adjustment works, correctly, in linear light. The two do not commute.
-   On its textbook's test photograph, a quarter-size preview of +1 EV differs from the full-size render averaged
-   down by up to 22 8-bit levels, on 0.5 % of the pixels, all at sharp edges.
+   On its textbook's test photograph, a quarter-size preview of +1 EV (one stop: twice the light) differs from the
+   full-size render averaged down by up to 22 8-bit levels, on 0.5 % of the pixels, all at sharp edges.
 2. **A correction in the wrong encoding damages what it corrects.** Heal copies a disc of pixels from a clean area
    onto a blemish, then corrects the copy so that its edge matches its new surroundings. Suppose the ring around the
    target measures 0.02 in linear light, the ring around the source 0.20, and the source has texture of ±0.05. An
@@ -40,8 +40,8 @@ operation on whatever numbers it is given, and fails in three ways.
    for exposure with two 4,096-entry tables, because a power function per channel per pixel "costs more than the rest
    of the adjustment". chromobench runs its per-channel blend modes in linear RGB; when a layer's values are in OkLab
    (a perceptual space), each pixel is converted to RGB and back. Where the blended colour is nearly black, the
-   cube root inside OkLab amplifies 32-bit rounding to 1.1 × 10⁻⁴, a third of an 8-bit level, against 10⁻⁵
-   elsewhere. The test bound for those cases had to be fifteen times looser.
+   cube root inside OkLab amplifies 32-bit rounding to 1.1 × 10⁻⁴ in OkLab units, against 10⁻⁵ elsewhere. The
+   test bound for those cases had to be fifteen times looser.
 
 Other fields meet the same problem. In probabilistic inference the likelihood of a long sequence is a product of
 small probabilities; a thousand factors near 0.01 underflow 64-bit floats, while the sum of their logarithms does
@@ -191,30 +191,34 @@ checkOrder(steps)
    same in density: in its words, "a harmonic density offset (a multiplicative transmittance gain)".
 3. **One formula may use two encodings.** The darkroom's light law sums the main exposure, burns, dodges and
    flashes in linear exposure H, because light adds. Density masks and filters multiply the transmission, so their
-   densities are summed in the exponent: `T = 10^(−Σ w·d)`. The result is stored as log10 H, floored at 10⁻⁸.
-   Enlarger time is an exact offset of the log exposure. Each `10^x` is a conversion paid per term per pixel.
+   densities are summed in the exponent: `T = 10^(−Σ w·d)`. Enlarger time is an exact offset of the log exposure.
+   Each `10^x` is a conversion paid per term per pixel. The result is stored as log10 of `max(H, 10⁻⁸)` on both
+   engines: WGSL lets implementations assume no infinities or NaNs occur, so `log(0)` has no portable value.
 4. **Linearity removes a table dimension.** How film responds to a colour is a sum over 81 wavelengths. That
    response is linear in the light's brightness, so chromobench folds it into a per-film table over chromaticity
    alone, two dimensions instead of three: `raw = b · table(u, v)`, with `b = X + Y + Z`. Homogeneity in one variable
    is worth looking for before tabulating any function of colour.
 5. **Perceptual operations in a perceptual space, and the gamut knee last.** chromobench runs curves, grading, the
    luminance that masks read and four blend modes (hue, saturation, colour, luminosity) in OkLab or OkLCh, its polar
-   form. Luminance is OkLab L, defined once. The output knee compresses chroma toward the largest chroma the display
-   can show at that lightness and hue, and the code states the rule: "The knee is the LAST colour operation before
-   encoding: a gain after it leaves the cube again". The debt sits upstream: the OkLCh blend modes skip the W3C's
-   `ClipColor`, so luminosity can leave the gamut and relies on the knee much later (task P10-9).
-6. **Measure conversions where they are ill-conditioned.** The OkLab round trip passes through a cube root, whose
-   slope grows without bound near zero. An early round-trip test drew random OkLab values far outside any gamut and
-   failed; it now starts from colours a print can have. Record the worst case, with its reason, in the bound.
+   form (lightness, chroma or colourfulness, hue). The output knee compresses chroma toward the largest the display
+   can show at that lightness and hue, keeping colours inside its gamut, the RGB cube of displayable values. The code
+   states the rule: "The knee is the LAST colour operation before encoding: a gain after it leaves the cube again".
+   A recorded debt sits upstream: the OkLCh blend modes skip the W3C's `ClipColor`, so luminosity can leave the
+   gamut and relies on the knee much later.
+6. **Measure conversions where they are ill-conditioned.** OkLab passes through a cube root: an absolute error δ in
+   the argument `x` becomes about `δ / (3x^(2/3))` in `∛x`, without bound as `x → 0`. An early round-trip test drew
+   random OkLab values far outside any gamut and failed; it now starts from colours a print can have. A bound set
+   from such tests is a measured maximum with a margin, not a guarantee; write down the cases and the margin. Where
+   an output is not smooth, measure it in its own terms: a thresholded mask by the share of pixels that flip.
 7. **Compute constants, do not copy them.** Ottosson's published OkLab matrix maps white to (1, 0, 0) only within
    4 × 10⁻⁸, and his published inverse is rounded to ten digits, so round trips drift by 2 × 10⁻⁷. chromobench
-   normalises the rows of the first matrix so white gives equal cone responses, tests white to 5 × 10⁻⁸, and computes
-   every inverse in 64 bits instead of copying it.
+   normalises the rows of the first matrix so white gives equal cone responses (LMS), tests white to 5 × 10⁻⁸, and
+   computes every inverse in 64 bits instead of copying it.
 8. **Let the compiler place conversions.** Each chromobench operation declares its encoding; the compiler inserts
    `composite.encode` where neighbours disagree, and "a conversion of a conversion converts the original node
    instead". Every conversion has one form, `post · f(pre · v)` with `f` the identity, a cube root or a cube, and the
-   GPU runs it as one opcode of its fused pointwise pass. The per-channel curves act on the cube root of each linear
-   RGB channel, so they stay in the linear encoding and fuse with exposure without converting.
+   GPU runs it as one opcode of its fused pointwise pass (each output pixel from the same pixel of its inputs). The
+   per-channel curves act on the cube root of each linear RGB channel, so they stay linear and fuse with exposure.
 9. **A table for a conversion is a precision decision.** Editor lab's sRGB tables hold 4,097 entries in 32-bit
    floats and are read at the nearest entry. Encoding near black, where the curve's slope is 12.92, the worst error is
    half a step times the slope: 12.92 / 8,192 ≈ 0.0016, 0.4 of an 8-bit level. Its GPU path calls the power function
@@ -265,8 +269,8 @@ checkOrder(steps)
   on sampling and encode on writing (OpenGL's `EXT_texture_sRGB`, WebGPU's `rgba8unorm-srgb`).
 - **ACES and OpenColorIO**: a linear scene-referred working space (ACEScg) beside log encodings for grading
   (ACEScc, ACEScct), with explicit transforms between them.
-- **Film scanning**: Kodak's Cineon format stores printing density on a log scale, 0.002 density per 10-bit code
-  value, so printer-light changes are offsets.
+- **Film scanning**: Kodak's Cineon format stores printing density (the density print film sees), 0.002 per
+  10-bit code value, so printer-light changes are offsets.
 - **chromobench** (light, density, OkLab, the knee, the light law) and **Editor lab** (premultiplied colour, sRGB
   tables, linear exposure).
 
