@@ -299,3 +299,56 @@ shown mask"
   38.9; picture renders 10, ms 30.8 14.4 40.8 20.0 19.3 18.9 18.2 19.1 19.9 18.7` (OVERLAY_W=3000);
   `GPU · google swiftshader (software) · 4000 px: cover renders during the drag 4, ms 244.9 38.5 33.6 34.5; picture
   renders 5, ms 128.1 113.7 116.9 114.3 636.1`.
+
+## Step 4: The full browser suite, and what is left
+
+I ran the whole browser suite once, headless on SwiftShader with this ticket's ports. 145 passed, 2 skipped and 1
+failed: the run's first test, which failed in its `beforeEach` before it reached any of my code. Run on its own,
+that file passes.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Run the full browser suite once after the overlay spec is green.
+
+**Inferred user intent:** No regressions elsewhere in the studio.
+
+### What I did
+- `STUDIO_PORT=5521 STUDIO_KIT_PORT=5522 SHELL_DEMO_PORT=5523 GPU_PARITY_PORT=5524 CI=1 pnpm test:browser` (15.0 min).
+- Re-ran the one failure on its own:
+  `… CI=1 npx playwright test e2e/output.spec.ts --project=chromium-webgpu` → 3 passed.
+
+### Why
+- The acceptance asks for the full suite once.
+
+### What worked
+- 148 tests in all: 145 passed, 2 skipped (benches), and the new e2e/studio-mask-overlay.spec.ts passed among them.
+  This includes the GPU parity `law.spec.ts`, whose `output.frame` permutation test still passes now that the op
+  also takes a mask.
+
+### What didn't work
+- `[chromium-webgpu] › e2e/output.spec.ts:17:1 › configureCanvas …`: `Test timeout of 60000ms exceeded while running
+  "beforeEach" hook` at `await page.goto('/')`. This was the run's first test, while the dev server was still cold.
+  It passes when run alone (3 passed, 5.4 s), and it does not touch packages/output.
+
+### What I learned
+- The first test of a cold run on this machine can spend its 60 s on the dev server's first page load.
+
+### What was tricky to build
+- N/A (a test run).
+
+### What warrants a second pair of eyes
+- If the main agent's merged run shows the same `output.spec.ts` timeout as the first test, the cause is the cold
+  start, not this branch.
+
+### What should be done in the future
+- A live preview of a mask tool's gesture before release (Step 2).
+- HANDOFF.md could name the overlay (O, Shift+O, Alt+O, `stack.overlay`) in its stack kit paragraph; that file
+  belongs to the main agent, so I left it.
+
+### Code review instructions
+- The log is in the scratchpad (chb039-browser.log). Re-run as above.
+
+### Technical details
+- Summary lines: `1 failed … 2 skipped … 145 passed (15.0m)`; rerun: `3 passed (5.4s)`.
