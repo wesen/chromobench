@@ -179,7 +179,7 @@ base = estimateBase(scan) → { value, confidence: 0.92, why: "rebate along the 
 
 -- 8 Count What You Own: the GPU budget is a ledger the engine keeps itself
 texture = gpu.acquire(desc)        -- counted against the budget; over it, something not on screen is evicted first
-gpu.release(texture)               -- destroyed only after the work that used it has finished
+gpu.release(texture)               -- back to the pool; destroyed later, only after the work that used it has finished
 
 -- 9 Keep What Is Dear: results are kept by content key, and evicted by cost of remaking
 cache.put(key(op, inputs), tile, cost: 38 ms)
