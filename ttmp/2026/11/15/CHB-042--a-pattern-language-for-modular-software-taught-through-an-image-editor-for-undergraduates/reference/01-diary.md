@@ -89,3 +89,68 @@ lessons, judged by habitability and piecemeal growth rather than by image-proces
 ### Technical details
 - Sources: chromobench integration worktree (scratchpad/chb037), Editor lab (scratchpad/editor-lab-src, untrusted,
   read-only).
+
+## Step 2: Ten chapters written, reviewed by a fresh reader, revised, published
+
+Five writers (two chapters each) wrote the ten chapters against the overview, each verifying claims against the
+chromobench integration worktree and the Editor lab source and keeping a diary (02–06 in this folder). A separate
+agent, which had not seen the drafting, read chapters 3 and 8 as a second-year student. Its findings were sent to
+those chapters' writers, and its general lessons to all five; every chapter was revised. The volume is published as
+an artifact with a sidebar that lists each chapter's sections and jumps to them directly.
+
+### Prompt Context
+
+**User prompt (verbatim):** "publish them as artifact as well, when done, with direct scroll (not smooth) to sections when selected."
+
+**Assistant interpretation:** One page for the volume; the sidebar navigates to sections; no smooth scrolling.
+
+**Inferred user intent:** A shareable, readable version of the course that is quick to move around in.
+
+### What I did
+- Committed each pair of chapters as it came back; normalised the rating line across chapters; corrected two overview
+  sketch lines (fallback for 7, budget comment for 8) and the release comment (review).
+- Checked: 16 sections in order in every chapter, all relative links resolve, privacy grep empty, all ten mermaid
+  diagrams render (mermaid-cli 11.4.2, headless).
+- Fresh-eyes review of chapters 3 and 8; revisions of all ten (notes cut 16–26 %, jargon glossed, Solutions made
+  general, non-image participants named, sketches completed, check-writing exercises).
+- Added CHB-037 tasks P10-1…9 for the chromobench debts the writers found.
+- Generalised docs/patterns/build-artifact.py: `--dir/--title/--sub/--accent`, review page only when present, section
+  ids prefixed per chapter, a section list under the chapter in view, instant jumps (`scroll-behavior: auto`,
+  `scrollIntoView({behavior: 'instant'})`). Built and published https://claude.ai/artifact/Bk6PoW4BrDaLyqTCHiXCfD.
+
+### Why
+- The review found errors no writer had seen (identity vs zero; a use-after-retire hole in chapter 8's sketch; "frame"
+  with two meanings; MB vs MiB), and patterns of excess (project history, jargon) common to all chapters.
+
+### What worked
+- Sending one reviewer's general lessons to all writers: every writer found and fixed its own sketch holes (chapter 6's
+  export loop rewrote earlier rows; chapter 9's cache could evict an entry being read; chapter 1's engine chooser fell
+  off the end).
+
+### What didn't work
+- `comm` over `sort`ed id lists reported false dangling anchors (locale ordering); a set comparison in Python showed none.
+
+### What I learned
+- The writers' verification turned up nine real chromobench debts (P10-1…9), among them heal coefficients re-solved
+  on every render, no time-to-picture gate, and engine abilities outside the Engine contract.
+
+### What was tricky to build
+- Unique section anchors on one page: pandoc makes ids per file (`intent` in every chapter); the build prefixes them
+  with the chapter (`ch-03-intent`) and rewrites in-chapter links to match.
+
+### What warrants a second pair of eyes
+- Chapters 7 and 8 are ~3,200–3,500 words raw because their sketches grew; prose is under 2,800.
+- Known uses were written from the writers' knowledge, not re-fetched; each writer's diary lists them.
+
+### What should be done in the future
+- Optionally rebuild the Image Engine Patterns artifact with the new section navigation.
+- A construction experiment for one of these chapters, as done for the engine volume.
+
+### Code review instructions
+- docs/patterns/modular/*.md; docs/patterns/build-artifact.py; writer diaries 02–06.
+- Rebuild: `python3 docs/patterns/build-artifact.py OUT --dir modular --title "A Small Pattern Language for Modular
+  Software" --sub "Ten patterns for software people can live in, taught through an image editor" --accent
+  "#1f5f8b,#7cb8e0,#e2edf5,#1b2a36"`.
+
+### Technical details
+- Commits on task/chb-042-modular-patterns: c6489d1 … b714cb2, plus this step.
