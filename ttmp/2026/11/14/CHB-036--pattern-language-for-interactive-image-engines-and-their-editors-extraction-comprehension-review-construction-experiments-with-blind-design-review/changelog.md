@@ -14,3 +14,8 @@ Diary Steps 1-7: extraction map, 12 chapters (d3d2886), comprehension review 20/
 
 Step 8: playbook lessons and blind-review method (go-go-parc 3e35caf, not pushed); artifact v2 without smooth scroll
 
+
+## 2026-11-14
+
+Round-1 chapter revisions (chapters 1, 4, 8, 9) from the experiment evidence; v1 kept in docs/patterns/versions/v1; diary 02-chapter-revisions-r1 (commits 6fc524e, 54d4d98, b6df001, 33233a6, 62feef9)
+

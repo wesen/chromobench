@@ -9,13 +9,34 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://docs/patterns/01-interned-operation-graph.md
+      Note: chapter 1 revised (round 1)
+    - Path: repo://docs/patterns/04-latest-wins-render-slots.md
+      Note: chapter 4 revised (round 1)
+    - Path: repo://docs/patterns/08-reach-declared-tiling.md
+      Note: chapter 8 revised (round 1)
+    - Path: repo://docs/patterns/09-vector-edit-document.md
+      Note: chapter 9 revised (round 1)
+    - Path: repo://docs/patterns/experiments/RESULTS.md
+      Note: the change list
+    - Path: repo://docs/patterns/experiments/reviews/document-r1.answer.json
+      Note: evidence for chapter 9
+    - Path: repo://docs/patterns/experiments/reviews/graph-r1.answer.json
+      Note: evidence for chapter 1
+    - Path: repo://docs/patterns/experiments/reviews/slots-r1.answer.json
+      Note: evidence for chapter 4
+    - Path: repo://docs/patterns/experiments/reviews/tiling-r1.answer.json
+      Note: evidence for chapter 8
+    - Path: repo://docs/patterns/versions/v1/README.md
+      Note: v1 of the four chapters, as tested
 ExternalSources: []
-Summary: ""
+Summary: 'Round-1 revisions of chapters 1, 4, 8 and 9 from the construction experiment: per change, the review file and implementation letter it came from.'
 LastUpdated: 2026-11-14T21:47:43.325465-05:00
-WhatFor: ""
-WhenToUse: ""
+WhatFor: 'Auditing why a revised chapter says what it says, and what was deliberately not changed.'
+WhenToUse: Before a second revision round or a rerun of the experiments with the revised chapters.
 ---
+
 
 
 # Diary
@@ -538,3 +559,74 @@ inverses only where they pay, …"
 ### Technical details
 - Undo model: `journal` (every entry, append-only), `units` (ids of applied entries in undo order), `cursor`;
   `push` truncates `units` at the cursor, so redo is discarded while the entries stay in the journal.
+
+## Step 6: Cross-checks, the build, and what was left alone
+
+With the four chapters revised, I checked them against the rest of the language. One conflict showed up: chapter 1's
+new note "cache every node" contradicted chapter 7, which fuses pointwise runs so that interior nodes are never
+materialised and asks for chosen checkpoints. The note now says "cache every materialised node (with fusion,
+Chapter 7 says which)" (commit 62feef9). The other in-text references to chapters 1, 4, 8 and 9 (from chapters 2, 5,
+6, 7, 11, 12) still hold.
+
+The overview is unchanged: no chapter was renamed, no star changed, and the map's arrows still describe the
+relations. The artifact page builds, and the two mermaid diagrams I changed parse.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Update the overview only where names, stars or the map change; check the artifact
+builds into the scratchpad without publishing; commit the diary.
+
+**Inferred user intent:** The revised chapters drop into the existing language and page without breaking either.
+
+**Commit (code):** 62feef9 — "Chapter 1 rev1: cache every materialised node (Chapter 7 decides which under fusion),
+…"
+
+### What I did
+- `grep` for in-text references to chapters 1, 4, 8, 9 in the other chapters; fixed chapter 1 note 7.
+- `python3 -I docs/patterns/build-artifact.py .../scratchpad/artifact/image-engine-patterns.html` → 209 KiB, exit 0
+  (not published).
+- Parsed the mermaid blocks of chapters 1 and 4 with mermaid 10.9.1 under jsdom in a scratchpad project
+  (`scratchpad/mmcheck/check.mjs`); both "ok"; a deliberately broken block fails, so the check can fail.
+- `docmgr doc relate` (10 files), `docmgr changelog update`, frontmatter Summary/WhatFor/WhenToUse filled,
+  `docmgr doctor --ticket CHB-036` clean.
+
+### Why
+- The chapters are read together; a revised note that contradicts a neighbouring chapter would teach two things.
+
+### What worked
+- Final word counts by `wc -w` (code and tables included): chapter 1 2,494; chapter 4 2,499; chapter 8 2,500;
+  chapter 9 2,500. Each chapter has 11 implementation notes and the template's sections plus Validation.
+
+### What didn't work
+- N/A
+
+### What I learned
+- The 2,500-word ceiling was the binding constraint in every chapter: each gained a longer, more correct sketch
+  (the experiment showed agents copy it), and paid for it with shorter Motivation, Variations and Known uses.
+
+### What was tricky to build
+- Deciding what not to change. Kept as they were, deliberately: chapter 1's ★★, Merkle tile keys and version
+  counters; chapter 4's target chooser and pass budget (no run built them, but they are part of the pattern in an
+  editor, not task trivia); chapter 8's physical units and chains-add rule; chapter 9's Compiler participant and the
+  hybrid-asset and event-sourced variations. Not imported as task trivia: the graph task's prefix-sum blur, the
+  document task's 1e-6 snapping and delete-only spot paths, the slots task's AbortError sniffing (a smell in
+  impl-D), and per-run magic thresholds.
+
+### What warrants a second pair of eyes
+- No star changed. Chapters 1, 4 and 9 keep ★★ because controls built the same core shape; chapter 8 keeps ★
+  because its runs split into three good forms. If ★★ is meant to also say "the chapter helps", chapter 4 is the
+  candidate for a downgrade; I read the overview's definition ("if you build this kind of system at all, you will
+  build something with this shape") as being about the shape only.
+
+### What should be done in the future
+- Rerun the four tasks with the revised chapters (same hidden tests, same review prompt and rubric) and compare the
+  reviews against round 1; that is the test of this revision.
+
+### Code review instructions
+- `git log --oneline e05e59c..HEAD`; `git diff e05e59c -- docs/patterns/0[1489]-*.md`; the v1 texts are in
+  `docs/patterns/versions/v1/`.
+
+### Technical details
+- Build: `python3 -I docs/patterns/build-artifact.py /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/artifact/image-engine-patterns.html`.
