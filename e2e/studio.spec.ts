@@ -202,7 +202,8 @@ test('tools: test strip band, ring-around tile, masks and darkroom layers, apply
   await page.mouse.up();
   await idle(page);
   const masks = await page.evaluate(() => Object.values(window.chromobench.doc!.masks.items).flatMap((m) => Object.values(m.components.items).map((c) => c.kind)));
-  expect(masks).toContain('ellipse');
+  // the radial component (a soft ellipse, P8a) where the catalogue has it
+  expect(masks).toContain('radial');
   expect(await page.evaluate(() => Object.values(window.chromobench.doc!.stages.darkroom.stack.items).some((e) => e.kind === 'layer' && e.op === 'burn' && !!e.mask))).toBe(true);
   await page.locator('.ck-panel[data-panel="exposures"] .cb-stack-add').first().click();
   await page.getByRole('menuitem', { name: 'Dodge', exact: true }).click();

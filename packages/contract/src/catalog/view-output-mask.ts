@@ -2,6 +2,7 @@
 // components and the one algebra of design §25 (add = max, subtract = a·(1 − b), intersect = a·b, invert = 1 − m,
 // each faded by an amount); mask.and / mask.or (min / max) are gone. Geometry is in document pixels.
 import { KNEE_METHODS, MASK_COMBINES, ORIENTATIONS, OUTPUT_SPACES } from '../document.ts';
+import { domainsOf } from '../encodings.ts';
 import { defineOp, type OpDef } from '../registry.ts';
 
 export const viewOps: OpDef[] = [
@@ -90,7 +91,7 @@ export const maskOps: OpDef[] = [
       below: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 1, doc: 'Select values below this. 1 means no upper bound.' },
       softness: { type: 'number', unit: 'fraction', min: 0, max: 0.5, default: 0.05, doc: 'Transition width.' },
     },
-    validate: (a) => ((a['above'] as number) <= (a['below'] as number) ? null : 'above must not exceed below'),
+    validate: (a) => ((a['above'] as number) <= (a['below'] as number) ? null : 'above must not exceed below'), ui: { label: 'Luminance range', menu: 'mask', order: 50 },
     doc: "Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below]. The receiver is the cut the mask reads.",
   }),
   defineOp({
@@ -100,7 +101,19 @@ export const maskOps: OpDef[] = [
       from: { type: 'point', unit: 'px', default: { x: 0, y: 0 }, doc: 'Where the mask is 1 (document px).' },
       to: { type: 'point', unit: 'px', default: { x: 0, y: 100 }, doc: 'Where the mask is 0 (document px).' },
     },
+    ui: { label: 'Linear gradient', menu: 'mask', order: 10 },
     doc: "Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn). The receiver only gives the size.",
+  }),
+  defineOp({
+    name: 'mask.radial', area: 'mask', owner: 'CHB-037', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
+    class: 'pointwise', binding: 'setting',
+    args: {
+      box: { type: 'box', unit: 'px', default: { x: 0, y: 0, w: 16, h: 16 }, doc: 'Bounding box of the outer ellipse in document px (before rotation).' },
+      angle_deg: { type: 'number', unit: 'deg', min: -90, max: 90, default: 0, doc: 'Rotation about the box centre.' },
+      feather: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0.5, doc: 'Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.' },
+    },
+    ui: { label: 'Radial gradient', menu: 'mask', order: 20 },
+    doc: "Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather. The receiver only gives the size.",
   }),
   defineOp({
     name: 'mask.ellipse', area: 'mask', owner: 'CHB-010', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
@@ -109,6 +122,7 @@ export const maskOps: OpDef[] = [
       box: { type: 'box', unit: 'px', default: { x: 0, y: 0, w: 16, h: 16 }, doc: 'Bounding box in document px (before rotation).' },
       angle_deg: { type: 'number', unit: 'deg', min: -90, max: 90, default: 0, doc: 'Rotation about the box centre.' },
     },
+    ui: { label: 'Ellipse', menu: 'mask', order: 30 },
     doc: "Mask component 'ellipse': the ellipse inscribed in the box. The edge is antialiased over one pixel; the mask's feather softens it.",
   }),
   defineOp({
@@ -125,7 +139,19 @@ export const maskOps: OpDef[] = [
         },
       },
     },
+    ui: { label: 'Brush', menu: 'mask', order: 40 },
     doc: "Mask component 'paint': brush strokes rasterised with soft round dabs.",
+  }),
+  defineOp({
+    name: 'mask.colour', area: 'mask', owner: 'CHB-037', on: 'Image', returns: 'Mask', domainIn: domainsOf('oklab'), domainOut: 'mask',
+    class: 'pointwise', binding: 'setting',
+    args: {
+      colour: { type: 'vec3', unit: 'none', min: -0.5, max: 1.5, default: [0.7, 0, 0], doc: 'The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures).', ui: { components: ['L', 'a', 'b'], label: 'Colour' } },
+      tolerance: { type: 'number', unit: 'none', min: 0, max: 1, usual: [0, 0.3], default: 0.1, doc: 'OkLab distance ΔE within which the mask is 1.', ui: { widget: 'slider', step: 0.005, label: 'Tolerance' } },
+      softness: { type: 'number', unit: 'none', min: 0, max: 1, usual: [0, 0.3], default: 0.05, doc: 'Distance over which it falls to 0 beyond the tolerance (a smoothstep).', ui: { widget: 'slider', step: 0.005, label: 'Softness' } },
+    },
+    ui: { label: 'Colour range', menu: 'mask', order: 60 },
+    doc: "Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance). The receiver is the cut the mask reads, encoded to OkLab by the compiler.",
   }),
   defineOp({
     name: 'mask.constant', area: 'mask', owner: 'CHB-037', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',

@@ -16,7 +16,7 @@ import { WHO } from '../../../src/model/history.ts';
 import { sel } from '../../../src/sel.ts';
 import {
   amountHint, amountTrack, blendChoices, blendWord, COMBINE_WORDS, combines, componentKinds, entryDetail, formatAmount, HINT_WORDS, KIND_WORDS, lawOf,
-  maskOf, maskUsers, opWord, provenance, readsChoices, rowsOf, addableOps, type StackRow,
+  linkWords, maskOf, maskUsers, opWord, provenance, readsChoices, rowsOf, addableOps, addMenu, type StackRow,
 } from './model.ts';
 import { selectedIn } from './state.ts';
 
@@ -45,6 +45,8 @@ interface NumberSpec {
   stepLabel: string;
   cls?: string;
   tip?: string;
+  /** write through this instead of the store (a link's Amount moves its siblings in other stages: a command) */
+  commit?: (v: number) => void;
 }
 function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
   const st = m.store;
@@ -65,12 +67,17 @@ function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
   const [lo, hi] = o.hard ?? [o.min, o.max];
   const hold = (x: number): number => Number(Math.min(hi, Math.max(lo, x)).toFixed(6));
   const write = (x: number, coalesce = false): void => {
+    if (o.commit) return o.commit(hold(x));
     const p = where();
     if (!p) return;
     m.rctx().tx(`${o.stepLabel} ${o.show(hold(x))}`, (t: any) => t.$set(p, hold(x)), { ...m.txOpts(), ...(coalesce ? { coalesce: `${f}:${o.path}` } : {}), source: { kind: 'control', control: o.path } });
   };
   listen(m.scope, input, 'pointerdown', () => void (dragging = true));
   listen(m.scope, input, 'input', () => {
+    if (o.commit) {
+      if (!dragging) write(Number(input.value));
+      return;
+    }
     const p = where();
     if (!p) return;
     st.preview(p, hold(Number(input.value)));
@@ -78,6 +85,7 @@ function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
   });
   listen(m.scope, input, 'change', () => {
     dragging = false;
+    if (o.commit) return write(Number(input.value));
     if (st.previewing) st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
   });
   listen(m.scope, input, 'keydown', (e: KeyboardEvent) => {
@@ -129,6 +137,7 @@ function amountControl(m: MountCtx, frame: (s: any) => string | null, id: Id, st
   const tr = amountTrack(stage);
   const hint = amountHint(stage, e);
   return numberControl(m, {
+    ...(e.kind === 'link' ? { commit: (v: number) => void run(m, 'layer.amount', id, v) } : {}),
     label: o.compact ? '' : 'Amount', path: `${id}.amount`, frame, min: tr.min, max: tr.max, hard: tr.hard, step: tr.step, show: formatAmount, parse: parsePercent,
     stepLabel: `${findName(m, frame, id)} amount`, cls: ['cb-stack-amount', o.compact && 'is-compact'].filter(Boolean).join(' '),
     tip: `Amount: ${HINT_WORDS[hint]}${lawOf(stage)?.amount === 'scale' ? ` (up to ${formatAmount(tr.hard[1])} typed)` : ''}`,
@@ -250,7 +259,21 @@ function drawRow(m: MountCtx, frame: (s: any) => string | null, r: Pick<StackRow
   blend.hidden = choices.length < 2;
   const amount = amountControl(m, frame, id, r.stage, { kind, ...(r.op ? { op: r.op } : {}) }, { compact: true });
   const chips = h('div', { class: 'cb-stack-chips' }, maskChip(m, frame, id), provChip(m, frame, id));
-  el.append(h('div', { class: 'cb-stack-line' }, on, tw, text, chips), h('div', { class: 'cb-stack-line is-controls' }, amount, blend));
+  // a link (a look, a preset, a roll's stack) is one row: its Amount, Bake into plain layers, Remove
+  const linkCmds: HTMLElement[] = [];
+  if (kind === 'link') {
+    blend.hidden = true;
+    for (const [label, cmd] of [['Bake', 'link.bake'], ['Remove', 'link.remove']] as const) {
+      const b = btn(label, `cb-stack-${cmd.replace('.', '-')}`, { 'aria-label': `${label} ${id}` });
+      listen(m.scope, b, 'click', (e: MouseEvent) => {
+        e.stopPropagation();
+        run(m, cmd, id);
+      });
+      linkCmds.push(b);
+    }
+  }
+  el.append(h('div', { class: 'cb-stack-line' }, on, tw, text, chips), h('div', { class: 'cb-stack-line is-controls' }, amount, blend, ...linkCmds));
+  if (kind === 'link') el.classList.add('is-link');
   // selection: a click on the row (not on its controls)
   listen(m.scope, el, 'pointerdown', (e: PointerEvent) => {
     if ((e.target as HTMLElement).closest('input,button,select,textarea')) return;
@@ -361,8 +384,7 @@ const layers: Renderer = (n, m) => {
     const add = btn('+ Layer', 'cb-stack-add', { 'aria-label': `Add a layer to the ${stage} stage` });
     listen(m.scope, add, 'click', () => {
       const r = add.getBoundingClientRect();
-      const ops = addableOps(stage).filter((o) => !Array.isArray(p['add']) || p['add'].includes(o.name));
-      m.rt.chrome.contextMenu(r.left, r.bottom + 2, ops.map((o) => ({ label: opWord(o.name), run: ['layer.add', o.name, stage] })) as any);
+      m.rt.chrome.contextMenu(r.left, r.bottom + 2, addMenu(stage, Array.isArray(p['add']) ? p['add'] : undefined) as any);
     });
     foot.append(add);
   }
@@ -552,7 +574,7 @@ const params: Renderer = (n, m) => {
     if (e.kind === 'layer') {
       const op = getOp(e.op);
       const basic = h('div', { class: 'cb-stack-args' });
-      const adv = h('details', { class: 'cb-stack-adv' }, h('summary', { text: 'Advanced' }));
+      const adv = h('details', { class: 'cb-stack-adv' }, h('summary', { text: 'More' }));
       for (const [k, spec] of Object.entries(op.args)) {
         const c = argControl(pm, frame, id, k, spec, d);
         if (c) (isAdvanced(spec) ? adv : basic).append(c);
@@ -560,9 +582,13 @@ const params: Renderer = (n, m) => {
       el.append(basic);
       if (adv.children.length > 1) el.append(adv);
       if (op.coalesce) el.append(h('p', { class: 'cb-dim', text: 'Its spots are placed with the spot tool (Q) on the print.' }));
-    } else if (e.kind === 'group') el.append(h('p', { class: 'cb-dim', text: `${Coll.size(e.stack)} entries; ${e.blend === 'pass' ? 'they act on the image below and the group fades and masks them together' : 'they are composited on their own, then blended as one layer'}.` }));
+    } else if (e.kind === 'link') el.append(h('p', { class: 'cb-dim', text: `Linked (${linkWords(e)}): one Amount over every stage it touches. Bake makes it plain layers you can edit.` }));
+    else if (e.kind === 'group') el.append(h('p', { class: 'cb-dim', text: `${Coll.size(e.stack)} entries; ${e.blend === 'pass' ? 'they act on the image below and the group fades and masks them together' : 'they are composited on their own, then blended as one layer'}.` }));
     const cmds = h('div', { class: 'cb-card-b cb-stack-cmds' });
-    for (const [label, cmd] of [['Duplicate', 'layer.duplicate'], ['Delete', 'layer.delete'], ['Group', 'layer.group'], ...(e.kind === 'group' ? [['Ungroup', 'layer.ungroup']] : [])] as const) {
+    const actions: (readonly [string, string])[] = e.kind === 'link'
+      ? [['Bake', 'link.bake'], ['Remove', 'link.remove']]
+      : [['Duplicate', 'layer.duplicate'], ['Delete', 'layer.delete'], ['Group', 'layer.group'], ...(e.kind === 'group' ? [['Ungroup', 'layer.ungroup'] as const] : [])];
+    for (const [label, cmd] of actions) {
       const bb = btn(label, `cb-stack-${cmd.split('.')[1]}`);
       listen(pm.scope, bb, 'click', () => run(pm, cmd, ...(cmd === 'layer.group' ? [[id]] : [id])));
       cmds.append(bb);

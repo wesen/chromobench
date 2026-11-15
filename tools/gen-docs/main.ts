@@ -85,7 +85,9 @@ function genAreaDoc(area: string, implemented: Map<string, string[]>): string {
     const din = op.domainIn === undefined ? '—' : Array.isArray(op.domainIn) ? op.domainIn.join(', ') : op.domainIn;
     out.push(`- On: ${op.on} (${din}) → ${op.returns}${op.domainOut ? ` (${op.domainOut})` : ''}`);
     out.push(`- Class: ${op.class}; binding: ${op.binding}${op.dsl === false ? '; not in the DSL' : ''}`);
-    if (op.stages) out.push(`- Layer in: ${op.stages.join(', ')}; encoding: ${op.encoding}${op.term ? `; light term: ${op.term}` : ''}${op.coalesce ? `; coalesces (${op.coalesce.list})` : ''}`);
+    const enc = typeof op.encoding === 'object' ? Object.entries(op.encoding.values).map(([v, e]) => `${e} (${op.encoding && typeof op.encoding === 'object' ? op.encoding.arg : ''} ${v})`).join(', ') : op.encoding;
+    if (op.ui) out.push(`- UI: "${op.ui.label}" in the ${op.ui.menu} menu (order ${op.ui.order})`);
+    if (op.stages) out.push(`- Layer in: ${op.stages.join(', ')}; encoding: ${enc}${op.term ? `; light term: ${op.term}` : ''}${op.coalesce ? `; coalesces (${op.coalesce.list})` : ''}`);
     out.push(`- Implementation: ${op.returns === 'Term' ? 'the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)' : engines.length ? engines.join(', ') : 'stub'}`);
     if (op.see?.length) out.push(`- See: ${op.see.map((s) => `\`${s}\``).join(', ')}`);
     out.push('');

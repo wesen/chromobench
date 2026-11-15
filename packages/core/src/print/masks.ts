@@ -52,6 +52,31 @@ export function ellipseAt(X: number, Y: number, box: Box, angle_deg: number): nu
   return clamp01(0.5 - (rho - 1) / Math.max(Math.hypot(gx, gy), 1e-12));
 }
 
+/**
+ * mask.radial (contract 1.1): 1 inside the ellipse of `box` scaled by 1 − feather, a smoothstep to 0 at the box's
+ * ellipse (Editor lab's radial component, src/engine.js:576–579, in document px).
+ */
+export function radialAt(X: number, Y: number, box: Box, angle_deg: number, feather: number): number {
+  const t = (angle_deg * Math.PI) / 180;
+  const c = Math.cos(t), s = Math.sin(t);
+  const a = Math.max(box.w / 2, 1e-9), b = Math.max(box.h / 2, 1e-9);
+  const dx = X - (box.x + box.w / 2), dy = Y - (box.y + box.h / 2);
+  const d = Math.hypot((c * dx + s * dy) / a, (-s * dx + c * dy) / b);
+  const inner = 1 - feather;
+  if (d <= inner) return 1;
+  const u = Math.min(1, (d - inner) / Math.max(1e-4, feather));
+  return 1 - u * u * (3 - 2 * u);
+}
+
+/** mask.colour (contract 1.1): 1 − smoothstep(tol, tol + soft, ΔE) of an OkLab pixel from the sample (a step at soft 0). */
+export function colourAt(lab: ArrayLike<number>, ref: ArrayLike<number>, tolerance: number, softness: number): number {
+  const d = Math.hypot(lab[0]! - ref[0]!, lab[1]! - ref[1]!, lab[2]! - ref[2]!);
+  if (d <= tolerance) return 1;
+  if (!(softness > 0)) return 0;
+  const u = Math.min(1, (d - tolerance) / softness);
+  return 1 - u * u * (3 - 2 * u);
+}
+
 // ---- painted masks (mask.paint.strokes: structured, contract 1.0) ---------------------------------
 
 /** One brush stroke as mask.paint's bound `strokes` items hold it (points [x, y, pressure] in document px). */

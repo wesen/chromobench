@@ -30,7 +30,7 @@ export const FRAME_KINDS: readonly FrameKind[] = ['negative-scan', 'digital-raw'
  * `negative` is the darkroom's input for both kinds; `darkroom.main` is the main exposure alone (paper log H, before
  * the other entries), which a luminance mask "of the print" reads.
  */
-export type CutName = 'source' | 'scan' | 'scene' | 'film' | 'negative' | 'darkroom.main' | 'darkroom.H' | 'print' | 'finished' | 'display';
+export type CutName = 'source' | 'scan' | 'scene.input' | 'scene' | 'film' | 'negative' | 'darkroom.main' | 'darkroom.H' | 'print' | 'finished' | 'display';
 
 export interface CutDef {
   name: CutName;
@@ -46,14 +46,15 @@ const BOTH: readonly FrameKind[] = FRAME_KINDS;
 export const CUTS: readonly CutDef[] = Object.freeze([
   { name: 'source', order: 0, kinds: BOTH, domain: 'camera-linear', doc: 'The decoded source as opened (source.open): linear sensor values.' },
   { name: 'scan', order: 1, kinds: ['negative-scan'], domain: 'scanner-density', doc: 'The scan in scanner density after the scan stage (flat field, flare, density, dust heal).' },
-  { name: 'scene', order: 1, kinds: ['digital-raw'], domain: 'scene-xyz', doc: 'The scene in XYZ after white balance and the scene stage.' },
-  { name: 'film', order: 2, kinds: ['digital-raw'], domain: 'film-dyes', doc: 'The developed film of a camera file (after film.grain): its negative.' },
-  { name: 'negative', order: 3, kinds: BOTH, domain: 'film-dyes', doc: "The negative in dye amounts: the darkroom's input (invert.dyes of a scan, the film of a camera file)." },
-  { name: 'darkroom.main', order: 4, kinds: BOTH, domain: 'paper-logH', doc: 'The main exposure alone (print.expose of the entry main), before any other darkroom entry.' },
-  { name: 'darkroom.H', order: 5, kinds: BOTH, domain: 'paper-logH', doc: 'Paper log exposure after the light law (every darkroom entry), before development.' },
-  { name: 'print', order: 6, kinds: BOTH, domain: 'print-xyz', doc: 'The print under the viewing light, adapted (view.adapt), before the print stage.' },
-  { name: 'finished', order: 7, kinds: BOTH, domain: 'print-xyz', doc: 'The print after the print stage (retouch, clarity, digital layers).' },
-  { name: 'display', order: 8, kinds: BOTH, domain: 'display-rgb', doc: 'Display RGB after output.display and the document geometry (output.frame).' },
+  { name: 'scene.input', order: 1, kinds: ['digital-raw'], domain: 'scene-xyz', doc: "The scene in XYZ after white balance, before the scene stage: what the scene stage's masks measure." },
+  { name: 'scene', order: 2, kinds: ['digital-raw'], domain: 'scene-xyz', doc: 'The scene in XYZ after white balance and the scene stage: what the film is exposed to.' },
+  { name: 'film', order: 3, kinds: ['digital-raw'], domain: 'film-dyes', doc: 'The developed film of a camera file (after film.grain): its negative.' },
+  { name: 'negative', order: 4, kinds: BOTH, domain: 'film-dyes', doc: "The negative in dye amounts: the darkroom's input (invert.dyes of a scan, the film of a camera file)." },
+  { name: 'darkroom.main', order: 5, kinds: BOTH, domain: 'paper-logH', doc: 'The main exposure alone (print.expose of the entry main), before any other darkroom entry.' },
+  { name: 'darkroom.H', order: 6, kinds: BOTH, domain: 'paper-logH', doc: 'Paper log exposure after the light law (every darkroom entry), before development.' },
+  { name: 'print', order: 7, kinds: BOTH, domain: 'print-xyz', doc: 'The print under the viewing light, adapted (view.adapt), before the print stage.' },
+  { name: 'finished', order: 8, kinds: BOTH, domain: 'print-xyz', doc: 'The print after the print stage (retouch, clarity, digital layers).' },
+  { name: 'display', order: 9, kinds: BOTH, domain: 'display-rgb', doc: 'Display RGB after output.display and the document geometry (output.frame).' },
 ] as CutDef[]);
 export const CUT_NAMES: readonly CutName[] = Object.freeze(CUTS.map((c) => c.name));
 
@@ -79,7 +80,7 @@ export interface StageDef {
 
 export const STAGES: Readonly<Record<StageName, StageDef>> = Object.freeze({
   scan: { name: 'scan', kinds: ['negative-scan'], law: 'repair', input: 'source', output: 'scan', mediumAfter: null, doc: 'Negative scans: scanner, stock and base; heal and clone on the negative (dust).' },
-  scene: { name: 'scene', kinds: ['digital-raw'], law: 'composite', input: 'source', output: 'scene', mediumAfter: 'source', doc: 'Camera files: white balance; digital adjustments before the film (scene-linear).' },
+  scene: { name: 'scene', kinds: ['digital-raw'], law: 'composite', input: 'scene.input', output: 'scene', mediumAfter: 'source', doc: 'Camera files: white balance; digital adjustments before the film (scene-linear).' },
   film: { name: 'film', kinds: ['digital-raw'], law: null, input: 'scene', output: 'film', mediumAfter: 'scene', doc: 'Camera files: the film the scene is shot on and its development.' },
   darkroom: { name: 'darkroom', kinds: FRAME_KINDS, law: 'light', input: 'negative', output: 'darkroom.H', mediumAfter: 'negative', doc: 'The enlarger and the paper: light on the paper (exposures, dodges, burns, flashes, masks, filters).' },
   // the print medium's illuminant is the darkroom's aim view, so it is used before darkroom.H
@@ -99,8 +100,16 @@ export function readableCuts(stage: StageName, kind: FrameKind, use: 'mask' | 'b
 
 // ---- entries ---------------------------------------------------------------------------------------------------
 
-/** Blend modes of the composite law (P2a: normal; the W3C set arrives with phase 8). */
-export const BLEND_MODES = ['normal'] as const;
+/**
+ * Blend modes of the composite law (contract 1.1): the W3C Compositing and Blending set. Separable modes act per
+ * channel in linear RGB (white = 1); hue, saturation, colour and luminosity act in OkLCh (design §5, §22).
+ */
+export const BLEND_MODES = [
+  'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'colour-dodge', 'colour-burn', 'hard-light', 'soft-light',
+  'difference', 'exclusion', 'hue', 'saturation', 'colour', 'luminosity',
+] as const;
+/** The blend modes defined through lightness, chroma and hue (OkLCh), not per channel. */
+export const NON_SEPARABLE_BLENDS: readonly BlendMode[] = ['hue', 'saturation', 'colour', 'luminosity'];
 export type BlendMode = (typeof BLEND_MODES)[number];
 /** A layer blends with a mode; a group is 'pass' (children act on the backdrop) or isolated with a mode. */
 export type EntryBlend = BlendMode | 'pass';
@@ -249,9 +258,14 @@ export interface Media {
 
 // ---- masks -----------------------------------------------------------------------------------------------------
 
-/** Components with an op today (radial and colour arrive with their ops in phase 8). Each is the op `mask.<kind>`. */
-export type MaskComponentKind = 'linear' | 'ellipse' | 'paint' | 'luminance';
-export const MASK_COMPONENT_KINDS: readonly MaskComponentKind[] = ['linear', 'ellipse', 'paint', 'luminance'];
+/**
+ * Mask components (design §25), each the op `mask.<kind>`: geometric (linear, radial, ellipse, paint: document pixels)
+ * or a range of the image the mask reads (luminance, colour).
+ */
+export type MaskComponentKind = 'linear' | 'radial' | 'ellipse' | 'paint' | 'luminance' | 'colour';
+export const MASK_COMPONENT_KINDS: readonly MaskComponentKind[] = ['linear', 'radial', 'ellipse', 'paint', 'luminance', 'colour'];
+/** Components that measure the image the mask reads (the others depend on position only). */
+export const RANGE_COMPONENTS: readonly MaskComponentKind[] = ['luminance', 'colour'];
 export type MaskCombine = 'add' | 'subtract' | 'intersect';
 export const MASK_COMBINES: readonly MaskCombine[] = ['add', 'subtract', 'intersect'];
 
@@ -280,7 +294,7 @@ export interface Mask {
   /** Gaussian feather radius in mm on the print (σ = radius / 2, as mask.feather). */
   readonly feather_mm: number;
   readonly invert: boolean;
-  /** What range components (luminance) measure: the input of the stage using the mask, or a named cut. */
+  /** What range components (luminance, colour) measure: the input of the stage using the mask, or a named cut. */
   readonly reads: 'stage-input' | CutName;
 }
 

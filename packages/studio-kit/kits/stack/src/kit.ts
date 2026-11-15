@@ -112,7 +112,7 @@ export function createStackKit(ck: Ck, cb: Cb) {
   const masks = (o: { id?: string; title?: string } = {}): any => ck.panel.define(o.id ?? 'layer-masks', { title: o.title ?? 'Mask' }, node('stack.masks', {}));
 
   /** the "+ Layer" items of a stage: the catalogue's ops of the stage (`ops` narrows them) */
-  const addItems = (stage: StageName, ops?: readonly string[]) => model.addableOps(stage).filter((o) => !ops || ops.includes(o.name)).map((o) => ({ label: model.opWord(o.name), run: ['layer.add', o.name, stage] }));
+  const addItems = (stage: StageName, ops?: readonly string[]) => model.addMenu(stage, ops);
 
   // ── specialised views (design §33) ──
   /** the darkroom's Exposures panel: the darkroom stack and the printing script */
@@ -165,7 +165,7 @@ export function createStackKit(ck: Ck, cb: Cb) {
       layer: (stages: StageName[] = ['darkroom', 'print']) =>
         ck.menu('Layer', [
           ...stages.filter((s) => model.addableOps(s).length).map((s) => ({ label: `Add to ${TITLES[s].split(' (')[0]}`, items: addItems(s) })),
-          '-', 'layer.duplicate', 'layer.delete', '-', 'layer.group', 'layer.ungroup', 'layer.up', 'layer.down', 'layer.toggle', '-',
+          '-', 'layer.duplicate', 'layer.delete', 'link.bake', '-', 'layer.group', 'layer.ungroup', 'layer.up', 'layer.down', 'layer.toggle', '-',
           { label: 'New Mask', items: model.componentKinds().map((k) => ({ label: model.KIND_WORDS[k] ?? k, run: ['mask.new', k] })) },
           'mask.detach',
         ] as any),

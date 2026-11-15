@@ -7,9 +7,9 @@
 // is the op's name plus the smallest free counter (`burn2`, `clarity1`, `g1`).
 import { applyTransaction, Coll, equal, getPath, insert, move, remove, set, type Id, type Json, type Log, type Mutation, type Why } from '@chromobench/values';
 import {
-  BLEND_MODES, getLaw, getOp, groupEntry, layerEntry, MASK_COMBINES, MASK_COMPONENT_KINDS, mask as maskValue, opsForStage, readableCuts, STAGES,
+  BLEND_MODES, getLaw, getOp, groupEntry, keyOf, LAYER_MENUS, linksOf as placedLinks, layerEntry, MASK_COMBINES, MASK_COMPONENT_KINDS, mask as maskValue, opsForStage, readableCuts, STAGES,
   documentKind, termSeconds, type CutName, type Document, type Entry, type EntryBlend, type Group, type Layer, type Mask, type MaskCombine,
-  type MaskComponent, type MaskComponentKind, type OpDef, type Params, type StageLaw, type StageName,
+  type LinkEntry, type MaskComponent, type MaskComponentKind, type OpDef, type Params, type StageLaw, type StageName,
 } from '@chromobench/contract';
 import { entriesOf, findEntry, mainExposure, newDarkroomLayer, nextId, paramsOf, type Placed } from '../../../src/model/doc.ts';
 
@@ -119,7 +119,7 @@ export function placedIn(doc: Document | null | undefined, stage: StageName, id:
 export function entryDetail(doc: Document, p: Placed): string {
   const e = p.entry;
   if (e.kind === 'group') return `${Coll.size(e.stack)} ${Coll.size(e.stack) === 1 ? 'entry' : 'entries'}`;
-  if (e.kind === 'link') return 'linked';
+  if (e.kind === 'link') return linkWords(e);
   const pr = paramsOf(e);
   const s = (t: number): string => `${t < 10 ? Number(t.toFixed(2)) : Number(t.toFixed(1))} s`;
   switch (e.op) {
@@ -149,6 +149,19 @@ export function entryDetail(doc: Document, p: Placed): string {
   }
 }
 
+// ---- links (P7): a look, a preset or a roll's stack as one entry ------------------------------------------------
+
+/** What a link row says: what it links to. */
+export function linkWords(e: LinkEntry): string {
+  const r = e.ref as Record<string, unknown>;
+  return 'look' in r ? `look ${String(r['look'])}` : 'preset' in r ? 'preset' : 'roll' in r ? `roll ${String(r['roll'])}` : 'linked';
+}
+/** The shared key of a link entry (its siblings in other stages carry the same key). */
+export function linkKey(doc: Document, id: Id): Id | null {
+  const l = placedLinks(doc).find((x) => x.id === id);
+  return l ? keyOf(l) : null;
+}
+
 // ---- the catalogue: what a stage can add ---------------------------------------------------------------------------
 
 /**
@@ -156,7 +169,26 @@ export function entryDetail(doc: Document, p: Placed): string {
  * unique (the main exposure, `term: 'main'`) and the coalescible ops the spot tools make (heal, clone).
  */
 export function addableOps(stage: StageName): OpDef[] {
-  return opsForStage(stage).filter((o) => o.term !== 'main' && !o.coalesce && !o.internal);
+  return opsForStage(stage)
+    .filter((o) => o.term !== 'main' && !o.coalesce && !o.internal)
+    .sort((a, b) => menuRank(a) - menuRank(b) || (a.ui?.order ?? 999) - (b.ui?.order ?? 999) || a.name.localeCompare(b.name));
+}
+const menuRank = (o: OpDef): number => (o.ui ? LAYER_MENUS.indexOf(o.ui.menu) : LAYER_MENUS.length);
+export const MENU_WORDS: Record<string, string> = { light: 'Light', retouch: 'Retouch', tone: 'Tone', colour: 'Colour', detail: 'Detail', effect: 'Effect', mask: 'Mask' };
+
+/**
+ * The "+ Layer" items of a stage, grouped by the catalogue's menu (`OpDef.ui.menu`, in `LAYER_MENUS` order, each by
+ * `ui.order`): one flat list with separators, or submenus when the stage has more than `flat` ops.
+ */
+export function addMenu(stage: StageName, ops?: readonly string[], flat = 14): ({ label: string; run: unknown[] } | '-' | { label: string; items: { label: string; run: unknown[] }[] })[] {
+  const list = addableOps(stage).filter((o) => !ops || ops.includes(o.name));
+  const groups = new Map<string, { label: string; run: unknown[] }[]>();
+  for (const o of list) {
+    const g = o.ui?.menu ?? 'other';
+    groups.set(g, [...(groups.get(g) ?? []), { label: opWord(o.name), run: ['layer.add', o.name, stage] }]);
+  }
+  if (list.length <= flat || groups.size === 1) return [...groups.values()].flatMap((items, i) => [...(i ? ['-' as const] : []), ...items]);
+  return [...groups].map(([g, items]) => ({ label: MENU_WORDS[g] ?? g, items }));
 }
 /** Whether a stage has anything to add (the Scene module is built only then). */
 export const hasAddableOps = (stage: StageName): boolean => addableOps(stage).length > 0;
@@ -164,6 +196,8 @@ export const hasAddableOps = (stage: StageName): boolean => addableOps(stage).le
 const DARKROOM_STARTERS = new Set(['burn', 'dodge', 'flash', 'preflash', 'densityMask']);
 /** The menu's words for an op. */
 export function opWord(op: string): string {
+  const def0 = getOp(op);
+  if (def0.ui?.label) return def0.ui.label;
   const WORDS: Record<string, string> = { burn: 'Burn', dodge: 'Dodge', flash: 'Flash', preflash: 'Preflash', densityMask: 'Contrast mask', filter: 'Filter', clarity: 'Clarity', heal: 'Heal', clone: 'Clone', expose: 'Main exposure' };
   if (WORDS[op]) return WORDS[op]!;
   const d = getOp(op);

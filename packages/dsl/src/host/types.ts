@@ -1,6 +1,6 @@
 // The DSL host's records (CHB-032 split; contract 1.0): handles, frames and their views, queued edits, show
 // requests, log lines, and the providers the session injects (named looks, docs).
-import type { Diagnostic, Document, Domain, SourceInfo } from '@chromobench/contract';
+import type { Diagnostic, Document, Domain, SourceInfo, Preset, Roll } from '@chromobench/contract';
 import type { Mutation } from '@chromobench/values';
 
 export interface HandleInfo {
@@ -70,19 +70,13 @@ export interface LogLine {
 export type At = { eval: number; line: number } | null;
 
 /**
- * The studio's named looks, injected by the host (packages/studio-kit's looks kit). Resolving a look is pure: the
- * frame's document in, mutations out, with the Amount and diff passes of the studio. Until links (P7) a named look
- * is a batch of edits over its frames.
+ * The shared data a frame's links resolve against (CHB-037 P7), supplied by the host as data (it crosses to a worker as
+ * JSON): the rolls (a frame on a roll links its scan to the roll) and the photographer's presets. Looks need nothing:
+ * they are the contract's registered look functions.
  */
-export interface LooksProvider {
-  list(): { id: string; name: string; group: string; requires: string; params: Record<string, { type: string; unit?: string; min?: number; max?: number; default?: unknown }> }[];
-  resolve(
-    id: string,
-    frame: { id: string; doc: Document },
-    params: Record<string, unknown>,
-    opts: { amount?: number; from?: 'current' | 'defaults' },
-  ): { look: { id: string; name: string }; label: string; mutations: Mutation[]; diff: { path: string; shown: string }[]; skip?: Diagnostic };
-  diff(a: Document, b: Document): { path: string; shown: string }[];
+export interface DslLinks {
+  rolls?: Readonly<Record<string, Roll>>;
+  presets?: Readonly<Record<string, Preset>>;
 }
 
 export interface DocsProvider {

@@ -16,12 +16,13 @@
 // mode 7  DENSITY:       d = w.x · (log10 b − w.y)              (w.x = ±γ, w.y = log10 of the smallest (positive) or
 //                                                               largest (same) blurred T; w.x = 0 gives 0)
 // mode 8  COPY:          a
-// mode 9  MIX:           k = w.x · m; k = 1 → b, k = 0 → a, else a + k·(b − a)   (a backdrop, b top; normal blend)
+// mode 9  MIX:           k = w.x · m; out = wkMix(a, b, k, blend w.y, encoding w.z) (kernels/working.wgsl): k = 0 → a,
+//                        k = 1 → B(a, b), else a + k·(B − a); a the backdrop, b the top (contract mixPixel, core blendPixel)
 // mode 10 MASK:          v = a.r, c = b.r; r = max(v, c) | v·(1 − c) | v·c for w.y = 0 | 1 | 2;
 //                        w.x = 1 → r, else v + w.x·(r − v)       (add, subtract, intersect faded by the amount)
 // mode 11 CLARITY:       a.rgb · (L′ / L)³, L = (Y / Y_w)^⅓, L̄ = (Y_b / Y_w)^⅓, L′ = max(0, L + w.x·w·(L − L̄)),
-//                        w = max(0, 1 − (2L − 1)²); Y = a.g, Y_b = b.g (the low-pass), Y_w = w.y; Y ≤ 0 unchanged
-//                        (core print/clarity.ts)
+//                        w = max(0, 1 − (2L − 1)²) (clarity, w.z = 1) or 1 (sharpen, w.z = 0); Y = a.g, Y_b = b.g (the
+//                        low-pass), Y_w = w.y; Y ≤ 0 unchanged (core print/clarity.ts)
 
 const LOG2_10: f32 = 3.321928094887362;
 const LOG10_2: f32 = 0.3010299956639812;
@@ -63,10 +64,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
       out = vec4<f32>(d, d, d, 1.0);
     }
     case 9u: {
-      // exact at both ends (mixPixel): full coverage is the top itself, none the backdrop itself
-      let k = U.w.x * cov;
-      let top = textureLoad(b, p, 0);
-      if (k == 1.0) { out = top; } else if (k != 0.0) { out = va + k * (top - va); }
+      // exact at both ends (mixPixel): full coverage is B (the top itself for normal), none the backdrop itself
+      out = wkMix(va, textureLoad(b, p, 0), U.w.x * cov, u32(U.w.y), u32(U.w.z));
     }
     case 10u: {
       let v = va.r;
@@ -82,7 +81,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
       if (Y > 0.0) {
         let L = pow(Y / U.w.y, 1.0 / 3.0);
         let Lb = pow(max(textureLoad(b, p, 0).g, 1e-30) / U.w.y, 1.0 / 3.0);
-        let w = max(0.0, 1.0 - (2.0 * L - 1.0) * (2.0 * L - 1.0));
+        var w = 1.0;
+        if (U.w.z > 0.5) { w = max(0.0, 1.0 - (2.0 * L - 1.0) * (2.0 * L - 1.0)); }
         let q = max(0.0, L + U.w.x * w * (L - Lb)) / L;
         out = vec4<f32>(va.rgb * (q * q * q), va.a);
       }

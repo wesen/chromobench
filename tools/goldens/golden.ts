@@ -48,8 +48,11 @@ export interface IndexCase {
   fixture: string;
   /** The format-3 document the check compiles, relative to the data directory. */
   document: string;
-  /** The P0 recipe (version 2) the document was translated from (translate.ts): provenance, read by nothing else. */
-  recipe: string;
+  /**
+   * The P0 recipe (version 2) the document was translated from (translate.ts): provenance, read by nothing else.
+   * Absent for the golden stacks P8a built as documents (stacks.ts is their provenance).
+   */
+  recipe?: string;
   /** Header per cut, relative to the data directory; null until the case is rendered (render.ts --only id). */
   cuts: Record<Cut, string> | null;
   /** The compiled chain's ops (graph closure of the display node, inputs first). */

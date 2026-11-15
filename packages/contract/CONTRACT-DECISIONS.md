@@ -467,6 +467,59 @@ consumers: core (every new or changed op, golden parity: P2b), engine-mock (pass
 migration: none (Decision D8): stored studio state is cleared once; frames reopen from their sources
 tests:     packages/contract/test: light law = combinePixel (property, n = 300), order-free, composite identities,
            coalescing, mask algebra laws, validation errors, compile identities, cuts, links (bake), bindings (upstream)
+
+CC-021  links: look functions, presets, linked media helpers, bake of a whole link (CHB-037 P7; contract 1.2.0;
+        numbered CC-020 on its branch, renumbered at the merge because P8a's CC-020 landed first)
+class:     additive (minor), except bakeLink's signature (breaking for its one caller, the contract's tests)
+changes:   links.ts: defineLook / getLook / allLooks / lookParams / lookSkip (registered, versioned, pure look functions
+           (params, { kind, facts, doc, size }) → { stacks per stage, masks }); the look and preset resolvers; Preset
+           (format chromobench.preset version 3: stacks and masks), validatePreset, makePreset, lookAsPreset;
+           LinkContext gains presets and size (compile passes the source size from the graph: linkContext());
+           a link entry's expansion brings the look's masks with ids `<linkId>--<maskId>`; insertLink (one entry per
+           stage, ids `<key>-<stage>`, source.link = key), linksOf, linkSiblings, keyOf, setLinkAmount (clamped per law),
+           setLinkParams, removeLink; bakeLink(doc, key, ctx) → Mutation[] (every stage of the key, masks inserted;
+           was (doc, id, stage) → Mutation); linked media: storedPath / storedMutations (a set of a medium field on a
+           linked medium is an override), readField (reads through the link), linkMedium, unlinkMedium, divergence,
+           followLink; resolveMedium(doc, stage, ctx) (was (stage, medium, ctx)). links-looks.ts: the built-in looks
+           (balance, neutral, warm-print, cool-print, print-density, soft-contrast, more-contrast, edge-burn,
+           crisp-print, crisp-warm), registered on import.
+consumers: studio-kit looks and roll kits, the studio's reads and writes of linked media (model/doc.ts), the render
+           bridge and every compile site that may see a roll or preset link (LinkContext), dsl (named looks)
+migration: none
+tests:     packages/contract/test/links-looks.test.ts (expansion at the law's amount, amount 0 = no look, params,
+           two stages one key, a look reading the document, masks and size, kinds, bake = same graph, presets,
+           look as preset = same graph, linked media: overrides, divergence, follow, reads and writes, unlink)
+```
+
+## Contract 1.1 (CHB-037 P8a: Editor lab's tools in the engine)
+
+`CONTRACT_VERSION = '1.1.0'`. Design: CHB-035 design 01 v2 Part I §3–§8, §22 (encodings), §23 (the op table); plan
+"P8a". Editor lab's digital tools are re-defined in linear light and OkLab (its sRGB arithmetic and its parametric
+curve are not imported, design §13).
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| design §23 | The composite op set: `exposure`, `curve`, `levels`, `hsl`, `vibrance`, `grade`, `mixer`, `vignette` (scene and print), `sharpen` (print) | accepted | Each with ArgSpecs in the catalogue's units, an `encoding`, an `identity`; core (`composite/*.ts`) is the f64 definition, the GPU mirrors it; a conformance case each (identity at identity params, closed forms) |
+| design §22 | Encodings | accepted | The working encodings are domains: `scene-rgb`/`print-rgb` (linear Rec. 2020, D65, white = 1) and `scene-oklab`/`print-oklab` (OkLab over it); one node op `composite.encode { to, white }` converts within a stage. The compiler converts each layer's input to its op's encoding, folds a conversion of a conversion into one from the original, and returns the stack to the stage's XYZ. An op's encoding may follow an argument (`EncodingSpec`): `curve` and `levels` act on L in OkLab, or on the cube root of an RGB channel in linear RGB. `clarity` is `stage` (it computes on XYZ) |
+| design §4–§6, §22 | The W3C blend modes, isolated groups | accepted | 16 modes (kebab case, British spelling: `colour-dodge`, `colour-burn`, `colour`). An entry mixes in its result's encoding; separable modes act per channel in linear RGB, hue/saturation/colour/luminosity in OkLCh (luminance defined once, no ClipColor). A blend on a stage-encoded result mixes in linear RGB. Isolated groups keep contract 1.0's meaning (children on the backdrop, the result blended as one layer) |
+| design §7, §25 | Mask components `radial` and `colour` | accepted | `mask.radial` (an ellipse with its own soft edge, pointwise); `mask.colour` (OkLab ΔE, tolerance, softness) on the cut it reads encoded to OkLab: a cut without colour (the negative, H) is E_CUT at compile |
+| design §21 | The scene stage for camera files | accepted | It compiled already; its masks now read the new cut `scene.input` (the white-balanced scene, before the stack); cut orders renumbered (0–9) |
+| design §33 (P5b-2) | UI fields | accepted | `OpDef.ui = { label, menu, order }` on every layer op and mask component op (`LAYER_MENUS`: light, retouch, tone, colour, detail, effect, mask); `UiHints.advanced` marks secondary controls |
+
+```text
+CC-020  the composite op set, blend modes, working encodings, colour and radial masks, scene.input (CHB-037 P8a)
+class:     additive (minor), with one changed meaning: a scene-stage mask with reads 'stage-input' measures scene.input
+           (the white-balanced scene XYZ) instead of source (camera-linear)
+changes:   domains scene-rgb, scene-oklab, print-rgb, print-oklab; encodings.ts; ops exposure, curve, levels, hsl,
+           vibrance, grade, mixer, vignette, sharpen, composite.encode, mask.radial, mask.colour; composite.mix takes the
+           working domains and BLEND_MODES (16); MASK_COMPONENT_KINDS + radial, colour; cut scene.input; OpDef.encoding
+           may be { arg, values }, OpDef.ui; UiHints.advanced; clarity's encoding stage; LawContext.encode/encodingOf
+consumers: DSL (generated: the new layer ops), UI (P5b-2: ui fields, the "+ Layer" menu), engines (core and gpu: every
+           new op; engine-mock: none, reported as not implemented)
+migration: none
+tests:     contract composite-law.test.ts; core composite.test.ts (laws: identities, blend identities, curve
+           monotonicity, encode round trips); conformance semantics for every new op; six golden stacks; GPU parity
+           (packages/gpu/test/browser/digital.spec.ts)
 ```
 
 ## Change-note template

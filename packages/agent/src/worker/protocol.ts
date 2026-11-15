@@ -5,7 +5,7 @@
 // eval makes there is made again on the page's log through the same door (agentSubmit), which stays the one way
 // in for the agent's edits.
 import type { AgentMode, Diagnostic, EngineCaps, EngineId, EvalRequest, EvalResult, EvalTarget, MeasureSpec, NodeDef, NodeRef, SourceInfo } from '@chromobench/contract';
-import type { DslLimits, Submission } from '@chromobench/dsl';
+import type { DslLimits, DslLinks, Submission } from '@chromobench/dsl';
 import type { LogData } from '@chromobench/values';
 
 /** The page's documents as the worker copies them: the log, the mode, the frames the agent may open. */
@@ -13,6 +13,8 @@ export interface DocsSnapshot {
   log: LogData;
   mode: AgentMode;
   frames: Record<string, { source: SourceInfo; name?: string }>;
+  /** the data links resolve against (rolls, presets: CHB-037 P7); looks are registered in the contract */
+  links?: DslLinks;
 }
 
 /** ImageResult without its lazy read(): the samples travel with the reply (transferred). */

@@ -143,3 +143,8 @@
 /* the History panel: a step of this frame with later changes of other frames on top (a jump to it crosses them) */
 .cb-hist-i.is-crossed .cb-who::after { content: ' ⤒'; color: var(--text3); }
 .cb-hist-confirm { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; background: var(--pendsoft); color: var(--text); border-left: 2px solid var(--pending); font-size: 12px; }
+
+/* a field of a linked medium: it follows the roll, or this frame overrides it (click to follow again) */
+.cb-arg-link { height: 16px; line-height: 14px; padding: 0 5px; border: 1px dotted var(--line2); border-radius: 8px; background: transparent; color: var(--text3); font: inherit; font-size: 10px; }
+.cb-arg-link[hidden] { display: none; }
+.cb-arg-link.is-override { border-style: solid; color: var(--text); background: var(--panel2); cursor: pointer; }

@@ -13,6 +13,9 @@ export const OP = Object.freeze({
   MASK_LUM: 12, MASK_LINEAR: 13, MASK_ELLIPSE: 14, MASK_INVERT: 15, MASK_CONSTANT: 17,
   // contract 0.3: v.rgb · p0.rgb + p1.rgb (scan.flare per channel)
   AFFINE: 16,
+  // contract 1.1: the composite stages' digital layers (engine/lower.ts; core composite/*.ts) and the fused mix
+  ENCODE: 18, EXPOSURE: 19, MIXER: 20, CURVE: 21, LEVELS: 22, HSL: 23, VIBRANCE: 24, GRADE: 25, VIGNETTE: 26,
+  MASK_COLOUR: 27, MASK_RADIAL: 28, SAVE: 29, MIX: 30,
 });
 export const MAXOPS = 12;
 /** Table lookup modes: hardware trilinear (parity tests only: 8-bit weights on real GPUs), manual tetrahedral (export), manual trilinear (preview, CHB-034), broken (no half-texel). */
@@ -57,6 +60,10 @@ export interface PwOp {
   flags?: number;
   p0?: number[];
   p1?: number[];
+  /** The op's data in the segment's op-data buffer (matrices, curve segments, bands); op.z is its offset. */
+  data?: readonly number[];
+  /** op.w: a count or a code (curve points, hue bands, a mix's encoding). */
+  aux?: number;
   /** Node id this op computes (for taps and diagnostics). */
   node?: string;
 }
@@ -94,9 +101,11 @@ export function packProgram(a: PackArgs): ArrayBuffer {
   if (seg.ops.length > MAXOPS) throw new Error(`program of ${seg.ops.length} ops exceeds ${MAXOPS}`);
   const ops: number[][] = [];
   const params: number[][] = [];
+  let at = 0;
   for (const o of seg.ops) {
-    ops.push([o.code, o.flags ?? 0, 0, 0]);
+    ops.push([o.code, o.flags ?? 0, o.data ? at : 0, o.aux ?? 0]);
     params.push(pad4(o.p0), pad4(o.p1));
+    at += o.data?.length ?? 0;
   }
   const s = seg.tables.solve;
   const I: Mat3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -112,6 +121,16 @@ export function packProgram(a: PackArgs): ArrayBuffer {
     disp: seg.disp ?? XYZ_TO_SRGB,
     okM1: seg.ok?.[0] ?? I, okM1i: seg.ok?.[1] ?? I,
   });
+}
+
+/** The op-data buffer of a segment (binding 9): every op's `data` in order (packProgram gives each its offset). */
+export function packOpData(seg: Segment): Float32Array<ArrayBuffer> | null {
+  const n = seg.ops.reduce((s, o) => s + (o.data?.length ?? 0), 0);
+  if (!n) return null;
+  const out = new Float32Array(n);
+  let at = 0;
+  for (const o of seg.ops) if (o.data) { out.set(o.data, at); at += o.data.length; }
+  return out;
 }
 
 /** misc.z: which tables the export path replaces by exact integrals (1 solve, 2 pd, 4 print). */

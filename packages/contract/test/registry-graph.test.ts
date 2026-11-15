@@ -12,11 +12,14 @@ describe('registry and catalogue', () => {
     for (const a of AREAS) expect(allOps().some((o) => o.area === a), a).toBe(true);
     const names = (s: Parameters<typeof opsForStage>[0]): string[] => opsForStage(s).map((o) => o.name).sort();
     expect(names('darkroom')).toEqual(['burn', 'densityMask', 'dodge', 'expose', 'filter', 'flash', 'preflash']);
-    expect(names('print')).toEqual(['clarity', 'clone', 'heal']);
+    const digital = ['curve', 'exposure', 'grade', 'hsl', 'levels', 'mixer', 'vibrance', 'vignette'];
+    expect(names('print')).toEqual(['clarity', 'clone', ...digital, 'heal', 'sharpen'].sort());
     expect(names('scan')).toEqual(['clone', 'heal']);
-    expect(names('scene')).toEqual([]);
+    expect(names('scene')).toEqual(digital);
     for (const o of allOps({ includeInternal: true })) if (o.stages) expect(o.encoding, o.name).toBeDefined();
-    expect(getOp('clarity')).toMatchObject({ encoding: 'linear', class: 'spatial' });
+    expect(getOp('clarity')).toMatchObject({ encoding: 'stage', class: 'spatial' });
+    // every layer op the photographer adds has a label, a menu and an order for the UI
+    for (const o of allOps({ includeInternal: true })) if (o.stages || /^mask\.(linear|radial|ellipse|paint|luminance|colour)$/.test(o.name)) expect(o.ui, o.name).toBeDefined();
     expect(getOp('clarity').args['radius_mm']).toMatchObject({ unit: 'mm' });
     expect(getOp('heal').coalesce).toEqual({ list: 'spots', opacity: 'opacity' });
   });

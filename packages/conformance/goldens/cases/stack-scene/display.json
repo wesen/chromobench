@@ -1,0 +1,32 @@
+{
+  "case": "stack-scene",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/stack-scene/display.f32",
+  "sha256": "3ffb4d9407494db4660f2e3db9a6668bf2daeb6936af5543784ae87ec696bb33",
+  "stats": {
+    "min": [
+      0.05324754,
+      0.05514678,
+      0.0628003
+    ],
+    "max": [
+      0.9573636,
+      0.9375489,
+      0.9009356
+    ],
+    "mean": [
+      0.5247019,
+      0.4304965,
+      0.3527921
+    ]
+  },
+  "warnings": []
+}

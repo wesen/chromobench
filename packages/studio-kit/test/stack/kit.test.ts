@@ -3,9 +3,9 @@
 // changed an entry (an approved agent proposal); the stage policy pass (CB-S101, CB-S102); every layout has the kit.
 import { describe, expect, it } from 'vitest';
 import { Coll } from '@chromobench/values';
-import type { Document, Group } from '@chromobench/contract';
+import { insertLink, type Document, type Group } from '@chromobench/contract';
 import { buildLayout, defineLayout } from '../../src/index.ts';
-import { provenance } from '../../kits/stack/src/model.ts';
+import { provenance, rowsOf } from '../../kits/stack/src/model.ts';
 import { started, docOf } from '../helpers.ts';
 
 const steps = (rt: any, f: string) => rt.store.log.inEffect(f).length;
@@ -72,6 +72,23 @@ describe('the stack commands are steps of the log', () => {
     await rt.runCommand('layer.add', null, 'clarity', 'darkroom');
     expect(toasts.at(-1)).toMatch(/does not live in the darkroom/);
     expect(steps(rt, f)).toBe(1);
+  });
+
+  it('a link (a look) is one row: its Amount, Bake into plain layers, Remove; each one step', async () => {
+    const { rt, f, studio } = await started();
+    studio.commit(f, insertLink(docOf(rt, f), { look: 'warm-print', version: 1 }, { key: 'warm1' }), 'Warm print');
+    const id = darkroom(docOf(rt, f)).order.find((x) => x.startsWith('warm1'))!;
+    expect(rowsOf(docOf(rt, f), 'darkroom').find((r) => r.id === id)).toMatchObject({ kind: 'link', op: null });
+    await rt.runCommand('layer.amount', null, id, 0.5);
+    expect((darkroom(docOf(rt, f)).items[id] as any).amount).toBe(0.5);
+    await rt.runCommand('layer.select', null, id);
+    await rt.runCommand('link.bake', null);
+    const baked = darkroom(docOf(rt, f)).items[id] ?? Object.values(darkroom(docOf(rt, f)).items).find((e: any) => e.kind === 'group');
+    expect((baked as any).kind).toBe('group');
+    rt.undo();
+    await rt.runCommand('link.remove', null, id);
+    expect(darkroom(docOf(rt, f)).order.some((x) => x.startsWith('warm1'))).toBe(false);
+    expect(steps(rt, f)).toBe(3);
   });
 
   it('provenance: an entry an agent proposal changed, once approved, says Agent; untouched ones the opening', async () => {

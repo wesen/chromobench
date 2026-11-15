@@ -2,8 +2,8 @@
 // pure functions to f64 images. Upstream context (stock, paper, viewing light) is found by walking the
 // node's inputs (`ctx.up`), because a pointwise op's own args do not name it.
 import {
-  DOMAINS, fail, lightH, maskCombine, mixPixel, mulberry32,
-  type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type LightSample, type LightTermSample, type Point, type SourceInfo,
+  DOMAINS, encodingOfDomain, fail, lightH, maskCombine, mixPixel, mulberry32,
+  type BlendMode, type Box, type Cmy, type Diagnostic, type Domain, type ImageInfo, type LightSample, type LightTermSample, type Point, type SourceInfo,
 } from '@chromobench/contract';
 import type { PhysicsData } from '../data/provider.ts';
 import { filtrationForLights } from '../print/balance.ts';
@@ -14,7 +14,11 @@ import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { clarity, claritySigma } from '../print/clarity.ts';
 import { combineRatio } from '../print/combine.ts';
 import { frameImage } from '../print/geometry.ts';
-import { ellipseAt, featherSigma, fullGrid, gaussianBlur1, gridCentres, linearAt, luminanceAt, paintMask, type Stroke } from '../print/masks.ts';
+import { colourAt, ellipseAt, featherSigma, fullGrid, gaussianBlur1, gridCentres, linearAt, luminanceAt, paintMask, radialAt, type Stroke } from '../print/masks.ts';
+import { gradeAt, gradeWheels, hslAt, hslBands, mixerMatrix, vibranceAt, vignetteGain } from '../composite/adjust.ts';
+import { blendPixel } from '../composite/blend.ts';
+import { channelIndex, evalCurve, evalLevels, toneAt, toneCurve, type Levels } from '../composite/tone.ts';
+import { applyEncode, encodeTransformOf } from '../composite/working.ts';
 import { densityMaskSigma, maskDensityPolar } from '../print/densityMask.ts';
 import { retouch, type RepairMode, type Spot } from '../print/retouch.ts';
 import { buildPdTable, buildPrintTable, buildSolveTable, look3, N3, type Table3 } from '../tables/tables.ts';
@@ -316,17 +320,79 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     return { w: r.w, h: r.h, c: r.c, data: clarity(r.data, r.w, r.h, r.c, strength, sigma, whiteAt(ctx)[1]) };
   },
   'composite.mix': (ctx) => {
-    // the composite law per entry: back + a·m·(B(back, top) − back), B = normal (contract 1.0; mixPixel)
+    // the composite law per entry: back + a·m·(B(back, top) − back) in the encoding they share (mixPixel, blendPixel)
     const back = recv(ctx);
     const top = ctx.image(A(ctx, 'top') as string);
     const mask = A(ctx, 'mask') === undefined ? undefined : ctx.image(A(ctx, 'mask') as string);
     const amount = num(ctx, 'amount');
-    if (A(ctx, 'blend') !== 'normal') fail('E_NOT_IMPLEMENTED', `composite.mix blend ${String(A(ctx, 'blend'))} (phase 8)`);
+    const blend = A(ctx, 'blend') as BlendMode;
+    const enc = (ctx.recvDomain && encodingOfDomain(ctx.recvDomain)?.encoding) || 'stage';
+    if (blend !== 'normal' && enc === 'stage') fail('E_DOMAIN', `composite.mix: the blend ${blend} needs a working encoding (rgb or oklab), not ${ctx.recvDomain}`, { hint: 'the composite law converts the entry first' });
     const c = back.c;
     return mapPx(back, c, (px, o, i) => {
       const k = amount * (mask ? mask.data[i * mask.c]! : 1);
-      for (let q = 0; q < c; q++) o[q] = mixPixel(px[q]!, top.data[i * top.c + q]!, k);
+      const t = top.data.subarray(i * top.c, i * top.c + c);
+      const B = blend === 'normal' ? t : blendPixel(blend, px, t, enc);
+      for (let q = 0; q < c; q++) o[q] = mixPixel(px[q]!, q < 3 ? B[q]! : t[q]!, k);
     });
+  },
+  // ---- the digital adjustments (contract 1.1, composite/*.ts) ----
+  'composite.encode': (ctx) => {
+    const t = encodeTransformOf(ctx.recvDomain!, A(ctx, 'to') as Domain, A(ctx, 'white') as 'D50' | 'D65');
+    return mapPx(recv(ctx), 3, (px, o) => { applyEncode(t, px, o); });
+  },
+  exposure: (ctx) => {
+    const g = 2 ** num(ctx, 'stops'), off = num(ctx, 'offset');
+    return mapPx(recv(ctx), 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = px[k]! * g + off; });
+  },
+  curve: (ctx) => {
+    const c = toneCurve(A(ctx, 'points') as { x: number; y: number }[]);
+    const ch = channelIndex(A(ctx, 'channel'));
+    return mapPx(recv(ctx), 3, (px, o) => { o.set(px.subarray(0, 3)); toneAt(o, ch, (v) => evalCurve(c, v)); });
+  },
+  levels: (ctx) => {
+    const l = ctx.args as unknown as Levels;
+    const ch = channelIndex(A(ctx, 'channel'));
+    return mapPx(recv(ctx), 3, (px, o) => { o.set(px.subarray(0, 3)); toneAt(o, ch, (v) => evalLevels(l, v)); });
+  },
+  hsl: (ctx) => {
+    const bands = hslBands(A(ctx, 'bands') as Record<string, number>[]);
+    return mapPx(recv(ctx), 3, (px, o) => { o.set(px.subarray(0, 3)); hslAt(o, bands); });
+  },
+  vibrance: (ctx) => {
+    const v = num(ctx, 'vibrance'), sat = num(ctx, 'saturation');
+    return mapPx(recv(ctx), 3, (px, o) => { o.set(px.subarray(0, 3)); vibranceAt(o, v, sat); });
+  },
+  grade: (ctx) => {
+    const g = gradeWheels(ctx.args);
+    return mapPx(recv(ctx), 3, (px, o) => { o.set(px.subarray(0, 3)); gradeAt(o, g); });
+  },
+  mixer: (ctx) => {
+    const M = mixerMatrix(ctx.args);
+    return mapPx(recv(ctx), 3, (px, o) => { for (let k = 0; k < 3; k++) o[k] = M[k]![0]! * px[0]! + M[k]![1]! * px[1]! + M[k]![2]! * px[2]!; });
+  },
+  vignette: (ctx) => {
+    const r = recv(ctx);
+    const stops = num(ctx, 'stops'), size = num(ctx, 'size'), feather = num(ctx, 'feather');
+    const { xs, ys } = gridCentres(fullGrid(r.w, r.h));
+    return mapPx(r, 3, (px, o, i) => {
+      const g = vignetteGain(xs[i % r.w]!, ys[Math.floor(i / r.w)]!, r.w, r.h, stops, size, feather);
+      for (let k = 0; k < 3; k++) o[k] = px[k]! * g;
+    });
+  },
+  sharpen: (ctx) => {
+    // print/clarity.ts without the midtone weight: an unsharp mask of the lightness, radius in mm on the print
+    const r = recv(ctx);
+    const strength = num(ctx, 'strength');
+    if (strength === 0) return r;
+    const sigma = claritySigma(num(ctx, 'radius_mm'), ctx.info?.umPerPx.paper, 'sharpen');
+    return { w: r.w, h: r.h, c: r.c, data: clarity(r.data, r.w, r.h, r.c, strength, sigma, whiteAt(ctx)[1], false) };
+  },
+  'mask.radial': (ctx) => coordMask(ctx, (X, Y) => radialAt(X, Y, A(ctx, 'box') as Box, num(ctx, 'angle_deg'), num(ctx, 'feather'))),
+  'mask.colour': (ctx) => {
+    const ref = A(ctx, 'colour') as Vec3;
+    const tol = num(ctx, 'tolerance'), soft = num(ctx, 'softness');
+    return mapPx(recv(ctx), 1, (px, o) => { o[0] = colourAt(px, ref, tol, soft); });
   },
   'mask.luminance': (ctx) => {
     const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;

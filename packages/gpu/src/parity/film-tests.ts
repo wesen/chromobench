@@ -2,7 +2,7 @@
 // (guide §5.6 kernel table): source.xyz, capture.expose, film.couple (pointwise and diffused),
 // film.halation, film.develop and film.grain; pcg4d uniforms bit-identical; grain statistics; a
 // digital-raw document end to end. Each stage reports its worst difference so the spec can bound it.
-import { compile, cutNode, Graph, newDocument, sha256Hex, type Document, type FilmMedium, type Node, type SceneMedium, type SourceInfo } from '@chromobench/contract';
+import { compile, cutNode, Graph, layerEntry, newDocument, sha256Hex, type Document, type FilmMedium, type Node, type SceneMedium, type SourceInfo } from '@chromobench/contract';
 import { gaussianKernelSum, RefEngine, uniformAt } from '@chromobench/core';
 import { GpuEngine } from '../engine-gpu.ts';
 import { FilmGpu } from '../film.ts';
@@ -184,5 +184,42 @@ export const FILM_TESTS: Record<string, T> = {
     let finite = true;
     for (const v of a) if (!Number.isFinite(v)) finite = false;
     return { ...diff(a, b, c, f.info.width, f.info.height, 6), finite, ops: [...new Set(f.g.closure(disp.id).map((x) => x.op))] };
+  },
+
+  /**
+   * The scene stage of a camera file (contract 1.1): exposure under a luminance mask that reads scene.input, a curve on
+   * R, HSL, a vignette at 0.7 (fused), before the film; the scene cut and the display against the reference engine.
+   */
+  async 'film:scene'() {
+    const f = await frame();
+    const d = newDocument('digital-raw', { sha256: f.info.sha256, name: 'synthetic.dng', width: f.info.width, height: f.info.height });
+    const fm = d.stages.film!.medium as FilmMedium;
+    const coll = <V>(e: [string, V][]) => ({ order: e.map(([id]) => id), items: Object.fromEntries(e) });
+    const doc = {
+      ...d,
+      masks: coll([['hi', { name: 'hi', components: coll([['l', { kind: 'luminance', params: { above: 0.3, softness: 0.3 }, combine: 'add', amount: 1, enabled: true }]]), feather_mm: 0, invert: false, reads: 'scene.input' }]]),
+      stages: {
+        ...d.stages,
+        film: { ...d.stages.film!, medium: { ...fm, grain: { ...fm.grain, amount: 0 } } },
+        scene: {
+          ...d.stages.scene!,
+          stack: coll([
+            ['x', layerEntry('exposure', { stops: -0.6 }, { mask: 'hi' })],
+            ['r', layerEntry('curve', { channel: 'R', points: coll([['a', { x: 0, y: 0 }], ['b', { x: 0.5, y: 0.55 }], ['c', { x: 1, y: 1 }]]) } as never)],
+            ['h', layerEntry('hsl', { bands: coll([['sb', { centre_deg: 260, saturation: 0.3, lightness: -0.1 }]]) } as never)],
+            ['n', layerEntry('vignette', { stops: -0.5 }, { amount: 0.7 })],
+          ]),
+        },
+      },
+    } as unknown as Document;
+    const comp = compile(doc, f.g);
+    const sc = await both(f, comp.cuts.scene!);
+    const top = comp.display;
+    const disp = top.op === 'output.frame' ? f.g.get(top.inputs[0]!)! : top;
+    const { a, b, c } = await both(f, disp);
+    const input = await both(f, comp.cuts['scene.input']!);
+    let changed = 0;
+    for (let i = 0; i < sc.b.length; i++) if (Math.abs(sc.b[i]! - input.b[i]!) > 1e-3) changed++;
+    return { scene: diff(sc.a, sc.b, 3, f.info.width, f.info.height, 0), display: diff(a, b, c, f.info.width, f.info.height, 6), changed };
   },
 };

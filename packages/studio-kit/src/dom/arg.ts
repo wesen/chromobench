@@ -9,11 +9,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { h, listen, type MountCtx } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
-import type { Document } from '@chromobench/contract';
+import { storedPath, type Document } from '@chromobench/contract';
+import { unset } from '@chromobench/values';
 import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
-import { exposureStep, isInert, read, storePath, TIME_PATH } from '../model/doc.ts';
+import { exposureStep, isInert, linksOf, read, storePath, TIME_PATH } from '../model/doc.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import { sel } from '../sel.ts';
 
@@ -67,7 +68,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     const d = f ? (s.docs?.[f] as Document | undefined) : undefined;
     // inert: time, aperture and magnification while the enlarger is normalised (CHB-031 F17); na: a path this
     // frame's kind does not have (a scanner for a photo, F23)
-    const v = read(d, model.path);
+    const v = read(d, model.path, linksOf(s));
     return { f, v, inert: isInert(d, model.path), na: !!d && v === undefined };
   };
   const initialOf = (f: string): unknown => (st.log.has(f) ? read(st.log.initial<Document>(f), model.path) : undefined);
@@ -96,7 +97,16 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const lab = h('label', { class: 'cb-arg-l', text: label, title: controlTip(model) });
   const out = h('span', { class: 'cb-arg-v' });
   const aside = h('span', { class: 'cb-arg-a' });
-  head.append(lab, out, aside);
+  // a field of a linked medium (a frame on a roll): it follows the roll, or this frame overrides it (click: follow again)
+  const linkChip = h('button', { type: 'button', class: 'cb-arg-link', hidden: true });
+  listen(m.scope, linkChip, 'click', () => {
+    const f = now.f;
+    const d = f ? docNow(f) : undefined;
+    const stored = d ? storedPath(d, model.path) : null;
+    if (!f || !d || !stored || stored === model.path || read(d, stored) === undefined) return;
+    (rt.services['studio'] as { commit(f: string, ms: unknown[], label: string): void }).commit(f, [unset(stored)], `${label} follows the roll`);
+  });
+  head.append(lab, out, aside, linkChip);
   el.append(head);
   let now: { f: string | null; v: unknown; inert: boolean; na: boolean } = { f: null, v: undefined, inert: false, na: false };
   const focus = () => m.rctx().set({ ui: { focusPath: model.path } });
@@ -288,6 +298,14 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
       if (v.inert) out.textContent = aside.textContent = '';
     }
     el.classList.toggle('is-inert', v.inert);
+    const d = v.f ? (rt.store.peek(['docs', v.f]) as Document | undefined) : undefined;
+    const stored = d ? storedPath(d, model.path) : model.path;
+    const linked = !!d && stored !== model.path;
+    const own = linked && read(d, stored) !== undefined;
+    linkChip.hidden = !linked;
+    linkChip.textContent = own ? 'Override' : 'Roll';
+    linkChip.classList.toggle('is-override', own);
+    linkChip.dataset['tip'] = own ? 'This frame overrides the roll: click to follow the roll again' : 'Follows the roll: a change here overrides it for this frame';
   });
   return el;
 }

@@ -4,8 +4,8 @@
 // skipped, one undo restoring every frame (CHB-037: the frames' documents and the roll record in one step of the log).
 import { describe, expect, it } from 'vitest';
 import { canonicalJSON, set } from '@chromobench/values';
-import { buildLayout, defineLayout, lightsOf, mainExposure, read } from '../../src/index.ts';
-import { autoOf, contactRecipe, rollBadge, rollOf, type RollDoc } from '../../kits/roll/src/index.ts';
+import { buildLayout, defineLayout, lightsOf, linksOf, mainExposure, read } from '../../src/index.ts';
+import { autoOf, contactRecipe, divergence, rollBadge, rollOf, type RollDoc } from '../../kits/roll/src/index.ts';
 import { startedRoll, type StartedRoll } from './fixtures.ts';
 
 const codes = (def: unknown, level: 'error' | 'warning') => buildLayout(def).app.diagnostics.list.filter((d) => d.level === level && d.code.startsWith('CB-R')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
@@ -51,8 +51,14 @@ describe('the roll flow through commands (guide §9)', () => {
     // one undo takes the first print off every frame and the roll back to analysed; redo puts it back
     const printed = recipes(r);
     rt.run('edit.undo');
-    expect(recipes(r)).toEqual(fresh);
     expect(rollOf(rt.state)!.status).toBe('analysed');
+    for (const f of ids) expect(auto(r, f)['method']).toBeUndefined();
+    // the analysis and the new roll (with every frame's link) are a step each: undone, the frames are as opened
+    rt.run('edit.undo');
+    rt.run('edit.undo');
+    expect(recipes(r)).toEqual(fresh);
+    rt.run('edit.redo');
+    rt.run('edit.redo');
     rt.run('edit.redo');
     expect(recipes(r)).toEqual(printed);
     expect(rollOf(rt.state)!.status).toBe('first-printed');
@@ -121,23 +127,40 @@ describe('the roll flow through commands (guide §9)', () => {
     expect(lightsOf(studio.doc(ids[2]!)!)).toEqual([0.05, 0, -0.05]);
   }, 60_000);
 
-  it('roll settings: one transaction sets the roll and every frame; the setup knows who diverges', async () => {
+  it('roll settings: the frames link to the roll; one roll edit reaches every frame; an override is the divergence', async () => {
     const r = await startedRoll([0, 0.004, 0.008]);
     const { rt, studio, ids } = r;
     await rt.runCommand('roll.fromFrames', null, { analyse: false });
     const stock = 'stages.scan.medium.stock';
+    const links = () => linksOf(rt.state);
+    for (const f of ids) expect(studio.doc(f)!.stages.scan!.medium).toMatchObject({ link: { roll: 'roll-1' } });
     rt.runCommand('roll.setShared', null, stock, 'kodak_gold_200');
-    for (const f of ids) expect(read(studio.doc(f)!, stock)).toBe('kodak_gold_200');
-    expect(rollOf(rt.state)!.fragment.stock).toBe('kodak_gold_200');
+    for (const f of ids) expect(read(studio.doc(f)!, stock, links())).toBe('kodak_gold_200');
+    expect(rollOf(rt.state)!.media.scan!['stock']).toBe('kodak_gold_200');
     expect(steps(r).at(-1)).toBe(`Roll: ${stock}`);
-    // one frame diverges
-    studio.commit(ids[2]!, [set('stages.darkroom.medium.grade', 3)], 'Grade');
+    // one frame overrides the stock: it diverges, on exactly that path
+    studio.commit(ids[2]!, [set(stock, 'kodak_portra_400')], 'Stock');
+    expect(read(studio.doc(ids[2]!)!, stock, links())).toBe('kodak_portra_400');
     expect(rollBadge(rt.state, ids[2]!)).toContain('diverges');
     expect(rollBadge(rt.state, ids[0]!)).not.toContain('diverges');
+    expect(divergence(rollOf(rt.state)!, (f) => studio.doc(f))).toEqual({ [stock]: [ids[2]] });
+    // a darkroom setting is no roll field: it does not diverge, and setShared copies it to every frame
+    studio.commit(ids[1]!, [set('stages.darkroom.medium.grade', 3)], 'Grade');
+    expect(rollBadge(rt.state, ids[1]!)).not.toContain('diverges');
+    rt.runCommand('roll.setShared', null, 'stages.darkroom.medium.grade', 4);
+    for (const f of ids) expect(read(studio.doc(f)!, 'stages.darkroom.medium.grade')).toBe(4);
+    rt.run('edit.undo');
+    // Reset to the Roll drops the override (one step); the roll's value shows again
+    rt.runCommand('frame.select', null, ids[2]);
+    rt.runCommand('roll.followRoll', null, stock);
+    expect(read(studio.doc(ids[2]!)!, stock, links())).toBe('kodak_gold_200');
+    expect(rollBadge(rt.state, ids[2]!)).not.toContain('diverges');
+    rt.run('edit.undo'); // the reset
     rt.run('edit.undo'); // the grade (its own step)
-    rt.run('edit.undo'); // the roll stock: frames and roll together
-    for (const f of ids) expect(read(studio.doc(f)!, stock)).toBe('kodak_portra_400');
-    expect(rollOf(rt.state)!.fragment.stock).toBe('kodak_portra_400');
+    rt.run('edit.undo'); // the frame's own stock
+    rt.run('edit.undo'); // the roll stock: the roll record alone, every frame follows
+    for (const f of ids) expect(read(studio.doc(f)!, stock, links())).toBe('kodak_portra_400');
+    expect(rollOf(rt.state)!.media.scan!['stock']).toBe('kodak_portra_400');
   }, 60_000);
 
   it('the contact sheet in "one time and pack" mode prints every frame with the reference\'s time and lights', async () => {
@@ -157,7 +180,7 @@ describe('the roll flow through commands (guide §9)', () => {
 });
 
 describe('the roll flow on documents: the scan medium\'s baseT and flare, batch ids, the first-print card', () => {
-  it('the first print writes the measured base and veil into the documents and tags every entry with its batch', async () => {
+  it('the analysis writes the measured base and veil on the roll, which every frame follows; batches tag every entry', async () => {
     const r = await startedRoll([0, 0.004, 0.008, 0.002]);
     const { rt, studio, ids } = r;
     await rt.runCommand('roll.fromFrames', null);
@@ -166,18 +189,20 @@ describe('the roll flow on documents: the scan medium\'s baseT and flare, batch 
     expect(b.veil).not.toBeNull();
     for (const f of ids) {
       const rec = studio.doc(f)!;
-      const flare = read(rec, 'stages.scan.medium.flare') as number[];
-      const baseT = read(rec, 'stages.scan.medium.baseT') as number[];
-      expect(flare).toEqual(roll.fragment.flare);
+      const flare = read(rec, 'stages.scan.medium.flare', linksOf(rt.state)) as number[];
+      const baseT = read(rec, 'stages.scan.medium.baseT', linksOf(rt.state)) as number[];
+      expect(flare).toEqual(roll.media.scan!['flare']);
       expect(flare.every((x) => x > 0 && x <= 20)).toBe(true);
-      expect(baseT).toEqual(roll.fragment.baseT);
+      expect(baseT).toEqual(roll.media.scan!['baseT']);
+      // the frame holds no copy: its scan links to the roll and keeps only its own fields
+      expect(Object.keys((rec.stages.scan!.medium as { overrides: object }).overrides).sort()).toEqual(['rebate', 'umPerPx']);
       // the veil is the document's: f = 100 L / (1 - L); the base is (T - L) / (1 - L)
       b.veil!.forEach((L, k) => expect(flare[k]).toBeCloseTo((100 * L) / (1 - L), 3));
       b.T!.forEach((T, k) => expect(baseT[k]).toBeCloseTo(T / (1 - b.veil![k]!), 5));
       const tags = rt.store.log.inEffect(f).map((e) => e.tx.batch);
-      expect(tags.length).toBeGreaterThan(0);
-      expect(new Set(tags).size).toBe(1);
-      expect(tags[0]).toMatch(/^roll:first-print-/);
+      expect(tags.length).toBe(2);
+      expect(tags[0]).toMatch(/^roll:new-roll-1/);
+      expect(tags[1]).toMatch(/^roll:first-print-/);
     }
   }, 60_000);
 

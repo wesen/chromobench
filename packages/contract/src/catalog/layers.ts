@@ -9,6 +9,7 @@
 // - composite.mix is what the composite and repair laws compile an entry's amount, mask and blend into; it is not a
 //   layer a user adds.
 import { BLEND_MODES } from '../document.ts';
+import { WORKING_DOMAINS } from '../encodings.ts';
 import { defineOp, type OpDef } from '../registry.ts';
 import type { ArgSpec } from '../spec.ts';
 
@@ -25,7 +26,7 @@ const term = (def: Omit<OpDef, 'area' | 'owner' | 'on' | 'returns' | 'binding' |
 
 export const darkroomLayerOps: OpDef[] = [
   term({
-    name: 'expose', term: 'main',
+    name: 'expose', ui: { label: 'Main exposure', menu: 'light', order: 0 }, term: 'main',
     args: {
       time_s: { type: 'number', unit: 's', min: 0.1, max: 600, usual: [2, 60], default: 10, doc: 'Exposure time.', ui: { widget: 'slider', step: 0.1, label: 'Time', group: 'Enlarger', scale: 'log2', aside: 'stop' } },
       fstop: { type: 'number', unit: 'fstop', min: 2.8, max: 45, default: 8, doc: 'Enlarger lens aperture (every exposure through the lens uses it).', ui: { widget: 'stepper', label: 'Aperture', group: 'Enlarger', scale: 'log2' } },
@@ -35,19 +36,19 @@ export const darkroomLayerOps: OpDef[] = [
     see: ['burn', 'dodge', 'print.expose'],
   }),
   term({
-    name: 'burn', term: 'contribution',
+    name: 'burn', ui: { label: 'Burn', menu: 'light', order: 10 }, term: 'contribution',
     args: { time_s: TIME, stops: STOPS, filtration: PACK },
     validate: oneTime,
     doc: 'More light through the negative under a mask (a split exposure is a burn with its own filtration). Amount scales its time.',
   }),
   term({
-    name: 'dodge', term: 'contribution',
+    name: 'dodge', ui: { label: 'Dodge', menu: 'light', order: 20 }, term: 'contribution',
     args: { time_s: TIME, stops: STOPS },
     validate: oneTime,
     doc: "Light held back from the main exposure under a mask (never more than the main gives: max(E_main − Σ E_dodge, 0)). Amount scales the time held back.",
   }),
   term({
-    name: 'flash', term: 'contribution',
+    name: 'flash', ui: { label: 'Flash', menu: 'light', order: 30 }, term: 'contribution',
     args: {
       time_s: TIME, stops: STOPS, filtration: PACK,
       through: { type: 'enum', values: ['base', 'open'], default: 'base', doc: 'Through the film base (no image: dye amounts 0) or an empty gate (no film).' },
@@ -56,13 +57,13 @@ export const darkroomLayerOps: OpDef[] = [
     doc: 'Light that does not pass the image: uniform under its mask, not held back by density masks.',
   }),
   term({
-    name: 'preflash', term: 'contribution',
+    name: 'preflash', ui: { label: 'Preflash', menu: 'light', order: 40 }, term: 'contribution',
     args: { fraction: { type: 'number', unit: 'fraction', min: 0, max: 0.2, usual: [0, 0.05], default: 0.02, doc: 'Uniform pre-exposure as a fraction of the grey-card exposure.', ui: { widget: 'slider', step: 0.005, label: 'Preflash' } } },
     identity: (p) => p['fraction'] === 0,
     doc: "A uniform pre-exposure of the paper, added after the filters (it is measured against the grey card's exposure, H = 1 at the aim): H ← H + a·m·φ.",
   }),
   term({
-    name: 'densityMask', term: 'modulator', class: 'spatial',
+    name: 'densityMask', ui: { label: 'Density mask', menu: 'light', order: 50 }, term: 'modulator', class: 'spatial',
     args: {
       gamma: { type: 'number', unit: 'none', min: 0, max: 1, default: 0.5, doc: 'Mask gamma γ_m (0.6: large-area contrast falls to 40 %).' },
       radius_um: { type: 'number', unit: 'um', min: 0, max: 5000, default: 300, doc: 'Gaussian σ of the blur on the film: wide for a contrast mask, a thin spacer for an unsharp mask.' },
@@ -72,7 +73,7 @@ export const darkroomLayerOps: OpDef[] = [
     doc: 'A neutral silver mask made from the negative and sandwiched with it (CHB-010 §6.6): every exposure through the negative passes its density, flashes do not. Amount scales the density.',
   }),
   term({
-    name: 'filter', term: 'modulator',
+    name: 'filter', ui: { label: 'Filter', menu: 'light', order: 60 }, term: 'modulator',
     args: {
       logH: {
         type: 'vec3', unit: 'logH', min: -1.5, max: 1.5, usual: [-0.5, 0.5], default: [0, 0, 0],
@@ -100,7 +101,7 @@ const SPOTS: ArgSpec = {
 };
 
 const repair = (name: 'heal' | 'clone', doc: string): OpDef => defineOp({
-  name, area: 'retouch', owner: 'CHB-037', on: 'Image', returns: 'Image', domainIn: ['scanner-density', 'print-xyz'], domainOut: 'same',
+  name, area: 'retouch', ui: { label: name === 'heal' ? 'Heal' : 'Clone', menu: 'retouch', order: name === 'heal' ? 10 : 20 }, owner: 'CHB-037', on: 'Image', returns: 'Image', domainIn: ['scanner-density', 'print-xyz'], domainOut: 'same',
   class: 'spatial', binding: 'setting', stages: ['scan', 'print'], encoding: 'stage',
   coalesce: { list: 'spots', opacity: 'opacity' },
   identity: (p) => Array.isArray(p['spots']) && p['spots'].length === 0,
@@ -117,23 +118,24 @@ export const retouchLayerOps: OpDef[] = [
 export const compositeOps: OpDef[] = [
   defineOp({
     name: 'clarity', area: 'composite', owner: 'CHB-037', on: 'Image', returns: 'Image', domainIn: 'print-xyz', domainOut: 'print-xyz',
-    class: 'spatial', binding: 'setting', stages: ['print'], encoding: 'linear',
+    class: 'spatial', binding: 'setting', stages: ['print'], encoding: 'stage', ui: { label: 'Clarity', menu: 'detail', order: 10 },
     identity: (p) => p['strength'] === 0,
     args: {
       strength: { type: 'number', unit: 'fraction', min: -1, max: 1, default: 0.25, doc: 'Local contrast: positive adds, negative softens.', ui: { widget: 'slider', step: 0.01, label: 'Clarity' } },
       radius_mm: { type: 'number', unit: 'mm', min: 0.1, max: 100, usual: [1, 30], default: 10, doc: 'Radius of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size).', ui: { widget: 'slider', step: 0.5, label: 'Radius' } },
     },
-    doc: 'Local contrast on the print (a large unsharp mask weighted to the midtones), in linear light. Replaces finishing.clarity, whose radius was in preview pixels.',
+    doc: "Local contrast on the print (a large unsharp mask weighted to the midtones): the low-pass of the print's luminance in linear light, the detail in lightness. Replaces finishing.clarity, whose radius was in preview pixels.",
+    see: ['sharpen'],
   }),
   defineOp({
-    name: 'composite.mix', area: 'composite', owner: 'CHB-037', on: 'Image', returns: 'Image', domainIn: ['scanner-density', 'scene-xyz', 'print-xyz'], domainOut: 'same',
+    name: 'composite.mix', area: 'composite', owner: 'CHB-037', on: 'Image', returns: 'Image', domainIn: ['scanner-density', ...WORKING_DOMAINS], domainOut: 'same',
     class: 'pointwise', binding: 'setting', dsl: false,
     args: {
       top: { type: 'Image', doc: 'What the entry made from the backdrop (its op applied, or a group\'s children).' },
       amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 1, doc: 'Opacity.' },
       mask: { type: 'Mask', optional: true, doc: 'Coverage; absent = everywhere.' },
-      blend: { type: 'enum', values: [...BLEND_MODES], default: 'normal', doc: 'Blend mode B(back, top) (normal: top; the W3C set arrives with phase 8).' },
+      blend: { type: 'enum', values: [...BLEND_MODES], default: 'normal', doc: 'Blend mode B(back, top), the W3C set: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), hue, saturation, colour and luminosity in OkLCh. A mode other than normal needs a working encoding (rgb or oklab).' },
     },
-    doc: 'The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back). The receiver is the backdrop. mixPixel (pixel.ts) is the formula.',
+    doc: 'The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back), in the encoding back and top share. The receiver is the backdrop. mixPixel (pixel.ts) is the mix; core composite/blend.ts defines B.',
   }),
 ];

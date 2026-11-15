@@ -1,8 +1,13 @@
 // Lowering (split from engine-gpu.ts, CHB-032): a chain of single-receiver pointwise nodes → program segments of
 // kernels/pointwise.wgsl. Every parameter comes from core (physics/core.ts).
-import { DOMAINS, fail, type Box, type Diagnostic, type Graph, type ImageInfo, type Node } from '@chromobench/contract';
-import { combineRatio, filmUmPerPx, flashExposure, type UpNode } from '@chromobench/core';
-import { lowerDisplay, OP, type PwOp, type Segment, type SegmentTables } from '../chain/program.ts';
+import { DOMAINS, fail, type Box, type Diagnostic, type Domain, type Graph, type ImageInfo, type Node } from '@chromobench/contract';
+import {
+  channelIndex, combineRatio, encodeTransformOf, filmUmPerPx, flashExposure, gradeWheels, HSL_NEUTRAL_CHROMA, hslBands, mixerMatrix, toneCurve, VIBRANCE_CHROMA,
+  type UpNode,
+} from '@chromobench/core';
+import { lowerDisplay, MAXOPS, OP, type PwOp, type Segment, type SegmentTables } from '../chain/program.ts';
+import { blendCode, encodingCode, flat3 } from '../chain/working.ts';
+import { fusedMixTop } from './dag.ts';
 import type { CorePhysics } from '../physics/core.ts';
 import type { Mat3, Vec3 } from '../tables/inputs.ts';
 import type { Lowered } from './defs.ts';
@@ -17,7 +22,7 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
   let cur: Segment = { ops: [], tables: {} };
   const push = (op: PwOp, need: Partial<SegmentTables> = {}, disp?: Mat3, ok?: [Mat3, Mat3]) => {
     const clash = (Object.keys(need) as (keyof SegmentTables)[]).some((k) => cur.tables[k] && cur.tables[k] !== need[k]);
-    if (cur.ops.length >= 12 || clash || (disp && cur.disp)) {
+    if (cur.ops.length >= MAXOPS || clash || (disp && cur.disp)) {
       segments.push(cur);
       cur = { ops: [], tables: {} };
     }
@@ -25,6 +30,14 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
     if (disp) cur.disp = disp;
     if (ok) cur.ok = ok;
     cur.ops.push(op);
+  };
+  /** Ops that must share one program (a fused mix: the backdrop register lives only within one dispatch). */
+  const pushSpan = (ops: PwOp[]) => {
+    if (cur.ops.length + ops.length > MAXOPS) {
+      segments.push(cur);
+      cur = { ops: [], tables: {} };
+    }
+    cur.ops.push(...ops);
   };
   for (let i = from; i < nodes.length; i++) {
     const n = nodes[i]!;
@@ -99,11 +112,71 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
       }
       case 'mask.invert': push({ code: OP.MASK_INVERT, node: n.id }); break;
       case 'mask.constant': push({ code: OP.MASK_CONSTANT, p0: [a['value'] as number], node: n.id }); break;
-      default: fail('E_INTERNAL', `${n.op} has no pointwise GPU lowering (barrier ops are materialised)`);
+      case 'composite.mix': {
+        // fused (engine/dag.ts fusedMixTop): SAVE the backdrop, the top's ops on it, MIX with the amount and blend
+        const top = fusedMixTop(graph, n) ?? fail('E_INTERNAL', 'composite.mix reached the pointwise lowering unfused');
+        const back = graph.get(n.inputs[0]!)!.info as ImageInfo;
+        pushSpan([
+          { code: OP.SAVE, node: n.id },
+          ...top.map((m) => lowerDigital(graph, m)),
+          { code: OP.MIX, flags: blendCode(a['blend']), aux: encodingCode(back.domain), p0: [a['amount'] as number], node: n.id },
+        ]);
+        break;
+      }
+      default: {
+        if (!DIGITAL_OPS.has(n.op)) fail('E_INTERNAL', `${n.op} has no pointwise GPU lowering (barrier ops are materialised)`);
+        push(lowerDigital(graph, n));
+      }
     }
   }
   if (cur.ops.length || !segments.length) segments.push(cur);
   return { root: nodes[0]!, segments, warnings };
+}
+
+/** The digital layers and their mask components: one program op each, parameters prepared by core. */
+const DIGITAL_OPS: ReadonlySet<string> = new Set(['composite.encode', 'exposure', 'curve', 'levels', 'hsl', 'vibrance', 'grade', 'mixer', 'vignette', 'mask.colour', 'mask.radial']);
+
+/**
+ * One digital op (contract 1.1) as a program op, with core's preparation of its parameters (composite/*.ts): the
+ * encoding transform, the curve's Hermite segments, the hue bands, the grading wheels, the mixer matrix.
+ */
+export function lowerDigital(graph: Pick<Graph, 'get'>, n: Node): PwOp {
+  const a = n.args as Record<string, unknown>;
+  const num = (k: string): number => a[k] as number;
+  switch (n.op) {
+    case 'composite.encode': {
+      const from = (graph.get(n.inputs[0]!)!.info as ImageInfo).domain;
+      const t = encodeTransformOf(from, a['to'] as Domain, a['white'] as 'D50' | 'D65');
+      return { code: OP.ENCODE, flags: t.f, data: [...flat3(t.pre), ...flat3(t.post)], node: n.id };
+    }
+    case 'exposure': return { code: OP.EXPOSURE, p0: [2 ** num('stops'), num('offset')], node: n.id };
+    case 'mixer': return { code: OP.MIXER, data: flat3(mixerMatrix(a)), node: n.id };
+    case 'curve': {
+      const c = toneCurve(a['points'] as { x: number; y: number }[]);
+      return { code: OP.CURVE, flags: channelIndex(a['channel']), aux: c.x.length, data: [...c.x, ...c.y, ...c.m], node: n.id };
+    }
+    case 'levels': return { code: OP.LEVELS, flags: channelIndex(a['channel']), p0: [num('black'), num('white'), 1 / num('gamma'), num('outBlack')], p1: [num('outWhite')], node: n.id };
+    case 'hsl': {
+      const bands = hslBands(a['bands'] as Record<string, number>[]);
+      return { code: OP.HSL, aux: bands.length, p0: [HSL_NEUTRAL_CHROMA], data: bands.flatMap((b) => [b.cx, b.cy, b.cosW, b.hue, b.sat, b.light]), node: n.id };
+    }
+    case 'vibrance': return { code: OP.VIBRANCE, p0: [num('vibrance'), num('saturation'), VIBRANCE_CHROMA], node: n.id };
+    case 'grade': {
+      const g = gradeWheels(a);
+      return { code: OP.GRADE, data: [...g.tint.flat(), ...g.light, g.exponent], node: n.id };
+    }
+    case 'vignette': return { code: OP.VIGNETTE, p0: [num('stops'), num('size'), num('size') + num('feather') * (1 - num('size'))], node: n.id };
+    case 'mask.colour': {
+      const c = a['colour'] as number[];
+      return { code: OP.MASK_COLOUR, p0: [c[0]!, c[1]!, c[2]!, num('tolerance')], p1: [num('softness')], node: n.id };
+    }
+    case 'mask.radial': {
+      const b = a['box'] as Box;
+      const th = (num('angle_deg') * Math.PI) / 180;
+      return { code: OP.MASK_RADIAL, p0: [b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w / 2, 1e-9), Math.max(b.h / 2, 1e-9)], p1: [Math.cos(th), Math.sin(th), num('feather')], node: n.id };
+    }
+    default: return fail('E_INTERNAL', `${n.op} is not a digital layer op`);
+  }
 }
 
 /** Grain σ per output pixel from size_um (Selwyn: σ²·A constant), filled per target; `pxPerOut` frame px per output px. */

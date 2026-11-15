@@ -3,12 +3,38 @@
 // of one, every mask.paint, and every node read by two consumers. planGraph orders the nodes, picks the materialised
 // ones and counts how often each texture is read (to release it after its last reader); GpuEngine.execute runs a plan.
 import { fail, getOp, type Graph, type Node } from '@chromobench/contract';
-import { BARRIER_OPS, GENERATOR_OPS, type Plan } from './defs.ts';
+import { MAXOPS } from '../chain/program.ts';
+import { BARRIER_OPS, FUSIBLE_TOP_OPS, GENERATOR_OPS, type Plan } from './defs.ts';
 import { combineArgs, combineIsPointwise } from './light.ts';
 
-/** A node computed from materialised inputs (not fused). print.combine fuses when no term reads a texture. */
-export function isBarrier(n: Node): boolean {
+type Nodes = Pick<Graph, 'get'>;
+
+/**
+ * The top of a composite.mix that fuses into the pointwise kernel (contract 1.1, design §29): no mask, and the top a
+ * chain of pointwise single-input ops (FUSIBLE_TOP_OPS) on the mix's own backdrop, short enough that SAVE, the chain
+ * and MIX fit one program. Returns the chain (receiver first), or null: the mix is a combine pass.
+ */
+export function fusedMixTop(g: Nodes, n: Node): Node[] | null {
+  if (n.op !== 'composite.mix' || n.args['mask'] !== undefined) return null;
+  const back = n.inputs[0]!;
+  const chain: Node[] = [];
+  for (let id = n.args['top'] as string; id !== back;) {
+    const m = g.get(id);
+    if (!m || !FUSIBLE_TOP_OPS.has(m.op) || chain.length >= MAXOPS - 2) return null;
+    chain.unshift(m);
+    id = m.inputs[0]!;
+  }
+  return chain.length ? chain : null;
+}
+
+/**
+ * A node computed from materialised inputs (not fused). print.combine fuses when no term reads a texture, a
+ * composite.mix when its top is a short pointwise chain on its backdrop and it has no mask (fusedMixTop; without the
+ * graph a mix counts as a barrier).
+ */
+export function isBarrier(n: Node, g?: Nodes): boolean {
   if (n.op === 'print.combine') return !combineIsPointwise(combineArgs(n.args));
+  if (n.op === 'composite.mix') return !g || fusedMixTop(g, n) === null;
   return BARRIER_OPS.has(n.op);
 }
 
@@ -17,8 +43,10 @@ export function isBarrier(n: Node): boolean {
  * every input but the flash terms' images (a flash is uniform: its x comes from the physics, not from a texture), so
  * a fused print.combine reads its receiver alone.
  */
-export function readsOf(n: Node): readonly string[] {
+export function readsOf(n: Node, g?: Nodes): readonly string[] {
   if (GENERATOR_OPS.has(n.op)) return [];
+  // a fused mix reads its backdrop alone: its top is recomputed from it inside the program
+  if (n.op === 'composite.mix' && g && fusedMixTop(g, n)) return [n.inputs[0]!];
   if (n.op === 'print.combine') {
     const c = combineArgs(n.args);
     const used = new Set<string>([n.inputs[0]!]);
@@ -45,7 +73,7 @@ export function planGraph(graph: Graph, id: string, check: (n: Node) => void, ch
     seen.add(nid);
     const n = graph.get(nid) ?? fail('E_NO_NODE', `unknown node ${nid.slice(0, 12)}…`);
     check(n);
-    for (const i of readsOf(n)) {
+    for (const i of readsOf(n, graph)) {
       consumers.set(i, (consumers.get(i) ?? 0) + 1);
       visit(i);
     }
@@ -56,9 +84,9 @@ export function planGraph(graph: Graph, id: string, check: (n: Node) => void, ch
   for (const nid of order) {
     const n = graph.get(nid)!;
     if ((consumers.get(nid) ?? 0) >= 2 || n.op === 'mask.paint') mat.add(nid);
-    if (isBarrier(n)) {
+    if (isBarrier(n, graph)) {
       mat.add(nid);
-      for (const i of readsOf(n)) mat.add(i);
+      for (const i of readsOf(n, graph)) mat.add(i);
     }
   }
   // plan: what each materialised node reads, for reference counts
@@ -76,7 +104,7 @@ export function planGraph(graph: Graph, id: string, check: (n: Node) => void, ch
 /** What a materialised node reads, and from where its pointwise tail starts. */
 export function planNode(graph: Graph, nid: string, mat: ReadonlySet<string>, chainOf: (id: string) => Node[]): Plan {
   const n = graph.get(nid)!;
-  if (isBarrier(n)) return { kind: 'barrier', reads: [...new Set(readsOf(n))] };
+  if (isBarrier(n, graph)) return { kind: 'barrier', reads: [...new Set(readsOf(n, graph))] };
   const nodes = chainOf(nid);
   for (let i = nodes.length - 1; ; i--) {
     const m = nodes[i]!;

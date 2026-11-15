@@ -6,14 +6,14 @@
 import type { CommandTable, ToolTable } from '@chromobench/shell';
 import type { Document, EntryBlend, MaskCombine, MaskComponentKind, Params, StageName } from '@chromobench/contract';
 import { Coll, set, type Id, type Mutation } from '@chromobench/values';
-import { pitches } from '@chromobench/contract';
+import { bakeLink, pitches, removeLink, setLinkAmount } from '@chromobench/contract';
 import type { Studio } from '../../../src/studio.ts';
 import { sel } from '../../../src/sel.ts';
 import { findEntry } from '../../../src/model/doc.ts';
 import { maskComponent, type MaskShape, type Pt3 } from '../../../src/model/tools.ts';
 import {
   addComponent, addLayer, blendChoices, componentKinds, deleteEntries, detachMask, dropOn, duplicateEntry, groupEntries, KIND_WORDS, maskGesture,
-  maskOf, newMaskOn, nudgeEntry, opWord, renameEntry, setAmount, setBlend, toggleEntry, ungroup, componentDefaults, formatAmount,
+  maskOf, newMaskOn, nudgeEntry, opWord, renameEntry, setAmount, setBlend, toggleEntry, ungroup, componentDefaults, formatAmount, linkKey,
 } from './model.ts';
 import { selectedIn, STACK_STATE, type StackView } from './state.ts';
 
@@ -103,7 +103,10 @@ export function stackCommands(): CommandTable {
         const fr = frame(ctx);
         const t = target(ctx, id);
         if (!fr || !t) return;
-        if (commit(ctx, fr.f, deleteEntries(fr.d, [t]), `Delete ${nameOf(fr.d, t)}`) && selectedIn(ctx.state) === t) select(ctx, fr.f, null);
+        // a link goes with its siblings in the other stages it touches (one look, one entry per stage)
+        const k = linkKey(fr.d, t);
+        const ms = k ? removeLink(fr.d, k) : deleteEntries(fr.d, [t]);
+        if (commit(ctx, fr.f, ms, `${k ? 'Remove' : 'Delete'} ${nameOf(fr.d, t)}`) && selectedIn(ctx.state) === t) select(ctx, fr.f, null);
       },
     },
     'layer.rename': {
@@ -186,7 +189,10 @@ export function stackCommands(): CommandTable {
       run: (ctx: any, id: Id, a: number) => {
         const fr = frame(ctx);
         const t = target(ctx, id);
-        if (fr && t && Number.isFinite(a)) commit(ctx, fr.f, setAmount(fr.d, t, a), `${nameOf(fr.d, t)} amount ${formatAmount(a)}`);
+        if (!fr || !t || !Number.isFinite(a)) return;
+        // a link: one Amount over every stage it touches (each held to its law)
+        const k = linkKey(fr.d, t);
+        commit(ctx, fr.f, k ? setLinkAmount(fr.d, k, a) : setAmount(fr.d, t, a), `${nameOf(fr.d, t)} amount ${formatAmount(a)}`);
       },
     },
     'layer.blend': {
@@ -201,6 +207,31 @@ export function stackCommands(): CommandTable {
           ctx.toast(words(e), { kind: 'warn' });
         }
       },
+    },
+    'link.bake': {
+      label: 'Bake Link into Layers',
+      enabled: (s: any) => {
+        const d = sel.doc(s);
+        const id = selectedIn(s);
+        return !!(d && id && findEntry(d, id)?.entry.kind === 'link');
+      },
+      why: 'Select a look, a preset or a roll link first',
+      /** the link becomes the plain group it expands to (its source recorded), in every stage it touches */
+      run: (ctx: any, id?: Id) => {
+        const fr = frame(ctx);
+        const t = target(ctx, id);
+        const k = fr && t ? linkKey(fr.d, t) : null;
+        if (!fr || !t || !k) return;
+        try {
+          commit(ctx, fr.f, bakeLink(fr.d, k, studioOf(ctx).links()), `Bake ${nameOf(fr.d, t)}`);
+        } catch (e) {
+          ctx.toast(words(e), { kind: 'warn' });
+        }
+      },
+    },
+    'link.remove': {
+      label: 'Remove Link', palette: false,
+      run: (ctx: any, id?: Id) => ctx.run('layer.delete', id),
     },
     'layer.collapse': {
       label: 'Collapse Group', palette: false,
@@ -287,6 +318,8 @@ function drawn(ctx: any, kind: MaskComponentKind, params: Params): void {
 }
 const shape = (ctx: any, s: MaskShape): void => {
   const [kind, params] = maskComponent(s);
+  // the radial component (a soft ellipse) where the catalogue has it; the hard ellipse before
+  if (kind === 'ellipse' && hasKind('radial')) return drawn(ctx, 'radial' as MaskComponentKind, { ...params, feather: 0.5 });
   drawn(ctx, kind, params);
 };
 
