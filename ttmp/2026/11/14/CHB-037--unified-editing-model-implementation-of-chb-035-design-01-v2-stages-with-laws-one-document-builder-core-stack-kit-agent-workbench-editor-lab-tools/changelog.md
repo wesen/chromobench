@@ -101,3 +101,13 @@ P8a: Editor lab's tools in the engine — composite op set (curve, levels, expos
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p8a/ttmp/2026/11/14/CHB-037--unified-editing-model-implementation-of-chb-035-design-01-v2-stages-with-laws-one-document-builder-core-stack-kit-agent-workbench-editor-lab-tools/diary/11-phase-p8a-ops.md — Phase P8a diary
 
+||||||| b5e8619
+
+## 2026-11-15
+
+P7 links: look functions, presets, bake, rolls on linked media, looks kit on links, sync copy/link, DSL named looks as links, *.cblook.js (commits 33c73c0, 660f5a6, 9c951df, c8f9c4a, 8d7d9c9)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p7/packages/contract/src/links.ts — The link mechanism
+

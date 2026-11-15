@@ -5,12 +5,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canonicalJSON, plan, set } from '@chromobench/values';
-import { compile, edit, Graph, newDocument, type Box, type Document, type Vec3 } from '@chromobench/contract';
+import { compile, edit, Graph, newDocument, resolveLinks, type Box, type Document, type Vec3 } from '@chromobench/contract';
 import { read } from '../../src/index.ts';
 import { openSourceSync, orientedToSensorBox, region } from '@chromobench/ingest';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import {
-  analysePixels, analyseRoll, autoOf, divergence, firstPrintBatch, fragmentOf, matchBatch, newRoll, previewOf, rollTotals, splitTotal, totalOf,
+  analysePixels, analyseRoll, autoOf, divergence, firstPrintBatch, linkFrame, matchBatch, newRoll, previewOf, rollTotals, sharedOf, splitTotal, totalOf,
   type FrameAnalysis, type Roll, type RollAnalysis,
 } from '../../kits/roll/src/index.ts';
 import { OFFSETS, openRoll, physics, tiffOf, type RollStudio } from './fixtures.ts';
@@ -21,9 +21,10 @@ const overlap = (a: Box, b: Box): number => {
   const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
   return ix * iy;
 };
-const entriesOf = (r: RollStudio) => r.ids.map((id) => {
+/** the analysis reads each frame as the compiler sees it: a linked scan through its roll */
+const entriesOf = (r: RollStudio, rolls?: (id: string) => Roll | undefined) => r.ids.map((id) => {
   const e = r.studio.frames.get(id)!;
-  return { id, sha256: e.sha, graph: e.graph, doc: r.studio.doc(id)! };
+  return { id, sha256: e.sha, graph: e.graph, doc: resolveLinks(r.studio.doc(id)!, rolls ? { rolls } : {}) };
 });
 
 describe('roll analysis of a planted 12-frame roll (stage 1)', () => {
@@ -83,7 +84,7 @@ describe('first print and match as batches (stage 2)', () => {
   beforeAll(async () => {
     r = await openRoll(OFFSETS.slice(0, 6));
     const a = await analyseRoll(r.studio.engine, entriesOf(r), physics(), { now: () => 1 });
-    roll = { ...newRoll('roll-1', 'test', r.ids, { ...fragmentOf(recipeOf(r.ids[0]!)!), mode: 'real' }), analysis: a };
+    roll = { ...newRoll('roll-1', 'test', r.ids, sharedOf(recipeOf(r.ids[0]!)!)), analysis: a };
   }, 60_000);
 
   it('the first print writes the rebate box, a real enlarger, time and lights, auto = roll; the base is the film edge, not the holes', async () => {
@@ -186,12 +187,15 @@ describe('divergence (guide §6.1, §11)', () => {
   it('editing the scan flare on one frame marks exactly that frame on exactly that path; analysis writes no document', async () => {
     const r = await openRoll(OFFSETS.slice(0, 3));
     const rec = (f: string) => r.studio.doc(f)!;
-    const roll = newRoll('r', 'r', r.ids, fragmentOf(rec(r.ids[0]!)));
+    const roll = newRoll('r', 'r', r.ids, sharedOf(rec(r.ids[0]!)));
+    // the frames link their scan to the roll: what they share is the roll's, their own fields are overrides
+    for (const f of r.ids) r.studio.commit(f, [linkFrame(roll, rec(f))!], 'Link');
+    expect(rec(r.ids[0]!).stages.scan!.medium).toMatchObject({ link: { roll: 'r' } });
     expect(divergence(roll, rec)).toEqual({});
     r.studio.commit(r.ids[1]!, [set('stages.scan.medium.flare', 1.2)], 'Flare');
     expect(divergence(roll, rec)).toEqual({ 'stages.scan.medium.flare': [r.ids[1]] });
     const hashes = r.ids.map((f) => canonicalJSON(rec(f)));
-    await analyseRoll(r.studio.engine, entriesOf(r), physics());
+    await analyseRoll(r.studio.engine, entriesOf(r, () => roll), physics());
     expect(r.ids.map((f) => canonicalJSON(rec(f)))).toEqual(hashes);
   }, 60_000);
 });

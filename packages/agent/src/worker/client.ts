@@ -14,7 +14,7 @@ import {
   diag, toDiagnostic,
   type AgentMode, type ContextBlock, type Diagnostic, type Engine, type EvalRequest, type EvalResult, type SourceInfo,
 } from '@chromobench/contract';
-import { historyOf, type DslLimits, type LogHost, type Submission } from '@chromobench/dsl';
+import { historyOf, type DslLimits, type DslLinks, type LogHost, type Submission } from '@chromobench/dsl';
 import type { Log, LogEntry } from '@chromobench/values';
 import type { DocsSnapshot, FromWorker, ImagePayload, ToWorker, WorkerLike } from './protocol.ts';
 
@@ -30,6 +30,8 @@ export interface FrameView {
  */
 export interface AgentDocs extends LogHost {
   ids(): string[];
+  /** the rolls and presets the frames' links resolve against (the studio: its state's `roll.rolls`, `looks.presets`) */
+  links?(): DslLinks;
   get(id: string): FrameView | undefined;
   /** calls fn after every change of the log or the mode; returns the unsubscribe function */
   subscribe(fn: () => void): () => void;
@@ -108,7 +110,7 @@ export class DslWorkerClient {
   private running: Running | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private readonly calls = new Map<number, AbortController>();
-  private sent: { log: Log; mode: AgentMode; frames: string } | null = null;
+  private sent: { log: Log; mode: AgentMode; frames: string; links: DslLinks | undefined } | null = null;
   private resetNote: Diagnostic | null = null;
   private disposed = false;
   private readonly graceMs: number;
@@ -248,9 +250,10 @@ export class DslWorkerClient {
       if (f) frames[id] = { source: f.info, ...(f.name !== undefined ? { name: f.name } : {}) };
     }
     const key = JSON.stringify(Object.entries(frames).map(([id, f]) => [id, f.source.sha256, f.name ?? '']));
-    if (this.sent && this.sent.log === log && this.sent.mode === mode && this.sent.frames === key) return;
-    this.post({ t: 'docs', snapshot: { log: log.toJSON(), mode, frames } });
-    this.sent = { log, mode, frames: key };
+    const links = d.links?.();
+    if (this.sent && this.sent.log === log && this.sent.mode === mode && this.sent.frames === key && this.sent.links === links) return;
+    this.post({ t: 'docs', snapshot: { log: log.toJSON(), mode, frames, ...(links ? { links } : {}) } });
+    this.sent = { log, mode, frames: key, links };
   }
 
   /** Runs one eval in the worker; never rejects (failures come back as EvalResult.error). */

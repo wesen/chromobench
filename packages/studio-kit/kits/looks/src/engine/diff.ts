@@ -38,6 +38,7 @@ export function labelOf(path: string, doc?: Document | null): string {
   if (LABELS[path]) return LABELS[path]!;
   const s = path.split('.');
   const e = doc && s[0] && !path.startsWith('stages.') && !path.startsWith('geometry.') && !path.startsWith('output.') && !path.startsWith('masks.') ? layerAt(doc, s[0]) : undefined;
+  if (e?.kind === 'link') return `look ${e.name}${s.length > 1 ? ` ${s.slice(s[1] === 'params' ? 2 : 1).join('.')}` : ''}`;
   if (e) return `${e.kind === 'layer' ? e.op : 'group'} ${s[0]}${s.length > 1 ? ` ${s.slice(s[1] === 'params' ? 2 : 1).join('.')}` : ''}`.trim();
   return s.slice(-2).join(' ').replace(/_/g, ' ');
 }
@@ -160,6 +161,16 @@ export function diffDocs(a: Document, b: Document, o: DiffOptions = {}): DiffEnt
     const y = lb.get(id);
     if (!x || !y) {
       out.push(describeChange(id, x, y, o.groups, y ? b : a));
+      continue;
+    }
+    if (x.kind === 'link' && y.kind === 'link') {
+      // a look as one unit: its Amount (percent), its parameters, on or off
+      if (x.amount !== y.amount) out.push({ path: `${id}.amount`, a: x.amount, b: y.amount, unit: null, label: labelOf(id, b), group: groupOf(id, o.groups, b), short: `${Math.round(x.amount * 100)} → ${Math.round(y.amount * 100)} %`, shown: `${labelOf(id, b)} ${Math.round(x.amount * 100)} → ${Math.round(y.amount * 100)} %` });
+      if (x.enabled !== y.enabled) out.push({ path: `${id}.enabled`, a: x.enabled, b: y.enabled, unit: null, label: labelOf(id, b), group: groupOf(id, o.groups, b), short: y.enabled ? 'on' : 'off', shown: `${labelOf(id, b)} ${y.enabled ? 'on' : 'off'}` });
+      for (const p of new Set([...Object.keys(x.params), ...Object.keys(y.params)])) {
+        if (canonicalJSON(x.params[p] ?? null) === canonicalJSON(y.params[p] ?? null)) continue;
+        out.push({ path: `${id}.params.${p}`, a: x.params[p], b: y.params[p], unit: null, label: `${labelOf(id, b)} ${p}`, group: groupOf(id, o.groups, b), short: `${str(x.params[p])} → ${str(y.params[p])}`, shown: `${labelOf(id, b)} ${p} ${str(x.params[p])} → ${str(y.params[p])}` });
+      }
       continue;
     }
     if (x.kind !== 'layer' || y.kind !== 'layer' || x.op !== y.op) {

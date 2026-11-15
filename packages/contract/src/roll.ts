@@ -1,7 +1,8 @@
 // The roll record (CHB-020 §6.2; contract 1.0, design §27): one per roll of film, persisted as `roll.json` beside the
 // frames and in the catalog. A roll holds partial media and stacks (the scanner and stock of all its scans, a shared
 // base, a shared dust group); each frame's media and link entries name it (`{ link: { roll }, overrides }`), so a
-// roll change reaches every frame that has not overridden it, and "divergence from the roll" is the overrides list.
+// roll change reaches every frame that has not overridden it, and "divergence from the roll" is the overrides list
+// (links.ts: linkMedium, divergence, followLink).
 import { Coll, isPlainObject, type JsonObject } from '@chromobench/values';
 import { STAGE_NAMES, type Entry, type StageName } from './document.ts';
 import { diag, type Diagnostic } from './errors.ts';

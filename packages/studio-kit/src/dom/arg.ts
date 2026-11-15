@@ -13,7 +13,7 @@ import type { Document } from '@chromobench/contract';
 import { argModel, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
-import { exposureStep, isInert, read, storePath, TIME_PATH } from '../model/doc.ts';
+import { exposureStep, isInert, linksOf, read, storePath, TIME_PATH } from '../model/doc.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import { sel } from '../sel.ts';
 
@@ -67,7 +67,7 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
     const d = f ? (s.docs?.[f] as Document | undefined) : undefined;
     // inert: time, aperture and magnification while the enlarger is normalised (CHB-031 F17); na: a path this
     // frame's kind does not have (a scanner for a photo, F23)
-    const v = read(d, model.path);
+    const v = read(d, model.path, linksOf(s));
     return { f, v, inert: isInert(d, model.path), na: !!d && v === undefined };
   };
   const initialOf = (f: string): unknown => (st.log.has(f) ? read(st.log.initial<Document>(f), model.path) : undefined);

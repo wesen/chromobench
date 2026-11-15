@@ -4,7 +4,7 @@
 // keys (content addressing) and the shell's queue and thumbnail cache dedupe by node. The engine is injected
 // (MockEngine in tests and the dev host; the reference engine and the GPU engine in the studio).
 import { set } from '@chromobench/values';
-import { compile, cutNode, documentKind, edit, fail, type Box, type Document, type Engine, type ImageInfo, type ImageResult, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
+import { compile, cutNode, documentKind, edit, fail, type Box, type Document, type Engine, type ImageInfo, type ImageResult, type LinkContext, type Node, type OutputSpaceId, type SampleData } from '@chromobench/contract';
 import { strip, type PresentImage, type RenderBridge, type RenderTarget, type Rendered } from '@chromobench/shell';
 import { cutOf, effectiveDoc, isImageHandle, type ImageHandle } from '../handles.ts';
 import { bandBoxes, stripBase, stripMutation, stripValues, type StripVary } from '../model/tools.ts';
@@ -68,13 +68,16 @@ export async function evaluateBands(engine: Engine, bands: readonly Pick<Band, '
   return { result, data: out };
 }
 
+const NO_LINKS: LinkContext = Object.freeze({});
+
 export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   readonly id = 'chromobench';
   readonly frames: Frames;
   displaySpace: OutputSpaceId;
   /** evaluations started, by shown node id (CHB-009's chainRuns, for tests and the lab's node panel) */
   readonly runs = new Map<string, number>();
-  private readonly cache = new WeakMap<Document, Map<string, Lowered>>();
+  /** lowered handles per link context (rolls, presets: a roll change re-lowers every frame) and per document */
+  private readonly cache = new WeakMap<LinkContext, WeakMap<Document, Map<string, Lowered>>>();
   /**
    * Adaptive drafts (CHB-027, F4): when set, a draft pass (a slider drag) is sized to take about this many ms on
    * this engine, from the speed measured on earlier renders, between draftMinPixels and the viewport's draft
@@ -149,17 +152,22 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
   initialDoc: ((f: string) => Document | undefined) | null = null;
   /** the log's current document of a frame, without drafts (the Studio sets it) */
   committedDoc: ((f: string) => Document | undefined) | null = null;
+  /** the shared data links resolve against (the Studio sets it: linksOf(state)); one object while it is unchanged */
+  links: (() => LinkContext) | null = null;
 
   lower(h: ImageHandle): Lowered {
     const e = this.entry(h);
     const base = this.docOf(h);
     const k = `${h.what}|${JSON.stringify(h.args)}|${this.displaySpace}`;
-    let per = this.cache.get(base);
+    const links = this.links?.() ?? NO_LINKS;
+    let docs = this.cache.get(links);
+    if (!docs) this.cache.set(links, (docs = new WeakMap()));
+    let per = docs.get(base);
     const hit = per?.get(k);
     if (hit) return hit;
     const d = effectiveDoc(h, base);
     const g = e.graph;
-    const c = compile(d, g, { displaySpace: this.displaySpace });
+    const c = compile(d, g, { displaySpace: this.displaySpace, links });
     const top = c.display;
     const I = (op: string, inputs: string[], args: Record<string, unknown>): Node => g.intern(op, inputs, args).node;
     const kind = documentKind(d);
@@ -200,14 +208,14 @@ export class FrameRenderBridge implements RenderBridge<ImageHandle> {
         const boxes = bandBoxes(values.length, info.width, info.height);
         const bands = values.map((value, i) => {
           const m = stripMutation(a.vary, d, value);
-          const band = compile(edit(d, [set(m.path, m.value)]).doc, g, { displaySpace: this.displaySpace });
+          const band = compile(edit(d, [set(m.path, m.value)]).doc, g, { displaySpace: this.displaySpace, links });
           return { value, box: boxes[i]!, node: band.display, named: cutNode(band, 'print') };
         });
         out = { named: bands[0]!.named, shown: bands[0]!.node, bands: bands.map(({ value, box, node }) => ({ value, box, node })) };
         break;
       }
     }
-    if (!per) this.cache.set(base, (per = new Map()));
+    if (!per) docs.set(base, (per = new Map()));
     per.set(k, out);
     return out;
   }

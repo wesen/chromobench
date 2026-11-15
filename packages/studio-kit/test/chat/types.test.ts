@@ -1,17 +1,13 @@
-// The chat and looks kits meet the agent and the DSL structurally (the kits import neither): the agent's
-// ChatSession is a ChatSessionLike, and the looks kit's provider is the DSL's LooksProvider. Type-only imports,
-// so the test file loads nothing of either package at run time; the typecheck is the test.
+// The chat kit meets the agent structurally (the kit imports neither the agent nor the DSL): the agent's ChatSession
+// is a ChatSessionLike. Type-only imports, so the test file loads nothing of the package at run time; the typecheck is
+// the test. (CHB-037 P7: the looks kit no longer provides the DSL's named looks: they are links the DSL builds itself.)
 import { describe, expect, it } from 'vitest';
 import type { ChatSession } from '@chromobench/agent';
-import type { LooksProvider } from '@chromobench/dsl';
 import type { ChatSessionLike } from '../../kits/chat/src/kit.ts';
-import type { LooksProviderShape } from '../../kits/looks/src/engine/provider.ts';
 
-describe('the kits fit the agent and the DSL', () => {
-  it('ChatSession is a ChatSessionLike; the looks provider is a LooksProvider', () => {
+describe('the chat kit fits the agent', () => {
+  it('ChatSession is a ChatSessionLike', () => {
     const chat = (s: ChatSession): ChatSessionLike => s;
-    const looks = (p: LooksProviderShape): LooksProvider => p;
     expect(typeof chat).toBe('function');
-    expect(typeof looks).toBe('function');
   });
 });

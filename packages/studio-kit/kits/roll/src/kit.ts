@@ -14,23 +14,27 @@
 // with the values batch builder (`plan`) as one step of the log, together with the roll record it changes (an edit
 // of the main document in the same batch): one undo takes the frames and the roll's status back together. The
 // current roll is the view tier (a selection, not an edit).
+//
+// CHB-037 P7 (links): the roll record holds the scan fields its frames share (`media.scan`); each frame's scan medium
+// links to it, so a roll setting (the stock, the measured base and veil) is one edit of the roll that every frame
+// follows unless it overrides the field; the overrides are the divergence ("overridden on 2 frames").
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonicalJSON, plan, set, transaction } from '@chromobench/values';
-import { edit, type Diagnostic, type Document, type Vec3 } from '@chromobench/contract';
+import { canonicalJSON, plan, set, transaction, type Mutation } from '@chromobench/values';
+import { edit, followLink, resolveLinks, storedPath, type Diagnostic, type Document, type Vec3 } from '@chromobench/contract';
 import type { Ck, NodeData } from '@chromobench/shell';
 import { MAIN, slot, strip, type FormSpec } from '@chromobench/shell';
 import type { Cb } from '../../../src/cb.ts';
 import { sel, type CatalogFrame } from '../../../src/sel.ts';
 import { frameRef } from '../../../src/handles.ts';
-import { FILTRATION_PATH, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, read, storePath, TIME_PATH } from '../../../src/model/doc.ts';
+import { FILTRATION_PATH, LIGHTS_PATH, lightsOf, linksOf, mainExposure, read, TIME_PATH } from '../../../src/model/doc.ts';
 import { stockName } from '../../../src/model/names.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { analyseRoll } from './engine/analyse.ts';
 import { plain, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
-import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, SHARED_PATHS } from './engine/constants.ts';
+import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, rollField, SHARED_PATHS } from './engine/constants.ts';
 import { autoOf, clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
-import { baseOfVeilFree, divergence, flareOfVeil, fragmentGet, fragmentOf, fragmentWith, newRoll, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
+import { baseOfVeilFree, diverging, flareOfVeil, linkFrame, newRoll, rollValue, sharedOf, withRollValue, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
 
 export interface RollDoc {
   rolls: Record<string, Roll>;
@@ -115,15 +119,17 @@ export function rollTag(s: any, f: FrameId): string {
   if (!roll) return '';
   return `roll ${d.order.indexOf(roll.id) + 1}${roll.reference === f ? ' ★' : ''}${r && divergenceOf(roll, f, r) ? ' ≠' : ''}`;
 }
-const divergenceOf = (roll: Roll, f: FrameId, r: Document): boolean => Object.keys(divergence({ fragment: roll.fragment, frames: [f] }, () => r)).length > 0;
+const divergenceOf = (roll: Roll, _f: FrameId, r: Document): boolean => diverging(roll, strip(r)).length > 0;
 
 const ROLL_DOCS = `## cb.kits.roll
 The roll workflow (CHB-020): a roll record per piece of film (the main document's slice \`roll\`), measured once — base
 (median of the frames' rebates), veil read on the holder, σ and class shares at the analysis size, stock ranking —
 then an automatic first print of every frame (one \`by: auto\` batch, one undo step), the contact sheet and cull, and
 "print the roll like this frame": integrate-to-grey with the reference frame as the aim, previewed on the sheet,
-approved on one card, applied as one batch (one undo step across the frames' documents). Settings shared by the roll
-are copied into every document; a frame diverges when its value differs (computed, never stored).`;
+approved on one card, applied as one batch (one undo step across the frames' documents). What the roll shares (the
+scan's scanner, stock, format, flat, open gate, veil and base) is held by the roll record; every frame's scan links
+to it, so one roll edit reaches every frame that has not overridden the field, and a frame's overrides are its
+divergence (Reset to Roll drops one).`;
 
 export function createRollKit(ck: Ck, cb: Cb) {
   const node = (form: string, props: Record<string, unknown> = {}): any => ck.node(form, props, []);
@@ -145,7 +151,7 @@ export function createRollKit(ck: Ck, cb: Cb) {
    * apply a batch: staleness first (E_STALE unless forced), then the values batch builder over the frames (every
    * transaction carries the batch's id) and one commit: one step of the log
    */
-  function applyBatch(ctx: any, b: MutationBatch, o: { force?: boolean; roll?: Roll } = {}): Diagnostic[] | true {
+  function applyBatch(ctx: any, b: MutationBatch, o: { force?: boolean; roll?: Roll; main?: Mutation[] } = {}): Diagnostic[] | true {
     const stale = staleOf(b, recipeOf(ctx));
     if (stale.length && !o.force) return staleDiagnostics(stale);
     const studio = studioOf(ctx);
@@ -154,7 +160,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
     const source = { kind: 'roll', batch: b.kind, why: b.why };
     const batch = plan(studio.log.targets<Document>([...by.keys()].filter((f) => studio.log.has(f))), (_d, f) => by.get(f) ?? null, { id, label: b.label, by: b.by, source });
     // the roll record the batch changes (status, match) goes into the same step
-    const rollEdit = o.roll ? [{ doc: MAIN, tx: transaction({ id: `${id}:${MAIN}`, label: b.label, by: b.by, source, batch: id, mutations: [set(`roll.rolls.${o.roll.id}`, plain(o.roll))] }) }] : [];
+    const main = [...(o.roll ? [set(`roll.rolls.${o.roll.id}`, plain(o.roll))] : []), ...(o.main ?? [])];
+    const rollEdit = main.length ? [{ doc: MAIN, tx: transaction({ id: `${id}:${MAIN}`, label: b.label, by: b.by, source, batch: id, mutations: main }) }] : [];
     if (batch.edits.length || rollEdit.length) studio.change((log) => log.commit({ ...batch, edits: [...batch.edits, ...rollEdit] }), b.label);
     return true;
   }
@@ -168,7 +175,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
       .map((f) => studio.frames.get(f))
       .filter((e): e is NonNullable<typeof e> => !!e)
       .filter((e) => !!studio.doc(e.id))
-      .map((e) => ({ id: e.id, sha256: e.sha, graph: e.graph, doc: studio.doc(e.id)! }));
+      // the analysis reads each frame as the compiler sees it: its scan through the roll's link
+      .map((e) => ({ id: e.id, sha256: e.sha, graph: e.graph, doc: resolveLinks(studio.doc(e.id)!, linksOf(ctx.state)) }));
     setView(ctx, 'progress', { done: 0, total: entries.length, frame: null });
     setView(ctx, 'error', null);
     try {
@@ -179,12 +187,13 @@ export function createRollKit(ck: Ck, cb: Cb) {
         now: () => ctx.rt.clock?.now?.() ?? Date.now(),
       });
       const top = analysis.ranking?.[0]?.stock;
-      const next: Roll = { ...rollOf(ctx.state, roll.id)!, analysis, status: 'analysed' };
-      if (top && !fragmentGet(next.fragment, 'stages.scan.medium.stock')) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.stock', top);
-      // the measured base and veil are scan medium settings, not pixel edits: baseT and per-channel flare
+      let next: Roll = { ...rollOf(ctx.state, roll.id)!, analysis, status: 'analysed' };
+      if (top && !rollValue(next, 'stock')) next = withRollValue(next, 'stock', top);
+      // the measured base and veil are the roll's scan settings, not pixel edits: baseT and per-channel flare; every
+      // frame linked to the roll follows them (a frame that overrides one keeps its own)
       const bs = analysis.base;
-      if (bs.T) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.baseT', baseOfVeilFree(bs.T, bs.veil));
-      if (bs.veil) next.fragment = fragmentWith(next.fragment, 'stages.scan.medium.flare', flareOfVeil(bs.veil));
+      if (bs.T) next = withRollValue(next, 'baseT', baseOfVeilFree(bs.T, bs.veil));
+      if (bs.veil) next = withRollValue(next, 'flare', flareOfVeil(bs.veil));
       for (const d of analysis.diagnostics) ctx.rt.diagnostics.info(d.code, d.message, { runtime: true });
       // the analysis is a step of its own (by auto), so undoing the first print keeps what was measured
       writeRoll(ctx, next, `Analyse ${next.label}`);
@@ -198,8 +207,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
     }
   }
 
-  /** the roll's own bookkeeping once its first print is in: a real enlarger for the roll, status first-printed */
-  const firstPrinted = (cur: Roll): Roll => ({ ...cur, fragment: fragmentWith(cur.fragment, MODE_PATH, 'real'), status: 'first-printed' });
+  /** the roll's own bookkeeping once its first print is in */
+  const firstPrinted = (cur: Roll): Roll => ({ ...cur, status: 'first-printed' });
   /** the frames that have no first print yet (the automatic one on a new roll), or `only` */
   function planFirstPrint(ctx: any, only?: FrameId[], of?: Roll): MutationBatch | null {
     const roll = of ?? rollOf(ctx.state);
@@ -293,14 +302,19 @@ export function createRollKit(ck: Ck, cb: Cb) {
           if (!first) return null;
           const n = Object.keys(ctx.state.roll?.rolls ?? {}).length + 1;
           const id = `roll-${n}`;
-          const fragment = fragmentOf(first);
-          const stock = read(first, 'stages.scan.medium.stock');
+          const links = linksOf(ctx.state);
+          const shared = sharedOf(first, links);
+          const stock = shared['stock'];
           const label = o.label ?? `${typeof stock === 'string' ? stockName(stock) : 'Roll'} · ${frames.length} frames`;
-          ctx.tx(`New roll "${label}"`, (t: any) => {
-            t.$set(['roll', 'rolls', id], newRoll(id, label, frames, fragment));
-            t.$set(['roll', 'order'], [...(ctx.state.roll?.order ?? []), id]);
-            t.$set(['roll', 'current'], id);
-          });
+          const roll = newRoll(id, label, frames, shared);
+          // the roll and every frame's link to it: one step (the frames keep their own fields as overrides). By 'auto':
+          // linking changes no print, so a frame stays "unedited" for the looks and the agent
+          const b: MutationBatch = {
+            id: `${ROLL_TX}new-${id}`, kind: 'setup', label: `New roll "${label}"`, why: `${frames.length} frames share ${Object.keys(shared).join(', ') || 'nothing yet'}`, by: 'auto', skipped: [],
+            frames: frames.map((f) => ({ f, d: recipeOf(ctx)(f) })).map(({ f, d }) => ({ frame: f, mutations: d ? [linkFrame(roll, strip(d), links)].filter((m): m is Mutation => !!m) : [], expect: {} })),
+          };
+          applyBatch(ctx, b, { force: true, roll, main: [set('roll.order', [...plain(ctx.state.roll?.order ?? []), id])] });
+          ctx.rt.store.writeView([{ path: ['roll', 'current'], value: id }]);
           return o.analyse === false ? id : analyse(ctx, { firstPrint: true }).then(() => id);
         },
       },
@@ -408,14 +422,17 @@ export function createRollKit(ck: Ck, cb: Cb) {
         run: (ctx: any, path: string, v: unknown) => {
           const roll = rollOf(ctx.state)!;
           const value = plain(v);
-          // the roll's value and every frame's copy in one transaction: one undo step
-          ctx.tx(`Roll: ${path}`, (t: any) => {
-            t.$set(['roll', 'rolls', roll.id, 'fragment'], fragmentWith(plain(roll.fragment), path, value));
-            for (const f of roll.frames) {
-              const d = recipeOf(ctx)(f);
-              if (d && read(d, path) !== undefined && canonicalJSON(read(d, path)) !== canonicalJSON(value)) t.$set(storePath(f, d, path), value);
-            }
+          const field = rollField(path);
+          const docs = roll.frames.map((f) => ({ f, d: recipeOf(ctx)(f) })).filter((x): x is { f: string; d: Document } => !!x.d).map((x) => ({ ...x, d: strip(x.d) }));
+          // a roll field: the roll's value, and every frame follows it again (its override goes); any other setting:
+          // copied to every frame of the roll (a sync by copy). One step either way.
+          const frames = docs.map(({ f, d }) => {
+            if (field) return { frame: f, mutations: [followLink(d, 'scan', field)].filter((m): m is Mutation => !!m), expect: {} };
+            return read(d, path) !== undefined && canonicalJSON(read(d, path)) !== canonicalJSON(value)
+              ? { frame: f, mutations: [set(storedPath(d, path), value)], expect: {} } : { frame: f, mutations: [], expect: {} };
           });
+          const b: MutationBatch = { id: `${ROLL_TX}set-${roll.id}-${Date.now().toString(36)}`, kind: 'custom', label: `Roll: ${path}`, why: field ? `the roll's ${field}, followed by every frame` : `${path} copied to the roll's frames`, by: 'user', frames, skipped: [] };
+          applyBatch(ctx, b, { force: true, ...(field ? { roll: withRollValue(roll, field, value) } : {}) });
         },
       },
       'roll.applyToRoll': {
@@ -425,7 +442,21 @@ export function createRollKit(ck: Ck, cb: Cb) {
         run: (ctx: any, path: string) => {
           const f = sel.current(ctx.state);
           const r = f ? recipeOf(ctx)(f) : undefined;
-          if (r) ctx.run('roll.setShared', path, read(r, path));
+          if (r) ctx.run('roll.setShared', path, read(r, path, linksOf(ctx.state)));
+        },
+      },
+      'roll.followRoll': {
+        label: 'Reset to the Roll',
+        palette: false,
+        ...hasRoll,
+        // the selected frame drops its own value of a roll field and follows the roll again (its divergence goes)
+        run: (ctx: any, path: string) => {
+          const f = sel.current(ctx.state);
+          const r = f ? recipeOf(ctx)(f) : undefined;
+          const field = rollField(path);
+          const m = r && field ? followLink(strip(r), 'scan', field) : null;
+          if (!f || !m) return null;
+          return applyBatch(ctx, { id: `${ROLL_TX}follow-${f}-${Date.now().toString(36)}`, kind: 'custom', label: `Reset ${field} to the roll`, why: `${f} follows the roll's ${field} again`, by: 'user', frames: [{ frame: f, mutations: [m], expect: {} }], skipped: [] }, { force: true });
         },
       },
       'roll.contact.mode': {

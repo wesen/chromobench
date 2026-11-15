@@ -1,21 +1,14 @@
-// The roll as data (guide §6.1–6.2). A roll record (the contract's Roll) lives in the main document's slice `roll`
-// (its changes are steps of the log, with the batches that make them); documents hold plain copies of the shared
-// settings (the roll's `fragment`, by key: sharedKey(path)), and divergence is computed, never stored. The contract's `media` and
-// `stacks` stay empty until phase 7 makes the shared settings a roll link.
-import { canonicalJSON } from '@chromobench/values';
-import { type Box, type Roll as ContractRoll, type Diagnostic, type Document, type RollStatus, type Vec3 } from '@chromobench/contract';
+// The roll as data (guide §6.1–6.2; CHB-037 P7: links). A roll record (the contract's Roll) lives in the main
+// document's slice `roll` (its changes are steps of the log, with the batches that make them). It holds what the
+// frames share — the scan medium's roll fields (`media.scan`) — and each frame's scan medium links to it
+// (`{ link: { roll }, overrides }`): a roll change reaches every frame that has not overridden it, and divergence is
+// the frames' overrides of roll fields, read directly (never computed by comparing copies).
+import type { JsonObject, Mutation } from '@chromobench/values';
+import { divergence as overridden, isLinked, linkMedium, type Box, type Roll as ContractRoll, type Diagnostic, type Document, type LinkContext, type RollStatus, type Vec3 } from '@chromobench/contract';
 import { read } from '../../../../src/model/doc.ts';
-import { SHARED_PATHS, sharedKey, type SharedKey, type SharedPath } from './constants.ts';
+import { ROLL_FIELDS, SHARED_PATHS, type RollField, type SharedPath } from './constants.ts';
 
 export type FrameId = string;
-/** The shared settings of a roll, by key (`stock`, `baseT`; sharedKey(path)). */
-export type RollFragment = Partial<Record<SharedKey, unknown>>;
-/** A shared path's value in a fragment (undefined: the roll does not set it). */
-export const fragmentGet = (f: RollFragment, path: SharedPath | string): unknown => f[sharedKey(path)];
-/** The fragment with a shared path set. */
-export const fragmentWith = (f: RollFragment, path: SharedPath | string, v: unknown): RollFragment => ({ ...f, [sharedKey(path)]: v });
-/** The fragment as [path, value] pairs, in SHARED_PATHS order. */
-export const fragmentEntries = (f: RollFragment): [SharedPath, unknown][] => SHARED_PATHS.filter((p) => sharedKey(p) in f).map((p) => [p, f[sharedKey(p)]]);
 
 // ── what the injected physics returns (structurally ingest's FilmLayout / RollBase, core's StockRank) ──
 export interface LayoutLike {
@@ -116,38 +109,53 @@ export interface RollAnalysis {
   diagnostics: Diagnostic[];
 }
 
-/** The contract's roll record (CHB-020 R6) with the kit's analysis and its shared fragment. */
+/** The contract's roll record (CHB-020 R6) with the kit's analysis. */
 export type { RollStatus };
-export type Roll = ContractRoll<RollAnalysis> & { fragment: RollFragment };
+export type Roll = ContractRoll<RollAnalysis>;
 
-export const newRoll = (id: string, label: string, frames: FrameId[], fragment: RollFragment = {}): Roll => ({
-  id, label, frames, media: {}, stacks: {}, fragment, analysis: null, reference: null, match: null, status: 'imported',
+/** A new roll sharing these scan fields (`media.scan`); no shared stacks. */
+export const newRoll = (id: string, label: string, frames: FrameId[], scan: JsonObject = {}): Roll => ({
+  id, label, frames, media: Object.keys(scan).length ? { scan } : {}, stacks: {}, analysis: null, reference: null, match: null, status: 'imported',
 });
 
-/** The shared fragment as one document has it (the roll's starting point when it is created). */
-export function fragmentOf(d: Document): RollFragment {
-  const f: RollFragment = {};
-  for (const p of SHARED_PATHS) {
-    const v = read(d, p);
-    if (v !== undefined) f[sharedKey(p)] = JSON.parse(JSON.stringify(v));
+/** The roll fields of a frame's scan (the roll's starting point when it is created); {} for a camera file. */
+export function sharedOf(d: Document, links?: LinkContext): JsonObject {
+  const out: Record<string, unknown> = {};
+  if (!d.stages.scan) return out as JsonObject;
+  for (const f of ROLL_FIELDS) {
+    const v = read(d, `stages.scan.medium.${f}`, links);
+    if (v !== undefined) out[f] = JSON.parse(JSON.stringify(v));
   }
-  return f;
+  return out as JsonObject;
 }
 
-/** Shared paths on which a frame's document differs from the roll's value (computed, not stored). */
-export function diverging(roll: Pick<Roll, 'fragment'>, d: Document): SharedPath[] {
-  const out: SharedPath[] = [];
-  for (const p of SHARED_PATHS) {
-    if (!(sharedKey(p) in roll.fragment)) continue;
-    const v = read(d, p);
-    if (v === undefined) continue; // a path this kind of frame does not have (a scan setting on a photo)
-    if (canonicalJSON(v ?? null) !== canonicalJSON(fragmentGet(roll.fragment, p) ?? null)) out.push(p);
-  }
-  return out;
+/** The roll's value of a field (undefined: the roll does not share it). */
+export const rollValue = (roll: Pick<Roll, 'media'>, f: RollField): unknown => (roll.media.scan as JsonObject | undefined)?.[f];
+/** The roll with a shared field set. */
+export const withRollValue = (roll: Roll, f: RollField, v: unknown): Roll => ({ ...roll, media: { ...roll.media, scan: { ...(roll.media.scan ?? {}), [f]: v as JsonObject[string] } } });
+
+/** The mutation that links a frame's scan medium to the roll (its own fields and departures stay as overrides). */
+export function linkFrame(roll: Pick<Roll, 'id' | 'media'>, d: Document, links?: LinkContext): Mutation | null {
+  if (!d.stages.scan || !roll.media.scan) return null;
+  const m = d.stages.scan.medium;
+  if (isLinked(m) && 'roll' in m.link && m.link.roll === roll.id) return null;
+  return linkMedium(d, 'scan', { roll: roll.id }, roll.media.scan, links);
 }
 
-/** For each shared path, the frames that diverge on it ("base overridden on 2 frames"). */
-export function divergence(roll: Pick<Roll, 'fragment' | 'frames'>, docOf: (f: FrameId) => Document | undefined): Partial<Record<SharedPath, FrameId[]>> {
+/** The roll a frame's scan links to, or null. */
+export function linkedRoll(d: Document | undefined): string | null {
+  const m = d?.stages.scan?.medium;
+  return isLinked(m) && 'roll' in m.link ? m.link.roll : null;
+}
+
+/** Shared paths a frame overrides (its divergence from the roll; read from its overrides, not computed). */
+export function diverging(roll: Pick<Roll, 'id' | 'media'>, d: Document): SharedPath[] {
+  if (linkedRoll(d) !== roll.id) return [];
+  return overridden(d, 'scan', roll.media.scan ?? {}).map((f) => `stages.scan.medium.${f}` as SharedPath).filter((p) => SHARED_PATHS.includes(p));
+}
+
+/** For each shared path, the frames that override it ("base overridden on 2 frames"). */
+export function divergence(roll: Pick<Roll, 'id' | 'media' | 'frames'>, docOf: (f: FrameId) => Document | undefined): Partial<Record<SharedPath, FrameId[]>> {
   const out: Partial<Record<SharedPath, FrameId[]>> = {};
   for (const f of roll.frames) {
     const d = docOf(f);

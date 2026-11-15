@@ -83,10 +83,23 @@ const amount = form('cb-looks-amount', (el, v, m) => {
   run(m, r, 'looks.applyToRoll');
   const lib = btn(`Library (${v.library})…`, '', { id: 'looks-apply-library' });
   run(m, lib, 'looks.applyToLibrary');
-  const from = h('select', { 'aria-label': 'Amount 0 means', id: 'looks-from' }) as HTMLSelectElement;
-  for (const [x, label] of [['current', '0 % = this frame'], ['defaults', '0 % = defaults']]) from.append(h('option', { value: x, text: label, ...(x === v.from ? { selected: true } : {}) }));
-  listen(m.scope, from, 'change', () => void m.rt.runCommand('looks.from', null, from.value));
-  el.append(h('div', { class: 'cb-looks-actions' }, a, r, lib), from);
+  el.append(h('div', { class: 'cb-looks-actions' }, a, r, lib));
+  // the frame's looks: one Amount each (over every stage the look touches), bake into plain layers, remove
+  if (v.applied?.length) {
+    const ul = h('ul', { class: 'cb-looks-applied', id: 'looks-applied' });
+    for (const x of v.applied) {
+      const pctOut = h('span', { class: 'cb-looks-value', text: `${x.pct} %` });
+      const range = h('input', { type: 'range', min: '0', max: x.stages.includes('darkroom') ? '200' : '100', step: '5', value: String(x.pct), 'aria-label': `${x.name} amount` }) as HTMLInputElement;
+      listen(m.scope, range, 'input', () => void (pctOut.textContent = `${range.value} %`));
+      listen(m.scope, range, 'change', () => void m.rt.runCommand('looks.setAmount', null, x.key, Number(range.value)));
+      const bake = btn('Bake', '', { 'aria-label': `Bake ${x.name}`, title: 'Keep the look as plain layers (detached from the look)' });
+      run(m, bake, 'looks.bake', x.key);
+      const del = btn('Remove', 'reject', { 'aria-label': `Remove ${x.name}` });
+      run(m, del, 'looks.remove', x.key);
+      ul.append(h('li', { 'data-look': x.key }, h('strong', { text: x.name }), h('span', { class: 'cb-dim', text: ` · ${x.stages.join(' + ')}` }), h('label', { class: 'cb-looks-amount-row' }, range, ' ', pctOut), h('div', { class: 'cb-looks-actions' }, bake, del)));
+    }
+    el.append(h('div', { class: 'cb-dim', text: 'On this frame' }), ul);
+  }
 });
 
 const diffForm = form('cb-looks-diff', (el, v) => {
@@ -178,20 +191,28 @@ const groups = form('cb-looks-groups', (el, v, m) => {
     listen(m.scope, box, 'change', () => void m.rt.runCommand('looks.syncGroup', null, g.name));
     el.append(h('label', { class: 'cb-looks-groupbox', 'data-group': g.name }, box, ` ${g.name}`, g.note ? h('span', { class: 'cb-dim', text: ` (${g.note})` }) : null));
   }
+  // sync by copy (values: each frame on its own afterwards) or by link (one preset: the frames stay together)
+  const mode = h('div', { class: 'cb-looks-syncmode', role: 'radiogroup', 'aria-label': 'Sync by' });
+  for (const [x, label] of [['copy', 'Copy values'], ['link', 'Link (stay together)']] as const) {
+    const b = h('input', { type: 'radio', name: 'looks-sync-mode', value: x, 'aria-label': label, ...(v.mode === x ? { checked: true } : {}) }) as HTMLInputElement;
+    listen(m.scope, b, 'change', () => void m.rt.runCommand('looks.syncMode', null, x));
+    mode.append(h('label', {}, b, ` ${label}`));
+  }
   const copy = btn('Copy', '', { id: 'looks-copy' });
   run(m, copy, 'looks.copy');
   const paste = btn('Paste', '', { id: 'looks-paste' });
   run(m, paste, 'looks.paste');
-  const sync = btn('Sync to selection', '', { id: 'looks-sync' });
+  const sync = btn(v.mode === 'link' ? 'Link selection' : 'Sync to selection', '', { id: 'looks-sync' });
   run(m, sync, 'looks.sync');
-  el.append(h('div', { class: 'cb-looks-actions' }, copy, paste, sync));
+  el.append(mode, h('div', { class: 'cb-dim', id: 'looks-sync-says', text: v.mode === 'link' ? 'The selected frames will link one preset made from this frame’s layers: a change to it reaches all of them.' : 'The selected frames get copies of this frame’s values and looks: each is on its own afterwards.' }), h('div', { class: 'cb-looks-actions' }, copy, paste, sync));
+  if (v.clipboard) el.append(h('div', { class: 'cb-dim', id: 'looks-clipboard', text: `Copied from ${v.clipboard.from}: ${v.clipboard.lines.join(', ') || 'nothing'}` }));
 });
 
 const presets = form('cb-looks-presets', (el, v, m) => {
   const save = btn('Save frame as preset', '', { id: 'looks-save-preset', ...(v.frame ? {} : { disabled: true }) });
   run(m, save, 'looks.saveAsPreset');
-  const bake = btn('Save look as preset', '', { id: 'looks-bake' });
-  run(m, bake, 'looks.bake');
+  const bake = btn('Save look as preset', '', { id: 'looks-save-look' });
+  run(m, bake, 'looks.saveLookAsPreset');
   el.append(h('div', { class: 'cb-looks-actions' }, save, bake));
   if (!v.presets.length) return void el.append(empty('No presets of your own yet'));
   const ul = h('ul', { class: 'cb-looks-presets', id: 'looks-presets' });

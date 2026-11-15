@@ -11,9 +11,11 @@ import {
   Coll, getPath, indexOf, isPlainObject, resolvePath, type Id, type Mutation,
 } from '@chromobench/values';
 import {
-  documentKind, getOp, isLinked, layerEntry, newDocument, stagesOf, termSeconds,
-  type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type StageName, type Vec3,
+  documentKind, getOp, isLinked, layerEntry, newDocument, readField, stagesOf, storedPath, termSeconds,
+  type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type LinkContext, type Preset, type Roll,
+  type StageName, type Vec3,
 } from '@chromobench/contract';
+import { strip } from '@chromobench/shell';
 
 export type { Document };
 
@@ -29,19 +31,56 @@ export const DUST = 'dust';
 /** The store's mount: frames are documents at docs.<frameId>. */
 export const DOCS = 'docs';
 
-/** The value at a document path, or undefined when the path does not exist in this document (another kind, an id it lacks). */
-export function read(doc: Document | null | undefined, path: string): unknown {
+/**
+ * The value at a document path, or undefined when the path does not exist in this document (another kind, an id it
+ * lacks). A field of a linked medium (a frame on a roll: `stages.scan.medium.stock`) reads through the link with
+ * `links` (linksOf(state)); without them only the frame's own overrides are known.
+ */
+export function read(doc: Document | null | undefined, path: string, links?: LinkContext): unknown {
   if (!doc) return undefined;
   try {
-    return getPath(doc, path);
+    return links ? readField(doc, path, links) : isLinkedField(doc, path) ? readField(doc, path) : getPath(doc, path);
   } catch {
     return undefined;
   }
 }
+const isLinkedField = (doc: Document, path: string): boolean => storedPath(doc, path) !== path;
 
-/** The physical path of a document path in the document's tree (where the store holds it). Throws E_PATH. */
+/**
+ * The physical path of a document path in the document's tree (where the store holds it). A field of a linked medium
+ * is stored as the frame's override (contract storedPath). Throws E_PATH.
+ */
 export function physical(doc: Document, path: string): (string | number)[] {
-  return [...resolvePath(doc, path, indexOf(doc)).phys];
+  return [...resolvePath(doc, storedPath(doc, path), indexOf(doc)).phys];
+}
+
+/** The shared data of the studio's state that links resolve against, as data (it crosses to the agent's worker). */
+export interface LinkData {
+  rolls?: Readonly<Record<string, Roll>>;
+  presets?: Readonly<Record<string, Preset>>;
+}
+let lastLinks: { data: LinkData; ctx: LinkContext } | null = null;
+/**
+ * The link data of the studio's state (CHB-037 P7): the rolls (the roll kit's `roll.rolls`) and the presets (the
+ * looks kit's `looks.presets`). The same object while both are unchanged.
+ */
+export function linkDataOf(s: any): LinkData { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
+  const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.data;
+  return linkEntry(rolls, presets).data;
+}
+function linkEntry(rolls: Record<string, Roll> | undefined, presets: Record<string, Preset> | undefined): { data: LinkData; ctx: LinkContext } {
+  const data: LinkData = { ...(rolls ? { rolls } : {}), ...(presets ? { presets } : {}) };
+  lastLinks = { data, ctx: { rolls: (id) => rolls?.[id], presets: (id) => presets?.[id] } };
+  return lastLinks;
+}
+/** The links of the studio's state as a LinkContext; the same object while the data is unchanged, so caches hold. */
+export function linksOf(s: any): LinkContext { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rolls = strip(s?.roll?.rolls) as Record<string, Roll> | undefined;
+  const presets = strip(s?.looks?.presets) as Record<string, Preset> | undefined;
+  if (lastLinks && lastLinks.data.rolls === rolls && lastLinks.data.presets === presets) return lastLinks.ctx;
+  return linkEntry(rolls, presets).ctx;
 }
 
 /** The store path of a document path of frame f: ['docs', f, ...physical]. */

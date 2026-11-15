@@ -24,6 +24,6 @@ export const VOCABULARY: readonly VocabEntry[] = Object.freeze([
   { name: 'cb.compare', call: "cb.compare([a, b], 'label')", doc: 'one side-by-side image; each half carries its own numbers' },
   { name: 'cb.testStrip', call: "cb.testStrip(frame, { vary: 'time', steps: 7, step: 1 / 3 })", doc: 'a test strip of the negative; its image carries one reading per band', counted: true },
   { name: 'cb.ringAround', call: 'cb.ringAround(frame, { step_pt: 4 })', doc: 'a 3×3 ring-around; its image carries one reading per cell', counted: true },
-  { name: 'cb.looks', call: "cb.looks.apply(name, params, { amount, to, where, why }) · whatIf(frame, name, params) · diff(a, b) · list()", doc: 'the studio\'s named looks: what-ifs, diffs, one proposal batch over frames', counted: true },
+  { name: 'cb.looks', call: "cb.looks.apply(name, params, { amount, to, where, why }) · whatIf(frame, name, params) · diff(a, b) · bake(link) · list()", doc: 'registered looks and presets as links on the frames: what-ifs, diffs, one proposal batch over frames, bake', counted: true },
   { name: 'units', call: 'units.pt(x) · toPt · stops · toStops · stopsFromTime(t1, t2) · stopsFromFstop(n1, n2)', doc: 'unit conversions; numbers or arrays' },
 ]);

@@ -168,6 +168,8 @@ export function describe(m: Mutation, before: Document, lookup: ModelLookup): st
       const it = m.item as { kind?: string; op?: string; name?: string; params?: { stops?: number; time_s?: number } } | undefined;
       if (m.coll === 'masks') return 'Mask drawn';
       if (m.coll === 'probes') return `Probe ${m.id} placed`;
+      // a look's or a preset's link (CHB-037 P7): one entry per stage it touches
+      if (it?.kind === 'link') return `Added the look ${it.name ?? m.id}`;
       if (it?.kind === 'layer' || it?.kind === 'group') {
         const w = entryWord(it as { kind: string });
         const pr = it.params ?? {};
