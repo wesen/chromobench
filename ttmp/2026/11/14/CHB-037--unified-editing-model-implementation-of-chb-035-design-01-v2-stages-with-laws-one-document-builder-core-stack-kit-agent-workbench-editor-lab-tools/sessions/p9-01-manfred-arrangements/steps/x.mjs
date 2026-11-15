@@ -1,0 +1,1 @@
+export default async ({ page }) => page.evaluate(() => { const d = window.chromobench.doc; return { scene: d.stages.scene, film: d.stages.film?.medium, main: d.stages.darkroom.stack.items.main.params, lights: d.stages.darkroom.stack.items.lights, hist: document.body.innerText.match(/(You|Auto) [^\n]*/g)?.slice(-3) }; });
