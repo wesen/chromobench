@@ -9,13 +9,38 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://apps/studio/src/host/workbench.ts
+      Note: 'The studio''s host adapter: layout dialog, agent looks (commit 5d74cc3)'
+    - Path: repo://apps/studio/src/main.ts
+      Note: switchLayout with a LayoutDef (commit 5d74cc3)
+    - Path: repo://packages/agent/src/worker/client.ts
+      Note: serveWb, the page's wb entries (commit 5d74cc3)
+    - Path: repo://packages/agent/src/worker/server.ts
+      Note: ProxyWorkbench (commit 5d74cc3)
+    - Path: repo://packages/contract/src/eval.ts
+      Note: Show, EvalResult.shows (commit 2c29a21)
+    - Path: repo://packages/dsl/src/prelude/prelude.ts
+      Note: wb and the layout recorder (commit 5d74cc3)
+    - Path: repo://packages/dsl/src/session.ts
+      Note: hostCall, wbAnswer, wb entries in EvalResult.transactions (commit 5d74cc3)
+    - Path: repo://packages/dsl/src/workbench.ts
+      Note: The workbench port and its data types (commit 5d74cc3)
+    - Path: repo://packages/shell/src/app/introspect.ts
+      Note: Command table, controls, reachable commands (commit 2c29a21)
+    - Path: repo://packages/shell/src/core/store.ts
+      Note: Store.acting (commit 2c29a21)
+    - Path: repo://packages/studio-kit/kits/chat/src/workbench.ts
+      Note: studioWorkbench, realizeLayout (commit 5d74cc3)
+    - Path: repo://packages/studio-kit/test/chat/workbench.test.ts
+      Note: The two completeness tests (commit 5d74cc3)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T02:53:16.085904-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary
@@ -356,3 +381,66 @@ proposed in ask mode, and a layout the agent writes, proposed in a dialog, accep
 
 ### Technical details
 - Instructions length after the bullet: under the 4000-character test limit (`docs.test.ts`).
+
+## Step 5: Merging the integration branch (P8b's editors); the checks again; what P9 must check
+
+The integration branch had P8b's editors (curve, levels, HSL bands, grade wheels, mixer, the colour-mask eyedropper,
+the shell's curve and wheel widgets). It merged without a conflict (not even the changelog), and every check passed
+again, the completeness tests included: the editors are inside the stack kit's params panel, whose actions are the
+stack kit's commands and drafts.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Main agent: "Before you finish, merge the integration branch (`git merge
+task/chb-037-unified-model`; the ticket changelog conflicts — keep both sides) and rerun your checks."
+
+**Inferred user intent:** P6b lands on what the other wave-5 phases built.
+
+**Commit (code):** c2da333 — "Merge task/chb-037-unified-model into P6b"
+
+### What I did
+- `git merge task/chb-037-unified-model` (528b537, P8b); `pnpm install --frozen-lockfile --prefer-offline`.
+- `pnpm typecheck` 0 errors; `pnpm lint` ok (187 files colours); `pnpm gen:check` ok (26 files); `pnpm test` →
+  137 files, 3215 passed, 19 skipped.
+- Browser, headless on SwiftShader, ports 5551–5554: `--grep "chat|agent|bridge|workbench"` → 9 passed (14.4 s);
+  `--grep "layout|Layout|interface|arrangement"` (main.ts's switchLayout changed) → 18 passed.
+- Changelog entry, related files, `docmgr doctor --ticket CHB-037` → all checks passed.
+
+### Why
+- The working rules; P8b's editors are new controls on screen, which the completeness test must still accept.
+
+### What worked
+- Everything above.
+
+### What didn't work
+- N/A
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A (merge and checks).
+
+### What warrants a second pair of eyes
+- See Steps 1 and 3 (decisions; the realizer's name walk).
+
+### What should be done in the future
+- **P9**: run the persona session with the assistant asking for "a simpler screen" (CHB-030's acceptance): the agent
+  should find `wb.layouts.build` from the instructions; check that the dialog reads well and that View ▸ Layout
+  returns to a built-in layout; `REAL_GPU=1` runs of the chat spec (the workbench test mounts a layout on the GPU
+  engine).
+- **Main agent / later**: persist agent layouts and agent looks (Step 3); rename the Go hub's wire field `looks`
+  (Step 2); P3b's `apps/studio/src/host/studio-engine.ts` was not touched here.
+- An async command's writes after its first `await` are not covered by `Store.acting` (Step 3).
+
+### Code review instructions
+- `git log --oneline task/chb-037-unified-model..task/chb-037-p6b-workbench`; the commands above.
+
+### Technical details
+- Files outside the listed scope: `apps/studio/src/main.ts` (`switchLayout(v: string | LayoutDef)`, the
+  `layouts` host for the chat), `apps/studio/src/host/lazy-chat.ts` (passes it on), `e2e/chat.spec.ts` (the
+  card's words, the workbench test), `packages/shell/src/core/store.ts` + `store/types.ts` (`Store.acting`, for
+  agent provenance), `packages/shell/src/build/explain.ts` (`module` option), `packages/contract/src/errors.ts`
+  (SHOWS, E_WORKBENCH, E_LAYOUT), `packages/contract/src/index.ts` (1.3.0), `CONTRACT-DECISIONS.md` (CC-022).
