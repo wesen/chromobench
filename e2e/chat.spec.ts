@@ -9,7 +9,7 @@ const FIXTURE = new URL('../fixtures/synthetic/m1-negative-96x64.tif', import.me
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 
 async function boot(page: Page): Promise<void> {
-  await page.goto('/?nosw&engine=mock&variant=classic&fresh');
+  await page.goto('/?nosw&engine=mock&layout=classic&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.setInputFiles('#file', FIXTURE);
   await opened(page);

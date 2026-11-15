@@ -4,7 +4,7 @@
 // an export of a source file (packages/*/src, packages/studio-kit/kits/*/src, apps/*/src) that no other file
 // imports is reported, split into "used in its own file" (could be un-exported), "used by nothing" (dead), and
 // exports imported only by tests/demos. Usage: node tools/scripts/unused-exports.mjs . [--json out.json]
-// Directories outside tsconfig.json (packages/gpu/parity-page, packages/studio-kit/variants, *.js playbooks) are not
+// Directories outside tsconfig.json (packages/gpu/parity-page, packages/studio-kit/layouts, *.js playbooks) are not
 // in the program: grep a reported name before deleting it.
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';

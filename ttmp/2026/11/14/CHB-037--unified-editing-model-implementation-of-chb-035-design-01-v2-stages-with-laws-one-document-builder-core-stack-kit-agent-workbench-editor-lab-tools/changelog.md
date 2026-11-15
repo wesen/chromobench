@@ -50,3 +50,9 @@ P2a Step 3: laws read params with defaults; final checks (commit b7a973f)
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p2a/packages/contract/src/compile.ts — LawContext.args binds params
 
+||||||| 4f22a4a
+
+## 2026-11-14
+
+P5a: the UI DSL made consistent on @chromobench/values (commits 4afeb8d..aec7c5f on task/chb-037-p5a-ui-dsl)
+

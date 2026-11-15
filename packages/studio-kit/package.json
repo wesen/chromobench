@@ -7,9 +7,9 @@
     ".": "./src/index.ts",
     "./dom": "./src/dom/index.ts",
     "./studio-kit.css": "./src/dom/studio-kit.css",
-    "./variants": {
-      "types": "./variants/index.d.ts",
-      "default": "./variants/index.js"
+    "./layouts": {
+      "types": "./layouts/index.d.ts",
+      "default": "./layouts/index.js"
     },
     "./kits/roll": "./kits/roll/src/index.ts",
     "./kits/roll/dom": "./kits/roll/src/dom.ts",

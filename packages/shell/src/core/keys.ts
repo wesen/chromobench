@@ -1,8 +1,10 @@
 // Keys (port of CraftKit core/keys.js): chords, scoped key maps with build-time checks, and the router that turns a
 // keydown into a command.
 //
-// Scopes, innermost first: text · dialog · tool:<id> · panel:<id> · canvas · module:<id> · global. The router
-// walks the chain it is given and runs the first binding it finds. Single letters are refused in text and global
+// Scopes, innermost first: text · dialog · tool:<id> · panel:<id> · canvas · module:<id> · global. A key's scope is
+// where it was declared: a shell's keys are global, a module's module:<id>, a kit's kit:<name>; kit:<name> (like the
+// built-in module:*) binds in every module, under the module's own keys. The router walks the chain it is given and
+// runs the first binding it finds. Single letters are refused in text and global
 // scope (they would fire while someone types a caption). A held key can be a spring: Space is the Hand while it
 // is down and the previous tool again when it comes up.
 //
@@ -183,6 +185,9 @@ export interface Spring {
   at: CallSite | null;
 }
 
+/** a scope that binds in every module (a module's own binding for the chord wins): module:* and kit:<name> */
+export const everyModule = (scope: string): boolean => scope === 'module:*' || scope.startsWith('kit:');
+
 const nameOf = (t: KeyTarget): string => (typeof t === 'string' ? t : Array.isArray(t) ? `${t[0]}(${t.slice(1).join(', ')})` : 'a handler');
 const loc = (at: CallSite | null | undefined): string => (at ? `${at.file}:${at.line}` : '');
 
@@ -251,7 +256,7 @@ export class Keymap {
         D.error('CK-K210', `Single-letter key in ${b.scope} scope`, {
           at: b.at,
           facts: [`${L(b.chord)} → ${nameOf(b.target)} would fire while someone types.`],
-          fix: `Bind it in a narrower scope: .keys('canvas', …) or a module, or add a modifier.`,
+          fix: `Bind it in a module (ck.module(…).keys({ … })) or a kit, or add a modifier.`,
         });
       }
       if (RESERVED.has(b.chord))
@@ -260,17 +265,17 @@ export class Keymap {
           facts: [`${L(b.chord)} → ${nameOf(b.target)}: browsers do not pass it to pages.`],
           fix: 'Pick another chord; the shortcut sheet shows the free ones per scope.',
         });
-      const scopes = b.scope === 'module:*' ? moduleIds.map(m => 'module:' + m) : [b.scope];
+      const scopes = everyModule(b.scope) ? moduleIds.map(m => 'module:' + m) : [b.scope];
       for (const sc of scopes) {
         const m = byScope.get(sc) || byScope.set(sc, new Map()).get(sc)!;
         const prev = m.get(b.chord);
-        if (prev && !sameTarget(prev.target, b.target) && !(b.scope === 'module:*' && prev.scope !== 'module:*') && !(prev.scope === 'module:*' && b.scope !== 'module:*')) {
+        if (prev && !sameTarget(prev.target, b.target) && !(everyModule(b.scope) && !everyModule(prev.scope)) && !(everyModule(prev.scope) && !everyModule(b.scope))) {
           D.error('CK-K204', `Shortcut conflict in scope "${sc}"`, {
             at: b.at,
             facts: [`${L(b.chord)} → ${nameOf(prev.target)}   ${loc(prev.at)}`, `${' '.repeat(L(b.chord).length)} → ${nameOf(b.target)}   ${loc(b.at)}`],
             fix: 'Give one of them another chord, or move one to a narrower scope.',
           });
-        } else if (!prev || b.scope !== 'module:*') m.set(b.chord, b);
+        } else if (!prev || !everyModule(b.scope)) m.set(b.chord, b);
       }
     }
     // a narrower scope that takes a chord the global map uses: allowed, but said once
@@ -321,10 +326,10 @@ export class KeyRouter {
     const ids = this.opts.moduleIds ? this.opts.moduleIds() : [];
     for (const b of this.keymap.bindings) {
       if (b.bad) continue;
-      const scopes = b.scope === 'module:*' ? ids.map(m => 'module:' + m) : [b.scope];
+      const scopes = everyModule(b.scope) ? ids.map(m => 'module:' + m) : [b.scope];
       for (const sc of scopes) {
         const m = this.tables.get(sc) || this.tables.set(sc, new Map()).get(sc)!;
-        if (b.scope !== 'module:*' || !m.has(b.chord)) m.set(b.chord, b);
+        if (!everyModule(b.scope) || !m.has(b.chord)) m.set(b.chord, b);
       }
     }
   }

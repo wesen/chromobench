@@ -22,7 +22,7 @@ import type { ModuleDef, ToolSpec } from '../build/types.ts';
 import { explainApp } from '../build/explain.ts';
 import { withDefaults } from '../build/checks.ts';
 import type { BuiltApp } from './built-app.ts';
-import { assemble } from './assemble.ts';
+import { assemble, menuIndex } from './assemble.ts';
 import { builtinCommands, GRAYS } from './builtins.ts';
 import { DEFAULT_THEME, GRAY_IDS, resolveTheme } from '../themes/tokens.ts';
 import { RecordingChrome, type ChromeApi, type DialogSpec, type ToastOpts } from './chrome.ts';
@@ -40,6 +40,8 @@ export interface Services {
   bridges?: RenderBridge<any>[];
   presenter?: (canvas: unknown) => Presenter;
   chrome?: ChromeApi;
+  /** the host's capabilities (functions), typed by the program: a command's requires: 'host.<name>' needs host.<name> */
+  host?: object | null;
   /** anything else the program's handlers need (ctx.services.engine, …) */
   [k: string]: unknown;
 }
@@ -75,6 +77,8 @@ export interface Ctx<S = any> {
   readonly state: Readonly<S>;
   readonly rt: Runtime<S>;
   readonly services: Services;
+  /** the host's capabilities (services.host, or what rt.setHost gave since) */
+  readonly host: any;
   readonly mods: { shift: boolean; alt: boolean; mod: boolean };
   tx(label: string, f: (t: Draft<S>) => void, o?: TxOpts): unknown;
   set(obj: Record<string, unknown>, o?: TxOpts): void;
@@ -134,6 +138,8 @@ const isEvent = (a: unknown): boolean => (typeof Event !== 'undefined' && a inst
 export class Runtime<S = any> {
   readonly app: BuiltApp<S>;
   readonly services: Services;
+  /** the host's capabilities: services.host at start, replaced by setHost */
+  host: object | null;
   readonly clock: Clock;
   readonly platform: Platform;
   readonly store: Store;
@@ -173,6 +179,7 @@ export class Runtime<S = any> {
   constructor(app: BuiltApp<S>, services: Services = {}, restored: Saved | null = null) {
     this.app = app;
     this.services = services;
+    this.host = services.host ?? null;
     this.clock = services.clock || browserClock();
     this.platform = services.platform || app.platform || OTHER;
     const ir = app.ir;
@@ -216,6 +223,7 @@ export class Runtime<S = any> {
     );
     const asm = assemble(ir, builtinCommands(() => this, ir.themes.values()), this.platform, id => this.selectTool(id, true));
     this.commands = asm.commands;
+    this.commands.capable = req => this.capable(req);
     this.keymap = asm.keymap;
     this.keymap.bindings = this.keymap.bindings.filter(b => b.scope !== 'spring');
     this.tools = ir.tools;
@@ -290,6 +298,18 @@ export class Runtime<S = any> {
       return {};
     }
   }
+  /** a capability '<service>.<member>' is there: a function at services[service][member] (host: the current host) */
+  capable(req: string): boolean {
+    const i = req.indexOf('.');
+    if (i < 0) return false;
+    const svc = req.slice(0, i);
+    const obj = (svc === 'host' ? this.host : this.services[svc]) as Record<string, unknown> | null | undefined;
+    return typeof obj?.[req.slice(i + 1)] === 'function';
+  }
+  /** the host's capabilities changed (a folder picked, a layout switched): commands that require them follow */
+  setHost(host: object | null): void {
+    this.host = host;
+  }
   ctx(extra: Partial<Ctx<S>> & Record<string, unknown> = {}): Ctx<S> {
     const rt = this;
     const st = this.store;
@@ -299,6 +319,9 @@ export class Runtime<S = any> {
     const c: Ctx<S> = {
       rt,
       services: this.services,
+      get host() {
+        return rt.host;
+      },
       get state() {
         return st.readonly();
       },
@@ -551,7 +574,7 @@ export class Runtime<S = any> {
   /** the scopes a menu's shortcut may come from: those that answer in this module without a focused field */
   liveScopes(): string[] {
     const tool = this.store.peek(['ui', 'tool']);
-    return ['global', 'module:*', 'module:' + this.module, 'canvas'].concat(tool ? ['tool:' + tool] : []);
+    return ['global', 'module:*', ...this.app.ir.kits.map(k => 'kit:' + k.name), 'module:' + this.module, 'canvas'].concat(tool ? ['tool:' + tool] : []);
   }
   /** the chain, innermost first: text · dialog · tool · panel · canvas · module · global (focus from the DOM half) */
   scopeChain(): string[] {
@@ -630,6 +653,7 @@ export class Runtime<S = any> {
   /** the app as text; { live: true } evaluates τ props and command labels against the current state */
   explain(o: { live?: boolean; at?: boolean } = {}): string {
     const st = this.store.readonly();
+    const menus = menuIndex(this.app.ir.menus);
     const rows = this.programCommands().map(c => {
       const status = this.commands.status(c.id, st);
       return {
@@ -637,7 +661,7 @@ export class Runtime<S = any> {
         label: this.commands.label(c.id, st) + (o.live && !status.ok ? ` — disabled, why: ${status.why}` : ''),
         chord: this.keymap.chordsFor(c.id)[0],
         source: c.source as string | undefined,
-        menu: c.menu,
+        menu: menus.get(c.id),
       };
     });
     return explainApp(

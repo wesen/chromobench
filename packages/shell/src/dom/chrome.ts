@@ -402,7 +402,7 @@ export class DomChrome implements ChromeApi {
         ? `In the ${s.slice(11).replace(/[-_]/g, ' ')} (while it has focus)`
         : s === 'global'
           ? 'Everywhere'
-          : s === 'module:*'
+          : s === 'module:*' || s.startsWith('kit:')
             ? 'Every module'
             : s.startsWith('module:')
               ? `${rt.modules.get(s.slice(7))?.label ?? s.slice(7)} module`
@@ -416,7 +416,8 @@ export class DomChrome implements ChromeApi {
     const groups = new Map<string, { chord: string; label: string }[]>();
     for (const b of rt.keymap.bindings) {
       if (b.bad) continue;
-      const g = groups.get(b.scope) || groups.set(b.scope, []).get(b.scope)!;
+      const scope = b.scope.startsWith('kit:') ? 'module:*' : b.scope;
+      const g = groups.get(scope) || groups.set(scope, []).get(scope)!;
       g.push({ chord: b.chord, label: typeof b.target === 'string' ? rt.commands.label(b.target, st) : Array.isArray(b.target) ? `${rt.commands.label(b.target[0], st)} ${b.target.slice(1).join(' ')}` : b.label || 'Custom action' });
     }
     const springs = rt.keymap.springs.map(s => ({ chord: s.chord, label: `Hold for ${s.opts.label || s.tool}` }));

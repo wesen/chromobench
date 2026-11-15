@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`explain > the mini studio explains deterministically (snapshot) 1`] = `
-"shell "Mini Studio" · theme craftkit · kits: none
+"shell "Mini Studio" · theme craftkit · kits: mini
 module library "Library" key G
   left   dockcol  width 220
            panel navigator "Navigator"
@@ -34,11 +34,11 @@ module develop "Develop" key D
                button  run photo.pick
   bottom filmstrip strip2  cell θ  items τ  select ui.selection
 commands
-  photo.pick "Flag as Pick" (Photo) P
-  photo.reject "Reject" (Photo) X
-  photo.rate "Set Rating" (Photo)
-  dev.reset "Reset Develop Settings" (Settings) Ctrl+Shift+R
-  view.grid "Show Grid Overlay" (View) \\
+  photo.pick "Flag as Pick" (Photo) P ← mini
+  photo.reject "Reject" (Photo) X ← mini
+  photo.rate "Set Rating" (Photo) ← mini
+  dev.reset "Reset Develop Settings" (Settings) Ctrl+Shift+R ← mini
+  view.grid "Show Grid Overlay" (View) \\ ← mini
 tools probe (I)
-commands 38 · keys 29 in 4 scopes · tools 1 · passes 12 · diagnostics ✓ 0 errors · 0 warnings"
+commands 38 · keys 29 in 5 scopes · tools 1 · passes 12 · diagnostics ✓ 0 errors · 0 warnings"
 `;

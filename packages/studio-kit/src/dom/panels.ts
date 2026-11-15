@@ -10,10 +10,10 @@ import { describe, historyGroups, whyRows, WHO } from '../model/history.ts';
 import { exposureRows, printingScript } from '../model/tools.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
+import { sel } from '../sel.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
-const cur = (s: any): string | null => s?.ui?.selection?.primary ?? null;
-const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? cur(s)));
+const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
 const btn = (text: string, cls: string, attrs: Record<string, unknown> = {}) => h('button', { type: 'button', class: `ck-btn is-small ${cls}`, text, ...attrs });
 const time = (ts: number): string => new Date(ts).toTimeString().slice(0, 5);
 
@@ -119,7 +119,7 @@ const approvals = list(
 
 const why = list(
   'cb-why',
-  s => ({ f: cur(s), r: cur(s) ? s.recipes?.[cur(s)!] : undefined, path: s.ui?.focusPath ?? 'print.enlarger.time_s' }),
+  s => ({ f: sel.current(s), r: sel.current(s) ? s.recipes?.[sel.current(s)!] : undefined, path: s.ui?.focusPath ?? 'print.enlarger.time_s' }),
   (el, v, m) => {
     const e = v.f ? studioOf(m).frames.get(v.f) : undefined;
     if (!e) return;
@@ -134,7 +134,7 @@ const why = list(
 
 const snapshots = list(
   'cb-snapshots',
-  s => ({ f: cur(s), list: cur(s) ? s.snapshots?.[cur(s)!] : undefined }),
+  s => ({ f: sel.current(s), list: sel.current(s) ? s.snapshots?.[sel.current(s)!] : undefined }),
   (el, v, m) => {
     const add = btn('New snapshot', 'snap-new');
     listen(m.scope, add, 'click', () => m.rt.runCommand('snapshot.new', null));
@@ -204,7 +204,7 @@ const explain: Renderer = (_n, m) => {
 
 const metadata = list(
   'cb-metadata',
-  s => ({ f: cur(s), c: cur(s) ? s.catalog?.frames?.[cur(s)!] : undefined }),
+  s => ({ f: sel.current(s), c: sel.current(s) ? s.catalog?.frames?.[sel.current(s)!] : undefined }),
   (el, v, m) => {
     if (!v.c) return void el.append(h('p', { class: 'cb-empty', text: 'No frame selected' }));
     const e = studioOf(m).frames.get(v.f);
@@ -272,7 +272,7 @@ const densitometer = list('cb-densitometer', s => ({ ...frameDeps(s, { props: {}
   else el.append(t);
 });
 
-const readout = list('cb-readout', s => ({ f: cur(s), r: cur(s) ? s.recipes?.[cur(s)!] : undefined, probe: s.ui?.probe }), (el, v, m) => {
+const readout = list('cb-readout', s => ({ f: sel.current(s), r: sel.current(s) ? s.recipes?.[sel.current(s)!] : undefined, probe: s.ui?.probe }), (el, v, m) => {
   if (!v.probe || !v.r) return;
   const span = h('span', { text: `${v.probe[0]}, ${v.probe[1]} · …` });
   el.append(span);
@@ -284,7 +284,7 @@ const readout = list('cb-readout', s => ({ f: cur(s), r: cur(s) ? s.recipes?.[cu
 
 const ribbon = list(
   'cb-ribbon',
-  s => ({ f: cur(s), show: s.ui?.showProposal, p: cur(s) ? s.proposals?.[cur(s)!] : undefined }),
+  s => ({ f: sel.current(s), show: s.ui?.showProposal, p: sel.current(s) ? s.proposals?.[sel.current(s)!] : undefined }),
   (el, v) => {
     const p = (v.p ?? []).find((x: any) => x.tx === v.show);
     el.hidden = !p;

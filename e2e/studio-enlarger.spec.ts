@@ -57,15 +57,15 @@ const darkroom = (page: Page) => page.locator('.ck-panel[data-panel="controls-da
 /** the recipe paths the frame's log recorded (its History) */
 const paths = (page: Page) => page.evaluate(() => window.chromobench.log!.entries.map((e) => (e.m as { path?: string }).path ?? e.m.op));
 
-async function boot(page: Page, variant = '', o: { keep?: boolean } = {}): Promise<string[]> {
+async function boot(page: Page, layout = '', o: { keep?: boolean } = {}): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await goto(page, variant, o);
+  await goto(page, layout, o);
   return errors;
 }
 /** `keep`: the browser's own library (IndexedDB) instead of a library in memory */
-async function goto(page: Page, variant = '', o: { keep?: boolean } = {}): Promise<void> {
-  await page.goto(`/?nosw&canvas2d${o.keep ? '' : '&fresh'}&engine=reference${variant ? `&variant=${variant}` : ''}`);
+async function goto(page: Page, layout = '', o: { keep?: boolean } = {}): Promise<void> {
+  await page.goto(`/?nosw&canvas2d${o.keep ? '' : '&fresh'}&engine=reference${layout ? `&layout=${layout}` : ''}`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
 }
 async function open(page: Page, file: { name: string; mimeType: string; buffer: Buffer }): Promise<void> {

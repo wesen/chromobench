@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`variants build headless > classic: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core)
+exports[`layouts build headless > classic: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.finish@1 (requires cb.core), cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -226,7 +226,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -235,6 +235,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -246,19 +248,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -266,8 +261,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -306,10 +306,10 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 125 · keys 104 in 15 scopes · tools 8 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 125 · keys 104 in 16 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > darkroom: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 200
@@ -391,7 +391,7 @@ commands
   frame.pick "Flag as Pick" (Frame) ← cb.core
   frame.reject "Reject" (Frame) ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -400,6 +400,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -411,19 +413,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -431,13 +426,18 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 29 in 4 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 29 in 5 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > finish: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.finish@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -626,7 +626,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -635,6 +635,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -646,19 +648,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -666,8 +661,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   crop.reset "Reset Crop" (Finish) ← cb.finish
   crop.aspect "Crop Aspect" ← cb.finish
   crop.lock "Lock Crop Aspect" (Finish) ← cb.finish
@@ -690,11 +690,11 @@ commands
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
   finish.resetTones "Reset Finishing Tones" (Finish) ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush, crop (R), spot (Q)
-commands 107 · keys 74 in 10 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 107 · keys 74 in 11 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > lab: zero errors, explain snapshot 1`] = `
-"shell "Chromobench" · theme craftkit · kits: cb.core@1
+exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
+"shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.chat@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
            panel navigator "Navigator"
@@ -956,7 +956,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -965,6 +965,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -976,19 +978,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -996,13 +991,18 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 84 · keys 82 in 12 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 84 · keys 82 in 13 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > looks: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core), cb.looks@1 (requires cb.core)
 module library "Library" key G
   left   dockcol  width 236
@@ -1134,7 +1134,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1143,6 +1143,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1154,19 +1156,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1174,24 +1169,29 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
-  roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
+  roll.fromFrames "New Roll from Open Frames" ← cb.roll
   roll.select "Select Roll" ← cb.roll
-  roll.analyse "Analyse Roll" (Roll) ← cb.roll
-  roll.firstPrint "First Print of the Roll" (Roll) ← cb.roll
-  roll.setReference "Set as Roll Reference" (Roll) ← cb.roll
-  roll.matchToReference "Print the Roll Like the Reference" (Roll) ← cb.roll
+  roll.analyse "Analyse Roll" ← cb.roll
+  roll.firstPrint "First Print of the Roll" ← cb.roll
+  roll.setReference "Set as Roll Reference" ← cb.roll
+  roll.matchToReference "Print the Roll Like the Reference" ← cb.roll
   roll.alpha "Roll Consistency" ← cb.roll
   roll.pending.toggle "Include Frame" ← cb.roll
   roll.pending.approve "Approve Roll Batch" ← cb.roll
   roll.pending.reject "Reject Roll Batch" ← cb.roll
-  roll.clearMatch "Clear Roll Match" (Roll) ← cb.roll
+  roll.clearMatch "Clear Roll Match" ← cb.roll
   roll.setShared "Set on the Roll" ← cb.roll
   roll.applyToRoll "Apply This Setting to the Roll" ← cb.roll
-  roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
-  roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
-  roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
+  roll.contact.mode "Contact Sheet: One Time and Pack" ← cb.roll
+  roll.cull.sweep "Cull the Roll" ← cb.roll
+  roll.exportSheet "Export Contact Sheet…" ← cb.roll
   looks.pick "Pick Look" ← cb.looks
   looks.param "Set Look Parameter" ← cb.looks
   looks.amount "Look Amount" ← cb.looks
@@ -1227,10 +1227,10 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 133 · keys 63 in 8 scopes · tools 6 · passes 19 · diagnostics ✓ 0 errors · 0 warnings"
+commands 133 · keys 63 in 9 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > roll: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.roll@1 (requires cb.core)
 module roll "Roll" key G
   left   dockcol  width 300
@@ -1351,7 +1351,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) U ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1360,6 +1360,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) → ← cb.core
+  frame.previous "Previous Frame" (Frame) ← ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1371,19 +1373,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) → ← cb.core
-  frame.previous "Previous Frame" (Frame) ← ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) \\ ← cb.core
   view.sideBySide "Side by Side" (View) Y ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) S ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1391,8 +1386,13 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
   roll.fromFrames "New Roll from Open Frames" (Roll) ← cb.roll
   roll.select "Select Roll" ← cb.roll
   roll.analyse "Analyse Roll" (Roll) ← cb.roll
@@ -1410,10 +1410,10 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 99 · keys 52 in 5 scopes · tools 6 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 99 · keys 52 in 6 scopes · tools 6 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > simple: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   top    cb.steps  labels {pick, print, save}  steps [pick, print, save]
@@ -1481,7 +1481,7 @@ commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
   frame.reject "Reject" (Frame) X ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1490,6 +1490,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1501,19 +1503,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) ← cb.core
-  frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) ← cb.core
   view.sideBySide "Side by Side" (View) ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1521,13 +1516,18 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 26 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 26 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > tiny: zero errors, explain snapshot 1`] = `
+exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1
 module main "Chromobench"
   left   dockcol  width 180
@@ -1567,7 +1567,7 @@ commands
   frame.pick "Flag as Pick" (Frame) ← cb.core
   frame.reject "Reject" (Frame) ← cb.core
   frame.unflag "Unflag" (Frame) ← cb.core
-  frame.rate "Set Stars" (Frame) ← cb.core
+  frame.rate "Set Stars" ← cb.core
   frame.label "Set Colour Label" ← cb.core
   frame.select "Select Frame" ← cb.core
   frame.reopenAsPhoto "Re-open as Photo" (Frame) ← cb.core
@@ -1576,6 +1576,8 @@ commands
   frame.rotateLeft "Rotate Left" (Frame) ← cb.core
   frame.rotateRight "Rotate Right" (Frame) ← cb.core
   frame.flip "Flip Left to Right" (Frame) ← cb.core
+  frame.next "Next Frame" (Frame) ← cb.core
+  frame.previous "Previous Frame" (Frame) ← cb.core
   file.open "Open Files…" (File) Ctrl+O ← cb.core
   file.openFolder "Open Folder…" (File) ← cb.core
   file.reopenFolder "τ" (File) ← cb.core
@@ -1587,19 +1589,12 @@ commands
   file.export "Export…" (File) Ctrl+E ← cb.core
   file.saveRecipe "Save Recipe" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
-  frame.next "Next Frame" (Frame) ← cb.core
-  frame.previous "Previous Frame" (Frame) ← cb.core
   view.mode "Library View" ← cb.core
   view.show "Show View" ← cb.core
   view.beforeAfter "Before / After" (View) ← cb.core
   view.sideBySide "Side by Side" (View) ← cb.core
   step.go "Go to Step" ← cb.core
   history.jump "Jump in History" ← cb.core
-  proposal.show "Show Proposal" ← cb.core
-  proposal.toggle "Include Change" ← cb.core
-  proposal.approve "Approve Agent Change" ← cb.core
-  proposal.reject "Reject Agent Change" ← cb.core
-  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   snapshot.new "New Snapshot" (Frame) ← cb.core
   snapshot.restore "Restore Snapshot" ← cb.core
   print.applyToSelection "Apply Print Settings to Selection" (Frame) ← cb.core
@@ -1607,13 +1602,18 @@ commands
   ring.apply "Use This Print" ← cb.core
   exposure.add "Add Exposure" (Frame) ← cb.core
   exposure.remove "Remove Exposure" ← cb.core
-  agent.mode "Agent Mode" ← cb.core
   output.save "Save the Print" ← cb.core
+  proposal.show "Show Proposal" ← cb.core
+  proposal.toggle "Include Change" ← cb.core
+  proposal.approve "Approve Agent Change" ← cb.core
+  proposal.reject "Reject Agent Change" ← cb.core
+  proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
+  agent.mode "Agent Mode" ← cb.core
 tools probe (I), test-strip (T), ring-around (R), mask-ellipse (M), mask-gradient, mask-brush
-commands 81 · keys 23 in 3 scopes · tools 6 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 81 · keys 23 in 4 scopes · tools 6 · passes 15 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
-exports[`variants build headless > warnings are listed (reviewed, not zero) 1`] = `
+exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `
 {
   "classic": [],
   "darkroom": [],

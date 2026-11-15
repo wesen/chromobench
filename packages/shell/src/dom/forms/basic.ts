@@ -65,7 +65,7 @@ defineRenderer('button', (n, m) => {
   });
   if (cmd) {
     el.dataset['ownTip'] = '1';
-    el.dataset['ownDisabled'] = p['disabled'] === undefined ? '1' : '';
+    el.dataset['ownDisabled'] = p['enabled'] === undefined ? '1' : '';
     const chord = rt.keymap.chordsFor(cmd.id)[0];
     m.cell(
       s => rt.commands.label(cmd.id, s),
@@ -75,7 +75,7 @@ defineRenderer('button', (n, m) => {
         el.setAttribute('aria-label', v);
       },
     );
-    if (p['disabled'] === undefined)
+    if (p['enabled'] === undefined)
       m.cell(
         s => rt.commands.status(cmd.id, s),
         st => setDisabled(el, !st.ok, st.why, m),

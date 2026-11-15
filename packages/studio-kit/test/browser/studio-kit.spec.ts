@@ -1,6 +1,6 @@
-// The studio-kit dev host in Chromium: each variant mounts on MockEngine with the M1 fixture and five more frames;
+// The studio-kit dev host in Chromium: each layout mounts on MockEngine with the M1 fixture and five more frames;
 // the film strip, grid and navigator show print thumbnails; a keyboard burst is one EditLog unit and Mod+Z undoes
-// it; typed darkroom units; an agent proposal is shown, refused as stale and applied anyway; an unknown variant
+// it; typed darkroom units; an agent proposal is shown, refused as stale and applied anyway; an unknown layout
 // shows the Build Report with a did-you-mean.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -13,8 +13,8 @@ test.afterEach(() => {
   expect(errors).toEqual([]);
 });
 
-async function open(page: Page, variant: string): Promise<void> {
-  await page.goto(`/demo/?variant=${variant}&fresh`);
+async function open(page: Page, layout: string): Promise<void> {
+  await page.goto(`/demo/?layout=${layout}&fresh`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
 }
 const hook = <T>(page: Page, f: string): Promise<T> => page.evaluate(`(() => { const cb = window.chromobench; return ${f}; })()`) as Promise<T>;
@@ -68,7 +68,7 @@ test('classic print: an agent proposal is shown, refused as stale, applied anywa
 });
 
 for (const v of ['darkroom', 'simple', 'lab', 'tiny']) {
-  test(`${v}: mounts and renders the print, explain names the variant's parts`, async ({ page }) => {
+  test(`${v}: mounts and renders the print, explain names the layout's parts`, async ({ page }) => {
     await open(page, v);
     if (v === 'simple') {
       await expect(page.locator('.ck-center-main .ck-thumb[data-rendered]')).toHaveCount(6);
@@ -89,7 +89,7 @@ for (const v of ['darkroom', 'simple', 'lab', 'tiny']) {
   });
 }
 
-test('an unknown variant shows the Build Report with a did-you-mean', async ({ page }) => {
-  await page.goto('/demo/?variant=clasic');
-  await expect(page.locator('#build-report')).toContainText('Did you mean ?variant=classic?');
+test('an unknown layout shows the Build Report with a did-you-mean', async ({ page }) => {
+  await page.goto('/demo/?layout=clasic');
+  await expect(page.locator('#build-report')).toContainText('Did you mean ?layout=classic?');
 });

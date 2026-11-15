@@ -4,7 +4,7 @@
 import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { EditLog, sha256Hex, type EditLogData } from '@chromobench/contract';
 import { describe, expect, it } from 'vitest';
-import { createStudio, defaultFor, libraryFrames, logKey, memoryKV, visibleFrames, type KV, type OpenAs } from '../src/index.ts';
+import { createStudio, defaultFor, logKey, memoryKV, sel, type KV, type OpenAs } from '../src/index.ts';
 import { recipePath, started } from './helpers.ts';
 
 const TIME = 'print.enlarger.time_s';
@@ -135,12 +135,12 @@ describe('the library survives a reload (F5)', () => {
     const { rt, f } = await started();
     rt.store.writeDoc([{ path: ['catalog', 'frames', 'frame_offline'], value: { id: 'frame_offline', sha256: 'ab'.repeat(32), name: 'DSC_1.NEF', flag: null, stars: 0, label: null, keywords: [], kind: 'photo', thumb: 'data:image/jpeg;base64,AA' } }, { path: ['catalog', 'order'], value: [f, 'frame_offline'] }], { tier: 'document' });
     const s = rt.state as any;
-    expect(libraryFrames(s).map((x) => x.id)).toEqual([f, 'frame_offline']);
-    expect(visibleFrames(s).map((x) => x.id)).toEqual([f]);
+    expect(sel.library(s).map((x) => x.id)).toEqual([f, 'frame_offline']);
+    expect(sel.visible(s).map((x) => x.id)).toEqual([f]);
     // removing a frame that is not open takes it out of the catalog
     rt.run('frame.select', 'frame_offline');
     rt.run('frame.remove');
-    expect(libraryFrames(rt.state).map((x) => x.id)).toEqual([f]);
+    expect(sel.library(rt.state).map((x) => x.id)).toEqual([f]);
   });
 
   it('host commands are hidden until a host offers them; then they run the host', async () => {

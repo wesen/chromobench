@@ -1,4 +1,4 @@
-// Frame handles, host side (guide §5.2): `cb.frame(s).print()` in a viewer names the node `frame.print()` names in
+// Frame handles, host side (guide §5.2): `cb.sel.frame(s).print()` in a viewer names the node `frame.print()` names in
 // an agent eval. A handle is a plain frozen object; it compiles nothing. The render bridge lowers it.
 //
 // The accessor names and the print() options are the contract's shared frame vocabulary (contract 0.3,

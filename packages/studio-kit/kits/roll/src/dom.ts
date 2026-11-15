@@ -14,6 +14,7 @@ import { previewOf } from './engine/batch.ts';
 import { SHARED_PATHS } from './engine/constants.ts';
 import { divergence, type Roll } from './engine/model.ts';
 import { rollFrames, rollOf } from './kit.ts';
+import { sel } from '../../../src/sel.ts';
 
 const LOGH_PER_POINT = 0.025;
 const pts = (v: readonly number[] | null | undefined): string => (v ? v.map((x) => `${x >= 0 ? '+' : ''}${(x / LOGH_PER_POINT).toFixed(1)}`).join(' ') : '–');
@@ -132,13 +133,13 @@ const setup = panelOf('cb-roll-setup', (s) => {
 const BATCH_THUMBS = 12;
 /** a small print thumbnail (the shell's thumb form), mounted from a renderer */
 const thumb = (m: MountCtx, image: unknown, which: 'before' | 'after'): Node => {
-  const el = m.mount(makeNode(null, 'thumb', { image, max: 72 }, [], null)) as HTMLElement;
+  const el = m.mount(makeNode('thumb', { image, max: 72 }, [], null)) as HTMLElement;
   el.classList.add('cb-change-thumb', `is-${which}`);
   el.title = which === 'before' ? 'now' : 'with the batch';
   return el;
 };
 
-const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: s.ui?.selection?.primary, cat: s.catalog, rec: s.rollView?.pending ? s.recipes : null }), (el, v, m) => {
+const balanceBar = panelOf('cb-roll-balance', (s) => ({ r: rollOf(s), v: s.rollView, sel: sel.current(s), cat: s.catalog, rec: s.rollView?.pending ? s.recipes : null }), (el, v, m) => {
   const r: Roll | null = v.r;
   if (!r) return void el.append(h('p', { class: 'cb-empty', text: 'No roll selected' }));
   const s = { catalog: v.cat };

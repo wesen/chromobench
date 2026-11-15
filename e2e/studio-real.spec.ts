@@ -1,5 +1,5 @@
 // CHB-023: the studio on the real engines (GpuEngine on SwiftShader, RefEngine), smoke-tested with the M1 fixture
-// on the default variant (classic) since the CHB-019 migration: boot and engine label, the automatic first print,
+// on the default layout (classic) since the CHB-019 migration: boot and engine label, the automatic first print,
 // enlarger controls that change the print, the four views, the densitometer, the test strip and ring-around on the
 // real chain, undo, export (CHB-011's encoders), the bench hook, and the offline start.
 // Canvas2D presentation (?canvas2d): presenting a WebGPU canvas loses the device on SwiftShader.
@@ -39,7 +39,7 @@ for (const engine of ['gpu', 'reference'] as const) {
     test.setTimeout(240_000);
     await open(page, engine);
     await expect(page.locator('#engine')).toHaveAttribute('data-engine', engine === 'gpu' ? /GPU/ : /reference/);
-    expect(await page.evaluate(() => window.chromobench.variant)).toBe('classic');
+    expect(await page.evaluate(() => window.chromobench.layout)).toBe('classic');
     // the first print: enlarger in 'real' mode, integrated to grey (recorded in print.lights.auto)
     const r0 = await page.evaluate(() => window.chromobench.log!.state.print);
     expect(r0.enlarger.mode).toBe('real');
@@ -128,13 +128,13 @@ for (const engine of ['gpu', 'reference'] as const) {
   });
 }
 
-// CHB-020 follow-up: the Roll module of the default (classic) variant on the real reference engine: the host's
+// CHB-020 follow-up: the Roll module of the default (classic) layout on the real reference engine: the host's
 // roll physics, a new roll with its automatic first print, the roll badge on the film strip, and the first print
 // of the roll as one card with before/after thumbnails, rejected.
-test('classic variant: the Roll module makes a roll, badges the strip and shows the first-print card with thumbnails', async ({ page }) => {
+test('classic layout: the Roll module makes a roll, badges the strip and shows the first-print card with thumbnails', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, 'reference');
-  expect(await page.evaluate(() => window.chromobench.variant)).toBe('classic');
+  expect(await page.evaluate(() => window.chromobench.layout)).toBe('classic');
   await page.evaluate(() => window.chromobench.rt.go('roll'));
   await expect(page.locator('#roll-new')).toBeVisible();
   await page.locator('#roll-new').click();

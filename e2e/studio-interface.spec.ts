@@ -25,8 +25,8 @@ const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const ready = (page: Page) => page.waitForFunction(() => document.body.dataset['ready'] === '1', null, { timeout: 60_000 });
 const frames = (page: Page) => page.evaluate(() => window.chromobench.studio.frames.all().length);
 /** a database of its own for this test (not ?fresh: a reload must find the library) */
-async function emptyLibrary(page: Page, variant = 'classic'): Promise<void> {
-  await page.goto(`/?nosw&canvas2d&engine=reference&variant=${variant}`);
+async function emptyLibrary(page: Page, layout = 'classic'): Promise<void> {
+  await page.goto(`/?nosw&canvas2d&engine=reference&layout=${layout}`);
   await page.evaluate(() => new Promise((ok) => {
     const r = indexedDB.deleteDatabase('chromobench-studio');
     r.onsuccess = r.onerror = r.onblocked = () => ok(null);
@@ -42,7 +42,7 @@ const menu = async (page: Page, top: string, command: string) => {
 async function layout(page: Page, id: string): Promise<void> {
   await menu(page, 'View', 'view.layout');
   await page.locator('.ck-dialog button', { hasText: new RegExp(`^${id}$`, 'i') }).click();
-  await page.waitForFunction((v) => document.body.dataset['variant'] === v, id, { timeout: 30_000 });
+  await page.waitForFunction((v) => document.body.dataset['layout'] === v, id, { timeout: 30_000 });
   await idle(page);
 }
 
@@ -68,7 +68,7 @@ test('F24: View ▸ Layout keeps the open frames open, their edits and one undo 
   expect(await page.evaluate(() => window.chromobench.studio.current)).toBe(sel);
   await expect(page.locator('#status')).not.toContainText('select one to open its file again');
   await expect(page.locator('#status')).toContainText('2 frames open');
-  expect(new URL(page.url()).searchParams.get('variant')).toBe('simple');
+  expect(new URL(page.url()).searchParams.get('layout')).toBe('simple');
   await page.locator('.cb-steps button', { hasText: 'Print' }).first().click();
   await idle(page);
   await expect(page.locator('.ck-vp:visible').first()).toHaveAttribute('data-rendered', /\d+x\d+/);

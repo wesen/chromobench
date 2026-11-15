@@ -1,4 +1,4 @@
-// CHB-009 studio flows, ported to the shell-based studio (CHB-019, variant lab, MockEngine): recipes resumed by hash
+// CHB-009 studio flows, ported to the shell-based studio (CHB-019, layout lab, MockEngine): recipes resumed by hash
 // after a reload, a folder of scans, the viewer (views, before/after, densitometer and pinned probes), generated
 // controls with keyboard bursts and typed units, approvals with E_STALE, the darkroom tools (test strip, ring-around,
 // masks and exposures, apply to selection) and the WebGPU presenter pipeline.
@@ -29,7 +29,7 @@ const hash = (page: Page) => page.evaluate(() => window.chromobench.log!.stateHa
 const units = (page: Page) => page.evaluate(() => window.chromobench.log!.units.length);
 
 async function boot(page: Page, extra = ''): Promise<void> {
-  await page.goto(`/?nosw&engine=mock&variant=lab${extra}`);
+  await page.goto(`/?nosw&engine=mock&layout=lab${extra}`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
 }
 async function open(page: Page, files: string | { name: string; mimeType: string; buffer: Buffer }[] = FIXTURE): Promise<void> {

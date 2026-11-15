@@ -1,6 +1,6 @@
 // Form specs: the headless half of every built-in form (DR-3). A spec is the form's slots with their binding times,
 // a doc string and a kind; renderers are registered by '@chromobench/shell/dom'. Slot tables are typed, so the
-// constructors on Ck<S> check options in the editor; the `slots` pass checks them again at build for JS variants.
+// constructors on Ck<S> check options in the editor; the `slots` pass checks them again at build for JS layouts.
 //
 // Port note: CraftKit's slider and number fields take `reset` as β but CraftKit Studio passes lambdas there; the
 // port makes `reset` τ.

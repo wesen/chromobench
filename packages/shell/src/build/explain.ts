@@ -117,7 +117,6 @@ export function explainNode(n: NodeData, o: ExplainOpts = {}, indent = ''): stri
   head += titleOf(n, o);
   const { words, blocks } = propWords(n, slots, o);
   if (words.length) head += '  ' + words.join('  ');
-  for (const c of n.calls) head += `  +${c.name}(${c.args.map(a => short(a, 20)).join(', ')})`;
   for (const f of o.fragments?.byTarget.get(n.$) || []) {
     if (f.spec.explain && (!f.spec.when || f.spec.when(n))) {
       const x = f.spec.explain(n);
@@ -154,7 +153,6 @@ export function explainKit(k: Kit): string {
   if (d.commands.length) lines.push(`  commands ${d.commands.map(c => c.id).join(', ')}`);
   for (const kd of d.keys) lines.push(`  keys ${kd.scope}: ${Object.entries(kd.map).map(([c, t]) => `${c} → ${refOf(t)}`).join(', ')}`);
   if (d.tools.length) lines.push(`  tools ${d.tools.map(t => t.id).join(', ')}`);
-  if (d.panels.length) lines.push(`  panels ${d.panels.map(p => String(p.props['id'])).join(', ')}`);
   for (const p of d.passes) lines.push(`  ${explainPass(p)}`);
   if (d.docs.length) lines.push(`  docs: ${d.docs[0]!.split('\n')[0]}`);
   return lines.join('\n');

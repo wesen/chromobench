@@ -6,13 +6,12 @@
 import { suggest } from './util.ts';
 import type { CallSite } from './diag.ts';
 
-export type Traced<S, T> = T | ((s: Readonly<S>) => T);
+/** a value, or a lambda of state (τ); with an untyped state (any) the lambda may type its own parameter */
+export type Traced<S, T> = T | (0 extends 1 & S ? (s: any) => T : (s: Readonly<S>) => T);
 
 /** S: the state type; C: the context handlers receive (the runtime's Ctx<S>) */
 export interface CommandSpec<S = any, C = any> {
   label?: Traced<S, string>;
-  /** the menu the command appears in (the default menus are built from this) */
-  menu?: string;
   icon?: string;
   enabled?: Traced<S, boolean>;
   why?: Traced<S, string>;
@@ -21,10 +20,16 @@ export interface CommandSpec<S = any, C = any> {
   /** a handler (ctx, ...args) or the id of another command (an alias) */
   run?: string | ((ctx: C, ...args: any[]) => unknown);
   palette?: boolean;
+  /** a set of commands (a submenu { label, group } lists them; the palette groups by it when no menu places one) */
   group?: string;
+  /**
+   * capabilities the command needs, as '<service>.<member>' ('host.openFiles': a function the host passes at mount,
+   * services.host): without them it is hidden and refuses to run (CHB-029 item 1)
+   */
+  requires?: string | string[];
   /** shown in menus and the palette only while one of these modules is current */
   module?: string | string[] | undefined;
-  /** replace a command of the same id on purpose (a variant replacing a kit's command) */
+  /** replace a command of the same id on purpose (a kit replacing another kit's command) */
   replace?: boolean;
   /** extend a previous definition instead of replacing it */
   extend?: boolean;
@@ -51,6 +56,13 @@ export class Commands<S = any> {
   map = new Map<string, Command<S>>();
   groups = new Map<string, string[]>();
   recent: string[] = [];
+  /** whether a capability is there (the runtime answers from its services; the build assumes yes) */
+  capable: (req: string) => boolean = () => true;
+  /** the command's required capabilities are all there */
+  supplied(id: string): boolean {
+    const c = this.map.get(id);
+    return !c?.requires || ([] as string[]).concat(c.requires).every(r => this.capable(r));
+  }
   add(id: string, spec: CommandSpec<S> | ((...a: any[]) => unknown) = {}): this {
     if (typeof spec === 'function') spec = { run: spec };
     const at = spec.at ?? null;
@@ -82,6 +94,7 @@ export class Commands<S = any> {
   hidden(id: string, state: any): boolean {
     const c = this.map.get(id);
     if (!c) return false;
+    if (!this.supplied(id)) return true;
     if (c.module && state && state.view && !([] as string[]).concat(c.module).includes(state.view.module)) return true;
     try {
       return !!call(c.hidden, state);
@@ -102,6 +115,7 @@ export class Commands<S = any> {
   status(id: string, state: any): { ok: boolean; why?: string } {
     const c = this.map.get(id);
     if (!c) return { ok: false, why: `No command '${id}'` };
+    if (!this.supplied(id)) return { ok: false, why: 'Not available in this window' };
     let ok = true;
     try {
       ok = c.enabled === undefined ? true : !!call(c.enabled, state);

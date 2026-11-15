@@ -57,7 +57,7 @@ export const KNOWN_VALUES: Record<string, string[]> = {
   lamps: ['TH-KG3', 'LED-RGB'],
 };
 
-/** Replaces valuesFrom lists before controls are generated (CHB-023: from CHB-004's packs; call before building a variant). */
+/** Replaces valuesFrom lists before controls are generated (CHB-023: from CHB-004's packs; call before building a layout). */
 export function setKnownValues(lists: Record<string, string[]>): void {
   for (const [k, v] of Object.entries(lists)) if (v.length) KNOWN_VALUES[k] = [...v];
 }

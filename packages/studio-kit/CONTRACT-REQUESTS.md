@@ -49,7 +49,7 @@ and in `LogEvent`: `| { type: 'preview'; mutation: Mutation | null; mutations: M
 `@chromobench/vocab`), imported by `packages/dsl/src/host.ts` and `packages/studio-kit/src/handles.ts`.
 
 **Why.** Viewer and agent must name the same node for the same words. Today studio-kit keeps a copy;
-`test/kit.test.ts` compares `PRINT_OPTIONS` with the DSL's and `cb.frame(s).print()` with `Host.printOf` on the M1
+`test/kit.test.ts` compares `PRINT_OPTIONS` with the DSL's and `cb.sel.frame(s).print()` with `Host.printOf` on the M1
 fixture, so a drift fails a test, but the copy should go (guide §14 item 9; CHB-017/CHB-007 decide where).
 
 ---
@@ -257,8 +257,8 @@ The kit's `FINISHING_PATHS` grows by these paths once they exist; the engines (c
 ## Notes (no contract change)
 
 - `finishing.clarity` is implemented by the mock engine only; core and the GPU fail with `E_NOT_IMPLEMENTED` when
-  Clarity is not 0. The `classic` variant's Finish module therefore leaves the tones panel out (`tones: false`);
-  the `finish` variant shows it. For CHB-015.
+  Clarity is not 0. The `classic` layout's Finish module therefore leaves the tones panel out (`tones: false`);
+  the `finish` layout shows it. For CHB-015.
 - `scan.heal` (dust on the film) is a pass-through in the mock and missing in core and the GPU. The spot tool offers
   its Dust mode only when the engine lists `scan.heal` and the frame is a negative scan; the default mode is Heal.
 

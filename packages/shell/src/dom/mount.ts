@@ -121,7 +121,7 @@ function decorate(el: HTMLElement, n: NodeData, m: MountCtx): void {
       if (v) el.dataset['tip'] = String(v);
       else delete el.dataset['tip'];
     });
-  if (p['disabled'] !== undefined && !el.dataset['ownDisabled']) m.val(p['disabled'], v => setDisabled(el, !!v, p['why'], m));
+  if (p['enabled'] !== undefined && !el.dataset['ownDisabled']) m.val(p['enabled'], v => setDisabled(el, !v, p['why'], m));
 }
 
 export function setDisabled(el: HTMLElement, off: boolean, why: unknown, m: MountCtx): void {

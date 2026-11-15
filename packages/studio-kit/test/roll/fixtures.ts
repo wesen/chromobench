@@ -8,10 +8,10 @@ import { plantedStrip, type PlantedStrip } from '@chromobench/ingest';
 import { CHROMOGEN, nodePacksData, scannerForward } from '@chromobench/core';
 import { manualClock, type ManualClock } from '@chromobench/shell/testing';
 import type { Runtime } from '@chromobench/shell';
-import { buildVariant, createStudio, memoryKV, type Studio } from '../../src/index.ts';
+import { buildLayout, createStudio, memoryKV, type Studio } from '../../src/index.ts';
 import type { RollPhysics } from '../../kits/roll/src/index.ts';
 import { rollPhysics } from '../../demo/roll-physics.ts';
-import { VARIANTS } from '../../variants/index.js';
+import { LAYOUTS } from '../../layouts/index.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const laws = JSON.parse(readFileSync(`${root}fixtures/golden/ingest-laws.json`, 'utf8'));
@@ -52,12 +52,12 @@ export interface StartedRoll extends RollStudio {
   rt: Runtime;
   clock: ManualClock;
 }
-/** the 'roll' variant booted headless on MockEngine with the planted frames open */
+/** the 'roll' layout booted headless on MockEngine with the planted frames open */
 export async function startedRoll(offsets: number[]): Promise<StartedRoll> {
   const clock = manualClock(1_000);
   // a KV, as in the browser: the logs are saved (structured-cloned) on every unit
   const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), now: () => clock.now() });
-  const { app } = buildVariant((await VARIANTS.roll()).default);
+  const { app } = buildLayout((await LAYOUTS.roll()).default);
   const rt = await app.boot(studio.services({ clock, rollPhysics: physics() }));
   studio.attach(rt);
   const strips = offsets.map((d, i) => strip(i, d));

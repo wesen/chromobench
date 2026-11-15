@@ -7,7 +7,7 @@ import { Commands, type CommandSpec } from '../core/commands.ts';
 import { Keymap, type KeyTarget } from '../core/keys.ts';
 import { OTHER, type Platform } from '../core/util.ts';
 import { isNode, walk } from '../ir/node.ts';
-import type { UiIR } from '../build/types.ts';
+import type { MenuDef, MenuItem, UiIR } from '../build/types.ts';
 
 export const COLLECTION_FORMS = ['listview', 'gridview', 'filmstrip', 'treeview'];
 
@@ -47,7 +47,7 @@ export function assemble(ir: UiIR, builtins: Record<string, CommandSpec>, platfo
     for (const k of mod.keys) keymap.bindMap(k.scope, k.map, k.at);
     if (mod.key) {
       if (!commands.has('module.' + mod.id))
-        commands.add('module.' + mod.id, { label: mod.label, run: (ctx: any) => ctx.go(mod.id), checked: (s: any) => s.view?.module === mod.id, menu: 'Window', at: mod.at });
+        commands.add('module.' + mod.id, { label: mod.label, run: (ctx: any) => ctx.go(mod.id), checked: (s: any) => s.view?.module === mod.id, group: 'Window', at: mod.at });
       keymap.bind('module:*', mod.key, 'module.' + mod.id, mod.at);
     }
   }
@@ -63,7 +63,7 @@ export function assemble(ir: UiIR, builtins: Record<string, CommandSpec>, platfo
     // a tool shows in menus and the palette, and answers its key, only in the modules that offer it
     const where = t.module ? ([] as string[]).concat(t.module) : [...(offered.get(id) || [])];
     if (t.key) {
-      if (t.scope || !where.length) keymap.bind(t.scope || 'module:*', t.key, 'tool.' + id, t.at ?? null);
+      if (!where.length) keymap.bind('module:*', t.key, 'tool.' + id, t.at ?? null);
       else for (const mid of where) keymap.bind('module:' + mid, t.key, 'tool.' + id, t.at ?? null);
     }
     if (!commands.has('tool.' + id) || commands.get('tool.' + id)!.builtin)
@@ -75,7 +75,7 @@ export function assemble(ir: UiIR, builtins: Record<string, CommandSpec>, platfo
         ...(t.enabled !== undefined ? { enabled: t.enabled } : {}),
         ...(t.why !== undefined ? { why: t.why } : {}),
         at: t.at ?? null,
-        menu: 'Tools',
+        group: 'Tools',
         ...(where.length ? { module: where } : {}),
       });
   }
@@ -97,4 +97,18 @@ export function assemble(ir: UiIR, builtins: Record<string, CommandSpec>, platfo
       return undefined;
     });
   return { commands, keymap, offered };
+}
+
+/** command id → the label of the first menu that places it (menus are the one source of where a command is) */
+export function menuIndex(menus: readonly MenuDef[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const add = (items: readonly MenuItem[], label: string): void => {
+    for (const it of items || []) {
+      if (typeof it === 'string') {
+        if (it !== '-' && !out.has(it)) out.set(it, label);
+      } else if (it && typeof it === 'object' && Array.isArray(it.items)) add(it.items, label);
+    }
+  };
+  for (const m of menus) add(m.items, m.label);
+  return out;
 }

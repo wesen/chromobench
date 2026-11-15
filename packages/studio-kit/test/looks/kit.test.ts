@@ -1,4 +1,4 @@
-// CHB-021 stages 4–5 through commands on the booted 'looks' variant (MockEngine, six M1-derived frames): user apply
+// CHB-021 stages 4–5 through commands on the booted 'looks' layout (MockEngine, six M1-derived frames): user apply
 // as one batch (one tx + LoggedMutation.batch per frame, one global undo), the roll plan with partial approval,
 // E_STALE and Apply anyway (recomputed), the agent's cb.looks.apply from a real DslSession coalesced into one card,
 // snapshot restore, compare sources, survey tiles = main view node ids, copy/paste/sync, presets round trip.
@@ -9,9 +9,9 @@ import { m1Codes, M1, MockEngine } from '@chromobench/engine-mock';
 import { writeTiff16 } from '@chromobench/ingest';
 import { manualClock } from '@chromobench/shell/testing';
 import { DslSession } from '@chromobench/dsl';
-import { buildVariant, createStudio, defineVariant, memoryKV } from '../../src/index.ts';
+import { buildLayout, createStudio, defineLayout, memoryKV } from '../../src/index.ts';
 import { agentBatches, looksView, warmPrint } from '../../kits/looks/src/index.ts';
-import { VARIANTS } from '../../variants/index.js';
+import { LAYOUTS } from '../../layouts/index.js';
 
 function frames(n: number): Uint8Array[] {
   const base = m1Codes();
@@ -26,7 +26,7 @@ function frames(n: number): Uint8Array[] {
 async function startedLooks(n = 6) {
   const clock = manualClock(1_000);
   const studio = createStudio({ engine: new MockEngine(), kv: memoryKV(), now: () => clock.now() });
-  const built = buildVariant((await VARIANTS.looks()).default);
+  const built = buildLayout((await LAYOUTS.looks()).default);
   const rt = await built.app.boot(studio.services({ clock }));
   studio.attach(rt);
   const ids: string[] = [];
@@ -39,11 +39,11 @@ async function startedLooks(n = 6) {
 }
 const lights = (s: Awaited<ReturnType<typeof startedLooks>>, f: string) => s.studio.frames.get(f)!.log.committed.print.lights.logH;
 
-describe('cb.kits.looks in variants', () => {
+describe('cb.kits.looks in layouts', () => {
   it('CB-L001: looks forms without the kit; CB-L002: an unknown look in a choice', () => {
-    const errs = (def: unknown) => buildVariant(def).app.diagnostics.list.filter((d) => d.level === 'error' && d.code.startsWith('CB-L')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').right(cb.kits['looks'].amount()) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
-    expect(errs(defineVariant({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).right(ck.panel('p', {}, cb.kits['looks'].choice(['warm-print', 'warm prnt']))) }))).toEqual(['CB-L002']);
+    const errs = (def: unknown) => buildLayout(def).app.diagnostics.list.filter((d) => d.level === 'error' && d.code.startsWith('CB-L')).map((d) => `${d.code}${d.fix ? ` fix: ${d.fix}` : ''}`);
+    expect(errs(defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').module(ck.module('main').right(cb.kits['looks'].panels.amount())) }))).toEqual(['CB-L001 fix: .use(cb.kits.looks.kit) on the studio']);
+    expect(errs(defineLayout({ id: 'x', label: 'x', build: (ck, cb) => cb.studio('X').use(cb.kits['looks'].kit).module(ck.module('main').right(ck.panel.define('p', {}, cb.kits['looks'].views.choice(['warm-print', 'warm prnt'])))) }))).toEqual(['CB-L002']);
   });
 });
 
@@ -126,7 +126,7 @@ describe('agent apply: one card per batch (approval scope)', () => {
     const session = await DslSession.create({
       engine: studio.engine,
       frames: Object.fromEntries(ids.map((f) => [f, { log: studio.frames.get(f)!.log, source: studio.frames.get(f)!.info, name: studio.frames.get(f)!.name }])),
-      looks: looks.provider(() => rt.store.peek([])),
+      looks: looks.lib.provider(() => rt.store.peek([])),
     });
     const r = await session.eval({ code: `return cb.looks.apply('warm print', { warmth: 4 }, { amount: 0.6, to: 'all', why: 'warm print at 60 %' }).frames`, frame: ids[0]! });
     expect(r.error).toBeUndefined();
@@ -160,7 +160,7 @@ describe('agent apply: one card per batch (approval scope)', () => {
   it('Skip rejects only the stale frames; partial approval leaves unticked frames pending', async () => {
     const s = await startedLooks(3);
     const { rt, studio, ids, looks, st } = s;
-    const session = await DslSession.create({ engine: studio.engine, frames: Object.fromEntries(ids.map((f) => [f, { log: studio.frames.get(f)!.log, source: studio.frames.get(f)!.info }])), looks: looks.provider(() => rt.store.peek([])) });
+    const session = await DslSession.create({ engine: studio.engine, frames: Object.fromEntries(ids.map((f) => [f, { log: studio.frames.get(f)!.log, source: studio.frames.get(f)!.info }])), looks: looks.lib.provider(() => rt.store.peek([])) });
     await session.eval({ code: `cb.looks.apply('strong grade 4', {}, { to: 'all' })`, frame: ids[0]! });
     const b = agentBatches(st())[0]!;
     rt.runCommand('looks.batch.toggle', null, b.batch, ids[1]);
@@ -181,7 +181,7 @@ describe('snapshots, compare, survey (guide §5)', () => {
     const snap = st().snapshots[f][0];
     studio.route.applyMutations(f, [{ op: 'set', path: 'print.grade', value: 3 }, { op: 'set', path: 'print.enlarger.time_s', value: 12.6 }, { op: 'set', path: 'print.paper', value: 'fuji_crystal_archive' }], 'Three');
     rt.runCommand('looks.compare', null, { snapshot: snap.id });
-    expect(looks.diffOf(st()).map((d: any) => d.shown)).toEqual(['time 10.0 → 12.6 s (+1/3 st)', 'grade 2 → 3', 'paper kodak_portra_endura → fuji_crystal_archive']);
+    expect(looks.sel.diffOf(st()).map((d: any) => d.shown)).toEqual(['time 10.0 → 12.6 s (+1/3 st)', 'grade 2 → 3', 'paper kodak_portra_endura → fuji_crystal_archive']);
     rt.runCommand('looks.restoreSnapshot', null, snap.id);
     expect(studio.frames.get(f)!.log.stateHash).toBe(snap.stateHash);
     expect(rt.history.entries.at(-1)!.label).toBe('Restore "first print"');
@@ -195,22 +195,22 @@ describe('snapshots, compare, survey (guide §5)', () => {
     const id = (h: any) => studio.bridge.lower(h).named.id;
     // compare with the frame itself as reference: identical node
     rt.runCommand('looks.compare', null, { frame: ids[0] });
-    expect(id(looks.before(st()))).toBe(id(looks.print(st())));
+    expect(id(looks.sel.before(st()))).toBe(id(looks.sel.print(st())));
     // a survey tile for warm print equals the main view after applying it
     rt.runCommand('looks.pick', null, 'warm-print');
-    const tile = id(looks.tile(st(), warmPrint));
-    expect(id(looks.print(st()))).toBe(tile); // previewed
+    const tile = id(looks.lib.tile(st(), warmPrint));
+    expect(id(looks.sel.print(st()))).toBe(tile); // previewed
     rt.runCommand('looks.apply', null);
-    expect(id(looks.print(st()))).toBe(tile); // applied
+    expect(id(looks.sel.print(st()))).toBe(tile); // applied
     // compare with the other frame: its own print
     rt.runCommand('looks.compare', null, { frame: ids[1] });
-    expect(looks.before(st()).frame).toBe(ids[1]);
+    expect(looks.sel.before(st()).frame).toBe(ids[1]);
     // the ring sweep's centre is the current print
-    const ring = looks.sweep.ring();
-    expect(id(looks.tile(st(), ring.find((l: any) => l.id === 'ring-current')))).toBe(id(looks.print(st())));
+    const ring = looks.lib.sweep.ring();
+    expect(id(looks.lib.tile(st(), ring.find((l: any) => l.id === 'ring-current')))).toBe(id(looks.sel.print(st())));
     // a look that does not apply has no tile and says why
-    expect(looks.tile(st(), looks.byId(st(), 'portra-400-endura'))).toBeNull();
-    expect(looks.caption(st(), looks.byId(st(), 'portra-400-endura'))).toBe('This look needs a digital RAW');
+    expect(looks.lib.tile(st(), looks.sel.byId(st(), 'portra-400-endura'))).toBeNull();
+    expect(looks.lib.caption(st(), looks.sel.byId(st(), 'portra-400-endura'))).toBe('This look needs a digital RAW');
   });
 });
 

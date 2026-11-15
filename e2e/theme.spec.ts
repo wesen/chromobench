@@ -7,7 +7,7 @@ const token = (page: Page, t: string) => page.evaluate((n) => getComputedStyle(d
 const barBg = (page: Page) => page.evaluate(() => getComputedStyle(document.getElementById('statusbar')!).backgroundColor);
 
 async function boot(page: Page, extra = ''): Promise<void> {
-  await page.goto(`/?nosw&engine=mock&variant=classic${extra}`);
+  await page.goto(`/?nosw&engine=mock&layout=classic${extra}`);
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
 }
 

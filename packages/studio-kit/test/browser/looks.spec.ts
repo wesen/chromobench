@@ -1,4 +1,4 @@
-// CHB-021 smoke (guide §10 stage 8): the 'looks' variant on MockEngine — the looks library with print thumbnails, a
+// CHB-021 smoke (guide §10 stage 8): the 'looks' layout on MockEngine — the looks library with print thumbnails, a
 // look previewed, Amount 60 % with its result in points, apply and one undo, the survey and the ring-around sweep,
 // and an agent's look batch approved on one card.
 import { expect, test, type Page } from '@playwright/test';
@@ -15,7 +15,7 @@ test.afterEach(() => {
 const hook = <T>(page: Page, f: string): Promise<T> => page.evaluate(`(() => { const cb = window.chromobench; return ${f}; })()`) as Promise<T>;
 
 test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, agent batch', async ({ page }) => {
-  await page.goto('/demo/?variant=looks&fresh');
+  await page.goto('/demo/?layout=looks&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await page.keyboard.press('d');
   const lib = page.locator('.ck-panel[data-panel="looks-library"]');
@@ -73,7 +73,7 @@ test('looks: library thumbnails, preview, Amount, apply, undo, survey, ring, age
 });
 
 test('looks: apply to the roll’s unedited frames on one card, untick a frame, apply, one undo', async ({ page }) => {
-  await page.goto('/demo/?variant=looks&fresh');
+  await page.goto('/demo/?layout=looks&fresh');
   await page.waitForFunction(() => document.body.dataset['ready'] === '1');
   await hook(page, `cb.run('roll.fromFrames', { analyse: false })`);
   const ids = await hook<string[]>(page, `cb.state().roll.rolls['roll-1'].frames`);

@@ -8,7 +8,7 @@ import {
   createStudio, defaultFor, DARKROOM, ENLARGER_MODES, exposureStep, initialInMode, isInert, isNormalised, logKey, memoryKV, NORMALISED_NOTE,
   stripLabel, stripMutation, stripRecipe, stripValues, StudioLog, withEnlargerMode, withoutInert,
 } from '../src/index.ts';
-import { VARIANTS } from '../variants/index.js';
+import { LAYOUTS } from '../layouts/index.js';
 import { planFrame, printDensity } from '../kits/looks/src/index.ts';
 
 const r0 = (): FrameRecipe => defaultRecipe('negative-scan', { sha256: '0'.repeat(64), name: 'x' });
@@ -104,7 +104,7 @@ describe('a layout\'s enlarger mode for new recipes (CHB-031)', () => {
 
   it('simple and tiny make normalised recipes; the darkroom-style layouts leave the default (real)', async () => {
     const modes: Record<string, string | undefined> = {};
-    for (const [id, load] of Object.entries(VARIANTS)) modes[id] = (await load()).default.enlarger;
+    for (const [id, load] of Object.entries(LAYOUTS)) modes[id] = (await load()).default.enlarger;
     expect(modes).toEqual({ classic: undefined, darkroom: undefined, simple: 'normalised', lab: undefined, tiny: 'normalised', roll: undefined, finish: undefined, looks: undefined });
   });
 });

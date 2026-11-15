@@ -9,7 +9,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const DIRS = ['packages/shell/src', 'packages/shell/demo', 'packages/studio-kit/src', 'packages/studio-kit/kits', 'packages/studio-kit/variants', 'packages/studio-kit/demo', 'apps/studio/src', 'apps/studio/index.html'];
+const DIRS = ['packages/shell/src', 'packages/shell/demo', 'packages/studio-kit/src', 'packages/studio-kit/kits', 'packages/studio-kit/layouts', 'packages/studio-kit/demo', 'apps/studio/src', 'apps/studio/index.html'];
 /** theme files: literal colours are what they are for */
 const THEME = [/^packages\/shell\/src\/themes\//];
 /** files allowed a fixed number of literal colours, and why */
