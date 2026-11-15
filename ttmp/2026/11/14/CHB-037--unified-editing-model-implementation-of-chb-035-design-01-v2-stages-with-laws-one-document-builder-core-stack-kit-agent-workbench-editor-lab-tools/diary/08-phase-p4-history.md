@@ -238,3 +238,170 @@ identity: an item in both versions is moved, never removed and re-inserted.
   (a builder returning a transaction by another author is refused, E_MUTATION).
 - `why(doc, path)` = last of `trail(doc, path)`; an entry is in the trail when the value read at `path` (id-anchored,
   so it survives moves) differs before and after it.
+
+## Step 3: The contract — EditLog deleted, LOG_RULES
+
+The contract keeps no history of its own any more. `editlog.ts` is deleted; a frame's history is an entry of the
+values log, opened with kind `'frame'`, and the contract exports what the log needs to check it:
+`LOG_RULES = { frame: DOCUMENT_RULES }`. `edit()` (one transaction under the rules, no log) stays for code that
+edits a document directly.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Delete EditLog; the document's log is the values log with DOCUMENT_RULES; keep edit().
+
+**Inferred user intent:** One history implementation, not a contract one and a shell one.
+
+**Commit (code):** e4cde19 — "CHB-037 P4: contract - EditLog deleted; a frame's history is the values document log with LOG_RULES"
+
+### What I did
+- `git rm packages/contract/src/editlog.ts`; `index.ts` no longer exports it.
+- `AgentMode` moves to `eval.ts` (it is the eval contract's word); `EvalResult.transactions` is `LogEntry[]` from
+  values.
+- `validate.ts`: `LOG_RULES: Rules = { frame: DOCUMENT_RULES }`.
+- `test/editlog-builders.test.ts` → `test/history-builders.test.ts`: the EditLog cases rewritten on `Log` (rules
+  refuse, undo exact, draft what-if compiles to the committed ids, proposal stale/forced/why, a roll batch with a
+  skipped frame, save/load, version refused); the builder tests unchanged.
+- `CONTRACT-DECISIONS.md` CC-019: a row "design §26, plan P4 — One history" and `editlog.ts` in the changes line.
+- `pnpm exec tsc -p packages/contract/tsconfig.json --noEmit` green; `pnpm exec vitest run packages/contract` → 7
+  files, 62 passed; `node tools/gen-docs/main.ts --contract-only --check` → `gen:check ok (15 files)`.
+
+### Why
+- Mode (read-only / ask / auto) is the host's policy about who may commit; it does not belong in a data structure.
+  The log lets anyone commit or propose; the host (P6) routes the agent's transactions to `propose` unless the
+  photographer chose auto.
+
+### What worked
+- Every EditLog behaviour the old tests pinned has a direct log equivalent; the test file shrank.
+
+### What didn't work
+- `plan(log.targets<Document>(), (d) => d.kind === …)`: `TS2339: Property 'kind' does not exist on type
+  'Document'` — the frame kind is `documentKind(d)`.
+
+### What I learned
+- `DOCUMENT_RULES`' `validateTransaction` validates the whole document; drafts therefore apply only the per-mutation
+  `validate` (cheap, per touched unit) while a gesture moves, and the commit runs both.
+
+### What was tricky to build
+- N/A beyond the above.
+
+### What warrants a second pair of eyes
+- `tools/scripts/m1-headless.ts` still imports `EditLog` and `defaultRecipe` (broken since P2a; not mine to change).
+
+### What should be done in the future
+- P6: map `AgentMode` onto commit vs propose in the host; `EvalResult.transactions` from `log.entries` of the eval.
+
+### Code review instructions
+- `packages/contract/src/validate.ts` (end), `src/eval.ts`, `test/history-builders.test.ts`.
+
+### Technical details
+- `Log.create({ rules: LOG_RULES })`, `log.open(doc.frame, doc, { kind: 'frame', by: 'auto', source: { kind: 'ingest' } })`.
+
+## Step 4: The shell store — the document tier is the log; Draft; mounts
+
+The store keeps its three tiers, but the document tier is now `store.log`. The program's own document state is the
+log's `main` document; frames and other documents are *mounted*: they show at a path in the state tree and edits
+under that path go to them. Routes, adapters, mirror values and history parts existed only to connect EditLogs to
+the store; with the documents in the log they are deleted, and so is `History` with its skip rules and channels.
+
+A transaction's writes are routed by document, each document's draft (`log.draft(id).update(setIn …)`) gives its
+net change by `diff`, and the edits commit as one step (a batch when several documents changed). The preview tier
+is made of `Draft`s (the renamed `Layer`): the gesture is the store's own draft, named drafts sit under it.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Make the store's document tier the values log; keep view and preview tiers; rename
+`Layer` → `Draft`; map gestures onto drafts.
+
+**Inferred user intent:** The studio, the agent and the UI all see and undo one history.
+
+**Commit (code):** e236dba — "CHB-037 P4: the shell store's document tier is the values document log; Layer -> Draft"
+
+### What I did
+- `core/store.ts` rewritten: `committed` (was `doc`), `current`, `log`, `gesture`, `drafts`, `mounts`;
+  `open(id, doc, { at, kind, by, source })`, `close(id)`, `change(log => log…)`, `adopt(store)`, `undo()`,
+  `redo()`, `tx`, `set`, `setMany`, `writeView` (view tier only; a document path throws), `commitWrites`,
+  `preview/commit/cancel`, `draft(name)`. `TxRefused(label, docs, cause)`.
+- `core/store/project.ts` (new): `MAIN`, `changedPaths(a, b)` (by reference, as deep as both are objects),
+  `project(tree, base, paths, doc, keep)` (writes a document's changed paths into the tree and puts back the view
+  prefixes and mounted documents that sit below them).
+- `store/layers.ts` → `store/drafts.ts` (class `Draft`); `store/draft.ts` → `store/writer.ts` (class `Writer`,
+  `writes()` instead of `patches()`); `store/types.ts`: `Write`, `TxOpts` (`coalesce`, `detail`, `by`, `source`,
+  `keepPreview`), `WriteInfo` (`draft` instead of `layer`), `MountDecl`; `store/routes.ts` and `core/history.ts`
+  deleted; `snapshot.ts`: the document tier is every document where it shows.
+- Kits: `k.route` → `k.mount(prefix, { keyDepth, kind, checkPath })`, `ir.routes` → `ir.mounts`; initial state
+  under a declared mount opens one document per key; a write under a declared prefix where no document is open is
+  refused.
+- Runtime: `services.adapters` → `services.rules`; `rt.history` gone (`rt.store.log`, `rt.undo()`/`rt.redo()`
+  return the `Step`); `ctx.layer` → `ctx.draft`, `ctx.history` → `ctx.log`; `type Draft<S>` → `WriterOf<S>`;
+  `stateOpts.channelName/currentChannel` → `docName/currentDoc`; `inspect().layers` → `drafts`; a refusal's toast
+  uses the diagnostic's message (no code prefix). Builtins' Undo/Redo labels read `store.log.undoStep/redoStep`.
+- `core/util.ts`: `overProxy(real, handler)`; the tracker and the read-only view use it.
+- Tests rewritten: `core.test.ts` (history cases on the log; adopt; why; a non-JSON value refused),
+  `store-ext.test.ts` (tiers, drafts, mounted documents: one notify and one step across main and a frame, a rules
+  refusal aborting everything, a gesture under a mount, a roll batch, coalescing, `change` with propose/approve/
+  plan, close, open's refusals), runtime/build/extend/mount/demo specs; the mini studio mounts `dev` (one document
+  per photo), so "Undo Exposure (on Photo 1)" comes from the step's document.
+- Shell README: "State: three tiers, one history".
+- `pnpm exec tsc -p packages/shell/tsconfig.json --noEmit` green; `pnpm exec vitest run packages/shell` → 10 files,
+  108 passed; `STUDIO_PORT=5541 STUDIO_KIT_PORT=5542 SHELL_DEMO_PORT=5543 GPU_PARITY_PORT=5544 CI=1 pnpm exec
+  playwright test --project shell-demo` → 3 passed (the web-server noise is the studio and studio-kit apps, broken
+  until P5b).
+
+### Why
+- With one log there is nothing to skip: undo applies the step's inverses to the documents they were made on.
+- `diff` as the net change makes `ctx.tx`, a draft's commit and a slider drag the same code path: write a new
+  version, take the difference, commit it.
+
+### What worked
+- The store-ext tests passed on the first run; the CraftKit core cases needed only API renames.
+
+### What didn't work
+- First full run: `TypeError: 'get' on proxy: property 'photos' is a read-only and non-configurable data property
+  on the proxy target but the proxy did not return its actual value` — the log deep-freezes documents, and a Proxy
+  over a frozen object must return its properties unchanged, so the tracker and the read-only view could not wrap
+  children. Fixed with `overProxy`: the proxy's own target is an empty stand-in (an array for arrays, so
+  `Array.isArray` holds); traps read the real object; descriptors are reported configurable (and `length` kept in
+  sync on the stand-in, whose own `length` is non-configurable).
+- The runtime test expected the toast `t must be at most 9` and got `E_ARG_RANGE: t must be at most 9` (a
+  ValueError's message carries the code); the toast now uses `cause.diag.message`.
+- `pnpm exec tsc …`: `Argument of type 'TxOpts | undefined' is not assignable to parameter of type '(WriteInfo &
+  TxOpts) | undefined'` once `TxOpts` lost its index signature; `set`/`setMany` take `TxOpts & { label? }`.
+- A Python replace script aborted on its last (already applied) pair and wrote nothing; I moved the edits into a
+  reusable all-or-nothing helper (`<scratchpad>/scripts/sub.py`).
+
+### What I learned
+- The mini studio's photos are a natural case for mounts: each photo's develop settings is a document, so the
+  undo toast's "(on Photo 1)" falls out of the step's documents instead of a channel tag.
+
+### What was tricky to build
+- A main-document write that *contains* other tiers (`t.roll = {...}` with `roll.contact` in the view tier, or a
+  write of `recipes` holding mounted frames): `route` splits it — the main document gets the value without those
+  parts, the view tier and each mounted document get theirs; a document root under a declared mount that nobody
+  opened is refused. The projection puts back what other tiers hold below a changed main path.
+- Coalescing: the store remembers the step its last coalescing transaction made; the next one with the same key,
+  inside the window, while that step is still the newest, commits with `merge: true` (the log replaces the step by
+  the net change).
+
+### What warrants a second pair of eyes
+- `Store.replace` assumes every document of the new log is the main one or mounted (throws otherwise); `adopt`
+  takes the other store's mounts and log as they are.
+- The document tier is deep-frozen now: code that mutated state objects in place (always a bug) now throws in
+  strict mode. studio-kit and the apps may have such code.
+
+### What should be done in the future
+- P5b: rewire studio-kit's bridge (`editlog-route.ts`) onto mounts — see Step 6.
+
+### Code review instructions
+- `packages/shell/src/core/store.ts` (`route`, `commitWrites`, `replace`, constructor), `store/project.ts`,
+  `store/drafts.ts`, `util.ts` `overProxy`; tests `test/core/store-ext.test.ts`, `test/core/core.test.ts`.
+- `pnpm exec vitest run packages/shell && pnpm exec tsc -p packages/shell/tsconfig.json --noEmit`.
+
+### Technical details
+- Sources the store writes: `ctx.tx` → `{ kind: 'tx', …opts.source }`, a gesture → `{ kind: 'gesture' }`, a named
+  draft → `{ kind: 'draft', draft: name }`; `detail` is added as `source.detail`. Edit ids `s<n>:<doc>`, batch id
+  `s<n>` when several documents change.
