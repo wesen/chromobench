@@ -36,3 +36,12 @@ test('an out-of-memory recovers on the retry; beyond it, E_GPU_OOM says what was
   expect(r.failed.hint).toMatch(/budget/);
   expect(r.afterLength).toBeGreaterThan(0);
 });
+
+// a measurement, not a law (CHB-041, asked: half floats for full-size intermediates): what rounding a camera file's first
+// full-size texture to rgba16float costs, against the tolerances the GPU holds against the reference engine
+test('half-float storage of the first full-size texture, measured against the parity tolerances', async ({ page }) => {
+  const r = await run(page, 'residency:f16');
+  expect(r.error).toBeUndefined();
+  expect(r.sourceRelError).toBeGreaterThan(0);
+  expect(r['scene.export'].maxAbs).toBeGreaterThan(0);
+});

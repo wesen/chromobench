@@ -38,7 +38,64 @@ async function compareScales(withProxy: GpuEngine, without: GpuEngine, g: Graph,
   return out;
 }
 
+/** x rounded to the nearest IEEE half float (ties to even), as an rgba16float texture would store it. */
+function f16(x: number): number {
+  const native = (Math as unknown as { f16round?: (v: number) => number }).f16round;
+  if (native) return native(x);
+  if (!Number.isFinite(x) || x === 0) return x;
+  const a = Math.abs(x);
+  if (a >= 65520) return Math.sign(x) * Infinity;
+  const q = 2 ** (Math.max(Math.floor(Math.log2(a)), -14) - 10);
+  const m = a / q, fl = Math.floor(m);
+  const r = m - fl > 0.5 || (m - fl === 0.5 && fl % 2 === 1) ? fl + 1 : fl;
+  return Math.sign(x) * r * q;
+}
+
 export const RESIDENCY_TESTS: Record<string, T> = {
+  /**
+   * CHB-041 (asked: 16-bit storage for full-size intermediates): what storing a camera file's first full-size texture
+   * in rgba16float would cost in accuracy. The source is rounded to half floats (the input of film.camMatrix, the texture
+   * of the owner's E_GPU_OOM) and the scene cut and the display are compared with the f32 render, at preview and export,
+   * against the tolerances the parity specs hold the GPU to against the reference engine (film:scene: scene 3e-5,
+   * display 2e-4).
+   */
+  async 'residency:f16'() {
+    const rt = await runtime();
+    const gpu = await GpuEngine.create({ runtime: rt, opfs: false, prewarm: false });
+    try {
+      const raw = syntheticRaw(403, 271);
+      const half = { info: { ...raw.info, sha256: raw.info.sha256.replace(/^./, (c) => (c === '0' ? '1' : '0')) }, data: raw.data.map(f16) };
+      let rel = 0;
+      for (let i = 0; i < raw.data.length; i++) rel = Math.max(rel, Math.abs(half.data[i]! - raw.data[i]!) / Math.max(Math.abs(raw.data[i]!), 1e-6));
+      gpu.openDecoded(raw.info, raw.data);
+      gpu.openDecoded(half.info, half.data);
+      const out: Record<string, { maxAbs: number; mean: number }> = {};
+      for (const cut of ['scene', 'display'] as const) {
+        for (const precision of ['preview', 'export'] as const) {
+          const r: Float32Array[] = [];
+          for (const src of [raw, half]) {
+            const g = new Graph();
+            g.registerSource(src.info);
+            const c = compile(newDocument('digital-raw', { sha256: src.info.sha256, name: 'synthetic.dng', width: 403, height: 271 }), g);
+            const n = cut === 'scene' ? c.cuts.scene! : c.display;
+            gpu.adopt(g.closure(n.id));
+            r.push((await (await gpu.evaluate(n, { scale: 'full', precision })).read()) as Float32Array);
+          }
+          let maxAbs = 0, sum = 0;
+          for (let i = 0; i < r[0]!.length; i++) {
+            const d = Math.abs(r[0]![i]! - r[1]![i]!);
+            maxAbs = Math.max(maxAbs, d);
+            sum += d;
+          }
+          out[`${cut}.${precision}`] = { maxAbs, mean: sum / r[0]!.length };
+        }
+      }
+      return { sourceRelError: rel, ...out };
+    } finally {
+      gpu.dispose();
+    }
+  },
+
   async 'residency:proxy'() {
     const rt = await runtime();
     const proxy = await GpuEngine.create({ runtime: rt, opfs: false, prewarm: false });
