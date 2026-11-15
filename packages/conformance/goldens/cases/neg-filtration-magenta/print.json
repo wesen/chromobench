@@ -1,0 +1,32 @@
+{
+  "case": "neg-filtration-magenta",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-filtration-magenta/print.f32",
+  "sha256": "fb857b243b06de9059ef5bcfb87f70cc207c85ada1ad21abacd825d5459f4672",
+  "stats": {
+    "min": [
+      0.0134718,
+      0.0178281,
+      0.01391255
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2809101,
+      0.3281337,
+      0.3058517
+    ]
+  },
+  "warnings": []
+}

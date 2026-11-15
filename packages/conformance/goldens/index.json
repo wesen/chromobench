@@ -1,0 +1,1774 @@
+{
+  "format": "chromobench-goldens/1",
+  "about": "Golden pictures of the recipe-v2 pipeline (compile() in packages/contract/src/graph.ts) on core's f64 reference engine, made before the CHB-037 cut-off. See tools/goldens/README.md.",
+  "engine": {
+    "id": "reference",
+    "adapter": "reference-f64",
+    "conventions": "core-v1:opaque/cie1931-2deg/subtract/model-3cdf/midgray-geomean",
+    "mode": "exact",
+    "wrapper": "StudioEngine (apps/studio/src/host/studio-engine.ts): output.frame"
+  },
+  "cuts": {
+    "print": "the view.adapt node (print-xyz)",
+    "display": "the output.frame node (display-rgb, sRGB)"
+  },
+  "tolerance": {
+    "maxAbs": 0.00001,
+    "note": "largest |Δ| allowed per float32 sample; today the renderer reproduces the files exactly"
+  },
+  "fixtures": {
+    "negative": {
+      "kind": "negative",
+      "path": "packages/conformance/goldens/fixtures/negative-96x64.tif",
+      "title": "Synthetic colour negative, 16-bit TIFF 96 × 64: rebate, neutral ramp, seven patches, fine grating, highlight blob, three dust specks (tools/goldens/fixtures.ts)",
+      "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38"
+    },
+    "camera": {
+      "kind": "camera",
+      "path": "packages/conformance/goldens/fixtures/camera-96x64.f32",
+      "info": "packages/conformance/goldens/fixtures/camera-96x64.json",
+      "title": "Synthetic camera file, linear camera RGB float32 96 × 64 with its SourceInfo (camera matrix, as-shot neutral): the same scene, three sensor-dust specks",
+      "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22"
+    },
+    "m1": {
+      "kind": "tiff",
+      "path": "fixtures/synthetic/m1-negative-96x64.tif",
+      "title": "The M1 walking-skeleton negative (tools/fixtures/make-m1.ts)",
+      "sha256": "29ffc4d574382d06cb2717894b65c6274256d4e802cd17d151893625049cb0a2"
+    }
+  },
+  "cases": [
+    {
+      "id": "neg-plain",
+      "title": "Negative as opened: default recipe, rebate box, 10 s, no lights",
+      "exercises": [
+        "source:negative-scan",
+        "scan.rebate",
+        "print.enlarger (default)"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-plain/recipe.json",
+      "cuts": {
+        "print": "cases/neg-plain/print.json",
+        "display": "cases/neg-plain/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-m1-plain",
+      "title": "The M1 fixture negative (fixtures/synthetic) with its rebate, first-printed",
+      "exercises": [
+        "source:negative-scan",
+        "fixture:m1",
+        "print.lights.auto"
+      ],
+      "fixture": "m1",
+      "recipe": "cases/neg-m1-plain/recipe.json",
+      "cuts": {
+        "print": "cases/neg-m1-plain/print.json",
+        "display": "cases/neg-m1-plain/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-plain",
+      "title": "Camera file as opened: default digital-raw recipe (daylight WB, 10 s)",
+      "exercises": [
+        "source:digital-raw",
+        "capture",
+        "film.* forward path"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-plain/recipe.json",
+      "cuts": {
+        "print": "cases/cam-plain/print.json",
+        "display": "cases/cam-plain/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-auto-lights",
+      "title": "Studio first print: integrate to grey, density into time, colour into lights",
+      "exercises": [
+        "print.lights.auto (integrate)",
+        "print.lights.logH",
+        "print.enlarger.time_s"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-auto-lights/recipe.json",
+      "cuts": {
+        "print": "cases/neg-auto-lights/print.json",
+        "display": "cases/neg-auto-lights/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-auto-filtration",
+      "title": "First print baked into filtration (studio ?filtration=1)",
+      "exercises": [
+        "print.lights.auto (integrate)",
+        "bake",
+        "print.enlarger.filtration"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-auto-filtration/recipe.json",
+      "cuts": {
+        "print": "cases/neg-auto-filtration/print.json",
+        "display": "cases/neg-auto-filtration/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-lights-manual",
+      "title": "Printer lights moved by hand: +4 pt red, −2 pt blue",
+      "exercises": [
+        "print.lights.logH"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-lights-manual/recipe.json",
+      "cuts": {
+        "print": "cases/neg-lights-manual/print.json",
+        "display": "cases/neg-lights-manual/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-auto",
+      "title": "Camera file first print (density half way to grey, colour as shot)",
+      "exercises": [
+        "print.lights.auto (integrate)",
+        "source:digital-raw"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-auto/recipe.json",
+      "cuts": {
+        "print": "cases/cam-auto/print.json",
+        "display": "cases/cam-auto/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-time-half",
+      "title": "Main exposure halved (one stop less)",
+      "exercises": [
+        "print.enlarger.time_s"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-time-half/recipe.json",
+      "cuts": {
+        "print": "cases/neg-time-half/print.json",
+        "display": "cases/neg-time-half/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-time-double",
+      "title": "Main exposure doubled (one stop more)",
+      "exercises": [
+        "print.enlarger.time_s"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-time-double/recipe.json",
+      "cuts": {
+        "print": "cases/neg-time-double/print.json",
+        "display": "cases/neg-time-double/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-fstop",
+      "title": "Lens stopped down from f/8 to f/11",
+      "exercises": [
+        "print.enlarger.fstop"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-fstop/recipe.json",
+      "cuts": {
+        "print": "cases/neg-fstop/print.json",
+        "display": "cases/neg-fstop/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-filtration-magenta",
+      "title": "Filtration +20 M",
+      "exercises": [
+        "print.enlarger.filtration"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-filtration-magenta/recipe.json",
+      "cuts": {
+        "print": "cases/neg-filtration-magenta/print.json",
+        "display": "cases/neg-filtration-magenta/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-filtration-cyan-yellow",
+      "title": "Filtration +10 C −15 Y",
+      "exercises": [
+        "print.enlarger.filtration"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-filtration-cyan-yellow/recipe.json",
+      "cuts": {
+        "print": "cases/neg-filtration-cyan-yellow/print.json",
+        "display": "cases/neg-filtration-cyan-yellow/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-normalised",
+      "title": "Normalised enlarger mode, first-printed (everything in the lights)",
+      "exercises": [
+        "print.enlarger.mode normalised",
+        "print.lights.auto"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-normalised/recipe.json",
+      "cuts": {
+        "print": "cases/neg-normalised/print.json",
+        "display": "cases/neg-normalised/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-grade-soft",
+      "title": "Grade 0.5 (soft)",
+      "exercises": [
+        "print.grade"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-grade-soft/recipe.json",
+      "cuts": {
+        "print": "cases/neg-grade-soft/print.json",
+        "display": "cases/neg-grade-soft/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-grade-hard",
+      "title": "Grade 4.5 (hard)",
+      "exercises": [
+        "print.grade"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-grade-hard/recipe.json",
+      "cuts": {
+        "print": "cases/neg-grade-hard/print.json",
+        "display": "cases/neg-grade-hard/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-preflash",
+      "title": "Preflash 3 % of the grey-card exposure",
+      "exercises": [
+        "print.preflash"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-preflash/recipe.json",
+      "cuts": {
+        "print": "cases/neg-preflash/print.json",
+        "display": "cases/neg-preflash/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.preflash",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-preflash-strong",
+      "title": "Preflash 15 % (beyond the usual range)",
+      "exercises": [
+        "print.preflash"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-preflash-strong/recipe.json",
+      "cuts": {
+        "print": "cases/neg-preflash-strong/print.json",
+        "display": "cases/neg-preflash-strong/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.preflash",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dodge-ellipse",
+      "title": "Dodge ½ stop through an ellipse over the patches",
+      "exercises": [
+        "exposure:dodge",
+        "stops",
+        "mask.ellipse"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dodge-ellipse/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dodge-ellipse/print.json",
+        "display": "cases/neg-dodge-ellipse/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.ellipse",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dodge-ellipse-feather",
+      "title": "Dodge 1 stop through a rotated, feathered ellipse",
+      "exercises": [
+        "exposure:dodge",
+        "mask.ellipse angle_deg",
+        "mask.feather"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dodge-ellipse-feather/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dodge-ellipse-feather/print.json",
+        "display": "cases/neg-dodge-ellipse-feather/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.ellipse",
+        "mask.feather",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-burn-gradient",
+      "title": "Burn 1 stop through a gradient from the top edge (a sky)",
+      "exercises": [
+        "exposure:burn",
+        "stops",
+        "mask.gradient"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-burn-gradient/recipe.json",
+      "cuts": {
+        "print": "cases/neg-burn-gradient/print.json",
+        "display": "cases/neg-burn-gradient/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "mask.gradient",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-burn-gradient-not",
+      "title": "Burn 2 s through the inverted top gradient (the foreground)",
+      "exercises": [
+        "exposure:burn",
+        "time_s",
+        "mask.gradient",
+        "mask.not"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-burn-gradient-not/recipe.json",
+      "cuts": {
+        "print": "cases/neg-burn-gradient-not/print.json",
+        "display": "cases/neg-burn-gradient-not/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.gradient",
+        "mask.not",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-burn-paint",
+      "title": "Burn 0.7 stop through painted strokes (one add, one erase)",
+      "exercises": [
+        "exposure:burn",
+        "mask.paint (add, erase)"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-burn-paint/recipe.json",
+      "cuts": {
+        "print": "cases/neg-burn-paint/print.json",
+        "display": "cases/neg-burn-paint/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.paint",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dodge-or",
+      "title": "Dodge ⅔ stop through an ellipse or-ed with painted strokes, feathered",
+      "exercises": [
+        "exposure:dodge",
+        "mask.or",
+        "mask.ellipse",
+        "mask.paint",
+        "mask.feather"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dodge-or/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dodge-or/print.json",
+        "display": "cases/neg-dodge-or/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.ellipse",
+        "mask.paint",
+        "mask.or",
+        "mask.feather",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-burn-and",
+      "title": "Burn 1 stop where a gradient and an ellipse overlap",
+      "exercises": [
+        "exposure:burn",
+        "mask.and",
+        "mask.gradient",
+        "mask.ellipse"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-burn-and/recipe.json",
+      "cuts": {
+        "print": "cases/neg-burn-and/print.json",
+        "display": "cases/neg-burn-and/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "mask.gradient",
+        "mask.ellipse",
+        "mask.and",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-burn-luminance-scan",
+      "title": "Burn ½ stop through a luminance mask of the scan (thin negative = shadows)",
+      "exercises": [
+        "exposure:burn",
+        "mask.luminance (camera-linear)"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-burn-luminance-scan/recipe.json",
+      "cuts": {
+        "print": "cases/neg-burn-luminance-scan/print.json",
+        "display": "cases/neg-burn-luminance-scan/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.luminance",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dodge-luminance-print",
+      "title": "Dodge ½ stop through a feathered luminance mask of the main exposure (paper log H)",
+      "exercises": [
+        "exposure:dodge",
+        "mask.luminance (paper-logH)",
+        "mask.feather"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dodge-luminance-print/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dodge-luminance-print/print.json",
+        "display": "cases/neg-dodge-luminance-print/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.luminance",
+        "mask.feather",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-flash-base",
+      "title": "Flash through the film base, 0.2 s, whole frame",
+      "exercises": [
+        "exposure:flash through base",
+        "unmasked"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-flash-base/recipe.json",
+      "cuts": {
+        "print": "cases/neg-flash-base/print.json",
+        "display": "cases/neg-flash-base/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.luminance",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-flash-base-gradient",
+      "title": "Flash through the base, 0.5 s, under the top gradient",
+      "exercises": [
+        "exposure:flash through base",
+        "mask.gradient"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-flash-base-gradient/recipe.json",
+      "cuts": {
+        "print": "cases/neg-flash-base-gradient/print.json",
+        "display": "cases/neg-flash-base-gradient/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.gradient",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-flash-open-ellipse",
+      "title": "Flash through an open gate, 0.5 s, through an ellipse",
+      "exercises": [
+        "exposure:flash open",
+        "mask.ellipse"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-flash-open-ellipse/recipe.json",
+      "cuts": {
+        "print": "cases/neg-flash-open-ellipse/print.json",
+        "display": "cases/neg-flash-open-ellipse/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.ellipse",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-split",
+      "title": "Split: half the time as main, half at +40 M (whole frame)",
+      "exercises": [
+        "exposure:split",
+        "exposure filtration",
+        "print.enlarger.time_s"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-split/recipe.json",
+      "cuts": {
+        "print": "cases/neg-split/print.json",
+        "display": "cases/neg-split/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.luminance",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-split-masked",
+      "title": "Split +30 Y for 2 s through a luminance mask of the scan",
+      "exercises": [
+        "exposure:split",
+        "exposure filtration",
+        "mask.luminance"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-split-masked/recipe.json",
+      "cuts": {
+        "print": "cases/neg-split-masked/print.json",
+        "display": "cases/neg-split-masked/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.luminance",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-exposures-mixed",
+      "title": "Dodge, burn, base flash and a disabled burn together (the sum is order-free)",
+      "exercises": [
+        "exposure:dodge",
+        "exposure:burn",
+        "exposure:flash through base",
+        "exposure enabled=false",
+        "burn filtration"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-exposures-mixed/recipe.json",
+      "cuts": {
+        "print": "cases/neg-exposures-mixed/print.json",
+        "display": "cases/neg-exposures-mixed/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "print.expose",
+        "print.expose",
+        "mask.ellipse",
+        "mask.feather",
+        "mask.gradient",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-contrast-positive",
+      "title": "Contrast mask, positive, γ 0.5, 300 µm, re-metered",
+      "exercises": [
+        "print.densityMasks contrast positive"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-contrast-positive/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-contrast-positive/print.json",
+        "display": "cases/neg-dm-contrast-positive/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-contrast-same",
+      "title": "Contrast mask, same polarity, γ 0.4, 300 µm, re-metered",
+      "exercises": [
+        "print.densityMasks contrast same"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-contrast-same/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-contrast-same/print.json",
+        "display": "cases/neg-dm-contrast-same/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-unsharp-positive",
+      "title": "Unsharp mask, positive, γ 0.6, 25 µm, re-metered",
+      "exercises": [
+        "print.densityMasks unsharp positive"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-unsharp-positive/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-unsharp-positive/print.json",
+        "display": "cases/neg-dm-unsharp-positive/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-unsharp-same",
+      "title": "Unsharp mask, same polarity, γ 0.5, 25 µm, re-metered",
+      "exercises": [
+        "print.densityMasks unsharp same"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-unsharp-same/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-unsharp-same/print.json",
+        "display": "cases/neg-dm-unsharp-same/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-unmetered",
+      "title": "Unsharp mask, positive, γ 0.6, 25 µm, at the base time (the mask lightens the whole print)",
+      "exercises": [
+        "print.densityMasks unsharp positive"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-unmetered/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-unmetered/print.json",
+        "display": "cases/neg-dm-unmetered/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-dm-two-with-burn-flash",
+      "title": "Contrast and unsharp masks (and a disabled one) with a burn and a base flash, re-metered (masks act on the burn, not the flash)",
+      "exercises": [
+        "print.densityMasks (several, enabled=false)",
+        "exposure:burn",
+        "exposure:flash through base"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dm-two-with-burn-flash/recipe.json",
+      "cuts": {
+        "print": "cases/neg-dm-two-with-burn-flash/print.json",
+        "display": "cases/neg-dm-two-with-burn-flash/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.expose",
+        "mask.gradient",
+        "mask.luminance",
+        "print.densityMask",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-retouch-heal",
+      "title": "Heal the three white dust specks on the print (one spot disabled)",
+      "exercises": [
+        "retouch.spots heal",
+        "enabled=false"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-retouch-heal/recipe.json",
+      "cuts": {
+        "print": "cases/neg-retouch-heal/print.json",
+        "display": "cases/neg-retouch-heal/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "retouch.heal",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-retouch-clone",
+      "title": "Clone a patch onto another (feather 0.5, opacity 0.8)",
+      "exercises": [
+        "retouch.spots clone",
+        "feather",
+        "opacity"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-retouch-clone/recipe.json",
+      "cuts": {
+        "print": "cases/neg-retouch-clone/print.json",
+        "display": "cases/neg-retouch-clone/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "retouch.heal",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-crop",
+      "title": "Crop to 72 × 52",
+      "exercises": [
+        "view.frame.crop"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-crop/recipe.json",
+      "cuts": {
+        "print": "cases/neg-crop/print.json",
+        "display": "cases/neg-crop/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-orient-cw90-crop",
+      "title": "Crop, then rotate 90° clockwise",
+      "exercises": [
+        "view.frame.orientation cw90",
+        "view.frame.crop"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-orient-cw90-crop/recipe.json",
+      "cuts": {
+        "print": "cases/neg-orient-cw90-crop/print.json",
+        "display": "cases/neg-orient-cw90-crop/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-orient-flipH",
+      "title": "Mirror left-right",
+      "exercises": [
+        "view.frame.orientation flipH"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-orient-flipH/recipe.json",
+      "cuts": {
+        "print": "cases/neg-orient-flipH/print.json",
+        "display": "cases/neg-orient-flipH/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-orient-transverse",
+      "title": "Transverse (flip about the anti-diagonal)",
+      "exercises": [
+        "view.frame.orientation transverse"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-orient-transverse/recipe.json",
+      "cuts": {
+        "print": "cases/neg-orient-transverse/print.json",
+        "display": "cases/neg-orient-transverse/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-straighten",
+      "title": "Straighten 4° inside a crop, rotated 180°",
+      "exercises": [
+        "view.frame.angle_deg",
+        "view.frame.crop",
+        "view.frame.orientation rot180"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-straighten/recipe.json",
+      "cuts": {
+        "print": "cases/neg-straighten/print.json",
+        "display": "cases/neg-straighten/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-scan-flare",
+      "title": "Scanner flare 1.5 % (per channel)",
+      "exercises": [
+        "scan.flare"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-scan-flare/recipe.json",
+      "cuts": {
+        "print": "cases/neg-scan-flare/print.json",
+        "display": "cases/neg-scan-flare/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.flare",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-scan-baseT",
+      "title": "The roll base as scan.baseT instead of the rebate box",
+      "exercises": [
+        "scan.baseT"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-scan-baseT/recipe.json",
+      "cuts": {
+        "print": "cases/neg-scan-baseT/print.json",
+        "display": "cases/neg-scan-baseT/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-view-print-as-seen",
+      "title": "Rendering print-as-seen (viewing flare on), white D50, illuminant D65",
+      "exercises": [
+        "view.output.rendering",
+        "view.output.white",
+        "view.illuminant",
+        "view.flare"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-view-print-as-seen/recipe.json",
+      "cuts": {
+        "print": "cases/neg-view-print-as-seen/print.json",
+        "display": "cases/neg-view-print-as-seen/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "neg-knee-clip",
+      "title": "Display knee: clip instead of OkLCh",
+      "exercises": [
+        "view.output.display.knee.method"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-knee-clip/recipe.json",
+      "cuts": {
+        "print": "cases/neg-knee-clip/print.json",
+        "display": "cases/neg-knee-clip/display.json"
+      },
+      "ops": [
+        "source.open",
+        "scan.density",
+        "invert.dyes",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-exposure-plus1",
+      "title": "Capture exposure +1 EV",
+      "exercises": [
+        "capture.exposureEV"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-exposure-plus1/recipe.json",
+      "cuts": {
+        "print": "cases/cam-exposure-plus1/print.json",
+        "display": "cases/cam-exposure-plus1/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-wb-as-shot",
+      "title": "White balance as shot",
+      "exercises": [
+        "capture.whiteBalance.mode as-shot"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-wb-as-shot/recipe.json",
+      "cuts": {
+        "print": "cases/cam-wb-as-shot/print.json",
+        "display": "cases/cam-wb-as-shot/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-wb-custom",
+      "title": "White balance custom 4000 K, tint +10",
+      "exercises": [
+        "capture.whiteBalance custom"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-wb-custom/recipe.json",
+      "cuts": {
+        "print": "cases/cam-wb-custom/print.json",
+        "display": "cases/cam-wb-custom/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-development",
+      "title": "Development: push +1, no grain, no halation, no DIR coupling",
+      "exercises": [
+        "capture.development"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-development/recipe.json",
+      "cuts": {
+        "print": "cases/cam-development/print.json",
+        "display": "cases/cam-development/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-grade-lights",
+      "title": "Grade 3.5 and lights −3 pt green",
+      "exercises": [
+        "print.grade",
+        "print.lights.logH"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-grade-lights/recipe.json",
+      "cuts": {
+        "print": "cases/cam-grade-lights/print.json",
+        "display": "cases/cam-grade-lights/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-exposures",
+      "title": "Burn through a gradient, dodge through an ellipse, open flash through paint",
+      "exercises": [
+        "exposure:burn",
+        "exposure:dodge",
+        "exposure:flash open",
+        "mask.gradient",
+        "mask.ellipse",
+        "mask.paint"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-exposures/recipe.json",
+      "cuts": {
+        "print": "cases/cam-exposures/print.json",
+        "display": "cases/cam-exposures/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.expose",
+        "print.expose",
+        "mask.gradient",
+        "mask.ellipse",
+        "mask.feather",
+        "mask.paint",
+        "print.combine",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-dm-unsharp",
+      "title": "Unsharp mask on the camera file, γ 0.5, 30 µm, with preflash 2 %, re-metered",
+      "exercises": [
+        "print.densityMasks unsharp positive",
+        "print.preflash"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-dm-unsharp/recipe.json",
+      "cuts": {
+        "print": "cases/cam-dm-unsharp/print.json",
+        "display": "cases/cam-dm-unsharp/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.densityMask",
+        "print.combine",
+        "print.lights",
+        "print.preflash",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-retouch",
+      "title": "Heal two dark sensor-dust spots and clone over the third",
+      "exercises": [
+        "retouch.spots heal",
+        "retouch.spots clone"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-retouch/recipe.json",
+      "cuts": {
+        "print": "cases/cam-retouch/print.json",
+        "display": "cases/cam-retouch/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "retouch.heal",
+        "output.display",
+        "output.frame"
+      ]
+    },
+    {
+      "id": "cam-crop-ccw90",
+      "title": "Crop and rotate 90° counter-clockwise",
+      "exercises": [
+        "view.frame.crop",
+        "view.frame.orientation ccw90"
+      ],
+      "fixture": "camera",
+      "recipe": "cases/cam-crop-ccw90/recipe.json",
+      "cuts": {
+        "print": "cases/cam-crop-ccw90/print.json",
+        "display": "cases/cam-crop-ccw90/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.lights",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "id": "neg-dust-heal",
+      "title": "Scan dust heal of the three specks (scan.heal)",
+      "exercises": [
+        "scan.dust.spots",
+        "scan.dust.method"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-dust-heal/recipe.json",
+      "reason": "scan.heal is implemented by no physics engine (only engine-mock, as identity): neither RefEngine nor GpuEngine renders it",
+      "missing": [
+        "scan.heal"
+      ]
+    },
+    {
+      "id": "neg-finishing-clarity",
+      "title": "Finishing clarity +0.4, radius 12 px (finishing.clarity)",
+      "exercises": [
+        "finishing.values.clarity",
+        "finishing.values.clarity_radius_px"
+      ],
+      "fixture": "negative",
+      "recipe": "cases/neg-finishing-clarity/recipe.json",
+      "reason": "finishing.clarity is implemented by no physics engine (only engine-mock): neither RefEngine nor GpuEngine renders it",
+      "missing": [
+        "finishing.clarity"
+      ]
+    }
+  ]
+}

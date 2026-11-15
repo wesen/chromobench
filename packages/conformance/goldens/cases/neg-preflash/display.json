@@ -1,0 +1,32 @@
+{
+  "case": "neg-preflash",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-preflash/display.f32",
+  "sha256": "5752028110319676d6b72f31a1a2e0b0610a15c13cc59a4281dba027cee6de9a",
+  "stats": {
+    "min": [
+      0.1137273,
+      0.1178949,
+      0.1189943
+    ],
+    "max": [
+      0.9999958,
+      0.9999989,
+      0.9999996
+    ],
+    "mean": [
+      0.4970997,
+      0.5107566,
+      0.5153329
+    ]
+  },
+  "warnings": []
+}

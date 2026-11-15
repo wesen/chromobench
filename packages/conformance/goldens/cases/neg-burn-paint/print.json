@@ -1,0 +1,32 @@
+{
+  "case": "neg-burn-paint",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-burn-paint/print.f32",
+  "sha256": "89d11b21bc5162775f5cd58bff7fa276a8cf2fe6fdbc5d166349c6122e95b132",
+  "stats": {
+    "min": [
+      0.008629179,
+      0.00905997,
+      0.009583153
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2339739,
+      0.2459788,
+      0.275628
+    ]
+  },
+  "warnings": []
+}

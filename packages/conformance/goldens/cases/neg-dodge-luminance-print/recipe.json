@@ -1,0 +1,213 @@
+{
+  "version": 2,
+  "frame": "golden-negative",
+  "kind": "negative-scan",
+  "source": {
+    "kind": "file",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+    "name": "negative-96x64.tif",
+    "decode": {
+      "mode": "scan",
+      "encoding": "linear"
+    }
+  },
+  "data": null,
+  "print": {
+    "paper": "kodak_portra_endura",
+    "aim": "grey-0.184",
+    "enlarger": {
+      "mode": "real",
+      "lamp": "TH-KG3",
+      "filtration": {
+        "c": 0,
+        "m": 0,
+        "y": 0
+      },
+      "time_s": 3.969,
+      "fstop": 8,
+      "magnification": null
+    },
+    "lights": {
+      "logH": [
+        0.062267,
+        0.022869,
+        -0.025007
+      ],
+      "auto": {
+        "method": "integrate",
+        "alpha": 1,
+        "analysisLongSide_px": 548,
+        "rollConsistency": null,
+        "matchFrame": null,
+        "matchAmount": null,
+        "applied": true,
+        "logH": [
+          0.062267,
+          0.022869,
+          -0.025007
+        ]
+      }
+    },
+    "exposures": [
+      {
+        "id": "dodge1",
+        "kind": "dodge",
+        "enabled": true,
+        "mask": "shadows",
+        "time_s": null,
+        "stops": 0.5,
+        "filtration": null,
+        "through": null
+      }
+    ],
+    "densityMasks": {},
+    "grade": 2,
+    "preflash": 0
+  },
+  "view": {
+    "illuminant": "D50",
+    "flare": 0.48,
+    "output": {
+      "rendering": "scan-of-print",
+      "white": "D65",
+      "display": {
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "proof": null
+      },
+      "export": {
+        "format": "tiff16",
+        "space": "prophoto",
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "scale": "full",
+        "dpi": 300,
+        "compression": "deflate",
+        "signal": "icc",
+        "recipe": "sidecar"
+      },
+      "printer": null
+    },
+    "frame": {
+      "orientation": "none",
+      "angle_deg": 0,
+      "crop": null
+    }
+  },
+  "masks": {
+    "shadows": {
+      "version": 1,
+      "nodes": [
+        {
+          "op": "source.open",
+          "inputs": [],
+          "args": {
+            "source": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38",
+            "encoding": "linear"
+          }
+        },
+        {
+          "op": "scan.density",
+          "inputs": [
+            "cc4cae248e1144719de278fd6bc783d6d6e6d60dae422596654ec51d525699ea"
+          ],
+          "args": {
+            "rebate": {
+              "x": 0,
+              "y": 0,
+              "w": 6,
+              "h": 64
+            }
+          }
+        },
+        {
+          "op": "invert.dyes",
+          "inputs": [
+            "4b0245c1e79881310c1a50c3f8fc5db2f7d58ca82d84ebb7ba439c50b5bfc6d7"
+          ],
+          "args": {
+            "stock": "kodak_portra_400",
+            "scanner": "xt5-rgb-led"
+          }
+        },
+        {
+          "op": "print.expose",
+          "inputs": [
+            "a70f172429250c50f0c41635f89bb105c11053ef2dfd8632ff471170a5fbc7ca"
+          ],
+          "args": {
+            "paper": "kodak_portra_endura",
+            "mode": "real",
+            "lamp": "TH-KG3",
+            "filtration": {
+              "c": 0,
+              "m": 0,
+              "y": 0
+            },
+            "time_s": 3.969,
+            "fstop": 8,
+            "aim": "grey-0.184",
+            "aimView": "D50"
+          }
+        },
+        {
+          "op": "mask.luminance",
+          "inputs": [
+            "6612764b819056233a0d09f14870565d55e23bf19749ca890ab4e639212cfed3"
+          ],
+          "args": {
+            "above": 0.62,
+            "below": 1,
+            "softness": 0.04
+          }
+        },
+        {
+          "op": "mask.feather",
+          "inputs": [
+            "94ffd8e67617ebcc1fc9c8bfeb2f1aac5b7e95c91f847884685d5725fa7afd9b"
+          ],
+          "args": {
+            "radius_px": 2
+          }
+        }
+      ]
+    }
+  },
+  "probes": {},
+  "retouch": {
+    "spots": {}
+  },
+  "finishing": {
+    "look": 0,
+    "values": {
+      "clarity": 0,
+      "clarity_radius_px": 40
+    },
+    "hues": {}
+  },
+  "roll": null,
+  "scan": {
+    "scanner": "xt5-rgb-led",
+    "stock": "kodak_portra_400",
+    "format": "135",
+    "rebate": {
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 64
+    },
+    "baseT": null,
+    "flat": null,
+    "openGate": null,
+    "flare": 0,
+    "dust": {
+      "spots": [],
+      "method": "patch",
+      "marginPx": 2
+    }
+  }
+}

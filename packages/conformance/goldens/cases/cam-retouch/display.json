@@ -1,0 +1,32 @@
+{
+  "case": "cam-retouch",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-retouch/display.f32",
+  "sha256": "e856792585a629107be2ebd5217c64d5cd4a64dc4a5c6adb0085cee968cbd4bc",
+  "stats": {
+    "min": [
+      0.06995361,
+      0.07224744,
+      0.08109786
+    ],
+    "max": [
+      0.9919271,
+      0.9710506,
+      0.9682692
+    ],
+    "mean": [
+      0.5134336,
+      0.4694208,
+      0.3805521
+    ]
+  },
+  "warnings": []
+}

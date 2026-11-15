@@ -1,0 +1,32 @@
+{
+  "case": "neg-burn-gradient-not",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-burn-gradient-not/display.f32",
+  "sha256": "c167dcb3fef0470587b6f5879dae9d0a9c52b30128374e0eed9cdf62c665f7f3",
+  "stats": {
+    "min": [
+      0.07560192,
+      0.08239666,
+      0.08903383
+    ],
+    "max": [
+      1,
+      1,
+      1
+    ],
+    "mean": [
+      0.3786892,
+      0.3946299,
+      0.4023545
+    ]
+  },
+  "warnings": []
+}

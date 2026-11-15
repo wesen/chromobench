@@ -1,0 +1,32 @@
+{
+  "case": "neg-knee-clip",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-knee-clip/display.f32",
+  "sha256": "7c4c884879022a5053b9fb6634f7e65f9e5dfc3ce0aef33bf8547db3a22c9bfb",
+  "stats": {
+    "min": [
+      0.3255906,
+      0.315083,
+      0.3232597
+    ],
+    "max": [
+      1,
+      1,
+      1
+    ],
+    "mean": [
+      0.7801768,
+      0.7840274,
+      0.7863473
+    ]
+  },
+  "warnings": []
+}

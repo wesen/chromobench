@@ -1,0 +1,32 @@
+{
+  "case": "cam-wb-as-shot",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-wb-as-shot/display.f32",
+  "sha256": "bb27bd1f9697fc9ad222a3b905da268942ef70d17c2d71691d600dd3fda241bb",
+  "stats": {
+    "min": [
+      0.06990664,
+      0.07225372,
+      0.08111147
+    ],
+    "max": [
+      0.966269,
+      0.9743292,
+      0.9838241
+    ],
+    "mean": [
+      0.4809873,
+      0.4815306,
+      0.4377851
+    ]
+  },
+  "warnings": []
+}

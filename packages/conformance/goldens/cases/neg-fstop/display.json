@@ -1,0 +1,32 @@
+{
+  "case": "neg-fstop",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-fstop/display.f32",
+  "sha256": "0b8bc91372fe98b954c50fc1b254d98761bb1448cbc65e8e3a93f77a11c82662",
+  "stats": {
+    "min": [
+      0.2994645,
+      0.290021,
+      0.2967606
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.7613697,
+      0.7658985,
+      0.7679662
+    ]
+  },
+  "warnings": []
+}

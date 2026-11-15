@@ -1,0 +1,32 @@
+{
+  "case": "neg-auto-filtration",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-auto-filtration/display.f32",
+  "sha256": "1728ec8f348fc74cbef2f0e18778ffe3fe0754bf7cb5979a0edc7fb6e9ffca96",
+  "stats": {
+    "min": [
+      0.1150033,
+      0.1190192,
+      0.1201485
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5105635,
+      0.5241158,
+      0.5275778
+    ]
+  },
+  "warnings": []
+}

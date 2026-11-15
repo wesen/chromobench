@@ -1,0 +1,32 @@
+{
+  "case": "neg-lights-manual",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-lights-manual/print.f32",
+  "sha256": "b574a033d4878684f247166f0c19ba8a9edea0eecdf6fcc6890e8fbbbf4df602",
+  "stats": {
+    "min": [
+      0.008413391,
+      0.009567568,
+      0.01350186
+    ],
+    "max": [
+      0.7714515,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2102401,
+      0.2315384,
+      0.3104066
+    ]
+  },
+  "warnings": []
+}

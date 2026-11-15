@@ -1,0 +1,136 @@
+{
+  "version": 2,
+  "frame": "golden-camera",
+  "kind": "digital-raw",
+  "source": {
+    "kind": "file",
+    "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22",
+    "name": "camera-96x64.dng",
+    "decode": {
+      "mode": "photo",
+      "encoding": "linear"
+    }
+  },
+  "data": null,
+  "print": {
+    "paper": "kodak_portra_endura",
+    "aim": "grey-0.184",
+    "enlarger": {
+      "mode": "real",
+      "lamp": "TH-KG3",
+      "filtration": {
+        "c": 0,
+        "m": 0,
+        "y": 0
+      },
+      "time_s": 7.937,
+      "fstop": 8,
+      "magnification": null
+    },
+    "lights": {
+      "logH": [
+        -0.009711,
+        -0.009711,
+        -0.009711
+      ],
+      "auto": {
+        "method": "integrate",
+        "alpha": 0,
+        "analysisLongSide_px": 548,
+        "rollConsistency": null,
+        "matchFrame": null,
+        "matchAmount": null,
+        "applied": true,
+        "logH": [
+          -0.009711,
+          -0.009711,
+          -0.009711
+        ]
+      }
+    },
+    "exposures": [],
+    "densityMasks": {},
+    "grade": 2,
+    "preflash": 0
+  },
+  "view": {
+    "illuminant": "D50",
+    "flare": 0.48,
+    "output": {
+      "rendering": "scan-of-print",
+      "white": "D65",
+      "display": {
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "proof": null
+      },
+      "export": {
+        "format": "tiff16",
+        "space": "prophoto",
+        "knee": {
+          "method": "oklch",
+          "strength": 6
+        },
+        "scale": "full",
+        "dpi": 300,
+        "compression": "deflate",
+        "signal": "icc",
+        "recipe": "sidecar"
+      },
+      "printer": null
+    },
+    "frame": {
+      "orientation": "none",
+      "angle_deg": 0,
+      "crop": null
+    }
+  },
+  "masks": {},
+  "probes": {},
+  "retouch": {
+    "spots": {}
+  },
+  "finishing": {
+    "look": 0,
+    "values": {
+      "clarity": 0,
+      "clarity_radius_px": 40
+    },
+    "hues": {}
+  },
+  "roll": null,
+  "capture": {
+    "stock": "kodak_portra_400",
+    "exposureEV": 0,
+    "whiteBalance": {
+      "mode": "daylight",
+      "temperature_K": 5500,
+      "tint": 0
+    },
+    "adapt": "to-film-reference",
+    "autoExposure": {
+      "method": "off",
+      "analysisLongSide_px": 256
+    },
+    "format": {
+      "longEdge_mm": 36
+    },
+    "development": {
+      "push": 0,
+      "dir": {
+        "amount": 1,
+        "diffusion_um": 0
+      },
+      "halation": {
+        "strength": 1
+      },
+      "grain": {
+        "amount": 1,
+        "size_um": 12,
+        "seed": 1
+      }
+    }
+  }
+}

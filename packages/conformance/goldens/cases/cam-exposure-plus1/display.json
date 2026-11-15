@@ -1,0 +1,32 @@
+{
+  "case": "cam-exposure-plus1",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-exposure-plus1/display.f32",
+  "sha256": "1f7e99948331a071e3b1531c9e524c6bc8903469c5a9380c3d3d5f4b8fe08159",
+  "stats": {
+    "min": [
+      0.07030474,
+      0.07266612,
+      0.08127479
+    ],
+    "max": [
+      0.9961123,
+      0.9946074,
+      0.9939185
+    ],
+    "mean": [
+      0.6622968,
+      0.6172491,
+      0.5183566
+    ]
+  },
+  "warnings": []
+}

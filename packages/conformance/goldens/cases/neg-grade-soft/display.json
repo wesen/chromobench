@@ -1,0 +1,32 @@
+{
+  "case": "neg-grade-soft",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-grade-soft/display.f32",
+  "sha256": "236e88b48f320bdaab4158afc5457ac903b9d4bd5be244d60dcaf250540062d7",
+  "stats": {
+    "min": [
+      0.1642244,
+      0.1649894,
+      0.164547
+    ],
+    "max": [
+      0.9999903,
+      0.9999982,
+      0.9999995
+    ],
+    "mean": [
+      0.513921,
+      0.5239405,
+      0.5298952
+    ]
+  },
+  "warnings": []
+}

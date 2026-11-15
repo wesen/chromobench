@@ -1,0 +1,56 @@
+{
+  "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22",
+  "format": "raw",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "bits": 16,
+  "sample": "float",
+  "encoding": {
+    "value": "linear",
+    "evidence": "format"
+  },
+  "levels": {
+    "black": [
+      0,
+      0,
+      0
+    ],
+    "white": [
+      1,
+      1,
+      1
+    ],
+    "from": "default"
+  },
+  "cfa": "none",
+  "camera": {
+    "make": "Synthetic",
+    "model": "CHB-037 golden camera",
+    "camToXyz": [
+      [
+        0.62,
+        0.22,
+        0.11
+      ],
+      [
+        0.27,
+        0.88,
+        -0.15
+      ],
+      [
+        0.03,
+        -0.12,
+        1.18
+      ]
+    ],
+    "asShotNeutral": [
+      1.0642350729824286,
+      0.9647102467261637,
+      0.8346842588285313
+    ],
+    "from": "dng"
+  },
+  "clippedFraction": 0,
+  "notes": []
+}

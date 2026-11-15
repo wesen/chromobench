@@ -1,0 +1,32 @@
+{
+  "case": "cam-wb-custom",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-wb-custom/display.f32",
+  "sha256": "904498b931fc196c91a2801dfbeadfc9b1e3e28f98a5fb333e0a88baffc0bfeb",
+  "stats": {
+    "min": [
+      0.03176792,
+      0.07229438,
+      0.08116972
+    ],
+    "max": [
+      0.9361361,
+      0.9768995,
+      0.9927976
+    ],
+    "mean": [
+      0.3971623,
+      0.5072956,
+      0.5393596
+    ]
+  },
+  "warnings": []
+}

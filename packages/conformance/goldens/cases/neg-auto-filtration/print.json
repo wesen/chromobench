@@ -1,0 +1,32 @@
+{
+  "case": "neg-auto-filtration",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-auto-filtration/print.f32",
+  "sha256": "b874cf32bfbf08d1f4f419713e395cfd9dc6b27e177f94d80bd2c9c3043aa826",
+  "stats": {
+    "min": [
+      0.009995935,
+      0.01064275,
+      0.01167876
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2430262,
+      0.2555299,
+      0.2863952
+    ]
+  },
+  "warnings": []
+}

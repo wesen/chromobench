@@ -1,0 +1,32 @@
+{
+  "case": "neg-dodge-ellipse-feather",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dodge-ellipse-feather/print.f32",
+  "sha256": "7d0dfc22ce840e158ed8b2d572969ed33d468700125dde0b4bc42d137c51ae95",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.01067903,
+      0.01170197
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2882652,
+      0.3046693,
+      0.3373708
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "cam-development",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-development/print.f32",
+  "sha256": "a410ae8da44b64b64f5415506b51e90f106a37ced0aa252414694b1f424795a4",
+  "stats": {
+    "min": [
+      0.004896193,
+      0.005101515,
+      0.006272395
+    ],
+    "max": [
+      0.7584968,
+      0.7980676,
+      0.8560171
+    ],
+    "mean": [
+      0.2084896,
+      0.2170639,
+      0.196547
+    ]
+  },
+  "warnings": []
+}

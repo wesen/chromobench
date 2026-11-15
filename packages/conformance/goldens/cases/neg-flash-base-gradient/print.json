@@ -1,0 +1,32 @@
+{
+  "case": "neg-flash-base-gradient",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-flash-base-gradient/print.f32",
+  "sha256": "08b4c70beaac6c9bcd1e3ddf9c6916906d02426799d38afc06efbe64033f374e",
+  "stats": {
+    "min": [
+      0.008171633,
+      0.008728215,
+      0.009744469
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2077148,
+      0.2180267,
+      0.2474269
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "neg-time-double",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-time-double/display.f32",
+  "sha256": "8c62f94777d34a7358f6abe92a3fb50a50c96dad227fd4f8ffa414fcb84c8530",
+  "stats": {
+    "min": [
+      0.04960229,
+      0.06872735,
+      0.08075952
+    ],
+    "max": [
+      0.9999973,
+      0.9999995,
+      0.9999999
+    ],
+    "mean": [
+      0.2602055,
+      0.2785383,
+      0.290578
+    ]
+  },
+  "warnings": []
+}

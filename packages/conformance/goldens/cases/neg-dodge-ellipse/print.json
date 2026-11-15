@@ -1,0 +1,32 @@
+{
+  "case": "neg-dodge-ellipse",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dodge-ellipse/print.f32",
+  "sha256": "d7ccd1044b5552575909b98d2c27b861e8e5cefec35ed951d55374339a3fe7b3",
+  "stats": {
+    "min": [
+      0.01003002,
+      0.01067903,
+      0.01170197
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2670224,
+      0.2820179,
+      0.315168
+    ]
+  },
+  "warnings": []
+}

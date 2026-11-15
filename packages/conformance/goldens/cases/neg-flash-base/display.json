@@ -1,0 +1,32 @@
+{
+  "case": "neg-flash-base",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-flash-base/display.f32",
+  "sha256": "aace39456c88a49c0695f858428485ad1ead06309566a5ce001aaf97e1ac50b0",
+  "stats": {
+    "min": [
+      0.1084699,
+      0.1130308,
+      0.114448
+    ],
+    "max": [
+      0.9964107,
+      0.997259,
+      0.9980726
+    ],
+    "mean": [
+      0.4483748,
+      0.4601344,
+      0.4668097
+    ]
+  },
+  "warnings": []
+}

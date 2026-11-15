@@ -1,0 +1,32 @@
+{
+  "case": "neg-dm-contrast-positive",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-dm-contrast-positive/print.f32",
+  "sha256": "ca714fffa36e6212891df56a43c73b89c24ce67832f35cb169394d6a3c192983",
+  "stats": {
+    "min": [
+      0.01383946,
+      0.01459813,
+      0.01569624
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2361483,
+      0.2474623,
+      0.2808098
+    ]
+  },
+  "warnings": []
+}

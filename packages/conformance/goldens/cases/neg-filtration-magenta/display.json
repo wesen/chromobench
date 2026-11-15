@@ -1,0 +1,32 @@
+{
+  "case": "neg-filtration-magenta",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-filtration-magenta/display.f32",
+  "sha256": "9872539bd1446d8b5fd892b20e940f41a7e5679db5d9653872b23ae8f9189c60",
+  "stats": {
+    "min": [
+      0.1085669,
+      0.1747433,
+      0.127467
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5074519,
+      0.6371446,
+      0.5368725
+    ]
+  },
+  "warnings": []
+}

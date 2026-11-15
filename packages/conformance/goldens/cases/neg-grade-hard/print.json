@@ -1,0 +1,32 @@
+{
+  "case": "neg-grade-hard",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-grade-hard/print.f32",
+  "sha256": "552cf16cc09a67803517e7ff4b08a67e9f007205f9f118895a2b87444126aaed",
+  "stats": {
+    "min": [
+      0.004562195,
+      0.004792415,
+      0.006261415
+    ],
+    "max": [
+      0.7714516,
+      0.8128254,
+      0.8715448
+    ],
+    "mean": [
+      0.2750257,
+      0.2886433,
+      0.3187306
+    ]
+  },
+  "warnings": []
+}

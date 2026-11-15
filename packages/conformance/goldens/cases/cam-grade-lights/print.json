@@ -1,0 +1,32 @@
+{
+  "case": "cam-grade-lights",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-grade-lights/print.f32",
+  "sha256": "677f6a889fef34fe127e6c912c30b81f501e1a976edbdbfd3afca8d982fa4db9",
+  "stats": {
+    "min": [
+      0.003801699,
+      0.003978576,
+      0.00562402
+    ],
+    "max": [
+      0.7633095,
+      0.80637,
+      0.8599008
+    ],
+    "mean": [
+      0.2454985,
+      0.268418,
+      0.1998983
+    ]
+  },
+  "warnings": []
+}

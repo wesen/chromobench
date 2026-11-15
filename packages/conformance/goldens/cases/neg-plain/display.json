@@ -1,0 +1,32 @@
+{
+  "case": "neg-plain",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-plain/display.f32",
+  "sha256": "4a7af069330d7db5daa15317b8a6dea53775bb4ea97e06017cab6aa9635c464b",
+  "stats": {
+    "min": [
+      0.05966865,
+      0.06309427,
+      0.07744249
+    ],
+    "max": [
+      0.9999947,
+      0.999999,
+      0.9999997
+    ],
+    "mean": [
+      0.2435712,
+      0.2342718,
+      0.2261945
+    ]
+  },
+  "warnings": []
+}

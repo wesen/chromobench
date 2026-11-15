@@ -1,0 +1,32 @@
+{
+  "case": "cam-dm-unsharp",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-dm-unsharp/display.f32",
+  "sha256": "8de9b54eb5117aaac7ce7aa71310a8da8b5872fd4dc9f45fbabcc01bb38b7291",
+  "stats": {
+    "min": [
+      0.2277756,
+      0.1594967,
+      0.1106787
+    ],
+    "max": [
+      0.9830081,
+      0.9762383,
+      0.9628276
+    ],
+    "mean": [
+      0.6990773,
+      0.6450535,
+      0.532334
+    ]
+  },
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "case": "neg-crop",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 72,
+  "height": 52,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/neg-crop/display.f32",
+  "sha256": "c102dd8ad53af2006d17d5f89ebfcdbb8b598732a25fe8587fa0b42e12315f8d",
+  "stats": {
+    "min": [
+      0.1814109,
+      0.1834379,
+      0.1874547
+    ],
+    "max": [
+      0.9999999,
+      1,
+      1
+    ],
+    "mean": [
+      0.5239695,
+      0.5504173,
+      0.5780597
+    ]
+  },
+  "warnings": []
+}
