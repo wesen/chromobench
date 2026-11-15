@@ -288,7 +288,7 @@ defineRenderer('wheel', (n, m) => {
   if (p['lum']) {
     const base = b.path;
     if (base) {
-      const sl = m.child('lum').mount(makeNode(null, 'slider', { bind: base.concat(['lum']).join('.'), min: -100, max: 100, label: 'Lum', bipolar: true, reset: 0, compact: true, labelWidth: 30, historyLabel: `${p['label'] || ''} Luminance`.trim(), tip: 'Luminance' }, [], n.at));
+      const sl = m.child('lum').mount(makeNode('slider', { bind: base.concat(['lum']).join('.'), min: -100, max: 100, label: 'Lum', bipolar: true, reset: 0, compact: true, labelWidth: 30, historyLabel: `${p['label'] || ''} Luminance`.trim(), tip: 'Luminance' }, [], n.at));
       if (sl) el.append(sl);
     }
   }

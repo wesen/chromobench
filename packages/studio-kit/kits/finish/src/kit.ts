@@ -5,9 +5,9 @@
 // Modules (CHB-032): state.ts (state, spots, crop check, edits), context.ts (what tools, commands and panels
 // share), tools.ts (crop and spot tools), commands.ts, panels.ts (builder calls), passes.ts; this file declares the kit.
 //
-//   const fin = cb.kits.finish;
-//   cb.studio('X').use(fin.kit)
-//     .module('finish', m => m.label('Finish').center(fin.viewer()).right(fin.cropPanel(), fin.retouchPanel(), fin.tonesPanel()).keys(fin.keys))
+//   const { finish } = cb.kits;
+//   cb.studio('X').use(finish.kit).menus(...cb.menus.standard(), finish.menus.finish()).module(finish.modules.finish())
+//   ck.module('f').center(finish.views.viewer()).right(finish.panels.crop(), finish.panels.retouch()).keys(finish.keys.finish)
 //
 // Units: everything the recipe stores is sensor px of the un-oriented source (geometry.ts); a gesture converts
 // at the boundary. The crop tool shows the whole frame, oriented and not straightened, with the region the crop
@@ -21,7 +21,7 @@ import { FINISH_STATE, spotsOf, cropProblem, edits } from './state.ts';
 import { finishPasses } from './passes.ts';
 import { createFinishContext } from './context.ts';
 import { createFinishTools } from './tools.ts';
-import { addFinishCommands } from './commands.ts';
+import { finishCommands } from './commands.ts';
 import { createFinishPanels } from './panels.ts';
 
 const FINISH_DOCS = `## cb.kits.finish
@@ -38,73 +38,82 @@ export function createFinishKit(ck: Ck, cb: Cb) {
   const T = createFinishTools(F);
   const { canvasOf, cropDown, cropDrag, cropUp, cropOverlay, spotDown, spotDrag, spotUp, spotOverlay } = T;
 
-  // ── passes (guide §9.5): CB-F101 on the kit; CB-F102 (finish tools without the kit) on the ck instance ──
-  const { labelPass, framePass } = finishPasses(ck);
-  ck.install(framePass);
+  // ── passes (guide §9.5): CB-F101 on the kit; CB-F102 (finish tools without the kit) is run by cb.core's cb.kits ──
+  const { labelPass, missing } = finishPasses(ck);
 
-  const kit = ck.kit<typeof FINISH_STATE>('cb.finish', (k) => {
-    k.version('1')
-      .requires('cb.core')
-      .state('finish', { init: FINISH_STATE.finish, view: true })
-      .passes(labelPass)
-      .tools((t) =>
-        t
-          .tool('crop', {
-            label: 'Crop & Straighten',
-            icon: 'crop',
-            key: 'R',
-            cursor: 'crosshair',
-            ...needFrame,
-            // the whole frame, oriented and not straightened; the crop is drawn over it
-            image: (h: unknown) => (isImageHandle(h) && h.what === 'print' && h.recipe !== 'initial' ? frameRef(h.frame, canvasOf(h.recipe)).print() : h),
-            overlay: cropOverlay,
-            on: { down: cropDown, drag: cropDrag as any, up: cropUp as any, escape: (ctx: any) => ctx.cancel() },
-          })
-          .tool('spot', {
-            label: 'Spot Removal',
-            icon: 'heal',
-            key: 'Q',
-            cursor: 'crosshair',
-            ...needFrame,
-            overlay: spotOverlay,
-            on: {
-              hover: (e: any, ctx: any) => {
-                const fr = frameOf(ctx);
-                if (fr) remember(fr);
-                return { hover: { sx: e.sx, sy: e.sy } };
-              },
-              leave: () => undefined,
-              down: spotDown,
-              drag: spotDrag as any,
-              up: spotUp as any,
-              escape: (ctx: any) => ctx.cancel(),
-            },
-          }),
-      )
-      .commands((c) => {
-        addFinishCommands(c, F, T);
-      })
-      .docs(FINISH_DOCS);
-  });
+  const kit = ck
+    .kit('cb.finish')
+    .version('1')
+    .requires('cb.core')
+    .state('finish', { init: FINISH_STATE.finish, view: true })
+    .passes(labelPass)
+    .tools({
+      crop: {
+        label: 'Crop & Straighten',
+        icon: 'crop',
+        key: 'R',
+        cursor: 'crosshair',
+        ...needFrame,
+        // the whole frame, oriented and not straightened; the crop is drawn over it
+        image: (h: unknown) => (isImageHandle(h) && h.what === 'print' && h.recipe !== 'initial' ? frameRef(h.frame, canvasOf(h.recipe)).print() : h),
+        overlay: cropOverlay,
+        on: { down: cropDown, drag: cropDrag as any, up: cropUp as any, escape: (ctx: any) => ctx.cancel() },
+      },
+      spot: {
+        label: 'Spot Removal',
+        icon: 'heal',
+        key: 'Q',
+        cursor: 'crosshair',
+        ...needFrame,
+        overlay: spotOverlay,
+        on: {
+          hover: (e: any, ctx: any) => {
+            const fr = frameOf(ctx);
+            if (fr) remember(fr);
+            return { hover: { sx: e.sx, sy: e.sy } };
+          },
+          leave: () => undefined,
+          down: spotDown,
+          drag: spotDrag as any,
+          up: spotUp as any,
+          escape: (ctx: any) => ctx.cancel(),
+        },
+      },
+    })
+    .commands(finishCommands(F, T))
+    .docs(FINISH_DOCS);
 
   const P = createFinishPanels(ck, cb, F);
   const { shown, viewer, cropPanel, retouchPanel, tonesPanel } = P;
 
-  return {
-    kit,
-    state: FINISH_STATE,
-    viewer,
-    shown,
-    cropPanel,
-    retouchPanel,
-    tonesPanel,
+  const keys = {
     /** the finish module's keys: X swaps the aspect, Delete removes the selected spot, [ ] size the brush */
-    keys: { X: 'crop.swap', Enter: 'crop.done', Delete: 'spot.delete', Backspace: 'spot.delete', '[': ['spot.size', -1], ']': ['spot.size', 1], 'Shift+[': 'spot.prev', 'Shift+]': 'spot.next', '\\': 'finish.toggle' } as Record<string, any>,
-    edits,
-    spots: spotsOf,
-    cropProblem,
-    largestCrop,
+    finish: { X: 'crop.swap', Enter: 'crop.done', Delete: 'spot.delete', Backspace: 'spot.delete', '[': ['spot.size', -1], ']': ['spot.size', 1], 'Shift+[': 'spot.prev', 'Shift+]': 'spot.next', '\\': 'finish.toggle' } as Record<string, any>,
   };
+  /** the Finish module (CHB-022 guide §9.1): crop and straighten (R), spot heal and clone (Q), the finishing tones, on the
+   *  finished print; tones: false leaves the tones out (their ops run on the mock engine only until CHB-015 lands them) */
+  const finishModule = (o: { id?: string; tones?: boolean; extraRight?: unknown[] } = {}) =>
+    ck
+      .module(o.id ?? 'finish', { label: 'Finish', key: 'F', txOpts: (s: any) => ({ channel: cb.sel.current(s) }) })
+      .left(ck.dock.column({ width: 236 }, cb.panels.navigator({ id: 'navigator-finish' }), cb.panels.history({ id: 'history-finish' })))
+      .center(viewer({ hud: cb.hud.readout() }))
+      .right(ck.dock.column({ width: 300 }, cropPanel(), retouchPanel(), ...(o.tones === false ? [] : [tonesPanel()]), ...((o.extraRight ?? []) as any[])))
+      .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-finish' })))
+      .keys(keys.finish);
+
+  return ck.product(kit, {
+    panels: { crop: cropPanel, retouch: retouchPanel, tones: tonesPanel },
+    views: { viewer },
+    modules: { finish: finishModule },
+    menus: {
+      /** the Finish menu: every finish command, so each is also in the palette and has its key shown */
+      finish: () => ck.menu('Finish', ['tool.crop', 'crop.reset', 'crop.swap', 'crop.lock', 'crop.fix', '-', 'orient.ccw', 'orient.cw', 'orient.flipH', 'orient.flipV', '-', 'tool.spot', 'spot.delete', 'spot.clear', 'spot.show', '-', 'finish.toggle', 'finish.resetTones']),
+    },
+    keys,
+    sel: { shown },
+    lib: { state: FINISH_STATE, edits, spots: spotsOf, cropProblem, largestCrop },
+    whenAbsent: missing,
+  });
 }
 
 export type FinishKit = ReturnType<typeof createFinishKit>;

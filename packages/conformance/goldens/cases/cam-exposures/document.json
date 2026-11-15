@@ -1,0 +1,352 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-camera",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "items": {
+      "brush": {
+        "components": {
+          "items": {
+            "brush_c1": {
+              "amount": 1,
+              "combine": "add",
+              "enabled": true,
+              "kind": "paint",
+              "params": {
+                "strokes": {
+                  "items": {
+                    "brush_c1_s1": {
+                      "hardness": 0.6,
+                      "mode": "add",
+                      "points": [
+                        [
+                          12,
+                          50,
+                          0.5
+                        ],
+                        [
+                          36,
+                          56,
+                          0.6
+                        ],
+                        [
+                          60,
+                          48,
+                          0.5
+                        ]
+                      ],
+                      "radius": 6
+                    },
+                    "brush_c1_s2": {
+                      "hardness": 1,
+                      "mode": "erase",
+                      "points": [
+                        [
+                          34,
+                          44,
+                          0.5
+                        ],
+                        [
+                          38,
+                          62,
+                          0.5
+                        ]
+                      ],
+                      "radius": 2.5
+                    }
+                  },
+                  "order": [
+                    "brush_c1_s1",
+                    "brush_c1_s2"
+                  ]
+                }
+              }
+            }
+          },
+          "order": [
+            "brush_c1"
+          ]
+        },
+        "feather_mm": 0,
+        "invert": false,
+        "name": "brush",
+        "reads": "stage-input"
+      },
+      "face": {
+        "components": {
+          "items": {
+            "face_c1": {
+              "amount": 1,
+              "combine": "add",
+              "enabled": true,
+              "kind": "ellipse",
+              "params": {
+                "angle_deg": 0,
+                "box": {
+                  "h": 28,
+                  "w": 44,
+                  "x": 28,
+                  "y": 18
+                }
+              }
+            }
+          },
+          "order": [
+            "face_c1"
+          ]
+        },
+        "feather_mm": 6,
+        "invert": false,
+        "name": "face",
+        "reads": "stage-input"
+      },
+      "sky": {
+        "components": {
+          "items": {
+            "sky_c1": {
+              "amount": 1,
+              "combine": "add",
+              "enabled": true,
+              "kind": "linear",
+              "params": {
+                "from": {
+                  "x": 48,
+                  "y": 0
+                },
+                "to": {
+                  "x": 48,
+                  "y": 30
+                }
+              }
+            }
+          },
+          "order": [
+            "sky_c1"
+          ]
+        },
+        "feather_mm": 0,
+        "invert": false,
+        "name": "sky",
+        "reads": "stage-input"
+      }
+    },
+    "order": [
+      "sky",
+      "face",
+      "brush"
+    ]
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "photo"
+    },
+    "kind": "file",
+    "name": "camera-96x64.dng",
+    "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "burn1": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": "sky",
+            "name": "Burn burn1",
+            "op": "burn",
+            "params": {
+              "stops": 1
+            },
+            "source": {
+              "kind": "user"
+            }
+          },
+          "dodge1": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": "face",
+            "name": "Dodge dodge1",
+            "op": "dodge",
+            "params": {
+              "stops": 0.5
+            },
+            "source": {
+              "kind": "user"
+            }
+          },
+          "flash1": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": "brush",
+            "name": "Flash flash1",
+            "op": "flash",
+            "params": {
+              "through": "open",
+              "time_s": 0.4
+            },
+            "source": {
+              "kind": "user"
+            }
+          },
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                -0.009711,
+                -0.009711,
+                -0.009711
+              ]
+            },
+            "source": {
+              "alpha": 0,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                -0.009711,
+                -0.009711,
+                -0.009711
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 7.937
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights",
+          "burn1",
+          "dodge1",
+          "flash1"
+        ]
+      }
+    },
+    "film": {
+      "medium": {
+        "dir": {
+          "amount": 1,
+          "diffusion_um": 0
+        },
+        "exposureEV": 0,
+        "format": {
+          "longEdge_mm": 36
+        },
+        "grain": {
+          "amount": 1,
+          "seed": 1,
+          "size_um": 12
+        },
+        "halation": {
+          "strength": 1
+        },
+        "push": 0,
+        "stock": "kodak_portra_400"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "scene": {
+      "medium": {
+        "whiteBalance": {
+          "mode": "daylight",
+          "temperature_K": 5500,
+          "tint": 0
+        }
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    }
+  }
+}

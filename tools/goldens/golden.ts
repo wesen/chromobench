@@ -1,19 +1,21 @@
-// The golden pictures' storage format and the check (CHB-037 P0; tools/goldens/README.md). Data lives in
-// packages/conformance/goldens/: index.json lists the fixtures and the cases; each case has its recipe and, per
-// cut, a JSON header and the pixels as little-endian float32 (interleaved, row-major, top row first).
+// The golden pictures' storage format and the check (CHB-037 P0, P2b; tools/goldens/README.md). Data lives in
+// packages/conformance/goldens/: index.json lists the fixtures and the cases; each case has its document (format 3),
+// the P0 recipe its pictures were first rendered from, and, per cut, a JSON header and the pixels as little-endian
+// float32 (interleaved, row-major, top row first).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ChromobenchError, sha256Hex, type FrameRecipe } from '@chromobench/contract';
+import { ChromobenchError, sha256Hex, type Document } from '@chromobench/contract';
 import { CUTS, makeGoldenEngine, type Cut, type FixtureRef, type GoldenEngine, type Rendered } from './engine.ts';
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 /** The data directory, relative to the repository root. */
 export const DATA = 'packages/conformance/goldens';
-export const FORMAT = 'chromobench-goldens/1';
+export const FORMAT = 'chromobench-goldens/2';
 /**
- * The check's tolerance: the largest absolute difference allowed in any sample, per cut. Today's renderer
- * reproduces the stored float32 exactly (0); the margin covers libm differences across Node versions.
+ * The check's tolerance: the largest absolute difference allowed in any sample, per cut. The P0 renderer
+ * reproduced the stored float32 exactly (0); contract 1.0's light law sums in another order (one log at the end,
+ * after the filters), a float32-rounding difference; the margin also covers libm differences across Node versions.
  */
 export const TOLERANCE = 1e-5;
 
@@ -41,37 +43,27 @@ export interface CutHeader {
 export interface IndexCase {
   id: string;
   title: string;
-  /** Features this case exercises (recipe fields, exposure kinds, mask ops). */
+  /** Features this case exercises (P0's recipe fields, exposure kinds, mask ops). */
   exercises: string[];
   fixture: string;
-  /** Relative to the data directory. */
+  /** The format-3 document the check compiles, relative to the data directory. */
+  document: string;
+  /** The P0 recipe (version 2) the document was translated from (translate.ts): provenance, read by nothing else. */
   recipe: string;
-  /** Header per cut, relative to the data directory. */
-  cuts: Record<Cut, string>;
+  /** Header per cut, relative to the data directory; null until the case is rendered (render.ts --only id). */
+  cuts: Record<Cut, string> | null;
   /** The compiled chain's ops (graph closure of the display node, inputs first). */
   ops: string[];
-}
-
-export interface SkippedCase {
-  id: string;
-  title: string;
-  exercises: string[];
-  fixture: string;
-  recipe: string;
-  reason: string;
-  /** Ops of the compiled chain the reference engine does not implement. */
-  missing: string[];
 }
 
 export interface GoldenIndex {
   format: typeof FORMAT;
   about: string;
-  engine: { id: string; adapter: string; conventions: string; mode: 'exact'; wrapper: string };
+  engine: { id: string; adapter: string; conventions: string; mode: 'exact' };
   cuts: Record<Cut, string>;
   tolerance: { maxAbs: number; note: string };
   fixtures: Record<string, FixtureRef & { title: string }>;
   cases: IndexCase[];
-  skipped: SkippedCase[];
 }
 
 export const dataPath = (rel: string): string => join(ROOT, DATA, rel);
@@ -146,16 +138,9 @@ export async function openAll(index: Pick<GoldenIndex, 'fixtures'>): Promise<Gol
   return ge;
 }
 
-/** Ops of a recipe's compiled chain the engine does not implement. */
-export function missingOps(ge: GoldenEngine, r: FrameRecipe): string[] {
-  const caps = new Set(ge.engine.capabilities().ops);
-  const ops = ge.ops(r);
-  return [...new Set(ops.filter((o) => !caps.has(o)))];
-}
+export interface CheckReport { cases: CaseCheck[]; ok: boolean; tol: number }
 
-export interface CheckReport { cases: CaseCheck[]; skipped: { id: string; stillMissing: boolean; missing: string[] }[]; ok: boolean; tol: number }
-
-/** Re-renders every stored recipe and compares it with the stored pictures. */
+/** Re-renders every stored document and compares it with the stored pictures. */
 export async function checkAll(o: { tol?: number; only?: (id: string) => boolean } = {}): Promise<CheckReport> {
   const tol = o.tol ?? TOLERANCE;
   const index = readIndex();
@@ -163,23 +148,23 @@ export async function checkAll(o: { tol?: number; only?: (id: string) => boolean
   const cases: CaseCheck[] = [];
   for (const c of index.cases) {
     if (o.only && !o.only(c.id)) continue;
-    const r = readJSON<FrameRecipe>(c.recipe);
+    const doc = readJSON<Document>(c.document);
     let cuts: CutError[];
     try {
-      const out = await ge.render(r);
-      cuts = CUTS.map((cut) => compareCut(readJSON<CutHeader>(c.cuts[cut]), out.cuts.find((x) => x.cut === cut)!, tol));
+      const stored = c.cuts ?? fail(`${c.id} has no pictures yet: render.ts --only ${c.id}`);
+      const out = await ge.render(doc);
+      cuts = CUTS.map((cut) => compareCut(readJSON<CutHeader>(stored[cut]), out.cuts.find((x) => x.cut === cut)!, tol));
     } catch (e) {
       const why = e instanceof ChromobenchError ? `${e.diag.code}: ${e.diag.message}` : String(e);
       cuts = CUTS.map((cut) => ({ cut, maxAbs: Infinity, meanAbs: Infinity, ok: false, why }));
     }
     cases.push({ id: c.id, ok: cuts.every((x) => x.ok), cuts });
   }
-  // a skipped case that renders now should become a golden: report it (not a failure)
-  const skipped = index.skipped.filter((s) => !o.only || o.only(s.id)).map((s) => {
-    const missing = missingOps(ge, readJSON<FrameRecipe>(s.recipe));
-    return { id: s.id, stillMissing: missing.length > 0, missing };
-  });
-  return { cases, skipped, ok: cases.every((c) => c.ok), tol };
+  return { cases, ok: cases.every((c) => c.ok), tol };
+}
+
+function fail(msg: string): never {
+  throw new Error(msg);
 }
 
 export const fileExists = (rel: string): boolean => existsSync(dataPath(rel));

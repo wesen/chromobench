@@ -5,8 +5,8 @@ import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { sha256Hex, type Box, type EditLogData } from '@chromobench/contract';
 import { manualClock } from '@chromobench/shell/testing';
 import { describe, expect, it } from 'vitest';
-import { buildVariant, createStudio, logKey, memoryKV, stripFrameId, type KV, type OpenAs } from '../src/index.ts';
-import { VARIANTS } from '../variants/index.js';
+import { buildLayout, createStudio, logKey, memoryKV, stripFrameId, type KV, type OpenAs } from '../src/index.ts';
+import { LAYOUTS } from '../layouts/index.js';
 import { recipePath } from './helpers.ts';
 
 const TIME = 'print.enlarger.time_s';
@@ -25,7 +25,7 @@ async function stripStudio(o: { kv?: KV; frames?: number } = {}) {
     return { info, kind, frames };
   };
   const studio = createStudio({ engine, kv, opener, now: () => clock.now() });
-  const { app } = buildVariant((await VARIANTS.tiny()).default);
+  const { app } = buildLayout((await LAYOUTS.tiny()).default);
   const rt = await app.boot(studio.services({ clock }));
   studio.attach(rt);
   return { studio, rt, kv };

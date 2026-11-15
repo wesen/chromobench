@@ -1,4 +1,4 @@
-// The DOM half of studio-kit: renderers for the cb forms, and mountStudio(), which mounts a built variant with the
+// The DOM half of studio-kit: renderers for the cb forms, and mountStudio(), which mounts a built layout with the
 // studio's services (adapters, bridges, persistence) plus these renderers, then attaches the studio to the runtime.
 //
 //   import { mountStudio } from '@chromobench/studio-kit/dom';

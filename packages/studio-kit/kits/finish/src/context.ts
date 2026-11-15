@@ -4,7 +4,8 @@
 import type { Box, FrameRecipe, FrameSettings } from '@chromobench/contract';
 import type { Studio } from '../../../src/studio.ts';
 import { parseAspect, swapsAxes } from './geometry.ts';
-import { type FinishView, FINISH_STATE, plain, current } from './state.ts';
+import { type FinishView, FINISH_STATE, plain } from './state.ts';
+import { sel } from '../../../src/sel.ts';
 
 export function createFinishContext() {
   const studioOf = (ctx: any): Studio => {
@@ -14,14 +15,14 @@ export function createFinishContext() {
   };
   /** the frame the tools act on: id, size (sensor px), the recipe as the state shows it (previews included) */
   const frameOf = (ctx: any): { f: string; W: number; H: number; r: FrameRecipe } | null => {
-    const f = current(ctx.state);
+    const f = sel.current(ctx.state);
     const e = f ? ctx.services?.studio?.frames?.get(f) : undefined;
     const r = f ? (ctx.state.recipes?.[f] as FrameRecipe | undefined) : undefined;
     return f && e && r ? { f, W: e.info.width, H: e.info.height, r } : null;
   };
   const sizeIn = (s: any): { W: number; H: number } | null => {
     // overlays get the state only: the size is the source's, from the recipe's frame entry (set by the tools)
-    const f = current(s);
+    const f = sel.current(s);
     const z = f ? sizes.get(f) : undefined;
     return z ?? null;
   };
@@ -35,7 +36,7 @@ export function createFinishContext() {
     const whole = !!z && !!c && c.x === 0 && c.y === 0 && c.w === z.W && c.h === z.H && f.angle_deg === 0;
     return plain({ orientation: f.orientation, angle_deg: Number(f.angle_deg.toFixed(4)), crop: whole ? null : c });
   };
-  const needFrame = { enabled: (s: any) => !!current(s) && !!s.recipes?.[current(s)!], why: 'Open a frame first' };
+  const needFrame = { enabled: (s: any) => !!sel.current(s) && !!s.recipes?.[sel.current(s)!], why: 'Open a frame first' };
   const dustAvailable = (ctx: any, r: FrameRecipe): boolean => r.kind === 'negative-scan' && !!r.scan && (studioOf(ctx).engine.capabilities().ops as string[]).includes('scan.heal');
   /** the shown aspect [p, q] the crop is locked to, or null (free) */
   const lockAspect = (s: any, fr: { W: number; H: number; r: FrameRecipe }, box: Box): [number, number] | null => {

@@ -5,9 +5,9 @@ import { makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { sha256Hex, type Box } from '@chromobench/contract';
 import { manualClock } from '@chromobench/shell/testing';
 import { describe, expect, it } from 'vitest';
-import { buildVariant, createStudio, memoryKV, type OpenAs } from '../src/index.ts';
+import { buildLayout, createStudio, memoryKV, type OpenAs } from '../src/index.ts';
 import { stripOrientation } from '../src/model/orient.ts';
-import { VARIANTS } from '../variants/index.js';
+import { LAYOUTS } from '../layouts/index.js';
 
 /** the M1 fixture with one sample changed: another file */
 function otherTiff(k = 1): Uint8Array {
@@ -30,7 +30,7 @@ async function studioWith(o: { guess?: 'photo' | 'negative'; strip?: (w: number,
     return { info, kind, frames: kind === 'negative-scan' && o.strip ? o.strip(info.width, info.height) : null };
   };
   const studio = createStudio({ engine, kv: o.kv ?? memoryKV(), opener, now: () => clock.now() });
-  const { app } = buildVariant((await VARIANTS.classic()).default);
+  const { app } = buildLayout((await LAYOUTS.classic()).default);
   const rt = await app.boot(studio.services({ clock }));
   studio.attach(rt);
   return { studio, rt, calls };
@@ -196,7 +196,7 @@ describe('strip frames: a saved recipe from another working size (F20)', () => {
       frames: [0, 1, 2].map((i) => ({ x: Math.round((2 + i * 14) * k), y: Math.round(2 * k), w: Math.round(12 * k), h: Math.round(9 * k) })),
     });
     const studio = createStudio({ engine, kv, opener, now: () => clock.now() });
-    const { app } = buildVariant((await VARIANTS.tiny()).default);
+    const { app } = buildLayout((await LAYOUTS.tiny()).default);
     const rt = await app.boot(studio.services({ clock }));
     studio.attach(rt);
     return studio;

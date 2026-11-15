@@ -8,9 +8,9 @@ runConformance('engine-mock', () => new MockEngine());
 describe('conformance suite can fail', () => {
   it('ops missing from capabilities() raise E_NOT_IMPLEMENTED', async () => {
     const all = allOps({ includeInternal: true }).map((o) => o.name);
-    const ops = all.filter((n) => n !== 'print.preflash' && n !== 'measure.histogram');
+    const ops = all.filter((n) => n !== 'clarity' && n !== 'measure.histogram');
     const res = await runCases(() => new MockEngine({ ops }), { filter: (c) => c.kind === 'not-implemented' });
-    expect(res.map((r) => r.op).sort()).toEqual(['measure.histogram', 'print.preflash']);
+    expect(res.map((r) => r.op).sort()).toEqual(['clarity', 'measure.histogram']);
     for (const r of res) expect(r.ok, r.error).toBe(true);
   });
 

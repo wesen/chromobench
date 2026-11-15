@@ -3,7 +3,7 @@
 // from them (nearest sample, as the mock), so a region is bit-identical to the crop of the full result.
 // Modes 'exact' and 'tabulated' (f64 tables through look3, the GPU preview's reference).
 import {
-  ChromobenchError, fail, getOp, Graph, nodeArgs, quantizeScale, sha256Hex,
+  ChromobenchError, fail, getOp, Graph, nodeSlots, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Domain, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
@@ -61,8 +61,8 @@ export interface RefEngineOptions {
  * and stay cached, and every grid (draft, screen, a region) samples them.
  */
 export const GRID_OPS: ReadonlySet<string> = new Set([
-  'print.expose', 'print.lights', 'print.preflash', 'print.develop', 'print.combine',
-  'mask.luminance', 'mask.not', 'mask.and', 'mask.or',
+  'print.expose', 'print.develop', 'print.combine', 'composite.mix',
+  'mask.luminance', 'mask.combine', 'mask.invert',
   'view.reflect', 'view.flare', 'view.adapt', 'output.display',
 ]);
 
@@ -264,10 +264,7 @@ export class RefEngine implements Engine {
 
   private ctx(n: Node, image: boolean, at: (id: string) => Img = (id) => this.compute(id)): OpCtx {
     const op = getOp(n.op);
-    const nArgs = new Set(nodeArgs(op).flatMap((a) => {
-      const v = n.args[a];
-      return v === undefined ? [] : ((Array.isArray(v) ? v : [v]) as string[]);
-    }));
+    const nArgs = new Set(nodeSlots(op, n.args).map((s) => s.id));
     const recvId = op.on === 'none' ? undefined : n.inputs[0];
     const recvNode = recvId ? this.graph.get(recvId) : undefined;
     const up = (name: string): UpNode | undefined => {

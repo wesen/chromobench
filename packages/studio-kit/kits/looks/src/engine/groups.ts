@@ -1,6 +1,6 @@
 // Sync groups (guide §6.3): CraftKit's SYNC_GROUPS as recipe path patterns. A look applied with `groups` keeps only
 // the entries whose path is in a chosen group; copy/paste/sync use the same table. Groups that describe this
-// frame's physical situation (crop, dust, probes, scan conditioning) default to off. The table is data: a variant
+// frame's physical situation (crop, dust, probes, scan conditioning) default to off. The table is data: a layout
 // passes its own (cb.kits.looks.syncGroups({...})).
 
 export interface SyncGroup {

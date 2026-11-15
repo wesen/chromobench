@@ -9,7 +9,7 @@ The one mask algebra (design §25): v ← v + amount·(op(v, c) − v), op add =
 - Owner: CHB-037
 - On: Mask (mask) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -24,7 +24,7 @@ A uniform mask of the receiver's size: the empty mask (0) a component fold start
 - Owner: CHB-037
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -64,7 +64,7 @@ Inverse (1 − m), an involution.
 - Owner: CHB-010
 - On: Mask (mask) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: stub
+- Implementation: mock
 
 ## `mask.linear`
 
@@ -73,7 +73,7 @@ Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond
 - Owner: CHB-010
 - On: Image (any) → Mask (mask)
 - Class: pointwise; binding: setting
-- Implementation: stub
+- Implementation: mock
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|

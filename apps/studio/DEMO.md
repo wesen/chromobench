@@ -17,13 +17,13 @@ keeps the app and the data packs, so it also starts with the network off. `dist/
 static web server at the site root (`npx serve dist`, `python3 -m http.server`); it does not work from
 `file://`. For development: `pnpm --filter @chromobench/studio dev`.
 
-URL options: `?variant=classic|darkroom|simple|lab|tiny` (the studio's layout, default **classic**: Library,
+URL options: `?layout=classic|darkroom|simple|lab|tiny` (the studio's layout, default **classic**: Library,
 Print and Output modules, history on the left, the enlarger on the right, the film strip at the bottom; also the
 **Layout** menu top right), `?engine=gpu|reference|mock` (default: GPU when WebGPU works, else the reference
 engine), `?long=N` (long side of the working image on the GPU, default 4000; `0` = the file's own size),
 `?canvas2d` (present without WebGPU), `?nosw` (no service worker), `?fresh` (keep nothing in the browser).
 
-The layouts are variants written in studio-kit's JS API (`packages/studio-kit/variants/*.js`); `lab` is classic
+The layouts are layouts written in studio-kit's JS API (`packages/studio-kit/layouts/*.js`); `lab` is classic
 plus every parameter, the raw journal and the node list.
 
 ## Open a folder of scans

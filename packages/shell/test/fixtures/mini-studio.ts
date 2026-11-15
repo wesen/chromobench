@@ -51,79 +51,58 @@ export const pictureOf = (s: MiniState, id: string | null): Record<string, unkno
   return { fake: true, name: id, w: 600, h: 400, exposure: d.light.exposure, contrast: d.light.contrast, temp: d.color.temp, tint: d.color.tint, saturation: d.color.saturation };
 };
 
-export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
+/** the mini studio's commands, keys and tools: the kit its shell installs (commands and tools come from kits) */
+export function miniKit(ck: Ck<MiniState>) {
   const sel = (s: MiniState) => s.ui.selection.primary;
-  const photoOf = (s: MiniState) => s.catalog.photos.find(p => p.id === sel(s));
   return ck
-    .shell('Mini Studio')
-    .state(miniState(o.n), {
-      channelName: (id, s) => s.catalog.photos.find(p => p.id === id)?.name,
-      currentChannel: s => s.ui.selection.primary,
-      keepUi: ['selection'],
+    .kit('mini')
+    .commands<MiniState>({
+      'photo.pick': {
+        label: 'Flag as Pick',
+        icon: 'flag',
+        enabled: (s: MiniState) => !!sel(s),
+        why: 'Select a photo first',
+        run: ctx =>
+          ctx.tx('Flag as Pick', (t: MiniState) => {
+            t.catalog.photos.find(p => p.id === sel(ctx.state))!.flag = 'pick';
+          }),
+      },
+      'photo.reject': {
+        label: 'Reject',
+        enabled: (s: MiniState) => !!sel(s),
+        why: 'Select a photo first',
+        run: ctx =>
+          ctx.tx('Reject', (t: MiniState) => {
+            t.catalog.photos.find(p => p.id === sel(ctx.state))!.flag = 'reject';
+          }),
+      },
+      'photo.rate': {
+        label: 'Set Rating',
+        palette: false,
+        run: (ctx, n: number) =>
+          ctx.tx(`Rating ${n}`, (t: MiniState) => {
+            t.catalog.photos.find(p => p.id === sel(ctx.state))!.rating = n;
+          }),
+      },
+      'dev.reset': {
+        label: 'Reset Develop Settings',
+        module: 'develop',
+        enabled: (s: MiniState) => {
+          const id = sel(s);
+          return !!id && JSON.stringify(s.dev[id]) !== JSON.stringify(defaultDev());
+        },
+        why: 'Nothing to reset',
+        run: ctx =>
+          ctx.tx('Reset', (t: MiniState) => {
+            t.dev[sel(ctx.state)!] = defaultDev();
+          }),
+      },
+      'view.grid': { label: 'Show Grid Overlay', checked: (s: MiniState) => s.view.grid, run: ctx => ctx.set({ view: { grid: !ctx.state.view.grid } }) },
     })
-    .derive('catalog.filtered', (s: MiniState) => s.catalog.photos.filter(p => p.rating >= s.view.filter.minRating))
-    .commands(c =>
-      c
-        .add('photo.pick', {
-          label: 'Flag as Pick',
-          menu: 'Photo',
-          icon: 'flag',
-          enabled: s => !!sel(s),
-          why: 'Select a photo first',
-          run: ctx =>
-            ctx.tx('Flag as Pick', t => {
-              t.catalog.photos.find(p => p.id === sel(ctx.state))!.flag = 'pick';
-            }),
-        })
-        .add('photo.reject', {
-          label: 'Reject',
-          menu: 'Photo',
-          enabled: s => !!sel(s),
-          why: 'Select a photo first',
-          run: ctx =>
-            ctx.tx('Reject', t => {
-              t.catalog.photos.find(p => p.id === sel(ctx.state))!.flag = 'reject';
-            }),
-        })
-        .add('photo.rate', {
-          label: 'Set Rating',
-          menu: 'Photo',
-          palette: false,
-          run: (ctx, n: number) =>
-            ctx.tx(`Rating ${n}`, t => {
-              t.catalog.photos.find(p => p.id === sel(ctx.state))!.rating = n;
-            }),
-        })
-        .add('dev.reset', {
-          label: 'Reset Develop Settings',
-          menu: 'Settings',
-          module: 'develop',
-          enabled: s => {
-            const id = sel(s);
-            return !!id && JSON.stringify(s.dev[id]) !== JSON.stringify(defaultDev());
-          },
-          why: 'Nothing to reset',
-          run: ctx =>
-            ctx.tx('Reset', t => {
-              t.dev[sel(ctx.state)!] = defaultDev();
-            }),
-        })
-        .add('view.grid', { label: 'Show Grid Overlay', menu: 'View', checked: s => s.view.grid, run: ctx => ctx.set({ view: { grid: !ctx.state.view.grid } }) }),
-    )
-    .menus(m =>
-      m
-        .menu('File', ['app.palette'])
-        .menu('Edit', ['edit.undo', 'edit.redo'])
-        .menu('Photo', ['photo.pick', 'photo.reject', '-', { label: 'Rating', items: ['photo.rate'] }])
-        .menu('Settings', ['dev.reset'])
-        .menu('View', ['view.grid', 'view.fit', 'view.zoomIn', 'view.zoomOut', '-', 'app.theme'])
-        .menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'workspace.reset'])
-        .menu('Help', ['app.shortcuts', 'app.diagnostics']),
-    )
-    .keys('global', { 'Mod+Shift+R': 'dev.reset' })
-    .keys('module:*', { P: 'photo.pick', X: 'photo.reject', ...ck.digits(0, 5, 'photo.rate') })
-    .tools(t =>
-      t.tool('probe', {
+    // the kit's keys bind in every module
+    .keys({ P: 'photo.pick', X: 'photo.reject', ...ck.digits(0, 5, 'photo.rate') })
+    .tools({
+      probe: {
         label: 'Probe',
         key: 'I',
         icon: 'eyedropper',
@@ -134,81 +113,96 @@ export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
             return false;
           },
         },
+      },
+    });
+}
+
+export function miniStudio(ck: Ck<MiniState>, o: { n?: number } = {}) {
+  const sel = (s: MiniState) => s.ui.selection.primary;
+  const photoOf = (s: MiniState) => s.catalog.photos.find(p => p.id === sel(s));
+  const library = ck
+    .module('library', { label: 'Library', key: 'G', icon: 'grid' })
+    .left(ck.dock.column({ width: 220 }, ck.panel.define('navigator', { title: 'Navigator' }, ck.stat(s => photoOf(s)?.name ?? '—', { label: 'Selected' }))))
+    .center(
+      ck.view.grid(s => (s as any).catalog.filtered, {
+        id: 'grid',
+        cell: (p: Photo) => ck.column({}, ck.view.thumb({ image: s => pictureOf(s, p.id), max: 160 }), ck.text(p.name, { dim: true })),
+        size: s => s.view.thumbSize,
+        select: { bind: s => s.ui.selection, mode: 'multi' },
+        keys: { Enter: 'module.develop' },
+        activate: (_p: Photo, ctx: any) => ctx.go('develop'),
+        empty: 'No photos match the filter',
       }),
     )
-    .spring('Space', 'hand')
-    .module('library', m =>
-      m
-        .label('Library')
-        .key('G')
-        .icon('grid')
-        .left(ck.dock.column({ width: 220 }, ck.panel('navigator', { title: 'Navigator' }, ck.stat(s => photoOf(s)?.name ?? '—', { label: 'Selected' }))))
-        .center(
-          ck.view.grid(s => (s as any).catalog.filtered, {
-            id: 'grid',
-            cell: (p: Photo) => ck.column({}, ck.view.thumb({ image: s => pictureOf(s, p.id), max: 160 }), ck.text(p.name, { dim: true })),
-            size: s => s.view.thumbSize,
-            select: { bind: s => s.ui.selection, mode: 'multi' },
-            keys: { Enter: 'module.develop' },
-            activate: (_p: Photo, ctx: any) => ctx.go('develop'),
-            empty: 'No photos match the filter',
-          }),
-        )
-        .right(
-          ck.dock.column(
-            { width: 260 },
-            ck.panel(
-              'filter',
-              { title: 'Filter' },
-              ck.ui.slider(0, 5, { label: 'Minimum rating', bind: s => s.view.filter.minRating, step: 1, reset: 0 }),
-              ck.ui.slider(60, 280, { label: 'Thumbnail size', bind: s => s.view.thumbSize, step: 10, reset: 140 }),
-            ),
-          ),
-        )
-        .bottom(ck.view.filmstrip(s => s.catalog.photos, { id: 'strip', cell: (p: Photo) => ck.text(p.name), select: { bind: s => s.ui.selection } })),
+    .right(
+      ck.dock.column(
+        { width: 260 },
+        ck.panel.define(
+          'filter',
+          { title: 'Filter' },
+          ck.ui.slider({ min: 0, max: 5, label: 'Minimum rating', bind: s => s.view.filter.minRating, step: 1, reset: 0 }),
+          ck.ui.slider({ min: 60, max: 280, label: 'Thumbnail size', bind: s => s.view.thumbSize, step: 10, reset: 140 }),
+        ),
+      ),
     )
-    .module('develop', m =>
-      m
-        .label('Develop')
-        .key('D')
-        .icon('adj')
-        .txOpts(s => ({ channel: s.ui.selection.primary, snapPath: ['dev', s.ui.selection.primary!] }))
-        .left(ck.dock.column({ width: 220 }, ck.panel('navigator')))
-        .center(
-          ck.viewport(s => pictureOf(s, s.ui.selection.primary), {
-            id: 'main',
-            tools: ['probe'],
-            compare: true,
-            overlays: [ck.overlay.grid({ when: s => s.view.grid })],
-            label: s => photoOf(s)?.name ?? '',
-          }),
-        )
-        .right(
-          ck.dock.column(
-            { width: 280, solo: false },
-            ck.panel(
-              'basic',
-              { title: 'Basic', reset: true },
-              ck.section(
-                'Light',
-                { reset: true },
-                ck.ui.slider(-5, 5, { label: 'Exposure', bind: s => s.dev[s.ui.selection.primary!]!.light.exposure, step: 0.05, reset: 0, bipolar: true }),
-                ck.ui.slider(-100, 100, { label: 'Contrast', bind: s => s.dev[s.ui.selection.primary!]!.light.contrast, step: 1, reset: 0, bipolar: true }),
-                ck.ui.slider(-100, 100, { label: 'Highlights', bind: s => s.dev[s.ui.selection.primary!]!.light.highlights, step: 1, reset: 0, bipolar: true }),
-                ck.ui.slider(-100, 100, { label: 'Shadows', bind: s => s.dev[s.ui.selection.primary!]!.light.shadows, step: 1, reset: 0, bipolar: true }),
-              ),
-              ck.section(
-                'Color',
-                { reset: true },
-                ck.ui.slider(2000, 12000, { label: 'Temp', bind: s => s.dev[s.ui.selection.primary!]!.color.temp, step: 50, reset: 5500, track: 'temp' }),
-                ck.ui.slider(-100, 100, { label: 'Tint', bind: s => s.dev[s.ui.selection.primary!]!.color.tint, step: 1, reset: 0, track: 'tint', bipolar: true }),
-                ck.ui.slider(-100, 100, { label: 'Saturation', bind: s => s.dev[s.ui.selection.primary!]!.color.saturation, step: 1, reset: 0, bipolar: true }),
-              ),
-              ck.row({}, ck.ui.command('dev.reset'), ck.ui.command('photo.pick')),
-            ),
+    .bottom(ck.view.filmstrip(s => s.catalog.photos, { id: 'strip', cell: (p: Photo) => ck.text(p.name), select: { bind: s => s.ui.selection } }));
+  const develop = ck
+    .module('develop', { label: 'Develop', key: 'D', icon: 'adj', txOpts: s => ({ channel: s.ui.selection.primary, snapPath: ['dev', s.ui.selection.primary!] }) })
+    .left(ck.dock.column({ width: 220 }, ck.panel('navigator')))
+    .center(
+      ck.viewport(s => pictureOf(s, s.ui.selection.primary), {
+        id: 'main',
+        tools: ['probe'],
+        compare: true,
+        overlays: [ck.overlay.grid({ when: s => s.view.grid })],
+        label: s => photoOf(s)?.name ?? '',
+      }),
+    )
+    .right(
+      ck.dock.column(
+        { width: 280, solo: false },
+        ck.panel.define(
+          'basic',
+          { title: 'Basic', reset: true },
+          ck.section(
+            { title: 'Light', reset: true },
+            ck.ui.slider({ min: -5, max: 5, label: 'Exposure', bind: s => s.dev[s.ui.selection.primary!]!.light.exposure, step: 0.05, reset: 0, bipolar: true }),
+            ck.ui.slider({ min: -100, max: 100, label: 'Contrast', bind: s => s.dev[s.ui.selection.primary!]!.light.contrast, step: 1, reset: 0, bipolar: true }),
+            ck.ui.slider({ min: -100, max: 100, label: 'Highlights', bind: s => s.dev[s.ui.selection.primary!]!.light.highlights, step: 1, reset: 0, bipolar: true }),
+            ck.ui.slider({ min: -100, max: 100, label: 'Shadows', bind: s => s.dev[s.ui.selection.primary!]!.light.shadows, step: 1, reset: 0, bipolar: true }),
           ),
-        )
-        .bottom(ck.view.filmstrip(s => s.catalog.photos, { id: 'strip2', cell: (p: Photo) => ck.text(p.name), select: { bind: s => s.ui.selection } }))
-        .keys({ '\\': 'view.grid' }),
-    );
+          ck.section(
+            { title: 'Color', reset: true },
+            ck.ui.slider({ min: 2000, max: 12000, label: 'Temp', bind: s => s.dev[s.ui.selection.primary!]!.color.temp, step: 50, reset: 5500, track: 'temp' }),
+            ck.ui.slider({ min: -100, max: 100, label: 'Tint', bind: s => s.dev[s.ui.selection.primary!]!.color.tint, step: 1, reset: 0, track: 'tint', bipolar: true }),
+            ck.ui.slider({ min: -100, max: 100, label: 'Saturation', bind: s => s.dev[s.ui.selection.primary!]!.color.saturation, step: 1, reset: 0, bipolar: true }),
+          ),
+          ck.row({}, ck.ui.button({ run: 'dev.reset' }), ck.ui.button({ run: 'photo.pick' })),
+        ),
+      ),
+    )
+    .bottom(ck.view.filmstrip(s => s.catalog.photos, { id: 'strip2', cell: (p: Photo) => ck.text(p.name), select: { bind: s => s.ui.selection } }))
+    .keys({ '\\': 'view.grid' });
+  return ck
+    .shell('Mini Studio')
+    .state(miniState(o.n), {
+      channelName: (id, s) => s.catalog.photos.find(p => p.id === id)?.name,
+      currentChannel: s => s.ui.selection.primary,
+      keepUi: ['selection'],
+    })
+    .derive('catalog.filtered', (s: MiniState) => s.catalog.photos.filter(p => p.rating >= s.view.filter.minRating))
+    .use(miniKit(ck))
+    .menus(
+      ck.menu('File', ['app.palette']),
+      ck.menu('Edit', ['edit.undo', 'edit.redo']),
+      ck.menu('Photo', ['photo.pick', 'photo.reject', '-', { label: 'Rating', items: ['photo.rate'] }]),
+      ck.menu('Settings', ['dev.reset']),
+      ck.menu('View', ['view.grid', 'view.fit', 'view.zoomIn', 'view.zoomOut', '-', 'app.theme']),
+      ck.menu('Window', ['view.hideSides', 'view.toggleLeft', 'view.toggleRight', 'workspace.reset']),
+      ck.menu('Help', ['app.shortcuts', 'app.diagnostics']),
+    )
+    .keys({ 'Mod+Shift+R': 'dev.reset' })
+    .spring('Space', 'hand')
+    .module(library)
+    .module(develop);
 }

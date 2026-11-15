@@ -10,22 +10,22 @@
   "endian": "little",
   "layout": "interleaved, row-major, top row first",
   "file": "cases/cam-dm-unsharp/display.f32",
-  "sha256": "8de9b54eb5117aaac7ce7aa71310a8da8b5872fd4dc9f45fbabcc01bb38b7291",
+  "sha256": "432a36f7921b06c72232b81dd786f99c5747a28dafeac455f9f23dcb01c99c5f",
   "stats": {
     "min": [
-      0.2277756,
-      0.1594967,
-      0.1106787
+      0.309259,
+      0.2584419,
+      0.1946524
     ],
     "max": [
-      0.9830081,
-      0.9762383,
-      0.9628276
+      0.938556,
+      0.922402,
+      0.9158702
     ],
     "mean": [
-      0.6990773,
-      0.6450535,
-      0.532334
+      0.6928831,
+      0.635508,
+      0.5176079
     ]
   },
   "warnings": []

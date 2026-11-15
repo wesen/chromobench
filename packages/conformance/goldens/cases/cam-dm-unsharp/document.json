@@ -1,0 +1,207 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-camera",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "items": {},
+    "order": []
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "photo"
+    },
+    "kind": "file",
+    "name": "camera-96x64.dng",
+    "sha256": "7ea631b47e3249678ccb6ff79648d642bcf212814663f8c83696e72cacfb7f22"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                0.001353,
+                0.001353,
+                0.001353
+              ]
+            },
+            "source": {
+              "alpha": 0,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                0.001353,
+                0.001353,
+                0.001353
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 10
+            },
+            "source": {
+              "kind": "user"
+            }
+          },
+          "preflash": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Preflash",
+            "op": "preflash",
+            "params": {
+              "fraction": 0.02
+            },
+            "source": {
+              "kind": "user"
+            }
+          },
+          "u": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "unsharp mask u",
+            "op": "densityMask",
+            "params": {
+              "gamma": 0.5,
+              "polarity": "positive",
+              "radius_um": 30
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights",
+          "u",
+          "preflash"
+        ]
+      }
+    },
+    "film": {
+      "medium": {
+        "dir": {
+          "amount": 1,
+          "diffusion_um": 0
+        },
+        "exposureEV": 0,
+        "format": {
+          "longEdge_mm": 36
+        },
+        "grain": {
+          "amount": 1,
+          "seed": 1,
+          "size_um": 12
+        },
+        "halation": {
+          "strength": 1
+        },
+        "push": 0,
+        "stock": "kodak_portra_400"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    },
+    "scene": {
+      "medium": {
+        "whiteBalance": {
+          "mode": "daylight",
+          "temperature_K": 5500,
+          "tint": 0
+        }
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    }
+  }
+}

@@ -20,23 +20,24 @@ function walk(n: unknown, f: (n: NodeData) => void, seen = new Set<unknown>()): 
     }
   }
 }
-/** CB-F101: a finishing control in a module labelled Print or Darkroom; CB-F102: finish tools without the kit. */
-export function finishPasses(ck: Ck): { labelPass: any; framePass: any } {
+/** CB-F101: a finishing control in a module labelled Print or Darkroom (a pass of the kit); CB-F102: finish tools
+ *  without the kit (a check cb.core's pass cb.kits runs, since the kit's own passes run only where it is installed). */
+export function finishPasses(ck: Ck): { labelPass: any; missing: (ir: any, p: any) => void } {
   const label = ck.pass('cb.finish.label', { on: 'ui', after: 'slots' }, (ir: any, p) => {
     for (const m of ir.modules as { id: string; label: string; regions: Record<string, NodeData | null> }[]) {
       if (!/print|darkroom/i.test(m.label ?? '')) continue;
       for (const r of Object.values(m.regions ?? {})) walk(r, (n) => {
         if (n.$ === 'cb.arg' && String(n.props['path'] ?? '').startsWith('finishing.'))
-          p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, { at: n.at, facts: ['finishing tones are digital, after the print; the Print module is physical'], fix: 'move it to a Finish module (cb.kits.finish.tonesPanel()) or relabel the module' });
+          p.warn('CB-F101', `cb.arg('${n.props['path']}') is a finishing control in the module '${m.label}'`, { at: n.at, facts: ['finishing tones are digital, after the print; the Print module is physical'], fix: 'move it to a Finish module (cb.kits.finish.panels.tones()) or relabel the module' });
       });
     }
   });
-  const frame = ck.pass('cb.finish.tools', { on: 'ui', after: 'slots' }, (ir: any, p) => {
+  const missing = (ir: any, p: any): void => {
     for (const n of ir.find('viewport') as NodeData[]) {
       const tools = (n.props['tools'] as string[] | undefined) ?? [];
       if ((tools.includes('crop') || tools.includes('spot')) && !ir.kits.some((k: any) => k.name === 'cb.finish'))
         p.error('CB-F102', `viewer '${n.props['id']}' lists the finish tools, but the finish kit is not installed`, { at: n.at, fix: '.use(cb.kits.finish.kit) on the studio' });
     }
-  });
-  return { labelPass: label, framePass: frame };
+  };
+  return { labelPass: label, missing };
 }

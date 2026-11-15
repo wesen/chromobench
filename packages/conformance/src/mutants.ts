@@ -35,7 +35,7 @@ function unsortedJSON(v: unknown): string {
 
 export const MUTANTS: Mutant[] = [
   {
-    name: 'ignores region', expectFail: 'region', ops: ['print.lights'],
+    name: 'ignores region', expectFail: 'region', ops: ['view.flare'],
     wrap: (e) => delegate(e, { evaluate: (n, t) => { const { region: _r, ...rest } = t; return e.evaluate(n, rest); } }),
   },
   {
@@ -50,7 +50,7 @@ export const MUTANTS: Mutant[] = [
     },
   },
   {
-    name: 'adds 1e-12 · Math.random()', expectFail: 'determinism', ops: ['print.lights'],
+    name: 'adds 1e-12 · Math.random()', expectFail: 'determinism', ops: ['view.flare'],
     wrap: (e) => delegate(e, {
       evaluate: async (n, t) => {
         const r = await e.evaluate(n, t);

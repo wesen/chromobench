@@ -31,11 +31,11 @@ describe('persistence', () => {
   it('a version bump starts fresh', async () => {
     const store = memoryPersistence();
     const ck = createCk();
-    const v1 = ck.shell('A').state({ n: 0 }, { version: 1 }).center(ck.text('x')).build();
+    const v1 = ck.shell('A').state({ n: 0 }, { version: 1 }).module(ck.module('main').center(ck.text('x'))).build();
     const rt = await v1.boot({ clock: manualClock(), persistence: store });
     rt.ctx().tx('N', t => void (t.n = 5));
     await rt.save();
-    const v2 = ck.shell('A').state({ n: 0 }, { version: 2 }).center(ck.text('x')).build();
+    const v2 = ck.shell('A').state({ n: 0 }, { version: 2 }).module(ck.module('main').center(ck.text('x'))).build();
     expect((await v2.boot({ clock: manualClock(), persistence: store })).state.n).toBe(0);
     expect((await v1.boot({ clock: manualClock(), persistence: store })).state.n).toBe(5);
   });
@@ -44,17 +44,17 @@ describe('persistence', () => {
 describe('runtime', () => {
   it('a route adapter supplied at start: a refusal is a toast and a runtime diagnostic', () => {
     const ck = createCk();
-    const kit = ck.kit('cb', k => k.state('recipes', { init: { f1: { t: 1 } } }).route('recipes', { keyDepth: 1 }));
+    const kit = ck.kit('cb').state('recipes', { init: { f1: { t: 1 } } }).route('recipes', { keyDepth: 1 });
     const app = ck
       .shell('x')
       .use(kit)
-      .center(ck.text('x'))
+      .module(ck.module('main').center(ck.text('x')))
       .build();
     const rt = app.start({
       clock: manualClock(),
       adapters: {
         recipes: {
-          apply(ps) {
+          apply(ps: any) {
             if ((ps[0]!.after as number) > 9) throw Object.assign(new Error('t must be at most 9'), { code: 'E_ARG_RANGE' });
           },
         },
@@ -75,8 +75,8 @@ describe('runtime', () => {
     const app = ck
       .shell('x')
       .state({ n: 0 })
-      .commands(c => c.add('bad', { run: (ctx: any) => void (ctx.state.n = 1) }))
-      .center(ck.text('x'))
+      .use(ck.kit('bad').commands({ bad: { run: (ctx: any) => void (ctx.state.n = 1) } }))
+      .module(ck.module('main').center(ck.text('x')))
       .build();
     const rt = app.start({ clock: manualClock() });
     rt.run('bad');
@@ -85,7 +85,7 @@ describe('runtime', () => {
   });
   it('an effect loop is CK-P510 with the cells', () => {
     const ck = createCk();
-    const rt = ck.shell('x').state({ n: 0, view: { m: 0 } }).center(ck.text('x')).build().start({ clock: manualClock() });
+    const rt = ck.shell('x').state({ n: 0, view: { m: 0 } }).module(ck.module('main').center(ck.text('x'))).build().start({ clock: manualClock() });
     rt.cell(s => s.n, v => rt.store.set('view.m', v));
     rt.cell(s => s.view.m, v => rt.store.writeDoc([{ path: ['n'], value: (v as number) + 1 }]));
     rt.store.writeDoc([{ path: ['n'], value: 1 }]);

@@ -1,17 +1,20 @@
-// Golden pictures of today's pipeline (CHB-037 P0; README.md beside this file).
-//   node tools/goldens/render.ts                 re-render every case from cases.ts and rewrite packages/conformance/goldens/
-//   node tools/goldens/render.ts --fixtures      also rewrite the two synthetic fixtures first (changes every golden)
-//   node tools/goldens/render.ts --check         re-render the stored recipes, compare with the stored pictures
+// Golden pictures (CHB-037 P0, P2b; README.md beside this file).
+//   node tools/goldens/render.ts --check         re-render the stored documents, compare with the stored pictures
 //        [--tol 1e-5] [--only id,id]            tolerance (max |Δ| per sample) and a case filter
-import { existsSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs';
+//   node tools/goldens/render.ts --only id,id    render these cases' documents and rewrite their pictures (a
+//                                                deliberate change of the oracle: say why in the diary)
+//   node tools/goldens/render.ts                 render every case and rewrite every picture
+//   node tools/goldens/render.ts --fixtures      also rewrite the synthetic fixtures first (changes every golden)
+// The cases are the documents in packages/conformance/goldens/cases/<id>/document.json, listed in index.json
+// (translate.ts made them from P0's recipes).
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertRecipe, sha256Hex, type FrameRecipe } from '@chromobench/contract';
-import { CASES, makeCtx, type FixtureId } from './cases.ts';
-import { CUT_OP, CUTS, makeGoldenEngine, type FixtureRef } from './engine.ts';
+import { sha256Hex, type Document } from '@chromobench/contract';
+import { CUTS } from './engine.ts';
 import { cameraData, cameraInfo, makeNegativeTiff } from './fixtures.ts';
 import {
-  checkAll, DATA, dataPath, f32le, FORMAT, missingOps, ROOT, stats, TOLERANCE, writeData,
-  type CutHeader, type GoldenIndex, type IndexCase, type SkippedCase,
+  checkAll, DATA, dataPath, f32le, FORMAT, openAll, readIndex, readJSON, ROOT, stats, TOLERANCE, writeData,
+  type CutHeader, type GoldenIndex,
 } from './golden.ts';
 
 const args = process.argv.slice(2);
@@ -22,94 +25,65 @@ const opt = (name: string): string | undefined => {
 const only = opt('--only')?.split(',');
 const filter = only ? (id: string): boolean => only.includes(id) : undefined;
 
-const FIX = `${DATA}/fixtures`;
-const FIXTURES: Record<FixtureId, Omit<FixtureRef, 'sha256'> & { title: string }> = {
-  negative: { kind: 'negative', path: `${FIX}/negative-96x64.tif`, title: 'Synthetic colour negative, 16-bit TIFF 96 × 64: rebate, neutral ramp, seven patches, fine grating, highlight blob, three dust specks (tools/goldens/fixtures.ts)' },
-  camera: { kind: 'camera', path: `${FIX}/camera-96x64.f32`, info: `${FIX}/camera-96x64.json`, title: 'Synthetic camera file, linear camera RGB float32 96 × 64 with its SourceInfo (camera matrix, as-shot neutral): the same scene, three sensor-dust specks' },
-  m1: { kind: 'tiff', path: 'fixtures/synthetic/m1-negative-96x64.tif', title: 'The M1 walking-skeleton negative (tools/fixtures/make-m1.ts)' },
-};
-
-function writeFixtures(): void {
+function writeFixtures(index: GoldenIndex): void {
   writeData('fixtures/negative-96x64.tif', makeNegativeTiff());
   const d = cameraData();
   writeData('fixtures/camera-96x64.f32', new Uint8Array(d.buffer, d.byteOffset, d.byteLength));
   writeData('fixtures/camera-96x64.json', `${JSON.stringify(cameraInfo(d), null, 2)}\n`);
-}
-
-function fixtureRefs(): Record<FixtureId, FixtureRef & { title: string }> {
-  const out = {} as Record<FixtureId, FixtureRef & { title: string }>;
-  for (const [id, f] of Object.entries(FIXTURES) as [FixtureId, (typeof FIXTURES)[FixtureId]][]) {
-    out[id] = { ...f, sha256: sha256Hex(new Uint8Array(readFileSync(join(ROOT, f.path)))) };
-  }
-  return out;
+  for (const f of Object.values(index.fixtures)) f.sha256 = sha256Hex(new Uint8Array(readFileSync(join(ROOT, f.path))));
 }
 
 const json = (v: unknown): string => `${JSON.stringify(v, null, 2)}\n`;
 
 async function regenerate(): Promise<void> {
-  if (args.includes('--fixtures') || !existsSync(dataPath('fixtures/negative-96x64.tif'))) writeFixtures();
-  const fixtures = fixtureRefs();
-  const ge = makeGoldenEngine(ROOT);
-  const sha = {} as Record<FixtureId, string>;
-  for (const [id, f] of Object.entries(fixtures) as [FixtureId, FixtureRef][]) sha[id] = (await ge.open(f)).sha256;
-  const ctx = await makeCtx(ge, sha);
-  if (!filter) rmSync(dataPath('cases'), { recursive: true, force: true });
-  const old: GoldenIndex | null = filter && existsSync(dataPath('index.json')) ? (JSON.parse(readFileSync(dataPath('index.json'), 'utf8')) as GoldenIndex) : null;
-  const files = new Map<string, string>(); // pixels' sha256 → file (identical pictures share one file)
-  const cases: IndexCase[] = [];
-  const skipped: SkippedCase[] = [];
+  const index = readIndex();
+  if (only) for (const id of only) if (!index.cases.some((c) => c.id === id)) throw new Error(`no case ${id} in index.json`);
+  if (args.includes('--fixtures')) writeFixtures(index);
+  const ge = await openAll(index);
   const caps = ge.engine.capabilities();
-  for (const def of CASES) {
-    if (filter && !filter(def.id)) continue;
-    const r: FrameRecipe = await def.build(ctx);
-    assertRecipe(r);
-    const dir = `cases/${def.id}`;
-    writeData(`${dir}/recipe.json`, json(r));
-    const base = { id: def.id, title: def.title, exercises: def.exercises, fixture: def.fixture, recipe: `${dir}/recipe.json` };
-    if (def.skip) {
-      const missing = missingOps(ge, r);
-      if (!missing.length) throw new Error(`${def.id} is marked skipped but renders: remove its skip`);
-      skipped.push({ ...base, reason: def.skip, missing });
-      console.log(`${def.id.padEnd(30)} skipped (${missing.join(', ')} not implemented)`);
-      continue;
+  // pixels' sha256 → file: identical pictures share one file, also with the cases not rendered now
+  const files = new Map<string, string>();
+  const kept = new Set<string>();
+  let written = 0;
+  for (const c of index.cases) {
+    if (!filter || filter(c.id) || !c.cuts) continue;
+    for (const cut of CUTS) {
+      const h = readJSON<CutHeader>(c.cuts[cut]);
+      files.set(h.sha256, h.file);
+      kept.add(h.file);
     }
-    const out = await ge.render(r);
+  }
+  for (const c of index.cases) {
+    if (filter && !filter(c.id)) continue;
+    const dir = `cases/${c.id}`;
+    const out = await ge.render(readJSON<Document>(c.document));
     const cutFiles = {} as Record<(typeof CUTS)[number], string>;
-    for (const c of out.cuts) {
-      const bytes = f32le(c.data);
+    for (const r of out.cuts) {
+      const bytes = f32le(r.data);
       const h = sha256Hex(bytes);
       let file = files.get(h);
       if (!file) {
-        file = `${dir}/${c.cut}.f32`;
+        file = `${dir}/${r.cut}.f32`;
+        if (kept.has(file)) throw new Error(`${file} is another case's picture too: render that case as well (--only)`);
         writeData(file, bytes);
         files.set(h, file);
+        written++;
       }
       const header: CutHeader = {
-        case: def.id, cut: c.cut, op: c.op, domain: c.domain, width: c.width, height: c.height, channels: c.channels,
+        case: c.id, cut: r.cut, op: r.op, domain: r.domain, width: r.width, height: r.height, channels: r.channels,
         dtype: 'float32', endian: 'little', layout: 'interleaved, row-major, top row first', file, sha256: h,
-        stats: stats(Float32Array.from(c.data), c.channels), warnings: c.warnings,
+        stats: stats(Float32Array.from(r.data), r.channels), warnings: r.warnings,
       };
-      writeData(`${dir}/${c.cut}.json`, json(header));
-      cutFiles[c.cut] = `${dir}/${c.cut}.json`;
+      writeData(`${dir}/${r.cut}.json`, json(header));
+      cutFiles[r.cut] = `${dir}/${r.cut}.json`;
     }
-    cases.push({ ...base, cuts: cutFiles, ops: out.ops });
+    c.cuts = cutFiles;
+    c.ops = out.ops;
     const [p, d] = out.cuts;
-    console.log(`${def.id.padEnd(30)} print ${p!.width}×${p!.height} mean ${stats(p!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}  display ${d!.width}×${d!.height} mean ${stats(d!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}`);
+    console.log(`${c.id.padEnd(30)} print ${p!.width}×${p!.height} mean ${stats(p!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}  display ${d!.width}×${d!.height} mean ${stats(d!.data, 3).mean.map((v) => v.toFixed(3)).join(' ')}`);
   }
-  // with --only, the other cases' entries are kept, all in cases.ts order
-  const order = CASES.map((c) => c.id);
-  const keep = <T extends { id: string }>(a: T[] | undefined, b: T[]): T[] =>
-    [...(a ?? []).filter((x) => !b.some((y) => y.id === x.id) && order.includes(x.id)), ...b].sort((x, y) => order.indexOf(x.id) - order.indexOf(y.id));
-  const index: GoldenIndex = {
-    format: FORMAT,
-    about: "Golden pictures of the recipe-v2 pipeline (compile() in packages/contract/src/graph.ts) on core's f64 reference engine, made before the CHB-037 cut-off. See tools/goldens/README.md.",
-    engine: { id: 'reference', adapter: caps.adapter?.name ?? 'unknown', conventions: caps.conventions ?? 'unknown', mode: 'exact', wrapper: 'StudioEngine (apps/studio/src/host/studio-engine.ts): output.frame' },
-    cuts: { print: `the ${CUT_OP.print} node (print-xyz)`, display: `the ${CUT_OP.display} node (display-rgb, sRGB)` },
-    tolerance: { maxAbs: TOLERANCE, note: 'largest |Δ| allowed per float32 sample; today the renderer reproduces the files exactly' },
-    fixtures,
-    cases: keep(old?.cases, cases),
-    skipped: keep(old?.skipped, skipped),
-  };
+  index.format = FORMAT;
+  index.engine = { id: 'reference', adapter: caps.adapter?.name ?? 'unknown', conventions: caps.conventions ?? 'unknown', mode: 'exact' };
   writeData('index.json', json(index));
   let bytes = 0;
   const walk = (p: string): void => {
@@ -120,7 +94,7 @@ async function regenerate(): Promise<void> {
     }
   };
   walk(dataPath(''));
-  console.log(`${index.cases.length} cases, ${index.skipped.length} skipped, ${files.size} picture files written; ${DATA}: ${(bytes / 1e6).toFixed(2)} MB`);
+  console.log(`${index.cases.length} cases, ${written} picture files written; ${DATA}: ${(bytes / 1e6).toFixed(2)} MB`);
 }
 
 async function check(): Promise<void> {
@@ -133,7 +107,6 @@ async function check(): Promise<void> {
     const why = c.cuts.find((x) => x.why)?.why;
     console.log(`${c.id.padEnd(30)} ${e(p!.maxAbs).padStart(10)} ${e(p!.meanAbs).padStart(10)}  ${e(d!.maxAbs).padStart(11)} ${e(d!.meanAbs).padStart(10)}  ${c.ok ? 'ok' : 'FAIL'}${why ? `  ${why}` : ''}`);
   }
-  for (const s of rep.skipped) console.log(`${s.id.padEnd(30)} ${s.stillMissing ? `skipped (${s.missing.join(', ')} not implemented)` : 'RENDERS NOW: make it a golden (remove its skip in cases.ts, re-render)'}`);
   const bad = rep.cases.filter((c) => !c.ok);
   console.log(`${rep.cases.length - bad.length}/${rep.cases.length} cases within max |Δ| ≤ ${tol}${bad.length ? `; failing: ${bad.map((c) => c.id).join(', ')}` : ''}`);
   if (!rep.ok) process.exit(1);

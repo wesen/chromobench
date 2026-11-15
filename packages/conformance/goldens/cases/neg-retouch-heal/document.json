@@ -1,0 +1,308 @@
+{
+  "data": null,
+  "format": 3,
+  "frame": "golden-negative",
+  "geometry": {
+    "angle_deg": 0,
+    "crop": null,
+    "orientation": "none"
+  },
+  "masks": {
+    "items": {},
+    "order": []
+  },
+  "output": {
+    "display": {
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "proof": null
+    },
+    "export": {
+      "compression": "deflate",
+      "document": "sidecar",
+      "dpi": 300,
+      "format": "tiff16",
+      "knee": {
+        "method": "oklch",
+        "strength": 6
+      },
+      "scale": "full",
+      "signal": "icc",
+      "space": "prophoto"
+    },
+    "printer": null,
+    "rendering": "scan-of-print",
+    "white": "D65"
+  },
+  "probes": {
+    "items": {},
+    "order": []
+  },
+  "source": {
+    "decode": {
+      "encoding": "linear",
+      "mode": "scan"
+    },
+    "kind": "file",
+    "name": "negative-96x64.tif",
+    "sha256": "f344b0bdbd8acb83cf2be6a221d9d52e7c8ead6324966f1df87a32325901ac38"
+  },
+  "stages": {
+    "darkroom": {
+      "medium": {
+        "aim": "grey-0.184",
+        "grade": 2,
+        "lamp": "TH-KG3",
+        "magnification": 8,
+        "mode": "real",
+        "paper": "kodak_portra_endura"
+      },
+      "stack": {
+        "items": {
+          "lights": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Printer lights",
+            "op": "filter",
+            "params": {
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ]
+            },
+            "source": {
+              "alpha": 1,
+              "analysisLongSide_px": 548,
+              "applied": true,
+              "kind": "auto",
+              "logH": [
+                0.062267,
+                0.022869,
+                -0.025007
+              ],
+              "matchAmount": null,
+              "matchFrame": null,
+              "method": "integrate",
+              "rollConsistency": null
+            }
+          },
+          "main": {
+            "amount": 1,
+            "blend": "normal",
+            "enabled": true,
+            "kind": "layer",
+            "mask": null,
+            "name": "Main exposure",
+            "op": "expose",
+            "params": {
+              "filtration": {
+                "c": 0,
+                "m": 0,
+                "y": 0
+              },
+              "fstop": 8,
+              "time_s": 3.969
+            },
+            "source": {
+              "kind": "user"
+            }
+          }
+        },
+        "order": [
+          "main",
+          "lights"
+        ]
+      }
+    },
+    "print": {
+      "medium": {
+        "flare": 0.48,
+        "illuminant": "D50"
+      },
+      "stack": {
+        "items": {
+          "retouch": {
+            "amount": 1,
+            "blend": "pass",
+            "enabled": true,
+            "kind": "group",
+            "mask": null,
+            "name": "Retouch",
+            "source": {
+              "kind": "user"
+            },
+            "stack": {
+              "items": {
+                "s1": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Heal s1",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "s1_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 3,
+                          "src": {
+                            "x": 24.5,
+                            "y": 31.5
+                          },
+                          "x": 30.5,
+                          "y": 31.5
+                        }
+                      },
+                      "order": [
+                        "s1_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                },
+                "s2": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Heal s2",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "s2_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 3,
+                          "src": {
+                            "x": 61.5,
+                            "y": 56.5
+                          },
+                          "x": 70.5,
+                          "y": 51.5
+                        }
+                      },
+                      "order": [
+                        "s2_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                },
+                "s3": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": true,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Heal s3",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "s3_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 3,
+                          "src": {
+                            "x": 84.5,
+                            "y": 15.5
+                          },
+                          "x": 84.5,
+                          "y": 9.5
+                        }
+                      },
+                      "order": [
+                        "s3_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                },
+                "s4": {
+                  "amount": 1,
+                  "blend": "normal",
+                  "enabled": false,
+                  "kind": "layer",
+                  "mask": null,
+                  "name": "Heal s4",
+                  "op": "heal",
+                  "params": {
+                    "spots": {
+                      "items": {
+                        "s4_spot": {
+                          "feather": 0.3,
+                          "opacity": 1,
+                          "r": 4,
+                          "src": {
+                            "x": 40,
+                            "y": 10
+                          },
+                          "x": 50,
+                          "y": 10
+                        }
+                      },
+                      "order": [
+                        "s4_spot"
+                      ]
+                    }
+                  },
+                  "source": {
+                    "kind": "user"
+                  }
+                }
+              },
+              "order": [
+                "s1",
+                "s2",
+                "s3",
+                "s4"
+              ]
+            }
+          }
+        },
+        "order": [
+          "retouch"
+        ]
+      }
+    },
+    "scan": {
+      "medium": {
+        "baseT": null,
+        "flare": 0,
+        "flat": null,
+        "format": "135",
+        "openGate": null,
+        "rebate": {
+          "h": 64,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "scanner": "xt5-rgb-led",
+        "stock": "kodak_portra_400",
+        "umPerPx": 6
+      },
+      "stack": {
+        "items": {},
+        "order": []
+      }
+    }
+  }
+}

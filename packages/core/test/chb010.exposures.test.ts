@@ -1,15 +1,21 @@
-// CHB-010 stages 3–4: multi-exposure printing (print.combine), mask rasterisation (mask.*) and density
-// masks (print.densityMask) in the f64 reference, with the guide's golden numbers
-// (fixtures/golden/chb010-exposures.json) and the recipe path through contract compile().
+// CHB-010 stages 3–4 on contract 1.0: the darkroom's light law (print.combine with structured terms, the contract's
+// lightH), mask rasterisation and the one mask algebra (mask.*), and density masks (print.densityMask) in the f64
+// reference, with the guide's golden numbers (fixtures/golden/chb010-exposures.json) and the document path through
+// contract compile().
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { applyMutation, compile, defaultRecipe, Graph, sha256Hex, type FrameRecipe, type Node } from '@chromobench/contract';
+import { Graph, lightH, maskCombine, sha256Hex, type LightTermSample, type Node } from '@chromobench/contract';
 import { M1, makeM1Tiff } from '@chromobench/engine-mock';
 import {
-  applyDensityMask, brushCoverage, combinePixel, combineRatio, compileExposures, ellipseAt, exposureSeconds, fullGrid, gaussianBlur1, gradientAt,
-  gridCentres, nodePacksData, luminanceAt, makePrintChain, maskDensity, midgrayDensity, paintMask, parseStrokes, RefEngine, SPEKTRAFILM,
-  type PrintChainOptions,
+  applyDensityMask, brushCoverage, clearExposure, combineRatio, DEFAULT_CONVENTIONS, ellipseAt, fullGrid, gaussianBlur1, gridCentres, linearAt, nodePacksData,
+  luminanceAt, makePrintChain, maskDensity, midgrayDensity, paintMask, PhysicsEnv, RefEngine, SPEKTRAFILM, type PrintChainOptions, type Stroke,
 } from '../src/index.ts';
+import { compiled, L, m1Engine, maskOf, component, opsOf, pixels, push, withEdits, insert } from './doc-helpers.ts';
+
+/** The light law for a main exposure with burns (+1) and dodges (−1) of mask m and seconds ratio r. */
+function combinePixel(xMain: ArrayLike<number>, terms: { x: ArrayLike<number>; m: number; sign: 1 | -1; ratio: number }[], out: number[]): boolean {
+  return lightH({ xMain, wMain: 1, densities: [], filters: [], preflash: [], terms: terms.map((t): LightTermSample => ({ role: t.sign < 0 ? 'dodge' : 'burn', x: t.x, w: t.m * t.ratio })) }, out);
+}
 
 const fx = JSON.parse(readFileSync(new URL('../../../fixtures/golden/chb010-exposures.json', import.meta.url), 'utf8')) as { entries: { id: string; [k: string]: any }[] };
 const entry = (id: string) => fx.entries.find((e) => e.id === id)!;
@@ -84,13 +90,13 @@ describe('mask rasterisation (mask.* at the evaluation grid)', () => {
     expect([...gridCentres(fullGrid(3, 1)).xs]).toEqual([0.5, 1.5, 2.5]);
   });
 
-  it('gradient: 1 at from, 0 at to, 0.5 half way, clamped beyond', () => {
+  it('linear: 1 at from, 0 at to, 0.5 half way, clamped beyond', () => {
     const f = { x: 0, y: 0 }, t = { x: 10, y: 0 };
-    expect(gradientAt(0, 3, f, t)).toBe(1);
-    expect(gradientAt(5, -2, f, t)).toBe(0.5);
-    expect(gradientAt(10, 0, f, t)).toBe(0);
-    expect(gradientAt(-4, 0, f, t)).toBe(1);
-    expect(gradientAt(14, 0, f, t)).toBe(0);
+    expect(linearAt(0, 3, f, t)).toBe(1);
+    expect(linearAt(5, -2, f, t)).toBe(0.5);
+    expect(linearAt(10, 0, f, t)).toBe(0);
+    expect(linearAt(-4, 0, f, t)).toBe(1);
+    expect(linearAt(14, 0, f, t)).toBe(0);
   });
 
   it('ellipse: 1 inside, 0 outside, a one-pixel antialiased edge; the angle rotates it about the box centre', () => {
@@ -114,10 +120,10 @@ describe('mask rasterisation (mask.* at the evaluation grid)', () => {
   });
 
   it('paint: strokes cover their path, the hardness sets the soft edge, erase subtracts, order matters', () => {
-    const strokes = parseStrokes(JSON.stringify([
-      { kind: 'stroke', points: [[5, 10, 0.5], [35, 10, 0.5]], radius: 4, hardness: 0.5, mode: 'add' },
-      { kind: 'stroke', points: [[20, 0, 0.5], [20, 20, 0.5]], radius: 2, hardness: 1, mode: 'erase' },
-    ]));
+    const strokes: Stroke[] = [
+      { points: [[5, 10, 0.5], [35, 10, 0.5]], radius: 4, hardness: 0.5, mode: 'add' },
+      { points: [[20, 0, 0.5], [20, 20, 0.5]], radius: 2, hardness: 1, mode: 'erase' },
+    ];
     const g = fullGrid(40, 20);
     const m = paintMask(strokes, g);
     const at = (x: number, y: number) => m[y * 40 + x]!;
@@ -126,17 +132,11 @@ describe('mask rasterisation (mask.* at the evaluation grid)', () => {
     expect(at(10, 12)).toBeCloseTo(brushCoverage(2.5, 4, 0.5), 12);
     expect(at(19, 9)).toBe(0); // erased
     expect(at(30, 9)).toBe(1);
-    expect(paintMask(parseStrokes('[]'), g).every((v) => v === 0)).toBe(true);
+    expect(paintMask([], g).every((v) => v === 0)).toBe(true);
     // a single dab
-    const dot = paintMask(parseStrokes('[{"kind":"stroke","points":[[3.5,3.5,1]],"radius":2,"hardness":1,"mode":"add"}]'), fullGrid(8, 8));
+    const dot = paintMask([{ points: [[3.5, 3.5, 1]], radius: 2, hardness: 1, mode: 'add' }], fullGrid(8, 8));
     expect(dot[3 * 8 + 3]).toBe(1);
     expect(dot[0]).toBe(0);
-  });
-
-  it('paint refuses malformed strokes with a typed error', () => {
-    expect(() => parseStrokes('nope')).toThrow(/E_ARG_TYPE/);
-    expect(() => parseStrokes('[{"points":[[1]],"radius":2}]')).toThrow(/points/);
-    expect(() => parseStrokes('[{"points":[[1,2,1]],"radius":-2}]')).toThrow(/radius/);
   });
 
   it('feather: a normalised Gaussian keeps a flat mask flat and the mean of a step', () => {
@@ -150,28 +150,18 @@ describe('mask rasterisation (mask.* at the evaluation grid)', () => {
   });
 });
 
-describe('exposure semantics (compileExposures)', () => {
-  const r = defaultRecipe('negative-scan', { sha256: 'a'.repeat(64) });
-  const withEx = (ex: object[], filtration = r.print.enlarger.filtration): FrameRecipe['print'] => ({ ...r.print, enlarger: { ...r.print.enlarger, filtration }, exposures: ex.map((e) => ({ enabled: true, mask: null, time_s: null, stops: null, filtration: null, through: null, ...e })) as FrameRecipe['print']['exposures'] });
-
-  it('stops are f-stop printer’s stops relative to the main time', () => {
-    expect(exposureSeconds({ kind: 'burn', time_s: null, stops: 0.5 }, 10)).toBeCloseTo(4.142, 3);
-    expect(exposureSeconds({ kind: 'dodge', time_s: null, stops: 1 }, 10)).toBe(5);
-    expect(exposureSeconds({ kind: 'burn', time_s: 3, stops: 1 }, 10)).toBe(3);
-    const c = compileExposures(withEx([{ id: 'sky', kind: 'burn', stops: 0.5 }, { id: 'face', kind: 'dodge', time_s: 2 }]));
-    expect(c.exposures.map((e) => [e.id, e.sign])).toEqual([['sky', 1], ['face', -1]]);
-  });
-
-  it('a dodge cannot carry a filtration; more than four packs is E_TOO_MANY_PACKS', () => {
-    expect(() => compileExposures(withEx([{ id: 'd', kind: 'dodge', time_s: 1, filtration: { c: 0, m: 10, y: 0 } }]))).toThrow(/E_RECIPE/);
-    const packs = [1, 2, 3, 4].map((i) => ({ id: `b${i}`, kind: 'burn', time_s: 1, filtration: { c: 0, m: 10 * i, y: 0 } }));
-    expect(() => compileExposures(withEx(packs))).toThrow(/E_TOO_MANY_PACKS/);
-    expect(compileExposures(withEx(packs.slice(0, 3))).exposures).toHaveLength(3);
-  });
-
-  it('unmasked dodges longer than the main exposure and base flashes are reported', () => {
-    const d = compileExposures(withEx([{ id: 'd', kind: 'dodge', time_s: 12 }, { id: 'f', kind: 'flash', time_s: 1, through: 'base' }])).diagnostics.map((x) => x.code);
-    expect(d).toEqual(['W_PREVIEW_APPROX', 'W_DODGE_EXCEEDS_MAIN']);
+describe('exposure semantics (the light law in compile)', () => {
+  it('stops are printer’s stops relative to the main time: each term is a print.expose of its own seconds', async () => {
+    const { e, doc } = await m1Engine();
+    const d = withEdits(doc, push('darkroom', 'sky', L('burn', { stops: 0.5 })), push('darkroom', 'face', L('dodge', { stops: 1 })), push('darkroom', 'b3', L('burn', { time_s: 3, filtration: { c: 0, m: 10, y: 0 } })));
+    const c = compiled(e, d);
+    const seconds = (id: string): unknown => e.graph.get(c.entries[id]![0]!)!.args['time_s'];
+    expect(seconds('sky')).toBeCloseTo(4.142, 3);
+    expect(seconds('face')).toBe(5);
+    expect(seconds('b3')).toBe(3);
+    const comb = c.cuts['darkroom.H']!;
+    expect(comb.op).toBe('print.combine');
+    expect((comb.args['terms'] as { role: string }[]).map((t) => t.role)).toEqual(['burn', 'dodge', 'burn']);
   });
 
   it('combineRatio: real mode carries time in x; normalised mode weights by seconds', () => {
@@ -195,20 +185,23 @@ async function setup() {
     return node;
   };
   const read = async (n: Node) => (await e.evaluate(n, { scale: 'full', precision: 'export' })).read();
-  const src = I('source.open', [], { source: info.sha256, encoding: 'linear' });
+  const src = I('source.open', [], { source: info.sha256, encoding: 'linear', umPerPx: 6 });
   const dyes = I('invert.dyes', [I('scan.density', [src.id], { rebate: M1.rebate }).id], { stock: 'kodak_portra_400', scanner: 'xt5-rgb-led' });
   return { e, g, I, read, src, dyes, sha: info.sha256 };
 }
 
+const burnOf = (image: Node, mask?: Node, amount = 1) => ({ role: 'burn', image: image.id, amount, ...(mask ? { mask: mask.id } : {}) });
+const dodgeOf = (image: Node, mask?: Node, amount = 1) => ({ ...burnOf(image, mask, amount), role: 'dodge' });
+
 describe('print.combine and mask.* in the reference engine', () => {
-  it('normalised and real mode: a one-stop burn through a gradient adds log10(1 + m) per pixel', async () => {
+  it('normalised and real mode: a one-stop burn through a linear mask adds log10(1 + m) per pixel', async () => {
     const { I, read, src, dyes } = await setup();
-    const mask = I('mask.gradient', [src.id], { from: { x: 8, y: 0 }, to: { x: 88, y: 0 } });
+    const mask = I('mask.linear', [src.id], { from: { x: 8, y: 0 }, to: { x: 88, y: 0 } });
     const m = await read(mask);
     for (const mode of ['normalised', 'real'] as const) {
       const main = I('print.expose', [dyes.id], { mode, time_s: 10 });
       const burn = I('print.expose', [dyes.id], { mode, time_s: 10 });
-      const comb = I('print.combine', [main.id], { exposures: [burn.id], masks: [mask.id], modes: ['add'] });
+      const comb = I('print.combine', [main.id], { terms: [burnOf(burn, mask)] });
       const [x0, x1] = [await read(main), await read(comb)];
       let worst = 0;
       for (let i = 0; i < M1.width * M1.height; i++) for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(x1[3 * i + k]! - x0[3 * i + k]! - Math.log10(1 + m[i]!)));
@@ -218,9 +211,8 @@ describe('print.combine and mask.* in the reference engine', () => {
 
   it('normalised mode weights a 2.5 s burn on a 10 s main by its seconds', async () => {
     const { I, read, src, dyes } = await setup();
-    const all = I('mask.luminance', [src.id], { above: 0, below: 1, softness: 0 });
-    const main = I('print.expose', [dyes.id], { time_s: 10 });
-    const comb = I('print.combine', [main.id], { exposures: [I('print.expose', [dyes.id], { time_s: 2.5 }).id], masks: [all.id], modes: ['add'] });
+    const main = I('print.expose', [dyes.id], { time_s: 10, mode: 'normalised' });
+    const comb = I('print.combine', [main.id], { terms: [burnOf(I('print.expose', [dyes.id], { time_s: 2.5, mode: 'normalised' }))] });
     const [x0, x1] = [await read(main), await read(comb)];
     expect(x1[100]! - x0[100]!).toBeCloseTo(Math.log10(1.25), 12);
   });
@@ -230,12 +222,12 @@ describe('print.combine and mask.* in the reference engine', () => {
     const mask = I('mask.ellipse', [src.id], { box: { x: 30, y: 10, w: 40, h: 40 }, angle_deg: 20 });
     const main = I('print.expose', [dyes.id], { mode: 'real', time_s: 10 });
     const t4 = I('print.expose', [dyes.id], { mode: 'real', time_s: 4 });
-    const both = I('print.combine', [main.id], { exposures: [t4.id, t4.id], masks: [mask.id, mask.id], modes: ['subtract', 'add'] });
+    const both = I('print.combine', [main.id], { terms: [dodgeOf(t4, mask), burnOf(t4, mask)] });
     const [x0, xb] = [await read(main), await read(both)];
     let worst = 0;
     for (let i = 0; i < x0.length; i++) worst = Math.max(worst, Math.abs(xb[i]! - x0[i]!));
     expect(worst).toBeLessThan(1e-12);
-    const over = I('print.combine', [main.id], { exposures: [I('print.expose', [dyes.id], { mode: 'real', time_s: 15 }).id], masks: [mask.id], modes: ['subtract'] });
+    const over = I('print.combine', [main.id], { terms: [dodgeOf(I('print.expose', [dyes.id], { mode: 'real', time_s: 15 }), mask)] });
     const r = await e.evaluate(over, { scale: 'full', precision: 'export' });
     expect(r.warnings.map((w) => w.code)).toContain('W_DODGE_EXCEEDS_MAIN');
     const xo = await r.read();
@@ -244,69 +236,108 @@ describe('print.combine and mask.* in the reference engine', () => {
     expect(xo[0]).toBeCloseTo(x0[0]!, 13); // outside the mask the print is untouched
   });
 
-  it('mask algebra: and/or/not/feather', async () => {
-    const { I, read, src } = await setup();
-    const a = I('mask.gradient', [src.id], { from: { x: 0, y: 0 }, to: { x: 96, y: 0 } });
-    const b = I('mask.gradient', [src.id], { from: { x: 0, y: 64 }, to: { x: 0, y: 0 } });
-    const [ma, mb] = [await read(a), await read(b)];
-    const [mand, mor, mnot] = [await read(I('mask.and', [a.id], { other: b.id })), await read(I('mask.or', [a.id], { other: b.id })), await read(I('mask.not', [a.id], {}))];
-    for (const i of [0, 100, 3000, 6143]) {
-      expect(mand[i]).toBe(Math.min(ma[i]!, mb[i]!));
-      expect(mor[i]).toBe(Math.max(ma[i]!, mb[i]!));
-      expect(mnot[i]).toBe(1 - ma[i]!);
+  it('filters, preflash, amounts and the main mask: the light law of lightH per pixel', async () => {
+    const { I, read, src, dyes } = await setup();
+    const mask = I('mask.ellipse', [src.id], { box: { x: 20, y: 8, w: 50, h: 40 } });
+    const main = I('print.expose', [dyes.id], { time_s: 10 });
+    const t2 = I('print.expose', [dyes.id], { time_s: 2 });
+    const comb = I('print.combine', [main.id], {
+      mainAmount: 0.8, mainMask: mask.id, terms: [burnOf(t2, mask, 1.5)],
+      filters: [{ logH: [0.1, -0.05, 0.02], amount: 0.5 }, { logH: [0, 0.2, 0], amount: 1, mask: mask.id }], preflash: [{ fraction: 0.03, amount: 2 }],
+    });
+    const [x0, x2, m, out] = [await read(main), await read(t2), await read(mask), await read(comb)];
+    for (const i of [0, 33 * 96 + 45, 20 * 96 + 22, 6143]) {
+      const want = [0, 0, 0];
+      lightH({ xMain: x0.slice(3 * i, 3 * i + 3), wMain: 0.8 * m[i]!, terms: [{ role: 'burn', x: x2.slice(3 * i, 3 * i + 3), w: 1.5 * m[i]! }], densities: [], filters: [{ logH: [0.1, -0.05, 0.02], w: 0.5 }, { logH: [0, 0.2, 0], w: m[i]! }], preflash: [{ fraction: 0.03, w: 2 }] }, want);
+      for (let k = 0; k < 3; k++) expect(out[3 * i + k]).toBe(want[k]);
     }
+  });
+
+  it('flashes: uniform through the base (dye amounts 0) or an open gate, not held back by density masks', async () => {
+    const { I, read, dyes } = await setup();
+    const main = I('print.expose', [dyes.id], { time_s: 10 });
+    const f = I('print.expose', [dyes.id], { time_s: 1 });
+    const dm = I('print.densityMask', [main.id], { gamma: 0.5, radius_um: 12 });
+    for (const role of ['flash-base', 'flash-open']) {
+      const a = await read(I('print.combine', [main.id], { terms: [{ role, image: f.id, amount: 1 }] }));
+      const b = await read(I('print.combine', [main.id], { terms: [{ role, image: f.id, amount: 1 }], densities: [{ image: dm.id, amount: 1 }] }));
+      const [x0, d] = [await read(main), await read(dm)];
+      const added = (o: ArrayLike<number>, i: number, k: number, through = 1): number => 10 ** o[3 * i + k]! - through * 10 ** x0[3 * i + k]!;
+      const ref = added(a, 0, 1);
+      expect(ref).toBeGreaterThan(0);
+      for (const i of [0, 1000, 5000]) {
+        expect(added(a, i, 1) / ref).toBeCloseTo(1, 9);
+        expect(added(b, i, 1, 10 ** -d[i]!) / ref).toBeCloseTo(1, 9);
+      }
+    }
+  });
+
+  it('the mask algebra: combine add/subtract/intersect with an amount, invert, constant, feather', async () => {
+    const { I, read, src } = await setup();
+    const a = I('mask.linear', [src.id], { from: { x: 0, y: 0 }, to: { x: 96, y: 0 } });
+    const b = I('mask.linear', [src.id], { from: { x: 0, y: 64 }, to: { x: 0, y: 0 } });
+    const [ma, mb] = [await read(a), await read(b)];
+    for (const mode of ['add', 'subtract', 'intersect'] as const) {
+      for (const amount of [1, 0.4]) {
+        const mc = await read(I('mask.combine', [a.id], { other: b.id, mode, amount }));
+        for (const i of [0, 100, 3000, 6143]) expect(mc[i]).toBe(maskCombine(mode, ma[i]!, mb[i]!, amount));
+      }
+    }
+    const inv = await read(I('mask.invert', [a.id], {}));
+    for (const i of [0, 100, 3000]) expect(inv[i]).toBe(1 - ma[i]!);
+    expect([...(await read(I('mask.constant', [src.id], { value: 0.25 })))].every((v) => v === 0.25)).toBe(true);
     const fe = await read(I('mask.feather', [a.id], { radius_px: 6 }));
     expect(fe[32 * 96 + 48]).toBeCloseTo(ma[32 * 96 + 48]!, 12); // a linear ramp is unchanged by a symmetric blur away from the edges
-    const paint = I('mask.paint', [src.id], { strokes: JSON.stringify([{ kind: 'stroke', points: [[10, 10, 0.5], [80, 50, 0.5]], radius: 5, hardness: 0.8, mode: 'add' }]) });
+    const paint = I('mask.paint', [src.id], { strokes: [{ points: [[10, 10, 0.5], [80, 50, 0.5]], radius: 5, hardness: 0.8, mode: 'add' }] });
     const mp = await read(paint);
     expect(mp[10 * 96 + 10]).toBe(1);
     expect(mp[60 * 96 + 5]).toBe(0);
   });
 
-  it('a recipe with masked exposures compiles to print.combine and prints through it', async () => {
-    const { e, g, read, sha } = await setup();
-    let r = defaultRecipe('negative-scan', { sha256: sha });
-    r = { ...r, scan: { ...r.scan!, rebate: M1.rebate } };
-    const srcNode = g.intern('source.open', [], { source: sha, encoding: 'linear' }).node;
-    const sky = g.intern('mask.gradient', [srcNode.id], { from: { x: 0, y: 0 }, to: { x: 0, y: 40 } }).node;
-    r = applyMutation(r, { op: 'mask.set', id: 'sky', mask: { version: 1, nodes: g.closure(sky.id) } }).recipe;
-    r = applyMutation(r, { op: 'exposure.add', exposure: { id: 'burn', kind: 'burn', mask: 'sky', stops: 1 } }).recipe;
-    const display = compile(r, g);
-    e.adopt(g.closure(display.id));
-    const nodes = g.closure(display.id);
-    const combDef = nodes.find((n) => n.op === 'print.combine')!;
-    expect(combDef).toBeDefined();
-    const comb = g.adopt([combDef])[0]!;
-    const main = g.get(combDef.inputs[0]!)!;
-    const [x0, x1, m] = [await read(main), await read(comb), await read(sky)];
-    // the top row is burned a full stop, below the gradient's end nothing changes
+  it('a document with a masked burn compiles to print.combine and prints through it', async () => {
+    const { e, doc } = await m1Engine();
+    const d = withEdits(doc,
+      insert('masks', 'sky', maskOf([['sky1', component('linear', { from: { x: 0, y: 0 }, to: { x: 0, y: 40 } })]])),
+      push('darkroom', 'burn', L('burn', { stops: 1 }, { mask: 'sky' })));
+    const c = compiled(e, d);
+    const comb = c.cuts['darkroom.H']!;
+    expect(comb.op).toBe('print.combine');
+    const sky = e.graph.get((comb.args['terms'] as { mask: string }[])[0]!.mask)!;
+    const [x0, x1, m] = [await pixels(e, c.cuts['darkroom.main']!), await pixels(e, comb), await pixels(e, sky)];
+    // the top row is burned a full stop, below the mask's end nothing changes
     expect(x1[3 * 50]! - x0[3 * 50]!).toBeCloseTo(Math.log10(1 + m[50]!), 12);
     expect(m[50]).toBeGreaterThan(0.98);
     expect(x1[3 * (50 * 96 + 50)]).toBeCloseTo(x0[3 * (50 * 96 + 50)]!, 13);
-    const shown = await e.evaluate(g.get(display.inputs[0]!)!, { scale: 0.5, precision: 'preview' }); // output.display (output.frame is CHB-011's)
+    expect(opsOf(e, c)).toContain('mask.linear');
+    const shown = await e.evaluate(c.display, { scale: 0.5, precision: 'preview' });
     expect(shown.width).toBe(48);
   });
 
-  it('print.densityMask (contract 0.3): d_m from PD = −x without a print.expose, ≥ 0 and 0 at the densest area; print.combine applies it', async () => {
-    const { I, read } = await setup();
-    const x = I('source.pattern', [], { domain: 'paper-logH', width: 24, height: 16, seed: 3 });
+  it('print.densityMask: d_m from PD = x_clear − x of the main print.expose, ≥ 0 and 0 at the densest area; print.combine applies it', async () => {
+    const { I, read, dyes } = await setup();
+    const x = I('print.expose', [dyes.id], { time_s: 10 });
     const x0 = await read(x);
-    expect([...(await read(I('print.densityMask', [x.id], { amount: 0 })))].every((v) => v === 0)).toBe(true);
-    const dm = I('print.densityMask', [x.id], { amount: 0.5, radius_um: 12 });
+    expect([...(await read(I('print.densityMask', [x.id], { gamma: 0 })))].every((v) => v === 0)).toBe(true);
+    const dm = I('print.densityMask', [x.id], { gamma: 0.5, radius_um: 12 }); // σ = 12 µm / 6 µm/px = 2 px
     const d1 = await read(dm);
-    const pd = Float64Array.from(x0, (v) => -v);
-    const d = maskDensity(pd, 24, 16, 3, 0.5, 2);
+    const env = new PhysicsEnv(nodePacksData(), DEFAULT_CONVENTIONS);
+    const clear = clearExposure({ up: (op) => (op === 'print.expose' ? { op, args: x.args, id: x.id, inputs: x.inputs } : op === 'invert.dyes' ? { op, args: dyes.args, id: dyes.id, inputs: dyes.inputs } : undefined), env });
+    const pd = Float64Array.from(x0, (v, i) => clear[i % 3]! - v);
+    const d = maskDensity(pd, 96, 64, 3, 0.5, 2);
     let min = Infinity;
-    for (let i = 0; i < 24 * 16; i++) {
+    for (let i = 0; i < 96 * 64; i++) {
       expect(d1[i]!).toBeCloseTo(d[i]!, 12);
       min = Math.min(min, d[i]!);
     }
     expect(min).toBe(0);
     // same polarity: 0 at the thinnest area, ≥ 0
-    const ds = await read(I('print.densityMask', [x.id], { amount: 0.5, radius_um: 12, polarity: 'same' }));
+    const ds = await read(I('print.densityMask', [x.id], { gamma: 0.5, radius_um: 12, polarity: 'same' }));
     expect(Math.min(...ds)).toBe(0);
     // the combine with only a density mask: x − d_m in every layer (neutral)
-    const c = await read(I('print.combine', [x.id], { densityMasks: [dm.id] }));
-    for (let i = 0; i < 24 * 16; i++) for (let k = 0; k < 3; k++) expect(c[3 * i + k]!).toBeCloseTo(x0[3 * i + k]! - d1[i]!, 11);
+    const c = await read(I('print.combine', [x.id], { densities: [{ image: dm.id, amount: 1 }] }));
+    for (let i = 0; i < 96 * 64; i++) for (let k = 0; k < 3; k++) expect(c[3 * i + k]!).toBeCloseTo(x0[3 * i + k]! - d1[i]!, 11);
+    // no pitch, no density mask: an image without umPerPx.film is refused (contract 1.0 has no default pitch)
+    const pattern = I('source.pattern', [], { domain: 'paper-logH', width: 24, height: 16, seed: 3 });
+    await expect(read(I('print.densityMask', [pattern.id], { gamma: 0.5, radius_um: 12 }))).rejects.toThrow(/film pitch/);
   });
 });

@@ -5,12 +5,10 @@
 // Modules (CHB-032): state.ts (state shape, readers, agent batches), model.ts (registry, looked recipes, targets,
 // plan and commit), commands.ts (the command table), panels.ts (builder calls); this file declares the kit.
 //
-//   const looks = cb.kits.looks;
-//   cb.studio('X').use(looks.kit)
-//     .module('print', m => m
-//       .left(looks.library())
-//       .center(ck.match(s => s.looksView.mode, { print: cb.viewer(looks.print, { compare: { before: looks.before } }), survey: looks.survey() }))
-//       .right(ck.dock.column({}, looks.params(), looks.amount(), looks.diff(), looks.card())))
+//   const { looks } = cb.kits;
+//   cb.studio('X').use(looks.kit).menus(...cb.menus.standard(), looks.menus.looks()).module(looks.modules.print())
+//   ck.module('p').left(looks.panels.library()).center(cb.viewer(looks.sel.print, { compare: { before: looks.sel.before } }))
+//     .right(ck.dock.column({}, looks.panels.params(), looks.panels.amount(), looks.panels.diff(), looks.panels.card()))
 //
 // A look resolves, per frame, to plain `set` mutations (re-run concretely when a parameter or the Amount moves).
 // A user apply commits one batch (one tx and LoggedMutation.batch on every frame's EditLog, one global undo step);
@@ -28,7 +26,7 @@ import { axis, ring } from './engine/sweep.ts';
 import { looksProvider } from './engine/provider.ts';
 import { LOOKS_STATE, looksView, agentBatches } from './state.ts';
 import { createLooksModel } from './model.ts';
-import { addLooksCommands } from './commands.ts';
+import { looksCommands } from './commands.ts';
 import { createLooksPanels } from './panels.ts';
 
 const LOOKS_DOCS = `## cb.kits.looks
@@ -56,8 +54,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   ];
 
   // ── passes ──
-  /** CB-L001: looks forms in a variant that did not install the kit; CB-L002: unknown look ids in a choice */
-  const installed = ck.pass('cb.looks.installed', { on: 'ui', after: 'slots' }, (ir: any, p) => {
+  /** CB-L001: looks forms in a layout that did not install the kit (cb.core's pass cb.kits runs it) */
+  const missing = (ir: any, p: any): void => {
     if (ir.kits.some((k: any) => k.name === 'cb.looks')) return;
     for (const f of FORMS) {
       const n = (ir.find(f.name) as NodeData[])[0];
@@ -66,8 +64,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
         return;
       }
     }
-  });
-  ck.install(installed);
+  };
+  /** CB-L002: unknown look ids in a choice */
   const checks = ck.pass('cb.looks.checks', { on: 'ui', after: 'slots' }, (ir: any, p) => {
     for (const n of ir.find('button') as NodeData[]) {
       const run = n.props['run'];
@@ -82,28 +80,23 @@ export function createLooksKit(ck: Ck, cb: Cb) {
   });
 
   // ── the kit ──
-  const kit = ck.kit<typeof LOOKS_STATE>('cb.looks', (k) => {
-    k.version('1')
-      .requires('cb.core')
-      .state('looks', { init: LOOKS_STATE.looks })
-      .state('looksView', { init: LOOKS_STATE.looksView, view: true })
-      .forms(...FORMS)
-      .passes(checks)
-      .commands((c) => {
-        addLooksCommands(c, cb, M);
-      })
-      .docs(LOOKS_DOCS);
-  });
+  const kit = ck
+    .kit('cb.looks')
+    .version('1')
+    .requires('cb.core')
+    .state('looks', { init: LOOKS_STATE.looks })
+    .state('looksView', { init: LOOKS_STATE.looksView, view: true })
+    .forms(...FORMS)
+    .passes(checks)
+    .commands(looksCommands(cb, M))
+    .docs(LOOKS_DOCS);
 
   const P = createLooksPanels(ck, cb, M);
   const { panel, paramsModel, amountModel, diffModel, compareModel, cardModel, groupsModel, presetsModel, lookCell, library, survey, choiceRow } = P;
 
-  return {
-    kit,
-    state: LOOKS_STATE,
-    // forms and builder calls
+  const panels = {
+    /** the looks library with print thumbnails */
     library,
-    survey,
     params: panel('looks.params', 'looks-params', 'Look', paramsModel),
     amount: panel('looks.amount', 'looks-amount', 'Amount', amountModel),
     diff: panel('looks.diff', 'looks-diff', 'What changed', diffModel),
@@ -111,41 +104,90 @@ export function createLooksKit(ck: Ck, cb: Cb) {
     groups: panel('looks.groups', 'looks-groups', 'Sync groups', groupsModel),
     presets: panel('looks.presets', 'looks-presets', 'Presets', presetsModel),
     compare: panel('looks.compare', 'looks-compare', 'Compare with', compareModel),
-    choice: choiceRow,
-    cell: lookCell,
-    /** the main viewer's image: the frame's print with the picked look previewed */
-    print,
-    /** the viewer's compare image: the compare source (before, defaults, snapshot, reference frame, a look) */
-    before,
-    tile,
-    caption,
-    // authoring
-    look,
-    slider,
-    choiceParam: choice,
-    set,
-    add,
-    mul,
-    pt,
-    fromPreset,
-    bake,
-    register: (l: Look) => (extra.set(l.id, l), l),
-    syncGroups: syncGroupsOf,
-    sweep: { ring, axis },
-    // readers and passes as functions
-    looks: looksOf,
-    byId: lookById,
-    view: looksView,
-    diffOf: diffAgainst,
-    diffRecipes,
-    summary,
-    batches: agentBatches,
-    planApply,
-    /** the DSL's LooksProvider (cb.looks.* for the agent), over the same registry */
-    provider: (getState: () => any) => looksProvider(() => looksOf(getState())),
-    keys: { N: 'looks.survey.open', 'Mod+Enter': 'looks.apply', 'Mod+Alt+N': 'looks.snapshot' } as Record<string, any>,
-    errors: (e: unknown): Diagnostic => toDiagnostic(e),
   };
+  const keys = { looks: { N: 'looks.survey.open', 'Mod+Enter': 'looks.apply', 'Mod+Alt+N': 'looks.snapshot' } as Record<string, any> };
+  /** the Print module built around the looks (CHB-021 guide §8.2): the looks library left; the print (the picked look
+   *  previewed, compared with a chosen source) or the survey (N) in the centre; parameters, Amount, diff, batches right */
+  const printModule = (o: { id?: string } = {}) =>
+    ck
+      .module(o.id ?? 'print', { label: 'Print', key: 'D', txOpts: (st: any) => ({ channel: cb.sel.current(st) }) })
+      .left(ck.dock.column({ width: 300 }, library({ size: 96 }), cb.panels.snapshots(), cb.panels.history()))
+      .center(
+        ck.match(
+          (st: any) => st.looksView.mode,
+          {
+            print: cb.viewer(print, { id: 'main', views: true, compare: { before }, tools: ['probe', 'test-strip', 'ring-around'], hud: cb.hud.readout() }),
+            survey: survey({ size: 200 }),
+          },
+          { of: ['print', 'survey'] },
+        ),
+      )
+      .right(
+        ck.dock.column(
+          { width: 320 },
+          panels.params(),
+          panels.amount(),
+          panels.diff(),
+          panels.compare(),
+          panels.card(),
+          cb.panels.approvals(),
+          ck.panel.define('enlarger', { title: 'Enlarger' }, cb.ifFrame(cb.arg('print.enlarger.time_s'), (cb.arg('print.lights.logH') as any).pad(), cb.arg('print.grade'), cb.arg('print.paper'))),
+          panels.groups(),
+          panels.presets(),
+        ),
+      )
+      .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-print' })))
+      .keys({ ...cb.keys.views, ...cb.keys.darkroom, ...keys.looks });
+
+  return ck.product(kit, {
+    panels,
+    views: { survey, cell: lookCell, choice: choiceRow },
+    modules: { print: printModule },
+    menus: {
+      looks: () =>
+        ck.menu('Looks', [
+          'looks.apply', 'looks.applyToRoll', 'looks.applyToLibrary', '-', 'looks.survey.open', 'looks.preview', 'looks.setReference', 'looks.snapshot', '-',
+          'looks.copy', 'looks.paste', 'looks.sync', '-', 'looks.saveAsPreset', 'looks.bake', '-', 'looks.virtualCopy', 'looks.match',
+        ]),
+    },
+    keys,
+    sel: {
+      /** the main viewer's image: the frame's print with the picked look previewed */
+      print,
+      /** the viewer's compare image: the compare source (before, defaults, snapshot, reference frame, a look) */
+      before,
+      looks: looksOf,
+      byId: lookById,
+      view: looksView,
+      diffOf: diffAgainst,
+      syncGroups: syncGroupsOf,
+      batches: agentBatches,
+    },
+    lib: {
+      state: LOOKS_STATE,
+      tile,
+      caption,
+      // authoring
+      look,
+      slider,
+      choiceParam: choice,
+      set,
+      add,
+      mul,
+      pt,
+      fromPreset,
+      bake,
+      register: (l: Look) => (extra.set(l.id, l), l),
+      sweep: { ring, axis },
+      diffRecipes,
+      summary,
+      planApply,
+      /** the DSL's LooksProvider (cb.looks.* for the agent), over the same registry */
+      provider: (getState: () => any) => looksProvider(() => looksOf(getState())),
+      errors: (e: unknown): Diagnostic => toDiagnostic(e),
+    },
+    whenAbsent: missing,
+  });
 }
 
 export type LooksKit = ReturnType<typeof createLooksKit>;

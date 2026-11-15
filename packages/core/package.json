@@ -11,7 +11,8 @@
   "dependencies": {
     "@chromobench/contract": "workspace:*",
     "@chromobench/data": "workspace:*",
-    "@chromobench/ingest": "workspace:*"
+    "@chromobench/ingest": "workspace:*",
+    "@chromobench/values": "workspace:*"
   },
   "devDependencies": {
     "@chromobench/conformance": "workspace:*",

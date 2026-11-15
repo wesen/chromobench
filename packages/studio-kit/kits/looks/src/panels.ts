@@ -3,7 +3,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FrameRecipe } from '@chromobench/contract';
 import type { Ck } from '@chromobench/shell';
-import { type Cb, visibleFrames } from '../../../src/cb.ts';
+import type { Cb } from '../../../src/cb.ts';
+import { sel } from '../../../src/sel.ts';
 import type { Studio } from '../../../src/studio.ts';
 import { type Look, type Preset } from './engine/look.ts';
 import { planFrame } from './engine/plan.ts';
@@ -18,7 +19,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
   // each form node carries its model (a τ function of the state and the services), so the renderers stay dumb
   const panel = (form: string, id: string, title: string, model: (s: any, o: Record<string, unknown>, services: any) => unknown) => (o: Record<string, unknown> = {}) => {
     const { id: pid, title: t, ...rest } = o as { id?: string; title?: string };
-    return ck.panel(pid ?? id, { title: t ?? title }, node(form, { ...rest, model: (s: any, services?: any) => model(s, rest, services) }));
+    return ck.panel.define(pid ?? id, { title: t ?? title }, node(form, { ...rest, model: (s: any, services?: any) => model(s, rest, services) }));
   };
   const nameOf = (s: any, f: string): string => s?.catalog?.frames?.[f]?.name ?? f;
   const paramsModel = (s: any) => {
@@ -37,7 +38,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
   const amountModel = (s: any, o: Record<string, unknown>) => {
     const v = looksView(s);
     const l = pickedLook(s);
-    const f = cb.current(s);
+    const f = sel.current(s);
     const r = f ? (s.recipes?.[f] as FrameRecipe | undefined) : undefined;
     const pf = l && f && r ? planFrame(l, paramsOf(s, l), f, r, optsOf(s)) : null;
     return {
@@ -50,7 +51,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       warnings: pf?.warnings.map((w) => w.message) ?? [],
       selected: selection(s).length,
       roll: rollFrameIds(s).length,
-      library: visibleFrames(s).length,
+      library: sel.visible(s).length,
       from: v.from ?? l?.base ?? 'current',
     };
   };
@@ -63,14 +64,14 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
     const v = looksView(s);
     const against = (o['against'] as string | undefined) ?? null;
     const src: CompareSource =
-      against === 'snapshot' ? ((s.snapshots?.[cb.current(s) ?? ''] ?? []).slice(-1)[0] ? { snapshot: (s.snapshots[cb.current(s)!] as any[]).slice(-1)[0].id } : v.compare)
+      against === 'snapshot' ? ((s.snapshots?.[sel.current(s) ?? ''] ?? []).slice(-1)[0] ? { snapshot: (s.snapshots[sel.current(s)!] as any[]).slice(-1)[0].id } : v.compare)
         : against === 'defaults' ? 'defaults' : against === 'before' ? 'before' : v.compare;
     const studio = services?.studio as Studio | undefined;
     const entries = diffAgainst(s, src, (f) => studio?.frames.get(f)?.initial);
     return { against: srcKey(src), entries: entries.map((e) => ({ shown: e.shown, group: e.group ?? 'Other', path: e.path })), previewing: !!(v.preview && v.picked) };
   };
   const compareModel = (s: any) => {
-    const f = cb.current(s);
+    const f = sel.current(s);
     const v = looksView(s);
     const snaps = f ? ((s.snapshots?.[f] ?? []) as any[]).map((x) => ({ key: `snapshot:${x.id}`, label: `Snapshot “${x.name}”`, src: { snapshot: x.id } as CompareSource })) : [];
     const ref = typeof v.compare === 'object' && 'frame' in v.compare ? [{ key: `frame:${v.compare.frame}`, label: `Frame ${nameOf(s, v.compare.frame)}`, src: v.compare }] : [];
@@ -100,7 +101,7 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
   const groupsModel = (s: any) => ({ chosen: looksView(s).groups, all: Object.entries(syncGroupsOf()).map(([name, g]) => ({ name, default: g.default, note: g.note ?? null })) });
   const presetsModel = (s: any) => ({
     presets: Object.values((s.looks?.presets ?? {}) as Record<string, Preset>).map((p) => ({ id: p.id, name: p.name, entries: p.entries.length, review: (s.looks?.review?.[p.id] ?? []) as string[] })),
-    frame: cb.current(s) ? nameOf(s, cb.current(s)!) : null,
+    frame: sel.current(s) ? nameOf(s, sel.current(s)!) : null,
   });
   const favMark = (s: any, l: Look): string => ((s.looks?.favourites ?? []).includes(l.id) ? '★ ' : '');
   const lookCell = (o: { size?: number; survey?: boolean } = {}) => (l: Look) =>
@@ -111,15 +112,15 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       ck.text((s: any) => caption(s, l), { dim: true, class: 'cb-look-caption' } as any),
       ck.row(
         { class: 'cb-look-actions' },
-        ck.ui.button('Preview', { run: ['looks.pick', l.id], small: true } as any),
-        o.survey ? ck.ui.button('Apply', { run: ['looks.apply', l.id], small: true, primary: true } as any) : ck.ui.button('Survey ±', { run: ['looks.survey.toggle', l.id], small: true } as any),
+        ck.ui.button({ label: 'Preview', run: ['looks.pick', l.id], small: true } as any),
+        o.survey ? ck.ui.button({ label: 'Apply', run: ['looks.apply', l.id], small: true, primary: true } as any) : ck.ui.button({ label: 'Survey ±', run: ['looks.survey.toggle', l.id], small: true } as any),
       ),
     );
   const library = (o: { groups?: string[]; size?: number; id?: string; title?: string } = {}) =>
-    ck.panel(
+    ck.panel.define(
       o.id ?? 'looks-library',
       { title: o.title ?? 'Looks' },
-      ck.ui.segmented([{ value: null, label: 'All' }, ...(o.groups ?? ['Print', 'Contrast', 'Film', 'Mine']).map((g) => ({ value: g, label: g }))], { bind: (s: any) => s.looksView.group, label: 'Group', small: true } as any),
+      ck.ui.segmented({ options: [{ value: null, label: 'All' }, ...(o.groups ?? ['Print', 'Contrast', 'Film', 'Mine']).map((g) => ({ value: g, label: g }))], bind: (s: any) => s.looksView.group, label: 'Group', small: true } as any),
       ck.view.grid((s: any) => looksOf(s).filter((l) => (!looksView(s).group || l.group === looksView(s).group) && (!o.groups || o.groups.includes(l.group))), {
         id: `${o.id ?? 'looks-library'}-grid`,
         cell: lookCell({ size: o.size ?? 96 }),
@@ -139,13 +140,13 @@ export function createLooksPanels(ck: Ck, cb: Cb, M: LooksModel) {
       { grow: 1, class: 'cb-looks-survey' },
       ck.row(
         { class: 'cb-looks-survey-bar' },
-        ck.text((s: any) => `Survey: ${surveyLooks(s).length} ${looksView(s).survey === 'ring' ? 'ring-around prints' : 'looks'} of ${s.catalog?.frames?.[cb.current(s) ?? '']?.name ?? 'no frame'} at ${looksView(s).amount} %`, { strong: true } as any),
-        ck.ui.segmented([{ value: 'set', label: 'Chosen looks' }, { value: 'ring', label: 'Ring-around' }], { bind: (s: any) => s.looksView.survey, label: 'Survey', small: true } as any),
-        ck.ui.command('looks.survey.open', { text: 'Back to the print', small: true } as any),
+        ck.text((s: any) => `Survey: ${surveyLooks(s).length} ${looksView(s).survey === 'ring' ? 'ring-around prints' : 'looks'} of ${s.catalog?.frames?.[sel.current(s) ?? '']?.name ?? 'no frame'} at ${looksView(s).amount} %`, { strong: true } as any),
+        ck.ui.segmented({ options: [{ value: 'set', label: 'Chosen looks' }, { value: 'ring', label: 'Ring-around' }], bind: (s: any) => s.looksView.survey, label: 'Survey', small: true } as any),
+        ck.ui.button({ run: 'looks.survey.open', text: 'Back to the print', small: true } as any),
       ),
       ck.view.grid((s: any) => surveyLooks(s), { id: o.id ?? 'looks-survey', cell: lookCell({ size: o.size ?? 220, survey: true }), key: (l: Look) => l.id, size: () => (o.size ?? 220) + 30, empty: 'Add looks to the survey (Survey ± in the library)' } as any),
     );
-  /** a one-row choice of looks for a simple variant: a button per look applies it at the current Amount */
-  const choiceRow = (ids: string[]) => ck.row({ class: 'cb-looks-choice' }, ...ids.map((id) => ck.ui.button(lookById({}, id)?.name ?? id, { run: ['looks.apply', id], small: true } as any)));
+  /** a one-row choice of looks for a simple layout: a button per look applies it at the current Amount */
+  const choiceRow = (ids: string[]) => ck.row({ class: 'cb-looks-choice' }, ...ids.map((id) => ck.ui.button({ label: lookById({}, id)?.name ?? id, run: ['looks.apply', id], small: true } as any)));
   return { panel, paramsModel, amountModel, diffModel, compareModel, cardModel, groupsModel, presetsModel, lookCell, library, survey, choiceRow };
 }

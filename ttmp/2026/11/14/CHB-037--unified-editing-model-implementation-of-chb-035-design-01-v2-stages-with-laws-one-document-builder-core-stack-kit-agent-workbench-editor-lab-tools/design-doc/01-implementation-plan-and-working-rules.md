@@ -323,3 +323,33 @@ deleted ops. Pointwise ops stay fused in the pointwise kernel; barriers as desig
 tests; the `[gpu-parity]` and `[chromium-webgpu]` browser projects green on SwiftShader (ports 5531–5534) and on the
 real GPU with `REAL_GPU=1` (GPU lock); the diary lists what the studio-level browser specs cannot show yet (they need
 P5b).
+
+### Amendments after P5a (main agent)
+
+- The UI DSL is now immutable throughout (P5a diary `diary/04-phase-p5a-ui-dsl.md`, `packages/shell/README.md`):
+  kits declare commands and tools as tables, layouts place modules and menus, `ck.panel(id)` refers and
+  `ck.panel.define` defines, every kit is a product `{ kit, panels, views, modules, menus, keys, sel, lib, tools,
+  commands, docs }`, state is read through `cb.sel.*`, host capabilities through `requires` and `ctx.host`,
+  `variant` is now `layout` (`?layout=` only). Module props are fixed; a stage declaration needs `ModuleProps`
+  extended in the shell or a module fragment via `ck.extend`.
+- Remaining CHB-029 items 5 (status bar, dialogs) and 6 (jobs) go to P5b if cheap there; `docs/HANDOFF.md` still says
+  `?variant=` (P9 updates the handoff).
+
+### P4 — one history (design §26)
+
+The two histories (the shell store's document-tier patches and the contract's `EditLog`) become one. The shell may
+import only `@chromobench/values`, so the generic log lives there.
+
+- **`packages/values`**: a document log over values transactions: applied entries with a cursor (undo, redo; a new
+  edit after undo drops what could be redone), proposals (`pending` → `applied` | `rejected`; stale when recomputed
+  inverses differ), batches (one batch id across several documents: approve and reject as one; one undo step per
+  batch for the user), authors and sources, `why(path)` (which entry last set a path, and from where), drafts for
+  gestures (preview without logging, commit as one transaction of the net change), serialisation of the log. One
+  batch builder `plan(targets, (doc) => transaction)` for looks, rolls, sync and agents. Property tests.
+- **`packages/contract`**: delete `EditLog`; the document's log is the values log with `DOCUMENT_RULES` as its
+  validator; keep `edit()`.
+- **`packages/shell`**: the store's document tier is the values log (the shell's own patch history for the document
+  tier goes); view and preview tiers stay; the preview type `Layer` is renamed `Draft`; gesture preview/commit maps
+  onto drafts.
+- Not in P4: the studio-kit bridge (`editlog-route.ts`) and every studio-kit/app consumer — P5b rewires them.
+- Acceptance: values, contract and shell typecheck and vitest green; the diary describes the API P5b and P6 use.
