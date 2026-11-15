@@ -1,3 +1,4 @@
+//! include grid.wgsl
 // output.frame on the GPU (contract 1.0 document geometry; CHB-037 P3b): the orientation of a texture rendered on
 // the receiver's grid, and the straightened crop (contract frame.ts straighten: bilinear at the rotated pixel centre,
 // 0 outside the frame) sampled at the output grid's nearest full-resolution pixels, as core's output.frame.
@@ -47,8 +48,9 @@ fn at(x: i32, y: i32) -> vec4<f32> {
 fn straighten(@builtin(global_invocation_id) g: vec3<u32>) {
   if (g.x >= U.outW || g.y >= U.outH) { return; }
   // the nearest full-resolution pixel of the oriented crop (the engines' grid rule), then the un-oriented crop pixel
-  let X2 = i32(U.reg.x) + min(i32(U.reg.z) - 1, i32(floor((f32(g.x) + 0.5) * U.reg.z / f32(U.outW))));
-  let Y2 = i32(U.reg.y) + min(i32(U.reg.w) - 1, i32(floor((f32(g.y) + 0.5) * U.reg.w / f32(U.outH))));
+  let s = vec2<i32>(gridSample(g.xy, vec4<u32>(U.reg), vec2<u32>(U.outW, U.outH)));
+  let X2 = s.x;
+  let Y2 = s.y;
   let cw = i32(U.crop.z);
   let ch = i32(U.crop.w);
   let ij = unorient(U.o, X2, Y2, cw, ch);

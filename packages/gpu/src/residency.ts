@@ -14,6 +14,8 @@
 // PROXIES_KEPT is a rule, not a measurement: a window resize or a draft size makes new grids; the newest few are what
 // the viewer and its drafts ask for again.
 
+import { gridAxis } from '@chromobench/contract';
+
 export interface ResidentStats {
   /** bytes kept, and of them in pinned frames */
   bytes: number;
@@ -162,25 +164,16 @@ export class Residency {
 }
 
 /**
- * The source sampled on a render's grid (CHB-041): output pixel p reads frame pixel region.xy + ⌊(p + ½)·(region.wh /
- * out.wh)⌋, computed in f32 as kernels/pointwise.wgsl does (`fp`), so a chain reading this proxy at p (srcOnGrid) reads
- * exactly the texel it would read from the full-size source. A thumbnail or a screen-size preview then needs a texture
- * of its own size, not the frame's.
+ * The source sampled on a render's grid (CHB-041): output pixel p reads frame pixel region.x + ⌊(2p + 1)·region.w / 2·out.w⌋
+ * (the contract's grid rule, gridAxis; kernels/grid.wgsl computes the same in u32), so a chain reading this proxy at p
+ * (srcOnGrid) reads exactly the texel it would read from the full-size source. A thumbnail or a screen-size preview then
+ * needs a texture of its own size, not the frame's.
  */
 export interface Sampled { w: number; h: number; c: number; data?: Float32Array; u16?: Uint16Array; samples?: number; max?: number }
 
-/** Frame coordinates the shader reads for output columns (or rows) 0…n−1: f32 arithmetic, like `fp` in pointwise.wgsl. */
-export function gridCoords(origin: number, span: number, n: number, limit: number): Int32Array {
-  const z = Math.fround(span / n);
-  const out = new Int32Array(n);
-  // (p + 0.5) is exact in f32; the product of two f32 values is exact in f64, so one fround is f32's correctly rounded product
-  for (let p = 0; p < n; p++) out[p] = Math.min(limit - 1, origin + Math.floor(Math.fround((p + 0.5) * z)));
-  return out;
-}
-
 export function sampleSource(img: Sampled, region: { x: number; y: number; w: number; h: number }, outW: number, outH: number): Sampled {
-  const xs = gridCoords(region.x, region.w, outW, img.w);
-  const ys = gridCoords(region.y, region.h, outH, img.h);
+  const xs = gridAxis(region.x, region.w, outW);
+  const ys = gridAxis(region.y, region.h, outH);
   if (img.u16) {
     const s = img.samples ?? 3;
     const src = img.u16;

@@ -1,5 +1,6 @@
+//! include grid.wgsl
 // heal and clone on the GPU (contract 1.0; CHB-022's per-pixel formula): spots composited in order on a grid.
-// Each grid pixel is computed at the full-resolution pixel centre it samples (outMap, as pointwise.wgsl), so a
+// Each grid pixel is computed at the full-resolution pixel centre it samples (the grid rule, grid.wgsl), so a
 // draft, a screen render and every tile of an export see the same spot. Sources are read from an atlas of
 // full-resolution windows, one per spot, each the image as the spots before it left it (src/retouch.ts); the seam
 // correction's Fourier coefficients come from core's healCoefficients() on the CPU (f64), so only the per-pixel
@@ -13,7 +14,8 @@
 const M: u32 = 8u;
 const STRIDE: u32 = 22u;
 
-struct U_ { outMap: vec4<f32>, frame: vec4<f32> };
+// outMap: the grid's region (x, y, w, h) of the frame; frame: (frameW, frameH, spots, 0)
+struct U_ { outMap: vec4<u32>, frame: vec4<f32> };
 @group(0) @binding(0) var<uniform> U: U_;
 @group(0) @binding(1) var base: texture_2d<f32>;
 @group(0) @binding(2) var atlas: texture_2d<f32>;
@@ -72,9 +74,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
   if (g.x >= size.x || g.y >= size.y) { return; }
   let p = vec2<i32>(g.xy);
   var out = textureLoad(base, p, 0);
-  // the full-resolution pixel this grid pixel samples (pointwise.wgsl outMap), at its centre
-  let fp = U.outMap.xy + floor((vec2<f32>(g.xy) + 0.5) * U.outMap.zw);
-  let pos = fp + 0.5;
+  // the full-resolution pixel this grid pixel samples (the grid rule), at its centre
+  let fp = gridSample(g.xy, U.outMap, size);
+  let pos = vec2<f32>(fp) + 0.5;
   let n = u32(U.frame.z);
   for (var s = 0u; s < n; s++) {
     let v0 = S[s * STRIDE];

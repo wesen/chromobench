@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { isChromobenchError } from '@chromobench/contract';
 import { Budget, BufferPool, TexturePool, type PoolDevice } from '../src/pool.ts';
-import { Residency, gridCoords, sampleSource } from '../src/residency.ts';
+import { gridAxis } from '@chromobench/contract';
+import { Residency, sampleSource, type Sampled } from '../src/residency.ts';
 import { BUDGET_RULE, budgetFor } from '../src/device.ts';
 
 function fakeDevice(): PoolDevice & { destroyed: string[] } {
@@ -277,31 +278,25 @@ describe('residency (CHB-041)', () => {
 
 describe('the source sampled on a render grid (CHB-041)', () => {
   // kernels/pointwise.wgsl: fp = outMap.xy + floor((p + 0.5) * outMap.zw), all f32, outMap.zw = f32(region / out)
-  const f32Mul = (a: number, b: number): number => {
-    const x = new Float32Array([a, b]);
-    return new Float32Array([x[0]! * x[1]!])[0]!;
-  };
-  it('reads the pixel the shader reads, in f32', () => {
-    for (const [span, n, origin] of [[4000, 1152, 0], [6000, 160, 0], [2667, 768, 0], [1000, 333, 17], [7, 3, 2]] as const) {
-      const xs = gridCoords(origin, span, n, origin + span);
-      const z = new Float32Array([span / n])[0]!;
-      for (let p = 0; p < n; p++) expect(xs[p]).toBe(origin + Math.floor(f32Mul(p + 0.5, z)));
-      expect(Math.max(...xs)).toBeLessThan(origin + span);
-    }
+  it('reads the pixels of the contract\'s grid rule (gridAxis; kernels/grid.wgsl computes the same in u32)', () => {
+    const img: Sampled = { w: 4000, h: 1, c: 3, data: new Float32Array(4000 * 3).map((_, i) => Math.floor(i / 3)) };
+    const s = sampleSource(img, { x: 0, y: 0, w: 4000, h: 1 }, 106, 1);
+    expect(s.data![26 * 3]).toBe(1000); // a tie: centre 26.5·4000/106 = 1000 exactly (the f32 rule read 999)
+    expect([...s.data!.filter((_, i) => i % 3 === 0)]).toEqual([...gridAxis(0, 4000, 106)]);
   });
 
   it('samples f32 and 16-bit sources at those pixels', () => {
     const w = 10, h = 6;
     const data = new Float32Array(w * h * 3).map((_, i) => i);
     const s = sampleSource({ w, h, c: 3, data }, { x: 2, y: 1, w: 6, h: 4 }, 3, 2);
-    const xs = gridCoords(2, 6, 3, w), ys = gridCoords(1, 4, 2, h);
+    const xs = gridAxis(2, 6, 3), ys = gridAxis(1, 4, 2);
     for (let y = 0; y < 2; y++) for (let x = 0; x < 3; x++) for (let k = 0; k < 3; k++) expect(s.data![(y * 3 + x) * 3 + k]).toBe(data[(ys[y]! * w + xs[x]!) * 3 + k]);
     const u16 = new Uint16Array(w * h).map((_, i) => i);
     const g = sampleSource({ w, h, c: 3, u16, samples: 1, max: 65535 }, { x: 0, y: 0, w, h }, 5, 3);
     expect(g.samples).toBe(1);
     expect(g.max).toBe(65535);
-    const row = gridCoords(0, h, 3, h)[0]!;
-    expect([...g.u16!.slice(0, 5)]).toEqual([...gridCoords(0, w, 5, w)].map((x) => row * w + x));
+    const row = gridAxis(0, h, 3)[0]!;
+    expect([...g.u16!.slice(0, 5)]).toEqual([...gridAxis(0, w, 5)].map((x) => row * w + x));
   });
 });
 

@@ -7,19 +7,17 @@
 // fp = region.x + ⌊(p + ½)·region.w / w⌋ (the engines' nearest-sample rule) and coordinate-based masks
 // are evaluated at that pixel's centre, fp + ½. At full resolution the grid is the frame itself.
 // packages/gpu evaluates the same formulas in WGSL (pointwise.wgsl ops 12–15) and uploads paintMask.
-import type { Box, Point } from '@chromobench/contract';
+import { gridAxis, type Box, type Point } from '@chromobench/contract';
 
 export interface MaskGrid { w: number; h: number; region: Box }
 
 /** The full-resolution grid of a w × h frame. */
 export const fullGrid = (w: number, h: number): MaskGrid => ({ w, h, region: { x: 0, y: 0, w, h } });
 
-/** Frame pixel centres of the grid's columns and rows (fp + ½). */
+/** Frame pixel centres of the grid's columns and rows (fp + ½, fp by the contract's grid rule). */
 export function gridCentres(g: MaskGrid): { xs: Float64Array; ys: Float64Array } {
-  const xs = new Float64Array(g.w);
-  const ys = new Float64Array(g.h);
-  for (let p = 0; p < g.w; p++) xs[p] = g.region.x + Math.floor(((p + 0.5) * g.region.w) / g.w) + 0.5;
-  for (let q = 0; q < g.h; q++) ys[q] = g.region.y + Math.floor(((q + 0.5) * g.region.h) / g.h) + 0.5;
+  const xs = Float64Array.from(gridAxis(g.region.x, g.region.w, g.w), (v) => v + 0.5);
+  const ys = Float64Array.from(gridAxis(g.region.y, g.region.h, g.h), (v) => v + 0.5);
   return { xs, ys };
 }
 

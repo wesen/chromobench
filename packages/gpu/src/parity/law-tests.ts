@@ -560,6 +560,59 @@ async function fieldRaceTest(o: Record<string, unknown> = {}): Promise<Record<st
 }
 LAW_TESTS['law:field-race'] = fieldRaceTest;
 
+/**
+ * CHB-045 GPUC-2 (CHB-037 P10-15): the grid rule, engine against engine, column by column. A 4000 × 2 pattern (seeded
+ * noise: every column its own values) rendered at every output width 1…4000 (scale n/4000), and a 2 × 2674 pattern at
+ * every output height 1…2674, on the GPU — with proxies (the host samples the source by the contract's gridAxis) and
+ * without (kernels/grid.wgsl in the pointwise kernel) — against core's reference engine at the same scale. A column
+ * differs when its values do (beyond f32 rounding). `ties` counts the output pixels whose centre falls exactly on a
+ * boundary between two image pixels ((2p + 1)·w divisible by 2n): where the f32 rule picked the left pixel.
+ */
+async function gridTest(): Promise<Record<string, unknown>> {
+  const rt = await runtime();
+  const data = defaultPhysicsData();
+  const ref = new RefEngine({ data });
+  const out: Record<string, unknown> = {};
+  for (const [name, PW, PH] of [['widths', 4000, 2], ['heights', 2, 2674]] as const) {
+    const g = new Graph();
+    const node = g.intern('source.pattern', [], { domain: 'camera-linear', width: PW, height: PH, seed: 7 }).node;
+    ref.adopt(g.closure(node.id));
+    const N = Math.max(PW, PH);
+    for (const proxies of [true, false]) {
+      const gpu = await GpuEngine.create({ runtime: rt, workers: 0, opfs: false, proxies, prewarm: false });
+      gpu.adopt(g.closure(node.id));
+      let sizes = 0, columns = 0, ties = 0, worst = '';
+      const t0 = performance.now();
+      for (let n = 1; n <= N; n++) {
+        const scale = n / N;
+        const a = await gpu.evaluate(node, { scale, precision: 'preview' });
+        const b = await ref.evaluate(node, { scale, precision: 'preview' });
+        const ga = (await a.read()) as Float32Array, rb = await b.read();
+        const c = a.info.channels;
+        const len = name === 'widths' ? a.width : a.height;
+        if (len !== n || b.width !== a.width || b.height !== a.height) throw new Error(`grid ${a.width}×${a.height} vs ${b.width}×${b.height} for n = ${n}`);
+        let bad = 0;
+        for (let p = 0; p < n; p++) {
+          if (((2 * p + 1) * N) % (2 * n) === 0) ties++;
+          const i = name === 'widths' ? p : p * a.width;
+          let d = 0;
+          for (let k = 0; k < c; k++) d = Math.max(d, Math.abs(ga[i * c + k]! - rb[i * c + k]!));
+          if (d > 1e-5) bad++;
+        }
+        if (bad) {
+          sizes++;
+          columns += bad;
+          if (!worst) worst = `n = ${n}: ${bad}`;
+        }
+      }
+      out[`${name}.${proxies ? 'proxies' : 'kernel'}`] = { sizes, columns, ties, first: worst, ms: Math.round(performance.now() - t0) };
+      gpu.dispose();
+    }
+  }
+  return out;
+}
+LAW_TESTS['law:grid'] = gridTest;
+
 function max8(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let m = 0;
   for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(Math.round(a[i]! * 255) - Math.round(b[i]! * 255)));

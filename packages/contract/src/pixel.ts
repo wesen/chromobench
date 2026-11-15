@@ -1,6 +1,38 @@
 // The laws' arithmetic per pixel (contract 1.0, design §22, §25): one definition, which the reference engine calls
 // and the GPU engine mirrors in WGSL, as frame.ts's straighten is the one definition of output.frame's sampling.
-// The contract still evaluates no image; these are the formulas of print.combine, composite.mix and mask.combine.
+// The contract still evaluates no image; these are the formulas of print.combine, composite.mix and mask.combine,
+// the grid rule every engine samples by, and the blend modes' channel formulas.
+import { fail } from './errors.ts';
+
+// ---- the grid rule (CHB-045, docs/patterns/gpu/03 "One grid rule") ------------------------------------------------
+
+/**
+ * A grid of n output pixels over [origin, origin + span) of the full-resolution image cannot be computed in u32 when
+ * (2p + 1)·span may reach 2³²: n·span < GRID_LIMIT keeps it below (the GPU's kernels compute the rule in u32).
+ */
+export const GRID_LIMIT = 2 ** 31;
+
+/** Refuses a grid whose rule would wrap in u32 (n·span ≥ 2³¹; 4000 px on 4000 px is 2²³·1.9). */
+export function gridCheck(span: number, n: number): void {
+  if (!(n * span < GRID_LIMIT)) fail('E_ARG_RANGE', `a grid of ${n} pixels over ${span} image pixels exceeds the grid rule's range (n·span < 2³¹)`);
+}
+
+/**
+ * The grid rule: output pixel p of an n-pixel grid over [origin, origin + span) reads image pixel
+ * origin + ⌊(2p + 1)·span / 2n⌋ — its centre (p + ½)·span/n, floored — in integers, so every engine picks the same pixel,
+ * ties ((2p + 1)·span divisible by 2n) included. In f64 the product and the quotient's floor are exact below 2⁵³.
+ */
+export function gridSample(origin: number, span: number, n: number, p: number): number {
+  return origin + Math.floor(((2 * p + 1) * span) / (2 * n));
+}
+
+/** The image pixels of every output pixel 0…n−1 along one axis (gridSample). */
+export function gridAxis(origin: number, span: number, n: number): Int32Array {
+  gridCheck(span, n);
+  const out = new Int32Array(n);
+  for (let p = 0; p < n; p++) out[p] = gridSample(origin, span, n, p);
+  return out;
+}
 
 /** Lowest paper exposure the light law keeps (x = −8: paper white). */
 export const H_FLOOR = 1e-8;

@@ -168,6 +168,19 @@ test('broken variant: without leases the pool hands the tile\'s field to the oth
   expect(r.codes).toBeGreaterThan(0);
 });
 
+// CHB-045 GPUC-2: one integer grid rule. Every output width 1…4000 of a 4000-px frame and every height 1…2674 of a
+// 2674-px one, GPU (proxies on and off: the host's gridAxis and kernels/grid.wgsl) against core, column by column; the
+// sweep meets thousands of ties (before: 554 widths of 3901 had a column on another pixel).
+test('the grid rule: every output width and height reads the same pixels on the GPU as in core, ties included', async ({ page }) => {
+  test.setTimeout(900_000);
+  const r = await run(page, 'law:grid');
+  expect(r.error).toBeUndefined();
+  for (const k of ['widths.proxies', 'widths.kernel', 'heights.proxies', 'heights.kernel']) {
+    expect(r[k].columns, k).toBe(0);
+    expect(r[k].ties, k).toBeGreaterThan(1000);
+  }
+});
+
 test('an export tile by tile equals the whole-frame export for every spatial op (halos, whole-frame fields and extremes)', async ({ page }) => {
   test.setTimeout(600_000);
   const r = await run(page, 'law:tiles');

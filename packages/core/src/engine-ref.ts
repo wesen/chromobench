@@ -3,7 +3,7 @@
 // from them (nearest sample, as the mock), so a region is bit-identical to the crop of the full result.
 // Modes 'exact' and 'tabulated' (f64 tables through look3, the GPU preview's reference).
 import {
-  ChromobenchError, fail, getOp, Graph, nodeSlots, quantizeScale, sha256Hex,
+  ChromobenchError, fail, getOp, Graph, gridAxis, nodeSlots, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Domain, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
@@ -112,9 +112,7 @@ class Lru<V> {
 interface Grid { key: string; W: number; H: number; xs: Int32Array; ys: Int32Array }
 
 function gridOf(W: number, H: number, region: Box, width: number, height: number): Grid {
-  const xs = new Int32Array(width), ys = new Int32Array(height);
-  for (let x = 0; x < width; x++) xs[x] = region.x + Math.min(region.w - 1, Math.floor(((x + 0.5) * region.w) / width));
-  for (let y = 0; y < height; y++) ys[y] = region.y + Math.min(region.h - 1, Math.floor(((y + 0.5) * region.h) / height));
+  const xs = gridAxis(region.x, region.w, width), ys = gridAxis(region.y, region.h, height);
   return { key: `${W}x${H}|${region.x},${region.y},${region.w},${region.h}|${width}x${height}`, W, H, xs, ys };
 }
 
