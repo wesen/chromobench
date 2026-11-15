@@ -20,4 +20,5 @@
 - [ ] From CHB-026 session 04 F44: switching a photo from Real to Normalised darkens it (luma 105 → 52): carry the time's density into the lights on a mode switch (and back) <!-- t:8nfh -->
 - [ ] From CHB-026 session 03 F37: the first filtration step (20 CC) flips a warm photo to blue; consider 5/10 CC steps for the first moves <!-- t:czh4 -->
 - [ ] From CHB-026 session 04 F42: portrait frames on a strip open sideways (flipV default fits landscape frames); a per-roll orientation or 'rotate all portrait frames' command <!-- t:itds -->
-- [ ] Owner decision (CHB-026 F30): the first print's colour aim for scans — neutral (now) or warm about 0.05–0.10 log H (CHB-031 WS-C diary 04 step 3 table); then one value for the studio's first print and the Roll module's ALPHA 0.75 <!-- t:cpv9 -->
+- [x] Owner decision (CHB-026 F30): the first print's colour aim for scans — neutral (now) or warm about 0.05–0.10 log H (CHB-031 WS-C diary 04 step 3 table); then one value for the studio's first print and the Roll module's ALPHA 0.75 <!-- t:cpv9 -->
+- [ ] Roll first prints vs studio first print: the Roll module's ALPHA 0.75 keeps a quarter of each frame's cast, the studio integrates negatives fully to grey (alpha 1, kept by the owner 2026-11-14); align or document why they differ <!-- t:5wjl -->

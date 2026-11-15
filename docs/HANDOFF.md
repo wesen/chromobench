@@ -304,13 +304,14 @@ must match is the **scene colour before the film**: white balance, camera RGB �
 - **CHB-032** clean-up (closed): splits of large files, one TIFF writer, reference docs on undo and on which engine
   computes what (`CHB-032 …/reference/`), 63 unused exports removed.
 
-### Decisions waiting for the owner (and the photographer)
+### Decisions taken (2026-11-14)
 
-- **First-print colour aim for scans** (CHB-026 F30, task in CHB-028): neutral grey (now) or a warm aim of about
-  0.05–0.10 log H like the photographer's Negative Lab Pro preset. Numbers: CHB-031 `diary/04-…` step 3. The
-  setting is `FIRST_PRINT_AIM` in `apps/studio/src/host/first-print.ts`; the Roll module's `ALPHA = 0.75`
-  (`packages/studio-kit/kits/roll/src/engine/constants.ts`) should then read the same value.
-- Whether the remaining 16–20 % saturation surplus over Adobe Standard should be kept (CHB-033).
+- **First-print colour aim for scans** (CHB-026 F30): stays **neutral grey** (integrate to grey, `alpha: 1` in
+  `FIRST_PRINT_AIM`, `apps/studio/src/host/first-print.ts`), not the warmer Negative Lab Pro look. Still open: the
+  Roll module's `ALPHA = 0.75` (`packages/studio-kit/kits/roll/src/engine/constants.ts`) keeps a quarter of each
+  frame's cast, so a roll's first prints are not the studio's (CHB-028 task).
+- **RAW colour** (CHB-033): **ours stays** (the camera's colour matrix, 16–20 % more saturated than Adobe Standard's
+  look); no Adobe look table is applied.
 
 ### Next, in order
 
