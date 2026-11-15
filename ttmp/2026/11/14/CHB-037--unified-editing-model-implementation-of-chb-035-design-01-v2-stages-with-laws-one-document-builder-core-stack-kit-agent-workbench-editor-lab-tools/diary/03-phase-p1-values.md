@@ -277,3 +277,63 @@ every mutation.
     `applyMutation(doc, m, { validate? }): { doc, mutation, inverse, warnings }`.
   - `transaction(init)`, `applyTransaction(doc, tx, { validate?, validateTransaction? })`, `tryTransaction`,
     `invertTransaction(tx, init?)`, `revertTransaction(doc, tx, opts?)`.
+
+## Step 3: Transactions frozen like everything else; final checks
+
+Re-reading the README against the code, its claim "everything this package returns is frozen" was too broad:
+`transaction()` froze only its top level, and the `Coll` helpers freeze the containers they make but not the items
+put in. I made `transaction()` deep-freeze the transaction (as the applied one already was), added a test, and
+reworded the README to say exactly what is frozen. This closes the phase.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Finish P1: consistent immutability, green checks, report.
+
+**Inferred user intent:** No surprises for the phases that build on the package.
+
+**Commit (code):** 2c680b9 — "CHB-037 P1: transactions are deep-frozen values; README states what is frozen"
+
+### What I did
+- `packages/values/src/transactions.ts`: `transaction()` returns `deepFreeze<unknown>({ … })`.
+- `packages/values/test/transactions.test.ts`: a pending and an applied transaction are deep-frozen and round-trip
+  through JSON. Values tests: 7 files, 51 tests.
+- `packages/values/README.md`: the immutability paragraph.
+- Checks: typecheck 0, lint 0, gen:check 0; `pnpm test` four times: one run reported `1 failed | 2847 passed`, the
+  next three `112 passed`, `2848 passed | 19 skipped`.
+
+### Why
+- A transaction is a stored value (the log, P4); it should be as immutable as the documents it changes.
+
+### What worked
+- The fix and the test.
+
+### What didn't work
+- `deepFreeze({ … })` on the transaction literal hit `TS2589: Type instantiation is excessively deep and possibly
+  infinite` (`Frozen<Json>` again, through `source: JsonObject`); fixed with `deepFreeze<unknown>(…)` and a cast to
+  `Transaction`.
+- One full `pnpm test` run had one failing test outside the new package that I did not capture (I grepped only the
+  summary line); three reruns were green. Other phase agents were running suites on the machine at the same time, so
+  I take it for a load-dependent flake, but I could not name it.
+
+### What I learned
+- `Frozen<T>` over a recursive JSON type needs `deepFreeze<unknown>` at the call sites that pass a `Json`; keep
+  `Frozen` for concrete record types.
+
+### What was tricky to build
+- Nothing beyond the typing note above.
+
+### What warrants a second pair of eyes
+- The unnamed flaky test in the full suite (see What didn't work); if it recurs on the integration branch, capture
+  the `FAIL` line.
+
+### What should be done in the future
+- See Step 2's list for P2, P4 and P5a.
+
+### Code review instructions
+- `git show 2c680b9`; `npx vitest run packages/values`.
+
+### Technical details
+- Branch `task/chb-037-p1-values`: 22a53d6 (package), 94824a2 (diary), 2c680b9 (frozen transactions), then this
+  diary step.
