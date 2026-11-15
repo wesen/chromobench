@@ -436,3 +436,69 @@ submit, fix the lifetime, prove it with a test that fails on the old code.
 
 ### Technical details
 - Old code (`film.ts`): `if (this.onesTex && same size) return it; this.onesTex?.destroy(); create; return`.
+
+## Step 6: Checks, the full browser suite, the fix on the real GPU, and the merge of the integration branch
+
+Everything green on the branch, the full browser suite once, a confirmation run of the fix on Metal with the owner's two
+NEFs, then — at the main agent's request — the integration branch (CHB-039 mask overlay, contract 1.4.0, CC-023)
+merged into this branch.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1); the main agent asked to merge `task/chb-037-unified-model` (at 764d2dd,
+including CHB-039 at 0efacab) before finishing, keeping both features where render-bridge and the viewport overlap.
+
+**Assistant interpretation:** Run every acceptance check, confirm the fix on the real GPU, merge, re-check.
+
+**Inferred user intent:** The branch merges cleanly with the latest studio.
+
+**Commit (code):** 0b17fdd (docs), fd3a8ed (merge)
+
+### What I did
+- `node tools/goldens/render.ts --check`: 66/66 within |Δ| ≤ 0.00001.
+- `STUDIO_PORT=5531 STUDIO_KIT_PORT=5532 SHELL_DEMO_PORT=5533 GPU_PARITY_PORT=5534 CI=1 pnpm test:browser` (before the
+  merge): 152 passed, 2 skipped, 0 failed (11.4 min).
+- Real GPU (GPU lock taken and removed), the fix in place, the owner's two NEFs, `console-capture.ts --sequence`: no
+  GPU validation error in the console or the journal. The journal still shows `E_GPU_OOM ×6 … render failed in main:
+  film.camMatrix.0: 14192640 bytes do not fit the budget (525083680 of 536870912 live)` and one in finish (Step 5).
+- Docs: `packages/shell/README.md` (the journal), `docs/HANDOFF.md` §9b (diagnostics and reports, the WebGPU error, how
+  to capture one), `apps/studio/DEMO.md` (`?debug`); `docmgr doc relate`, `docmgr changelog update`,
+  `docmgr doctor --ticket CHB-038` → all checks passed.
+- `git merge task/chb-037-unified-model`: one conflict, `packages/studio-kit/test/__snapshots__/layouts.test.ts.snap`;
+  took the integration side and regenerated (`npx vitest run packages/studio-kit/test/layouts.test.ts -u`); the diff
+  against the integration branch is only the diagnostics kit's line and its four commands per layout. render-bridge,
+  handles, cb.ts and the viewport merged without conflict (this branch touched `bridge/frames.ts`, not
+  `render-bridge.ts`). No contract change in CHB-038, so no CC note.
+- After the merge: typecheck 0, lint ok (502 file checks), gen:check ok (26), vitest 141 files / 3412 passed /
+  19 skipped, goldens 66/66; the full browser suite again: 152 passed, 2 skipped, 1 failed (9.2 min) — the failure was
+  `e2e/m1-walking-skeleton.spec.ts:42` with `TimeoutError: browserType.launch: Timeout 180000ms exceeded.` (Chromium did
+  not start; the test ran 1 ms). Alone (`npx playwright test e2e/m1-walking-skeleton.spec.ts --project=chromium-webgpu`):
+  2 passed. So the merged tree: 154 of 154 run green, 2 skipped.
+
+### Why
+- The main agent merges this branch next; it must be green on top of CHB-039.
+
+### What worked
+- See above.
+
+### What didn't work
+- The launch timeout above (machine load: the suite runs ~9 min of SwiftShader work on one worker); not a test failure.
+
+### What I learned
+- The OOM is reproducible with the owner's files on every run; it is the next thing the photographer will meet with two
+  or more camera files open (a "render failed" toast and a badge), and the journal now names it.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- N/A
+
+### What should be done in the future
+- A ticket for E_GPU_OOM with several camera files at 4000 px (Step 5, future).
+
+### Code review instructions
+- `git diff task/chb-037-unified-model...task/chb-038-diagnostics --stat`.
+
+### Technical details
+- N/A
