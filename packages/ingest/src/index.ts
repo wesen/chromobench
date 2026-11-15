@@ -28,6 +28,7 @@ export * from './conditioning/planted-frames.ts';
 export * from './conditioning/dust/kernels.ts';
 export * from './conditioning/dust/specks.ts';
 export * from './conditioning/dust/heal.ts';
+export * from './conditioning/dust/layers.ts';
 export * from './conditioning/dust/planted.ts';
 export * from './libraw/protocol.ts';
 export * from './libraw/scan-mode.ts';

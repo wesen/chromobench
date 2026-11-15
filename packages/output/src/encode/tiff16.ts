@@ -24,7 +24,7 @@ export interface TiffOptions {
   software?: string;
   /** DateTime (306); default now. */
   dateTime?: Date;
-  /** ImageDescription (270), e.g. the recipe JSON. */
+  /** ImageDescription (270), e.g. the document JSON. */
   description?: string;
 }
 

@@ -2,7 +2,7 @@
 // single-channel blobs (and the variant without it does not), goja-cv's heal laws, IR detection.
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  checkDust, components, detectSpecks, distanceToSet, heal, plantedFrame, spotsMask, toRecipeSpots, type PlantedFrame, type SpeckResult,
+  checkDust, components, detectSpecks, distanceToSet, heal, plantedFrame, spotsMask, type PlantedFrame, type SpeckResult,
 } from '@chromobench/ingest';
 
 let F: PlantedFrame;
@@ -36,12 +36,9 @@ describe('dust detection in density', () => {
     const broken = detectSpecks(F.D, F.w, F.h, F.sigma, { neutrality: false });
     expect(decoyFound(broken)).toBeGreaterThanOrEqual(F.decoys.length * 0.8);
   });
-  it('dust spots are neutral; recipe spots are in sensor px', () => {
+  it('dust spots are neutral', () => {
     const dust = R.spots.filter((s) => s.score >= 0.5);
     for (const s of dust) expect(s.neutrality).toBeGreaterThan(0.5);
-    const rs = toRecipeSpots(R.spots, { x0: 100, y0: 50 });
-    expect(rs.length).toBe(dust.length);
-    expect(rs[0]!.x).toBeCloseTo(100 + dust[0]!.cx, 6);
   });
   it('an infrared plane detects dust directly (Digital ICE), without neutrality', () => {
     const ir = new Float32Array(F.w * F.h).map((_, i) => 0.05 + 0.002 * Math.sin(i));

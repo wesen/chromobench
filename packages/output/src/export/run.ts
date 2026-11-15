@@ -7,8 +7,9 @@
 // meanwhile create new nodes. Cancellation: the signal is checked before every tile; the tile in flight
 // finishes, the sink is aborted (no partial file) and the promise rejects with E_CANCELLED.
 import {
-  ChromobenchError, compile, toDiagnostic, type Box, type Engine, type EvalTarget, type ExportSettings, type FrameRecipe, type Graph, type ImageInfo,
-  type Node, type NodeRef, type OutputSpaceId, type TilePlan,
+  canonicalJSON, ChromobenchError, compile, sha256Hex, toDiagnostic,
+  type Box, type CompileOptions, type Document, type Engine, type EvalTarget, type ExportSettings, type Graph, type ImageInfo, type Node, type NodeRef,
+  type OutputSpaceId, type TilePlan,
 } from '@chromobench/contract';
 import { pngText, tiffDescription, type FileMeta } from '../encode/metadata.ts';
 import { Png16Writer } from '../encode/png16.ts';
@@ -36,21 +37,22 @@ export interface EncodedFile {
   bits: 8 | 16;
   space: OutputSpaceId;
   iccSha256: string;
-  recipeSha256: string;
-  /** The recipe JSON to save next to the file when settings.recipe is 'sidecar'. */
+  /** documentSha256 of the document the file was made from ('' when none was given). */
+  documentSha256: string;
+  /** The document JSON to save next to the file when settings.document is 'sidecar'. */
   sidecar?: { name: string; json: string };
 }
 
 export interface ExportRequest {
   /** An immutable display-rgb node (output.display or output.frame) compiled for `settings.space`. */
   node: NodeRef;
-  settings: Pick<ExportSettings, 'format' | 'space' | 'scale' | 'dpi' | 'compression' | 'signal' | 'recipe'>;
+  settings: Pick<ExportSettings, 'format' | 'space' | 'scale' | 'dpi' | 'compression' | 'signal' | 'document'>;
   sink: ByteSink;
   name: string;
   signal?: AbortSignal;
   onProgress?: (p: ExportProgress) => void;
-  /** Recipe JSON and its hash, for metadata and the sidecar. */
-  recipe?: { json: string; sha256: string };
+  /** The document as JSON and its hash (documentPayload), for metadata and the sidecar. */
+  document?: { json: string; sha256: string };
   rendering?: string;
   /** Tile size for engines without plan() (default 1024). */
   tile?: number;
@@ -90,7 +92,7 @@ interface Encoder { writeRows(rgb16: Uint16Array, rows: number): Promise<void>; 
 async function openEncoder(req: ExportRequest, w: number, h: number): Promise<{ enc: Encoder; mime: EncodedFile['mime']; bits: 8 | 16; iccSha256: string }> {
   const s = req.settings;
   const space = getSpace(s.space);
-  const meta: FileMeta = { space: space.label, ...(req.rendering ? { rendering: req.rendering } : {}), ...(req.recipe ? { recipeSha256: req.recipe.sha256 } : {}), ...(req.recipe && s.recipe === 'embedded' ? { recipeJson: req.recipe.json } : {}) };
+  const meta: FileMeta = { space: space.label, ...(req.rendering ? { rendering: req.rendering } : {}), ...(req.document ? { documentSha256: req.document.sha256 } : {}), ...(req.document && s.document === 'embedded' ? { documentJson: req.document.json } : {}) };
   if (s.format === 'tiff16') {
     const description = tiffDescription(meta);
     const enc = await Tiff16Writer.open(req.sink, {
@@ -115,7 +117,7 @@ async function openEncoder(req: ExportRequest, w: number, h: number): Promise<{ 
 export async function exportFrame(engine: Engine, req: ExportRequest): Promise<EncodedFile> {
   const t0 = performance.now();
   const info = req.node.info as ImageInfo;
-  if (info.kind !== 'Image' || info.domain !== 'display-rgb') throw new ChromobenchError({ code: 'E_DOMAIN', message: `export needs a display-rgb image node, not ${info.domain}`, hint: 'compile the recipe with displaySpace = the export space (exportNode)' });
+  if (info.kind !== 'Image' || info.domain !== 'display-rgb') throw new ChromobenchError({ code: 'E_DOMAIN', message: `export needs a display-rgb image node, not ${info.domain}`, hint: 'compile the document with displaySpace = the export space (exportNode)' });
   const s = req.settings;
   const scale = s.scale === 'full' ? 1 : s.scale;
   let phase: ExportProgress['phase'] = 'plan';
@@ -168,10 +170,10 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
     await req.sink.close();
     phase = 'done';
     progress();
-    const recipeSha256 = req.recipe?.sha256 ?? '';
+    const documentSha256 = req.document?.sha256 ?? '';
     return {
-      name: req.name, format: s.format, mime, bytes: req.sink.size, width: outW, height: outH, bits, space: s.space, iccSha256, recipeSha256,
-      ...(req.recipe && s.recipe === 'sidecar' ? { sidecar: { name: req.name.replace(/\.[^.]+$/, '') + '.recipe.json', json: req.recipe.json } } : {}),
+      name: req.name, format: s.format, mime, bytes: req.sink.size, width: outW, height: outH, bits, space: s.space, iccSha256, documentSha256,
+      ...(req.document && s.document === 'sidecar' ? { sidecar: { name: sidecarName(req.name), json: req.document.json } } : {}),
     };
   } catch (e) {
     await req.sink.abort().catch(() => undefined);
@@ -181,16 +183,31 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
   }
 }
 
+/** The sidecar's name beside an exported file: `frame_0042.png` → `frame_0042.chromobench.json`. */
+export const sidecarName = (file: string): string => `${file.replace(/\.[^.]+$/, '')}.chromobench.json`;
+
+/** SHA-256 (hex) of a document's canonical JSON: the identity of the edit an exported file was made from. */
+export function documentSha256(doc: Document): string {
+  return sha256Hex(new TextEncoder().encode(canonicalJSON(doc)));
+}
+
+/** A document as an export carries it: its canonical JSON and its hash (ExportRequest.document). */
+export function documentPayload(doc: Document): { json: string; sha256: string } {
+  const json = canonicalJSON(doc);
+  return { json, sha256: sha256Hex(new TextEncoder().encode(json)) };
+}
+
 /**
- * The export node of a recipe: compile() with the export space as the display space, and the export
- * knee in place of the display knee (output.display reads view.output.display.knee in compile()).
+ * The export node of a document: the one compiler with the export space as the display space, and the export knee
+ * in place of the display knee (compile reads output.display.knee). The node is the display cut: output.display, then
+ * the document geometry (output.frame).
  */
-export function exportNode(r: FrameRecipe, g: Graph): Node {
-  const ex = r.view.output.export;
-  const frame = compile(r, g, { displaySpace: ex.space });
-  if (ex.knee.method === r.view.output.display.knee.method) return frame;
-  const display = g.get(frame.inputs[0]!);
-  if (!display || display.op !== 'output.display') return frame;
+export function exportNode(doc: Document, g: Graph, opts: Omit<CompileOptions, 'displaySpace'> = {}): Node {
+  const ex = doc.output.export;
+  const top = compile(doc, g, { ...opts, displaySpace: ex.space }).display;
+  if (ex.knee.method === doc.output.display.knee.method) return top;
+  const display = g.get(top.inputs[0]!);
+  if (!display || display.op !== 'output.display') return top;
   const d2 = g.intern('output.display', [...display.inputs], { ...display.args, knee: ex.knee.method }).node;
-  return g.intern('output.frame', [d2.id], frame.args).node;
+  return g.intern(top.op, [d2.id], top.args).node;
 }
