@@ -256,3 +256,21 @@ P0's golden recipes into format-3 documents (a one-off script in `tools/goldens/
 reproduce every golden within P0's tolerance. Acceptance: contract + core + mock + conformance tests green; goldens
 check green; the diary lists any golden that legitimately changes (with the physics reason) and every remaining
 consumer breakage.
+
+### Amendments after P0 (main agent, from the P0 report)
+
+- **`output.frame` moves into the reference engine (P2b).** Today it exists only as a host op in the studio's engine
+  wrapper (`apps/studio/src/host/studio-engine.ts`), so the goldens' `display` cut depends on an app module. Geometry
+  is document-level in v2 (design §20); every engine implements it. After P2b, `tools/goldens/engine.ts` uses the
+  reference engine alone.
+- **Heal and clarity get real implementations (P2b in core, P3 on the GPU).** No physics engine implements
+  `scan.heal` or `finishing.clarity` today (only the mock); their goldens are stored as recipes only. In v2 they are
+  the `heal`/`clone` and `clarity` layers and must render.
+- **A scan's µm per pixel is explicit (P2a).** The scan medium (or the source facts) carries `umPerPx`; the goldens'
+  fixtures have none and today's density masks fall back to `DEFAULT_FILM_UM_PER_PX = 6`. The golden translation
+  sets 6 explicitly; nothing in v2 has a hidden default (design §25).
+- **Golden translation** follows `tools/goldens/README.md` ("How P2 uses it"): translate each `recipe.json` to a
+  format-3 document by the §23 mapping, replace only the compile-and-cut step, keep the stored pictures as the oracle.
+  A difference above float rounding is a semantic change to explain, never a reason to widen the tolerance. Masks in
+  the recipes are node closures (some embed the fixture hash and, once, the main exposure chain); the translation
+  rebuilds them as mask values.

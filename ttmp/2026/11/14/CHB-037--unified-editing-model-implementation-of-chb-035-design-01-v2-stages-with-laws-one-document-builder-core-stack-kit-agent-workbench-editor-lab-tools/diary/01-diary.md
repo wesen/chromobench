@@ -87,3 +87,57 @@ photographer.
 
 ### Technical details
 - Worktrees: `<scratchpad>/chb037` (integration), `<scratchpad>/chb037-p<id>` (phases).
+
+## Step 2: P0 merged — 58 golden pictures, bit-exact
+
+The P0 agent rendered today's pipeline on the reference engine for 58 synthetic cases at the `print` and `display`
+cuts; the check reproduces all of them exactly. Merged into the integration branch; the plan gained four amendments
+from its report.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the first finished phase and fold its findings into the plan.
+
+**Inferred user intent:** Progress toward the unified studio with a safety net for the cut-off.
+
+**Commit (code):** 115e9ba — "Merge P0 goldens (58 cases, bit-exact check) into the CHB-037 integration branch"
+
+### What I did
+- Merged `task/chb-037-p0-goldens` (last commit cc2117e) with `--no-ff`.
+- On the integration branch: `node tools/goldens/render.ts --check` → "58/58 cases within max |Δ| ≤ 0.00001";
+  `pnpm test` → 106 files, 2799 passed, 19 skipped (baseline + the goldens test).
+- Plan amendments: `output.frame` into the reference engine; heal and clarity implemented for real; explicit µm per
+  pixel; golden translation rules.
+
+### Why
+- The goldens are the oracle for P2's light law; their gaps (no engine implements `scan.heal` or
+  `finishing.clarity`; the display cut needs an app module) are exactly the inconsistencies v2 removes.
+
+### What worked
+- Coverage beyond the spec (scan flare, base transmission, view settings, knee, capture settings); deterministic
+  (seeded grain); 8.2 MB.
+
+### What didn't work
+- N/A on the merge. Two cases cannot render today (dust heal, finishing clarity): stored as recipes, reported by the
+  check if they start rendering.
+
+### What I learned
+- Today's `display` cut exists only through the studio's engine wrapper; the reference engine has no `output.frame`.
+
+### What was tricky to build
+- N/A (merge only).
+
+### What warrants a second pair of eyes
+- P0's recipes are built the way the studio builds them (default recipe, first print, mutations, masks from the
+  studio-kit editor): good for realism, but the translation in P2b must rebuild masks from node closures.
+
+### What should be done in the future
+- Merge P1 when it reports; launch P5a and P2a.
+
+### Code review instructions
+- `tools/goldens/README.md`; `node tools/goldens/render.ts --check`.
+
+### Technical details
+- P0 diary: `diary/02-phase-p0-goldens.md` (Steps 1–3).
