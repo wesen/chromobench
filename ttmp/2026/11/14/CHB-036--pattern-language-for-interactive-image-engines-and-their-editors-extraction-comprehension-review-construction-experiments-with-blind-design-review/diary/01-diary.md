@@ -657,3 +657,86 @@ timeline.py
 - Time budget (recorded min / output tokens / thinking chars): tiling chapter-1 28.1 / 107,826 / 310,396 (then 32 min
   hung); tiling control-1 59.9 / 168,103 / 450,261; document chapter-1 31.2 / 69,605 / 135,072; graph control-2
   31.5 / 43,416 / 62,831.
+
+## Step 10: Harness v2 — supervised runs, a prompt that states time, retried provider failures
+
+The first batch ended at 19:5x with 16 of 24 runs answered. The eight losses were three provider failures
+(`upstream_stream_failed`: graph/control-1, slots/control-1, and tiling/chapter-4 after 727 s, which the new check
+classified), four tiling runs and slots/control-2 at the 60-minute limit. Step 9 traced the limit hits mostly to the
+harness. This step fixes the harness and starts a clean rerun of the two affected tasks.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, improve. If you don't have a ticket for it and its diary, create it. commit at
+appropriate intervals, keep a diary according to the diary skill in ~/.codex/skills)" — preceded by "what are the
+harness fixes? is this all to deal better with 429?"
+
+**Assistant interpretation:** Implement the five harness fixes (process-tree kill, watchdog, prompt, parallelism,
+tiling budget) under CHB-036, test them, commit in steps, record them here, and rerun the affected tasks.
+
+**Inferred user intent:** Experiment results that measure the patterns rather than the harness.
+
+**Commit (code):** c7f9b17 — "Pattern experiments: supervise.py, a process-tree supervisor for agent runs [...]";
+6d2c9be — "Pattern experiments harness v2: runs under supervise.py [...]"
+
+### What I did
+- Read pi's bash tool (`/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/tools/bash.js`):
+  `detached: process.platform !== "win32"` and `timeout: Type.Optional(... "no default timeout")`. Each command is
+  its own process group, so killing pi's group can never reach it; only the process tree can.
+- `supervise.py`: new session for the agent; every 5 s a `ps` scan of the agent's descendants; a descendant older than
+  the watchdog limit has its process group killed (TERM, KILL after 2 s); at the budget, every descendant group and
+  the agent's own group are killed. `test_supervise.py`: 6 tests with a fake agent that runs commands detached like
+  pi (fast commands untouched; a never-ending `sleep` killed and the agent continues; a CPU-bound `node -e
+  'for(;;){}'` killed; the budget leaves no orphans; the agent's own children die with it). 6/6 pass in 16 s.
+- `run-impl.py` (harness v2): argparse options `--budget-min`, `--watchdog-min`; prompt states the budget with start
+  and stop times, the watchdog, `node --test --test-timeout=60000 project/test/*.test.ts`, scratch files in
+  `project/scratch/`, the first diary step before the first source write, `NOTES.md` kept current, and stopping new
+  features 15 minutes before the end; `run.json` records settings and outcome; exit code 3 for provider failures.
+- `batch.py`: `--tasks`, per-task budgets, `--par` 4, longest tasks first, provider failures retried twice after
+  60 s with the failed attempt moved to `_failed/`.
+- Checked the new test command on graph chapter-1's tests (48/48) and the provider-failure signature on two real
+  failures (last assistant `stopReason: "error"`, `errorMessage: "Error Code upstream_stream_failed: …"`).
+- Smoke run: tiling chapter, budget 2 min, watchdog 1 min → `run.json` `timed_out: true`, `outcome: "timeout"`,
+  `watchdog.log` "budget 120s reached: killing groups [39635]", no process left.
+- Launched v2 at 20:1x: `batch.py <scratchpad>/pattern-runs-v2 --tasks tiling,slots --par 4 --budget-min
+  tiling=120,default=60 --watchdog-min 5 --retries 2` (12 runs). 24 other pi agents were running at launch.
+
+### Why
+- One hanging command cost a whole hour; the watchdog turns that into five minutes and a lesson for the agent.
+- Rerunning whole tasks keeps chapter and control runs of one task under one harness and one prompt.
+
+### What worked
+- The fake-agent tests reproduced both observed hangs (a waiting test and a spinning test) and the orphan.
+
+### What didn't work
+- First test run: `python3 -I -m unittest test_supervise` → `ModuleNotFoundError: No module named 'test_supervise'`
+  (`-I` drops the current directory from `sys.path`); the file now runs as `python3 -I test_supervise.py -v`.
+- Two tests then failed with `PermissionError: [Errno 1] Operation not permitted` from `os.killpg(pgid, 0)`: on macOS a
+  group whose leader is an unreaped zombie answers EPERM. Group membership is now read from `ps` (non-zombie members),
+  and signals go to the group and to each member.
+
+### What I learned
+- tiling/chapter-4's "no answer after 727 s" in v1 was a provider failure, not a timeout.
+
+### What was tricky to build
+- Telling the agent's own group from its commands' groups: the agent is the leader of the new session's group
+  (`pgid == pid`); everything with another pgid below it is a command the watchdog may kill.
+
+### What warrants a second pair of eyes
+- The watchdog was not exercised with real pi (a model cannot be made to hang on cue); its mechanism matches pi's
+  detached spawn, which the fake agent copies.
+- A legitimate test suite longer than 5 minutes would be killed (v1 tiling/control-1 had one of 10.5 min). The prompt
+  now asks for a suite well under a minute.
+
+### What should be done in the future
+- After v2: score both roots, run `analyze.py`, compare stalls and watchdog kills with v1, then the Opus reviews.
+- The playbook's harness section should get the process-tree lesson.
+
+### Code review instructions
+- `docs/patterns/experiments/supervise.py` (`supervise`, `kill_group`, `group_members`), `test_supervise.py`,
+  `run-impl.py` (prompt "Time" section, exit codes), `batch.py` (`one`, retries).
+- Validate: `cd docs/patterns/experiments && python3 -I test_supervise.py -v`.
+
+### Technical details
+- v2 runs root: the session scratchpad's `pattern-runs-v2/` (`batch.log`, `_failed/`); per run `run.json`,
+  `watchdog.log`.
