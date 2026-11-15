@@ -398,3 +398,113 @@ word counts.
 ### Technical details
 - Final counts: chapter 9 3,626 raw, 2,978 prose; chapter 10 3,505 raw, 2,816 prose (prose = outside code and
   mermaid fences).
+
+## Step 5: Revision after review
+
+The coordinator relayed lessons from a fresh reviewer's reading of chapters 2 and 6 and asked me to apply them to
+chapters 9 and 10: recompute every number, separate a-priori bounds from measurements, give derivations, make device
+semantics precise, consistent units, a Solution that states only the invariant, no task IDs, sketches with every
+name defined and guards for degenerate cases, glosses, and exercises that do not duplicate the modular volume's.
+
+### Prompt Context
+
+**User prompt (verbatim):** (relayed by the coordinating agent) "Revision round. A fresh reviewer (first-year PhD
+reader) reviewed chapters 2 and 6 and found errors that generalise. Apply these lessons to your chapters 9 and 10.
+Edit only your two chapters and your diary (add a \"Revision after review\" step). Do not commit; do not run
+mermaid-cli (I render diagrams). Report changes and word counts. GENERAL LESSONS … (recompute numbers; a-priori vs
+measured; derivations; device semantics; units; Solution invariant only; no task IDs; sketch guards; glosses;
+exercises without duplicates, with parameters, linearised estimates marked)."
+
+**Assistant interpretation:** Same chapters and facts, made exact: derivations in the notes, guards in the
+sketches, units in ms and MiB, Solutions trimmed to the invariant, new exercises.
+
+**Inferred user intent:** Chapters a graduate reader can check line by line.
+
+### What I did
+- Recomputed (my arithmetic):
+  - Birthday bound: C(N,2)/2^b ≈ N²/2^(b+1); N = 10⁵: 10¹⁰/2³³ = 1.164 at 32 bits; 10¹⁰/2⁵³ = 1.11 × 10⁻⁶ at 52.
+    Union bound for P(any collision); the bounded-cache figure L · C / 2^b is also a union (linearised) bound.
+  - Exercise 9.2(b): 10⁶ · 10⁶ · 400 / 2^b < 10⁻³ ⇒ b > log₂(4 × 10¹⁷) = 58.47 ⇒ b ≥ 59; at 52 bits 0.089, at 64
+    2.2 × 10⁻⁵.
+  - Textbook figures: Table 6.1 sums to 259.5 ms; cheapest layers 16.8/40 = 0.42 to 24.0/40 = 0.60 ms a tile;
+    0.093/0.60 = 15.5 %, 0.093/0.42 = 22.1 %; four checkpoints × 40 tiles × 256 KiB = 40 MiB, eight layers 80 MiB.
+    Editor lab's budgets are ×1,048,576 (`engine.js:401`), so the textbook's "MB" are MiB; the chapter now says MiB.
+  - Order statistics: P(X₍ᵣ₎ ≥ q_p) = P(Bin(n, p) ≤ r − 1); r = n gives 1 − pⁿ; n ≥ ln 0.05 / ln p: 58.40 → 59
+    (p = 0.95), 298.07 → 299 (p = 0.99). Assumes independent samples from a continuous distribution; noted as
+    optimistic for correlated samples within a drag.
+  - Exercise 10.2(a): n = 100, p = 0.95: F = 100 − B ~ Bin(100, 0.05); P(F ≤ 1) = 0.0371, P(F ≤ 2) = 0.1183, so
+    P(F ≥ 2) = 0.963 ≥ 0.95 and r = 99 (the second largest).
+  - Mean of p95s example (nearest rank): twenty at 10 ms → 10; eighteen at 10 and two at 100 → 100; mean 55, pooled
+    (rank 38 of 40) 10 ms. Exercise 10.2(b) example: 19×10 + 1×100 (p95 10) and 19×20 + 1×100 (p95 20), mean 15,
+    pooled rank 38 of 40 = 20 ms.
+  - Fan-out: 1 − 0.99¹⁰⁰ = 1 − e^(−1.005) = 0.634 (independence assumed; Dean and Barroso's own example).
+  - Exercise 10.2(c): exact q ≤ 1 − 0.95^(1/16) = 0.003201; linearised 0.05/16 = 0.003125.
+  - Coordinated omission: a stall of S with user interval Δ gives ≈ S/Δ missing samples S, S − Δ, …, mean ≈ S/2.
+- Chapter 9:
+  - Solution rewritten to the invariant (five sentences): names, output-hash checkpoints, keep where saving per
+    byte is largest, GDS with the clock rule and its LRU special case, verified tiers.
+  - Note 1: derivation of the birthday bound and the bounded-cache bound, labelled a-priori for an ideal hash.
+  - Note 5: Young's k-competitiveness stated with its definition (equal sizes, k entries); Cao and Irani only as
+    extending the algorithm (I am not sure enough of their bound to state it). GDS = LRU when cost/size is constant
+    only with a recency tie rule, because the clock moves only at evictions and entries touched between evictions
+    tie. Editor lab breaks ties by first insertion (`engine.js:418`: strict `<` over Map order; the cost policy does
+    not reorder on `get`, `:404`).
+  - Note 6: the cost-aware counts depend on measured costs and can move between runs; LRU counts repeat.
+  - Sketch: heap ordered by (H, seq) with a use counter for the tie rule; entries carry their key; cost floor
+    `MIN_MS` and byte floor; the nondeterminism check now records `bad`, releases every hold, and refuses (no
+    assert that would leak holds).
+  - Glosses added: kernel, reduction, fence, OPFS, texture, fused segment.
+  - Exercises: 1 now measures the tie rule and early cutoff with given parameters (eight layers, 0.5 / 2.2 ms,
+    32 MiB = 128 tiles, 20 identity tiles); 2(b) marks the union bound as linearised; 3 gives costs and sizes.
+    None repeats the modular chapter's (proxy trace, own forces, spreadsheet cutoff, build-it with a held entry).
+- Chapter 10:
+  - Solution rewritten to the invariant (five sentences); count gates and steering moved to notes.
+  - Motivation: units in ms (4,100–4,300, 4,200 → 740, 0.1 ms); animation frame and pass glossed.
+  - Notes: 1 states what `onSubmittedWorkDone` covers (all work submitted before the call, other code's included);
+    2 states WebGPU timestamp semantics (optional feature, pass boundaries, 64-bit ns, may be quantised, not
+    promised monotonic) and one line each for CUDA events (elapsed ms between two stream points) and Vulkan
+    (`timestampPeriod` ns per tick); 6 gives the order-statistic derivation, the mean-of-p95s counterexample and the
+    fan-out figure; 7 (new) treats coordinated omission as a sampling bias with HdrHistogram's
+    expected-interval correction; the old "proportions vs sums" note merged into 2 and the fan-out note into 6.
+  - Sketch: stamps per pass via `runPass`; ns → ms with non-positive differences mapped to `none`; `record` guards
+    x ≤ lo; `quantile` returns none on an empty histogram; `gate` refuses an empty scenario or fewer than two rounds
+    (no noise estimate from one baseline run); `conf` is part of the requirement; `dragExposure` and
+    `segmentPasses` defined; `app.stop()` added.
+  - Exercises: 1 no longer ends with an open-loop stall (the modular chapter's exercise 2); 2 asks for r at
+    n = 100, a mean below the pooled value, and exact vs linearised q; 3 gives arrival rate, batch window, batch
+    time and size cap.
+- No task IDs or decision numbers in either chapter (grep for `P10`, `CHB`); no line over 120 characters.
+
+### Why
+- The reviewer's lessons, applied as listed.
+
+### What worked
+- The tie rule turned "GDS degenerates to LRU" from a slogan into a checkable statement and a one-field change in
+  the sketch.
+
+### What didn't work
+- First pass at chapter 9 reached 3,194 prose words; trimmed Intent, Applicability, notes 3, 4, 7–9, Variations and
+  Related chapters to 2,995.
+
+### What I learned
+- WebGPU's `onSubmittedWorkDone` covers everything submitted before the call, so a submit-to-signal time on a busy
+  queue includes other code's work.
+
+### What was tricky to build
+- Releasing holds on the nondeterminism path without exceptions: the sketch records `bad`, finishes, releases, then
+  refuses.
+
+### What warrants a second pair of eyes
+- From memory, not re-fetched: Young's k-competitiveness for weighted caching; the WebGPU specification's notes that
+  timestamps may be quantised and may not increase monotonically; HdrHistogram's expected-interval correction;
+  CUDA `cudaEventElapsedTime` in ms; Vulkan `timestampPeriod`.
+
+### What should be done in the future
+- The coordinator renders the mermaid diagram.
+
+### Code review instructions
+- Read both chapters' Solutions, notes (9: 1, 5, 6; 10: 1, 2, 6, 7) and sketches against this step's list.
+
+### Technical details
+- Counts after revision (`wc -w`; prose = outside code and mermaid fences): chapter 9 3,717 raw, 2,995 prose
+  (before: 3,626 / 2,978); chapter 10 3,767 raw, 2,985 prose (before: 3,505 / 2,816).

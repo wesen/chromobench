@@ -19,27 +19,28 @@ Completion timing; open-loop benchmarking; latency objectives; performance regre
 ## Motivation
 
 chromobench renders a print on the graphics processor (GPU) through WebGPU or, without one, on a slow, exact
-double-precision engine in a background thread (a **worker**). A screen redraw comes every 16.7 ms at 60 Hz. Four
+double-precision engine in a background thread (a **worker**). The screen redraws every 16.7 ms at 60 Hz. Four
 measurements went wrong in this program and its sibling, Editor lab.
 
 1. **A dispatch returns before the work starts.** A **dispatch** records a request to run a **kernel** (a function
    run once per element of a grid) into a batch of commands; **submit** hands the batch to the device and returns
    at once. A timer around either call measures how fast work is queued. Device **timestamps**, written by the
-   device as it reaches a point in the batch, measure the work, but Chrome rounds them to 100 µs, coarser than most
-   single dispatches on a hardware GPU.
-2. **The test watched the wrong clock.** chromobench's drag test records gaps between screen redraws and fails above
-   1,000 ms. With the engine in a worker, the window never froze, so the test passed while each screen render took
-   4.1 to 4.3 s. Once someone measured the render itself, two fixes took a step from 4.2 s to 0.74 s.
+   device at the start and end of a **pass** (a group of dispatches run as one unit), measure the work, but Chrome
+   rounds them to 0.1 ms, coarser than most single dispatches on a hardware GPU.
+2. **The test watched the wrong clock.** chromobench's drag test records gaps between the browser's animation frames
+   (the callbacks it runs before each screen redraw) and fails above 1,000 ms. With the engine in a worker the
+   window never froze, so the test passed while each screen render took 4,100 to 4,300 ms. Once someone measured
+   the render itself, two fixes took a step from 4,200 to 740 ms.
 3. **Noise swamps a doubling.** On the shared build machine (load average about 20), one build took 4,211 ms for a
    step in one run and 9,238 ms in another. A darkroom export that went from 781 to 1,650 ms was seen only because
    an engineer ran the benchmark by hand before and after; it runs only on request and asserts nothing.
-4. **A summary that is no statistic.** Editor lab's bench reports the mean of each repeat's 95th percentile. That
-   number is not a percentile of any set of samples, and its textbook gives the same scenario's percentile as 28 ms
-   in one run and 17 ms in the next.
+4. **A summary that is no statistic.** Editor lab's bench reports the mean of each repeat's 95th percentile, a
+   number that is not a percentile of any set of samples; its textbook gives one scenario's 95th percentile as
+   28 ms in one run and 17 ms in the next.
 
 The same problems meet anyone serving neural-network inference (a kernel launch returns at once, and a batching
-server measured one request at a time hides its queue), game engines (an average frame rate hides the stutters
-players notice), and web services load-tested by clients that wait for each response.
+server tested one request at a time hides its queue), game engines (an average frame rate hides stutters), and web
+services load-tested by clients that wait for each response.
 
 ## Problem
 
@@ -62,15 +63,14 @@ into a check that fails when the program gets slower?**
 
 ## Solution
 
-**Therefore: time device work from submission to the device's completion signal, never around the call that
-records it, and attribute time inside a batch with device timestamps read back once, after that batch's fence. Time
-what people wait from the moment each request was meant to be made, on the user's schedule (open loop), to the
-moment its result is visible. Summarise by percentiles over pooled samples or merged histograms, and gate a
-percentile only with enough samples to bound it. State each requirement as an event, a percentile, a limit and a
-device class; run baseline and candidate interleaved on one fixed machine; fail when the candidate's bound passes the
-limit or its percentile exceeds the baseline's by more than the baseline's own spread; gate exact work counts beside
-it on machines that cannot be fixed. Let the same measurements steer work sizes and cache costs, but gate response
-time, which steering cannot hide.**
+**Therefore: time device work from its submission to the device's signal that it has finished, never around the
+call that records it, and attribute time inside a batch only from device timestamps read after that batch has
+finished. Time what people wait from the moment each request was meant to be made, on the user's schedule, to the
+moment its result is visible. Summarise by percentiles of all samples pooled, never by averaging summaries, and gate
+a percentile only when there are enough samples to bound it at a stated confidence. State each requirement as an
+event, a percentile, a limit and a device class, and run baseline and candidate interleaved on one fixed machine of
+that class. Fail the build when the candidate's bound exceeds the limit, or when it is slower than the baseline by
+more than the baseline differs from itself.**
 
 ## Applicability
 
@@ -127,48 +127,54 @@ queueing, the passes and the signal; the stamps measure the passes alone. The pe
 ## Sketch
 
 ```text
--- helpers: clock.now() (monotonic, ms); waitUntil(t); newBatch(); stamp(batch, slot): record a command that writes
--- the device's time into a slot when the device reaches it; resolveStamps(batch, buf): copy the slots into buf;
--- stampBuf: a device buffer the host may read after a fence; binomialCdf(k, n, p) = P(X ≤ k) for X ~ Binomial(n, p);
--- shuffle; range(xs) = max(xs) − min(xs); start(build, device): a fresh instance of the program;
--- Histogram(lo, ratio): empty buckets of relative width ratio above lo
+-- helpers: clock.now() (monotonic, ms); waitUntil(t); newBatch(); runPass(batch, p, startSlot, endSlot): record
+-- pass p's dispatches as one pass whose start and end the device writes, in ns, into the two slots;
+-- resolveStamps(batch, buf): copy the slots into buf; stampBuf: a device buffer the host may read after a fence;
+-- binomialCdf(k, n, p) = P(X ≤ k) for X ~ Binomial(n, p); shuffle; range(xs) = max(xs) − min(xs);
+-- start(build, device): a fresh instance of the program; Histogram(lo, ratio): empty buckets, relative width ratio
 
 -- 1 device time: one fence per batch; stamps are read after it, never between passes
 timeBatch(passes) → { wallMs, passMs }:
   b ← newBatch()
-  for (i, p) in passes:
-    stamp(b, 2i) ; dispatch(p.kernel, p.grid, p.bindings) ; stamp(b, 2i + 1)
+  for (i, p) in passes: runPass(b, p, 2i, 2i + 1)
   resolveStamps(b, stampBuf)
   t0 ← clock.now() ; f ← submit(b) ; await f ; wall ← clock.now() − t0    -- queueing and signal included
   s ← readback(stampBuf)                                                   -- after the fence: no extra stall
-  return { wallMs: wall, passMs: [s[2i + 1] − s[2i] for i in 0 .. length(passes) − 1] }   -- quantised
+  passMs ← []
+  for i in 0 .. length(passes) − 1:
+    d ← s[2i + 1] − s[2i]                      -- ns; quantised, not promised monotonic: d can be ≤ 0
+    if d > 0: passMs ← passMs ++ [d / 1e6] else: passMs ← passMs ++ [none]
+  return { wallMs: wall, passMs }
 
 -- 2 summaries that merge: buckets of fixed relative width
-value Histogram: { counts, lo, ratio }         -- bucket j holds [lo · ratio^j, lo · ratio^(j+1))
-record(h, x): h.counts[max(0, floor(log(x / h.lo) / log(h.ratio)))] += 1
+value Histogram: { counts, lo, ratio }         -- bucket j holds [lo · ratio^j, lo · ratio^(j+1)); all start at 0
+record(h, x): h.counts[floor(log(max(x, h.lo) / h.lo) / log(h.ratio))] += 1      -- x below lo goes to bucket 0
 merge(a, b) → Histogram: return copy(a, counts: a.counts + b.counts)      -- exact; percentiles do not add
 size(h) = sum(h.counts)
-at(h, r) → ms: the upper edge of the bucket that holds the r-th smallest sample
-quantile(h, p) → ms: return at(h, max(1, ceil(p · size(h))))
-upper(h, p, conf) → ms | none:                 -- P(true p-quantile ≤ r-th sample) = P(Binomial(n, p) ≤ r − 1)
+at(h, r) → ms: the upper edge of the bucket that holds the r-th smallest sample, 1 ≤ r ≤ size(h)
+quantile(h, p) → ms | none:                    -- nearest rank
+  if size(h) = 0: return none
+  return at(h, max(1, ceil(p · size(h))))
+upper(h, p, conf) → ms | none:                 -- P(true p-quantile ≤ r-th smallest) = P(Binomial(n, p) ≤ r − 1)
   for r in 1 .. size(h): if binomialCdf(r − 1, size(h), p) ≥ conf: return at(h, r)
-  return none                                  -- too few samples to bound this percentile
+  return none                                  -- too few samples (or none) to bound this percentile
 
 -- 3 response time, open loop: requests on the user's schedule; each ends at the frame that includes it
 openLoop(scenario, app, h) → done | refuse:
   t0 ← clock.now() ; asked ← {}                -- request id → scheduled time, in id order
-  app.onPresented((id, shownAt) → for p in asked with p ≤ id: record(h, shownAt − asked[p]) ; remove p)
+  app.onPresented((id, shownAt) → for q in asked with q ≤ id: record(h, shownAt − asked[q]) ; remove q)
                                                -- shownAt: when the frame reached the screen, on the same clock
   for (i, a) in scenario.actions:
     due ← t0 + i · scenario.intervalMs
     waitUntil(due) ; asked[a.id] ← due ; app.apply(a)       -- never wait for the previous answer
-  app.waitIdle()
+  app.waitIdle() ; app.stop()
   if asked ≠ {}: return refuse(unanswered, "requests never shown", where: scenario)
   return done
 
 -- 4 the gate: interleaved runs on one machine; the noise is the baseline measured against itself
-value Requirement: { scenario, p, limitMs, minEffectMs, device }
+value Requirement: { scenario, p, conf, limitMs, minEffectMs, device }
 gate(req, base, cand, rounds) → pass | refuse:
+  if req.scenario.actions = [] or rounds < 2: return refuse(noData, "need actions and two rounds", where: req)
   hb ← Histogram(0.1, 1.02) ; hc ← Histogram(0.1, 1.02) ; baseRuns ← []
   for r in 1 .. rounds:
     for build in shuffle([base, cand]):
@@ -176,75 +182,82 @@ gate(req, base, cand, rounds) → pass | refuse:
       res ← openLoop(req.scenario, start(build, req.device), h) ; if res ≠ done: return res
       if build = base: hb ← merge(hb, h) ; baseRuns ← baseRuns ++ [quantile(h, req.p)]
       else: hc ← merge(hc, h)
-  u ← upper(hc, req.p, 0.95)
-  if u = none: return refuse(tooFewSamples, "add rounds or events", where: req.scenario)
+  u ← upper(hc, req.p, req.conf)
+  if u = none: return refuse(tooFewSamples, "add rounds or actions", where: req.scenario)
   if u > req.limitMs:
     return refuse(overLimit, "cannot show the percentile is within its limit", where: req.scenario)
   if quantile(hc, req.p) − quantile(hb, req.p) > max(req.minEffectMs, range(baseRuns)):
     return refuse(regression, "slower than the baseline by more than its own spread", where: req.scenario)
   return pass
 
--- in use: 60 events at 16.7 ms, five rounds each: 300 samples, enough to bound a p99
-req ← Requirement{ scenario: "drag exposure", p: 0.95, limitMs: 50, minEffectMs: 2, device: "integrated GPU" }
+-- in use: dragExposure is 60 slider actions at 16.7 ms; five rounds give 300 candidate samples, enough to bound
+-- even a 99th percentile; segmentPasses are the passes of one fused segment
+req ← Requirement{ scenario: dragExposure, p: 0.95, conf: 0.95, limitMs: 50, minEffectMs: 2, device: "integrated GPU" }
 gate(req, base: mainBranch, cand: thisChange, rounds: 5)
-cost ← timeBatch(segmentPasses).wallMs         -- the passes of one fused segment: a cache entry's cost (Chapter 9)
+cost ← timeBatch(segmentPasses).wallMs         -- what a cache entry records as its cost (Chapter 9)
 ```
 
 ## Implementation notes
 
-1. **Completion includes more than the work.** Submit to fence covers queueing, scheduling, the passes and the
-   notification; for small dispatches the fixed part dominates. The first run also compiles the device program: the
-   textbook's GPU probe measured 79 ms for that compile. Report cold runs apart from warm ones.
+1. **Know what the completion signal covers.** WebGPU's `onSubmittedWorkDone` resolves when all work submitted to
+   the queue before the call has finished, other code's work included, and the host learns of it through its event
+   loop; time on a quiet queue. Submit to that signal covers queueing, the passes and the notification; for small
+   batches the fixed part dominates. A first run also compiles the device program (79 ms in the textbook's probe,
+   one machine): report cold runs apart from warm ones.
 
-2. **Read timestamps once per batch, after its fence.** On devices that offer timestamps, chromobench's timer stamps
+2. **Know what a timestamp promises.** In WebGPU timestamps are an optional feature (`timestamp-query`) the device
+   must request. They are written at pass boundaries as 64-bit counts of nanoseconds, which the implementation may
+   quantise (Chrome to 0.1 ms) and does not promise to increase monotonically, so a difference can be zero or
+   negative. Read stamps around groups of passes and take percentiles of the sums, not sums of rounded parts. CUDA's
+   events give elapsed milliseconds between two points on a stream; Vulkan's timestamps count ticks, converted with
+   the device's `timestampPeriod` in nanoseconds per tick.
+
+3. **Read timestamps once per batch, after its fence.** On devices that offer timestamps, chromobench's timer stamps
    each labelled pass and, in five places, awaits the reading right after every submit, so the host cannot record
    the next pass while the device runs this one. Nothing reads the results: they go into a log that grows by one
-   record per timed pass for the device's lifetime. The timer's completion method has no caller, and the project has
-   no measurement of what the waits cost. Sample one batch in N, resolve into a ring of buffers, and read each after
-   its own fence.
-
-3. **Timestamps give proportions; sums give durations.** With 100 µs rounding, a 60 µs pass reads as 0 or 100 µs.
-   Read stamps around groups of passes or a whole batch, and take the quantile of the sum, not the sum of rounded
-   parts. A pass timed by stalling around it runs alone and shows proportions only, as chromobench's timer says.
+   record per timed pass for the device's lifetime, and the timer's completion method has no caller. No one has
+   measured what the waits cost. Sample one batch in N, resolve into a ring of buffers, read each after its fence.
 
 4. **Service time steers; response time gates.** chromobench times each render from its start to the pixels read
    back, folds pixels per millisecond into a running average (weight 0.4, renders under 20 ms ignored) and sizes
-   drag drafts to about 150 ms. That is the right input for sizing work, which costs service time. It leaves out
-   the wait behind an earlier render and the presentation, and the numbers go only to a debug log. Gate the
-   response time; the steering cannot hide a regression from it.
+   drag drafts to about 150 ms. That suits sizing work, which costs service time. It leaves out the wait behind an
+   earlier render and the presentation, and the numbers go only to a debug log. Gate response time.
 
-5. **A timeout is not a requirement.** After the 4.1 to 4.3 s finding, the drag test was changed to hold the mouse
-   until a draft shows, with a timeout of 120 s. It would still pass at 100 s. The fix (rendering the display crop on
-   the preview's sample grid, then a faster colour-gamut search) took a step from 4.2 to 1.37 to 0.74 s; nothing now
-   fails if that returns. Write the limit as a percentile per device class.
+5. **A timeout is not a requirement.** After the 4,100 to 4,300 ms finding, the drag test was changed to hold the
+   mouse until a draft shows, with a timeout of 120,000 ms; it would still pass at 100,000. The fixes took a step from
+   4,200 to 1,370 to 740 ms, and nothing fails if that returns. Write the limit as a percentile per device class.
 
-6. **Pool, or merge histograms; never average percentiles.** Percentiles are not linear: the mean of two runs'
-   95th percentiles can be a value no sample took. Histograms with buckets of fixed relative width merge exactly.
-   Order statistics say how many samples a gate needs: with n samples the maximum bounds the 95th percentile from
-   above with 95 % confidence only when 0.95ⁿ ≤ 0.05, n ≥ 59; for the 99th, n ≥ 299.
+6. **Bound percentiles with order statistics; never average them.** Take n independent samples from a continuous
+   distribution with p-quantile q. The number below q is Binomial(n, p), and the r-th smallest exceeds q exactly
+   when fewer than r samples lie below it, so P(X₍ᵣ₎ ≥ q) = P(Binomial(n, p) ≤ r − 1). For r = n this is 1 − pⁿ: the
+   maximum is a 95 % upper bound only when pⁿ ≤ 0.05, n ≥ ln 0.05 / ln p, that is n ≥ 59 for p = 0.95 and n ≥ 299
+   for p = 0.99. Samples in one drag are correlated, so treat this as optimistic. Averages break percentiles: one
+   run of twenty 10 ms samples and one of eighteen at 10 ms and two at 100 ms have 95th percentiles (nearest rank)
+   of 10 and 100 ms; their mean, 55 ms, is no sample, and the pooled 95th percentile is 10 ms. Histograms of fixed
+   relative width merge exactly. Tails compound across parallel parts: with 100 independent parts each slow 1 % of
+   the time, 1 − 0.99¹⁰⁰ ≈ 63 % of wholes are slow (Dean and Barroso's example).
 
-7. **Measure the noise; do not assume it.** While the 4.2 s render was investigated, only runs alternating the old
-   and new code on the loaded machine could be compared. Interleave baseline and candidate, and take the noise from
-   the baseline's spread against itself. Mytkowicz and colleagues showed that the size of the environment and the
-   link order alone bias measured speed-ups; Kalibera and Jones show how to choose repetitions at each level
-   (process, iteration) from measured variance.
+7. **Coordinated omission is a sampling bias; drive open loop, or correct.** A closed-loop driver takes one sample
+   per completed request. A stall of S ms yields one sample of S, while a user acting every Δ ms would have waited
+   S, S − Δ, S − 2Δ and so on: about S / Δ samples, averaging S / 2. Correct closed-loop data by also recording
+   x − Δ, x − 2Δ, … down to Δ for every sample x above Δ (HdrHistogram offers this), or better, drive open loop.
 
-8. **The test machine may not have the device.** chromobench's browser tests run WebGPU on SwiftShader, a software
-   implementation on the CPU, unless a flag selects the real adapter. Time there says nothing about a GPU. Gate
-   counts in CI (passes, bytes read back, pixels computed; the reference engine counts stages and pixels) and time
-   on a fixed machine with the real device class. Editor lab models slower devices by multiplying measured time by
-   1.8, 3.5 or 5, as if bandwidth, arithmetic and per-dispatch overhead slowed alike; calibrate each class instead.
+8. **Measure the noise; do not assume it.** While the 4,200 ms render was investigated, only runs alternating old
+   and new code on the loaded machine could be compared. Take the noise from the baseline against itself.
+   Mytkowicz and colleagues showed that environment size and link order alone bias measured speed-ups; Kalibera and
+   Jones show how to choose repetitions at each level (process, iteration) from measured variance.
 
-9. **Make accepting a regression a recorded act.** The export from 781 to 1,650 ms was the price of exact tile
-   borders and was accepted by hand, as acceptable for a patient user. The benchmark runs only when an environment
-   variable asks, and asserts nothing. It does avoid flattering itself: each round changes a setting slightly so
-   the result cache misses, discards two warm-up rounds and reports a median of eight. With a gate, acceptance is a
-   baseline change in the same commit, with its reason.
+9. **The test machine may not have the device.** chromobench's browser tests run WebGPU on SwiftShader, a software
+   adapter (a CPU implementation of the GPU interface), unless a flag selects the real one. Time there says nothing
+   about a GPU: gate counts in CI (passes, bytes read back, pixels computed) and time on a fixed machine of the real
+   device class. Editor lab models slower devices by multiplying measured time by 1.8, 3.5 or 5, as if bandwidth,
+   arithmetic and per-dispatch overhead slowed alike; calibrate each class instead.
 
-10. **Tails compound across parallel parts; means add across sequential ones.** Dean and Barroso: if each of 100
-    servers is slow one time in a hundred, 1 − 0.99¹⁰⁰ ≈ 63 % of requests that need all of them are slow. A frame
-    whose tiles render in parallel waits for its slowest tile; an export of 48 tiles rendered one after another
-    waits for their sum, whose spread shrinks relative to its mean. Gate the percentile of what people wait for.
+10. **Make accepting a regression a recorded act.** The export from 781 to 1,650 ms was the price of exact tile
+    borders and was accepted by hand. The benchmark runs only when an environment variable asks, and asserts
+    nothing; it does avoid flattering itself (each round changes a setting so the result cache misses, two warm-up
+    rounds are dropped, the median of eight is reported). With a gate, acceptance is a baseline change in the same
+    commit, with its reason.
 
 ## Variations
 
@@ -261,9 +274,9 @@ cost ← timeBatch(segmentPasses).wallMs         -- the passes of one fused segm
 
 - \+ A slowdown fails the change that caused it, on the device class it matters for.
 - \+ Numbers describe what people wait for, queue and screen included.
-- \+ The same device timings feed draft sizes and cache costs without disturbing the work.
+- \+ The gate's decision carries a stated confidence instead of a feeling.
 - − It needs reserved machines with the real device, time in every build, and someone who owns the baselines.
-- − Tail percentiles need hundreds of samples per scenario; a p99 gate on forty is a gate on the maximum.
+- − Tail percentiles need hundreds of samples per scenario; a 99th-percentile gate on forty is a gate on the maximum.
 - − Open-loop drivers and presentation probes are harder to write than a timer around a call.
 
 ## Known uses
@@ -299,16 +312,19 @@ cost ← timeBatch(segmentPasses).wallMs         -- the passes of one fused segm
 
 ## Exercises
 
-1. **Build and measure.** Write a fake device: a thread that runs queued passes of set durations, adds a fixed
-   0.2 ms per batch, signals a fence, and offers timestamps rounded to 100 µs. Time a batch of twenty 60 µs passes
-   (a) around submit, (b) submit to fence, (c) by stamps summed per pass, (d) by stamps around the batch. Then make
-   the host wait for the stamps after every pass while recording the next batch, and report the loss in batches per
-   second. Finally drive it open loop at 60 Hz with a stall of 300 ms, and gate a p95 with the sketch.
-2. **Analyse.** (a) Derive the smallest n for which the maximum is a 95 % upper bound on the p-th quantile, and
-   evaluate it for p = 0.95 and 0.99. (b) Construct two runs whose 95th percentiles average to a value no sample
-   took, and give the pooled 95th percentile. (c) A frame waits for 16 tiles rendered in parallel, each over budget
-   with probability q. For what q is the frame over budget at most 5 % of the time?
-3. **Another domain.** An inference server batches requests for up to 10 ms before running a batch on the GPU. Write
-   its requirement, say where coordinated omission enters a test client, and which counts you would gate in CI.
+1. **Build and measure.** Write a fake device: a thread that runs queued passes of set durations, adds 0.2 ms per
+   batch, signals a fence, and offers timestamps rounded to 0.1 ms. Time a batch of twenty 0.06 ms passes (a) around
+   submit, (b) submit to fence, (c) by stamps per pass, summed, (d) by stamps around the batch, and compare with the
+   true 1.2 ms of work. Then make the host wait for the stamps after every pass while recording the next batch, and
+   report the loss in batches per second.
+2. **Analyse.** (a) For n = 100 samples, find the smallest r for which the r-th smallest is a 95 % upper bound on
+   the 95th percentile, and say what a gate gains over using the maximum. (b) Give two runs whose 95th percentiles
+   average to less than the pooled 95th percentile. (c) A frame waits for 16 tiles rendered in parallel, each over
+   budget independently with probability q. Find the largest q for which the frame is over budget at most 5 % of
+   the time, exactly and by the linearised estimate 16q ≤ 0.05.
+3. **Another domain.** An inference server collects requests for up to 10 ms, then runs a batch on the GPU in
+   20 ms whatever its size (up to 64 requests); requests arrive at 400 per second. Write its requirement; say what
+   a closed-loop client with one request in flight would report, and what an open-loop client would; name the
+   counts you would gate in CI.
 4. **Read a real system.** Read wrk2's description of its constant-rate mode, or rustc-perf's description of how it
    decides a change is significant. Which parts of the sketch's gate does each have, and which does it lack?
