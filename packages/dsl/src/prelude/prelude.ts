@@ -486,6 +486,15 @@ export const PRELUDE = String.raw`(function (host, hostEval, hostCall) {
     },
     layout: () => call('wb.layouts').then((x) => x.current),
     layouts: wbLayouts,
+    diagnostics: (opts) => {
+      const o = opts || {};
+      const p = call('wb.diagnostics', {
+        level: o.level === undefined ? null : String(o.level), source: o.source === undefined ? null : String(o.source),
+        limit: o.limit === undefined ? null : Number(o.limit), text: o.text === undefined ? null : String(o.text),
+      }).then(withText);
+      p.explain = () => p.then((s) => s.text);
+      return p;
+    },
   }));
 
   const cbObj = {

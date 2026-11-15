@@ -26,6 +26,8 @@ export interface DiagnosticsService {
   openReport(bytes?: Uint8Array): unknown;
   /** a few lines for a quick message, on the clipboard */
   copySummary(): unknown;
+  /** what this computer and the studio are (browser, screen, GPU devices, engine): the report's environment */
+  environment?(): unknown;
 }
 
 export const diagnosticsOf = (services: Record<string, unknown>): DiagnosticsService | null => (services['diagnostics'] as DiagnosticsService | undefined) ?? null;

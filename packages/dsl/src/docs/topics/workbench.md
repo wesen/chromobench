@@ -30,6 +30,15 @@ const s = await wb.screen({ module: 'print' })
 return s.controls.filter((c) => c.path).map((c) => c.label + ': ' + c.path + ' = ' + JSON.stringify(c.value))
 ```
 
+## Diagnostics
+
+`wb.diagnostics()` reads the studio's diagnostics journal: what went wrong and how often (a repeated event is one row with its `count`, `first` and `last` time), the commands and edits around it, and the machine it happened on (`environment`: browser, screen, the GPU devices with their adapter, limits, features and losses, the engine, the layout, the service worker). Rows are `{ level, source, code, message, data, frame, count, first, last, session }`; sources are `gpu`, `engine`, `worker`, `decode`, `ui`, `command`, `store`, `agent`, `sw`, `app`. Filter with `{ level: 'warn' }` (warnings and errors), `{ source: 'gpu' }`, `{ text: 'texture' }`, `{ limit: 20 }`; `await wb.diagnostics().explain()` is the summary as text. Rows of an earlier session (kept across a reload) have another `session`.
+
+```js fragment
+const d = await wb.diagnostics({ level: 'warn' })
+return { errors: d.totals.error, gpu: d.environment && d.environment.gpu, last: d.rows.slice(-5).map((r) => r.code + ' ×' + r.count + ' ' + r.message) }
+```
+
 ## Writing a layout
 
 A layout is written with the same `ck` and `cb` as the studio's own layouts, and its build runs here, in the sandbox, on recording proxies: every call becomes data that the studio replays on its builders. So the layout can be kept on `mem`, revised and built again. `wb.layouts.build` answers with the studio's verdict (its passes: missing panels, stages a module shows without declaring them, unknown names) and the built layout's explain and controls.

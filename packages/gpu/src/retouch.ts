@@ -91,7 +91,7 @@ export class Retouch {
     dev.queue.writeBuffer(sb, 0, rec);
     const atlas = a?.atlas ?? base;
     const bg = dev.createBindGroup({
-      layout: pipe.getBindGroupLayout(0),
+      label: pipe.label, layout: pipe.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: ub, size: 32 } },
         { binding: 1, resource: base.createView() },

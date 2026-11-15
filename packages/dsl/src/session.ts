@@ -260,6 +260,15 @@ export class DslSession {
       case 'wb.state': return wb.state(String(a['name']), (a['args'] as unknown[]) ?? []);
       case 'wb.screen': return wb.screen(typeof a['module'] === 'string' ? { module: a['module'] } : {});
       case 'wb.layouts': return wb.layouts();
+      case 'wb.diagnostics': {
+        if (!wb.diagnostics) throw new ChromobenchError(diag('E_WORKBENCH', 'this studio has no diagnostics journal', { hint: 'the studio page has one; a headless studio without the diagnostics service does not' }));
+        const o: { level?: string; source?: string; limit?: number; text?: string } = {};
+        if (typeof a['level'] === 'string') o.level = a['level'];
+        if (typeof a['source'] === 'string') o.source = a['source'];
+        if (typeof a['limit'] === 'number') o.limit = a['limit'];
+        if (typeof a['text'] === 'string') o.text = a['text'];
+        return wb.diagnostics(o);
+      }
       case 'wb.build': return wb.build(a['layout'] as WbLayoutData);
       case 'wb.use': {
         if (this.history.mode() === 'read-only') throw new ChromobenchError(diag('E_READONLY', 'the agent is read-only: wb.layouts.use cannot propose a layout', { hint: 'describe the layout instead; the photographer can switch the mode' }));

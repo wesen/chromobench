@@ -46,10 +46,10 @@ export class ChainRunner {
 
   private dummies(): { t3: GPUTexture; t2: GPUTexture; buf: GPUBuffer; samp: GPUSampler } {
     const dev = this.rt.device;
-    this.dummy3 ??= dev.createTexture({ size: [2, 2, 2], dimension: '3d', format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
-    this.dummy2 ??= dev.createTexture({ size: [2, 3], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
-    this.dummyBuf ??= dev.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE });
-    this.sampler ??= dev.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge' });
+    this.dummy3 ??= dev.createTexture({ label: 'chain.dummy3d', size: [2, 2, 2], dimension: '3d', format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    this.dummy2 ??= dev.createTexture({ label: 'chain.dummy2d', size: [2, 3], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    this.dummyBuf ??= dev.createBuffer({ label: 'chain.dummy', size: 16, usage: GPUBufferUsage.STORAGE });
+    this.sampler ??= dev.createSampler({ label: 'chain.linear', magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge' });
     return { t3: this.dummy3, t2: this.dummy2, buf: this.dummyBuf, samp: this.sampler };
   }
 
@@ -57,7 +57,7 @@ export class ChainRunner {
     let t = this.curveTex.get(row.id);
     if (!t) {
       const N1 = row.data.length / 4;
-      t = this.rt.device.createTexture({ size: [N1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      t = this.rt.device.createTexture({ label: `chain.curve.${row.id}`, size: [N1, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
       this.rt.device.queue.writeTexture({ texture: t }, row.data as Float32Array<ArrayBuffer>, { bytesPerRow: N1 * 16 }, [N1, 1]);
       this.curveTex.set(row.id, t);
     }
@@ -114,7 +114,7 @@ export class ChainRunner {
       const ub = rt.buffers.acquire({ size: prog.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pointwise.prog');
       dev.queue.writeBuffer(ub, 0, prog);
       const bg = dev.createBindGroup({
-        layout: pipe.getBindGroupLayout(0),
+        label: pipe.label, layout: pipe.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: ub, size: prog.byteLength } },
           { binding: 1, resource: input.createView() },

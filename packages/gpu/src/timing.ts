@@ -20,9 +20,9 @@ export class GpuTimer {
     this.device = device;
     this.timestamps = device.features.has('timestamp-query');
     if (this.timestamps) {
-      this.qs = device.createQuerySet({ type: 'timestamp', count: 2 * MAX_PASSES });
-      this.resolveBuf = device.createBuffer({ size: 16 * MAX_PASSES, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
-      this.readBuf = device.createBuffer({ size: 16 * MAX_PASSES, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      this.qs = device.createQuerySet({ label: 'timer.queries', type: 'timestamp', count: 2 * MAX_PASSES });
+      this.resolveBuf = device.createBuffer({ label: 'timer.resolve', size: 16 * MAX_PASSES, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+      this.readBuf = device.createBuffer({ label: 'timer.read', size: 16 * MAX_PASSES, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     }
   }
 

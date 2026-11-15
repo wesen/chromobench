@@ -252,3 +252,157 @@ pictures, originals, zip, download, and reopening a report's photos with their e
 
 ### Technical details
 - Zip layout: see the header of `kits/diagnostics/src/report.ts`.
+
+## Step 4: wb.diagnostics() for the agent, and the browser specs
+
+The agent reads the journal through the workbench: `wb.diagnostics({ level, source, limit, text })` answers the rows
+(with counts), the totals, the unseen errors, the environment and the journal's explain; `.explain()` gives the text.
+The studio-kit workbench reads it from the runtime's `diagnostics` service, so no new host plumbing was needed.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Spec item 6 and the acceptance's browser specs.
+
+**Inferred user intent:** An assistant can help diagnose from the same evidence.
+
+**Commit (code):** see Step 5's commit (one commit for Steps 4–5)
+
+### What I did
+- `packages/dsl/src/workbench.ts`: `WbJournalRow`, `WbDiagnostics`, `Workbench.diagnostics?`, `WB_METHODS` +
+  'diagnostics'; `session.ts` `case 'wb.diagnostics'`; prelude `wb.diagnostics(opts)` with `.explain()`;
+  `docs/topics/workbench.md` "Diagnostics" section; one line in `generate.ts` (the agent's instructions); `pnpm gen`.
+- `packages/studio-kit/kits/chat/src/workbench.ts`: `diagnostics(o)` from `diagnosticsOf(rt.services)`;
+  `DiagnosticsService.environment?()` added.
+- `packages/studio-kit/test/chat/workbench.test.ts`: wb.diagnostics through the sandbox (refused without the service,
+  rows ×2, filters, totals, environment, explain, a bad level).
+- `e2e/diagnostics.spec.ts` (7 tests): badge on an injected WebGPU error and ×2 on a repeat; a report holds exactly the
+  chosen parts (download, unzip in Node); a report reopens with its documents and history in a fresh studio; the journal
+  survives a reload; `wb.diagnostics()` through `window.chromobench.eval`; two regression tests (Step 5).
+
+### Why
+- Every acceptance item of the spec is a browser spec on SwiftShader.
+
+### What worked
+- `STUDIO_PORT=5531 … npx playwright test e2e/diagnostics.spec.ts --project=chromium-webgpu`: 7 passed after two fixes.
+
+### What didn't work
+- `pnpm gen` failed after adding the agent's instructions line: `SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]:
+  Expected ',', got 'ident'` (unescaped `'` inside a single-quoted string in `generate.ts`) — escaped.
+- e2e import `@chromobench/output` from the spec: `error TS2307: Cannot find module '@chromobench/output'` (the root
+  package does not depend on it) — the spec imports `../packages/output/src/encode/zip.ts`.
+- The badge test first injected `device.createBuffer({ size: 4, usage: 0 })`: no validation error on this Chrome
+  (badge stayed "0 problems"). It now injects the owner's kind of error (a destroyed texture used in a submit).
+- `page.evaluate(() => window.chromobench.run('diagnostics.report'))` timed out (120 s): the command returns the
+  dialog's promise; the spec no longer awaits it.
+
+### What I learned
+- The label shows up in the message: `presenter: validation error: Destroyed texture [Texture "test.injected"] used in
+  a submit` — labels are what makes such a row actionable.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- N/A
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- `e2e/diagnostics.spec.ts`; `npx vitest run packages/studio-kit/test/chat/workbench.test.ts -t diagnostics`.
+
+### Technical details
+- `wb.diagnostics({ level: 'warn', source: 'gpu' })` → `{ session, debug, totals, unseen, rows, environment, text }`.
+
+## Step 5: The owner's WebGPU error — cause, reproduction, fix
+
+The owner captured his error: `Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in
+a submit. - While calling [Queue].Submit([[CommandBuffer]])`, repeatedly, after opening DSC_8535.NEF, editing it, and
+opening DSC_8538.NEF. The cause is in the GPU engine's film grain: `FilmGpu.ones()` kept one cached texture of ones
+and destroyed it when another size was asked, while a render that had already taken it was still between `ones()` and
+its submit.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1); the main agent relayed the owner's console line and steps, and asked to label
+every texture/buffer/pipeline, reproduce with `tools/scripts/console-capture.ts --files <a.NEF> <b.NEF>` (the owner's
+two NEFs, locally only), build a synthetic regression test, and fix the cause in the engine.
+
+**Assistant interpretation:** Find which texture is unlabeled and 160×107 RGBA32Float, why it is destroyed before a
+submit, fix the lifetime, prove it with a test that fails on the old code.
+
+**Inferred user intent:** The repeated errors stop, and the next such error names its owner.
+
+**Commit (code):** (this step's commit) — "CHB-038: fix the destroyed-texture race of the film grain …"
+
+### What I did
+- `grep -rn createTexture packages/gpu/src apps/studio/src`: the only unlabeled `rgba32float` texture sized like an
+  image is `film.ts` `ones(like)` (the others are 1×1 / 2×2 dummies and curve rows). It feeds the grain's
+  `− density_min` pass: `await this.one('axpy', sum!, …, { b: await this.ones(sum!) })` — camera files' documents
+  have `film.grain` with amount 1 by default, so every render of a camera file's print takes it.
+- `pass()` awaits `rt.pipelines.get(…)` (a microtask even when cached) before it encodes and submits, and every pass
+  awaits `onSubmittedWorkDone()`, so renders that started together (a 160 px filmstrip thumbnail and the viewer) run
+  in lockstep: render A takes the 160×107 texture, yields; render B asks for its size, and `ones()` called
+  `this.onesTex?.destroy()`; A submits with the destroyed texture. Every alternation repeats it: "repeatedly".
+- Fix (`packages/gpu`): `GpuRuntime.busy(f)` / `retire(o)` — engine work runs inside `busy` (`GpuEngine.gpu()`), and
+  objects let go meanwhile are destroyed when no work is in flight; `BufferPool`/`TexturePool.trimAll` retire instead
+  of destroying; `FilmGpu` keeps a texture of ones per size (the newest 4), retiring the evicted ones;
+  `GpuEngine.forgetSource` retires the old source textures (the same race on a re-open as photo/negative).
+- Labels: every bind group takes its pipeline's label; the remaining unlabeled textures, buffers, samplers and query
+  sets of `packages/gpu` (chain dummies and curve rows, timer, engine dummy, `film.grain.ones WxH`) and the presenter's
+  (`presenter.image WxH`, `presenter.target`, `presenter.readback`, pipeline `presenter <format>`) are labelled.
+  `GpuRuntime.activity` names the node a render started last (op, id, size) in every reported error.
+- Reproduction with the owner's files (local only; console text read, nothing kept), real GPU under the GPU lock,
+  the old `film.ts` (`git stash push packages/gpu/src/film.ts`):
+  `node tools/scripts/console-capture.ts 'http://127.0.0.1:5531/?layout=classic&fresh&nosw' --sequence --files …/DSC_8535.NEF …/DSC_8538.NEF`
+  (new `--sequence` mode: open one file, set the time five times, open the next; print the journal) — the race did not
+  show in that run (it depends on two renders reaching the grain together), but the journal caught another problem
+  (below).
+- Deterministic regression test (`e2e/diagnostics.spec.ts`, "the interleaving itself"): inside `rt.busy`, take
+  `film.ones(160×107)`, ask for five other sizes, then submit a command buffer that uses the first texture. On the old
+  `film.ts` it fails with exactly the owner's message:
+  `"Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit.\n - While calling [Queue].Submit([[CommandBuffer]])"`;
+  with the fix it passes (and the evicted textures are destroyed once the work ends: `retiring` > 0 inside, 0 after).
+  A second, end-to-end test opens two synthetic camera DNGs with edits between them (the owner's steps) and renders
+  each print at thumbnail and viewer sizes together, four rounds: no GPU warning or error in the journal.
+
+### Why
+- Swallowing the error (an error scope) would hide a real use-after-destroy; the lifetime is what was wrong.
+
+### What worked
+- The interleaving test reproduces the owner's message byte for byte on the old code, and passes on the fix.
+
+### What didn't work
+- The first end-to-end regression test passed on the old code too (the lockstep needs both renders at the grain's
+  axpy in the same task); hence the deterministic test of the interleaving itself.
+
+### What I learned
+- A second problem, found by the journal in the run with the owner's NEFs: `E_GPU_OOM ×6 … render failed in main:
+  film.camMatrix.0: 14192640 bytes do not fit the budget (525083680 of 536870912 live)`. Each open frame's source
+  texture stays live in the engine's 512 MB budget as rgba32float at the working size: a 24 MP NEF at the default
+  4000 px is 4000×2667×16 B ≈ 171 MB, so two NEFs hold ≈ 341 MB and the renders run out. Not fixed here (see future).
+
+### What was tricky to build
+- Destroy order vs submit order: WebGPU lets a texture be destroyed after the command buffers using it were submitted
+  (they complete), but not before. The fix defers destruction until no engine work is in flight (`busy` counts);
+  with renders overlapping continuously the retired list waits for the next quiet moment (bounded in practice: the
+  studio's renders end between interactions).
+
+### What warrants a second pair of eyes
+- `GpuEngine.dropFields` releases an exact export's field textures into the pool when a preview render starts; the
+  pool may hand them out again while the export's tile still reads them (a data race, not a destroy). Pre-existing.
+
+### What should be done in the future
+- E_GPU_OOM with two or more camera files at 4000 px: keep source textures of frames not on screen out of the budget
+  (an LRU of `srcTex`, retired), or size the budget from the adapter; the journal shows it as `E_GPU_OOM` rows.
+
+### Code review instructions
+- `packages/gpu/src/device.ts` (`busy`, `retire`), `pool.ts` (`retire`), `film.ts` (`ones`), `engine-gpu.ts`
+  (`gpu()`, `forgetSource`, `activity`).
+- `npx playwright test e2e/diagnostics.spec.ts --project=chromium-webgpu -g interleaving` (to see it fail:
+  restore `ones()` destroying `onesTex` on a size change).
+
+### Technical details
+- Old code (`film.ts`): `if (this.onesTex && same size) return it; this.onesTex?.destroy(); create; return`.

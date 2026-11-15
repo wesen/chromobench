@@ -114,6 +114,8 @@ export class GpuRuntime {
     this.textures = new TexturePool(device, this.budget);
     this.pipelines = new PipelineCache(device);
     this.timer = new GpuTimer(device);
+    this.buffers.retire = (b) => this.retire(b);
+    this.textures.retire = (t) => this.retire(t);
     device.lost.then((info) => {
       this.lost = info;
       for (const cb of this.lostCbs) cb(info);
@@ -200,6 +202,35 @@ export class GpuRuntime {
     if (this.lost) cb(this.lost);
   }
 
+  // ── lifetimes (CHB-038) ──
+  // A texture or buffer may be bound by a pass that has been encoded but not submitted yet: every pass awaits its
+  // pipeline first, so another render can run in between. Destroying it then makes that submit a validation error
+  // ("Destroyed texture … used in a submit"). Engine work runs inside busy(); what is let go meanwhile is retired and
+  // destroyed when no work is in flight.
+  private inFlight = 0;
+  private retired: { destroy(): void }[] = [];
+  /** Runs GPU work; while any runs, retire() defers destruction. */
+  async busy<T>(f: () => Promise<T>): Promise<T> {
+    this.inFlight++;
+    try {
+      return await f();
+    } finally {
+      if (--this.inFlight === 0 && this.retired.length) {
+        const r = this.retired.splice(0);
+        for (const o of r) o.destroy();
+      }
+    }
+  }
+  /** Destroys a GPU object now, or after the work in flight when there is any. */
+  retire(o: { destroy(): void }): void {
+    if (this.inFlight === 0 || this.destroyed) o.destroy();
+    else this.retired.push(o);
+  }
+  /** objects waiting for the work in flight to end (tests) */
+  get retiring(): number {
+    return this.retired.length;
+  }
+
   /** Throws E_DEVICE_LOST if the device is gone. */
   check(): void {
     if (this.lost || this.destroyed) throw new ChromobenchError({ code: 'E_DEVICE_LOST', message: `GPU device lost${this.lost ? `: ${this.lost.reason} ${this.lost.message}` : ''}`, hint: 'the engine recreates the device on the next call' });
@@ -246,6 +277,7 @@ export class GpuRuntime {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    for (const o of this.retired.splice(0)) o.destroy();
     this.buffers.destroyAll();
     this.textures.destroyAll();
     this.pipelines.clear();

@@ -18,6 +18,7 @@ import { ChromobenchError, closest, diag, type AgentMode } from '@chromobench/co
 import type { LogEntry } from '@chromobench/values';
 import { controlsOf, createCk, paramNames, Store, type ControlRow, type Runtime } from '@chromobench/shell';
 import { createCb, type Cb } from '../../../src/cb.ts';
+import { diagnosticsOf } from '../../diagnostics/src/kit.ts';
 import { buildLayout, type LayoutDef } from '../../../src/layout.ts';
 import { read } from '../../../src/model/doc.ts';
 import { sel } from '../../../src/sel.ts';
@@ -295,6 +296,7 @@ export interface StudioWorkbench {
   build(l: AgentLayout): unknown;
   use(l: AgentLayout, o: Actor): unknown;
   defineLook(src: string): unknown;
+  diagnostics(o: { level?: string; source?: string; limit?: number; text?: string }): unknown;
 }
 
 export function studioWorkbench(host: WorkbenchHost): StudioWorkbench {
@@ -393,6 +395,19 @@ export function studioWorkbench(host: WorkbenchHost): StudioWorkbench {
     async defineLook(src) {
       if (!host.defineLook) return wbFail('this studio cannot register looks written by the agent');
       return host.defineLook(src);
+    },
+    // CHB-038: the diagnostics journal of the runtime's service (the studio page has one; headless studios do not)
+    async diagnostics(o) {
+      const d = diagnosticsOf(rtNow().services);
+      if (!d) return wbFail('this studio has no diagnostics journal');
+      const levels = ['debug', 'info', 'warn', 'error'];
+      if (o.level !== undefined && !levels.includes(o.level)) wbFail(`no level ${o.level}`, { valid: levels, fix: "wb.diagnostics({ level: 'warn' })" });
+      const j = d.journal;
+      const rows = j.rows({ level: (o.level ?? 'info') as 'info', ...(o.source ? { source: o.source as 'gpu' } : {}), ...(o.text ? { text: o.text } : {}), limit: Math.max(1, Math.min(o.limit ?? 100, 1000)) });
+      return {
+        session: j.session, debug: j.debugOn, totals: j.totals(), unseen: j.unseenErrors,
+        rows: rows.map((r) => toData(r)), environment: toData(d.environment ? await d.environment() : null) ?? null, text: j.explain(),
+      };
     },
   };
 }

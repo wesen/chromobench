@@ -77,7 +77,7 @@ export class WebGpuPresenter implements Presenter {
     this.canvas = canvas;
     this.fmt = format;
     this.space = colorSpace;
-    this.uniform = device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.uniform = device.createBuffer({ label: 'presenter.uniform', size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     void device.lost.then((info) => {
       if (!this.disposed) this.onLost(info.message);
     });
@@ -141,8 +141,8 @@ export class WebGpuPresenter implements Presenter {
   private pipeline(format: GPUTextureFormat): GPURenderPipeline {
     let p = this.pipelines.get(format);
     if (!p) {
-      const module = this.device.createShaderModule({ code: WGSL });
-      p = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
+      const module = this.device.createShaderModule({ label: 'presenter', code: WGSL });
+      p = this.device.createRenderPipeline({ label: `presenter ${format}`, layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
       this.pipelines.set(format, p);
     }
     return p;
@@ -152,7 +152,7 @@ export class WebGpuPresenter implements Presenter {
     const rgba = toRgba(img);
     const half = new Uint16Array(rgba.length);
     for (let i = 0; i < rgba.length; i++) half[i] = toHalf(rgba[i]!);
-    const tex = this.device.createTexture({ size: [img.width, img.height], format: 'rgba16float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    const tex = this.device.createTexture({ label: `presenter.image ${img.width}x${img.height}`, size: [img.width, img.height], format: 'rgba16float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
     this.device.queue.writeTexture({ texture: tex }, half, { bytesPerRow: img.width * 8 }, [img.width, img.height]);
     return tex;
   }
@@ -179,7 +179,7 @@ export class WebGpuPresenter implements Presenter {
     this.device.queue.writeBuffer(this.uniform, 0, u as Float32Array<ArrayBuffer>);
     const pipeline = this.pipeline(format);
     const bind = this.device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
+      label: pipeline.label, layout: pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this.uniform } },
         { binding: 1, resource: this.main!.tex.createView() },
@@ -201,7 +201,7 @@ export class WebGpuPresenter implements Presenter {
     let target: GPUTexture;
     if (this.context) target = this.context.getCurrentTexture();
     else {
-      target = this.device.createTexture({ size: [this.canvas.width, this.canvas.height], format: this.format, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      target = this.device.createTexture({ label: 'presenter.target', size: [this.canvas.width, this.canvas.height], format: this.format, usage: GPUTextureUsage.RENDER_ATTACHMENT });
     }
     this.device.queue.submit([this.encode(target, this.format, this.uniforms(view, colours, this.canvas.width, this.canvas.height)).finish()]);
     if (!this.context) target.destroy();
@@ -211,8 +211,8 @@ export class WebGpuPresenter implements Presenter {
     if (!this.main || !this.last) return null;
     // A 1×1 render whose single pixel centre maps to the document pixel centre (x + ½, y + ½), at 1:1.
     const view: ViewTransform = { ...this.last.view, cx: x + 0.5, cy: y + 0.5, zoom: 1, dpr: 1, split: null };
-    const tex = this.device.createTexture({ size: [1, 1], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
-    const buf = this.device.createBuffer({ size: 256, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const tex = this.device.createTexture({ label: 'presenter.readback', size: [1, 1], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    const buf = this.device.createBuffer({ label: 'presenter.readback', size: 256, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     const enc = this.encode(tex, 'rgba16float', this.uniforms(view, this.last.colours, 1, 1));
     enc.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: 256 }, [1, 1]);
     this.device.queue.submit([enc.finish()]);
