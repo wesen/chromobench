@@ -259,3 +259,57 @@ processes.
 ### Technical details
 - Breakage table (P2a report): core 68 tsc errors / 7 test files, engine-mock 21/3, goldens 21/1, gpu 35/browser,
   output 18/1, ingest 16/0, studio-kit 326/16, apps/studio 72/6, dsl 94/8, agent 45/6, tools/scripts 6/0.
+
+## Step 5: P5a merged — one immutable UI DSL; P4 specified and launched
+
+The UI DSL agent made `ck` and `cb` one immutable builder language on `@chromobench/values` and rewrote every call
+site; all checks were green on its branch (vitest 2856, browser 108). Merged after the contract; the merged state is
+as planned: contract, shell and values green, consumers red until their phases.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge P5a, start the history phase.
+
+**Inferred user intent:** Steady progress through the waves.
+
+**Commit (code):** a546ad5 — "Merge P5a UI DSL (…)"
+
+### What I did
+- Merged `task/chb-037-p5a-ui-dsl` (cf63e09); the ticket changelog conflicted again (both sides kept).
+- On the integration branch: lint rc=0 ("import boundaries ok (452 file checks)"); contract tsc rc=0; vitest shell +
+  values + contract: 223 passed; repository typecheck: 770 errors, all in planned consumers (studio-kit 328, dsl 93,
+  apps/studio 72, core 68, agent 45, e2e 47, gpu 35, engine-mock 21, goldens 21, output 18, ingest 16, scripts 6).
+- P4 spec: the generic document log lives in `packages/values` (the shell may import only values), the contract
+  deletes `EditLog`, the shell's document tier becomes the values log, `Layer` → `Draft`.
+
+### Why
+- One history means one undo model for user, agent and automatic edits; placing it in values lets the shell use it
+  without importing the contract.
+
+### What worked
+- The merge needed no code conflict resolution: P5a and P2a touched disjoint packages.
+
+### What didn't work
+- N/A
+
+### What I learned
+- P5a's browser runs saw two load flakes (a launch timeout, the offline service-worker test) that passed alone; to
+  watch in P9.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P5a decisions: no shell-level regions (a single screen is `ck.module('main')`); layouts declare no commands; kit
+  keys bind in every module; the product holds the kit; `?variant=` removed (no aliases).
+
+### What should be done in the future
+- Merge P2b and P3 when they report; launch P4 now and P5b after it.
+
+### Code review instructions
+- `packages/shell/README.md`; `diary/04-phase-p5a-ui-dsl.md`.
+
+### Technical details
+- Running: P2b (reference engine), P3 (gpu), P4 (history).
