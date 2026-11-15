@@ -3,7 +3,7 @@
 *Show a coarse answer at once; then do the rest in interruptible steps, most important first, each slice sized to
 a time budget.*
 
-**★** A good form among several; the Variations name the others.
+**★** A good form among several; the Variations section names the others.
 
 ## Intent
 

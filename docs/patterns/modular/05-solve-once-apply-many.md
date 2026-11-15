@@ -3,7 +3,7 @@
 *Split a computation by how often its inputs change; do the rare, hard part once and carefully, and leave the hot
 loop a simple formula.*
 
-**★★** We believe every good solution to this problem has this shape.
+**★★** We believe any good solution to this problem has this shape.
 
 ## Intent
 

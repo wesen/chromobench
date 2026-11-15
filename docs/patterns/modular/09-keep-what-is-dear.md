@@ -2,7 +2,7 @@
 
 *Name every result by what it was made from; when memory runs short, let go of what is cheapest to make again.*
 
-★ a good form among several; the Variations section names the others.
+**★** A good form among several; the Variations section names the others.
 
 ## Intent
 

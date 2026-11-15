@@ -3,7 +3,7 @@
 *Time each action from when the person asked to when they saw the answer, keep the whole distribution, and let the
 build fail when it grows.*
 
-★★ close to invariant: we believe any good solution to this problem has this shape.
+**★★** We believe any good solution to this problem has this shape.
 
 ## Intent
 
