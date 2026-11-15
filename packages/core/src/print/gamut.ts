@@ -18,10 +18,10 @@ export function knee(d: number, t: number, l: number, p: number): number {
 }
 
 // OKLab (Ottosson) from linear sRGB.
-const M1: Mat3 = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]];
-const M2: Mat3 = [[0.2104542553, 0.793617785, -0.0040720468], [1.9779984951, -2.428592205, 0.4505937099], [0.0259040371, 0.7827717662, -0.808675766]];
+export const M1: Mat3 = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]];
+export const M2: Mat3 = [[0.2104542553, 0.793617785, -0.0040720468], [1.9779984951, -2.428592205, 0.4505937099], [0.0259040371, 0.7827717662, -0.808675766]];
 /** The exact inverse of M2 (Ottosson's published M2⁻¹ is rounded to 10 digits: round trips drift by 2e-7). */
-const M2_INV: Mat3 = inv3(M2);
+export const M2_INV: Mat3 = inv3(M2);
 
 const inCube = (rgb: ArrayLike<number>, eps = 1e-9): boolean => rgb[0]! >= -eps && rgb[0]! <= 1 + eps && rgb[1]! >= -eps && rgb[1]! <= 1 + eps && rgb[2]! >= -eps && rgb[2]! <= 1 + eps;
 

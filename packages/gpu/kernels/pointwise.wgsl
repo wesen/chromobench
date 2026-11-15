@@ -31,6 +31,21 @@ const OP_MASK_ELLIPSE: u32 = 14u;  // p0 = (cx, cy, a, b), p1 = (cos, sin): anti
 const OP_MASK_INVERT: u32 = 15u;   // 1 − m
 const OP_MASK_CONSTANT: u32 = 17u; // p0.x everywhere
 const OP_AFFINE: u32 = 16u;        // v.rgb · p0.rgb + p1.rgb (scan.flare, contract 0.3)
+// the composite stages' digital layers (contract 1.1; core composite/*.ts, src/engine/lower.ts). op.z: offset of the
+// op's data in `opd`; op.w: a count or code; channel ops (curve, levels) act on L (flags 0) or on ∛ of R, G, B (1–3)
+const OP_ENCODE: u32 = 18u;        // v = post · f(pre · v), f by flags: 0 identity, 1 cube root, 2 cube; opd: pre, post (row-major)
+const OP_EXPOSURE: u32 = 19u;      // v · p0.x + p0.y
+const OP_MIXER: u32 = 20u;         // M · v, opd: M row-major
+const OP_CURVE: u32 = 21u;         // monotone cubic: opd x[n], y[n], m[n], n = op.w
+const OP_LEVELS: u32 = 22u;        // p0 = (black, white, 1/γ, outBlack), p1.x = outWhite
+const OP_HSL: u32 = 23u;           // opd per band (cx, cy, cos width, hue rad, sat, light), op.w bands; p0.x neutral chroma
+const OP_VIBRANCE: u32 = 24u;      // p0 = (vibrance, saturation, C_ref)
+const OP_GRADE: u32 = 25u;         // opd: tints (a, b) × 3, lightness × 3, exponent
+const OP_VIGNETTE: u32 = 26u;      // p0 = (stops, size, e1): rgb · 2^(stops · smooth(size, e1, ρ)) on the frame
+const OP_MASK_COLOUR: u32 = 27u;   // p0 = (L, a, b, tolerance), p1.x = softness
+const OP_MASK_RADIAL: u32 = 28u;   // p0 = (cx, cy, a, b), p1 = (cos, sin, feather)
+const OP_SAVE: u32 = 29u;          // the backdrop of a fused composite.mix: bk = v
+const OP_MIX: u32 = 30u;           // v = wkMix(bk, v, p0.x, blend = flags, encoding = op.w)
 
 // Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
 const BRAD = mat3x3<f32>(vec3<f32>(0.8951, -0.7502, 0.0389), vec3<f32>(0.2664, 1.7135, -0.0685), vec3<f32>(-0.1614, 0.0367, 1.0296));
@@ -74,6 +89,8 @@ struct Prog {
 // exact spectra, 7n each: [0, 7n) solve P0 P1 P2 E0 E1 E2 B; [7n, 14n) pd W0 W1 W2 E0 E1 E2 B;
 // [14n, 21n) print W0 W1 W2 E0 E1 E2 B; [21n, 21n + 9) the print table's M, row-major
 @group(0) @binding(8) var<storage, read> spec: array<f32>;
+// the digital layers' data (matrices, curve segments, hue bands), each op's at op.z (src/chain/program.ts packOpData)
+@group(0) @binding(9) var<storage, read> opd: array<f32>;
 
 fn p10(x: vec3<f32>) -> vec3<f32> { return exp2(LOG2_10 * x); }
 fn lg10(x: vec3<f32>) -> vec3<f32> { return log2(x) * LOG10_2; }
@@ -232,10 +249,8 @@ fn paraEnc(y: vec3<f32>, p0: vec4<f32>, d: f32) -> vec3<f32> {
   return select(max(vec3<f32>(d), pw), y / p0.w, y < vec3<f32>(p0.w * d));
 }
 
-// OkLab M2 and M2⁻¹ (Ottosson), column by column; LMS = U.okM1 · rgb is the space's own (core oklabFor)
-const OK_M2 = mat3x3<f32>(vec3<f32>(0.2104542553, 1.9779984951, 0.0259040371), vec3<f32>(0.793617785, -2.428592205, 0.7827717662), vec3<f32>(-0.0040720468, 0.4505937099, -0.808675766));
-// OK_M2I is inv(M2) computed in f64 (core M2_INV), not the 10-digit published inverse
-const OK_M2I = mat3x3<f32>(vec3<f32>(0.999999998451, 1.00000000888, 1.00000005467), vec3<f32>(0.396337792174, -0.105561342324, -0.0894841820950), vec3<f32>(0.215803758061, -0.0638541747717, -1.29148553786));
+// OkLab: OK_M2 and OK_M2I (Ottosson's M2 and its f64 inverse, core M2_INV) come from src/chain/working.ts, which
+// prepends kernels/working.wgsl with core's matrices; LMS = U.okM1 · rgb is the output space's own (core oklabFor)
 
 fn cbrt3(v: vec3<f32>) -> vec3<f32> { return sign(v) * pow(abs(v), vec3<f32>(1.0 / 3.0)); }
 fn okFwd(rgb: vec3<f32>) -> vec3<f32> { return OK_M2 * cbrt3(U.okM1 * rgb); }
@@ -287,6 +302,75 @@ fn okKnee(rgb: vec3<f32>, lightOn: bool, lightT: f32) -> vec3<f32> {
   return clamp(okInv(vec3<f32>(L, Cn * ca, Cn * sa)), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// ---- the digital layers (core composite/*.ts) ----
+
+fn opMat(o: u32) -> mat3x3<f32> {
+  return mat3x3<f32>(vec3<f32>(opd[o], opd[o + 3u], opd[o + 6u]), vec3<f32>(opd[o + 1u], opd[o + 4u], opd[o + 7u]), vec3<f32>(opd[o + 2u], opd[o + 5u], opd[o + 8u]));
+}
+
+// core evalCurve: the Hermite segment of v, or the end tangents beyond the points
+fn curveAt(o: u32, n: u32, v: f32) -> f32 {
+  let x0 = opd[o];
+  let xn = opd[o + n - 1u];
+  if (v <= x0) { return opd[o + n] + opd[o + 2u * n] * (v - x0); }
+  if (v >= xn) { return opd[o + 2u * n - 1u] + opd[o + 3u * n - 1u] * (v - xn); }
+  var k = 0u;
+  while (k < n - 2u && v > opd[o + k + 1u]) { k++; }
+  let xa = opd[o + k];
+  let h = opd[o + k + 1u] - xa;
+  let t = (v - xa) / h;
+  let t2 = t * t;
+  let t3 = t2 * t;
+  return (2.0 * t3 - 3.0 * t2 + 1.0) * opd[o + n + k] + (t3 - 2.0 * t2 + t) * h * opd[o + 2u * n + k]
+    + (-2.0 * t3 + 3.0 * t2) * opd[o + n + k + 1u] + (t3 - t2) * h * opd[o + 2u * n + k + 1u];
+}
+
+// core evalLevels
+fn levelsAt(p0: vec4<f32>, outWhite: f32, v: f32) -> f32 {
+  let t = (v - p0.x) / (p0.y - p0.x);
+  var g = t;
+  if (t > 0.0 && t < 1.0) { g = pow(t, p0.z); }
+  return p0.w + (outWhite - p0.w) * g;
+}
+
+// sin and cos of |x| ≤ π/3 (hsl's hue shift) by their Taylor series to x¹¹ / x¹²: error below 1e-8, unlike WGSL's
+// sin/cos (2^−11 absolute on SwiftShader, CHB-037 P3)
+fn sinCosSmall(x: f32) -> vec2<f32> {
+  let q = x * x;
+  let s = x * (1.0 - q / 6.0 * (1.0 - q / 20.0 * (1.0 - q / 42.0 * (1.0 - q / 72.0 * (1.0 - q / 110.0)))));
+  let c = 1.0 - q / 2.0 * (1.0 - q / 12.0 * (1.0 - q / 30.0 * (1.0 - q / 56.0 * (1.0 - q / 90.0 * (1.0 - q / 132.0)))));
+  return vec2<f32>(s, c);
+}
+
+// core hslAt
+fn hslAt(v: vec3<f32>, o: u32, n: u32, neutral: f32) -> vec3<f32> {
+  let C = length(v.yz);
+  if (!(C > 0.0)) { return v; }
+  let ca = v.y / C;
+  let sa = v.z / C;
+  var sw = 0.0; var dh = 0.0; var ds = 0.0; var dl = 0.0;
+  for (var i = 0u; i < n; i++) {
+    let q = o + 6u * i;
+    let w = wkSmooth(opd[q + 2u], 1.0, ca * opd[q] + sa * opd[q + 1u]);
+    sw += w; dh += w * opd[q + 3u]; ds += w * opd[q + 4u]; dl += w * opd[q + 5u];
+  }
+  let k = wkSmooth(0.0, neutral, C) / max(1.0, sw);
+  let r = sinCosSmall(k * dh);
+  let C2 = C * max(0.0, 1.0 + k * ds);
+  return vec3<f32>(v.x + 0.25 * k * dl, C2 * (ca * r.y - sa * r.x), C2 * (sa * r.y + ca * r.x));
+}
+
+// a tone function on L of an OkLab pixel (ch 0) or on ∛ of one linear RGB channel (1–3)
+fn toneCh(v: vec3<f32>, ch: u32, op: vec4<u32>, p0: vec4<f32>, p1: vec4<f32>) -> vec3<f32> {
+  var x = v.x;
+  if (ch > 0u) { x = wkCbrt1(v[ch - 1u]); }
+  var y = 0.0;
+  if (op.x == 21u) { y = curveAt(op.z, op.w, x); } else { y = levelsAt(p0, p1.x, x); }
+  var out = v;
+  if (ch == 0u) { out.x = y; } else { out[ch - 1u] = y * y * y; }
+  return out;
+}
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_index) li: u32) {
   // stage the solve spectra (only when the exact solve runs); barrier before any range check
@@ -301,6 +385,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
   // srcOrigin.z = 1: the source is the previous segment's output, read at p
   let sp = select(vec2<i32>(fp) - U.srcOrigin.xy, vec2<i32>(p), U.srcOrigin.z == 1);
   var v = textureLoad(src, sp, 0);
+  var bk = v; // the backdrop register of a fused composite.mix (SAVE … MIX)
   for (var o = 0u; o < U.misc.x; o++) {
     let op = U.ops[o];
     let p0 = U.params[2u * o];
@@ -389,6 +474,64 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       case 15u: { let m = 1.0 - v.r; v = vec4<f32>(m, m, m, 1.0); }
       case 16u: { v = vec4<f32>(v.rgb * p0.rgb + p1.rgb, v.a); }
       case 17u: { v = vec4<f32>(p0.x, p0.x, p0.x, 1.0); }
+      case 18u: {
+        var q = opMat(op.z) * v.rgb;
+        if (op.y == 1u) { q = wkCbrt(q); } else if (op.y == 2u) { q = q * q * q; }
+        v = vec4<f32>(opMat(op.z + 9u) * q, v.a);
+      }
+      case 19u: { v = vec4<f32>(v.rgb * p0.x + p0.y, v.a); }
+      case 20u: { v = vec4<f32>(opMat(op.z) * v.rgb, v.a); }
+      case 21u, 22u: { v = vec4<f32>(toneCh(v.rgb, op.y, op, p0, p1), v.a); }
+      case 23u: { v = vec4<f32>(hslAt(v.rgb, op.z, op.w, p0.x), v.a); }
+      case 24u: {
+        let C = length(v.yz);
+        let u = 1.0 - C / p0.z;
+        var g = 1.0 + p0.y;
+        if (C < p0.z) { g = (1.0 + p0.x * u * u) * (1.0 + p0.y); }
+        v = vec4<f32>(v.x, v.yz * g, v.a);
+      }
+      case 25u: {
+        let L = v.x;
+        let t = pow(clamp(L, 0.0, 1.0), opd[op.z + 9u]);
+        let w = vec3<f32>((1.0 - t) * (1.0 - t), 2.0 * t * (1.0 - t), t * t);
+        let g0 = op.z;
+        let da = w.x * opd[g0] + w.y * opd[g0 + 2u] + w.z * opd[g0 + 4u];
+        let db = w.x * opd[g0 + 1u] + w.y * opd[g0 + 3u] + w.z * opd[g0 + 5u];
+        let dl = w.x * opd[g0 + 6u] + w.y * opd[g0 + 7u] + w.z * opd[g0 + 8u];
+        let f = max(L, 0.0);
+        v = vec4<f32>(L + 0.25 * dl, v.y + f * da, v.z + f * db, v.a);
+      }
+      case 26u: {
+        // core vignetteGain at the full-resolution frame pixel's centre
+        let W = f32(U.frame.z);
+        let Hf = f32(U.frame.w);
+        let d = (vec2<f32>(fp) + 0.5 - vec2<f32>(W, Hf) * 0.5) / (vec2<f32>(W, Hf) * 0.5);
+        let rho = sqrt(dot(d, d) / 2.0);
+        var t = select(0.0, 1.0, rho >= p0.y);
+        if (p0.z - p0.y > 1e-6) { t = wkSmooth(p0.y, p0.z, rho); }
+        v = vec4<f32>(v.rgb * exp2(p0.x * t), v.a);
+      }
+      case 27u: {
+        // core colourAt
+        let d = length(v.rgb - p0.xyz);
+        var m = 1.0;
+        if (d > p0.w) {
+          m = 0.0;
+          if (p1.x > 0.0) { let u = min(1.0, (d - p0.w) / p1.x); m = 1.0 - u * u * (3.0 - 2.0 * u); }
+        }
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 28u: {
+        // core radialAt
+        let e = vec2<f32>(fp) + 0.5 - p0.xy;
+        let d = length(vec2<f32>((p1.x * e.x + p1.y * e.y) / p0.z, (-p1.y * e.x + p1.x * e.y) / p0.w));
+        let inner = 1.0 - p1.z;
+        var m = 1.0;
+        if (d > inner) { let u = min(1.0, (d - inner) / max(1e-4, p1.z)); m = 1.0 - u * u * (3.0 - 2.0 * u); }
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 29u: { bk = v; }
+      case 30u: { v = wkMix(bk, v, p0.x, op.y, op.w); }
       default: {}
     }
   }

@@ -92,3 +92,12 @@ P6a: the DSL and the agent on contract 1.0 and the values log — frames are vie
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/agent/src/worker/client.ts — AgentDocs, docs snapshots, replay
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p6a/packages/dsl/src/history.ts — The agent's door into the log
 
+
+## 2026-11-15
+
+P8a: Editor lab's tools in the engine — composite op set (curve, levels, exposure, hsl, vibrance, grade, mixer, vignette, sharpen), mask components radial and colour, 16 W3C blend modes (separable in linear RGB, non-separable in OkLCh), working encodings as domains with composite.encode inserted by the compiler and fused on the GPU, a fused composite.mix, scene.input; contract 1.1 (CC-020); six golden stacks; parity SwiftShader and Metal 51/51, conformance 516/516 (commits 007a30e, 3c09973, 4299a90, 1d18948)
+
+### Related Files
+
+- /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p8a/ttmp/2026/11/14/CHB-037--unified-editing-model-implementation-of-chb-035-design-01-v2-stages-with-laws-one-document-builder-core-stack-kit-agent-workbench-editor-lab-tools/diary/11-phase-p8a-ops.md — Phase P8a diary
+

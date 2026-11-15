@@ -9,6 +9,7 @@ Clones circular spots: the source patch replaces the target as it is. Adjacent c
 - Owner: CHB-037
 - On: Image (scanner-density, print-xyz) → Image (same)
 - Class: spatial; binding: setting
+- UI: "Clone" in the retouch menu (order 20)
 - Layer in: scan, print; encoding: stage; coalesces (spots)
 - Implementation: mock
 - See: `heal`
@@ -24,6 +25,7 @@ Heals circular spots: the source patch, matched to the target's surroundings, re
 - Owner: CHB-037
 - On: Image (scanner-density, print-xyz) → Image (same)
 - Class: spatial; binding: setting
+- UI: "Heal" in the retouch menu (order 10)
 - Layer in: scan, print; encoding: stage; coalesces (spots)
 - Implementation: mock
 - See: `clone`

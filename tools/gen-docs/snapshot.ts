@@ -34,7 +34,7 @@ export function buildSnapshot(): Record<string, unknown> {
       area: op.area, owner: op.owner, on: op.on, returns: op.returns, class: op.class, binding: op.binding,
       args: Object.fromEntries(Object.entries(op.args).map(([n, s]) => [n, argSnapshot(s)])),
     };
-    for (const k of ['domainIn', 'domainOut', 'domainFromArg', 'channels', 'internal', 'dsl', 'stages', 'encoding', 'term', 'coalesce'] as const) if (op[k] !== undefined) o[k] = op[k];
+    for (const k of ['domainIn', 'domainOut', 'domainFromArg', 'channels', 'internal', 'dsl', 'stages', 'encoding', 'ui', 'term', 'coalesce'] as const) if (op[k] !== undefined) o[k] = op[k];
     if (op.fields) o['fields'] = op.fields.map((f) => ({ name: f.name, type: f.type, ...(f.unit ? { unit: f.unit } : {}), ...(f.optional ? { optional: true } : {}) }));
     return [op.name, o];
   });

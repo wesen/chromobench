@@ -1,4 +1,5 @@
-// Semantic cases (CHB-010, contract 0.3, contract 1.0): what print.combine (the light law), composite.mix, heal and
+// Semantic cases (CHB-010, contract 0.3, contract 1.0, 1.1): the digital ops of the composite stages and the blend
+// modes (identity at identity params, closed forms, the blend identities of design §37), and what print.combine (the light law), composite.mix, heal and
 // clone, the mask algebra, output.frame, scan.flare and scan.density's baseT must compute, in any engine, on seeded
 // synthetic inputs. Values are read back from the engine under test (masks included), so the cases hold for f64 and
 // f32 engines alike; the tolerance is the f32 one. The expected values come from the contract's per-pixel formulas
@@ -29,7 +30,117 @@ const px3 = (a: ArrayLike<number>, i: number): number[] => [a[3 * i]!, a[3 * i +
 
 interface SemanticCase { id: string; op: string; needs: string[]; run(env: Env): Promise<void> }
 
+/** Identity params of every digital layer op (design §37: a layer at identity params changes nothing). */
+const IDENTITY: [op: string, domain: 'print-rgb' | 'print-oklab' | 'print-xyz', params: Record<string, unknown>][] = [
+  ['exposure', 'print-rgb', {}], ['curve', 'print-oklab', {}], ['curve', 'print-rgb', { channel: 'G' }], ['levels', 'print-oklab', {}],
+  ['levels', 'print-rgb', { channel: 'B' }], ['hsl', 'print-oklab', {}], ['vibrance', 'print-oklab', { vibrance: 0 }], ['grade', 'print-oklab', {}],
+  ['mixer', 'print-rgb', {}], ['vignette', 'print-rgb', { stops: 0 }],
+];
+const smooth = (e0: number, e1: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+
+const COMPOSITE_CASES: SemanticCase[] = [
+  ...IDENTITY.map(([op, domain, params]): SemanticCase => ({
+    id: `${op} semantics: identity params change nothing (${domain}${Object.keys(params).length ? ` ${JSON.stringify(params)}` : ''})`, op, needs: [op],
+    async run(env) {
+      const x = env.input(domain);
+      const [a, b] = [await read(env, x), await read(env, env.build(op, [x.id], params))];
+      check(worst(b, 3, (i, k) => a[3 * i + k]!) <= TOL, `${op} at identity params changed the image`);
+    },
+  })),
+  {
+    id: 'composite.encode semantics: xyz → oklab → rgb → xyz is the identity; D50 and D65 whites', op: 'composite.encode', needs: ['composite.encode'],
+    async run(env) {
+      for (const white of ['D50', 'D65']) {
+        const x = env.input('print-xyz');
+        const ok = env.build('composite.encode', [x.id], { to: 'print-oklab', white });
+        const back = env.build('composite.encode', [env.build('composite.encode', [ok.id], { to: 'print-rgb', white }).id], { to: 'print-xyz', white });
+        const [a, b] = [await read(env, x), await read(env, back)];
+        check(worst(b, 3, (i, k) => a[3 * i + k]!) <= TOL, `${white}: the round trip through OkLab and RGB is not the identity`);
+      }
+    },
+  },
+  {
+    id: 'exposure semantics: rgb · 2^stops + offset', op: 'exposure', needs: ['exposure'],
+    async run(env) {
+      const x = env.input('print-rgb');
+      const [a, b] = [await read(env, x), await read(env, env.build('exposure', [x.id], { stops: 1, offset: 0.01 }))];
+      check(worst(b, 3, (i, k) => 2 * a[3 * i + k]! + 0.01) <= TOL, 'exposure is not rgb · 2^stops + offset');
+    },
+  },
+  {
+    id: 'curve and levels semantics: a straight two-point curve and a linear levels are affine in L; a channel acts on its cube root', op: 'curve', needs: ['curve', 'levels'],
+    async run(env) {
+      const ok = env.input('print-oklab');
+      const pts = [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }];
+      const [a, c, l] = [await read(env, ok), await read(env, env.build('curve', [ok.id], { points: pts })), await read(env, env.build('levels', [ok.id], { black: 0.2, white: 0.8, gamma: 2 }))];
+      check(worst(c, 3, (i, k) => (k === 0 ? 0.1 + 0.8 * a[3 * i]! : a[3 * i + k]!)) <= TOL, 'curve on L is not the straight line through its points');
+      const lv = (v: number): number => { const t = (v - 0.2) / 0.6; return t <= 0 || t >= 1 ? t : t ** 0.5; };
+      check(worst(l, 3, (i, k) => (k === 0 ? lv(a[3 * i]!) : a[3 * i + k]!)) <= TOL, 'levels on L is not outBlack + (outWhite − outBlack)·t^(1/γ)');
+      const rgb = env.input('print-rgb');
+      const [ra, rc] = [await read(env, rgb), await read(env, env.build('curve', [rgb.id], { channel: 'R', points: pts }))];
+      check(worst(rc, 3, (i, k) => (k === 0 ? (0.1 + 0.8 * Math.cbrt(ra[3 * i]!)) ** 3 : ra[3 * i + k]!)) <= TOL, 'curve on R does not act on the cube root of R alone');
+    },
+  },
+  {
+    id: 'mixer and vignette semantics: the matrix; 2^stops at the corners, 1 at the centre', op: 'mixer', needs: ['mixer', 'vignette'],
+    async run(env) {
+      const x = env.input('print-rgb');
+      const xa = await read(env, x);
+      const M = [[0.8, 0.2, 0], [0.1, 0.7, 0.2], [0, 0.3, 0.7]];
+      const m = await read(env, env.build('mixer', [x.id], { red: M[0], green: M[1], blue: M[2] }));
+      check(worst(m, 3, (i, k) => M[k]![0]! * xa[3 * i]! + M[k]![1]! * xa[3 * i + 1]! + M[k]![2]! * xa[3 * i + 2]!) <= TOL, 'mixer is not the matrix product');
+      const mono = await read(env, env.build('mixer', [x.id], { monochrome: true }));
+      check(worst(mono, 3, (i) => mono[3 * i]!) <= 1e-6, 'monochrome is not neutral');
+      const W = widthOf(x), H = (x.info as { height: number }).height;
+      const v = await read(env, env.build('vignette', [x.id], { stops: -1, size: 0.3, feather: 0.6 }));
+      const gain = (i: number): number => {
+        const dx = (((i % W) + 0.5) - W / 2) / (W / 2), dy = ((Math.floor(i / W) + 0.5) - H / 2) / (H / 2);
+        return 2 ** (-smooth(0.3, 0.3 + 0.6 * 0.7, Math.sqrt((dx * dx + dy * dy) / 2)));
+      };
+      check(worst(v, 3, (i, k) => xa[3 * i + k]! * gain(i)) <= TOL, 'vignette is not rgb · 2^(stops · smoothstep(size, size + feather·(1 − size), ρ)) on the frame');
+    },
+  },
+  {
+    id: 'composite.mix semantics: the blend identities (screen and lighten by black, difference with itself, multiply by itself)', op: 'composite.mix', needs: ['composite.mix', 'mixer'],
+    async run(env) {
+      const b = env.input('print-rgb');
+      const black = env.build('mixer', [b.id], { red: [0, 0, 0], green: [0, 0, 0], blue: [0, 0, 0] });
+      const ba = await read(env, b);
+      const mix = async (top: string, blend: string, amount = 1): Promise<ArrayLike<number>> => read(env, env.build('composite.mix', [b.id], { top, blend, amount }));
+      check(worst(await mix(black.id, 'screen'), 3, (i, k) => ba[3 * i + k]!) <= TOL, 'screen by black is not the backdrop');
+      check(worst(await mix(black.id, 'lighten'), 3, (i, k) => Math.max(ba[3 * i + k]!, 0)) <= TOL, 'lighten by black is not max(b, 0)');
+      check(worst(await mix(b.id, 'difference'), 3, () => 0) <= TOL, 'difference with itself is not 0');
+      check(worst(await mix(b.id, 'multiply', 0.5), 3, (i, k) => { const v = ba[3 * i + k]!; return v + 0.5 * (v * v - v); }) <= TOL, 'multiply by itself at 0.5 is not b + 0.5·(b² − b)');
+    },
+  },
+  {
+    id: 'composite.mix semantics: luminosity and colour in OkLCh (lightness of one, colour of the other)', op: 'composite.mix', needs: ['composite.mix', 'vibrance', 'curve'],
+    async run(env) {
+      const b = env.input('print-oklab');
+      const s = env.build('curve', [env.build('vibrance', [b.id], { vibrance: 0, saturation: 0.5 }).id], { points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] });
+      const ba = await read(env, b);
+      const lum = await read(env, env.build('composite.mix', [b.id], { top: s.id, blend: 'luminosity' }));
+      check(worst(lum, 3, (i, k) => (k === 0 ? 0.1 + 0.8 * ba[3 * i]! : ba[3 * i + k]!)) <= TOL, 'luminosity is not (L_s, a_b, b_b)');
+      const col = await read(env, env.build('composite.mix', [b.id], { top: s.id, blend: 'colour' }));
+      check(worst(col, 3, (i, k) => (k === 0 ? ba[3 * i]! : 1.5 * ba[3 * i + k]!)) <= TOL, 'colour is not (L_b, a_s, b_s)');
+    },
+  },
+  {
+    id: 'mask semantics: radial is 1 at its centre and 0 outside; colour is 1 at its own sample', op: 'mask.radial', needs: ['mask.radial', 'mask.colour'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const m = await read(env, env.build('mask.radial', [r.id], { box: { x: 2, y: 1, w: 8, h: 7 }, angle_deg: 20, feather: 0.5 }));
+      check(m[4 * 12 + 6]! === 1 && m[0]! === 0, `mask.radial: centre ${m[4 * 12 + 6]}, corner ${m[0]}`);
+      const ok = env.input('print-oklab');
+      const oa = await read(env, ok);
+      const c = await read(env, env.build('mask.colour', [ok.id], { colour: px3(oa, 7), tolerance: 0.01, softness: 0 }));
+      check(Math.abs(c[7]! - 1) <= 1e-6, `mask.colour at its own sample: ${c[7]}`);
+    },
+  },
+];
+
 const CASES: SemanticCase[] = [
+  ...COMPOSITE_CASES,
   {
     id: 'print.combine semantics: no terms is the receiver', op: 'print.combine', needs: ['print.combine'],
     async run(env) {

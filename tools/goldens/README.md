@@ -38,7 +38,11 @@ what it `exercises` (P0's recipe fields) and the compiled chain's `ops` (closure
 
 ## The cases
 
-60 cases, named by what they exercise (`index.json` has the titles):
+66 cases, named by what they exercise (`index.json` has the titles): the 60 translated from P0's recipes and six
+golden stacks of the digital layers (P8a), built as documents by `stacks.ts` on the balanced cases `neg-auto-lights`
+and `cam-auto` (no recipe: `stacks.ts` is their provenance; `node tools/goldens/stacks.ts` rewrites their documents,
+then `render.ts --only <ids>` their pictures). The stacks change only the cut `display` of a negative (the print
+stage comes after `print`) and both cuts of the camera file (its scene stage comes before the film).
 
 | Group | Cases |
 |---|---|
@@ -51,6 +55,7 @@ what it `exercises` (P0's recipe fields) and the compiled chain's `ops` (closure
 | retouch | `neg-retouch-heal` (three spots and a disabled one), `neg-retouch-clone`, `cam-retouch` |
 | crop, orientation | `neg-crop`, `neg-orient-cw90-crop`, `neg-orient-flipH`, `neg-orient-transverse`, `neg-straighten` (4° in a crop, rot180), `cam-crop-ccw90` |
 | scan, view, capture | `neg-scan-flare`, `neg-scan-baseT`, `neg-view-print-as-seen`, `neg-knee-clip`, `cam-exposure-plus1`, `cam-wb-as-shot`, `cam-wb-custom`, `cam-development`, `cam-grade-lights` |
+| stacks (P8a) | `stack-print-tone` (exposure, an S-curve on L, levels on blue, vibrance), `stack-print-colour` (HSL bands, colour grading, a mixer at 0.7), `stack-print-masked` (a curve under a radial mask, exposure under a colour range ∩ gradient, vignette, sharpen), `stack-print-blends` (multiply, screen, soft light, luminosity and colour layers; an isolated luminosity group under a mask; a pass group at 0.6), `stack-print-mono` (monochrome mixer, levels, split toning), `stack-scene` (a camera file's scene stage: exposure under a luminance mask reading `scene.input`, a curve on R, HSL; a print vignette) |
 | new in P2b | `neg-dust-heal` (a scan-stage group `dust` of three one-spot heal layers, coalesced into one `heal` node on scanner density), `neg-finishing-clarity` (a print-stage `clarity` layer, strength 0.4, radius 0.576 mm = P0's 12 px × 48 µm) |
 
 P0 built the recipes the way the studio built them then (`defaultRecipe`, the studio's first print with core's

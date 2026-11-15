@@ -4,9 +4,10 @@ import pointwiseCode from '../../kernels/pointwise.wgsl?raw';
 import type { GpuRuntime } from '../device.ts';
 import type { CurveRow } from '../physics/core.ts';
 import type { TableManager } from '../tables/manager.ts';
-import { exactBits, LOOKUP, packProgram, packSpectra, type Segment } from './program.ts';
+import { exactBits, LOOKUP, packOpData, packProgram, packSpectra, type Segment } from './program.ts';
+import { WORKING_WGSL } from './working.ts';
 
-export const POINTWISE_WGSL = pointwiseCode;
+export const POINTWISE_WGSL = `${WORKING_WGSL}\n${pointwiseCode}`;
 
 export interface RunTarget {
   /** Output size. */
@@ -101,6 +102,13 @@ export class ChainRunner {
         dev.queue.writeBuffer(ownSpec, 0, arr);
         specBuf = ownSpec;
       }
+      // the digital layers' data (matrices, curve segments, bands)
+      const od = packOpData(seg);
+      let opBuf = d.buf;
+      if (od) {
+        opBuf = rt.buffers.acquire({ size: Math.max(16, od.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }, 'pointwise.opdata');
+        dev.queue.writeBuffer(opBuf, 0, od);
+      }
       const out = rt.textures.acquire({ format: 'rgba32float', w: t.outW, h: t.outH, usage }, `pointwise.${i}`);
       const prog = packProgram({ seg, outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region, srcOrigin, srcIsPrev: i > 0 || !!opts.srcOnGrid, lookup, exact });
       const ub = rt.buffers.acquire({ size: prog.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'pointwise.prog');
@@ -117,6 +125,7 @@ export class ChainRunner {
           { binding: 6, resource: curveTex.createView() },
           { binding: 7, resource: d.samp },
           { binding: 8, resource: { buffer: specBuf } },
+          { binding: 9, resource: { buffer: opBuf } },
         ],
       });
       const enc = dev.createCommandEncoder();
@@ -130,6 +139,7 @@ export class ChainRunner {
       await rt.timer.flush();
       rt.buffers.release(ub);
       if (ownSpec) rt.buffers.release(ownSpec);
+      if (od) rt.buffers.release(opBuf);
       if (prev) rt.textures.release(prev);
       prev = out;
       input = out;

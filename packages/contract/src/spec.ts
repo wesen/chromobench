@@ -30,6 +30,8 @@ export interface UiHints {
   /** Labels of vec3 / cmy components. */
   components?: [string, string, string];
   fmt?: string;
+  /** A secondary control: the panel shows it behind "More" (the photographer's first view keeps the main ones). */
+  advanced?: boolean;
 }
 
 export interface Redirect {

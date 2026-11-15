@@ -62,7 +62,8 @@ export interface RefEngineOptions {
  */
 export const GRID_OPS: ReadonlySet<string> = new Set([
   'print.expose', 'print.develop', 'print.combine', 'composite.mix',
-  'mask.luminance', 'mask.combine', 'mask.invert',
+  'composite.encode', 'exposure', 'curve', 'levels', 'hsl', 'vibrance', 'grade', 'mixer',
+  'mask.luminance', 'mask.colour', 'mask.combine', 'mask.invert',
   'view.reflect', 'view.flare', 'view.adapt', 'output.display',
 ]);
 

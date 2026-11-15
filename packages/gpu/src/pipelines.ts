@@ -13,8 +13,22 @@ export interface KernelSpec {
   layout?: { key: string; layouts: GPUBindGroupLayout[] };
 }
 
+/**
+ * The hash of a kernel's WGSL, memoised by the string: every dispatch asks for its pipeline, and hashing 30 kB of WGSL
+ * per pointwise program and per combine pass cost a tiled export tens of milliseconds (CHB-037 P8a, measured on Metal).
+ */
+const codeHashes = new Map<string, string>();
+function codeHash(code: string): string {
+  let h = codeHashes.get(code);
+  if (h === undefined) {
+    h = sha256Hex(code);
+    codeHashes.set(code, h);
+  }
+  return h;
+}
+
 export function kernelKey(k: KernelSpec): string {
-  return sha256Hex(canonicalJSON({ code: sha256Hex(k.code), entry: k.entryPoint ?? 'main', constants: k.constants ?? {}, layout: k.layout?.key ?? 'auto' }));
+  return sha256Hex(canonicalJSON({ code: codeHash(k.code), entry: k.entryPoint ?? 'main', constants: k.constants ?? {}, layout: k.layout?.key ?? 'auto' }));
 }
 
 /** Turns compilation messages into one diagnostic (first error's position in `where`). */

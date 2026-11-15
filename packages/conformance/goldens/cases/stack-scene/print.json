@@ -1,0 +1,32 @@
+{
+  "case": "stack-scene",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/stack-scene/print.f32",
+  "sha256": "4ad3ec5d23d04ef3e6e62590ad7ac9a56911970d284fc36a8d8892f8bab0e225",
+  "stats": {
+    "min": [
+      0.004889352,
+      0.005094579,
+      0.006268542
+    ],
+    "max": [
+      0.7148049,
+      0.7548398,
+      0.8047525
+    ],
+    "mean": [
+      0.2227314,
+      0.2199853,
+      0.1809598
+    ]
+  },
+  "warnings": []
+}

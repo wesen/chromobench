@@ -1,0 +1,32 @@
+{
+  "case": "stack-print-colour",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/stack-print-colour/display.f32",
+  "sha256": "6ef6a1ee0bfea193688075ee7db87ba6ce22e82e0d4591f05b41ac748f70ff37",
+  "stats": {
+    "min": [
+      0.03324169,
+      0.1247477,
+      0.1258737
+    ],
+    "max": [
+      1,
+      0.9970469,
+      0.9943013
+    ],
+    "mean": [
+      0.49822,
+      0.5208218,
+      0.5149777
+    ]
+  },
+  "warnings": []
+}

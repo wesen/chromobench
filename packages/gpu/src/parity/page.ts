@@ -15,6 +15,7 @@ import { CHAIN_TESTS } from './chain-tests.ts';
 import { SPATIAL_TESTS } from './spatial-tests.ts';
 import { OUTPUT_TESTS } from './output-tests.ts';
 import { LAW_TESTS } from './law-tests.ts';
+import { DIGITAL_TESTS } from './digital-tests.ts';
 import { BENCH_TESTS } from './bench-tests.ts';
 import { FILM_TESTS } from './film-tests.ts';
 import { GpuEngine } from '../engine-gpu.ts';
@@ -203,6 +204,7 @@ const TESTS: Record<string, Test> = {
   ...SPATIAL_TESTS,
   ...OUTPUT_TESTS,
   ...LAW_TESTS,
+  ...DIGITAL_TESTS,
   ...BENCH_TESTS,
   ...FILM_TESTS,
 

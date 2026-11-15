@@ -12,7 +12,7 @@
 import { canonicalJSON, Coll, type Id } from '@chromobench/values';
 import type { BlendMode, Entry, EntryBlend, FrameKind, Layer, LawName, Media, StageName } from './document.ts';
 import { fail, type Diagnostic } from './errors.ts';
-import { getOp, type OpDef } from './registry.ts';
+import { getOp, opEncoding, type OpDef, type OpEncoding } from './registry.ts';
 import type { CutName, Params } from './document.ts';
 
 /** The rules a law imposes on entries (validation reads them; compile relies on them). */
@@ -41,6 +41,13 @@ export interface LawContext {
   mask(id: Id): string;
   /** Layer params → node args: list Colls → arrays in order, defaults filled, checked (bindings are already resolved). */
   args(op: OpDef, params: Params): Record<string, unknown>;
+  /**
+   * The node in another encoding of the stage (composite.encode; the node itself when it is in it already). A
+   * conversion of a conversion converts the original node, so no round trip is ever built (design §22, §29).
+   */
+  encode(node: string, to: OpEncoding): string;
+  /** The encoding a node of this stage is in. */
+  encodingOf(node: string): OpEncoding;
   setCut(name: CutName, node: string): void;
   /** Records the node an entry compiled to (explain, the stack panel's node ids). */
   note(entry: Id, node: string): void;
@@ -173,11 +180,19 @@ export const LIGHT = defineLaw('light', {
 
 // ---- composite and repair ----------------------------------------------------------------------------------------
 
-/** The composite law's mix of one entry, or no node when it is the identity (amount 1, no mask, normal). */
+/**
+ * The composite law's mix of one entry (design §4, §22): out = back + a·m·(B(back, top) − back), computed in the
+ * encoding of the entry's result (a layer's op encoding, whatever a group's last child left); a blend other than
+ * normal needs a working encoding, so a result in the stage's XYZ is mixed in linear RGB. No node when the entry is
+ * the identity (amount 1, no mask, normal): the result goes on in its own encoding.
+ */
 function mix(ctx: LawContext, back: string, top: string, amount: number, mask: Id | null, blend: BlendMode): string {
   if (top === back || amount === 0) return back;
   if (amount === 1 && mask === null && blend === 'normal') return top;
-  return ctx.intern('composite.mix', [back], { top, amount, ...(mask ? { mask: ctx.mask(mask) } : {}), blend });
+  let enc = ctx.encodingOf(top);
+  if (blend !== 'normal' && enc === 'stage') enc = 'linear';
+  const b = ctx.encode(back, enc);
+  return ctx.intern('composite.mix', [b], { top: ctx.encode(top, enc), amount, ...(mask ? { mask: ctx.mask(mask) } : {}), blend });
 }
 
 const groupBlend = (b: EntryBlend): BlendMode => (b === 'pass' ? 'normal' : b);
@@ -225,23 +240,28 @@ function compileOrdered(ctx: LawContext, stack: Coll<Entry>, input: string): str
         items.push(...scaled(op, nargs, n.amount));
         ids.push(nid);
       }
-      v = ctx.intern(op.name, [v], { ...args, [op.coalesce!.list]: items });
+      v = ctx.intern(op.name, [ctx.encode(v, opEncoding(op, args))], { ...args, [op.coalesce!.list]: items });
       for (const x of ids) ctx.note(x, v);
       continue;
     }
-    const top = ctx.intern(op.name, [v], args);
-    v = mix(ctx, v, top, e.amount, e.mask, e.blend === 'pass' ? 'normal' : e.blend);
+    // the layer's input in its op's encoding (the compiler inserts the conversion; one encoding fuses)
+    const vin = ctx.encode(v, opEncoding(op, args));
+    const top = ctx.intern(op.name, [vin], args);
+    v = mix(ctx, vin, top, e.amount, e.mask, e.blend === 'pass' ? 'normal' : e.blend);
     ctx.note(id, v);
   }
   return v;
 }
 
+/** A composite or repair stack: entries in order, the result back in the stage's own encoding for the next stage. */
+const compileStack = (ctx: LawContext, stack: Coll<Entry>, input: string): string => ctx.encode(compileOrdered(ctx, stack, input), 'stage');
+
 export const COMPOSITE = defineLaw('composite', {
   blend: true, groups: ['pass', 'isolated'], amount: 'opacity', amountRange: [0, 1], order: 'stack', coalesce: true,
-  doc: 'Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op\'s encoding. Amount is opacity. A pass group\'s children act on the backdrop and the group fades their total effect; an isolated group blends its children\'s result as one layer with its mode.',
-}, compileOrdered);
+  doc: 'Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op\'s encoding (XYZ, linear RGB or OkLab; the compiler converts between them). Amount is opacity. A pass group\'s children act on the backdrop and the group fades their total effect; an isolated group blends its children\'s result as one layer with its mode.',
+}, compileStack);
 
 export const REPAIR = defineLaw('repair', {
   blend: false, groups: ['pass'], amount: 'opacity', amountRange: [0, 1], order: 'stack', coalesce: true,
   doc: 'Scan: entries apply in order, each replacing pixels within its geometry (heal and clone spots on the negative). Amount is opacity; no blend modes.',
-}, compileOrdered);
+}, compileStack);

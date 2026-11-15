@@ -18,7 +18,8 @@ import type { Engine } from './engine.ts';
 import { ChromobenchError, fail, type Diagnostic } from './errors.ts';
 import type { Graph, Node } from './graph.ts';
 import { resolveLinks, type LinkContext } from './links.ts';
-import { bindArgs, getOp, type OpDef } from './registry.ts';
+import { ENCODED_DOMAINS, encodingOfDomain, type WorkingStage } from './encodings.ts';
+import { bindArgs, getOp, type OpDef, type OpEncoding } from './registry.ts';
 import { paramsToArgs } from './schema.ts';
 import { getLaw, type LawContext } from './stage-laws.ts';
 
@@ -137,6 +138,35 @@ class Compiler {
     return m;
   }
 
+  /** The XYZ white of a composite stage's images: the print's is output.white (after view.adapt), the scene's D65. */
+  private white(stage: WorkingStage): 'D50' | 'D65' {
+    return stage === 'print' ? this.doc.output.white : 'D65';
+  }
+
+  /** The encoding of a node of a composite (or the scan) stage: 'stage' for every domain but the working ones. */
+  encodingOf = (id: string): OpEncoding => {
+    const info = this.g.get(id)!.info;
+    return (info.kind === 'Image' && encodingOfDomain(info.domain)?.encoding) || 'stage';
+  };
+
+  /**
+   * A node in another encoding of its stage (design §22): composite.encode, or the node itself. A conversion of a
+   * conversion converts the original node instead (or is the original node), so adjacent ops in one encoding never
+   * convert back and forth and a stack whose layers produce no node compiles to its input.
+   */
+  encode = (id: string, to: OpEncoding): string => {
+    let n = this.g.get(id)!;
+    if (n.op === 'composite.encode') n = this.g.get(n.inputs[0]!)!;
+    const info = n.info;
+    const at = info.kind === 'Image' ? encodingOfDomain(info.domain) : undefined;
+    if (!at) {
+      if (to === 'stage') return n.id;
+      return fail('E_INTERNAL', `only the composite stages have working encodings; ${n.op} is ${info.kind === 'Image' ? info.domain : 'a value'}`);
+    }
+    if (at.encoding === to) return n.id;
+    return this.I('composite.encode', [n.id], { to: ENCODED_DOMAINS[at.stage][to], white: this.white(at.stage) });
+  };
+
   /** A mask's node for entries of a stage (cached per mask and stage). */
   mask(id: Id, stage: StageName): string {
     const key = `${id}@${stage}`;
@@ -147,10 +177,11 @@ class Compiler {
     const reads: CutName = m.reads === 'stage-input' ? STAGES[stage].input : m.reads;
     const lum = (this.cuts[reads] ?? fail('E_CUT', `mask ${id} reads ${reads}, which is not compiled before the ${stage} stage`, { path: `${id}.reads`, valid: readableCuts(stage, this.kind, 'mask') })).id;
     let v: string | undefined;
-    for (const c of Coll.values(m.components)) {
+    for (const [cid, c] of Coll.entries(m.components)) {
       if (!c.enabled) continue;
       const op = getOp(`mask.${c.kind}`);
-      const node = this.I(op.name, [c.kind === 'luminance' ? lum : geom], paramsToArgs(op, this.bind(c.params, stage, 'binding', id) as Params));
+      const recv = c.kind === 'luminance' ? lum : c.kind === 'colour' ? this.colourInput(lum, reads, `${id}.components.${cid}`) : geom;
+      const node = this.I(op.name, [recv], paramsToArgs(op, this.bind(c.params, stage, 'binding', id) as Params));
       if (v === undefined && c.combine === 'add' && c.amount === 1) {
         v = node; // the empty mask's identity: 0 + (max(0, c) − 0) = c
         continue;
@@ -163,6 +194,17 @@ class Compiler {
     if (m.invert) v = this.I('mask.invert', [v], {});
     this.masks.set(key, v);
     return v;
+  }
+
+  /** A colour component measures OkLab: the cut it reads (a composite stage's XYZ) in that stage's OkLab encoding. */
+  private colourInput(cut: string, reads: CutName, at: string): string {
+    const d = this.g.get(cut)!.info;
+    if (d.kind !== 'Image' || encodingOfDomain(d.domain) === undefined) {
+      return fail('E_CUT', `${at}: a colour component measures colour, and ${reads} holds ${d.kind === 'Image' ? d.domain : 'a value'}`, {
+        path: at, hint: "let the mask read a cut in XYZ ('scene.input', 'scene', 'print', 'finished'): a scan has colour only from the print on", valid: ['scene.input', 'scene', 'print', 'finished'],
+      });
+    }
+    return this.encode(cut, 'oklab');
   }
 
   /** Binds a stack's params, then runs the stage law on it. */
@@ -186,6 +228,8 @@ class Compiler {
         this.warnings.push(...r.warnings);
         return { ...r.args };
       },
+      encode: this.encode,
+      encodingOf: this.encodingOf,
       setCut: (name, node) => this.setCut(name, node),
       note: (entry, node) => (this.entries[entry] ??= []).push(node),
       warn: (d) => this.warnings.push(d),
@@ -223,6 +267,7 @@ class Compiler {
     } else {
       const wb = this.medium('scene').whiteBalance;
       let n = I('source.xyz', [src], { mode: wb.mode, temperature_K: wb.temperature_K, tint: wb.tint });
+      this.setCut('scene.input', n);
       n = this.stack('scene', n);
       this.setCut('scene', n);
       const f = this.medium('film');

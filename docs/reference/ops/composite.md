@@ -4,25 +4,41 @@
 
 ## `clarity`
 
-Local contrast on the print (a large unsharp mask weighted to the midtones), in linear light. Replaces finishing.clarity, whose radius was in preview pixels.
+Local contrast on the print (a large unsharp mask weighted to the midtones): the low-pass of the print's luminance in linear light, the detail in lightness. Replaces finishing.clarity, whose radius was in preview pixels.
 
 - Owner: CHB-037
 - On: Image (print-xyz) → Image (print-xyz)
 - Class: spatial; binding: setting
-- Layer in: print; encoding: linear
+- UI: "Clarity" in the detail menu (order 10)
+- Layer in: print; encoding: stage
 - Implementation: mock
+- See: `sharpen`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
 | `strength` | number | fraction | [-1, 1] |  | `0.25` | Local contrast: positive adds, negative softens. |
 | `radius_mm` | number | mm | [0.1, 100] | [1, 30] | `10` | Radius of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size). |
 
-## `composite.mix`
+## `composite.encode`
 
-The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back). The receiver is the backdrop. mixPixel (pixel.ts) is the formula.
+Converts a composite stage's image between its encodings: XYZ (the stage's), linear Rec. 2020 RGB, OkLab over that RGB (contract encodings.ts). The compiler inserts it where adjacent ops differ in encoding.
 
 - Owner: CHB-037
-- On: Image (scanner-density, scene-xyz, print-xyz) → Image (same)
+- On: Image (scene-xyz, scene-rgb, scene-oklab, print-xyz, print-rgb, print-oklab) → Image (same)
+- Class: pointwise; binding: setting; not in the DSL
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `to` | enum scene-xyz/scene-rgb/scene-oklab/print-xyz/print-rgb/print-oklab |  |  |  |  | The encoding to convert to, a domain of the same stage as the receiver. |
+| `white` | enum D50/D65 |  |  |  | `"D65"` | The XYZ white of the stage (print: Document.output.white, after view.adapt; scene: D65): XYZ is adapted from it to D65 (Bradford) before linear Rec. 2020. |
+
+## `composite.mix`
+
+The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back), in the encoding back and top share. The receiver is the backdrop. mixPixel (pixel.ts) is the mix; core composite/blend.ts defines B.
+
+- Owner: CHB-037
+- On: Image (scanner-density, scene-xyz, scene-rgb, scene-oklab, print-xyz, print-rgb, print-oklab) → Image (same)
 - Class: pointwise; binding: setting; not in the DSL
 - Implementation: mock
 
@@ -31,4 +47,170 @@ The composite law per entry (design §4, §22): out = back + a·m·(B(back, top)
 | `top` | Image |  |  |  |  | What the entry made from the backdrop (its op applied, or a group's children). |
 | `amount` | number | fraction | [0, 1] |  | `1` | Opacity. |
 | `mask` (optional) | Mask |  |  |  |  | Coverage; absent = everywhere. |
-| `blend` | enum normal |  |  |  | `"normal"` | Blend mode B(back, top) (normal: top; the W3C set arrives with phase 8). |
+| `blend` | enum normal/multiply/screen/overlay/darken/lighten/colour-dodge/colour-burn/hard-light/soft-light/difference/exclusion/hue/saturation/colour/luminosity |  |  |  | `"normal"` | Blend mode B(back, top), the W3C set: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), hue, saturation, colour and luminosity in OkLCh. A mode other than normal needs a working encoding (rgb or oklab). |
+
+## `curve`
+
+A point curve (Lightroom's point curve, Photoshop's Curves) on lightness or one channel. Not Editor lab's parametric curve, whose negative contrast added contrast (design §13).
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab, scene-rgb, print-rgb) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Curve" in the tone menu (order 20)
+- Layer in: scene, print; encoding: oklab (channel L), linear (channel R), linear (channel G), linear (channel B)
+- Implementation: stub
+- See: `levels`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `channel` | enum L/R/G/B |  |  |  | `"L"` | What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve). |
+| `points` | list of {x, y} |  |  |  | `[{"x":0,"y":0},{"x":1,"y":1}]` | Control points in order of x (in a document: a Coll of points). The curve is the monotone cubic through them (Fritsch–Carlson): it never overshoots, so monotone points give a monotone curve; beyond the end points it continues along the end tangents. |
+
+## `exposure`
+
+Exposure in linear light: rgb · 2^stops + offset (Editor lab `exposure`, without its sRGB round trip and gamma).
+
+- Owner: CHB-037
+- On: Image (scene-rgb, print-rgb) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Exposure" in the tone menu (order 10)
+- Layer in: scene, print; encoding: linear
+- Implementation: stub
+- See: `levels`, `curve`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `stops` | number | stop | [-6, 6] | [-3, 3] | `0` | Exposure change: linear RGB × 2^stops. |
+| `offset` | number | fraction | [-0.2, 0.2] | [-0.05, 0.05] | `0` | Added after the gain, a fraction of white (a black level: negative removes a veil). |
+
+## `grade`
+
+Colour grading with shadow, midtone and highlight wheels in OkLab (Lightroom's Color Grading): weights (1 − t)², 2t(1 − t), t² of the lightness, a, b += L·Σ w·chroma·(cos hue, sin hue), L += 0.25·Σ w·lightness.
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Colour grading" in the colour menu (order 30)
+- Layer in: scene, print; encoding: oklab
+- Implementation: stub
+- See: `hsl`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `shadowsHue_deg` | number | deg | [0, 360] |  | `230` | Shadows: the OkLCh hue of the tint. |
+| `shadowsChroma` | number | none | [0, 0.3] | [0, 0.1] | `0` | Shadows: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). |
+| `shadowsLightness` | number | fraction | [-1, 1] |  | `0` | Shadows: lightness change, ΔL = 0.25 · lightness · weight. |
+| `midtonesHue_deg` | number | deg | [0, 360] |  | `60` | Midtones: the OkLCh hue of the tint. |
+| `midtonesChroma` | number | none | [0, 0.3] | [0, 0.1] | `0` | Midtones: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). |
+| `midtonesLightness` | number | fraction | [-1, 1] |  | `0` | Midtones: lightness change, ΔL = 0.25 · lightness · weight. |
+| `highlightsHue_deg` | number | deg | [0, 360] |  | `70` | Highlights: the OkLCh hue of the tint. |
+| `highlightsChroma` | number | none | [0, 0.3] | [0, 0.1] | `0` | Highlights: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black). |
+| `highlightsLightness` | number | fraction | [-1, 1] |  | `0` | Highlights: lightness change, ΔL = 0.25 · lightness · weight. |
+| `balance` | number | fraction | [-1, 1] |  | `0` | Moves the split between the wheels: positive gives the highlights more of the range (t = clamp(L, 0, 1)^(2^−balance)). |
+
+## `hsl`
+
+Hue, saturation and lightness per hue band in OkLCh (Lightroom's HSL panel); replaces the never-compiled finishing.hue.
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "HSL" in the colour menu (order 10)
+- Layer in: scene, print; encoding: oklab
+- Implementation: stub
+- See: `vibrance`, `grade`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `bands` | list of {centre_deg, width_deg, hue_deg, saturation, lightness} |  |  |  | `[{"centre_deg":25,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":55,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":105,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":145,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":195,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":260,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":295,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":330,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0}]` | Hue bands (in a document: a Coll; default the eight of Lightroom's HSL panel: red, orange, yellow, green, aqua, blue, purple, magenta). A band weighs a pixel by w = smoothstep(cos width, 1, cos(h − centre)); weights are normalised by max(1, Σw) and faded towards neutral (chroma below 0.04). |
+
+## `levels`
+
+Levels on lightness or one channel: out = outBlack + (outWhite − outBlack)·g((x − black)/(white − black)), g(t) = t^(1/gamma) on [0, 1] and continued with slope 1 beyond, so nothing is clipped in the working encoding (the display knee clips).
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab, scene-rgb, print-rgb) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Levels" in the tone menu (order 30)
+- Layer in: scene, print; encoding: oklab (channel L), linear (channel R), linear (channel G), linear (channel B)
+- Implementation: stub
+- See: `curve`, `exposure`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `channel` | enum L/R/G/B |  |  |  | `"L"` | What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve). |
+| `black` | number | fraction | [0, 1] |  | `0` | Input black point (the channel's lightness). |
+| `white` | number | fraction | [0, 1] |  | `1` | Input white point. |
+| `gamma` | number | none | [0.1, 10] | [0.3, 3] | `1` | Midtone gamma: t^(1/gamma) between black and white (above 1 brightens). |
+| `outBlack` | number | fraction | [0, 1] |  | `0` | Output black: where the input black lands. |
+| `outWhite` | number | fraction | [0, 1] |  | `1` | Output white: where the input white lands. |
+
+## `mixer`
+
+A 3 × 3 channel mixer in linear RGB, or black and white from weighted channels (Editor lab `bw`, generalised and in linear light).
+
+- Owner: CHB-037
+- On: Image (scene-rgb, print-rgb) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Channel mixer" in the colour menu (order 40)
+- Layer in: scene, print; encoding: linear
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `red` | vec3 | fraction | [-2, 2] |  | `[1,0,0]` | Output red from input R, G, B (linear RGB). |
+| `green` | vec3 | fraction | [-2, 2] |  | `[0,1,0]` | Output green from input R, G, B. |
+| `blue` | vec3 | fraction | [-2, 2] |  | `[0,0,1]` | Output blue from input R, G, B. |
+| `monochrome` | bool |  |  |  | `false` | Black and white: every channel becomes grey = grey · (R, G, B); the rows are not used. |
+| `grey` | vec3 | fraction | [-2, 2] |  | `[0.2627,0.678,0.0593]` | Weights of R, G, B in the monochrome grey (default the luminance of Rec. 2020: a neutral conversion; filters shift them, as a red filter on panchromatic film). |
+
+## `sharpen`
+
+An unsharp mask on the print's lightness (clarity without the midtone weight, at a small radius): the low-pass of Y in linear light, L = (Y / Y_w)^⅓, out = XYZ·(L′/L)³ (chromaticity kept, no clipping).
+
+- Owner: CHB-037
+- On: Image (print-xyz) → Image (print-xyz)
+- Class: spatial; binding: setting
+- UI: "Sharpen" in the detail menu (order 20)
+- Layer in: print; encoding: stage
+- Implementation: stub
+- See: `clarity`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `strength` | number | fraction | [0, 3] | [0, 1.5] | `0.5` | Sharpening: the lightness detail added, L′ = L + s·(L − L̄). |
+| `radius_mm` | number | mm | [0.01, 2] | [0.03, 0.5] | `0.1` | Radius (Gaussian σ) of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size). |
+
+## `vibrance`
+
+Vibrance and saturation in OkLCh chroma (Editor lab `vibrance`, in chroma instead of an sRGB spread).
+
+- Owner: CHB-037
+- On: Image (scene-oklab, print-oklab) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Vibrance" in the colour menu (order 20)
+- Layer in: scene, print; encoding: oklab
+- Implementation: stub
+- See: `hsl`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `vibrance` | number | fraction | [-1, 1] |  | `0.25` | Chroma change weighted to muted colours: C × (1 + v·(1 − C/0.3)²) below C = 0.3 (monotone: colours keep their order). |
+| `saturation` | number | fraction | [-1, 1] |  | `0` | Uniform chroma change after vibrance: C × (1 + saturation). |
+
+## `vignette`
+
+A vignette in linear light, centred on the frame (document pixels): rgb · 2^(stops · smoothstep(size, size + feather·(1 − size), ρ)), ρ = 1 at the corners.
+
+- Owner: CHB-037
+- On: Image (scene-rgb, print-rgb) → Image (same)
+- Class: pointwise; binding: setting
+- UI: "Vignette" in the effect menu (order 10)
+- Layer in: scene, print; encoding: linear
+- Implementation: stub
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `stops` | number | stop | [-4, 4] | [-2, 2] | `-0.5` | Exposure change at the corners (negative darkens). |
+| `size` | number | fraction | [0, 1] |  | `0.5` | Where the falloff starts, a fraction of the distance from the centre to the corners on the frame's ellipse. |
+| `feather` | number | fraction | [0, 1] |  | `0.5` | How much of the rest of the way the falloff takes (0: a hard edge, 1: it reaches the corners). |

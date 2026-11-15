@@ -30,7 +30,8 @@ Named points of the compiled document, in pipeline order; a frame has those of i
 
 - `frame.source()` → camera-linear — The decoded source as opened (source.open): linear sensor values.
 - `frame.scan()` → scanner-density (negative-scan only) — The scan in scanner density after the scan stage (flat field, flare, density, dust heal).
-- `frame.scene()` → scene-xyz (digital-raw only) — The scene in XYZ after white balance and the scene stage.
+- `frame.cut('scene.input')` → scene-xyz (digital-raw only) — The scene in XYZ after white balance, before the scene stage: what the scene stage's masks measure.
+- `frame.scene()` → scene-xyz (digital-raw only) — The scene in XYZ after white balance and the scene stage: what the film is exposed to.
 - `frame.film()` → film-dyes (digital-raw only) — The developed film of a camera file (after film.grain): its negative.
 - `frame.negative()` → film-dyes — The negative in dye amounts: the darkroom's input (invert.dyes of a scan, the film of a camera file).
 - `frame.cut('darkroom.main')` → paper-logH — The main exposure alone (print.expose of the entry main), before any other darkroom entry.
@@ -79,13 +80,55 @@ Layers (`insert('stages.scan.stack', id, layer(op, params))`):
 
 Camera files: white balance; digital adjustments before the film (scene-linear).
 
-Law **composite**: amount opacity in [0, 1]; blend modes; groups pass, isolated; order stack. Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op's encoding. Amount is opacity. A pass group's children act on the backdrop and the group fades their total effect; an isolated group blends its children's result as one layer with its mode.
+Law **composite**: amount opacity in [0, 1]; blend modes; groups pass, isolated; order stack. Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op's encoding (XYZ, linear RGB or OkLab; the compiler converts between them). Amount is opacity. A pass group's children act on the backdrop and the group fades their total effect; an isolated group blends its children's result as one layer with its mode.
 
 Medium (`stages.scene.medium`):
 
 - `stages.scene.medium.whiteBalance.mode`: enum daylight|as-shot|custom — White balance source.
 - `stages.scene.medium.whiteBalance.temperature_K`: number, K — Custom white balance temperature.
 - `stages.scene.medium.whiteBalance.tint`: number — Custom white balance tint (green–magenta).
+
+Layers (`insert('stages.scene.stack', id, layer(op, params))`):
+
+- `layer('curve', { channel, points }) in scene, print — A point curve (Lightroom's point curve, Photoshop's Curves) on lightness or one channel.`
+  - channel: enum L|R|G|B, default "L" — What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve).
+  - points: list, default [{"x":0,"y":0},{"x":1,"y":1}] — Control points in order of x (in a document: a Coll of points). The curve is the monotone cubic through them (Fritsch–Carlson): it never overshoots, so monotone points give a monotone curve; beyond the end points it continues along the end tangents.
+- `layer('exposure', { stops, offset }) in scene, print — Exposure in linear light: rgb · 2^stops + offset (Editor lab `exposure`, without its sRGB round trip and gamma).`
+  - stops: number, stop, [-6, 6], default 0 — Exposure change: linear RGB × 2^stops.
+  - offset: number, fraction, [-0.2, 0.2], default 0 — Added after the gain, a fraction of white (a black level: negative removes a veil).
+- `layer('grade', { shadowsHue_deg, shadowsChroma, shadowsLightness, midtonesHue_deg, midtonesChroma, midtonesLightness, highlightsHue_deg, highlightsChroma, highlightsLightness, balance }) in scene, print — Colour grading with shadow, midtone and highlight wheels in OkLab (Lightroom's Color Grading): weights (1 − t)², 2t(1 − t), t² of the lightness, a, b += L·Σ w·chroma·(cos hue, sin hue), L += 0.25·Σ w·lightness.`
+  - shadowsHue_deg: number, deg, [0, 360], default 230 — Shadows: the OkLCh hue of the tint.
+  - shadowsChroma: number, [0, 0.3], default 0 — Shadows: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - shadowsLightness: number, fraction, [-1, 1], default 0 — Shadows: lightness change, ΔL = 0.25 · lightness · weight.
+  - midtonesHue_deg: number, deg, [0, 360], default 60 — Midtones: the OkLCh hue of the tint.
+  - midtonesChroma: number, [0, 0.3], default 0 — Midtones: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - midtonesLightness: number, fraction, [-1, 1], default 0 — Midtones: lightness change, ΔL = 0.25 · lightness · weight.
+  - highlightsHue_deg: number, deg, [0, 360], default 70 — Highlights: the OkLCh hue of the tint.
+  - highlightsChroma: number, [0, 0.3], default 0 — Highlights: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - highlightsLightness: number, fraction, [-1, 1], default 0 — Highlights: lightness change, ΔL = 0.25 · lightness · weight.
+  - balance: number, fraction, [-1, 1], default 0 — Moves the split between the wheels: positive gives the highlights more of the range (t = clamp(L, 0, 1)^(2^−balance)).
+- `layer('hsl', { bands }) in scene, print — Hue, saturation and lightness per hue band in OkLCh (Lightroom's HSL panel); replaces the never-compiled finishing.hue.`
+  - bands: list, default [{"centre_deg":25,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":55,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":105,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":145,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":195,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":260,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":295,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":330,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0}] — Hue bands (in a document: a Coll; default the eight of Lightroom's HSL panel: red, orange, yellow, green, aqua, blue, purple, magenta). A band weighs a pixel by w = smoothstep(cos width, 1, cos(h − centre)); weights are normalised by max(1, Σw) and faded towards neutral (chroma below 0.04).
+- `layer('levels', { channel, black, white, gamma, outBlack, outWhite }) in scene, print — Levels on lightness or one channel: out = outBlack + (outWhite − outBlack)·g((x − black)/(white − black)), g(t) = t^(1/gamma) on [0, 1] and continued with slope 1 beyond, so nothing is clipped in the working encoding (the display knee clips).`
+  - channel: enum L|R|G|B, default "L" — What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve).
+  - black: number, fraction, [0, 1], default 0 — Input black point (the channel's lightness).
+  - white: number, fraction, [0, 1], default 1 — Input white point.
+  - gamma: number, [0.1, 10], default 1 — Midtone gamma: t^(1/gamma) between black and white (above 1 brightens).
+  - outBlack: number, fraction, [0, 1], default 0 — Output black: where the input black lands.
+  - outWhite: number, fraction, [0, 1], default 1 — Output white: where the input white lands.
+- `layer('mixer', { red, green, blue, monochrome, grey }) in scene, print — A 3 × 3 channel mixer in linear RGB, or black and white from weighted channels (Editor lab `bw`, generalised and in linear light).`
+  - red: vec3, fraction, [-2, 2], default [1,0,0] — Output red from input R, G, B (linear RGB).
+  - green: vec3, fraction, [-2, 2], default [0,1,0] — Output green from input R, G, B.
+  - blue: vec3, fraction, [-2, 2], default [0,0,1] — Output blue from input R, G, B.
+  - monochrome: bool, default false — Black and white: every channel becomes grey = grey · (R, G, B); the rows are not used.
+  - grey: vec3, fraction, [-2, 2], default [0.2627,0.678,0.0593] — Weights of R, G, B in the monochrome grey (default the luminance of Rec. 2020: a neutral conversion; filters shift them, as a red filter on panchromatic film).
+- `layer('vibrance', { vibrance, saturation }) in scene, print — Vibrance and saturation in OkLCh chroma (Editor lab `vibrance`, in chroma instead of an sRGB spread).`
+  - vibrance: number, fraction, [-1, 1], default 0.25 — Chroma change weighted to muted colours: C × (1 + v·(1 − C/0.3)²) below C = 0.3 (monotone: colours keep their order).
+  - saturation: number, fraction, [-1, 1], default 0 — Uniform chroma change after vibrance: C × (1 + saturation).
+- `layer('vignette', { stops, size, feather }) in scene, print — A vignette in linear light, centred on the frame (document pixels): rgb · 2^(stops · smoothstep(size, size + feather·(1 − size), ρ)), ρ = 1 at the corners.`
+  - stops: number, stop, [-4, 4], default -0.5 — Exposure change at the corners (negative darkens).
+  - size: number, fraction, [0, 1], default 0.5 — Where the falloff starts, a fraction of the distance from the centre to the corners on the frame's ellipse.
+  - feather: number, fraction, [0, 1], default 0.5 — How much of the rest of the way the falloff takes (0: a hard edge, 1: it reaches the corners).
 
 ### film (digital-raw)
 
@@ -152,7 +195,7 @@ Layers (`insert('stages.darkroom.stack', id, layer(op, params))`):
 
 The print under the viewing light: retouch, clarity, digital layers (print-referred).
 
-Law **composite**: amount opacity in [0, 1]; blend modes; groups pass, isolated; order stack. Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op's encoding. Amount is opacity. A pass group's children act on the backdrop and the group fades their total effect; an isolated group blends its children's result as one layer with its mode.
+Law **composite**: amount opacity in [0, 1]; blend modes; groups pass, isolated; order stack. Scene and print: entries apply bottom to top, v ← v + a·m·(B(v, A(v)) − v) in the op's encoding (XYZ, linear RGB or OkLab; the compiler converts between them). Amount is opacity. A pass group's children act on the backdrop and the group fades their total effect; an isolated group blends its children's result as one layer with its mode.
 
 Medium (`stages.print.medium`):
 
@@ -161,13 +204,55 @@ Medium (`stages.print.medium`):
 
 Layers (`insert('stages.print.stack', id, layer(op, params))`):
 
-- `layer('clarity', { strength, radius_mm }) in print — Local contrast on the print (a large unsharp mask weighted to the midtones), in linear light.`
+- `layer('clarity', { strength, radius_mm }) in print — Local contrast on the print (a large unsharp mask weighted to the midtones): the low-pass of the print's luminance in linear light, the detail in lightness.`
   - strength: number, fraction, [-1, 1], default 0.25 — Local contrast: positive adds, negative softens.
   - radius_mm: number, mm, [0.1, 100], default 10 — Radius of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size).
 - `layer('clone', { spots }) in scan, print — Clones circular spots: the source patch replaces the target as it is.`
   - spots: list, default [] — Spots in order; each reads the image as the spots before it left it (in a document: a Coll of spots).
+- `layer('curve', { channel, points }) in scene, print — A point curve (Lightroom's point curve, Photoshop's Curves) on lightness or one channel.`
+  - channel: enum L|R|G|B, default "L" — What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve).
+  - points: list, default [{"x":0,"y":0},{"x":1,"y":1}] — Control points in order of x (in a document: a Coll of points). The curve is the monotone cubic through them (Fritsch–Carlson): it never overshoots, so monotone points give a monotone curve; beyond the end points it continues along the end tangents.
+- `layer('exposure', { stops, offset }) in scene, print — Exposure in linear light: rgb · 2^stops + offset (Editor lab `exposure`, without its sRGB round trip and gamma).`
+  - stops: number, stop, [-6, 6], default 0 — Exposure change: linear RGB × 2^stops.
+  - offset: number, fraction, [-0.2, 0.2], default 0 — Added after the gain, a fraction of white (a black level: negative removes a veil).
+- `layer('grade', { shadowsHue_deg, shadowsChroma, shadowsLightness, midtonesHue_deg, midtonesChroma, midtonesLightness, highlightsHue_deg, highlightsChroma, highlightsLightness, balance }) in scene, print — Colour grading with shadow, midtone and highlight wheels in OkLab (Lightroom's Color Grading): weights (1 − t)², 2t(1 − t), t² of the lightness, a, b += L·Σ w·chroma·(cos hue, sin hue), L += 0.25·Σ w·lightness.`
+  - shadowsHue_deg: number, deg, [0, 360], default 230 — Shadows: the OkLCh hue of the tint.
+  - shadowsChroma: number, [0, 0.3], default 0 — Shadows: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - shadowsLightness: number, fraction, [-1, 1], default 0 — Shadows: lightness change, ΔL = 0.25 · lightness · weight.
+  - midtonesHue_deg: number, deg, [0, 360], default 60 — Midtones: the OkLCh hue of the tint.
+  - midtonesChroma: number, [0, 0.3], default 0 — Midtones: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - midtonesLightness: number, fraction, [-1, 1], default 0 — Midtones: lightness change, ΔL = 0.25 · lightness · weight.
+  - highlightsHue_deg: number, deg, [0, 360], default 70 — Highlights: the OkLCh hue of the tint.
+  - highlightsChroma: number, [0, 0.3], default 0 — Highlights: the tint's strength, OkLab chroma added at L = 1 (scaled by L, so black stays black).
+  - highlightsLightness: number, fraction, [-1, 1], default 0 — Highlights: lightness change, ΔL = 0.25 · lightness · weight.
+  - balance: number, fraction, [-1, 1], default 0 — Moves the split between the wheels: positive gives the highlights more of the range (t = clamp(L, 0, 1)^(2^−balance)).
 - `layer('heal', { spots }) in scan, print — Heals circular spots: the source patch, matched to the target's surroundings, replaces the target (dust on the negative in the scan stage, blemishes on the print).`
   - spots: list, default [] — Spots in order; each reads the image as the spots before it left it (in a document: a Coll of spots).
+- `layer('hsl', { bands }) in scene, print — Hue, saturation and lightness per hue band in OkLCh (Lightroom's HSL panel); replaces the never-compiled finishing.hue.`
+  - bands: list, default [{"centre_deg":25,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":55,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":105,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":145,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":195,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":260,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":295,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0},{"centre_deg":330,"width_deg":45,"hue_deg":0,"saturation":0,"lightness":0}] — Hue bands (in a document: a Coll; default the eight of Lightroom's HSL panel: red, orange, yellow, green, aqua, blue, purple, magenta). A band weighs a pixel by w = smoothstep(cos width, 1, cos(h − centre)); weights are normalised by max(1, Σw) and faded towards neutral (chroma below 0.04).
+- `layer('levels', { channel, black, white, gamma, outBlack, outWhite }) in scene, print — Levels on lightness or one channel: out = outBlack + (outWhite − outBlack)·g((x − black)/(white − black)), g(t) = t^(1/gamma) on [0, 1] and continued with slope 1 beyond, so nothing is clipped in the working encoding (the display knee clips).`
+  - channel: enum L|R|G|B, default "L" — What the tone function maps: L = OkLab lightness (tone without hue shifts); R, G, B = the cube root of that linear RGB channel, the same lightness scale (a neutral's R, G and B curves are its L curve).
+  - black: number, fraction, [0, 1], default 0 — Input black point (the channel's lightness).
+  - white: number, fraction, [0, 1], default 1 — Input white point.
+  - gamma: number, [0.1, 10], default 1 — Midtone gamma: t^(1/gamma) between black and white (above 1 brightens).
+  - outBlack: number, fraction, [0, 1], default 0 — Output black: where the input black lands.
+  - outWhite: number, fraction, [0, 1], default 1 — Output white: where the input white lands.
+- `layer('mixer', { red, green, blue, monochrome, grey }) in scene, print — A 3 × 3 channel mixer in linear RGB, or black and white from weighted channels (Editor lab `bw`, generalised and in linear light).`
+  - red: vec3, fraction, [-2, 2], default [1,0,0] — Output red from input R, G, B (linear RGB).
+  - green: vec3, fraction, [-2, 2], default [0,1,0] — Output green from input R, G, B.
+  - blue: vec3, fraction, [-2, 2], default [0,0,1] — Output blue from input R, G, B.
+  - monochrome: bool, default false — Black and white: every channel becomes grey = grey · (R, G, B); the rows are not used.
+  - grey: vec3, fraction, [-2, 2], default [0.2627,0.678,0.0593] — Weights of R, G, B in the monochrome grey (default the luminance of Rec. 2020: a neutral conversion; filters shift them, as a red filter on panchromatic film).
+- `layer('sharpen', { strength, radius_mm }) in print — An unsharp mask on the print's lightness (clarity without the midtone weight, at a small radius): the low-pass of Y in linear light, L = (Y / Y_w)^⅓, out = XYZ·(L′/L)³ (chromaticity kept, no clipping).`
+  - strength: number, fraction, [0, 3], default 0.5 — Sharpening: the lightness detail added, L′ = L + s·(L − L̄).
+  - radius_mm: number, mm, [0.01, 2], default 0.1 — Radius (Gaussian σ) of the low-pass on the print, mm (converted with ImageInfo.umPerPx.paper, so it is the same at every export size).
+- `layer('vibrance', { vibrance, saturation }) in scene, print — Vibrance and saturation in OkLCh chroma (Editor lab `vibrance`, in chroma instead of an sRGB spread).`
+  - vibrance: number, fraction, [-1, 1], default 0.25 — Chroma change weighted to muted colours: C × (1 + v·(1 − C/0.3)²) below C = 0.3 (monotone: colours keep their order).
+  - saturation: number, fraction, [-1, 1], default 0 — Uniform chroma change after vibrance: C × (1 + saturation).
+- `layer('vignette', { stops, size, feather }) in scene, print — A vignette in linear light, centred on the frame (document pixels): rgb · 2^(stops · smoothstep(size, size + feather·(1 − size), ρ)), ρ = 1 at the corners.`
+  - stops: number, stop, [-4, 4], default -0.5 — Exposure change at the corners (negative darkens).
+  - size: number, fraction, [0, 1], default 0.5 — Where the falloff starts, a fraction of the distance from the centre to the corners on the frame's ellipse.
+  - feather: number, fraction, [0, 1], default 0.5 — How much of the rest of the way the falloff takes (0: a hard edge, 1: it reaches the corners).
 
 ## Masks
 
@@ -176,6 +261,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
 - `linear` { from, to } — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).
   - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
   - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (document px).
+- `radial` { box, angle_deg, feather } — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.
+  - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+  - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - `ellipse` { box, angle_deg } — Mask component 'ellipse': the ellipse inscribed in the box.
   - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
   - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
@@ -185,6 +274,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
   - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
   - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
   - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
+- `colour` { colour, tolerance, softness } — Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance).
+  - colour: vec3, [-0.5, 1.5], default [0.7,0,0] — The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures).
+  - tolerance: number, [0, 1], default 0.1 — OkLab distance ΔE within which the mask is 1.
+  - softness: number, [0, 1], default 0.05 — Distance over which it falls to 0 beyond the tolerance (a smoothstep).
 
 ## Handles in camera-linear
 
@@ -203,6 +296,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -263,6 +360,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -302,6 +403,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -364,6 +469,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -430,6 +539,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -483,6 +596,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -523,6 +640,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -573,6 +694,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -615,6 +740,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -647,6 +776,170 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
   - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
     - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
 
+## Handles in scene-rgb
+
+- **mask**
+  - `h.mask.constant({ value }) → mask — A uniform mask of the receiver's size: the empty mask (0) a component fold starts from, or full coverage (1).`
+    - value: number, fraction, [0, 1], default 0 — The coverage everywhere (0: the empty mask, where every fold starts).
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Mask component 'ellipse': the ellipse inscribed in the box.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.linear({ from, to }) → mask — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).`
+    - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
+    - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (document px).
+  - `h.mask.luminance({ above, below, softness }) → mask — Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below].`
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
+    - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
+  - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
+    - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+- **measure**
+  - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
+    - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
+    - bins: number, [8, 1024], default 64 — Number of bins.
+    - returns `edges`, `counts`
+  - `h.measure.patches({ box, cols, rows }) → value — Mean value per grid cell (test strips, ring-arounds, charts).`
+    - box: box, px, optional — Region; absent = whole image.
+    - cols: number, [1, 24], default 1 — Columns.
+    - rows: number, [1, 24], default 1 — Rows.
+    - returns `cells`
+  - `h.measure.stats({ box, mask }) → value — Exact statistics over a region.`
+    - box: box, px, optional — Region in source px; absent = whole image.
+    - mask: Mask, optional — Weighting mask.
+    - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
+- **view**
+  - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
+    - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
+
+## Handles in scene-oklab
+
+- **mask**
+  - `h.mask.colour({ colour, tolerance, softness }) → mask — Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance).`
+    - colour: vec3, [-0.5, 1.5], default [0.7,0,0] — The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures).
+    - tolerance: number, [0, 1], default 0.1 — OkLab distance ΔE within which the mask is 1.
+    - softness: number, [0, 1], default 0.05 — Distance over which it falls to 0 beyond the tolerance (a smoothstep).
+  - `h.mask.constant({ value }) → mask — A uniform mask of the receiver's size: the empty mask (0) a component fold starts from, or full coverage (1).`
+    - value: number, fraction, [0, 1], default 0 — The coverage everywhere (0: the empty mask, where every fold starts).
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Mask component 'ellipse': the ellipse inscribed in the box.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.linear({ from, to }) → mask — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).`
+    - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
+    - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (document px).
+  - `h.mask.luminance({ above, below, softness }) → mask — Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below].`
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
+    - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
+  - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
+    - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+- **measure**
+  - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
+    - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
+    - bins: number, [8, 1024], default 64 — Number of bins.
+    - returns `edges`, `counts`
+  - `h.measure.patches({ box, cols, rows }) → value — Mean value per grid cell (test strips, ring-arounds, charts).`
+    - box: box, px, optional — Region; absent = whole image.
+    - cols: number, [1, 24], default 1 — Columns.
+    - rows: number, [1, 24], default 1 — Rows.
+    - returns `cells`
+  - `h.measure.stats({ box, mask }) → value — Exact statistics over a region.`
+    - box: box, px, optional — Region in source px; absent = whole image.
+    - mask: Mask, optional — Weighting mask.
+    - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
+- **view**
+  - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
+    - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
+
+## Handles in print-rgb
+
+- **mask**
+  - `h.mask.constant({ value }) → mask — A uniform mask of the receiver's size: the empty mask (0) a component fold starts from, or full coverage (1).`
+    - value: number, fraction, [0, 1], default 0 — The coverage everywhere (0: the empty mask, where every fold starts).
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Mask component 'ellipse': the ellipse inscribed in the box.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.linear({ from, to }) → mask — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).`
+    - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
+    - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (document px).
+  - `h.mask.luminance({ above, below, softness }) → mask — Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below].`
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
+    - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
+  - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
+    - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+- **measure**
+  - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
+    - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
+    - bins: number, [8, 1024], default 64 — Number of bins.
+    - returns `edges`, `counts`
+  - `h.measure.patches({ box, cols, rows }) → value — Mean value per grid cell (test strips, ring-arounds, charts).`
+    - box: box, px, optional — Region; absent = whole image.
+    - cols: number, [1, 24], default 1 — Columns.
+    - rows: number, [1, 24], default 1 — Rows.
+    - returns `cells`
+  - `h.measure.stats({ box, mask }) → value — Exact statistics over a region.`
+    - box: box, px, optional — Region in source px; absent = whole image.
+    - mask: Mask, optional — Weighting mask.
+    - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
+- **view**
+  - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
+    - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
+
+## Handles in print-oklab
+
+- **mask**
+  - `h.mask.colour({ colour, tolerance, softness }) → mask — Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance).`
+    - colour: vec3, [-0.5, 1.5], default [0.7,0,0] — The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures).
+    - tolerance: number, [0, 1], default 0.1 — OkLab distance ΔE within which the mask is 1.
+    - softness: number, [0, 1], default 0.05 — Distance over which it falls to 0 beyond the tolerance (a smoothstep).
+  - `h.mask.constant({ value }) → mask — A uniform mask of the receiver's size: the empty mask (0) a component fold starts from, or full coverage (1).`
+    - value: number, fraction, [0, 1], default 0 — The coverage everywhere (0: the empty mask, where every fold starts).
+  - `h.mask.ellipse({ box, angle_deg }) → mask — Mask component 'ellipse': the ellipse inscribed in the box.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.linear({ from, to }) → mask — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).`
+    - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
+    - to: point, px, default {"x":0,"y":100} — Where the mask is 0 (document px).
+  - `h.mask.luminance({ above, below, softness }) → mask — Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below].`
+    - above: number, fraction, [0, 1], default 0 — Select values above this (normalised to the domain range). 0 means no lower bound (values below the domain range stay selected).
+    - below: number, fraction, [0, 1], default 1 — Select values below this. 1 means no upper bound.
+    - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
+  - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
+    - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+- **measure**
+  - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
+    - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
+    - bins: number, [8, 1024], default 64 — Number of bins.
+    - returns `edges`, `counts`
+  - `h.measure.patches({ box, cols, rows }) → value — Mean value per grid cell (test strips, ring-arounds, charts).`
+    - box: box, px, optional — Region; absent = whole image.
+    - cols: number, [1, 24], default 1 — Columns.
+    - rows: number, [1, 24], default 1 — Rows.
+    - returns `cells`
+  - `h.measure.stats({ box, mask }) → value — Exact statistics over a region.`
+    - box: box, px, optional — Region in source px; absent = whole image.
+    - mask: Mask, optional — Weighting mask.
+    - returns `mean`, `p01`, `p99`, `clipLow`, `clipHigh`
+- **view**
+  - `h.view.inspect({ mode }) → display-rgb — Renders an intermediate domain for inspection (negative, dye, class views) as display RGB.`
+    - mode: enum negative|density|dyes|classes|mask, default "negative" — Inspection view.
+
 ## Handles in display-rgb
 
 - **mask**
@@ -664,6 +957,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -708,6 +1005,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -743,6 +1044,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -778,6 +1083,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -813,6 +1122,10 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+    - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).

@@ -9,6 +9,7 @@ More light through the negative under a mask (a split exposure is a burn with it
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Burn" in the light menu (order 10)
 - Layer in: darkroom; encoding: stage; light term: contribution
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 
@@ -98,6 +99,7 @@ A neutral silver mask made from the negative and sandwiched with it (CHB-010 §6
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: spatial; binding: setting
+- UI: "Density mask" in the light menu (order 50)
 - Layer in: darkroom; encoding: stage; light term: modulator
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 
@@ -114,6 +116,7 @@ Light held back from the main exposure under a mask (never more than the main gi
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Dodge" in the light menu (order 20)
 - Layer in: darkroom; encoding: stage; light term: contribution
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 
@@ -129,6 +132,7 @@ The main exposure through the negative: exactly one per document, id `main`. Amo
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Main exposure" in the light menu (order 0)
 - Layer in: darkroom; encoding: stage; light term: main
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 - See: `burn`, `dodge`, `print.expose`
@@ -146,6 +150,7 @@ A filter in the light path: the printer lights, or a local colour correction in 
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Filter" in the light menu (order 60)
 - Layer in: darkroom; encoding: stage; light term: modulator
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 
@@ -160,6 +165,7 @@ Light that does not pass the image: uniform under its mask, not held back by den
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Flash" in the light menu (order 30)
 - Layer in: darkroom; encoding: stage; light term: contribution
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 
@@ -177,6 +183,7 @@ A uniform pre-exposure of the paper, added after the filters (it is measured aga
 - Owner: CHB-037
 - On: none (—) → Term
 - Class: pointwise; binding: setting
+- UI: "Preflash" in the light menu (order 40)
 - Layer in: darkroom; encoding: stage; light term: contribution
 - Implementation: the light law (lowered to print.expose, print.densityMask and print.combine; no engine evaluates it)
 

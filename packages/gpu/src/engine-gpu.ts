@@ -35,6 +35,7 @@ import { planGraph } from './engine/dag.ts';
 import { cancelled, COMBINE_WGSL, GPU_OPS, type Cached, type GridTarget, type Lowered, type Plan, type SourceImg, type U16Result } from './engine/defs.ts';
 import { FLAG, MODE, combineArgs, lightPasses } from './engine/light.ts';
 import { fillGrain, lightContext, lowerChain } from './engine/lower.ts';
+import { blendCode, encodingCode } from './chain/working.ts';
 import { reduceMeasure } from './engine/reduce.ts';
 import { addResult } from './engine/results.ts';
 import { combinePass, gaussianBlur, readU16, syntheticSource, uploadF32, uploadU16 } from './engine/textures.ts';
@@ -470,10 +471,12 @@ export class GpuEngine implements Engine {
         return H!;
       }
       case 'composite.mix': {
-        // the composite law per entry (contract mixPixel): exact at coverage 0 and 1
-        if (a['blend'] !== 'normal') return fail('E_NOT_IMPLEMENTED', `composite.mix blend ${String(a['blend'])} has no GPU kernel`);
+        // the composite law per entry (contract mixPixel, core blendPixel): exact at coverage 0 and 1; a mix without a
+        // mask whose top is a pointwise chain on its backdrop is fused instead (engine/dag.ts fusedMixTop)
         const m = a['mask'] as string | undefined;
-        return this.mix(MODE.MIX, recv, tex(a['top'] as string), m === undefined ? null : tex(m), m === undefined ? 0 : FLAG.MASK, [a['amount'] as number]);
+        const enc = encodingCode((this.graph.get(n.inputs[0]!)!.info as ImageInfo).domain);
+        if (a['blend'] !== 'normal' && enc === 0) return fail('E_DOMAIN', `composite.mix: the blend ${String(a['blend'])} needs a working encoding (rgb or oklab)`);
+        return this.mix(MODE.MIX, recv, tex(a['top'] as string), m === undefined ? null : tex(m), m === undefined ? 0 : FLAG.MASK, [a['amount'] as number, blendCode(a['blend']), enc]);
       }
       case 'mask.combine': {
         // the one mask algebra (contract maskCombine): add = max, subtract = v·(1 − c), intersect = v·c
@@ -498,14 +501,15 @@ export class GpuEngine implements Engine {
         this.rt.textures.release(Hm);
         return out;
       }
-      case 'clarity': {
-        // core print/clarity.ts: local contrast in lightness, midtone-weighted; the low-pass of Y at σ = radius on the print
+      case 'clarity': case 'sharpen': {
+        // core print/clarity.ts: lightness detail over the low-pass of Y at σ = radius on the print, midtone-weighted for
+        // clarity, not for sharpen
         const info = n.info as ImageInfo;
         const chain = this.chainOf(nid);
         const Yw = whiteAt(this.physics.ctx(chain, chain.length - 1))[1];
-        const low = await this.gaussian(recv, claritySigma(a['radius_mm'] as number, info.umPerPx.paper) * scale, 1);
+        const low = await this.gaussian(recv, claritySigma(a['radius_mm'] as number, info.umPerPx.paper, n.op) * scale, 1);
         try {
-          return await this.mix(MODE.CLARITY, recv, low, null, 0, [a['strength'] as number, Yw]);
+          return await this.mix(MODE.CLARITY, recv, low, null, 0, [a['strength'] as number, Yw, n.op === 'clarity' ? 1 : 0]);
         } finally {
           this.rt.textures.release(low);
         }
