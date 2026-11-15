@@ -339,3 +339,95 @@ and known uses, and fixed what did not hold.
 
 ### Technical details
 - Final counts: chapter 9 3,004 words (2,678 outside code); chapter 10 3,031 words (2,714 outside code).
+
+## Step 5: Revision after review
+
+The coordinator relayed general lessons from a fresh reader's review of chapters 3 and 8 (a second-year student with
+no image or GPU background) and asked me to apply them to chapters 9 and 10, aiming at ≤ 2,800 raw words each. I
+revised both: cut project history and platform detail, glossed or removed image and GPU terms, closed a hole in the
+cache sketch, defined the statistical terms once, added a non-image mapping of the participants, and gave chapter 10
+an exercise that shows coordinated omission on a simulated server.
+
+### Prompt Context
+
+**User prompt (verbatim):** (relayed by the coordinating agent) "Revision round. A fresh reader (playing a
+second-year CS student with no image/GPU knowledge) reviewed chapters 3 and 8 of this volume. Its findings
+generalise; apply the lessons below to your chapters 9 and 10. … Edit only your two chapters and your diary (add a
+\"Revision after review\" step). Do not commit. Report what changed and word counts before/after (target ≤ 2,800
+raw)."
+
+**Assistant interpretation:** Same chapters, same facts; shorter, glossed, general Solution, sound sketches,
+student-doable exercises.
+
+**Inferred user intent:** Chapters a student can read without the example programs' history or vocabulary.
+
+### What I did
+- Chapter 9: 3,004 → 2,794 words (raw `wc -w`). Implementation notes 619 words (my first-pass rewrite had 684; the
+  original was longer, not measured separately). Notes went from 10 to 10, merged and shortened: the OPFS note now
+  points at the sketch's `fromDisk` instead of repeating it; the pipeline note folds in "memoise the key"; note 8
+  covers both programs in one sentence.
+  - Glosses: layer, tile, GPU ("the graphics processor's (GPU's) memory"), reference engine ("the slow, exact one kept
+    beside the fast one"), colour tables ("precomputed"), mask-confined layers in plain words. Removed: "apron",
+    "residency", "texture", "Origin Private File System" (now "a disk store in the browser"), "dispatch".
+  - Solution: no image words; "Never evict an entry someone holds" replaces "just stored or held" (the sketch now
+    holds the stored entry).
+  - Sketch: entries are **held** on `get` and `put` and freed by `release`; `evict` only takes entries with
+    `holds = 0`, so an entry cannot be evicted while a reader uses it; `put` of an existing key returns the stored one;
+    `entries` is defined as ordered by last use; helpers named in a header comment; `render` explained; units of
+    cost and H stated. The old `keep` parameter (a mechanism only the comment explained) is gone.
+  - Added a web-proxy mapping under Structure; added exercise 4 (build the cache with a fake producer, test that a
+    held entry is never evicted); dropped the key-width exercise (note 3 covers it) and the darktable variation
+    (third-party detail).
+- Chapter 10: 3,031 → 2,798 words. Implementation notes 806 → 596 (−26 %), 11 → 10 (the "measurements that steer"
+  note was cut as project history).
+  - Motivation item 1 lost its second bug (the colour-gamut search) and the test's internals; item 4 lost the p95
+    sentence (percentile is now defined after the Solution).
+  - Glosses: frame (one screen redraw, 16.7 ms at 60 per second), worker, GPU, closed loop, open loop, coordinated
+    omission, service vs response time, percentile/p50/p95, monotonic clock, "mean of each repeat's p95". Removed:
+    timestamp queries and Chrome's 100 µs rounding (one lesson kept: time to completion), "dispatch", "tile".
+  - Units: latencies in ms throughout (4,200 → 740 ms; 780 → 1,650 ms); seconds only for the simulation's length.
+  - Solution: image words only in parentheses ("the screen or the response that shows the answer").
+  - Sketch: the probe is created before the app that reports to it; `shown(id)` documents that the program reports
+    the newest request each answer includes; unanswered requests refuse instead of vanishing; the gate's message
+    names `req.measure` instead of a hard-coded "p95"; helpers and the clock's unit named.
+  - Added a web-service mapping under Structure; replaced the closed-form web exercise with exercise 2: simulate a
+    fake server (1 ms per request, stalled from 50 s to 52 s) for 100 s with a closed-loop and an open-loop driver
+    and compare count, p50, p99, maximum. Expected: closed loop p99 ≈ 1 ms, one ≈ 2,000 ms sample; open loop about
+    200 samples between 0 and 2,000 ms, p99 ≈ 1,000 ms.
+  - Variations: "trend instead of gate" folded into Applicability.
+- Both: star line restored to the volume's normalised form (`**★** A good form …`); my earlier full rewrite of
+  chapter 9 had replaced it. All sibling chapters now exist, and every relative link in both chapters resolves
+  (checked with a file-existence loop). No prose line over 120 characters.
+
+### Why
+- The reviewer's lessons: a student cannot use §-references, platform trivia or second bugs; every term glossed once;
+  the Solution standalone; sketches without holes.
+
+### What worked
+- Defining terms once (frame, percentile, closed/open loop) let later notes shrink.
+
+### What didn't work
+- My first chapter 9 rewrite grew to 3,110 words because the safer sketch is longer; several trimming passes
+  (Known uses, Related chapters, Variations, Applicability) brought it under 2,800.
+
+### What I learned
+- The held/release protocol made the "never evict the entry just stored" special case unnecessary: storing returns a
+  held entry.
+
+### What was tricky to build
+- Keeping each example lesson while cutting its history: the 4.2 s episode now reads as "the test gated frame gaps,
+  passed, was changed to wait; the fix gave 4,200 → 740 ms", with the causes left to the diary.
+
+### What warrants a second pair of eyes
+- Chapter 9's sketch updates `H` and the LRU order on every `get` regardless of policy, and raises the clock with
+  `max(clock, victim.H)` for both policies; harmless for LRU, but a reader may ask why.
+- Chapter 10 exercise 2's expected numbers above are my hand calculation, not a run.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- Diff both chapters against Step 4's versions (no commit exists; compare with this step's list).
+
+### Technical details
+- Counts: `wc -w` 09: 3,004 → 2,794; 10: 3,031 → 2,798.

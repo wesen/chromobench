@@ -446,3 +446,106 @@ syntax, portability, privacy and length.
 ### Technical details
 
 - Final counts: chapter 1 2,797 words (2,565 outside code); chapter 2 2,772 (2,504 outside code).
+
+## Step 5: Revision after review
+
+A fresh reader, playing a second-year student with no image or GPU background, reviewed chapters 3 and 8. The
+coordinator passed on its general lessons, and I applied them to chapters 1 and 2. Every lesson from the earlier draft
+is kept, but there is less project history, every image or GPU term is glossed or cut, each sketch defines the
+names it uses, and each chapter has an exercise that makes the student write the check the pattern relies on.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Revision round. A fresh reader (playing a second-year CS student with no image/GPU
+knowledge) reviewed chapters 3 and 8 of this volume. Its findings generalise; apply the lessons below to your
+chapters 1 and 2. Edit only your two chapters and your diary (add a \"Revision after review\" step). Do not commit.
+Report what changed and word counts before/after." (followed by the list of general lessons: cut project history,
+gloss terms, consistent units, general Solution, sketch completeness, precise mathematical vocabulary, a non-image
+mapping of participants, concrete exercises including a check-writing one)
+
+**Assistant interpretation:** Revise both chapters against that checklist without losing lessons or verified facts.
+
+**Inferred user intent:** Chapters a student outside graphics can read and use.
+
+### What I did
+
+- Word counts (`wc -w`, whole file): chapter 1 2,797 → 2,806; chapter 2 2,772 → 2,800. Outside code blocks:
+  chapter 1 2,565 → about 2,380; chapter 2 2,504 → about 2,450. Implementation notes, with the closing habitability
+  paragraph: chapter 1 694 → 584 (−16 %); chapter 2 682 → 574 (−16 %).
+- Chapter 1:
+  - Motivation: WebGPU glossed; second bug in item 3 (ignored region) removed; "export code" glossed.
+  - Forces: GPU-specific wording made general ("split a large job into pieces"; "a fast engine can fail
+    mid-session").
+  - Solution: "names its unit and device" → "names its unit and the machine it was measured on".
+  - Applicability: "properties: identities, symmetries" replaced by a correct example ("sorting twice changes
+    nothing"), avoiding a loose use of "identity".
+  - Structure: added a line naming the participants in a web service.
+  - Sketch rewritten: `Request`, `Result`, `Caps` defined; rules written as named rules, each a conformance case;
+    `caseFor`, `delegate`, `Mutant` defined; mutant concretely built (ignores region); parity compares `.pixels` and
+    passes `cancel: never`; `chooseEngine` disposes an unavailable engine and refuses when none can run (hole: the old
+    version leaked the engine and fell off the end); `parity(...)` called with a stated tolerance in levels.
+  - Notes: merged the generated-suite note into note 1; removed adapter/software-fallback detail, the five-mutant
+    inventory, the "worker" and the error hint; glossed level, preview, "masked", WGSL; every number now says why it
+    matters (1.6 levels accepted for speed vs < 0.1 below visibility; 1e-12 invisible but breaks bit-identity; 640 vs
+    4,000 px keeps the slow engine responsive).
+  - Exercises: new exercise 1 (exact `math.fsum` reference vs left-to-right sum, parity test with a justified
+    tolerance, a broken engine that drops the last element and must fail); the key-value exercise made concrete
+    (sorted list vs hash map); the exercise that needed chromobench (the leaking ability) dropped.
+  - Trimmed to stay near 2,800: dropped BLAS from Known uses, the Chapter 5 related line, the router detail.
+- Chapter 2:
+  - Motivation: glossed stops, uniform; cut project history (the predecessor's 112-byte hand-packed uniform) and the
+    second-project bug about two Playwright configurations (platform trivia); replaced it with the scenario's own
+    failure (documentation describing last month's range). Item 4 glosses operation numbers instead of "opcodes".
+  - Structure: added the web-service mapping.
+  - Sketch: types glossed (f32, u32, vec3); struct shrunk to four fields (offsets 0, 4, 16, 28; size 32, recomputed
+    by hand from `layout.ts:21-43`); `ops` and `artifacts` defined; `detents` glossed; the checker's range test written
+    out; packer refuses missing fields (closing the zero-fill hole the old sketch fell into, since it packed only
+    `gain`); validation result matched before use; `parseGpuStruct` and `agreement` defined; `show`/`upload` named.
+  - Notes: removed file inventories and the Go-embedding detail; glossed GPU terms; note 2 says "the most operations
+    one GPU pass may run (12)" instead of MAXOPS; note 9 says "a baseline", which is what `contract-check.ts:1-4`
+    compares against (main's snapshot or the newest released one), not "the last release".
+  - Exercises: exercise 1 now has the student write the freshness check and break it by hand-editing a generated
+    file; exercise 3 gives the answer and asks for the agreement test, with no project names (Exercises must be
+    portable).
+
+### Why
+
+- The reviewer's lessons apply directly: both chapters had project history and unglossed GPU terms, and both
+  sketches used undefined names. The chapter 2 sketch also had a real hole.
+
+### What worked
+
+- A section-replacement helper in the scratchpad (`rev/secrep.py`) made whole-section rewrites safe (it asserts that
+  every old string is present).
+
+### What didn't work
+
+- The first revision of chapter 1 grew to 3,063 words because the fuller sketch and the new exercise added text. I
+  cut Known uses, Related chapters, Variations and Consequences to get back to 2,806.
+
+### What I learned
+
+- The old chapter 2 sketch demonstrated the very trap its note 3 warns about (packing a struct with missing fields).
+
+### What was tricky to build
+
+- Keeping every lesson while cutting 16 % of note prose: merged notes 1 and 2 of chapter 1, and pointed chapter 2's
+  note 6 back to the Motivation instead of repeating the Editor lab detail.
+
+### What warrants a second pair of eyes
+
+- Both files are at about 2,800 words counted with code blocks and tables. Without the code they are about 2,400.
+
+### What should be done in the future
+
+- N/A
+
+### Code review instructions
+
+- Compare each chapter's Sketch with the definitions above; check the offsets 0, 4, 16, 28 / 32 by the rules in
+  `CB/packages/gpu/src/layout.ts:21-43`.
+
+### Technical details
+
+- Links unchanged except that chapter 1 no longer links chapter 5; all remaining relative links resolve. Mermaid
+  diagrams unchanged. A scan confirms project names now appear only in Motivation and Implementation notes.
