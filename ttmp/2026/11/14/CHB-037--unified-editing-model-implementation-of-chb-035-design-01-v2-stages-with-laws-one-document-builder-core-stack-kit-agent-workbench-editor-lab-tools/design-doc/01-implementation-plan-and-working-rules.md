@@ -353,3 +353,43 @@ import only `@chromobench/values`, so the generic log lives there.
   onto drafts.
 - Not in P4: the studio-kit bridge (`editlog-route.ts`) and every studio-kit/app consumer — P5b rewires them.
 - Acceptance: values, contract and shell typecheck and vitest green; the diary describes the API P5b and P6 use.
+
+### Amendments after P3 and P4 (main agent)
+
+- **History (P4)**: `Log` in `@chromobench/values` (diary `08-phase-p4-history.md` Step 5 has every signature);
+  `LOG_RULES` in the contract; the shell store's document tier is `store.log` (`store.open/close`, `store.change`,
+  `k.mount(prefix, { keyDepth, kind })`, `ctx.draft`, `ctx.log`; `Layer` → `Draft`; state is deep-frozen). Batches:
+  `plan(targets, fn, meta)`; agents propose, users commit; `why`/`trail` for provenance.
+- **GPU (P3)**: on contract 1.0, parity 47/47 on SwiftShader and Metal. Known gaps: `output.frame` has no GPU
+  implementation (the studio's host wrapper or P8 covers the `display` cut on the GPU); **tiled export with spatial
+  ops is wrong at tile borders** (`planFor` declares no kernels: density masks, feathers, clarity computed per tile) —
+  a correctness bug for P8; `composite.mix` is normal-only and a barrier.
+
+## 7. Wave 3 specifications
+
+### P5b-1 — the studio on the document and the log
+
+Owns `packages/studio-kit/`, `apps/studio/`, `packages/output/`, `packages/ingest/`, `e2e/`. Bring every consumer of
+the old recipe and the two old histories onto document format 3 and the values log, with today's features: the
+store's `k.mount('recipes', { keyDepth: 1, kind: 'frame' })` (rename to `docs` if cleaner) and `store.open` per frame;
+`LOG_RULES` at `app.start`; delete `editlog-route.ts`, `StudioLog`, the roll `buildBatch` and the looks `planApply`
+batching in favour of `plan`; the first print (`apps/studio/src/host/first-print.ts`) on cuts (`darkroom.H`) and
+`bakeLights(doc)`; `StudioEngine` (keep the host `output.frame` for the GPU's `display` cut until P8); controls from
+the catalogue on document paths (`argPath` is gone: controls address `<entryId>.params.<arg>` and media paths);
+ingest's dust detection produces heal layers with an explicit `src`; output's export on documents
+(`documentSha256`). Hard cut-off: stored studio state of the old format is cleared once with a clear message.
+Acceptance: typecheck of these packages, vitest, lint, `pnpm gen:check` for the studio-kit docs, and the browser
+suite green headless on SwiftShader (ports 5561–5564; the `[chromium-webgpu]` studio specs exercise the new GPU ops
+end to end) — the diary lists any spec that changed and why. The stack kit is NOT in P5b-1.
+
+### P6a — the agent's DSL and the agent on contract 1.0 and the log
+
+Owns `packages/dsl/`, `packages/agent/`. Bring the DSL and the agent onto the document, cuts and the log: frame
+handles address cuts (`frame.cut('print')`, `frame.print()` as the `print` cut, `frame.finished()`, `frame.display()`);
+`printChain` is deleted and every what-if is `compile(edit(doc, tx).doc)` or `log.draft(f).apply(...).value`;
+edits are built with the values/contract builders (layers, groups, masks as values; `insert`, `set`, `remove`, `move`)
+and proposed (`log.propose`, batches via `plan`); `EvalResult.transactions`; `h.look()` → `h.show()` (one meaning of
+"look"); named looks stay as they are until P7 makes them links; delete `MirrorLog`. Regenerate the DSL reference
+(`pnpm gen`; the full run works once dsl and agent compile). Acceptance: dsl and agent typecheck and vitest green;
+`pnpm gen:check` green; the agent examples rewritten. The workbench surface `wb` (commands, state, layouts, screen) is
+P6b, after P5b.

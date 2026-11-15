@@ -2,8 +2,14 @@
 // format-3 document whose printer lights are the filter layer `lights`).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { check, compile, cutNode, edit, EditLog, Graph, law, newDocument, sha256Hex, type Compiled, type Node } from '@chromobench/contract';
-import { set } from '@chromobench/values';
+import { check, compile, cutNode, edit, Graph, law, LOG_RULES, newDocument, sha256Hex, type Compiled, type Document, type Node } from '@chromobench/contract';
+import { canonicalJSON, Log, set, transaction, type Mutation } from '@chromobench/values';
+
+/** One frame in the document log, as the studio opens it. */
+const openLog = (doc: Document) => Log.create({ rules: LOG_RULES }).open('f', doc, { kind: 'frame', by: 'auto' });
+const stateOf = (log: Log) => log.doc<Document>('f');
+const hashOf = (log: Log) => sha256Hex(canonicalJSON(stateOf(log)));
+const tx = (id: string, label: string, by: 'user' | 'agent', mutations: Mutation[]) => ({ doc: 'f', tx: transaction({ id, label, by, mutations }) });
 import { M1, makeM1Tiff, MockEngine } from '@chromobench/engine-mock';
 import { readTiffCodes } from '@chromobench/ingest';
 
@@ -53,9 +59,9 @@ describe('M1 fixture', () => {
 describe('§6 trace on the mock engine', () => {
   it('reproduces every stage to 1e-4, reuses upper nodes, and undo restores pixel and hash', async () => {
     const { engine, g, info } = await setup();
-    const log = EditLog.create(doc0(info.sha256), { mode: 'ask' });
-    const s0 = log.stateHash;
-    const top0 = compile(log.state, g);
+    let log = openLog(doc0(info.sha256));
+    const s0 = hashOf(log);
+    const top0 = compile(stateOf(log), g);
     close(await pixelOf(engine, g, nodeAt(g, top0, 'scan.density')), golden.scannerDensity);
     close(await pixelOf(engine, g, nodeAt(g, top0, 'invert.dyes')), golden.scannerDensity);
     close(await pixelOf(engine, g, cutNode(top0, 'darkroom.H')), golden.before.x);
@@ -63,10 +69,10 @@ describe('§6 trace on the mock engine', () => {
     const p0 = await pixelOf(engine, g, display(top0));
     close(p0, golden.before.display);
 
-    log.apply([set('lights.params.logH', golden.after.lightsLogH)], 'user', 'Printer lights');
-    const s1 = log.stateHash;
+    log = log.commit(tx('t1', 'Printer lights', 'user', [set('lights.params.logH', golden.after.lightsLogH)]));
+    const s1 = hashOf(log);
     expect(s1).not.toBe(s0);
-    const top1 = compile(log.state, g);
+    const top1 = compile(stateOf(log), g);
     const upper = g.closure(top1.display.id).slice(0, 4);
     expect(upper.map((d) => d.op)).toEqual(['source.open', 'scan.density', 'invert.dyes', 'print.expose']);
     expect(cutNode(top1, 'darkroom.H').op).toBe('print.combine');
@@ -77,22 +83,22 @@ describe('§6 trace on the mock engine', () => {
     // upper nodes were computed once and served from cache for the new chain
     for (const d of upper) expect(engine.runs(g.adopt([d]).at(-1)!.id), d.op).toBe(1);
 
-    log.undo();
-    expect(log.stateHash).toBe(s0);
-    const top2 = compile(log.state, g);
+    log = log.undo();
+    expect(hashOf(log)).toBe(s0);
+    const top2 = compile(stateOf(log), g);
     expect(top2.display.id).toBe(top0.display.id);
     expect(await pixelOf(engine, g, display(top2))).toEqual(p0);
   });
 
   it('agent proposal in ask mode: pending leaves the pixel, approval matches the user edit', async () => {
     const { engine, g, info } = await setup();
-    const log = EditLog.create(doc0(info.sha256), { mode: 'ask' });
-    const p0 = await pixelOf(engine, g, display(compile(log.state, g)));
-    const prop = log.propose([set('lights.params.logH', [0.1, 0, 0])], { tx: 'eval-1', why: '+4 pt red' });
-    expect(await pixelOf(engine, g, display(compile(log.state, g)))).toEqual(p0);
-    log.approve([prop.seq]);
-    close(await pixelOf(engine, g, display(compile(log.state, g))), golden.after.display);
-    expect(log.why('lights.params.logH').at(-1)).toMatchObject({ by: 'agent', approvedBy: 'user' });
+    let log = openLog(doc0(info.sha256));
+    const p0 = await pixelOf(engine, g, display(compile(stateOf(log), g)));
+    log = log.propose(tx('eval-1', 'eval-1', 'agent', [set('lights.params.logH', [0.1, 0, 0])]), { why: '+4 pt red' });
+    expect(await pixelOf(engine, g, display(compile(stateOf(log), g)))).toEqual(p0);
+    log = log.approve(log.pending('f')[0]!.seq, { by: 'user' });
+    close(await pixelOf(engine, g, display(compile(stateOf(log), g))), golden.after.display);
+    expect(log.why('f', 'lights.params.logH')).toMatchObject({ by: 'agent', approvedBy: 'user' });
   });
 
   it('mock print directions: more red light → less red reflectance; longer time → darker', async () => {

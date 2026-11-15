@@ -1,8 +1,8 @@
 // CHB-010 stages 1–2 behaviour: the calibration (aim fixed there), real vs normalised, optics, grade,
 // printer lights, warmth/tint, integrate-to-grey, roll tools, grey pick, lights → filtration and Bake.
 import { describe, expect, it } from 'vitest';
-import { ChromobenchError, EditLog, Graph, newDocument, sha256Hex, type Layer } from '@chromobench/contract';
-import { set } from '@chromobench/values';
+import { ChromobenchError, edit, Graph, LOG_RULES, newDocument, sha256Hex, type Document, type Layer } from '@chromobench/contract';
+import { Log, set, transaction } from '@chromobench/values';
 import { makeM1Tiff } from '@chromobench/engine-mock';
 import {
   aimOf, autoLights, bakeLights, chainOptionsOf, colourOffset, filtrationForLights, frameStats, gradeToGamma, greyPickSliders, nodePacksData,
@@ -173,14 +173,12 @@ describe('grey pick, lights → filtration and Bake', () => {
 
   it('Bake moves the printer lights into the main exposure’s filtration and time as one undo unit; the grey card prints the same', () => {
     const blank = newDocument('negative-scan', { sha256: 'a'.repeat(64) }, { umPerPx: 6 });
-    const log0 = EditLog.create(blank);
-    log0.apply([set('lights.params.logH', [0.05, -0.025, 0.04])], 'user', 'lights');
-    const r0 = log0.state;
-    const log = EditLog.create(r0);
-    const { fit, mutations } = bakeLights(log.state, data, SPEKTRAFILM);
-    log.apply(mutations, 'user', 'bake');
-    expect(log.inEffect().length).toBe(1);
-    const r1 = log.state;
+    const r0 = edit(blank, [set('lights.params.logH', [0.05, -0.025, 0.04])]).doc;
+    let log = Log.create({ rules: LOG_RULES }).open('f', r0, { kind: 'frame', by: 'auto' });
+    const { fit, mutations } = bakeLights(log.doc<Document>('f'), data, SPEKTRAFILM);
+    log = log.commit({ doc: 'f', tx: transaction({ id: 'bake', label: 'Bake', by: 'user', mutations }) });
+    expect(log.inEffect('f').length).toBe(1);
+    const r1 = log.doc<Document>('f');
     const at = (d: typeof r0, id: string): Layer => d.stages.darkroom.stack.items[id] as Layer;
     expect(at(r1, 'lights').params['logH']).toEqual([0, 0, 0]);
     expect(at(r1, 'main').params['time_s']).toBe(fit.time_s);
@@ -190,8 +188,8 @@ describe('grey pick, lights → filtration and Bake', () => {
     const xb = before.xOfDyes(before.grey, Lights.fromLogH(at(r0, 'lights').params['logH'] as [number, number, number]));
     const xa = after.xOfDyes(after.grey);
     for (let k = 0; k < 3; k++) expect(Math.abs(xa[k]! - xb[k]!) / PT).toBeLessThan(0.5);
-    log.undo();
-    expect(log.state).toEqual(r0);
+    log = log.undo();
+    expect(log.doc<Document>('f')).toEqual(r0);
     expect(() => bakeLights(r0, data, SPEKTRAFILM, 'main')).toThrow(/printer-lights filter/);
   });
 });

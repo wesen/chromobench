@@ -372,3 +372,60 @@ rename
 
 ### Technical details
 - P2b diary: `diary/06-phase-p2b-reference.md`.
+
+## Step 7: P3 and P4 merged; the last EditLog users moved; wave 3 specified
+
+The GPU engine (P3) runs on contract 1.0 with parity 47/47 on SwiftShader and on Metal and a 15 % faster darkroom
+export; the history (P4) is one immutable log in `@chromobench/values`. Both merged; three leftover users of the
+deleted `EditLog` (two tests, one demo script) were moved onto the log by me.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge, repair what fell between phases, plan the studio and agent waves.
+
+**Inferred user intent:** Keep the core green while the consumers come over.
+
+**Commit (code):** d57ca0f — "Merge P4 one history (…)"; 1a24fe7 — "Merge P3 GPU engine on contract 1.0 (…)";
+(this step's commit) — tests and demo on the log, wave 3 specs
+
+### What I did
+- `merge-phase.sh` (scratchpad): merges a phase branch and resolves the ticket changelog conflict (keep both sides),
+  stops on any other conflict. Both merges were clean apart from the changelog.
+- Checks: tsc values/contract/shell/conformance 0 errors; core and engine-mock 1 own error each before the fix;
+  vitest values + contract + shell + core + mock + conformance + gpu + goldens: "2 failed | 56 passed (58)", the two
+  being `core/test/chb010.balance.test.ts` and `engine-mock/test/m1-trace.test.ts` (they used `EditLog`); goldens
+  60/60; lint rc=0.
+- Rewrote both tests and `tools/scripts/m1-headless.ts` on `Log.create({ rules: LOG_RULES }).open(…)`, `commit`,
+  `propose`/`approve`, `undo`, `why`/`trail`; the tests pass (20), and the demo prints the same flow (S0 → +4 pt red →
+  undo returns S0's hash → proposal pending leaves the patch → approval → provenance agent, approved by user).
+- Plan: amendments after P3 and P4, wave 3 specs P5b-1 (studio on the document and the log) and P6a (DSL and agent).
+
+### Why
+- The tests and the demo were outside every phase's scope; leaving them broken would hide regressions.
+
+### What worked
+- `Log` reads naturally in tests: immutable, one value per step.
+
+### What didn't work
+- First vitest run after the merges: "Tests 3 failed | 1397 passed" (the `EditLog` users).
+
+### What I learned
+- Phase scopes need an owner for repo-level scripts and cross-package tests; I keep them.
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- P3's two known gaps: no GPU `output.frame`; tiled export wrong at tile borders for spatial ops (density masks,
+  feathers, clarity) — a correctness bug assigned to P8.
+
+### What should be done in the future
+- Launch P5b-1 and P6a in parallel; then P5b-2 (stack kit), P6b (workbench), P7 (links), P8 (Editor lab tools).
+
+### Code review instructions
+- `tools/scripts/m1-headless.ts`; `pnpm demo:m1`.
+
+### Technical details
+- P3 diary `07-phase-p3-gpu.md`, P4 diary `08-phase-p4-history.md`.
