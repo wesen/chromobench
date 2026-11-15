@@ -121,3 +121,8 @@ P7 links: look functions, presets, bake, rolls on linked media, looks kit on lin
 
 - /private/tmp/claude-501/-Users-manuel-code-wesen-chromobench/bf16e1a6-fa3e-4569-93f9-63fc4d4d3d92/scratchpad/chb037-p7/packages/contract/src/links.ts — The link mechanism
 
+
+## 2026-11-15
+
+P8b Step 2: editors for the stack kit's params panel (curve, levels, HSL, grade, mixer), the colour-mask eyedropper, editorMath service, shell curvePlane/wheelDisc widgets (commits 580d454, 5b5bd71)
+
