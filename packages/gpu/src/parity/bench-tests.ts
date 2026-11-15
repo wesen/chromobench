@@ -52,6 +52,7 @@ export const BENCH_TESTS: Record<string, (o: Record<string, unknown>) => Promise
     const out: Record<string, unknown> = { w, h, rounds, adapter: rt.caps.adapter };
     for (const kind of ['plain', 'darkroom'] as const) {
       const ms = { preview: [] as number[], export: [] as number[] };
+      let plan = { tile: 0, halo: 0, tiles: 0 };
       for (let i = 0; i < warmup + rounds; i++) {
         const disp: Node = g.get(compile(doc(f.sha, w, h, kind, 0.01 + i * 1e-3), g).display.inputs[0]!)!; // output.display
         f.gpu.adopt(g.closure(disp.id));
@@ -60,12 +61,14 @@ export const BENCH_TESTS: Record<string, (o: Record<string, unknown>) => Promise
         const tp = performance.now() - t0;
         t0 = performance.now();
         // the export as the export runner does it: the engine's tile plan, 16-bit codes per tile
-        for (const tile of f.gpu.planFor(disp.info as import('@chromobench/contract').ImageInfo).tiles) await f.gpu.evaluateU16(disp, { scale: 'full', region: tile.core });
+        const p = f.gpu.planFor(disp.info as import('@chromobench/contract').ImageInfo, disp.id);
+        plan = { tile: p.tile, halo: p.halo, tiles: p.tiles.length };
+        for (const tile of p.tiles) await f.gpu.evaluateU16(disp, { scale: 'full', region: tile.core });
         const te = performance.now() - t0;
         if (i >= warmup) { ms.preview.push(tp); ms.export.push(te); }
       }
       const med = (a: number[]) => Number([...a].sort((x, y) => x - y)[a.length >> 1]!.toFixed(1));
-      out[kind] = { previewMs: med(ms.preview), exportMs: med(ms.export) };
+      out[kind] = { previewMs: med(ms.preview), exportMs: med(ms.export), plan };
     }
     return out;
   },

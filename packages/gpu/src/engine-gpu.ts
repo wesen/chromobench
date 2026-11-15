@@ -61,7 +61,7 @@ export interface GpuEngineOptions extends RuntimeOptions {
    * interactive host sets it: every slider step makes new nodes and a new cached result (CHB-023).
    */
   cacheLimit?: number;
-  /** Side (px, about) of the frame boxes an exact export builds whole-frame fields and extremes from (default 1024; tests). */
+  /** Side (px, about) of the frame boxes an exact export builds whole-frame fields and extremes from (default 512: they render while the tile's own textures are live; tests set it). */
   exactBox?: number;
 }
 
@@ -92,7 +92,7 @@ export class GpuEngine implements Engine {
   private readonly rebateT = new Map<string, Vec3>();
   private disposed = false;
   private recreating: Promise<void> | null = null;
-  /** Whole-frame blur fields of exact (tiled) exports, by node, purpose and σ; a few, oldest dropped (CHB-037 P3b). */
+  /** Whole-frame blur fields of exact (tiled) exports, by node, purpose and σ; the newest few within a quarter of the budget (CHB-037 P3b). */
   private readonly fields = new Map<string, { tex: GPUTexture; s: number; pad: number }>();
   /** Whole-frame reference extremes of density masks in exact exports, by node. */
   private readonly extremes = new Map<string, { min: number; max: number }>();
@@ -246,14 +246,21 @@ export class GpuEngine implements Engine {
 
   async plan(ref: NodeRef, target: EvalTarget): Promise<TilePlan> {
     const n = this.node(ref);
-    const info = n.info as ImageInfo;
     void target;
-    return this.planFor(info);
+    return this.planFor(n.info as ImageInfo, n.id);
   }
 
-  planFor(info: ImageInfo): GpuTilePlan {
-    // no spatial kernels are declared, so the pitch only labels the plan (an image without one, a pattern, plans at 1)
-    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? 1 }, [], this.rt.caps);
+  /**
+   * The export's tiles. With a node, its halo (haloOf: the reach an exact export renders around each tile) is declared
+   * as one local kernel, so the planner shrinks the tile until tile plus halo fits the budget; wide blurs need no halo
+   * (whole-frame fields). The pitch only labels the plan (an image without one, a pattern, plans at 1).
+   */
+  planFor(info: ImageInfo, node?: string): GpuTilePlan {
+    const halo = node ? this.haloOf(node) : 0;
+    const kernels = halo > 0 ? [{ id: 'halo', radiusPx: halo, fieldOk: false }] : [];
+    // a haloed tile holds a darkroom DAG's textures (terms, masks, the density mask's passes) at once, not the planner's
+    // default five: plan with 20 rgba32float textures per pixel then (12 ran out of memory on the darkroom bench at 4000 px, CHB-037 P3b)
+    return planTiles({ w: info.width, h: info.height, umPerPx: info.umPerPx.film ?? 1 }, kernels, this.rt.caps, halo > 0 ? { bytesPerPixel: 320 } : {});
   }
 
   dispose(): void {
@@ -608,7 +615,7 @@ export class GpuEngine implements Engine {
       own = this.film.reach(n, this.physics.ctx(chain, chain.length - 1));
     }
     let below = 0;
-    for (const i of n.op === 'output.frame' ? [] : readsOf(n, this.graph)) below = Math.max(below, this.haloOf(i, memo));
+    for (const i of n.op === 'output.frame' ? [n.inputs[0]!] : readsOf(n, this.graph)) below = Math.max(below, this.haloOf(i, memo));
     memo.set(id, own + below);
     return own + below;
   }
@@ -635,9 +642,9 @@ export class GpuEngine implements Engine {
     }
   }
 
-  /** Frame boxes of about 1024 px whose sides are multiples of s (a field's blocks never straddle two). */
+  /** Frame boxes of about exactBox px whose sides are multiples of s (a field's blocks never straddle two). */
   private boxes(t: GridTarget, s: number): Box[] {
-    const B = s * Math.max(1, Math.floor((this.opts.exactBox ?? 1024) / s));
+    const B = s * Math.max(1, Math.floor((this.opts.exactBox ?? 512) / s));
     const out: Box[] = [];
     for (let y = 0; y < t.frameH; y += B) for (let x = 0; x < t.frameW; x += B) out.push({ x, y, w: Math.min(B, t.frameW - x), h: Math.min(B, t.frameH - y) });
     return out;
@@ -675,7 +682,9 @@ export class GpuEngine implements Engine {
       const sig = [0, 1, 2, 3].map((c) => (channel === undefined || c === channel ? fs : 0));
       const F = { tex: await this.blur.gaussian(down, sig), s, pad };
       this.fields.set(k, F);
-      while (this.fields.size > 6) {
+      // a field at s = 2 of a 4000-px frame is ~40 MB: keep the newest few, within a quarter of the budget
+      const bytes = (): number => [...this.fields.values()].reduce((b, f) => b + f.tex.width * f.tex.height * 16, 0);
+      while (this.fields.size > 1 && (this.fields.size > 4 || bytes() > this.rt.caps.budgetBytes / 4)) {
         const [old, v] = this.fields.entries().next().value as [string, { tex: GPUTexture }];
         this.rt.textures.release(v.tex);
         this.fields.delete(old);
@@ -774,6 +783,8 @@ export class GpuEngine implements Engine {
     const width = Math.max(1, Math.round(region.w * scale));
     const height = Math.max(1, Math.round(region.h * scale));
     const grid: GridTarget = { outW: width, outH: height, frameW: info.width, frameH: info.height, region, precision, ...(precision === 'export' && scale === 1 ? { exact: true } : {}) };
+    // fields serve the tiles of an exact export; any other render (a preview) means that export is over: free them
+    if (!grid.exact && this.fields.size) this.dropFields();
     const r = await this.gpu(async () => {
       const g = await this.renderRegion(n.id, grid);
       try {
