@@ -9,13 +9,28 @@ Topics:
 DocType: diary
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://apps/studio/src/main.ts
+      Note: agent layouts and looks kept in the KV
+    - Path: repo://docs/HANDOFF.md
+      Note: rewritten for the unified model
+    - Path: repo://e2e/walkthrough.spec.ts
+      Note: End-to-end walkthroughs (P9)
+    - Path: repo://packages/shell/src/core/store.ts
+      Note: adopt adds the layout's own state
+    - Path: repo://packages/shell/src/dom/shell.css
+      Note: collections in side columns get a height
+    - Path: repo://packages/studio-kit/kits/looks/src/kit.ts
+      Note: Settings menu and keys
+    - Path: repo://packages/values/src/log.ts
+      Note: Log.withFields for Store.adopt (P9-8)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-15T03:39:18.488208-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Diary
@@ -379,3 +394,128 @@ resumed after the reset with the instruction to write its diary and report first
 
 ### Technical details
 - vitest after the step: 137 files, 3382 passed, 19 skipped.
+
+## Step 6: The persona session; its blocker and the strip fixed; findings triaged; the default recommended
+
+The persona sub-agent (resumed after the usage-limit stop) finished S1–S5 on synthetic material and recommends
+**Classic as the default for now**: Darkroom first is the screen Manfred would rather work in, but only Classic takes a
+newcomer from the negative to a cropped, spotted print and has the scene stage for camera files. Its blocker — Roll ▸
+New roll always failing — reproduced only after a layout switch, which is why the walkthrough (always `?fresh` in
+one layout) had missed it. It and the 2 px strip thumbnails are fixed; the other findings are CHB-037 tasks.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Item 3 of the spec: run the CHB-026 protocol on the two arrangements, triage findings
+into tasks, recommend the default with reasons; fix what is cheap and critical.
+
+**Inferred user intent:** Find what the photographer would trip over before he does, and settle design §38's first
+open question with evidence.
+
+**Commit (code):** d63a220 — "CHB-037 P9: New roll works after View > Layout from Darkroom first (P9-8); the darkroom
+strip shows its prints (P9-4)"; e435bc5, de80de7 (the session, the tasks); 348eefd (a Metal race in the walkthrough)
+
+### What I did
+- Session (sub-agent): brief = the protocol, synthetic files only, headless SwiftShader, preview build on port 5516;
+  output `sessions/p9-01-manfred-arrangements/` (`01-diary.md`, `02-experience-report.md`, 63 shots, step scripts);
+  I added front matter and numbered names (docmgr doctor), and checked that no private path was used.
+- P9-8 reproduced with a probe: Darkroom first (no roll kit) → View ▸ Layout ▸ Classic → `roll.fromFrames` returned
+  nothing (in a fresh Classic: `roll-1`). Cause: `Store.adopt` replaced the new program's log with the old one, whose
+  main document never had `roll`; the state still showed `roll` (projected from the new init) but the log refused the
+  write. Fix: `Log.withFields(id, fields)` in `packages/values` (adds missing top-level fields to the initial state and
+  the state now, not a step) and `Store.adopt` calls it with its own main document. Tests: values unit test (undo keeps
+  the field, serialisation keeps it), e2e "a roll after switching from Darkroom first to Classic".
+- P9-4: the vertical strip used the list's 24 px row, leaving the thumbnail 2 px under its caption; rows are 150 px;
+  the darkroom walkthrough asserts two rendered thumbnails > 80 px tall. Explain snapshots (darkroom, tiny) updated.
+- Metal rerun after Step 5: 142 passed, 2 failed: the walkthrough read `[data-handle="1,1"]`'s box before it was
+  drawn (`TypeError: Cannot read properties of null (reading 'x')`) — now waits for it; `arrangements.spec`
+  `browserContext.close: Test timeout of 60000ms exceeded` — the launch/teardown hang again. Three Metal reruns of both
+  files: 9/9 each.
+- 23 tasks added with `docmgr task add` (4 checked as fixed in P9), owners named; the integration report filled.
+
+### Why
+- A blocker found by the persona is exactly what P9 is for; its fix is small and general (any kit installed by one
+  layout and not another).
+
+### What worked
+- The persona's diary named the cause precisely (`t.$set(['roll','rolls',id])` and no `roll` root), which made the
+  probe a two-minute job.
+
+### What didn't work
+- The persona run stopped once on the account's usage limit (`rate_limit`, HTTP 429) with 38 screenshots and no
+  documents; resumed with "write the documents first".
+
+### What I learned
+- Walkthroughs that always start fresh in one layout miss state that crosses layouts; the new e2e test crosses.
+
+### What was tricky to build
+- `withFields` must touch both the initial state and the current state: undo applies inverse transactions to the
+  current value, and a later load replays from the initial state, so a field added only "now" would vanish on reload.
+
+### What warrants a second pair of eyes
+- `Store.adopt` adds only top-level fields the adopted main document lacks; a kit whose state shape changed between
+  layouts (same root, different fields) is not reconciled.
+
+### What should be done in the future
+- The open tasks of the session (P9-1, P9-3, P9-5, P9-9 … P9-18) and the owner's decision on the default.
+
+### Code review instructions
+- `packages/values/src/log.ts` `withFields`; `packages/shell/src/core/store.ts` `adopt`; `packages/studio-kit/src/cb.ts`
+  `strip`; `e2e/walkthrough.spec.ts` (last test); `sessions/p9-01-manfred-arrangements/02-experience-report.md`.
+
+### Technical details
+- Probe output before the fix: `darkroom-then-classic fromFrames undefined []`, `classic-fresh fromFrames "roll-1"`.
+
+## Step 7: Final checks and hand-over
+
+Every acceptance check is green on the last code commit: typecheck, lint, gen:check, vitest, goldens, and the whole
+browser suite on SwiftShader and on Metal. The integration report (`reference/02-integration-report.md`) holds the
+results, the walkthroughs, the screenshots, the persona findings, the recommended arrangement and the open items with
+owners; the arrangement screenshots were regenerated by the final SwiftShader run (they now show the darkroom strip's
+prints and the Settings menu).
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Close the phase: all checks, the report, the final hand-back.
+
+**Inferred user intent:** An integration branch the main agent can merge with confidence, and an honest list of
+what remains.
+
+**Commit (code):** (this step's docs commit; code last changed in d63a220)
+
+### What I did
+- `pnpm typecheck` 0 errors; `pnpm lint` ok; `pnpm gen:check` ok (26); `pnpm test` 137 files, 3383 passed, 19
+  skipped; `node tools/goldens/render.ts --check` 66/66.
+- `P9_SHOTS=<ticket>/various/p9-arrangements … CI=1 pnpm test:browser` (SwiftShader): **145 passed, 2 skipped**,
+  8.7 min. Under the GPU lock, `REAL_GPU=1`: **145 passed, 2 skipped**, 1.0 min. Lock removed.
+- The report filled; HANDOFF's browser count updated (147 tests).
+
+### Why
+- N/A
+
+### What worked
+- The final runs on both adapters were clean on the first try.
+
+### What didn't work
+- N/A
+
+### What I learned
+- N/A
+
+### What was tricky to build
+- N/A
+
+### What warrants a second pair of eyes
+- The Chromium launch hang under `REAL_GPU=1` was seen three times in this phase; it did not occur in the last run.
+
+### What should be done in the future
+- The open CHB-037 tasks (report section 8).
+
+### Code review instructions
+- Start with `reference/02-integration-report.md`, then this diary's Steps 2, 3 and 6.
+
+### Technical details
+- Logs: `<scratchpad>/p9-browser-sw-4.log`, `p9-browser-metal-4.log`.

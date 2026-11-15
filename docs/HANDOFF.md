@@ -131,7 +131,7 @@ pnpm lint             # package-boundary and literal-colour checks
 pnpm gen:check        # generated docs and references are up to date (regenerate with: pnpm gen)
 pnpm test             # vitest: 137 files, ~3380 tests, ~30 s
 node tools/goldens/render.ts --check    # 66 golden pictures of the reference engine
-CI=1 pnpm test:browser   # Playwright: 146 tests incl. GPU conformance 524/524, ~8 min on SwiftShader
+CI=1 pnpm test:browser   # Playwright: 147 tests incl. GPU conformance 524/524, ~8 min on SwiftShader
 ```
 
 When several people or agents run browser suites on one machine, give each run its own ports:
