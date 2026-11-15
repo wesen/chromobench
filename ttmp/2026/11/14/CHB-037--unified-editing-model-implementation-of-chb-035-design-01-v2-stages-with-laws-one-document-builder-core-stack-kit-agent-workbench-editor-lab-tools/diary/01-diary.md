@@ -538,3 +538,56 @@ vitest 124 files / 2935 passed / 19 skipped, goldens 60/60.
 
 ### Technical details
 - Running: P8a (Editor lab ops in the engines).
+
+## Step 10: P8a merged — Editor lab's tools in both engines
+
+The composite op set (curve, levels, exposure, HSL, vibrance, grade, mixer, vignette, sharpen), radial and colour
+masks, all 16 W3C blend modes with isolated groups, linear/OkLab encodings inserted by the compiler, and the scene
+stage now exist in the contract, the reference engine and the GPU engine, at parity on SwiftShader and Metal.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Merge the Editor lab ops; queue the engine gaps.
+
+**Inferred user intent:** The full layer toolset on the physical core.
+
+**Commit (code):** eb89d96 — "Merge P8a Editor lab tools in the engines (…)"
+
+### What I did
+- Merged with `merge-phase.sh`; full checks: typecheck 0 errors, lint, gen:check (26), goldens "66/66 cases within
+  max |Δ| ≤ 0.00001"; vitest "2 failed | 125 passed (127)" — `ch3.golden.test.ts` and `output/test/export.test.ts`,
+  both passing alone (22/22); load from P5b-2's and P7's parallel suites.
+- P3b spec (engine fixes and performance) from the queued gaps plus P8a's notes; launched next.
+
+### Why
+- Core and gpu were P8a's; with P8a merged, P3b can own them.
+
+### What worked
+- Six unmasked composite layers cost ~1 ms in preview at 4000 px (fused); goldens: the 60 old cases bit-identical.
+
+### What didn't work
+- First full vitest after the merge had the two load-sensitive failures above.
+
+### What I learned
+- Timing- or iteration-count tests are sensitive to other agents' suites on the same machine; P3b hardens them.
+
+### What was tricky to build
+- N/A (merge).
+
+### What warrants a second pair of eyes
+- P8a's decisions: entries mix in their result's encoding (a masked curve's edge blends in OkLab); separable blend
+  modes in linear light (multiply/overlay stronger than on sRGB numbers); non-separable modes in OkLCh without W3C's
+  ClipColor; levels extend with slope 1 beyond black/white; HSL hue shifts limited to ±60°; colour masks in the
+  darkroom only for camera files.
+
+### What should be done in the future
+- P3b now; P8b (UI for these ops) after P5b-2; P6b; P9.
+
+### Code review instructions
+- `packages/core/src/composite/`, `packages/contract/CONTRACT-DECISIONS.md` (CC-020), `tools/goldens/stacks.ts`.
+
+### Technical details
+- Timings (P8a, M1 Max, 4000 × 2674): one exposure layer 22–23 ms preview / 256–263 ms export; six fused layers 23–24
+  / 274–276 ms; plus one masked curve 49–52 / 369–391 ms.

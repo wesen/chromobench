@@ -506,3 +506,36 @@ the looks/roll parts of `packages/dsl` (the `LooksProvider`, named looks).
 - **DSL**: named looks become link inserts; `LooksProvider` goes; the DSL compiles with a LinkContext.
 - Acceptance: contract, studio-kit (looks, roll), dsl typecheck and vitest; looks and roll browser specs; one-step
   undo of a look over a roll; lint; gen:check.
+
+### Amendments after P8a (main agent)
+
+- Contract 1.1 (CC-020): the composite op set, 16 W3C blend modes (British spelling: `colour-dodge`, `colour-burn`,
+  `colour`), encodings as domains (`scene-rgb`, `scene-oklab`, `print-rgb`, `print-oklab`) with `composite.encode`
+  inserted by the compiler, the scene stage (masks read `scene.input`), `OpDef.ui = { label, menu, order, advanced }`
+  (menus: light, retouch, tone, colour, detail, effect, mask), `opEncoding(op, params)`, `BLEND_MODES`,
+  `NON_SEPARABLE_BLENDS`, `DEFAULT_HSL_BANDS`; curve points and HSL bands are Colls (ids unique per document: prefix
+  per layer). Diary `11-phase-p8a-ops.md` Step 6 lists what the stack kit needs.
+- After merging (eb89d96): typecheck 0 errors, lint, gen:check (26), goldens 66/66; vitest 125/127 files — the two
+  failures (`core/test/ch3.golden.test.ts` iteration counts, `output/test/export.test.ts` 16-bit distinct values)
+  pass alone (22/22): load-sensitive while other agents run suites; to harden in P9.
+
+### P3b — engine fixes and performance (queued gaps)
+
+Owns `packages/core/`, `packages/gpu/`, `packages/engine-mock/`, `packages/output/` (export path only).
+1. **Tiled export correctness**: tiles evaluated without aprons are wrong at borders for every spatial op (density
+   masks, feathers, clarity, sharpen, heal near borders). Declare each spatial op's reach in the catalogue/planner and
+   tile with halos (pattern chapter 8 rev1: exact routes first; wide kernels via the reduced-resolution field the
+   planner already has); a test that a tiled export equals the whole-image result for every spatial op.
+2. **GPU `output.frame`** so the GPU covers the `display` cut; then remove the studio host wrapper's own
+   `output.frame` (coordinate: `apps/studio/src/host/studio-engine.ts` is P5b-2's file — leave a precise note if you
+   cannot change it).
+3. **CPU preview speed**: the reference engine renders the 1024×683 test negative's screen view in ~4.2 s in the
+   worker; find whether the tabulated preview path (pattern chapter 6) was lost in P2b/P8a, restore it, measure
+   before/after.
+4. **engine-mock**: pass-through implementations for P8a's ops so its conformance run is complete.
+5. **Flaky tests**: the load-dependent `gpu/…/film.spec.ts` parity timeout and the two vitest cases above — make them
+   robust (no timing assumptions) without weakening what they check.
+6. Optional: fuse masked layers whose mask depends only on position (linear, radial, ellipse) into the pointwise
+   kernel.
+- Acceptance: core, gpu, mock, output typecheck and vitest; goldens 66/66; `[gpu-parity]` on SwiftShader (ports
+  5521–5524) and Metal (GPU lock); timings before/after for preview and export.
