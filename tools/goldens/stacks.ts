@@ -1,12 +1,13 @@
 // Golden stacks (CHB-037 P8a): documents with the digital layers of the composite stages (contract 1.1), built on two
 // balanced golden cases (the first print of the negative, the auto balance of the camera file) and rendered on the
 // reference engine like every case. They have no P0 recipe: this file is their provenance, as translate.ts is the
-// others'.
+// others'. Since CHB-048 the file also builds the cases of a changed medium on the balanced camera file (a white
+// balance before the film, a film stock preset), which are documents of the same kind: a base case and its edits.
 //
 //   node tools/goldens/stacks.ts                    write every stack's document.json and its index entry (no pictures)
 //   node tools/goldens/render.ts --only <ids>       render them (the ids are printed)
 import { edit, type Document, type Entry, type Mask, type MaskComponent, type Params } from '@chromobench/contract';
-import { Coll, insert, type Json, type Mutation } from '@chromobench/values';
+import { Coll, insert, set, type Json, type Mutation } from '@chromobench/values';
 import { readIndex, readJSON, writeData, type IndexCase } from './golden.ts';
 
 const C = (items: [string, Record<string, unknown>][]): Json => Coll.of(items) as unknown as Json;
@@ -97,6 +98,12 @@ export const STACKS: readonly Stack[] = [
       scene('sh', L('hsl', { bands: C([['sb', { centre_deg: 260, saturation: 0.3, lightness: -0.15 }]]) })),
       print('pv', L('vignette', { stops: -0.5, size: 0.4, feather: 0.7 })),
     ],
+  },
+  {
+    id: 'cam-wb-tungsten', base: 'cam-auto',
+    title: 'White balance before the film (CHB-048): 3200 K, +10 in Lightroom\'s units on the balanced camera file, whose light is about 5400 K: the film sees a scene corrected for a much warmer light, so the print goes blue (display mean 0.30 0.53 0.64 against cam-auto\'s 0.51 0.47 0.38 with no correction)',
+    exercises: ['source.xyz', 'white balance', 'temperature', 'tint'],
+    edits: [set('stages.scene.medium.whiteBalance', { temperature_K: 3200, tint: 10 })],
   },
 ];
 

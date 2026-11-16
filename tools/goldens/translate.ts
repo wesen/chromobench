@@ -18,9 +18,12 @@
 //   - retouch spots → print-stage heal / clone layers in a group `retouch` (one layer per spot, natural id order);
 //     scan dust spots → scan-stage heal layers in a group `dust` (sources chosen beside each speck: the recipe had none);
 //   - finishing clarity (radius in preview px) → a print-stage clarity layer, radius px × 48 µm / 1000 mm;
-//   - view.frame → geometry, view.output → output (export.recipe → export.document).
+//   - view.frame → geometry, view.output → output (export.recipe → export.document);
+//   - the camera file's white balance (CHB-048, contract 1.6: a temperature and a tint in Lightroom's units, applied as
+//     CAT16 to D65): P0's 'daylight' (no adaptation) → NO_CORRECTION (D65's white), 'as-shot' → the camera fixture's
+//     as-shot white, 'custom' → the temperature and tint of P0's white (daylight locus ≥ 4000 K, its own tint scale).
 import { readFileSync } from 'node:fs';
-import { assertDocument, nodeId, type Document, type Entry, type Mask, type MaskComponent } from '@chromobench/contract';
+import { asShotWhiteBalance, assertDocument, NO_CORRECTION, nodeId, whiteBalanceOf, xyToXYZ, type Document, type Entry, type Mask, type MaskComponent, type SourceInfo, type WhiteBalance } from '@chromobench/contract';
 import { canonicalJSON, Coll, type Json } from '@chromobench/values';
 import { dataPath, FORMAT, openAll, readIndex, writeData, type GoldenIndex, type IndexCase } from './golden.ts';
 
@@ -35,6 +38,42 @@ export const MAGNIFICATION = 8;
 const DUST_SOURCES: Record<string, { x: number; y: number }> = { d1: { x: 24.5, y: 31.5 }, d2: { x: 61.5, y: 56.5 }, d3: { x: 84.5, y: 15.5 } };
 
 const natural = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true });
+
+/**
+ * P0's custom white (core film/camera.ts before CHB-048): the CIE daylight locus from 4000 K, the Planckian locus (Kim
+ * et al.) below, its tint 150 units = Δv' 0.02 in CIE 1976 u'v'. Only the translation of the P0 recipes uses it.
+ */
+function p0CustomWhite(T: number, tint: number): [number, number] {
+  let x: number, y: number;
+  if (T >= 4000) {
+    const t = Math.min(T, 25000);
+    x = t <= 7000 ? -4.607e9 / t ** 3 + 2.9678e6 / t ** 2 + 0.09911e3 / t + 0.244063 : -2.0064e9 / t ** 3 + 1.9018e6 / t ** 2 + 0.24748e3 / t + 0.23704;
+    y = -3 * x * x + 2.87 * x - 0.275;
+  } else {
+    const t = Math.max(T, 1667);
+    x = -0.2661239e9 / t ** 3 - 0.2343589e6 / t ** 2 + 0.8776956e3 / t + 0.17991;
+    y = t <= 2222 ? -1.1063814 * x ** 3 - 1.3481102 * x ** 2 + 2.18555832 * x - 0.20219683 : -0.9549476 * x ** 3 - 1.37418593 * x ** 2 + 2.09137015 * x - 0.16748867;
+  }
+  if (tint !== 0) {
+    const d = -2 * x + 12 * y + 3;
+    const u = (4 * x) / d;
+    const v = (9 * y) / d - (tint / 150) * 0.02;
+    const e = 6 * u - 16 * v + 12;
+    x = (9 * u) / e;
+    y = (4 * v) / e;
+  }
+  return [x, y];
+}
+
+/** The camera fixture's colour (its as-shot neutral). */
+const cameraFixture = (): SourceInfo['camera'] => (JSON.parse(readFileSync(dataPath('fixtures/camera-96x64.json'), 'utf8')) as SourceInfo).camera;
+
+/** A P0 white balance ({ mode, temperature_K, tint }) as contract 1.6's temperature and tint. */
+export function translateWhiteBalance(wb: R): WhiteBalance {
+  if (wb['mode'] === 'daylight') return { ...NO_CORRECTION };
+  if (wb['mode'] === 'as-shot') return asShotWhiteBalance(cameraFixture()) ?? fail('the camera fixture has no as-shot neutral');
+  return whiteBalanceOf(xyToXYZ(...p0CustomWhite(wb['temperature_K'], wb['tint'])));
+}
 
 function entry(e: Partial<Entry> & Pick<Entry, 'kind' | 'name'>): Record<string, unknown> {
   return { enabled: true, amount: 1, mask: null, blend: e.kind === 'group' ? 'pass' : 'normal', source: { kind: 'user' }, ...e };
@@ -163,7 +202,7 @@ export function translate(r: R): Document {
     };
   } else {
     const c = r['capture'], d = c['development'];
-    stages['scene'] = { medium: { whiteBalance: c['whiteBalance'] }, stack: Coll.empty() };
+    stages['scene'] = { medium: { whiteBalance: translateWhiteBalance(c['whiteBalance']) }, stack: Coll.empty() };
     stages['film'] = { medium: { stock: c['stock'], exposureEV: c['exposureEV'], format: c['format'], push: d['push'], dir: d['dir'], halation: d['halation'], grain: d['grain'] }, stack: Coll.empty() };
   }
   const doc = {
@@ -184,6 +223,11 @@ async function main(): Promise<void> {
   const cases: IndexCase[] = [];
   for (const c of all) {
     const dir = `cases/${c.id}`;
+    // the stacks (stacks.ts) have no recipe: they stay as they are
+    if (!(c as { recipe?: string }).recipe) {
+      cases.push(c as IndexCase);
+      continue;
+    }
     const recipe = JSON.parse(readFileSync(dataPath(`${dir}/recipe.json`), 'utf8')) as R;
     const doc = translate(recipe);
     writeData(`${dir}/document.json`, `${JSON.stringify(doc, null, 2)}\n`);

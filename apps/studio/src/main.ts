@@ -38,7 +38,7 @@ import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/
 import { lazyChat, type BridgeLike, type LazyChat } from './host/lazy-chat.ts';
 import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
 import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
-import { firstPrint, firstPrintAim, photoDocument, withMeasured } from './host/first-print.ts';
+import { firstPrint, firstPrintAim, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -180,7 +180,8 @@ async function startEngine(): Promise<Host> {
     // into the enlarger's filtration and time (CHB-010 bake), not the printer lights
     initial: async (d, g) => {
       const n = se.notes.get(d.source.sha256);
-      const doc = n?.kind === 'digital-raw' ? photoDocument(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
+      // a photo's document has the raw's as-shot white balance already (studio-kit defaultDocument, CHB-048)
+      const doc = n?.kind === 'digital-raw' ? d : withMeasured(d, n);
       // CHB-034 fusz: metered on the file's analysis image, so both engines propose the same Time
       const kind = doc.stages.scan ? 'negative-scan' : 'digital-raw';
       const fp = await firstPrint(se, g, doc, { integrate: h.integrate, aim: firstPrintAim(kind, (k) => q.get(k), neutraliseNow()), analysis: se.analysisOf(doc.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });

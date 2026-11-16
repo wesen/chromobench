@@ -1,0 +1,32 @@
+{
+  "case": "cam-wb-tungsten",
+  "cut": "display",
+  "op": "output.frame",
+  "domain": "display-rgb",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-wb-tungsten/display.f32",
+  "sha256": "dcb27f8a1900830a5ca2d5f4061fb5eed26167fb622643714723dcc3694ef215",
+  "stats": {
+    "min": [
+      0.01297851,
+      0.07238796,
+      0.08136307
+    ],
+    "max": [
+      0.8912981,
+      0.9728069,
+      0.9926632
+    ],
+    "mean": [
+      0.2948473,
+      0.5262526,
+      0.6371247
+    ]
+  },
+  "warnings": []
+}

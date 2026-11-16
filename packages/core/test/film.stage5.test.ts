@@ -1,6 +1,6 @@
 // CHB-012 stage 5: the RAW photo path end to end through the reference engine, and the graph-level
 // composition laws (guide §5.6, §8.2). A synthetic RAW: scene XYZ of a chart × a known camera matrix.
-import { compile, cutNode, edit, Graph, newDocument, sha256Hex, type Document, type SourceInfo } from '@chromobench/contract';
+import { asShotWhiteBalance, compile, cutNode, edit, Graph, newDocument, NO_CORRECTION, sha256Hex, type Document, type SourceInfo } from '@chromobench/contract';
 import { set } from '@chromobench/values';
 import { describe, expect, it } from 'vitest';
 import { nodePacksData, inv3, mulMV, PhysicsEnv, rawOfLinearSRGB, RefEngine, SPEKTRAFILM, SRGB_TO_XYZ, type FilmModel, type Mat3 } from './film-helpers.ts';
@@ -72,7 +72,7 @@ describe('stage 5: a synthetic RAW renders end to end to a print', () => {
     const e = new RefEngine({ data: nodePacksData() });
     const { info, data } = syntheticRaw();
     e.openDecoded(info, data);
-    const r = edit(newDocument('digital-raw', { sha256: info.sha256, name: 'synthetic.dng' }), [set('stages.scene.medium.whiteBalance.mode', 'as-shot')]).doc;
+    const r = newDocument('digital-raw', { sha256: info.sha256, name: 'synthetic.dng' }, { whiteBalance: asShotWhiteBalance(info.camera)! });
     const img = await render(r, e);
     for (const v of img.data) { expect(Number.isFinite(v)).toBe(true); expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
     const greys = [0, 1, 2, 3, 4, 5].map((i) => patchMean(img, i));
@@ -103,7 +103,7 @@ describe('stage 5: graph-level composition laws', () => {
   /** A ramp of log exposures as scene XYZ of a neutral: build source → xyz → expose and the film ops by hand. */
   function chain(g: Graph, sha: string, opts: { couple?: boolean; curves?: 'datasheet' | 'precorrected'; amount?: number }) {
     let n = g.intern('source.open', [], { source: sha, encoding: 'linear', umPerPx: 375 }).node.id;
-    n = g.intern('source.xyz', [n], { mode: 'daylight', temperature_K: 5500, tint: 0 }).node.id;
+    n = g.intern('source.xyz', [n], { ...NO_CORRECTION }).node.id;
     n = g.intern('capture.expose', [n], { stock: 'kodak_portra_400', exposureEV: 0 }).node.id;
     if (opts.couple) n = g.intern('film.couple', [n], { amount: opts.amount ?? 1, diffusion_um: 0 }).node.id;
     return g.intern('film.develop', [n], { push: 0, curves: opts.curves ?? 'datasheet' }).node.id;

@@ -2,8 +2,7 @@
 // film.couple, film.halation, film.develop and film.grain over core's film/ modules. The bindings
 // (camera matrix, film table, curves, DIR, presets) are shared with packages/gpu through the
 // *At(ctx, args) helpers, so both engines read a graph the same way.
-import { fail, type ImageInfo, type SourceInfo } from '@chromobench/contract';
-import { cameraMatrix } from '../film/camera.ts';
+import { fail, NO_CORRECTION, sceneMatrix, type ImageInfo, type SourceInfo } from '@chromobench/contract';
 import { coupleImage, dirForStock, precorrectedCurves, type Dir } from '../film/couple.ts';
 import type { FilmCurves } from '../film/curves.ts';
 import { developmentCurves, type DevelopmentResult } from '../film/develop.ts';
@@ -27,10 +26,12 @@ export function filmUmPerPx(info: Pick<ImageInfo, 'umPerPx'> | undefined): numbe
 /** The film of film.* ops: capture.expose's stock (core's default film without one, as filmOf). */
 const filmStock = (ctx: ChainCtx): string => filmOf(ctx);
 
-/** source.xyz: camera RGB → scene XYZ matrix for the source's camera colour and the white balance. */
+/** source.xyz: camera RGB → white-balanced scene XYZ for the source's camera colour and the white balance (the contract's). */
 export function sceneMatrixAt(camera: SourceInfo['camera'], args: Readonly<Record<string, unknown>>): Mat3 {
-  const mode = (args['mode'] as 'daylight' | 'as-shot' | 'custom' | undefined) ?? 'daylight';
-  return cameraMatrix(camera, { mode, temperature_K: args['temperature_K'] as number | undefined, tint: args['tint'] as number | undefined }).M;
+  return sceneMatrix(camera, {
+    temperature_K: (args['temperature_K'] as number | undefined) ?? NO_CORRECTION.temperature_K,
+    tint: (args['tint'] as number | undefined) ?? NO_CORRECTION.tint,
+  }) as Mat3;
 }
 
 /** capture.expose's per-pixel exposer (adapt to the film reference from D65; exposureEV). */

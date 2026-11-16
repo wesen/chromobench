@@ -2,7 +2,7 @@
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
 import {
-  blendSeparable, DOMAINS, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
+  blendSeparable, DOMAINS, whiteBalanceMatrix, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
   type BlendMode, type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
 } from '@chromobench/contract';
 
@@ -72,6 +72,7 @@ function inv3(m: number[][]): number[][] {
 }
 export const MINV = inv3(M);
 const mul = (m: number[][], v: number[]): number[] => m.map((r) => r[0]! * v[0]! + r[1]! * v[1]! + r[2]! * v[2]!);
+const mulMM = (a: number[][], b: number[][]): number[][] => a.map((r) => [0, 1, 2].map((j) => r[0]! * b[0]![j]! + r[1]! * b[1]![j]! + r[2]! * b[2]![j]!));
 export const srgbEncode = (v: number): number => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
 const srgbDecode = (v: number): number => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const WHITE_XYZ = mul(M, [1, 1, 1]);
@@ -361,10 +362,11 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     for (let i = 0; i < out.data.length; i++) out.data[i] = info.domain === 'scan-classes' ? Math.floor(rng.next() * 4) : lo + rng.next() * (hi - lo);
     return out;
   },
-  'source.xyz': (ctx) => map(recv(ctx), 3, (px) => {
-    const gain = A(ctx, 'mode') === 'custom' ? [1, 1, 6500 / num(ctx, 'temperature_K')] : [1, 1, 1];
-    return mul(M, rgb3(px).map((v, k) => v * gain[k]!));
-  }),
+  'source.xyz': (ctx) => {
+    // the mock's camera is linear sRGB (M); the white balance is the contract's CAT16 from the light's white to D65
+    const W = mulMM(whiteBalanceMatrix({ temperature_K: num(ctx, 'temperature_K'), tint: num(ctx, 'tint') }), M);
+    return map(recv(ctx), 3, (px) => mul(W, rgb3(px)));
+  },
   'scan.flatField': (ctx) => {
     const r = recv(ctx);
     if (A(ctx, 'flat') === undefined) return r;

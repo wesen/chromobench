@@ -98,14 +98,6 @@ export function firstPrintAim(kind: FrameKind, param: (k: string) => string | nu
   return aim;
 }
 
-/**
- * A photo's document before its first print (CHB-012, F31): the neutral document of a camera file (shot on the
- * default film, in the enlarger mode the layout gave it), with the as-shot white balance when the camera recorded one.
- */
-export function photoDocument(d: Document, asShot: boolean): Document {
-  return asShot && d.stages.scene ? edit(d, [set('stages.scene.medium.whiteBalance.mode', 'as-shot')]).doc : d;
-}
-
 export interface FirstPrintOptions {
   integrate: IntegrateToGrey;
   /** The colour aim (default FIRST_PRINT_AIM of the document's kind). */

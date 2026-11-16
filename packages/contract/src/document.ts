@@ -13,6 +13,7 @@ import type { Domain } from './domains.ts';
 import { fail } from './errors.ts';
 import type { DecodeOptions, SourceRef } from './source.ts';
 import type { Box, Cmy, Vec3 } from './spec.ts';
+import { NO_CORRECTION, type WhiteBalance } from './white-balance.ts';
 
 export const DOCUMENT_FORMAT = 3 as const;
 
@@ -214,7 +215,12 @@ export interface ScanMedium {
 }
 
 export interface SceneMedium {
-  readonly whiteBalance: { readonly mode: 'daylight' | 'as-shot' | 'custom'; readonly temperature_K: number; readonly tint: number };
+  /**
+   * The white of the light the scene was lit by, as a temperature and a tint in Lightroom's units (contract 1.6,
+   * white-balance.ts): source.xyz adapts it to D65 (CAT16) before the scene stage, so the film sees a white-balanced
+   * scene. A camera file opens with its raw's as-shot white; NO_CORRECTION is D65 (the light as it was).
+   */
+  readonly whiteBalance: WhiteBalance;
 }
 
 export interface FilmMedium {
@@ -417,6 +423,8 @@ export interface NewDocumentOptions {
   /** A scan's film µm per document pixel (else from the format's long edge over the source's long side). */
   umPerPx?: number;
   format?: FilmFormat;
+  /** A camera file's white balance (its raw's as-shot white, white-balance.ts asShotWhiteBalance); else no correction. */
+  whiteBalance?: WhiteBalance;
 }
 
 /** Film pitch of a scan of `format` that is `width × height` document pixels. */
@@ -457,7 +465,7 @@ export function newDocument(kind: FrameKind, source: NewSource, opts: NewDocumen
     };
   } else {
     stages = {
-      scene: { medium: { whiteBalance: { mode: 'daylight', temperature_K: 5500, tint: 0 } }, stack: Coll.empty() },
+      scene: { medium: { whiteBalance: { ...(opts.whiteBalance ?? NO_CORRECTION) } }, stack: Coll.empty() },
       film: {
         medium: {
           stock: 'kodak_portra_400', exposureEV: 0, format: { longEdge_mm: 36 }, push: 0,

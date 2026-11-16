@@ -3,14 +3,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { compile, edit, Graph, newDocument, type Document, type FrameKind, type SourceInfo, type Vec3 } from '@chromobench/contract';
+import { asShotWhiteBalance, compile, edit, Graph, newDocument, NO_CORRECTION, type Document, type FrameKind, type SceneMedium, type SourceInfo, type Vec3 } from '@chromobench/contract';
 import { set } from '@chromobench/values';
-import { darkroomMedium, layerOf, lightsOf, mainExposure, MODE_PATH, NEUTRALISE } from '@chromobench/studio-kit';
+import { darkroomMedium, defaultDocument, layerOf, lightsOf, mainExposure, MODE_PATH, NEUTRALISE } from '@chromobench/studio-kit';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { LibRawDecoder } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
 import { decodePhoto } from '../src/host/decode.ts';
-import { FIRST_PRINT_AIM, firstPrint, firstPrintAim, integratedExposure, LAB_SUBJECT_FAILURE, measureExposure, photoDocument } from '../src/host/first-print.ts';
+import { FIRST_PRINT_AIM, firstPrint, firstPrintAim, integratedExposure, LAB_SUBJECT_FAILURE, measureExposure } from '../src/host/first-print.ts';
 
 const integrate = (latd: Vec3, alpha: number): Vec3 => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3;
 const W = 64, H = 40;
@@ -35,7 +35,7 @@ function source(kind: FrameKind, pixel: (x: number, y: number) => readonly numbe
   const g = new Graph();
   g.registerSource(info);
   const d = newDocument(kind, { sha256: sha, name: kind, width: W, height: H });
-  return { e, g, r0: kind === 'digital-raw' ? photoDocument(d, false) : d };
+  return { e, g, r0: d };
 }
 
 /** a dim, warm daylight photo: a smooth scene, red above blue (a camera's as-shot colour the print must keep) */
@@ -117,14 +117,13 @@ describe('the first print\'s aim (CHB-031 F30): one setting', () => {
 });
 
 describe('a photo\'s first print (CHB-031 F31): density from the frame, colour from the camera', () => {
-  it('photoDocument keeps the layout\'s enlarger mode and takes the as-shot white balance when the camera has one', () => {
-    const d = withMode(newDocument('digital-raw', { sha256: 'f'.repeat(64), name: 'DSC_0001.NEF' }), 'normalised');
-    const r = photoDocument(d, true);
-    const wb = (x: Document): string => (x.stages.scene!.medium as { whiteBalance: { mode: string } }).whiteBalance.mode;
-    expect(modeOf(r)).toBe('normalised');
-    expect(wb(r)).toBe('as-shot');
-    expect(r.source.decode.mode).toBe('photo');
-    expect(wb(photoDocument(withMode(d, 'real'), false))).toBe('daylight');
+  it('a photo opens with its raw\'s as-shot white balance (CHB-048): the document default from the camera', () => {
+    const cam = { make: 'Synthetic', model: 'test', camToXyz: [[0.62, 0.22, 0.11], [0.27, 0.88, -0.15], [0.03, -0.12, 1.18]], asShotNeutral: [1.05, 1, 0.92] as [number, number, number] };
+    const d = defaultDocument('digital-raw', { sha256: 'f'.repeat(64), name: 'DSC_0001.NEF', width: 30, height: 20, camera: cam });
+    expect((d.stages.scene!.medium as SceneMedium).whiteBalance).toEqual(asShotWhiteBalance(cam));
+    expect(d.source.decode.mode).toBe('photo');
+    // a file without an as-shot white: no correction
+    expect((defaultDocument('digital-raw', { sha256: 'f'.repeat(64), width: 30, height: 20 }).stages.scene!.medium as SceneMedium).whiteBalance).toEqual(NO_CORRECTION);
   });
 
   it('real mode: the density goes into the time, the lights stay equal (the colour untouched), half way to the aim', async () => {
@@ -173,7 +172,7 @@ describe.skipIf(!existsSync(NEF))('local: a daylight NEF opens near the aim, not
     e.openDecoded(d.info, d.data);
     const g = new Graph();
     g.registerSource(d.info);
-    const before = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'DSC_8559.NEF' }), d.info.camera?.asShotNeutral !== undefined);
+    const before = newDocument('digital-raw', { sha256: sha, name: 'DSC_8559.NEF' }, { whiteBalance: asShotWhiteBalance(d.info.camera)! });
     const luma = async (r: Document): Promise<{ luma: number; rgb: number[] }> => {
       const top = compile(r, g).display;
       const n = top.op === 'output.frame' ? g.get(top.inputs[0]!)! : top;

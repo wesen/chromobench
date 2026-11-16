@@ -1,0 +1,32 @@
+{
+  "case": "cam-wb-tungsten",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-wb-tungsten/print.f32",
+  "sha256": "046d0ca8c3970adaf79288d6412e0e2b88b6ebc7b814386c24aa8c4e897ef27e",
+  "stats": {
+    "min": [
+      0.004890901,
+      0.005101367,
+      0.006295382
+    ],
+    "max": [
+      0.671923,
+      0.7360809,
+      0.8546547
+    ],
+    "mean": [
+      0.208789,
+      0.2388471,
+      0.4004371
+    ]
+  },
+  "warnings": []
+}

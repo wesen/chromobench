@@ -2,6 +2,7 @@
 // engine-mock; the owning ticket implements them in the reference and GPU engines.
 import { DOMAIN_NAMES } from '../domains.ts';
 import { defineOp, type OpDef } from '../registry.ts';
+import { NO_CORRECTION, TEMPERATURE_RANGE, TINT_RANGE } from '../white-balance.ts';
 
 const BOX_DOC = 'Box in source (sensor) pixels; absent means automatic.';
 
@@ -45,11 +46,10 @@ export const sourceOps: OpDef[] = [
     name: 'source.xyz', area: 'source', owner: 'CHB-006', on: 'Image', returns: 'Image', domainIn: 'camera-linear', domainOut: 'scene-xyz',
     class: 'pointwise', binding: 'scan',
     args: {
-      mode: { type: 'enum', values: ['daylight', 'as-shot', 'custom'], default: 'daylight', doc: 'White balance source.', ui: { widget: 'segmented', label: 'White balance', group: 'Capture' } },
-      temperature_K: { type: 'number', unit: 'K', min: 2000, max: 15000, usual: [2800, 10000], default: 5500, doc: 'Custom white balance temperature.', ui: { widget: 'slider', step: 50, label: 'Temperature', group: 'Capture', aside: 'mired' } },
-      tint: { type: 'number', unit: 'none', min: -150, max: 150, default: 0, doc: 'Custom white balance tint (green–magenta).', ui: { widget: 'slider', step: 1, label: 'Tint', group: 'Capture' } },
+      temperature_K: { type: 'number', unit: 'K', min: TEMPERATURE_RANGE[0], max: TEMPERATURE_RANGE[1], usual: [2500, 10000], default: NO_CORRECTION.temperature_K, doc: "White balance: the temperature of the light the scene was lit by (Lightroom's Temperature; higher makes the picture warmer). Default: no correction (D65).", ui: { widget: 'slider', step: 50, label: 'Temperature', group: 'White balance', aside: 'mired' } },
+      tint: { type: 'number', unit: 'none', min: TINT_RANGE[0], max: TINT_RANGE[1], usual: [-50, 50], default: NO_CORRECTION.tint, doc: "White balance: the light's tint, green (−) to magenta (+) correction, in Lightroom's units (Adobe's: 1 = 1/3000 of a CIE 1960 uv unit across the isotemperature line).", ui: { widget: 'slider', step: 1, label: 'Tint', group: 'White balance' } },
     },
-    doc: 'Photo mode: camera RGB to scene XYZ with the camera matrices in SourceInfo.camera (consumed by CHB-012).',
+    doc: 'Photo mode: camera RGB to white-balanced scene XYZ: the camera matrix (SourceInfo.camera), then the CAT16 adaptation from the white of the temperature and tint to D65 (contract white-balance.ts sceneMatrix).',
     see: ['capture.expose'],
   }),
 ];

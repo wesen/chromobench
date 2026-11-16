@@ -583,6 +583,32 @@ tests:     contract grid-rule.test.ts, composite-law.test.ts; core composite.tes
            GPU law:grid, law:density-floor, law:blend (20 modes)
 ```
 
+## Contract 1.6 (CHB-048: before the film)
+
+`CONTRACT_VERSION = '1.6.0'`. Phase 2's "before the film" work: the white balance of a camera file defined once in the
+contract (decision D2).
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| D2 (CHB-044), CHB-037 P9-12 | White balance before the film (`white-balance.ts`) | accepted | The scene medium's `whiteBalance` is the white of the light the scene was lit by: `{ temperature_K, tint }` in Lightroom's units (Robertson's isotemperature lines in CIE 1960 uv, the tint the offset along the line × −3000, as Adobe's DNG SDK; `temperatureToWhite` and its closed-form inverse `whiteToTemperature`, exact to 1e-13). `source.xyz` applies, after the camera matrix, the CAT16 adaptation (complete, in XYZ) from that white to D65; capture.expose then adapts D65 to the film's reference white with the same CAT16 (`cat16`, moved from core), so the two compose. A camera file opens with its raw's as-shot white (`asShotWhiteBalance`); `NO_CORRECTION` is D65 itself (the light as it was, as a daylight film sees it). `mode` (daylight / as-shot / custom) is gone: as-shot and none are values now, and every stored golden is reproduced bit for bit (max \|Δ\| = 0) with the translated values. `pickedWhiteBalance` is the eyedropper's rule; `WHITE_BALANCE_PRESETS` are Lightroom's presets for raw files |
+
+```text
+CC-025  stages.scene.medium.whiteBalance, source.xyz: the white of the light as temperature and tint, CAT16 to D65 (CHB-048; contract 1.6.0)
+class:     breaking (major for documents: whiteBalance.mode is removed; hard cut-off, no migration)
+changes:   white-balance.ts (D65_XYZ, CAT16_M, SRGB_TO_XYZ_M, cat16, xyToXYZ, xyOf, temperatureToWhite, whiteToTemperature,
+           whiteBalanceOf, NO_CORRECTION, whiteOf, cameraToXyz, asShotWhite, asShotWhiteBalance, whiteBalanceMatrix,
+           sceneMatrix, pickedWhiteBalance, WHITE_BALANCE_PRESETS, sameWhiteBalance, TEMPERATURE_RANGE 2000…50000 K,
+           TINT_RANGE ±150); SceneMedium.whiteBalance: WhiteBalance; NewDocumentOptions.whiteBalance; source.xyz args
+           temperature_K, tint (defaults NO_CORRECTION; mode removed)
+consumers: engines (core sceneMatrixAt calls sceneMatrix, core's camera.ts and cat16Matrix deleted; gpu binds core's
+           matrix; mock applies whiteBalanceMatrix after its sRGB camera); studio (defaultDocument takes the raw's as-shot
+           white; the white balance panel); DSL (generated)
+migration: none (hard cut-off); the golden documents were re-translated (tools/goldens/translate.ts), pictures unchanged
+tests:     contract white-balance.test.ts (round trip, Lightroom anchors, identity at as shot and none, composition,
+           eyedropper); core white-balance.test.ts (a white-balanced tungsten grey is the daylight grey through the film);
+           mock white-balance.test.ts; GPU film.spec.ts (a changed white balance against core); golden cam-wb-tungsten
+```
+
 ## Change-note template
 
 ```text
