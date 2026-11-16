@@ -216,7 +216,7 @@ function crop(img: Img, b: Box): Img {
   return out;
 }
 
-interface MockStroke { points: number[][]; radius: number; hardness?: number; mode?: string }
+interface MockStroke { points: number[][]; radius: number; hardness?: number; mode?: string; flow?: number }
 
 /**
  * mask.paint (the same rule as core's paintMask, kept here because the mock cannot import core): each
@@ -286,7 +286,8 @@ function paint(r: Img, strokes: readonly MockStroke[]): Img {
         const t = clamp((s.radius - d) / ew, 0, 1);
         const c = t * t * (3 - 2 * t);
         const k = y * r.w + x;
-        out.data[k] = s.mode === 'erase' ? out.data[k]! * (1 - c) : Math.max(out.data[k]!, c);
+        // the one algebra at the stroke's flow (contract 1.6)
+        out.data[k] = maskCombine(s.mode === 'erase' ? 'subtract' : 'add', out.data[k]!, c, s.flow ?? 1);
       }
     }
   }
@@ -613,6 +614,86 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
     });
   },
   'mask.paint': (ctx) => paint(recv(ctx), A(ctx, 'strokes') as MockStroke[]),
+  // selections (contract 1.6, CHB-049): the mock's own rasterisers of core's rules
+  'mask.rect': (ctx) => {
+    const b = A(ctx, 'box') as Box;
+    const t = num(ctx, 'angle_deg') * (Math.PI / 180);
+    const [cos, sin] = [Math.cos(t), Math.sin(t)];
+    return map(recv(ctx), 1, (_, x, y) => {
+      const dx = x + 0.5 - (b.x + b.w / 2), dy = y + 0.5 - (b.y + b.h / 2);
+      const d = Math.max(Math.abs(cos * dx + sin * dy) - b.w / 2, Math.abs(-sin * dx + cos * dy) - b.h / 2);
+      return [clamp(0.5 - d, 0, 1)];
+    });
+  },
+  'mask.polygon': (ctx) => {
+    const P = A(ctx, 'points') as number[][];
+    return map(recv(ctx), 1, (_, x, y) => {
+      const X = x + 0.5, Y = y + 0.5;
+      let inside = false, d = Infinity;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        const [xi, yi] = [P[i]![0]!, P[i]![1]!], [xj, yj] = [P[j]![0]!, P[j]![1]!];
+        if ((yi > Y) !== (yj > Y) && X >= xi + ((Y - yi) * (xj - xi)) / (yj - yi)) inside = !inside;
+        const dx = xi - xj, dy = yi - yj, l2 = dx * dx + dy * dy;
+        const t = l2 > 0 ? clamp(((X - xj) * dx + (Y - yj) * dy) / l2, 0, 1) : 0;
+        d = Math.min(d, Math.hypot(X - xj - t * dx, Y - yj - t * dy));
+      }
+      return [d < 0.5 ? clamp(0.5 + (inside ? d : -d), 0, 1) : inside ? 1 : 0];
+    });
+  },
+  'mask.wand': (ctx) => {
+    const r = recv(ctx);
+    const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;
+    const sd = A(ctx, 'seed') as Point;
+    const px = clamp(Math.floor(sd.x), 0, r.w - 1), py = clamp(Math.floor(sd.y), 0, r.h - 1);
+    const tol = num(ctx, 'tolerance'), soft = num(ctx, 'softness');
+    const seed = rgb3(Array.from(r.data.subarray((py * r.w + px) * r.c, (py * r.w + px + 1) * r.c)));
+    const out = map(r, 1, (px3) => {
+      const v = rgb3(px3);
+      const d = Math.max(...v.map((x, k) => Math.abs(x - seed[k]!))) / (hi - lo || 1);
+      return [d <= tol ? 1 : soft > 0 ? 1 - smoothstep(tol, tol + soft, d) : 0];
+    });
+    if (!(A(ctx, 'contiguous') as boolean)) return out;
+    // breadth-first from the seed through pixels the wand selects (4-connected)
+    const keep = new Uint8Array(r.w * r.h);
+    const queue = [py * r.w + px];
+    keep[queue[0]!] = 1;
+    while (queue.length) {
+      const i = queue.shift()!;
+      const x = i % r.w, y = Math.floor(i / r.w);
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]] as const) {
+        if (nx < 0 || ny < 0 || nx >= r.w || ny >= r.h) continue;
+        const j = ny * r.w + nx;
+        if (!keep[j] && out.data[j]! > 0) {
+          keep[j] = 1;
+          queue.push(j);
+        }
+      }
+    }
+    for (let i = 0; i < keep.length; i++) if (!keep[i]) out.data[i] = 0;
+    return out;
+  },
+  'mask.grow': (ctx) => {
+    // the octagon of core's growPlan, as four one-dimensional passes; pixels outside are left out
+    const r = recv(ctx);
+    const R = Math.abs(num(ctx, 'radius_px')), grow = num(ctx, 'radius_px') >= 0;
+    const s = Math.round(R * (Math.SQRT2 - 1)), a = Math.round(R * (1 - Math.SQRT1_2));
+    let cur = r;
+    for (const [dx, dy, L] of [[1, 0, s], [0, 1, s], [1, 1, a], [1, -1, a]] as const) {
+      if (!L) continue;
+      const prev = cur;
+      cur = map(prev, 1, (px, x, y) => {
+        let v = px[0]!;
+        for (let i = -L; i <= L; i++) {
+          const X = x + i * dx, Y = y + i * dy;
+          if (X < 0 || Y < 0 || X >= prev.w || Y >= prev.h) continue;
+          const u = prev.data[Y * prev.w + X]!;
+          v = grow ? Math.max(v, u) : Math.min(v, u);
+        }
+        return [v];
+      });
+    }
+    return cur;
+  },
   'mask.feather': (ctx) => boxBlur(recv(ctx), num(ctx, 'radius_px') / 2),
   'mask.constant': (ctx) => map(recv(ctx), 1, () => [num(ctx, 'value')]),
   'mask.combine': (ctx) => {

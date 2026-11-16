@@ -268,6 +268,11 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
 - `ellipse` { box, angle_deg } — Mask component 'ellipse': the ellipse inscribed in the box.
   - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box in document px (before rotation).
   - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+- `rect` { box, angle_deg } — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).
+  - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+  - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+- `polygon` { points } — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.
+  - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
 - `paint` { strokes } — Mask component 'paint': brush strokes rasterised with soft round dabs.
   - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
 - `luminance` { above, below, softness } — Mask component 'luminance': how far the receiver's luminance (the mean of its channels, normalised to its domain range) lies inside [above, below].
@@ -278,6 +283,11 @@ Layers (`insert('stages.print.stack', id, layer(op, params))`):
   - colour: vec3, [-0.5, 1.5], default [0.7,0,0] — The colour to select, OkLab (L, a, b) (the eyedropper reads it from the image the mask measures).
   - tolerance: number, [0, 1], default 0.1 — OkLab distance ΔE within which the mask is 1.
   - softness: number, [0, 1], default 0.05 — Distance over which it falls to 0 beyond the tolerance (a smoothstep).
+- `wand` { seed, tolerance, softness, contiguous } — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).
+  - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+  - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+  - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+  - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 
 ## Workbench
 
@@ -318,10 +328,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -382,10 +402,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -425,10 +455,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -491,10 +531,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -561,10 +611,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -618,10 +678,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -662,10 +732,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -716,10 +796,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -762,10 +852,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.densitometer({ at, aperture_px, response }) → value — Reads densities at a point, like a hand densitometer.`
     - at: point, px, default {"x":0,"y":0} — Centre in source px.
@@ -815,10 +915,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -858,10 +968,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -897,10 +1017,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -940,10 +1070,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -979,10 +1119,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -1017,6 +1167,8 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
   - `h.mask.feather({ radius_px }) → mask — Feathers (blurs) a mask.`
     - radius_px: number, px, [0, 100000], default 10 — Feather radius in document px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). The compiler converts the mask's feather_mm on the print with the print's pitch.
+  - `h.mask.grow({ radius_px }) → mask — Grows a mask (the maximum over a near-disc of radius r) or contracts it (the minimum), contract 1.6: the regular octagon closest to the disc, a square of half-side s = round(r(√2 − 1)) and two diagonals of half-length a = round(r(1 − √2/2)), each a one-dimensional pass in that order (rows, columns, the diagonal, the anti-diagonal); pixels outside the image are left out.`
+    - radius_px: number, px, [-100000, 100000], default 4 — Grow (> 0) or contract (< 0) by this radius in document px. The compiler converts the mask's grow_mm on the print with the print's pitch.
   - `h.mask.invert({  }) → mask — Inverse (1 − m), an involution.`
   - `h.mask.linear({ from, to }) → mask — Mask component 'linear': 1 at `from`, 0 at `to`, linear between, constant beyond (a graduated burn).`
     - from: point, px, default {"x":0,"y":0} — Where the mask is 1 (document px).
@@ -1027,10 +1179,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -1071,10 +1233,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -1110,10 +1282,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).
@@ -1149,10 +1331,20 @@ at build time. A function where an option goes is E_LAYOUT. A module declares it
     - softness: number, fraction, [0, 0.5], default 0.05 — Transition width.
   - `h.mask.paint({ strokes }) → mask — Mask component 'paint': brush strokes rasterised with soft round dabs.`
     - strokes: list, default [] — Brush strokes in order (in a document: a Coll of strokes).
+  - `h.mask.polygon({ points }) → mask — Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside.`
+    - points: polyline, default [[0,0],[16,0],[0,16]] — The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.
   - `h.mask.radial({ box, angle_deg, feather }) → mask — Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial gradient), pointwise: no blur, unlike the mask's feather.`
     - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — Bounding box of the outer ellipse in document px (before rotation).
     - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
     - feather: number, fraction, [0, 1], default 0.5 — Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between.
+  - `h.mask.rect({ box, angle_deg }) → mask — Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)).`
+    - box: box, px, default {"x":0,"y":0,"w":16,"h":16} — The rectangle in document px (before rotation).
+    - angle_deg: number, deg, [-90, 90], default 0 — Rotation about the box centre.
+  - `h.mask.wand({ seed, tolerance, softness, contiguous }) → mask — Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid).`
+    - seed: point, px, default {"x":0,"y":0} — Where the wand was clicked (document px): the pixel whose value is matched.
+    - tolerance: number, fraction, [0, 1], default 0.1 — How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125).
+    - softness: number, fraction, [0, 0.5], default 0.02 — The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).
+    - contiguous: bool, default true — Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.
 - **measure**
   - `h.measure.histogram({ channel, bins }) → value — Histogram over the domain range.`
     - channel: enum r|g|b|L, default "L" — Channel (L = mean of channels).

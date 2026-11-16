@@ -17,6 +17,8 @@ export const OP = Object.freeze({
   // contract 1.1: the composite stages' digital layers (engine/lower.ts; core composite/*.ts) and the fused mix
   ENCODE: 18, EXPOSURE: 19, MIXER: 20, CURVE: 21, LEVELS: 22, HSL: 23, VIBRANCE: 24, GRADE: 25, VIGNETTE: 26,
   MASK_COLOUR: 27, MASK_RADIAL: 28, SAVE: 29, MIX: 30,
+  // contract 1.6 (CHB-049): the rectangular marquee
+  MASK_RECT: 31,
 });
 export const MAXOPS = 12;
 /** Table lookup modes: hardware trilinear (parity tests only: 8-bit weights on real GPUs), manual tetrahedral (export), manual trilinear (preview, CHB-034), broken (no half-texel). */

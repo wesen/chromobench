@@ -11,6 +11,7 @@ Mask component 'colour': how close the image's colour is to a sample, 1 − smoo
 - Class: pointwise; binding: setting
 - UI: "Colour range" in the mask menu (order 60)
 - Implementation: mock
+- See: `mask.wand`
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
@@ -74,6 +75,19 @@ Feathers (blurs) a mask.
 |---|---|---|---|---|---|---|
 | `radius_px` | number | px | [0, 100000] | [0.5, 500] | `10` | Feather radius in document px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). The compiler converts the mask's feather_mm on the print with the print's pitch. |
 
+## `mask.grow`
+
+Grows a mask (the maximum over a near-disc of radius r) or contracts it (the minimum), contract 1.6: the regular octagon closest to the disc, a square of half-side s = round(r(√2 − 1)) and two diagonals of half-length a = round(r(1 − √2/2)), each a one-dimensional pass in that order (rows, columns, the diagonal, the anti-diagonal); pixels outside the image are left out. On a preview grid r is scaled with the grid.
+
+- Owner: CHB-049
+- On: Mask (mask) → Mask (mask)
+- Class: spatial; binding: setting
+- Implementation: mock
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `radius_px` | number | px | [-100000, 100000] | [-100, 100] | `4` | Grow (> 0) or contract (< 0) by this radius in document px. The compiler converts the mask's grow_mm on the print with the print's pitch. |
+
 ## `mask.invert`
 
 Inverse (1 − m), an involution.
@@ -126,7 +140,21 @@ Mask component 'paint': brush strokes rasterised with soft round dabs.
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
-| `strokes` | list of {points, radius, hardness, mode} |  |  |  | `[]` | Brush strokes in order (in a document: a Coll of strokes). |
+| `strokes` | list of {points, radius, hardness, mode, flow} |  |  |  | `[]` | Brush strokes in order (in a document: a Coll of strokes). |
+
+## `mask.polygon`
+
+Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside. The receiver only gives the size.
+
+- Owner: CHB-049
+- On: Image (any) → Mask (mask)
+- Class: pointwise; binding: setting
+- UI: "Lasso" in the mask menu (order 34)
+- Implementation: mock
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `points` | polyline |  |  |  | `[[0,0],[16,0],[0,16]]` | The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first. |
 
 ## `mask.radial`
 
@@ -143,3 +171,36 @@ Mask component 'radial': an ellipse with its own soft edge (Lightroom's radial g
 | `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` | Bounding box of the outer ellipse in document px (before rotation). |
 | `angle_deg` | number | deg | [-90, 90] |  | `0` | Rotation about the box centre. |
 | `feather` | number | fraction | [0, 1] |  | `0.5` | Soft edge as a fraction of the radius: 1 inside the ellipse scaled by 1 − feather, 0 from the outer ellipse on, a smoothstep between. |
+
+## `mask.rect`
+
+Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)). The receiver only gives the size.
+
+- Owner: CHB-049
+- On: Image (any) → Mask (mask)
+- Class: pointwise; binding: setting
+- UI: "Rectangle" in the mask menu (order 32)
+- Implementation: mock
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `box` | box | px |  |  | `{"x":0,"y":0,"w":16,"h":16}` | The rectangle in document px (before rotation). |
+| `angle_deg` | number | deg | [-90, 90] |  | `0` | Rotation about the box centre. |
+
+## `mask.wand`
+
+Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid). Contiguous: c where the pixel is 4-connected to the seed's pixel through pixels with c > 0, else 0. The receiver is the cut the mask reads (as for the luminance range), so the wand samples the image the mask reads: by default the stage's input.
+
+- Owner: CHB-049
+- On: Image (any) → Mask (mask)
+- Class: global; binding: setting
+- UI: "Magic wand" in the mask menu (order 70)
+- Implementation: mock
+- See: `mask.colour`, `mask.luminance`
+
+| Argument | Type | Unit | Range | Usual | Default | Doc |
+|---|---|---|---|---|---|---|
+| `seed` | point | px |  |  | `{"x":0,"y":0}` | Where the wand was clicked (document px): the pixel whose value is matched. |
+| `tolerance` | number | fraction | [0, 1] | [0, 0.4] | `0.1` | How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image's range (Photoshop's 32 of 255 is 0.125). |
+| `softness` | number | fraction | [0, 0.5] | [0, 0.1] | `0.02` | The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge). |
+| `contiguous` | bool |  |  |  | `true` | Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere. |

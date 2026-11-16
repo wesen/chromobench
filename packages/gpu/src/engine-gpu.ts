@@ -10,7 +10,7 @@
 // combine and blur passes), engine/reduce.ts (measure reductions), engine/results.ts (result cache policy).
 // This file keeps the Engine surface, device-loss handling, sources, and execute() (one materialised node).
 import {
-  ChromobenchError, fail, getOp, isChromobenchError, Graph, MASK_T_FLOOR, quantizeScale, sha256Hex,
+  ChromobenchError, DOMAINS, fail, getOp, gridAxis, isChromobenchError, Graph, MASK_T_FLOOR, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
@@ -20,7 +20,11 @@ import type { Segment } from './chain/program.ts';
 import { GpuRuntime, type AccelChoice, type RuntimeOptions } from './device.ts';
 import { Residency, sampleSource, type ResidentStats } from './residency.ts';
 import { REDUCE_WGSL, Reducer } from './measure.ts';
-import { claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigma, paintMask, rebateBox, seedFallbackSpectra, whiteAt, type PhysicsData, type Stroke } from '@chromobench/core';
+import {
+  claritySigma, clearExposure, densitiesOf, densityMaskSigma, featherSigma, growPlan, paintMask, polygonMask, rebateBox, seedFallbackSpectra, wandAt, wandFlood, wandMask, wandSeedPixel, whiteAt,
+  type PhysicsData, type Stroke, type WandSettings,
+} from '@chromobench/core';
+import { Morph } from './morph.ts';
 import { Blur } from './spatial.ts';
 import { Retouch, type RepairSpot } from './retouch.ts';
 import { FILM_OPS, FilmGpu } from './film.ts';
@@ -102,6 +106,7 @@ export class GpuEngine implements Engine {
   private chain: ChainRunner;
   private reducer: Reducer;
   private blur: Blur;
+  private morph: Morph;
   private film: FilmGpu;
   private dummyTex: GPUTexture | null = null;
   private retouchK: { rt: GpuRuntime; k: Retouch } | null = null;
@@ -126,6 +131,11 @@ export class GpuEngine implements Engine {
   private recreating: Promise<void> | null = null;
   /** Whole-frame blur fields of exact (tiled) exports, by node, purpose and σ; the newest few within a quarter of the budget (CHB-037 P3b). */
   private readonly fields = new Map<string, { tex: GPUTexture; s: number; pad: number }>();
+  /**
+   * The magic wand's coverage on a whole-frame grid, by node and grid size (contract 1.6): a contiguous wand needs the
+   * whole frame, so a part (a zoomed screen render, an export tile) is cut from it. CPU memory; the newest few.
+   */
+  private readonly wands = new Map<string, Float32Array>();
   /** Whole-frame reference extremes of density masks in exact exports, by node. */
   private readonly extremes = new Map<string, { min: number; max: number }>();
 
@@ -140,6 +150,7 @@ export class GpuEngine implements Engine {
     this.chain = new ChainRunner(rt, this.tables);
     this.reducer = new Reducer(rt);
     this.blur = new Blur(rt);
+    this.morph = new Morph(rt);
     this.film = new FilmGpu(rt, this.blur);
     this.residency = this.residencyOn(rt);
     rt.onLost(() => this.dropDeviceState());
@@ -232,6 +243,7 @@ export class GpuEngine implements Engine {
       this.chain = new ChainRunner(rt, this.tables);
       this.reducer = new Reducer(rt);
       this.blur = new Blur(rt);
+      this.morph = new Morph(rt);
       this.film = new FilmGpu(rt, this.blur);
       this.residency = this.residencyOn(rt);
       rt.onLost(() => this.dropDeviceState());
@@ -580,10 +592,12 @@ export class GpuEngine implements Engine {
     const tex = (id: string): GPUTexture => texs.get(id) ?? fail('E_INTERNAL', `GPU render: ${id.slice(0, 12)}… was not materialised`);
     const run: RunTarget = { outW: t.outW, outH: t.outH, frameW: t.frameW, frameH: t.frameH, region: t.region, precision: t.precision };
     if (p.kind === 'tail') {
-      if (n.op === 'mask.paint') {
-        // strokes are rasterised by core on this grid (the same f64 function as the reference engine) and uploaded
-        const m = paintMask(n.args['strokes'] as readonly Stroke[], { w: t.outW, h: t.outH, region: t.region });
-        return this.chain.upload(m, t.outW, t.outH, 1, 'mask.paint');
+      if (n.op === 'mask.paint' || n.op === 'mask.polygon') {
+        // strokes and lassos are rasterised by core on this grid (the same f64 functions as the reference engine) and
+        // uploaded
+        const g = { w: t.outW, h: t.outH, region: t.region };
+        const m = n.op === 'mask.paint' ? paintMask(n.args['strokes'] as readonly Stroke[], g) : polygonMask(n.args['points'] as number[][], g);
+        return this.chain.upload(m, t.outW, t.outH, 1, n.op);
       }
       const treb = await this.rebates(p.nodes.slice(p.from));
       const low = this.lower(p.nodes, treb, p.from);
@@ -631,6 +645,9 @@ export class GpuEngine implements Engine {
         const mode = ['add', 'subtract', 'intersect'].indexOf(a['mode'] as string);
         return this.mix(MODE.MASK, recv, tex(a['other'] as string), null, 0, [a['amount'] as number, mode]);
       }
+      // contract 1.6 (CHB-049): grow or contract (kernels/morph.wgsl), the magic wand (core's, on the GPU's values)
+      case 'mask.grow': return this.morph.grow(recv, (a['radius_px'] as number) * scale);
+      case 'mask.wand': return this.wand(nid, recv, t);
       case 'mask.feather': return this.blurAt(`${nid}|feather`, recv, featherSigma(a['radius_px'] as number) * scale, t, (g) => this.texOf(n.inputs[0]!, g));
       case 'print.densityMask': {
         // core maskDensityPolar: PD = x_clear − x from the main print.expose, blur the mean transmittance,
@@ -687,6 +704,84 @@ export class GpuEngine implements Engine {
 
   // ---- exact exports of a part of the frame (CHB-037 P3b) --------------------------------------------------------
 
+  /**
+   * mask.wand on grid t: core's wandMask on the receiver's values read back from the GPU. On a grid of the whole frame
+   * the receiver is already there; for a part (a zoomed screen render, a tile of an exact export) the coverage is
+   * computed on the whole frame — at the part's scale for a preview, at full resolution box by box for an exact export —
+   * and the part's pixels are read from it, so a contiguous region is the same whatever the part.
+   */
+  private async wand(nid: string, recv: GPUTexture, t: GridTarget): Promise<GPUTexture> {
+    const n = this.graph.get(nid)!;
+    const a = n.args as Record<string, unknown>;
+    const rd = this.graph.get(n.inputs[0]!)!.info as ImageInfo;
+    const [lo, hi] = DOMAINS[rd.domain].range;
+    const ws: WandSettings = { tolerance: a['tolerance'] as number, softness: a['softness'] as number, contiguous: a['contiguous'] as boolean, lo, hi };
+    const seed = a['seed'] as { x: number; y: number };
+    const wholeFrame = t.region.x === 0 && t.region.y === 0 && t.region.w === t.frameW && t.region.h === t.frameH;
+    if (wholeFrame) {
+      const key = `${nid}|${t.outW}x${t.outH}`;
+      let cov = this.wands.get(key);
+      if (!cov) {
+        const v = await this.chain.readTexture(recv, t.outW, t.outH);
+        cov = Float32Array.from(wandMask(v, t.outW, t.outH, 4, wandSeedPixel(seed.x, 0, t.frameW, t.outW), wandSeedPixel(seed.y, 0, t.frameH, t.outH), ws));
+        this.keepWand(key, cov);
+      }
+      return this.chain.upload(cov, t.outW, t.outH, 1, 'mask.wand');
+    }
+    // a part: the whole frame's coverage on its grid (full resolution in an exact export), then the part's pixels
+    const scale = t.outW / t.region.w;
+    const W = t.exact ? t.frameW : Math.max(1, Math.round(t.frameW * scale)), H = t.exact ? t.frameH : Math.max(1, Math.round(t.frameH * scale));
+    const key = `${nid}|${W}x${H}`;
+    let cov = this.wands.get(key);
+    if (!cov) {
+      const whole: GridTarget = { ...t, region: { x: 0, y: 0, w: t.frameW, h: t.frameH }, outW: W, outH: H };
+      const px = wandSeedPixel(seed.x, 0, t.frameW, W), py = wandSeedPixel(seed.y, 0, t.frameH, H);
+      if (!t.exact) {
+        const tex = await this.texOf(n.inputs[0]!, whole);
+        try {
+          cov = Float32Array.from(wandMask(await this.chain.readTexture(tex, W, H), W, H, 4, px, py, ws));
+        } finally {
+          this.rt.textures.release(tex);
+        }
+      } else {
+        // full resolution, box by box: the seed's value first, then each box's coverage, then the flood
+        const one = await this.texOf(n.inputs[0]!, { ...t, region: { x: px, y: py, w: 1, h: 1 }, outW: 1, outH: 1 });
+        const sv = await this.chain.readTexture(one, 1, 1);
+        this.rt.textures.release(one);
+        cov = new Float32Array(W * H);
+        for (const box of this.boxes(whole, 1)) {
+          const tex = await this.texOf(n.inputs[0]!, { ...t, region: box, outW: box.w, outH: box.h });
+          try {
+            const v = await this.chain.readTexture(tex, box.w, box.h);
+            for (let y = 0; y < box.h; y++) for (let x = 0; x < box.w; x++) cov[(box.y + y) * W + box.x + x] = wandAt(v, (y * box.w + x) * 4, 4, sv, ws);
+          } finally {
+            this.rt.textures.release(tex);
+          }
+        }
+        if (ws.contiguous) wandFlood(cov, W, H, py * W + px);
+      }
+      this.keepWand(key, cov);
+    }
+    const xs = gridAxis(t.region.x, t.region.w, t.outW), ys = gridAxis(t.region.y, t.region.h, t.outH);
+    const part = new Float32Array(t.outW * t.outH);
+    for (let q = 0; q < t.outH; q++) {
+      const Y = Math.min(H - 1, Math.floor(((ys[q]! + 0.5) * H) / t.frameH));
+      for (let p = 0; p < t.outW; p++) part[q * t.outW + p] = cov[Y * W + Math.min(W - 1, Math.floor(((xs[p]! + 0.5) * W) / t.frameW))]!;
+    }
+    return this.chain.upload(part, t.outW, t.outH, 1, 'mask.wand');
+  }
+
+  private keepWand(key: string, cov: Float32Array): void {
+    this.wands.set(key, cov);
+    let bytes = 0;
+    for (const c of this.wands.values()) bytes += c.byteLength;
+    for (const k of this.wands.keys()) {
+      if (this.wands.size <= 1 || (this.wands.size <= 4 && bytes <= 256 * 2 ** 20)) break;
+      bytes -= this.wands.get(k)!.byteLength;
+      this.wands.delete(k);
+    }
+  }
+
   /** True when grid t covers its whole frame at full resolution. */
   private whole(t: GridTarget): boolean {
     return t.region.x === 0 && t.region.y === 0 && t.region.w === t.frameW && t.region.h === t.frameH && t.outW === t.frameW && t.outH === t.frameH;
@@ -713,6 +808,7 @@ export class GpuEngine implements Engine {
     const local = (sigma: number): number => (sigma > 0 && sigma <= MAX_PASS_SIGMA ? Math.min(96, Math.ceil(3 * sigma)) : 0);
     let own = 0;
     if (n.op === 'mask.feather') own = local(featherSigma(a['radius_px'] as number));
+    else if (n.op === 'mask.grow') own = growPlan(a['radius_px'] as number).reach;
     else if (n.op === 'print.densityMask' && (a['gamma'] as number) !== 0) own = local(densityMaskSigma(a['radius_um'] as number, info.umPerPx.film));
     else if ((n.op === 'clarity' || n.op === 'sharpen') && (a['strength'] as number) !== 0) own = local(claritySigma(a['radius_mm'] as number, info.umPerPx.paper, n.op));
     else if (FILM_OPS.has(n.op)) {

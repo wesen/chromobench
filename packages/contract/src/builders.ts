@@ -42,11 +42,15 @@ export function group(name: string, ...entries: readonly (readonly [Id, Entry | 
 export const reads = (cut: 'stage-input' | CutName): Modifier<{ reads: 'stage-input' | CutName }> => field('reads')(cut);
 export const feather = (mm: number): Modifier<{ feather_mm: number }> => field('feather_mm')(mm);
 export const inverted = (on = true): Modifier<{ invert: boolean }> => field('invert')(on);
+/** Grow (> 0) or contract (< 0) the mask by mm on the print (contract 1.6). */
+export const grown = (mm: number): Modifier<{ grow_mm: number }> => field('grow_mm')(mm);
+/** The mask's density 0…1 (contract 1.6): 1 − density·(1 − m). */
+export const density = (d: number): Modifier<{ density: number }> => field('density')(d);
 const add = (kind: MaskComponentKind, combine: MaskCombine) => (id: Id, p: Params, a = 1): Modifier<Mask> =>
   modifier<Mask>(`${combine} ${kind}`, (m) => ({ ...m, components: Coll.insert(m.components, id, { kind, params: p, combine, amount: a, enabled: true }) }), [id, p as Json, a]);
 
 export const MaskValue = defineValue<Mask>()('mask', {
-  name: named, feather, invert: inverted, reads,
+  name: named, feather, invert: inverted, reads, grow: grown, density,
   /** Adds a component: `.add('c2', 'ellipse', { box }, 'intersect')`. */
   add: (id: Id, kind: MaskComponentKind, p: Params, combine: MaskCombine = 'add', a = 1) => add(kind, combine)(id, p, a),
 });

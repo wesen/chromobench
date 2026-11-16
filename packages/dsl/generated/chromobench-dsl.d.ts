@@ -66,7 +66,10 @@ export interface CameraLinearHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -99,7 +102,10 @@ export interface SceneXyzHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -121,7 +127,10 @@ export interface ScannerDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -153,7 +162,10 @@ export interface FilmLogHHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -184,7 +196,10 @@ export interface FilmDyesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -210,7 +225,10 @@ export interface PrintingDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -230,7 +248,10 @@ export interface PaperLogHHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -254,7 +275,10 @@ export interface PaperDyesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -275,7 +299,10 @@ export interface PrintXyzHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     densitometer(args?: Partial<OpArgs["measure.densitometer"]>): ValueHandle<{ D: unknown; visual?: unknown }>;
@@ -300,7 +327,10 @@ export interface SceneRgbHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -320,7 +350,10 @@ export interface SceneOklabHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -339,7 +372,10 @@ export interface PrintRgbHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -359,7 +395,10 @@ export interface PrintOklabHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -378,7 +417,10 @@ export interface DisplayRgbHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -396,11 +438,15 @@ export interface MaskHandle extends ImageHandleBase {
     constant(args?: Partial<OpArgs["mask.constant"]>): MaskHandle;
     ellipse(args?: Partial<OpArgs["mask.ellipse"]>): MaskHandle;
     feather(args?: Partial<OpArgs["mask.feather"]>): MaskHandle;
+    grow(args?: Partial<OpArgs["mask.grow"]>): MaskHandle;
     invert(args?: Partial<OpArgs["mask.invert"]>): MaskHandle;
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -422,7 +468,10 @@ export interface ScanClassesHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -441,7 +490,10 @@ export interface ScalarFieldHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;
@@ -460,7 +512,10 @@ export interface SilverDensityHandle extends ImageHandleBase {
     linear(args?: Partial<OpArgs["mask.linear"]>): MaskHandle;
     luminance(args?: Partial<OpArgs["mask.luminance"]>): MaskHandle;
     paint(args?: Partial<OpArgs["mask.paint"]>): MaskHandle;
+    polygon(args?: Partial<OpArgs["mask.polygon"]>): MaskHandle;
     radial(args?: Partial<OpArgs["mask.radial"]>): MaskHandle;
+    rect(args?: Partial<OpArgs["mask.rect"]>): MaskHandle;
+    wand(args?: Partial<OpArgs["mask.wand"]>): MaskHandle;
   };
   readonly measure: {
     histogram(args?: Partial<OpArgs["measure.histogram"]>): ValueHandle<{ edges: unknown; counts: unknown }>;

@@ -13,6 +13,8 @@ export const GPU_OPS = [
   // the darkroom's light law (contract 1.0: one print.combine with terms, densities, filters, preflash) and masks
   'print.combine', 'print.densityMask',
   'mask.luminance', 'mask.linear', 'mask.ellipse', 'mask.paint', 'mask.constant', 'mask.combine', 'mask.feather', 'mask.invert',
+  // contract 1.6 (CHB-049): the selections' components and the mask's grow
+  'mask.rect', 'mask.polygon', 'mask.wand', 'mask.grow',
   // the composite and repair laws: an entry's mix, coalesced heal and clone runs, clarity on the print
   'composite.mix', 'heal', 'clone', 'clarity',
   // contract 1.1: the digital layers of the composite stages, their encodings and mask components (engine/lower.ts)
@@ -25,9 +27,9 @@ export const GPU_OPS = [
  * Multi-input or spatial ops: materialised, computed from materialised inputs (combine.wgsl, blur.wgsl, retouch.wgsl).
  * print.combine is one only when a term reads a texture (engine/light.ts combineIsPointwise); otherwise it fuses.
  */
-export const BARRIER_OPS: ReadonlySet<string> = new Set(['output.frame', 'print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
+export const BARRIER_OPS: ReadonlySet<string> = new Set(['output.frame', 'print.combine', 'print.densityMask', 'mask.feather', 'mask.combine', 'mask.grow', 'mask.wand', 'composite.mix', 'heal', 'clone', 'clarity', 'sharpen', ...FILM_OPS]);
 /** Masks from coordinates, strokes or a constant: their receiver's values are never read. */
-export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.radial', 'mask.ellipse', 'mask.paint', 'mask.constant']);
+export const GENERATOR_OPS: ReadonlySet<string> = new Set(['mask.linear', 'mask.radial', 'mask.ellipse', 'mask.rect', 'mask.polygon', 'mask.paint', 'mask.constant']);
 /** Pointwise ops a fused composite.mix may run between SAVE and MIX (one program op each; engine/dag.ts fusedMixTop). */
 export const FUSIBLE_TOP_OPS: ReadonlySet<string> = new Set(['composite.encode', 'exposure', 'curve', 'levels', 'hsl', 'vibrance', 'grade', 'mixer', 'vignette']);
 /** Largest σ (output px) of one blur pass (spatial.ts MAX_RADIUS = 3σ); wider blurs run on a downsampled field (engine/textures.ts gaussianBlur). */

@@ -583,6 +583,37 @@ tests:     contract grid-rule.test.ts, composite-law.test.ts; core composite.tes
            GPU law:grid, law:density-floor, law:blend (20 modes)
 ```
 
+## Contract 1.6 (CHB-049: selections as mask components, mask controls)
+
+`CONTRACT_VERSION = '1.6.0'`. Decision D3 (CHB-044): selections are wanted, as mask components — no separate
+selection state, one algebra. MASK-3 (CHB-040 t:srjo) adds the mask controls the engines must compute.
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| D3, CHB-040 t:f4vl | `mask.rect` (the rectangular marquee) | accepted | The box rotated about its centre; the edge antialiased over one pixel, clamp(½ − d) with d the signed distance outside the box, as the ellipse's. Pointwise; the GPU's op 31 |
+| D3 | `mask.polygon` (the freehand and polygonal lassos) | accepted | Even-odd inside; within ½ document px of the outline ½ ± the distance (+ inside). Rasterised by core on the grid (as `mask.paint`); the GPU uploads it |
+| D3 | `mask.wand` (the magic wand) | accepted | A range component (reads the cut the mask reads, as the luminance range, so it samples the image the mask reads — by default the stage's input). 1 − smoothstep(tolerance, tolerance + softness, d), d the largest channel difference from the seed pixel over the domain's range; contiguous keeps the 4-connected region of the seed through pixels with coverage > 0. Class global: on a part of the frame the GPU computes the whole frame's coverage (at the part's scale for a preview, full resolution box by box for an exact export) and cuts the part |
+| D3 | `mask.grow` and `Mask.grow_mm` | accepted | Grow (max) or contract (min) over the octagon closest to the disc of radius r: a square of half-side round(r(√2 − 1)) and two diagonals of half-length round(r(1 − √2/2)), four one-dimensional passes, pixels outside left out. The mask's `grow_mm` (mm on the print, signed; absent 0) compiles before the feather. Laws: grow then contract by r lies between the mask and the grown mask; contract then grow under the mask; contract is grow of the inverse, inverted |
+| MASK-3 | `Mask.density` | accepted | Photoshop's mask density after the invert: 1 − density·(1 − m) (absent 1), compiled as the algebra's add of a full mask at amount 1 − density — no new op |
+| MASK-3 | `MaskComponent.invert` | accepted | 1 − c before the component is combined (absent false): `mask.invert` on the component's node |
+| MASK-3 | `mask.paint` strokes' `flow` | accepted | A stroke folds into the mask with the one algebra at its flow (absent 1: add is the maximum and erase v·(1 − c), as before); below 1 strokes build up |
+
+```text
+CC-025  selections as mask components (rect, polygon, wand), mask.grow, Mask.grow_mm and density, a component's invert,
+        a stroke's flow (CHB-049; contract 1.6.0)
+class:     additive (minor): new ops and optional fields; absent fields are their defaults, so documents and node ids
+           of earlier masks are unchanged (no golden moved)
+changes:   document.ts MaskComponentKind + rect, polygon, wand (RANGE_COMPONENTS + wand); MaskComponent.invert?;
+           Stroke.flow?; Mask.grow_mm?, density?; catalogue mask.rect, mask.polygon, mask.wand, mask.grow; mask.paint
+           strokes.of.flow (optional); compile: component invert, grow → feather → invert → density
+consumers: engines (core masks.ts rectAt, polygonMask, wandMask/wandAt/wandFlood, growMask/growPlan; gpu op 31,
+           kernels/morph.wgsl, the wand from read-back values; mock: its own rasterisers); UI (the stack kit's mask
+           controls, the select kit); DSL (generated)
+migration: none (optional fields)
+tests:     contract mask-controls.test.ts; core selections.test.ts; conformance semantics (selection, grow); GPU
+           law:selections, law:tiles (grow, wand)
+```
+
 ## Change-note template
 
 ```text

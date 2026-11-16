@@ -266,13 +266,15 @@ export interface Media {
 // ---- masks -----------------------------------------------------------------------------------------------------
 
 /**
- * Mask components (design §25), each the op `mask.<kind>`: geometric (linear, radial, ellipse, paint: document pixels)
- * or a range of the image the mask reads (luminance, colour).
+ * Mask components (design §25), each the op `mask.<kind>`: geometric (linear, radial, ellipse, rect, polygon, paint:
+ * document pixels) or a range of the image the mask reads (luminance, colour, wand). Contract 1.6 (CHB-049, D3): the
+ * selections are components too — the rectangle and ellipse marquees (`rect`, `ellipse`), the lassos (`polygon`) and
+ * the magic wand (`wand`) — so a selection is a mask and there is one algebra.
  */
-export type MaskComponentKind = 'linear' | 'radial' | 'ellipse' | 'paint' | 'luminance' | 'colour';
-export const MASK_COMPONENT_KINDS: readonly MaskComponentKind[] = ['linear', 'radial', 'ellipse', 'paint', 'luminance', 'colour'];
+export type MaskComponentKind = 'linear' | 'radial' | 'ellipse' | 'rect' | 'polygon' | 'paint' | 'luminance' | 'colour' | 'wand';
+export const MASK_COMPONENT_KINDS: readonly MaskComponentKind[] = ['linear', 'radial', 'ellipse', 'rect', 'polygon', 'paint', 'luminance', 'colour', 'wand'];
 /** Components that measure the image the mask reads (the others depend on position only). */
-export const RANGE_COMPONENTS: readonly MaskComponentKind[] = ['luminance', 'colour'];
+export const RANGE_COMPONENTS: readonly MaskComponentKind[] = ['luminance', 'colour', 'wand'];
 export type MaskCombine = 'add' | 'subtract' | 'intersect';
 export const MASK_COMBINES: readonly MaskCombine[] = ['add', 'subtract', 'intersect'];
 
@@ -284,6 +286,8 @@ export interface MaskComponent {
   /** How much the component acts: v ← v + amount·(combine(v, c) − v). */
   readonly amount: number;
   readonly enabled: boolean;
+  /** The component inverted (1 − c) before it is combined (contract 1.6); absent: false. */
+  readonly invert?: boolean;
 }
 
 export interface Stroke {
@@ -292,15 +296,30 @@ export interface Stroke {
   readonly radius: number;
   readonly hardness: number;
   readonly mode: 'add' | 'erase';
+  /** How far one stroke builds the mask up towards its own coverage (the one algebra's amount; contract 1.6): absent 1. */
+  readonly flow?: number;
 }
 
-/** A coverage function in 0…1 (design §25): components folded from the empty mask, then feather, then invert. */
+/**
+ * A coverage function in 0…1 (design §25): components folded from the empty mask, then grown or contracted, feathered,
+ * inverted and held to its density (contract 1.6, CHB-049).
+ */
 export interface Mask {
   readonly name: string;
   readonly components: Coll<MaskComponent>;
   /** Gaussian feather radius in mm on the print (σ = radius / 2, as mask.feather). */
   readonly feather_mm: number;
   readonly invert: boolean;
+  /**
+   * Grow (> 0) or contract (< 0) by this radius in mm on the print, before the feather (mask.grow: the maximum, or the
+   * minimum, over a near-disc of that radius); absent: 0. Contract 1.6.
+   */
+  readonly grow_mm?: number;
+  /**
+   * Photoshop's mask density, 0…1, after the invert: m ← 1 − density·(1 − m): at 1 the mask holds the entry back fully
+   * where it is 0, at 0 the entry acts everywhere; absent: 1. Contract 1.6.
+   */
+  readonly density?: number;
   /** What range components (luminance, colour) measure: the input of the stage using the mask, or a named cut. */
   readonly reads: 'stage-input' | CutName;
 }
