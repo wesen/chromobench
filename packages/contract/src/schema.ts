@@ -29,6 +29,16 @@ function arg(op: string, name: string, over: Partial<ArgSpec> = {}): ArgSpec {
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const custom = (doc: string, check: (v: unknown) => string | null): CustomRule => ({ doc, check });
 const boxOr = (v: unknown, also: unknown[]): boolean => also.includes(v) || (isPlainObject(v) && Object.keys(v).sort().join() === 'h,w,x,y' && ['x', 'y', 'w', 'h'].every((k) => fin(v[k])));
+/** An export size (ExportSize, contract 1.6): what is wrong with v, or null. */
+function sizeProblem(v: unknown): string | null {
+  if (!isPlainObject(v)) return "expected { by: 'original' | 'long' | 'percent', … }";
+  const keys = Object.keys(v).sort().join();
+  if (v['by'] === 'original') return keys === 'by' ? null : "{ by: 'original' } takes no other field";
+  if (v['by'] === 'long') return keys === 'by,px' && fin(v['px']) && Number.isInteger(v['px']) && v['px'] >= 16 && v['px'] <= 100000 ? null : "{ by: 'long', px }: px a whole number of pixels, 16…100000";
+  if (v['by'] === 'percent') return keys === 'by,pct' && fin(v['pct']) && v['pct'] >= 1 && v['pct'] <= 100 ? null : "{ by: 'percent', pct }: pct in 1…100";
+  return "by must be 'original', 'long' or 'percent'";
+}
+
 const knee = (): Schema => ({
   method: { type: 'enum', values: [...KNEE_METHODS], doc: 'Gamut compression method.' },
   strength: { type: 'number', unit: 'none', min: 0, max: 20, doc: 'Knee strength (p for oklch, s for tanh-shoulder).' },
@@ -85,7 +95,8 @@ export function schemas(): { media: Record<StageName, Schema>; geometry: Schema;
         format: arg('output.encode', 'format'),
         space: { type: 'enum', values: [...OUTPUT_SPACES], doc: 'Export colour space.' },
         knee: knee(),
-        scale: custom("'full' or a number in (0, 1]", (v) => (v === 'full' || (fin(v) && v > 0 && v <= 1) ? null : "expected 'full' or a number in (0, 1]")),
+        size: custom("{ by: 'original' }, { by: 'long', px } (px ≥ 16) or { by: 'percent', pct } (pct in 1…100)", sizeProblem),
+        quality: arg('output.encode', 'quality'),
         dpi: arg('output.encode', 'dpi'),
         compression: arg('output.encode', 'compression'),
         signal: { type: 'enum', values: ['icc', 'icc+cicp', 'none'], doc: 'Colour signalling.' },

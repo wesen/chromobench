@@ -328,11 +328,19 @@ export type OutputSpaceId = 'srgb' | 'display-p3' | 'rec2020' | 'adobe-rgb' | 'p
 export const OUTPUT_SPACES: readonly OutputSpaceId[] = ['srgb', 'display-p3', 'rec2020', 'adobe-rgb', 'prophoto'];
 export type Intent = 'perceptual' | 'relative' | 'saturation' | 'absolute';
 
+/**
+ * The size of an export (contract 1.6, CHB-047): the file's own size of the frame ('original'), the long edge in pixels
+ * (never more than the original), or a percentage of the original size. Sizes are of the cropped, oriented frame.
+ */
+export type ExportSize = { readonly by: 'original' } | { readonly by: 'long'; readonly px: number } | { readonly by: 'percent'; readonly pct: number };
+
 export interface ExportSettings {
   readonly format: 'tiff16' | 'png16' | 'png8' | 'jpeg';
   readonly space: OutputSpaceId;
   readonly knee: KneeSpec;
-  readonly scale: 'full' | number;
+  readonly size: ExportSize;
+  /** JPEG quality, 1–100 (the IJG scale); the other formats are lossless and ignore it. */
+  readonly quality: number;
   readonly dpi: number;
   readonly compression: 'none' | 'deflate';
   readonly signal: 'icc' | 'icc+cicp' | 'none';
@@ -482,7 +490,7 @@ export function newDocument(kind: FrameKind, source: NewSource, opts: NewDocumen
       rendering: 'scan-of-print',
       white: 'D65',
       display: { knee, proof: null },
-      export: { format: 'tiff16', space: 'prophoto', knee, scale: 'full', dpi: 300, compression: 'deflate', signal: 'icc', document: 'sidecar' },
+      export: { format: 'tiff16', space: 'prophoto', knee, size: { by: 'original' }, quality: 90, dpi: 300, compression: 'deflate', signal: 'icc', document: 'sidecar' },
       printer: null,
     },
   };

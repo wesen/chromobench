@@ -8,7 +8,7 @@ import {
   type EngineCaps, type Engine, type EngineId, type EvalTarget, type ImageResult, type Measurement, type MeasureSpec, type NodeDef, type NodeRef,
   type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
-import type { DecodeMode, FromWorker, InitJob, InitReply, ToWorker, WireDecoded, WireResult, WorkerLog } from './worker-protocol.ts';
+import type { DecodeMode, FromWorker, InitJob, InitReply, ToWorker, WireDecoded, WirePixels, WireResult, WorkerLog } from './worker-protocol.ts';
 
 /** What WorkerClient needs of a Worker (a MessagePort-like object; tests pass a fake). */
 export interface WorkerLike {
@@ -83,6 +83,12 @@ export class WorkerClient {
   decode(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: { long: number; dust: boolean; keep: 'register' | 'return'; analysisLong?: number }): Promise<WireDecoded> {
     const buf = bytes.slice().buffer as ArrayBuffer;
     return this.call<WireDecoded>({ kind: 'decode', bytes: buf, sha256, name, mode, ...o }, { transfer: [buf] });
+  }
+
+  /** A file's pixels at an export's size under the source id `source` (CHB-047); 'register' keeps them in the worker. */
+  pixels(bytes: Uint8Array, sha256: string, source: string, name: string, mode: DecodeMode, o: { long: number; keep: 'register' | 'return' }): Promise<WirePixels> {
+    const buf = bytes.slice().buffer as ArrayBuffer;
+    return this.call<WirePixels>({ kind: 'pixels', bytes: buf, sha256, source, name, mode, ...o }, { transfer: [buf] });
   }
 
   terminate(): void {

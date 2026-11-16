@@ -22,7 +22,7 @@ import {
 import librawWasmUrl from '@colorhythm/libraw-wasm/libraw.wasm?url';
 import type { Journal } from '@chromobench/shell';
 import { gpuEvents, watchWorker, workerLog } from './capture.ts';
-import { decodeFile } from './decode.ts';
+import { decodeFile, decodePixels } from './decode.ts';
 import { referenceEngine, type RefLike } from './engine-serve.ts';
 import type { IntegrateToGrey } from './first-print.ts';
 import { ANALYSIS_LONG, StudioEngine, type HostServices } from './studio-engine.ts';
@@ -260,6 +260,14 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
       // meters the same ANALYSIS_LONG image, so the first print's Time does not depend on the engine)
       if (client) return client.decode(bytes, sha, name, mode, { long, dust: settings.dust, keep: inEngine ? 'register' : 'return', analysisLong: ANALYSIS_LONG });
       return decodeFile(bytes, sha, name, mode, { long, dust: settings.dust, roll, raw: LAZY_LIBRAW, analysisLong: ANALYSIS_LONG });
+    },
+    // CHB-047: the file at an export's size; kept in the worker for the reference engine there, else returned
+    decodePixels: async (bytes, sha, source, name, mode, long) => {
+      if (client) {
+        const px = await client.pixels(bytes, sha, source, name, mode, { long, keep: inEngine ? 'register' : 'return' });
+        return px.data ? { info: px.info, data: px.data } : { info: px.info };
+      }
+      return decodePixels(bytes, sha, source, name, mode, { long, raw: LAZY_LIBRAW });
     },
     prior: (name) => openPrior({ name }),
     forget: (e, sha) => (e as { forgetSource?: (s: string) => void }).forgetSource?.(sha),

@@ -26,6 +26,8 @@ import { DOCS, linkDataOf, linksOf, withEnlargerMode, type EnlargerMode, type Li
 import { describe, type Change, type ModelLookup } from './model/history.ts';
 import { modelAt } from './kit/args.ts';
 import type { CatalogEntry as CatalogFrame } from './sel.ts';
+import type { ExportRequestOf } from './commands/output.ts';
+import type { ExportResult } from './model/export.ts';
 
 /** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
 export const frameName = (f: Pick<FrameEntry, 'name' | 'strip'>): string => (f.strip ? `${f.name} · ${f.strip.index}/${f.strip.of}` : f.name);
@@ -60,8 +62,11 @@ export interface StudioHost {
   /** File ▸ Reopen <folder> (the folder used last; `folder` names it) */
   reopenFolder?(): unknown;
   folder?: string | null;
-  /** File ▸ Export… (Mod+E): format and colour space in a dialog */
-  exportPrint?(): unknown;
+  /**
+   * The export of frames with his export settings (CHB-047): the Output module's Export, File ▸ Export…, and
+   * output.export; progress through `onProgress`, one result per frame.
+   */
+  exportFrames?(req: ExportRequestOf): Promise<ExportResult[]>;
   /** File ▸ Save Document */
   saveDocument?(): unknown;
   /** File ▸ Open As ▸ Heal Dust: the host finds dust on open and adds a Dust group of heal layers to the scan stage */

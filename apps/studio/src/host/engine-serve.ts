@@ -15,8 +15,8 @@ import {
 import { RefEngine, type RefEngineOptions } from '@chromobench/core';
 import { loadDefaultPhysicsData } from '@chromobench/gpu';
 import { LibRawDecoder, setLibRawWasm, type FrameBase, type RawDecoder } from '@chromobench/ingest';
-import { decodeFile } from './decode.ts';
-import type { FromWorker, InitReply, ToWorker, WireDecoded, WireResult, WorkerLog } from './worker-protocol.ts';
+import { decodeFile, decodePixels } from './decode.ts';
+import type { FromWorker, InitReply, ToWorker, WireDecoded, WirePixels, WireResult, WorkerLog } from './worker-protocol.ts';
 
 /** A worker's global scope, or a MessagePort. */
 export interface EngineScope {
@@ -104,7 +104,7 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
   let raw: RawDecoder | null = o.raw ?? null;
   const roll = new Map<string, FrameBase>();
   /** The last 'register' decode per source, waiting for its 'register' message. */
-  const decoded = new Map<string, Awaited<ReturnType<typeof decodeFile>>>();
+  const decoded = new Map<string, { info: SourceInfo; data: Float32Array; analysis?: { info: SourceInfo; data?: Float32Array } }>();
   const macrotask = macrotasks();
   const queue: Job[] = [];
   const running = new Map<number, AbortController>();
@@ -158,6 +158,17 @@ export function serveEngine(scope: EngineScope, o: { raw?: RawDecoder } = {}): v
         }
         const transfer = [d.data.buffer, ...(d.analysis?.data ? [d.analysis.data.buffer] : [])];
         return { value: { ...d, ms: performance.now() - t0 } satisfies WireDecoded, transfer };
+      }
+      case 'pixels': {
+        const t0 = performance.now();
+        if (!raw) throw new Error('the engine worker is not initialised');
+        const px = await decodePixels(new Uint8Array(job.bytes), job.sha256, job.source, job.name, job.mode, { long: job.long, raw });
+        if (job.keep === 'register') {
+          need();
+          decoded.set(job.source, px);
+          return { value: { info: px.info, ms: performance.now() - t0 } satisfies WirePixels };
+        }
+        return { value: { ...px, ms: performance.now() - t0 } satisfies WirePixels, transfer: [px.data.buffer] };
       }
       case 'evaluate': {
         const ctl = new AbortController();

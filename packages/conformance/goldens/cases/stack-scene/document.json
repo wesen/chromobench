@@ -54,8 +54,11 @@
         "method": "oklch",
         "strength": 6
       },
-      "scale": "full",
+      "quality": 90,
       "signal": "icc",
+      "size": {
+        "by": "original"
+      },
       "space": "prophoto"
     },
     "printer": null,

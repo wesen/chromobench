@@ -567,6 +567,7 @@ tests:     packages/contract/test/coverage.test.ts; studio-kit test/overlay.test
 | CHB-045 GPUC-2, CHB-043 ch. 3 | The grid rule `gridSample`, `gridAxis`, `gridCheck`, `GRID_LIMIT` | accepted | Output pixel p of an n-pixel grid over (x, w) reads image pixel x + ⌊(2p + 1)·w / 2n⌋ in integers; every engine calls it (the GPU in u32, `kernels/grid.wgsl`); grids with n·w ≥ 2³¹ are refused (E_ARG_RANGE) |
 | CHB-045 GPUC-3 | `MASK_T_FLOOR` (1e-8) | accepted | print.densityMask takes log10 max(H_m, MASK_T_FLOOR): an underflowed exposure has no log. Unchanged above the floor |
 | D7 (CHB-044), CHB-037 P10-23 | Contrast blend modes in the display encoding; four new modes | accepted | `CONTRAST_BLENDS` = overlay, hard-light, soft-light, vivid-light, linear-light, pin-light, hard-mix: B is evaluated on the channels encoded by the sRGB curve (`displayEncode`, odd below 0) and decoded (`blendSeparable`), so they switch at display mid-grey (linear 0.214) as in Photoshop; the other separable modes stay in linear light; the amount still mixes in the entry's encoding. `BLEND_MODES` gains vivid-light, linear-light, pin-light, hard-mix (after soft-light: 20 modes). `blendChannel` (the channel formulas) moved from core to the contract so core and the mock share it |
+| CHB-047 OUT-2 | `ExportSettings.size` (`ExportSize`) and `quality` replace `scale`; `scaleDocument`, `scaleBox` | accepted | An export's size is the frame's original size, a long edge in px (never above the original) or a percentage of it; JPEG quality 1–100 (`output.encode.quality`, IJG scale). A document on a decode of another size is the same print with its pixel quantities scaled (`scaleDocument`: the catalogue's px args, box, point, polyline; the crop, probes, the scan medium's rebate and open gate; the scan's µm/px divided) |
 
 ```text
 CC-024  grid rule, MASK_T_FLOOR, contrast blend modes in the display encoding, four blend modes (CHB-045; contract 1.5.0)
@@ -581,6 +582,18 @@ migration: none (hard cut-off)
 tests:     contract grid-rule.test.ts, composite-law.test.ts; core composite.test.ts (D7 laws: a source at display
            mid-grey leaves the backdrop unchanged in every contrast mode but hard mix), density-mask-floor.test.ts;
            GPU law:grid, law:density-floor, law:blend (20 modes)
+```
+
+```text
+CC-025  output.export.size and .quality, scaleDocument (CHB-047; contract 1.6.0)
+class:     breaking (major in shape, no migration by decision): output.export.scale is gone; size and quality are new
+changes:   document.ts ExportSize, ExportSettings.size, ExportSettings.quality (default { by: 'original' }, 90);
+           output.encode gains quality (1…100, integer); schema.ts size rule; scale.ts scaleDocument, scaleBox
+consumers: output (export runner: always full scale on a source decoded at the export's size; JPEG writer); studio host
+           (export at his size: decode again, scaleDocument, render); studio-kit (his export settings); goldens (the
+           stored documents carry size and quality; no picture changed)
+migration: none (hard cut-off: studio-kit STORAGE_FORMAT 4 clears edits saved before, once, with the message)
+tests:     contract scale-document.test.ts; output jpeg.test.ts, export.test.ts; e2e studio-output.spec.ts
 ```
 
 ## Change-note template

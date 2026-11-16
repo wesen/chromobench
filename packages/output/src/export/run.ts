@@ -1,5 +1,6 @@
 // Tiled full-resolution export (guide §5.9, stage 5; the CHB-005 "tiled-export driver" task): plan →
-// tiles in row-major order → one band of tiles at a time → encoder → finalise. Engine-agnostic: it uses
+// tiles in row-major order → one band of tiles at a time → encoder → finalise. The node is rendered at full scale:
+// an export at another size is a source decoded at that size (CHB-047; the host's export), not a resampled render. Engine-agnostic: it uses
 // Engine.plan() when the engine has one (the GPU engine), `evaluateU16` when the engine packs 16-bit
 // codes itself (GpuEngine: pack2x16unorm, 8 bytes per pixel read back), else evaluate() and quantises.
 //
@@ -11,7 +12,8 @@ import {
   type Box, type CompileOptions, type Document, type Engine, type EvalTarget, type ExportSettings, type Graph, type ImageInfo, type Node, type NodeRef,
   type OutputSpaceId, type TilePlan,
 } from '@chromobench/contract';
-import { pngText, tiffDescription, type FileMeta } from '../encode/metadata.ts';
+import { JpegWriter } from '../encode/jpeg.ts';
+import { pngText, SOFTWARE, tiffDescription, type FileMeta } from '../encode/metadata.ts';
 import { Png16Writer } from '../encode/png16.ts';
 import { toU16 } from '../encode/quantise.ts';
 import type { ByteSink } from '../encode/sinks.ts';
@@ -30,7 +32,7 @@ export interface ExportProgress {
 export interface EncodedFile {
   name: string;
   format: ExportSettings['format'];
-  mime: 'image/png' | 'image/tiff';
+  mime: 'image/png' | 'image/tiff' | 'image/jpeg';
   bytes: number;
   width: number;
   height: number;
@@ -44,9 +46,12 @@ export interface EncodedFile {
 }
 
 export interface ExportRequest {
-  /** An immutable display-rgb node (output.display or output.frame) compiled for `settings.space`. */
+  /**
+   * An immutable display-rgb node (output.display or output.frame) compiled for `settings.space`, on a source decoded
+   * at the export's size (CHB-047): the runner renders it at full scale, tile by tile.
+   */
   node: NodeRef;
-  settings: Pick<ExportSettings, 'format' | 'space' | 'scale' | 'dpi' | 'compression' | 'signal' | 'document'>;
+  settings: Pick<ExportSettings, 'format' | 'space' | 'quality' | 'dpi' | 'compression' | 'signal' | 'document'>;
   sink: ByteSink;
   name: string;
   signal?: AbortSignal;
@@ -64,13 +69,8 @@ interface U16Engine {
 }
 const hasU16 = (e: Engine): e is Engine & U16Engine => typeof (e as Partial<U16Engine>).evaluateU16 === 'function';
 
-/** Tiles of the output grid. At full scale: the engine's plan (or a default grid); below: one pass. */
-async function planOf(engine: Engine, node: NodeRef, info: ImageInfo, scale: number, tile: number): Promise<{ tiles: { core: Box }[]; outW: number; outH: number }> {
-  if (scale < 1) {
-    // a reduced-size export is small (a 100 MP frame at 0.25 is 6 MP): one pass at that scale, so the
-    // engine's own resampling decides every output pixel
-    return { tiles: [{ core: { x: 0, y: 0, w: info.width, h: info.height } }], outW: Math.max(1, Math.round(info.width * scale)), outH: Math.max(1, Math.round(info.height * scale)) };
-  }
+/** Tiles of the output grid: the engine's plan, or a default grid (the export source is decoded at the export's size). */
+async function planOf(engine: Engine, node: NodeRef, info: ImageInfo, tile: number): Promise<{ tiles: { core: Box }[]; outW: number; outH: number }> {
   let plan: Pick<TilePlan, 'tiles'> | null = null;
   if (engine.plan) plan = await engine.plan(node, { scale: 'full', precision: 'export' });
   if (!plan) {
@@ -106,7 +106,14 @@ async function openEncoder(req: ExportRequest, w: number, h: number): Promise<{ 
     const enc = await Png16Writer.open(req.sink, { width: w, height: h, bits: s.format === 'png8' ? 8 : 16, colour, dpi: s.dpi, text: pngText(meta) });
     return { enc, mime: 'image/png', bits: s.format === 'png8' ? 8 : 16, iccSha256: colour.icc ? space.iccSha256 : '' };
   }
-  throw new ChromobenchError({ code: 'E_NOT_IMPLEMENTED', message: `export format ${s.format} is not implemented`, hint: 'JPEG needs an OffscreenCanvas encoder (8 bits); use png8, png16 or tiff16', valid: ['tiff16', 'png16', 'png8'] });
+  if (s.format === 'jpeg') {
+    // the profile for every space (JPEG has no sRGB chunk); the metadata as one comment, the document in another
+    const { documentJson, ...rest } = meta;
+    const comments = [tiffDescription(rest), ...(documentJson ? [tiffDescription({ documentJson })] : [])].filter((c): c is string => !!c);
+    const enc = await JpegWriter.open(req.sink, { width: w, height: h, quality: s.quality, dpi: s.dpi, comments: [`${SOFTWARE}`, ...comments], ...(s.signal !== 'none' ? { icc: space.icc } : {}) });
+    return { enc, mime: 'image/jpeg', bits: 8, iccSha256: s.signal !== 'none' ? space.iccSha256 : '' };
+  }
+  throw new ChromobenchError({ code: 'E_NOT_IMPLEMENTED', message: `export format ${String(s.format)} is not implemented`, valid: ['tiff16', 'png16', 'png8', 'jpeg'] });
 }
 
 /**
@@ -119,7 +126,6 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
   const info = req.node.info as ImageInfo;
   if (info.kind !== 'Image' || info.domain !== 'display-rgb') throw new ChromobenchError({ code: 'E_DOMAIN', message: `export needs a display-rgb image node, not ${info.domain}`, hint: 'compile the document with displaySpace = the export space (exportNode)' });
   const s = req.settings;
-  const scale = s.scale === 'full' ? 1 : s.scale;
   let phase: ExportProgress['phase'] = 'plan';
   let tilesDone = 0;
   let tilesTotal = 0;
@@ -128,7 +134,7 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
   try {
     if (req.signal?.aborted) throw cancelled();
     progress();
-    const { tiles, outW, outH } = await planOf(engine, req.node, info, scale, req.tile ?? 1024);
+    const { tiles, outW, outH } = await planOf(engine, req.node, info, req.tile ?? 1024);
     tilesTotal = tiles.length;
     const { enc, mime, bits, iccSha256 } = await openEncoder(req, outW, outH);
     phase = 'tiles';
@@ -137,12 +143,12 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
     const bands = new Map<number, { core: Box }[]>();
     for (const t of tiles) bands.set(t.core.y, [...(bands.get(t.core.y) ?? []), t]);
     for (const [y0, band] of [...bands].sort((a, b) => a[0] - b[0])) {
-      const bh = scale < 1 ? outH : band[0]!.core.h;
+      const bh = band[0]!.core.h;
       const rows = new Uint16Array(outW * bh * 3);
       for (const t of band.sort((a, b) => a.core.x - b.core.x)) {
         if (req.signal?.aborted) throw cancelled();
         tileAt = tiles.indexOf(t);
-        const target = { scale: scale < 1 ? scale : ('full' as const), region: t.core, ...(req.signal ? { signal: req.signal } : {}) };
+        const target = { scale: 'full' as const, region: t.core, ...(req.signal ? { signal: req.signal } : {}) };
         let data: Uint16Array;
         let tw: number;
         let th: number;
@@ -155,7 +161,7 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
           th = r.height;
           data = toU16(await r.read(), r.info.channels, tw, th);
         }
-        const ox = scale < 1 ? 0 : t.core.x;
+        const ox = t.core.x;
         for (let r = 0; r < th; r++) rows.set(data.subarray(r * tw * 3, (r + 1) * tw * 3), (r * outW + ox) * 3);
         tilesDone++;
         progress();

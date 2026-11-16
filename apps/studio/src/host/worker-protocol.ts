@@ -1,7 +1,7 @@
 // The engine worker's messages (CHB-027 WS-B, F4). The main thread posts jobs; the worker (host/engine-worker.ts)
 // decodes files and, without WebGPU, hosts the reference engine. Pixels move as transferables both ways.
 // Contract types only, so the main-thread side (host/worker-engine.ts) stays free of core, gpu and ingest.
-import type { Box, Diagnostic, EngineCaps, ImageInfo, MeasureSpec, NodeDef, Precision, TableKey } from '@chromobench/contract';
+import type { Box, Diagnostic, EngineCaps, ImageInfo, MeasureSpec, NodeDef, Precision, SourceInfo, TableKey } from '@chromobench/contract';
 import type { Decoded } from './studio-engine.ts';
 
 /** How a file is opened: a photo (scene light shot on film, CHB-012) or a scan of a negative. */
@@ -48,6 +48,24 @@ export interface DecodeJob {
   keep: 'register' | 'return';
 }
 
+/**
+ * A file's pixels at an export's size (CHB-047, decode.ts decodePixels), under the source id `id`: 'register' keeps
+ * them in the worker for a 'register' message (the reference engine), 'return' sends them back (the GPU engine).
+ */
+export interface PixelsJob {
+  kind: 'pixels';
+  id: number;
+  bytes: ArrayBuffer;
+  sha256: string;
+  /** The export image's source id (exportSourceSha). */
+  source: string;
+  name: string;
+  mode: DecodeMode;
+  /** Long side (0 = the file's own size). */
+  long: number;
+  keep: 'register' | 'return';
+}
+
 export interface EvaluateJob {
   kind: 'evaluate';
   id: number;
@@ -65,6 +83,7 @@ export interface MeasureJob {
 export type ToWorker =
   | InitJob
   | DecodeJob
+  | PixelsJob
   | EvaluateJob
   | MeasureJob
   | { kind: 'prepare'; id: number; keys: TableKey[] }
@@ -91,6 +110,9 @@ export interface WireResult {
   /** Transferred. */
   data: Float64Array | Float32Array | Uint16Array;
 }
+
+/** An export's pixels (PixelsJob): without data when they stay in the worker ('register'). */
+export interface WirePixels { info: SourceInfo; data?: Float32Array; ms: number }
 
 /** A decoded file: without data when the worker's engine registered it ('register'). */
 export type WireDecoded = Omit<Decoded, 'data'> & { data?: Float32Array; ms: number };

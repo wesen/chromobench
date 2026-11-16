@@ -31,7 +31,8 @@ export default {
       .module(
         ck
           .module('output', { label: 'Output', key: 'Mod+Shift+E' })
-          .center(cb.views.grid({ id: 'picks', source: st => cb.sel.visible(st).filter(f => f.flag === 'pick') }))
+          // CHB-047: the open photos; he selects the ones to export (the Output panel exports the selection)
+          .center(cb.views.grid({ id: 'export-grid', source: st => cb.sel.visible(st) }))
           .right(ck.dock.column({ width: 260 }, cb.panels.output()))
           .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-output' }))),
       );

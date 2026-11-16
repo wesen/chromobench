@@ -12,8 +12,10 @@ import { toU16 } from '../src/encode/quantise.ts';
 import { MemorySink, opfsSink } from '../src/encode/sinks.ts';
 import { documentPayload, documentSha256, exportFrame, exportNode, type ExportProgress } from '../src/export/run.ts';
 import { memoryDir } from './helpers.ts';
+import { decodeJpeg } from './jpeg-decode.ts';
+import { ditherTo8 } from '../src/encode/quantise.ts';
 
-const SETTINGS: ExportSettings = { format: 'png16', space: 'srgb', knee: { method: 'oklch', strength: 6 }, scale: 'full', dpi: 300, compression: 'deflate', signal: 'icc', document: 'none' };
+const SETTINGS: ExportSettings = { format: 'png16', space: 'srgb', knee: { method: 'oklch', strength: 6 }, size: { by: 'original' }, quality: 90, dpi: 300, compression: 'deflate', signal: 'icc', document: 'none' };
 
 /** A frame in the reference engine and its export node (the display cut: output.display, then output.frame). */
 async function setup(tiff = makeM1Tiff(), space: ExportSettings['space'] = 'srgb') {
@@ -75,10 +77,11 @@ describe('tiled export (stage 5)', () => {
     expect(Buffer.from(got.buffer).equals(Buffer.from((await pixels(e, display)).buffer))).toBe(true);
   });
 
-  it('bug 4484 regression: a quarter-size 16-bit export has > 256 distinct values per channel, not all multiples of 257', async () => {
-    const { e, display } = await setup(smoothTiff());
+  it('bug 4484 regression: a small 16-bit export (a source decoded small) has > 256 distinct values per channel, not all multiples of 257', async () => {
+    // since CHB-047 a reduced-size export renders a source decoded at that size: here the ramp at a quarter of 512 × 256
+    const { e, display } = await setup(smoothTiff(128, 64));
     const sink = new MemorySink();
-    const f = await exportFrame(e, { node: display, settings: { ...SETTINGS, scale: 0.25 }, sink, name: 'q.png' });
+    const f = await exportFrame(e, { node: display, settings: SETTINGS, sink, name: 'q.png' });
     expect([f.width, f.height]).toEqual([128, 64]);
     const d = decodePngFast(sink.bytes()).data as Uint16Array;
     for (let k = 0; k < 3; k++) expect(new Set(Array.from({ length: 128 * 64 }, (_, i) => d[3 * i + k])).size).toBeGreaterThan(256);
@@ -86,8 +89,7 @@ describe('tiled export (stage 5)', () => {
     // the Studio's way (render 8-bit, multiply by 257) has at most 256 values per channel, all multiples of 257
     const studio = d.map((v) => Math.round(v / 257) * 257);
     expect(new Set(studio).size).toBeLessThanOrEqual(256);
-  }, 0); // a 512 × 256 frame through the f64 reference chain: ~2 s alone, over 30 s under parallel suites; deterministic, so no
-  // timeout (CHB-037 P3b): a wrong value fails it, slowness does not
+  }, 0); // through the f64 reference chain; deterministic, so no timeout (CHB-037 P3b): a wrong value fails it, slowness does not
 
   it('cancellation after tile 3 of 12: rejects with E_CANCELLED, no file remains in OPFS; the next export succeeds', async () => {
     const { e, display } = await setup();
@@ -135,11 +137,29 @@ describe('tiled export (stage 5)', () => {
     expect(Buffer.from(a.buffer).equals(Buffer.from(b.buffer))).toBe(true);
   });
 
-  it('refuses a node that is not display-rgb, and JPEG (needs a canvas encoder)', async () => {
+  it('refuses a node that is not display-rgb', async () => {
     const { e, g, display } = await setup();
     const xyz = g.get(g.get(display.inputs[0]!)!.inputs[0]!)!; // under output.frame and output.display: print-xyz
     await expect(exportFrame(e, { node: xyz, settings: SETTINGS, sink: new MemorySink(), name: 'x.png' })).rejects.toThrow(/E_DOMAIN/);
-    await expect(exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'jpeg' }, sink: new MemorySink(), name: 'x.jpg' })).rejects.toThrow(/E_NOT_IMPLEMENTED/);
+  });
+
+  it('JPEG (CHB-047): tiled, the profile and the document hash in the file, pixels within a level or two of the 16-bit export', async () => {
+    const { e, r, display } = await setup(makeM1Tiff(), 'display-p3');
+    const document = documentPayload(r);
+    const sink = new MemorySink();
+    const f = await exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'jpeg', space: 'display-p3', quality: 95, dpi: 240 }, sink, name: 'm1.jpg', tile: 24, document });
+    expect([f.width, f.height, f.bits, f.mime, f.space, f.documentSha256]).toEqual([96, 64, 8, 'image/jpeg', 'display-p3', document.sha256]);
+    const j = decodeJpeg(sink.bytes());
+    expect([j.width, j.height, j.jfif?.x]).toEqual([96, 64, 240]);
+    expect(j.icc && sha256Hex(j.icc)).toBe(f.iccSha256);
+    expect(j.comments.join('\n')).toContain(document.sha256);
+    const want = await pixels(e, display);
+    let sum = 0;
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 96; x++) for (let k = 0; k < 3; k++) {
+      const i = (y * 96 + x) * 3 + k;
+      sum += Math.abs(j.rgb[i]! - ditherTo8(want[i]!, x, y, k));
+    }
+    expect(sum / (96 * 64 * 3)).toBeLessThan(1.5);
   });
 
   it('document sidecar and embedding; documentSha256 is the hash of the canonical document', async () => {

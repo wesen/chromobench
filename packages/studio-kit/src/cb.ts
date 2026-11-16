@@ -28,6 +28,7 @@ import { hostCommands } from './commands/host.ts';
 import { viewCommands } from './commands/view.ts';
 import { printCommands } from './commands/print.ts';
 import { agentCommands } from './commands/agent.ts';
+import { outputCommands } from './commands/output.ts';
 import { coreTools } from './commands/tools.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
@@ -147,6 +148,7 @@ export function createCb(ck: Ck) {
     .commands(viewCommands())
     .commands(printCommands())
     .commands(agentCommands())
+    .commands(outputCommands())
     .tools(coreTools())
     .docs(CORE_DOCS);
 
@@ -348,7 +350,7 @@ export function createCb(ck: Ck) {
       metadata: panel('cb.metadata', 'metadata', 'Metadata'),
       library: panel('cb.library', 'library', 'Library'),
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
-      output: panel('cb.output', 'output', 'Save'),
+      output: panel('cb.output', 'output', 'Export'),
       /**
        * D8 (CHB-046): the first print's colour aim as an amount he can change, "Neutralise" (prefs.neutralise, 75 % by
        * default: a quarter of each frame's cast stays), used by the studio's first print and the Roll module's; "First

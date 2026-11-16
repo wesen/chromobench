@@ -6,6 +6,7 @@ export { concat, deflateAll, DeflateStream, inflateAll } from './encode/deflate.
 export { pngText, SOFTWARE, tiffDescription, type FileMeta } from './encode/metadata.ts';
 export { Png16Writer, PNG_SIGNATURE, pngChunk, pngChunks, ppmFromDpi, type PngColour, type PngOptions } from './encode/png16.ts';
 export { ditherTo8, toU16 } from './encode/quantise.ts';
+export { fdct8x8, iccSegments, ICC_CHUNK, JpegWriter, quantTable, ZIGZAG, type JpegOptions } from './encode/jpeg.ts';
 export {
   CountingSink, MemorySink, opfsRoot, opfsSink, pickerAvailable, pickerSink,
   type ByteSink, type DirHandleLike, type FileHandleLike, type FileSink,

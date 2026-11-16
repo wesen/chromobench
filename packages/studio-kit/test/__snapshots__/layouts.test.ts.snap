@@ -266,9 +266,9 @@ module assistant "Assistant"
   bottom dockcol  width 124
            filmstrip strip-assistant  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
 module output "Output" key Mod+Shift+E
-  center gridview picks  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
+  center gridview export-grid  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection  size τ
   right  dockcol  width 260
-           panel output "Save"
+           panel output "Export"
              cb.output
   bottom dockcol  width 124
            filmstrip strip-output  cell θ  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  select ui.selection
@@ -296,7 +296,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -312,13 +311,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -425,7 +427,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 198 · keys 124 in 22 scopes · tools 10 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 200 · keys 124 in 22 scopes · tools 10 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -525,7 +527,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -541,13 +542,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -617,7 +621,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 152 · keys 39 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 154 · keys 39 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -836,7 +840,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -852,13 +855,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -911,7 +917,7 @@ commands
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 140 · keys 81 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 142 · keys 81 in 12 scopes · tools 10 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -1202,7 +1208,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -1218,13 +1223,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1257,7 +1265,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 118 · keys 89 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 120 · keys 89 in 14 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1412,7 +1420,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -1428,13 +1435,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1521,7 +1531,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 171 · keys 73 in 11 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+commands 173 · keys 73 in 11 scopes · tools 8 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1677,7 +1687,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -1693,13 +1702,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) P ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1749,7 +1761,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 134 · keys 59 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 136 · keys 59 in 7 scopes · tools 8 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1814,7 +1826,7 @@ module main "Chromobench" stages darkroom
                  button  primary  run tool.ring-around  text "Which looks best?"
                  cb.approvals  compact
            cases.save:
-             panel output "Save"
+             panel output "Export"
                cb.output  simple
 commands
   frame.pick "Flag as Pick" (Frame) P ← cb.core
@@ -1840,7 +1852,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -1856,13 +1867,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1895,7 +1909,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 115 · keys 33 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 117 · keys 33 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -1957,7 +1971,6 @@ commands
   file.openAs.negative "Open as Negatives" (File) ← cb.core
   file.openAs.keep "Keep This Choice After Restart" (File) ← cb.core
   file.dust "Heal Dust on Open" (File) ← cb.core
-  file.export "Export…" (File) Ctrl+E ← cb.core
   print.firstPrint "First Print Again" ← cb.core
   file.saveDocument "Save Document" (File) ← cb.core
   view.layout "Layout…" (View) ← cb.core
@@ -1973,13 +1986,16 @@ commands
   print.enlargerMode "Enlarger Mode" ← cb.core
   probe.pin "Pin Probe" (Frame) ← cb.core
   ring.apply "Use This Print" ← cb.core
-  output.save "Save the Print" ← cb.core
   proposal.show "Show Proposal" ← cb.core
   proposal.toggle "Include Change" ← cb.core
   proposal.approve "Approve Agent Change" ← cb.core
   proposal.reject "Reject Agent Change" ← cb.core
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
+  output.set "Export Settings" ← cb.core
+  output.export "τ" ← cb.core
+  output.cancel "Cancel Export" ← cb.core
+  file.export "Export…" (File) Ctrl+E ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -2012,7 +2028,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 115 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 117 · keys 30 in 5 scopes · tools 8 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

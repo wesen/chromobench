@@ -32,6 +32,7 @@ Encodes a display-rgb image as a file in OPFS and returns its EncodedFile descri
 | `format` | enum tiff16/png16/png8/jpeg |  |  |  | `"tiff16"` | File format. |
 | `compression` | enum none/deflate |  |  |  | `"deflate"` | Lossless compression. |
 | `dpi` | number | none | [1, 4800] | [240, 360] | `300` | Print resolution metadata. |
+| `quality` | number | none | [1, 100] | [70, 95] | `90` | JPEG quality (the IJG scale: 100 is the finest quantisation); the lossless formats ignore it. |
 
 Returns:
 
@@ -39,7 +40,7 @@ Returns:
 - `name`: string — file name in OPFS
 - `bytes`: number (none) — file size
 - `sha256`: string — content hash
-- `mime`: string — image/png or image/tiff
+- `mime`: string — image/png, image/tiff or image/jpeg
 - `width`: number (px) — pixel width
 - `height`: number (px) — pixel height
 - `bits`: number (none) — 8 or 16
