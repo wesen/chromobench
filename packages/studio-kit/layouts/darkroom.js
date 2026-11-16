@@ -2,7 +2,8 @@
 // photographer). The film strip runs down the left, the print fills the centre, the enlarger is on the right: the
 // main exposure and the printer lights as rows of the darkroom stack with their controls, every burn, dodge, flash
 // and contrast mask a row beside them, ordered by kind. Below it, a collapsed digital palette: the print stage's
-// layers, labelled as acting after the print. The module shows two stages and says so.
+// layers, labelled as acting after the print. The module shows the stages and says so. CHB-048: a "Before the film"
+// palette for camera files (the white balance in scene light, the scene's layers); a negative says why it has none.
 
 /** no open frame selected: the panels that only show a frame's settings are not drawn (CHB-031 8iv8) */
 const noFrame = cb => s => !cb.sel.doc(s);
@@ -21,11 +22,11 @@ export default {
       .menus(...cb.menus.standard(), looks.menus.settings())
       .module(
         ck
-          .module('main', { label: 'Darkroom', stages: ['darkroom', 'print'] })
+          .module('main', { label: 'Darkroom', stages: ['scene', 'darkroom', 'print'] })
           .left(ck.dock.column({ width: 200 }, cb.views.strip({ vertical: true }), cb.panels.history().hidden(noFrame(cb))))
           .center(
             cb.viewer(s => cb.sel.frame(s)?.print() ?? null, {
-              tools: ['probe', 'test-strip', 'ring-around', ...stack.maskTools],
+              tools: ['probe', 'test-strip', 'ring-around', 'white-balance', ...stack.maskTools],
               compare: { before: s => cb.sel.frame(s)?.initial().print() ?? null },
               hud: cb.hud.readout(),
             }),
@@ -36,6 +37,15 @@ export default {
               // no frame: one empty-state text in the Enlarger panel (it says how to open photos), the panels below
               // it are not drawn (CHB-031 8iv8)
               stack.panels.enlarger(),
+              // before the film (CHB-048, D2): a camera file's white balance and its scene layers; a negative: why not
+              ck.panel.define(
+                'before-film',
+                { title: 'Before the film' },
+                cb.ifFrame(
+                  cb.views.whiteBalance(),
+                  ck.when(s => cb.sel.isPhoto(s), stack.views.layers('scene', { density: 'compact' })),
+                ),
+              ).hidden(noFrame(cb)),
               ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('stages.darkroom.medium.paper'), cb.arg('stages.darkroom.medium.grade'))).hidden(noFrame(cb)),
               // the digital zone: the print stage, after the darkroom; closed until it is wanted
               ck.panel.define('digital', { title: 'Digital (after the print)', open: false }, stack.views.layers('print', { density: 'compact' })).hidden(noFrame(cb)),

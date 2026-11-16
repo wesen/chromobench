@@ -8,6 +8,7 @@ import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/she
 import type { NodeData } from '@chromobench/shell';
 import { describe, historyRows, jumpCrosses, whyRows, WHO, type ModelLookup } from '../model/history.ts';
 import { TIME_PATH } from '../model/doc.ts';
+import { pickerOf, type Picker, type PickerKind } from '../model/presets.ts';
 import { modelAt } from '../kit/args.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
@@ -361,6 +362,56 @@ const chat: Renderer = () => h('div', { class: 'cb-panel cb-dim', text: 'The cha
 void studioOf;
 
 /** every studio-kit renderer, by form name: pass to mount as `renderers` */
+/** cb.preset: a select of presets (model/presets.ts pickerOf), the frame's own shown, Custom when none; a choice runs the command */
+const preset: Renderer = (n, m) => {
+  const kind = String(n.props['kind']) as PickerKind;
+  const el = h('label', { class: 'ck-field ck-select cb-preset', 'data-kind': kind });
+  const lab = h('span', { class: 'ck-field-l' });
+  const select = h('select', { class: 'ck-field-i' }) as HTMLSelectElement;
+  el.append(lab, select);
+  let picker: Picker | null = null;
+  m.cell(
+    (s) => {
+      const f = frameOf(n, s);
+      return { r: f ? s.docs?.[f] : undefined, shot: f ? s.catalog?.frames?.[f]?.asShot : undefined };
+    },
+    (v: any) => {
+      picker = pickerOf(kind, v.r, { asShot: v.shot ?? null });
+      el.hidden = !picker;
+      if (!picker) return;
+      lab.textContent = picker.label;
+      el.title = picker.tip;
+      select.setAttribute('aria-label', picker.label);
+      const opts: HTMLElement[] = [];
+      if (picker.current === null) opts.push(h('option', { value: '', text: picker.custom, selected: true }));
+      let group: HTMLElement | null = null;
+      for (const o of picker.options) {
+        const opt = h('option', { value: o.value, text: o.label, disabled: !!o.disabled, selected: o.value === picker.current });
+        if (o.group) {
+          if (!group || group.getAttribute('label') !== o.group) {
+            group = h('optgroup', { label: o.group });
+            opts.push(group);
+          }
+          group.append(opt);
+        } else {
+          group = null;
+          opts.push(opt);
+        }
+      }
+      select.replaceChildren(...opts);
+      select.value = picker.current ?? '';
+    },
+    { equals: same },
+  );
+  listen(m.scope, select, 'change', () => {
+    if (!picker || !select.value) return;
+    const [cmd, arg] = picker.run(select.value);
+    m.rt.runCommand(cmd, null, arg);
+  });
+  listen(m.scope, select, 'keydown', (e: KeyboardEvent) => e.stopPropagation());
+  return el;
+};
+
 export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.arg': renderArg,
   'cb.history': history,
@@ -379,6 +430,7 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.readout': readout,
   'cb.ribbon': ribbon,
   'cb.filter': filter,
+  'cb.preset': preset,
   // the stack kit is in every studio (cb.studio installs it)
   ...STACK_RENDERERS,
 };

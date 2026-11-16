@@ -29,6 +29,8 @@ import { viewCommands } from './commands/view.ts';
 import { printCommands } from './commands/print.ts';
 import { agentCommands } from './commands/agent.ts';
 import { coreTools } from './commands/tools.ts';
+import { sceneCommands, sceneTools } from './commands/scene.ts';
+import { NEGATIVE_WB_NOTE, TEMPERATURE_PATH, TINT_PATH, WB_NOTE, whiteBalanceIn } from './model/white-balance.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
 import { createLooksKit } from '../kits/looks/src/kit.ts';
@@ -147,7 +149,9 @@ export function createCb(ck: Ck) {
     .commands(viewCommands())
     .commands(printCommands())
     .commands(agentCommands())
+    .commands(sceneCommands())
     .tools(coreTools())
+    .tools(sceneTools())
     .docs(CORE_DOCS);
 
   // ── viewer ──
@@ -272,6 +276,23 @@ export function createCb(ck: Ck) {
 
   // ── controls ──
   const arg = (path: string, o: Record<string, unknown> = {}): any => node('cb.arg', { path, ...o });
+  /**
+   * The white balance before the film (CHB-048, D2): the preset (As shot, Lightroom's, None, or Custom), Temperature and
+   * Tint in Lightroom's units, Pick a neutral (the eyedropper: W), what it does. A negative says why it has none.
+   */
+  const whiteBalanceView = (): any =>
+    ck.when(
+      (s: any) => !!whiteBalanceIn(sel.doc(s)),
+      ck.column(
+        { class: 'cb-wb' },
+        node('cb.preset', { kind: 'white-balance' }),
+        arg(TEMPERATURE_PATH),
+        arg(TINT_PATH),
+        ck.ui.button({ run: 'tool.white-balance', text: 'Pick a neutral', small: true, tip: 'Click something grey or white in the picture: its colour becomes neutral (W)' } as any),
+        ck.text(WB_NOTE, { dim: true, wrap: true }),
+      ),
+      ck.text(NEGATIVE_WB_NOTE, { dim: true, wrap: true }),
+    );
   const controls = (which: 'darkroom' | 'all' | Arrangement, o: { id?: string; title?: string } = {}): any => {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
@@ -320,7 +341,7 @@ export function createCb(ck: Ck) {
     arg,
     viewer,
     /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
-    views: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_, library: libraryViews },
+    views: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_, library: libraryViews, whiteBalance: whiteBalanceView },
     cell: { frame: cellFrame },
     /** the studio's panels: each defines a panel where it is placed (props: id, title, …) */
     panels: {
@@ -338,6 +359,8 @@ export function createCb(ck: Ck) {
           ),
         ),
       controls,
+      /** the white balance before the film (CHB-048): Classic's Print and Scene modules; a negative says why it has none */
+      whiteBalance: (o: { id?: string; title?: string } = {}) => ck.panel.define(o.id ?? 'white-balance', { title: o.title ?? 'White balance (before the film)' }, ifFrame(whiteBalanceView())),
       history: panel('cb.history', 'history', 'History'),
       approvals: panel('cb.approvals', 'approvals', 'Agent proposals'),
       why: panel('cb.why', 'why', 'Why'),
@@ -402,11 +425,12 @@ export function createCb(ck: Ck) {
               id: 'main',
               views: true,
               compare: true,
-              tools: ['probe', 'test-strip', 'ring-around', ...MASK_TOOLS],
+              tools: ['probe', 'test-strip', 'ring-around', 'white-balance', ...MASK_TOOLS],
               hud: cb.hud.readout(),
             }),
           )
-          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.panels.firstPrint(), cb.kits['stack'].panels.exposures(), cb.kits['stack'].panels.params({ id: 'layer-params-print' }), cb.kits['stack'].panels.masks({ id: 'layer-masks-print' }), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
+          // CHB-048: the white balance first after the tools, where a Lightroom user looks for it (Develop's Basic panel)
+          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.whiteBalance(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.panels.firstPrint(), cb.kits['stack'].panels.exposures(), cb.kits['stack'].panels.params({ id: 'layer-params-print' }), cb.kits['stack'].panels.masks({ id: 'layer-masks-print' }), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
           .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-print' })))
           .keys({ ...cb.keys.views, ...cb.keys.darkroom }),
     },

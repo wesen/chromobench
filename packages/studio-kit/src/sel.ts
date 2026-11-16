@@ -31,6 +31,8 @@ export interface CatalogFrame extends Rating {
   thumb?: string;
   /** a frame of a strip (CHB-027 WS-D): the file's name (`name` adds the frame's place, "raw010.dng · 2/3") */
   file?: string;
+  /** a camera file's as-shot white balance, from its raw (CHB-048): the "As shot" preset of the white balance */
+  asShot?: { temperature_K: number; tint: number };
 }
 /** What the catalog stores for a frame (the view tier): everything but the rating. */
 export type CatalogEntry = Omit<CatalogFrame, keyof Rating>;
@@ -163,6 +165,8 @@ export const sel = {
   },
   /** a frame's document (the current one by default), as the state shows it (with a gesture's preview) */
   doc: (s: St, id?: string | null): Document | undefined => s?.docs?.[id ?? current(s) ?? ''],
+  /** the frame is a photo from a digital camera (it has a scene and a film before the darkroom; CHB-048) */
+  isPhoto: (s: St, id?: string | null): boolean => !!s?.docs?.[id ?? current(s) ?? '']?.stages?.scene,
   /** a frame's catalog entry with its rating (the current one by default) */
   entry: (s: St, id?: string | null): CatalogFrame | undefined => {
     const f = id ?? current(s) ?? '';
