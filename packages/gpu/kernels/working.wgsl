@@ -81,12 +81,40 @@ fn wkBlendOk(mode: u32, bd: vec3<f32>, sr: vec3<f32>) -> vec3<f32> {
   }
 }
 
+// contract clipColour (LAY-2): W3C ClipColor in OkLCh. A result whose RGB leaves [0, top] keeps its L and hue and
+// takes the chroma factor of the first exit from grey (CLIP_MARCH steps, then CLIP_STEPS halvings, the in-gamut end kept); in the
+// gamut it is returned as it is; a grey outside the gamut is returned as the grey
+fn wkInGamut(c: vec3<f32>, top: f32) -> bool { return all(c >= vec3<f32>(-CLIP_EPS * top)) && all(c <= vec3<f32>(top * (1.0 + CLIP_EPS))); }
+fn wkClipColour(lab: vec3<f32>, top: f32) -> vec3<f32> {
+  if (wkInGamut(wkOkToRgb(lab), top)) { return lab; }
+  let g = lab.x * lab.x * lab.x;
+  if (!(g >= 0.0 && g <= top)) { return vec3<f32>(lab.x, 0.0, 0.0); }
+  var lo = 0.0;
+  var hi = 1.0;
+  // the first exit from grey (the gamut along the ray need not be one interval): march, then halve the step
+  for (var k = 1; k <= CLIP_MARCH; k++) {
+    let t = f32(k) / f32(CLIP_MARCH);
+    if (!wkInGamut(wkOkToRgb(vec3<f32>(lab.x, t * lab.yz)), top)) { hi = t; break; }
+    lo = t;
+  }
+  for (var i = 0; i < CLIP_STEPS; i++) {
+    let m = 0.5 * (lo + hi);
+    if (wkInGamut(wkOkToRgb(vec3<f32>(lab.x, m * lab.yz)), top)) { lo = m; } else { hi = m; }
+  }
+  return vec3<f32>(lab.x, lo * lab.yz);
+}
+
 // B(back, source) in the entry's encoding enc (1 linear RGB, 2 OkLab; core blendPixel)
 fn wkBlend(mode: u32, bd: vec3<f32>, sr: vec3<f32>, enc: u32) -> vec3<f32> {
   if (mode == BL_NORMAL) { return sr; }
   if (mode >= BL_FIRST_NONSEP) {
-    if (enc == 2u) { return wkBlendOk(mode, bd, sr); }
-    return wkOkToRgb(wkBlendOk(mode, wkRgbToOk(bd), wkRgbToOk(sr)));
+    // OkLCh, kept in the gamut: the top is the brighter of white and the inputs' brightest channel (contract gamutTop)
+    var lb = bd; var ls = sr; var rb = bd; var rs = sr;
+    if (enc == 2u) { rb = wkOkToRgb(bd); rs = wkOkToRgb(sr); } else { lb = wkRgbToOk(bd); ls = wkRgbToOk(sr); }
+    let top = max(1.0, max(max(max(rb.x, rb.y), rb.z), max(max(rs.x, rs.y), rs.z)));
+    let r = wkClipColour(wkBlendOk(mode, lb, ls), top);
+    if (enc == 2u) { return r; }
+    return wkOkToRgb(r);
   }
   var bl = bd;
   var sl = sr;

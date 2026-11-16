@@ -182,3 +182,76 @@ export function blendSeparable(mode: BlendMode, b: number, s: number): number {
   if (!isContrastBlend(mode)) return blendChannel(mode, b, s);
   return displayDecode(blendChannel(mode, displayEncode(b), displayEncode(s)));
 }
+
+// ---- the non-separable modes in OkLCh, and ClipColor (contract 1.1; 1.6: CHB-048, LAY-2) ---------------------------
+// core's blendPixel and the mock call these with their OkLab conversions; kernels/working.wgsl mirrors them.
+
+/**
+ * Hue, saturation, colour and luminosity of two OkLab colours (backdrop b, source s), before the gamut is kept:
+ *   hue (L_b, C_b, h_s)   saturation (L_b, C_s, h_b)   colour (L_b, a_s, b_s)   luminosity (L_s, a_b, b_b).
+ * A source without hue keeps the backdrop's (hue); a backdrop without hue stays grey (saturation).
+ */
+export function blendOkLch(mode: BlendMode, b: ArrayLike<number>, s: ArrayLike<number>): [number, number, number] {
+  switch (mode) {
+    case 'hue': {
+      const Cb = Math.hypot(b[1]!, b[2]!), Cs = Math.hypot(s[1]!, s[2]!);
+      return Cs > 0 ? [b[0]!, (Cb * s[1]!) / Cs, (Cb * s[2]!) / Cs] : [b[0]!, b[1]!, b[2]!];
+    }
+    case 'saturation': {
+      const Cb = Math.hypot(b[1]!, b[2]!), Cs = Math.hypot(s[1]!, s[2]!);
+      return Cb > 0 ? [b[0]!, (Cs * b[1]!) / Cb, (Cs * b[2]!) / Cb] : [b[0]!, b[1]!, b[2]!];
+    }
+    case 'colour': return [b[0]!, s[1]!, s[2]!];
+    case 'luminosity': return [s[0]!, b[1]!, b[2]!];
+    default: return [s[0]!, s[1]!, s[2]!];
+  }
+}
+
+/** Steps of clipColour's outward march over the chroma factor [0, 1] (the GPU's are the same). */
+export const CLIP_MARCH = 32;
+/** Bisection steps of clipColour within the march's step (below f32's resolution, so the GPU's 24 match). */
+export const CLIP_STEPS = 24;
+/**
+ * How far outside [0, top] a channel may be and still count as in the gamut, relative to top: f32 noise on a colour
+ * that is already on the gamut's edge (a clipped one, blended again) must not send it through the bisection in one
+ * engine and not the other.
+ */
+export const CLIP_EPS = 1e-6;
+
+/**
+ * The top of the gamut a non-separable blend keeps (W3C's [0, 1], white = 1): the brighter of white and the inputs'
+ * brightest channel, so a scene-linear highlight above white keeps its colour (inputs in [0, 1]: W3C's cube exactly).
+ */
+export function gamutTop(b: ArrayLike<number>, s: ArrayLike<number>): number {
+  return Math.max(1, b[0]!, b[1]!, b[2]!, s[0]!, s[1]!, s[2]!);
+}
+
+/**
+ * W3C ClipColor in OkLCh (LAY-2): a blend result whose linear RGB leaves [0, top] is brought back by reducing its
+ * chroma at its own lightness and hue (W3C moves towards the grey of the same luminance in RGB; here luminance is OkLab
+ * L, defined once, so the move is along the chroma axis, which keeps L and hue exactly). The chroma factor t is the
+ * first exit from grey: along a ray of constant L and hue the gamut need not be one interval (deep blues), so a march
+ * of CLIP_MARCH steps finds the first step that leaves and CLIP_STEPS halvings of it the edge (the in-gamut end kept);
+ * a result in the gamut is returned unchanged, bit for bit. A grey outside the gamut (L < 0, or L³ above the top) has no
+ * in-gamut chroma: the grey is returned.
+ */
+export function clipColour(lab: ArrayLike<number>, top: number, toRgb: (lab: [number, number, number]) => ArrayLike<number>): [number, number, number] {
+  const L = lab[0]!, a = lab[1]!, bb = lab[2]!;
+  const lo0 = -CLIP_EPS * top, hi0 = top * (1 + CLIP_EPS);
+  const inside = (c: ArrayLike<number>): boolean => c[0]! >= lo0 && c[1]! >= lo0 && c[2]! >= lo0 && c[0]! <= hi0 && c[1]! <= hi0 && c[2]! <= hi0;
+  if (inside(toRgb([L, a, bb]))) return [L, a, bb];
+  const g = L * L * L;
+  if (!(g >= 0 && g <= top)) return [L, 0, 0];
+  let lo = 0, hi = 1;
+  for (let k = 1; k <= CLIP_MARCH; k++) {
+    const t = k / CLIP_MARCH;
+    if (!inside(toRgb([L, t * a, t * bb]))) { hi = t; break; }
+    lo = t;
+  }
+  for (let i = 0; i < CLIP_STEPS; i++) {
+    const m = 0.5 * (lo + hi);
+    if (inside(toRgb([L, m * a, m * bb]))) lo = m;
+    else hi = m;
+  }
+  return [L, lo * a, lo * bb];
+}

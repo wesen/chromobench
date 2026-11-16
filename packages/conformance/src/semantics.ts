@@ -25,6 +25,13 @@ function worst(a: ArrayLike<number>, c: number, f: (pixel: number, k: number) =>
   return w;
 }
 
+/** The worst |Δ| of the first channel of a 3-channel image (OkLab L). */
+function worstL(a: ArrayLike<number>, f: (pixel: number) => number): number {
+  let w = 0;
+  for (let i = 0; i < a.length / 3; i++) w = Math.max(w, Math.abs(a[3 * i]! - f(i)));
+  return w;
+}
+
 const widthOf = (n: Node): number => (n.info as { width: number }).width;
 const px3 = (a: ArrayLike<number>, i: number): number[] => [a[3 * i]!, a[3 * i + 1]!, a[3 * i + 2]!];
 
@@ -114,15 +121,28 @@ const COMPOSITE_CASES: SemanticCase[] = [
     },
   },
   {
-    id: 'composite.mix semantics: luminosity and colour in OkLCh (lightness of one, colour of the other)', op: 'composite.mix', needs: ['composite.mix', 'vibrance', 'curve'],
+    id: 'composite.mix semantics: luminosity and colour in OkLCh (lightness of one, colour of the other, the chroma kept in the gamut)', op: 'composite.mix', needs: ['composite.mix', 'vibrance', 'curve'],
     async run(env) {
       const b = env.input('print-oklab');
       const s = env.build('curve', [env.build('vibrance', [b.id], { vibrance: 0, saturation: 0.5 }).id], { points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] });
       const ba = await read(env, b);
+      // the lightness is the one blended exactly; the colour is the other's, its chroma reduced (never raised, the hue
+      // kept) where it would leave the gamut (ClipColor in OkLCh, contract 1.6)
+      const chromaOf = (out: ArrayLike<number>, want: (i: number, k: number) => number, what: string): void => {
+        let bad = 0;
+        for (let i = 0; i < out.length / 3; i++) {
+          const a = out[3 * i + 1]!, c = out[3 * i + 2]!, wa = want(i, 1), wc = want(i, 2);
+          const off = Math.abs(a * wc - c * wa), over = Math.hypot(a, c) - Math.hypot(wa, wc), back = -(a * wa + c * wc);
+          bad = Math.max(bad, off, over, back > TOL ? back : 0);
+        }
+        check(bad <= TOL, `${what}: chroma raised or hue moved (${bad})`);
+      };
       const lum = await read(env, env.build('composite.mix', [b.id], { top: s.id, blend: 'luminosity' }));
-      check(worst(lum, 3, (i, k) => (k === 0 ? 0.1 + 0.8 * ba[3 * i]! : ba[3 * i + k]!)) <= TOL, 'luminosity is not (L_s, a_b, b_b)');
+      check(worstL(lum, (i) => 0.1 + 0.8 * ba[3 * i]!) <= TOL, 'luminosity is not L_s');
+      chromaOf(lum, (i, k) => ba[3 * i + k]!, 'luminosity is not (L_s, a_b, b_b) within the gamut');
       const col = await read(env, env.build('composite.mix', [b.id], { top: s.id, blend: 'colour' }));
-      check(worst(col, 3, (i, k) => (k === 0 ? ba[3 * i]! : 1.5 * ba[3 * i + k]!)) <= TOL, 'colour is not (L_b, a_s, b_s)');
+      check(worstL(col, (i) => ba[3 * i]!) <= TOL, 'colour is not L_b');
+      chromaOf(col, (i, k) => 1.5 * ba[3 * i + k]!, 'colour is not (L_b, a_s, b_s) within the gamut');
     },
   },
   {

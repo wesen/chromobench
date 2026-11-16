@@ -586,11 +586,12 @@ tests:     contract grid-rule.test.ts, composite-law.test.ts; core composite.tes
 ## Contract 1.6 (CHB-048: before the film)
 
 `CONTRACT_VERSION = '1.6.0'`. Phase 2's "before the film" work: the white balance of a camera file defined once in the
-contract (decision D2).
+contract (decision D2), and the OkLCh blend modes kept in the gamut (LAY-2).
 
 | Request | Item | Status | Notes |
 |---|---|---|---|
 | D2 (CHB-044), CHB-037 P9-12 | White balance before the film (`white-balance.ts`) | accepted | The scene medium's `whiteBalance` is the white of the light the scene was lit by: `{ temperature_K, tint }` in Lightroom's units (Robertson's isotemperature lines in CIE 1960 uv, the tint the offset along the line × −3000, as Adobe's DNG SDK; `temperatureToWhite` and its closed-form inverse `whiteToTemperature`, exact to 1e-13). `source.xyz` applies, after the camera matrix, the CAT16 adaptation (complete, in XYZ) from that white to D65; capture.expose then adapts D65 to the film's reference white with the same CAT16 (`cat16`, moved from core), so the two compose. A camera file opens with its raw's as-shot white (`asShotWhiteBalance`); `NO_CORRECTION` is D65 itself (the light as it was, as a daylight film sees it). `mode` (daylight / as-shot / custom) is gone: as-shot and none are values now, and every stored golden is reproduced bit for bit (max \|Δ\| = 0) with the translated values. `pickedWhiteBalance` is the eyedropper's rule; `WHITE_BALANCE_PRESETS` are Lightroom's presets for raw files |
+| CHB-037 P10-9 (LAY-2) | W3C ClipColor for the OkLCh blend modes | accepted | `blendOkLch` (the four modes' formulas, moved from core) and `clipColour`: a result whose linear RGB leaves [0, `gamutTop`] (the brighter of white and the inputs' brightest channel: W3C's cube for inputs in [0, 1], room for a scene-linear highlight) keeps its OkLab L and hue and takes the chroma factor of the first exit from grey (`CLIP_MARCH` = 32 steps out, then `CLIP_STEPS` = 24 halvings; the GPU runs the same): along a ray of constant L and hue the gamut need not be one interval (deep blues). A channel within `CLIP_EPS` (1e-6 of the top) of the gamut counts as inside, so f32 noise on an edge colour cannot send it through the search in one engine only. A result in the gamut is unchanged bit for bit. The display knee's chroma search (core `maxChromaOf`, the GPU's `okMaxChroma`) had the same flaw and now also returns the first exit (`CHROMA_MARCH` = 64): it jumped between two exits for print colours 1e-5 apart (0.037 in blue); no golden changed |
 
 ```text
 CC-025  stages.scene.medium.whiteBalance, source.xyz: the white of the light as temperature and tint, CAT16 to D65 (CHB-048; contract 1.6.0)
@@ -607,6 +608,18 @@ migration: none (hard cut-off); the golden documents were re-translated (tools/g
 tests:     contract white-balance.test.ts (round trip, Lightroom anchors, identity at as shot and none, composition,
            eyedropper); core white-balance.test.ts (a white-balanced tungsten grey is the daylight grey through the film);
            mock white-balance.test.ts; GPU film.spec.ts (a changed white balance against core); golden cam-wb-tungsten
+```
+
+```text
+CC-026  composite.mix hue, saturation, colour, luminosity: ClipColor in OkLCh (CHB-048 LAY-2; contract 1.6.0)
+class:     changed meaning (minor): out-of-gamut results of the four modes are brought into the gamut
+changes:   pixel.ts blendOkLch, clipColour, gamutTop, CLIP_MARCH, CLIP_STEPS, CLIP_EPS; core blendOklab deleted (blendPixel calls
+           the contract); core maxChromaOf and the GPU's okMaxChroma return the first exit (CHROMA_MARCH)
+consumers: engines (core blendPixel; gpu working.wgsl wkClipColour, CLIP_STEPS generated into blend-codes; mock blend)
+migration: none
+tests:     contract clip-colour.test.ts (in-gamut unchanged, in gamut after, L and hue kept, maximal chroma, idempotent);
+           core composite.test.ts; conformance semantics (luminosity, colour: chroma never raised, hue kept); GPU
+           law:blend, law:digital-doc; core knee-first-exit.test.ts; golden stack-print-blends re-rendered
 ```
 
 ## Change-note template

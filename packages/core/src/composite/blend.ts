@@ -8,30 +8,13 @@
 //   - the contrast modes (overlay, hard, soft, vivid, linear and pin light, hard mix: CONTRAST_BLENDS) act on those
 //     channels in the display encoding (the sRGB curve, pixel.ts blendSeparable), so they switch at display mid-grey
 //     as in Photoshop (D7); the mix with the amount stays in the entry's encoding;
-//   - hue, saturation, colour and luminosity act in OkLCh: luminance is OkLab L, defined once in the working space,
-//     instead of W3C's Lum/SetLum/ClipColor with fixed weights (gamut is the output knee's job):
+//   - hue, saturation, colour and luminosity act in OkLCh: luminance is OkLab L, defined once, in the working space:
 //       hue        (L_b, C_b, h_s)      saturation (L_b, C_s, h_b)      colour (L_b, a_s, b_s)      luminosity (L_s, a_b, b_b)
-//     A source without hue keeps the backdrop's (hue); a backdrop without hue stays grey (saturation).
-import { blendSeparable, NON_SEPARABLE_BLENDS, type BlendMode } from '@chromobench/contract';
+//     and the result keeps the gamut by W3C's ClipColor in OkLCh (contract 1.6, LAY-2: blendOkLch, clipColour): its
+//     chroma is reduced at its lightness and hue until no RGB channel is below 0 or above gamutTop (white, or the
+//     inputs' brightest channel). A source without hue keeps the backdrop's (hue); a backdrop without hue stays grey.
+import { blendOkLch, blendSeparable, clipColour, gamutTop, NON_SEPARABLE_BLENDS, type BlendMode } from '@chromobench/contract';
 import { oklabToRgb, rgbToOklab } from './working.ts';
-
-
-/** The non-separable blend of two OkLab colours. */
-export function blendOklab(mode: BlendMode, b: ArrayLike<number>, s: ArrayLike<number>): [number, number, number] {
-  switch (mode) {
-    case 'hue': {
-      const Cb = Math.hypot(b[1]!, b[2]!), Cs = Math.hypot(s[1]!, s[2]!);
-      return Cs > 0 ? [b[0]!, (Cb * s[1]!) / Cs, (Cb * s[2]!) / Cs] : [b[0]!, b[1]!, b[2]!];
-    }
-    case 'saturation': {
-      const Cb = Math.hypot(b[1]!, b[2]!), Cs = Math.hypot(s[1]!, s[2]!);
-      return Cb > 0 ? [b[0]!, (Cs * b[1]!) / Cb, (Cs * b[2]!) / Cb] : [b[0]!, b[1]!, b[2]!];
-    }
-    case 'colour': return [b[0]!, s[1]!, s[2]!];
-    case 'luminosity': return [s[0]!, b[1]!, b[2]!];
-    default: return [s[0]!, s[1]!, s[2]!];
-  }
-}
 
 export const isNonSeparable = (mode: BlendMode): boolean => NON_SEPARABLE_BLENDS.includes(mode);
 
@@ -42,8 +25,10 @@ export const isNonSeparable = (mode: BlendMode): boolean => NON_SEPARABLE_BLENDS
 export function blendPixel(mode: BlendMode, b: ArrayLike<number>, s: ArrayLike<number>, enc: 'stage' | 'linear' | 'oklab'): [number, number, number] {
   if (mode === 'normal') return [s[0]!, s[1]!, s[2]!];
   if (isNonSeparable(mode)) {
-    if (enc === 'oklab') return blendOklab(mode, b, s);
-    return oklabToRgb(blendOklab(mode, rgbToOklab(b), rgbToOklab(s)));
+    const [lb, ls] = enc === 'oklab' ? [b, s] : [rgbToOklab(b), rgbToOklab(s)];
+    const [rb, rs] = enc === 'oklab' ? [oklabToRgb(b), oklabToRgb(s)] : [b, s];
+    const r = clipColour(blendOkLch(mode, lb, ls), gamutTop(rb, rs), oklabToRgb);
+    return enc === 'oklab' ? r : oklabToRgb(r);
   }
   const bl = enc === 'oklab' ? oklabToRgb(b) : [b[0]!, b[1]!, b[2]!];
   const sl = enc === 'oklab' ? oklabToRgb(s) : [s[0]!, s[1]!, s[2]!];

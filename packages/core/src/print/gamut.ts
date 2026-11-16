@@ -205,14 +205,29 @@ export function perceptual(kind: 'oklch' | 'cam16-ucs', space: OutputSpaceId = '
   return p;
 }
 
-/** Largest in-gamut chroma at lightness L and hue angle h (radians) of a perceptual model, by bisection. */
+/** Steps of the outward march of maxChromaOf over [0, cHi] (and the GPU's okMaxChroma). */
+export const CHROMA_MARCH = 64;
+
+/**
+ * Largest chroma at lightness L and hue angle h (radians) of a perceptual model whose whole way from grey is in the
+ * gamut: the first exit. Along a ray of constant L and hue the gamut need not be one interval (a deep blue of sRGB
+ * leaves it, comes back and leaves again: CHB-048), so a bisection over [0, cHi] could land on either exit and jump
+ * between them for nearly equal colours. The search marches out from grey in CHROMA_MARCH steps of cHi (doubling the
+ * reach while the colour is still inside at cHi, up to 8 times) and bisects the step where the colour first leaves.
+ */
 export function maxChromaOf(P: Perceptual, L: number, h: number, iterations = 40): number {
   const ca = Math.cos(h);
   const sa = Math.sin(h);
   const ok = (C: number): boolean => P.inGamut(L, C * ca, C * sa);
   let lo = 0;
   let hi = P.cHi;
-  for (let i = 0; i < 8 && ok(hi); i++) { lo = hi; hi *= 2; }
+  const step = P.cHi / CHROMA_MARCH;
+  let left = false;
+  for (let k = 1; k <= CHROMA_MARCH; k++) {
+    if (!ok(k * step)) { hi = k * step; left = true; break; }
+    lo = k * step;
+  }
+  for (let i = 0; !left && i < 8 && ok(hi); i++) { lo = hi; hi *= 2; }
   for (let i = 0; i < iterations; i++) {
     const m = (lo + hi) / 2;
     if (ok(m)) lo = m;

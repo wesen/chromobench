@@ -2,7 +2,7 @@
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
 import {
-  blendSeparable, DOMAINS, whiteBalanceMatrix, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
+  blendOkLch, blendSeparable, clipColour, DOMAINS, gamutTop, whiteBalanceMatrix, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
   type BlendMode, type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
 } from '@chromobench/contract';
 
@@ -331,16 +331,13 @@ function polyline(points: readonly { x: number; y: number }[]): (v: number) => n
   };
 }
 const smoothstep = (e0: number, e1: number, x: number): number => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
-/** B(b, s) of one pixel in encoding e: separable modes per channel in linear RGB (the contrast modes in the display encoding: contract blendSeparable), the others on OkLab's L and chroma. */
+/** B(b, s) of one pixel in encoding e: separable modes per channel in linear RGB (the contrast modes in the display encoding: contract blendSeparable), the others on OkLab's L and chroma, kept in the gamut (clipColour). */
 function blend(mode: BlendMode, b: number[], s: number[], e: Enc): number[] {
   if (mode === 'normal') return s;
   if (NON_SEPARABLE_BLENDS.includes(mode)) {
-    const [lb, ls] = e === 'oklab' ? [b, s] : [toOklab(toLinear(b, e)), toOklab(toLinear(s, e))];
-    const Cb = Math.hypot(lb[1]!, lb[2]!), Cs = Math.hypot(ls[1]!, ls[2]!);
-    const r = mode === 'luminosity' ? [ls[0]!, lb[1]!, lb[2]!]
-      : mode === 'colour' ? [lb[0]!, ls[1]!, ls[2]!]
-      : mode === 'hue' ? (Cs > 0 ? [lb[0]!, (Cb * ls[1]!) / Cs, (Cb * ls[2]!) / Cs] : lb)
-      : (Cb > 0 ? [lb[0]!, (Cs * lb[1]!) / Cb, (Cs * lb[2]!) / Cb] : lb);
+    // the contract's OkLCh formulas and ClipColor (LAY-2) on the mock's own OkLab
+    const [rb, rs] = [toLinear(b, e), toLinear(s, e)];
+    const r = clipColour(blendOkLch(mode, toOklab(rb), toOklab(rs)), gamutTop(rb, rs), (lab) => fromOklab(lab));
     return e === 'oklab' ? r : fromLinear(fromOklab(r), e);
   }
   const bl = toLinear(b, e), sl = toLinear(s, e);

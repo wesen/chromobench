@@ -4,7 +4,7 @@
 // links its pipelines with it (chain/working.ts linkKernel, from the ?raw imports) and tools/wgsl-check links every
 // kernel file the same way (from the file system), so the check compiles exactly what the engine compiles. No ?raw
 // import here: Node (the check) loads this module as it is.
-import { BLEND_MODES, CONTRAST_BLENDS, H_FLOOR, MASK_T_FLOOR, NON_SEPARABLE_BLENDS } from '@chromobench/contract';
+import { BLEND_MODES, CLIP_EPS, CLIP_MARCH, CLIP_STEPS, CONTRAST_BLENDS, H_FLOOR, MASK_T_FLOOR, NON_SEPARABLE_BLENDS } from '@chromobench/contract';
 import { OK_M1, OK_M1_INV, OK_M2, OK_M2_INV } from '@chromobench/core';
 
 /** A WGSL mat3x3<f32> literal of a row-major matrix (WGSL constructs column by column). */
@@ -25,6 +25,10 @@ export const GENERATED_WGSL: Readonly<Record<string, string>> = {
     ...BLEND_MODES.map((m, i) => `const BL_${m.toUpperCase().replace(/-/g, '_')}: u32 = ${i}u;`),
     `const BL_FIRST_NONSEP: u32 = ${Math.min(...NON_SEPARABLE_BLENDS.map((m) => BLEND_MODES.indexOf(m)))}u;`,
     `fn blContrast(mode: u32) -> bool { return ${CONTRAST_BLENDS.map((m) => `mode == BL_${m.toUpperCase().replace(/-/g, '_')}`).join(' || ')}; }`,
+    // ClipColor's bisection steps (contract pixel.ts CLIP_STEPS, LAY-2)
+    `const CLIP_MARCH: i32 = ${CLIP_MARCH};`,
+    `const CLIP_STEPS: i32 = ${CLIP_STEPS};`,
+    `const CLIP_EPS: f32 = ${CLIP_EPS};`,
   ].join('\n'),
   // the contract's floors (pixel.ts): the light law's H_FLOOR, the density mask's MASK_T_FLOOR
   'contract-constants': [

@@ -105,7 +105,8 @@ export function readableCuts(stage: StageName, kind: FrameKind, use: 'mask' | 'b
  * Blend modes of the composite law (contract 1.1; 1.5: D7): the W3C Compositing and Blending set and Photoshop's
  * vivid light, linear light, pin light and hard mix. Separable modes act per channel in linear RGB (white = 1), except
  * the contrast modes (CONTRAST_BLENDS), which act in the display encoding so they switch at display mid-grey; hue,
- * saturation, colour and luminosity act in OkLCh (design §5, §22; pixel.ts blendSeparable).
+ * saturation, colour and luminosity act in OkLCh and keep the gamut by ClipColor in OkLCh (design §5, §22; pixel.ts
+ * blendSeparable, blendOkLch, clipColour; 1.6: LAY-2).
  */
 export const BLEND_MODES = [
   'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'colour-dodge', 'colour-burn', 'hard-light', 'soft-light',

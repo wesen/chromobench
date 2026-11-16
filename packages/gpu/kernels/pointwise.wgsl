@@ -269,12 +269,21 @@ fn kneeR(d: f32, t: f32, l: f32, p: f32) -> f32 {
   return t + s * q;
 }
 
-// Largest in-gamut OkLab chroma at (L, h) by bisection (core maxChromaOf; 26 halvings reach f32 resolution).
+// Largest OkLab chroma at (L, h) whose whole way from grey is in the gamut (core maxChromaOf): a march of
+// CHROMA_MARCH steps over [0, 0.5] finds the first exit (the gamut along the ray need not be one interval), then 26
+// halvings of that step reach f32 resolution; still inside at 0.5, the reach doubles (as before).
+const CHROMA_MARCH: i32 = 64;
 fn okMaxChroma(L: f32, ca: f32, sa: f32) -> f32 {
   var lo = 0.0;
   var hi = 0.5;
+  var left = false;
+  for (var k = 1; k <= CHROMA_MARCH; k++) {
+    let c = f32(k) * (0.5 / f32(CHROMA_MARCH));
+    if (!inCube(okInv(vec3<f32>(L, c * ca, c * sa)))) { hi = c; left = true; break; }
+    lo = c;
+  }
   for (var i = 0; i < 4; i++) {
-    if (inCube(okInv(vec3<f32>(L, hi * ca, hi * sa)))) { lo = hi; hi = 2.0 * hi; }
+    if (!left && inCube(okInv(vec3<f32>(L, hi * ca, hi * sa)))) { lo = hi; hi = 2.0 * hi; }
   }
   for (var i = 0; i < 26; i++) {
     let m = 0.5 * (lo + hi);

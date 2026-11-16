@@ -197,15 +197,26 @@ describe('blend modes: the laws', () => {
   it('luminosity takes the lightness of the source and the colour of the backdrop; colour the opposite', () => {
     for (let n = 0; n < 50; n++) {
       const b = rgbToOklab(px()), s = rgbToOklab(px());
-      expect(blendPixel('luminosity', b, s, 'oklab')).toEqual([s[0], b[1], b[2]]);
-      expect(blendPixel('colour', b, s, 'oklab')).toEqual([b[0], s[1], s[2]]);
+      // the lightness of one and the colour of the other; where that colour does not fit at that lightness, its chroma
+      // is reduced at the same hue until it does (ClipColor in OkLCh, LAY-2), so the result stays in the gamut
+      const fits = (lab: ArrayLike<number>): boolean => oklabToRgb(lab).every((v) => v >= -1e-6 && v <= 1 + 1e-6);
+      const like = (out: number[], want: number[]): void => {
+        expect(out[0]).toBe(want[0]);
+        if (fits(want)) return void expect(out).toEqual(want);
+        const t = Math.hypot(out[1]!, out[2]!) / Math.hypot(want[1]!, want[2]!);
+        expect(t).toBeLessThan(1);
+        expect(Math.abs(out[1]! - t * want[1]!) + Math.abs(out[2]! - t * want[2]!)).toBeLessThan(1e-12);
+        expect(oklabToRgb(out).every((v) => v >= -1.1e-6 && v <= 1 + 1.1e-6)).toBe(true);
+      };
+      like(blendPixel('luminosity', b, s, 'oklab'), [s[0], b[1], b[2]]);
+      like(blendPixel('colour', b, s, 'oklab'), [b[0], s[1], s[2]]);
       const h = blendPixel('hue', b, s, 'oklab');
-      expect(Math.hypot(h[1], h[2])).toBeCloseTo(Math.hypot(b[1], b[2]), 12);
+      expect(Math.hypot(h[1], h[2])).toBeLessThanOrEqual(Math.hypot(b[1], b[2]) + 1e-12);
       const sat = blendPixel('saturation', b, s, 'oklab');
-      expect(Math.hypot(sat[1], sat[2])).toBeCloseTo(Math.hypot(s[1], s[2]), 12);
+      expect(Math.hypot(sat[1], sat[2])).toBeLessThanOrEqual(Math.hypot(s[1], s[2]) + 1e-12);
       // in linear RGB the same, through OkLab
       const lin = blendPixel('luminosity', oklabToRgb(b), oklabToRgb(s), 'linear');
-      expect(close(rgbToOklab(lin), [s[0], b[1], b[2]], 1e-12)).toBe(true);
+      expect(close(rgbToOklab(lin), blendPixel('luminosity', b, s, 'oklab'), 1e-12)).toBe(true);
     }
   });
 
