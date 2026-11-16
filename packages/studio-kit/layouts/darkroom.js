@@ -25,7 +25,7 @@ export default {
           .left(ck.dock.column({ width: 200 }, cb.views.strip({ vertical: true }), cb.panels.history().hidden(noFrame(cb))))
           .center(
             cb.viewer(s => cb.sel.frame(s)?.print() ?? null, {
-              tools: ['probe', 'test-strip', 'ring-around', ...stack.maskTools],
+              tools: ['probe', 'test-strip', 'ring-around', ...stack.maskTools, ...cb.kits.select.tools],
               compare: { before: s => cb.sel.frame(s)?.initial().print() ?? null },
               hud: cb.hud.readout(),
             }),

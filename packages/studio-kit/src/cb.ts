@@ -35,6 +35,8 @@ import { createLooksKit } from '../kits/looks/src/kit.ts';
 import { createChatKit } from '../kits/chat/src/kit.ts';
 import { createStackKit } from '../kits/stack/src/kit.ts';
 import { createDiagnosticsKit } from '../kits/diagnostics/src/kit.ts';
+import { createSelectKit } from '../kits/select/src/kit.ts';
+import { SELECT_TOOLS } from '../kits/select/src/commands.ts';
 import { MASK_TOOLS } from '../kits/stack/src/commands.ts';
 import { maskCover } from '../kits/stack/src/overlay.ts';
 
@@ -316,7 +318,9 @@ export function createCb(ck: Ck) {
         // every studio has the stack kit: the darkroom's exposures are its view of the darkroom stage
         .use(cb.kits['stack'].kit)
         // and the diagnostics kit: Help ▸ Report a Problem… wherever he is (CHB-038)
-        .use(cb.kits['diagnostics'].kit),
+        .use(cb.kits['diagnostics'].kit)
+        // and the select kit: selections are masks (CHB-049, D3)
+        .use(cb.kits['select'].kit),
     arg,
     viewer,
     /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
@@ -402,7 +406,7 @@ export function createCb(ck: Ck) {
               id: 'main',
               views: true,
               compare: true,
-              tools: ['probe', 'test-strip', 'ring-around', ...MASK_TOOLS],
+              tools: ['probe', 'test-strip', 'ring-around', ...MASK_TOOLS, ...SELECT_TOOLS],
               hud: cb.hud.readout(),
             }),
           )
@@ -430,8 +434,10 @@ export function createCb(ck: Ck) {
       help: () => ck.menu('Help', ['app.shortcuts', '-', ...cb.kits['diagnostics'].menus.help(), '-', 'app.diagnostics']),
       /** the stack kit's Layer menu (add from the catalogue, duplicate, delete, group, order, masks) */
       layer: () => cb.kits['stack'].menus.layer(),
-      /** File, Edit, Frame, Layer, View, Window, Help */
-      standard: () => [cb.menus.file(), cb.menus.edit(), cb.menus.frame(), cb.menus.layer(), cb.menus.view(), cb.menus.window(), cb.menus.help()],
+      /** the select kit's Select menu (CHB-049) */
+      select: () => cb.kits['select'].menus.select(),
+      /** File, Edit, Frame, Layer, Select, View, Window, Help */
+      standard: () => [cb.menus.file(), cb.menus.edit(), cb.menus.frame(), cb.menus.layer(), cb.menus.select(), cb.menus.view(), cb.menus.window(), cb.menus.help()],
     },
     ring: { tiles: ringTiles },
     arrangements: { DARKROOM },
@@ -446,6 +452,8 @@ export function createCb(ck: Ck) {
   cb.kits['stack'] = createStackKit(ck, cb as any);
   // CHB-038: the diagnostics journal's panel and problem reports (every studio installs it)
   cb.kits['diagnostics'] = createDiagnosticsKit(ck, cb as any);
+  // CHB-049: selections as mask components (D3)
+  cb.kits['select'] = createSelectKit(ck, cb as any);
   // the kits' fragment methods (cb.arg(…).pad(), .testStrip(), .rollScope()) on the nodes layouts build with this ck
   ck.extend(core, ...Object.values(cb.kits).map(k => k.kit));
   return cb;
