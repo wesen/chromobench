@@ -1,7 +1,7 @@
 // Pointwise programs for kernels/pointwise.wgsl: op codes and the uniform layout. The f64 reference of
 // a program is core's reference engine on the same graph (parity/chain-tests.ts, CHB-017).
 import { gridCheck } from '@chromobench/contract';
-import { oklabFor, outputSpace, type DisplaySetup } from '@chromobench/core';
+import { cam16Knee, oklabFor, outputSpace, type DisplaySetup } from '@chromobench/core';
 import { defineStruct } from '../layout.ts';
 import type { CurveRow } from '../physics/core.ts';
 import { A_RANGE, CP_RANGE, C_RANGE, X_RANGE, type Mat3, type SolveInputs, type SpectralInputs } from '../tables/inputs.ts';
@@ -34,28 +34,30 @@ export const PROG = defineStruct('Prog', [
 ]);
 
 /** output.display knee codes (op flags; kernels/pointwise.wgsl op 8). */
-export const KNEE = Object.freeze({ clip: 0, tanh: 1, oklch: 2 });
+export const KNEE = Object.freeze({ clip: 0, tanh: 1, oklch: 2, cam16: 3 });
 
 /**
  * output.display lowered from core's DisplaySetup (CHB-011): the matrix before the knee, the knee code,
  * the space's ICC type-3 TRC (p0 = g a b c, p1.x = d), the lightness rule (p1.y threshold, p1.z 1 for
  * the print-as-seen knee, 0 for the scan-of-print clip), the tanh shoulder start (p1.w), and the
- * per-space OkLab matrix for the oklch knee. 'cam16-ucs' has no GPU kernel yet: it lowers to oklch.
+ * per-space OkLab matrix for the oklch knee. The cam16-ucs knee (CHB-047 OUT-3) uses the two matrix slots for the
+ * space's RGB ↔ adapted cone signals (core cam16Knee) and carries CAM16's constants in the op's data.
  */
-export function lowerDisplay(ds: DisplaySetup, node?: string): { op: PwOp; disp: Mat3; ok: [Mat3, Mat3]; approx: boolean } {
+export function lowerDisplay(ds: DisplaySetup, node?: string): { op: PwOp; disp: Mat3; ok: [Mat3, Mat3] } {
   const c = ds.compress;
   const S = outputSpace(ds.space);
   const cv = S.curve;
-  const approx = c.algorithm === 'cam16-ucs';
-  const flags = c.algorithm === 'clip' ? KNEE.clip : c.algorithm === 'tanh-shoulder' ? KNEE.tanh : KNEE.oklch;
+  const cam = c.algorithm === 'cam16-ucs' ? cam16Knee(ds.space) : null;
+  const flags = c.algorithm === 'clip' ? KNEE.clip : c.algorithm === 'tanh-shoulder' ? KNEE.tanh : cam ? KNEE.cam16 : KNEE.oklch;
   const ok = oklabFor(ds.space);
   const op: PwOp = {
     code: OP.DISPLAY, flags,
     p0: [cv.g, cv.a ?? 1, cv.b ?? 0, cv.c ?? 0],
     p1: [cv.d ?? 0, c.lightness ? c.lightness[0] : 1, c.lightness ? 1 : 0, c.shoulder ?? 0.82],
+    ...(cam ? { data: cam.scalars } : {}),
     ...(node ? { node } : {}),
   };
-  return { op, disp: ds.M, ok: [ok.M1s, ok.M1sInv], approx };
+  return { op, disp: ds.M, ok: cam ? [cam.fwd, cam.inv] : [ok.M1s, ok.M1sInv] };
 }
 
 export interface PwOp {

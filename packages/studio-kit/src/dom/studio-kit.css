@@ -131,6 +131,25 @@
 .cb-step { font-size: 15px; font-weight: 300; padding: 6px 18px; border: 1px solid var(--line2); border-radius: 18px; background: var(--panel3); color: var(--text2); }
 .cb-step.is-on { background: var(--accent); color: var(--onaccent); border-color: var(--accent); font-weight: 400; }
 .cb-simple-side { padding: 10px; gap: 8px; overflow: auto; background: var(--panel); border-left: 1px solid var(--line); }
+/* the Output panel and File ▸ Export… (CHB-047) */
+.cb-output { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; }
+.cb-export-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.cb-export-l { min-width: 92px; color: var(--text2); }
+.cb-export-c { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.cb-export-c select, .cb-export-c input[type=text] { flex: 1; min-width: 0; }
+.cb-export-c input[type=range] { flex: 1; min-width: 60px; }
+.cb-export-num { width: 5em; font-variant-numeric: tabular-nums; }
+.cb-export-unit { font-size: 11px; white-space: nowrap; }
+.cb-export-sample { font-size: 11px; overflow-wrap: anywhere; }
+.cb-export-go { display: flex; gap: 6px; flex-wrap: wrap; }
+.cb-export-run { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.cb-export-run progress { width: 100%; }
+.cb-export-now { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.cb-export-head { color: var(--text); }
+.cb-export-results { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+.cb-export-res { color: var(--text2); overflow-wrap: anywhere; padding: 1px 0; }
+.cb-export-res.is-ok { color: var(--ok); }
+.cb-export-res.is-failed { color: var(--err); }
 .cb-output.is-simple { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-size: 16px; }
 .cb-output.is-simple .cb-save { font-size: 18px; padding: 12px 28px; height: auto; }
 

@@ -26,6 +26,8 @@ import { DOCS, linkDataOf, linksOf, withEnlargerMode, type EnlargerMode, type Li
 import { describe, type Change, type ModelLookup } from './model/history.ts';
 import { modelAt } from './kit/args.ts';
 import type { CatalogEntry as CatalogFrame } from './sel.ts';
+import type { ExportRequestOf } from './commands/output.ts';
+import type { ExportResult, PrinterProfileRef } from './model/export.ts';
 
 /** The library's name of a frame: the file's, with its place on a strip ("raw010.dng · 2/3"). */
 export const frameName = (f: Pick<FrameEntry, 'name' | 'strip'>): string => (f.strip ? `${f.name} · ${f.strip.index}/${f.strip.of}` : f.name);
@@ -60,8 +62,11 @@ export interface StudioHost {
   /** File ▸ Reopen <folder> (the folder used last; `folder` names it) */
   reopenFolder?(): unknown;
   folder?: string | null;
-  /** File ▸ Export… (Mod+E): format and colour space in a dialog */
-  exportPrint?(): unknown;
+  /**
+   * The export of frames with his export settings (CHB-047): the Output module's Export, File ▸ Export…, and
+   * output.export; progress through `onProgress`, one result per frame.
+   */
+  exportFrames?(req: ExportRequestOf): Promise<ExportResult[]>;
   /** File ▸ Save Document */
   saveDocument?(): unknown;
   /** File ▸ Open As ▸ Heal Dust: the host finds dust on open and adds a Dust group of heal layers to the scan stage */
@@ -74,6 +79,10 @@ export interface StudioHost {
   relink?(id: string): unknown;
   /** D8 (CHB-046): print a negative anew with the first print's aim (Neutralise), one step */
   firstPrint?(frame: string): unknown;
+  /** CHB-047 OUT-5: add a printer profile (.icc, .icm) to his library; the host publishes the list (HostFlags.printers) */
+  addPrinterProfile?(): unknown;
+  /** his printer profiles (published as HostFlags.printers) */
+  printers?: PrinterProfileRef[];
 }
 
 /** What the host publishes into the state (ui.host) for labels and menus: the folder, the layouts. Its actions are
@@ -82,6 +91,8 @@ export interface HostFlags {
   folder: string | null;
   layouts: { id: string; label: string }[];
   layout: string | null;
+  /** his printer profiles (CHB-047 OUT-5), for the Output panel's colour space */
+  printers?: PrinterProfileRef[];
 }
 
 /** A pending proposal of the log on one frame, in the photographer's words (the Agent proposals panel's card). */
@@ -268,7 +279,7 @@ export class Studio {
   /** the host flags in ui.host, after the host changed (a folder picked) */
   publishHost(): void {
     const h = this.host;
-    const flags: HostFlags = { folder: h?.folder ?? null, layouts: h?.layouts ?? [], layout: h?.layout ?? null };
+    const flags: HostFlags = { folder: h?.folder ?? null, layouts: h?.layouts ?? [], layout: h?.layout ?? null, ...(h?.printers ? { printers: h.printers } : {}) };
     this.rt?.store.writeView([{ path: ['ui', 'host'], value: flags }]);
   }
   detach(): void {

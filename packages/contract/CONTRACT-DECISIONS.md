@@ -614,6 +614,27 @@ tests:     contract mask-controls.test.ts; core selections.test.ts; conformance 
            law:selections, law:tiles (grow, wand)
 ```
 
+## Contract 2.0 (CHB-047: export at the file's size, JPEG quality, the CAM16 knee on the GPU)
+
+`CONTRACT_VERSION = '2.0.0'`. A major version: `output.export.scale` is removed (breaking, no migration by the owner's hard cut-off; studio-kit STORAGE_FORMAT 4 clears saved edits once). Merged after CHB-049 took 1.6.0 and CC-025, so this note is CC-026.
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| CHB-047 OUT-2 | `ExportSettings.size` (`ExportSize`) and `quality` replace `scale`; `scaleDocument`, `scaleBox` | accepted | An export's size is the frame's original size, a long edge in px (never above the original) or a percentage of it; JPEG quality 1–100 (`output.encode.quality`, IJG scale). A document on a decode of another size is the same print with its pixel quantities scaled (`scaleDocument`: the catalogue's px args, box, point, polyline; the crop, probes, the scan medium's rebate and open gate; the scan's µm/px divided) |
+| CHB-047 OUT-3 | The GPU's cam16-ucs knee | accepted | Supersedes output R1's "GPU keeps the OkLCh kernel with `W_PREVIEW_APPROX`": `kernels/pointwise.wgsl` computes CAM16 forward and inverse (spektrafilm's viewing conditions, D = 1) and the knee in J′a′b′; core `cam16Knee` gives its constants. Parity with core f64 ≤ 3e-5 in linear RGB (gpu-parity `output.spec.ts`); no warning |
+
+```text
+CC-026  output.export.size and .quality, scaleDocument (CHB-047; contract 2.0.0)
+class:     breaking (major in shape, no migration by decision): output.export.scale is gone; size and quality are new
+changes:   document.ts ExportSize, ExportSettings.size, ExportSettings.quality (default { by: 'original' }, 90);
+           output.encode gains quality (1…100, integer); schema.ts size rule; scale.ts scaleDocument, scaleBox
+consumers: output (export runner: always full scale on a source decoded at the export's size; JPEG writer); studio host
+           (export at his size: decode again, scaleDocument, render); studio-kit (his export settings); goldens (the
+           stored documents carry size and quality; no picture changed)
+migration: none (hard cut-off: studio-kit STORAGE_FORMAT 4 clears edits saved before, once, with the message)
+tests:     contract scale-document.test.ts; output jpeg.test.ts, export.test.ts; e2e studio-output.spec.ts
+```
+
 ## Change-note template
 
 ```text

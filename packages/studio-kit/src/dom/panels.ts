@@ -11,6 +11,7 @@ import { TIME_PATH } from '../model/doc.ts';
 import { modelAt } from '../kit/args.ts';
 import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
+import { outputPanel } from './output.ts';
 import { sel } from '../sel.ts';
 import { STACK_RENDERERS } from '../../kits/stack/src/dom.ts';
 import { SELECT_RENDERERS } from '../../kits/select/src/dom.ts';
@@ -352,12 +353,6 @@ const filter: Renderer = (_n, m) => {
   return h('div', { class: 'cb-filter' }, input, modes);
 };
 
-const output: Renderer = (n, m) => {
-  const b = btn(n.props['simple'] ? 'Save the print' : 'Save PNG', 'cb-save is-primary');
-  listen(m.scope, b, 'click', () => m.rt.runCommand('output.save', null));
-  return h('div', { class: ['cb-panel cb-output', n.props['simple'] && 'is-simple'] }, h('p', { class: 'cb-dim', text: 'Export, colour management and soft proofing come with CHB-011.' }), b);
-};
-
 const chat: Renderer = () => h('div', { class: 'cb-panel cb-dim', text: 'The chat comes with CHB-008. Until then: window.chromobench.propose(mutations, why).' });
 void studioOf;
 
@@ -374,7 +369,7 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.metadata': metadata,
   'cb.library': library,
   'cb.densitometer': densitometer,
-  'cb.output': output,
+  'cb.output': outputPanel,
   'cb.chat': chat,
   'cb.steps': steps,
   'cb.readout': readout,

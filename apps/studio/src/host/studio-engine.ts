@@ -64,6 +64,9 @@ export const ANALYSIS_LONG = 640;
 /** The source id of a file's analysis image (a SHA-256 like every source id, derived from the file's). */
 export const analysisSha = (sha256: string): string => sha256Hex(`first-print analysis image of ${sha256}`);
 
+/** The source id of a file decoded at an export's long side (CHB-047; 0 = the file's own size). */
+export const exportSourceSha = (sha256: string, long: number): string => sha256Hex(`export image of ${sha256} at ${long > 0 ? `${long} px` : 'full size'}`);
+
 /** A file's analysis image: its source info and the scale from the working image's px to its px. */
 export interface AnalysisImage {
   info: SourceInfo;
@@ -95,6 +98,11 @@ export interface HostServices {
   decode(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode): Promise<Decoded>;
   /** The decode to try first when guessing (classifier hook: ingest's openPrior): a camera RAW is decoded as a photo. */
   prior?(name: string): 'photo' | 'negative' | null;
+  /**
+   * A file's pixels at an export's size (CHB-047, decode.ts decodePixels) under the source id `source`: `data` comes back
+   * for an engine on this thread, and is absent when the engine worker keeps them for the reference engine.
+   */
+  decodePixels?(bytes: Uint8Array, sha256: string, source: string, name: string, mode: DecodeMode, long: number): Promise<{ info: SourceInfo; data?: Float32Array }>;
   /** Drops a source and everything computed from it in the physics engine (before the file is decoded another way). */
   forget?(engine: Engine, sha256: string): void;
   /**
@@ -273,16 +281,59 @@ export class StudioEngine implements Engine {
   private forget(sha: string): void {
     this.host.forget?.(this.primary, sha);
     if (this.notes.get(sha)?.analysis) this.host.forget?.(this.primary, analysisSha(sha));
+    this.notes.delete(sha);
+    this.rebuildGraph();
+  }
+
+  /** A new graph with the open files' sources (and analysis images and the export images open now) registered. */
+  private rebuildGraph(): void {
     const old = this.graph;
     this.graph = new Graph();
     for (const [k, n] of this.notes) {
-      if (k === sha) continue;
       const info = old.source(k);
       if (info) this.graph.registerSource(info);
       if (n.analysis) this.graph.registerSource(n.analysis.info);
     }
+    for (const info of this.exports.values()) this.graph.registerSource(info);
     this.supported.clear();
-    this.notes.delete(sha);
+  }
+
+  /** Export images open now (CHB-047), by source id. */
+  private readonly exports = new Map<string, SourceInfo>();
+  /** The export images open now (CHB-047; none between exports): their source ids. */
+  get exportImages(): string[] {
+    return [...this.exports.keys()];
+  }
+
+  /**
+   * The file decoded at an export's long side (CHB-047; 0 = its own size), registered as its own source
+   * (exportSourceSha) in the physics engine and this engine's graph, decoded the way the file is open (photo or
+   * negative). `closeExport` lets it go.
+   */
+  async openExport(sha256: string, bytes: Uint8Array, name: string, long: number): Promise<SourceInfo> {
+    const d = this.notes.get(sha256) ?? fail('E_NO_SOURCE', `source ${sha256.slice(0, 12)}… is not open`);
+    if (!this.host.decodePixels) return fail('E_NOT_IMPLEMENTED', 'this host cannot decode a file at an export size');
+    const id = exportSourceSha(sha256, long);
+    const have = this.exports.get(id);
+    if (have) return have;
+    const px = await this.host.decodePixels(bytes, sha256, id, name, d.kind === 'digital-raw' ? 'photo' : 'scan', long);
+    this.host.register(this.primary, px.info, px.data);
+    this.graph.registerSource(px.info);
+    this.exports.set(id, px.info);
+    return px.info;
+  }
+
+  /** Lets an export image go (its pixels, textures and cached results in the physics engine). */
+  closeExport(id: string): void {
+    if (!this.exports.delete(id)) return;
+    this.host.forget?.(this.primary, id);
+    this.rebuildGraph();
+  }
+
+  /** The working image's size and the file's own size of an open source (CHB-047: the export's scale). */
+  sizes(sha256: string): { working: { width: number; height: number }; full: { width: number; height: number } } | null {
+    const d = this.notes.get(sha256);
+    return d ? { working: { width: d.info.width, height: d.info.height }, full: { ...d.full } } : null;
   }
 
   /**

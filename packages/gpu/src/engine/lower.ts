@@ -82,9 +82,8 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
       case 'view.flare': push({ code: OP.FLARE, p0: P.flare(ctx, a['flare'] as number), p1: [1], node: n.id }); break;
       case 'view.adapt': push({ code: OP.ADAPT, p0: P.adaptGains(ctx, a['to']), node: n.id }); break;
       case 'output.display': {
-        // core's display setup (CHB-011): every space, both renderings, clip / tanh / oklch knees
+        // core's display setup (CHB-011): every space, both renderings, clip / tanh / oklch / cam16-ucs knees
         const d = lowerDisplay(P.display(ctx, a), n.id);
-        if (d.approx) warnings.push({ code: 'W_PREVIEW_APPROX', message: 'the cam16-ucs knee has no GPU kernel yet; the oklch knee is used instead' });
         push(d.op, {}, d.disp, d.ok);
         break;
       }

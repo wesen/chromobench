@@ -24,3 +24,5 @@ export * from './model/settings.ts';
 export * from './model/enlarger-mode.ts';
 export * from './model/aim.ts';
 export * from './model/doc.ts';
+export * from './model/export.ts';
+export { outputCommands, type ExportRequestOf } from './commands/output.ts';

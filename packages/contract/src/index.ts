@@ -4,8 +4,9 @@
 // one compiler with named cuts, validation through the values hooks (a frame's history is the values document log
 // with LOG_RULES). Contract 1.1 (CHB-037 P8a): the composite op set, blend modes, working encodings, colour and radial
 // masks. Contract 1.6 (CHB-049): selections as mask components, grow, density, a component's invert, a stroke's flow.
+// Contract 2.0 (CHB-047): export size and quality replace scale (breaking, hard cut-off), scaleDocument.
 // Importing this module registers the catalogue.
-export const CONTRACT_VERSION = '1.6.0';
+export const CONTRACT_VERSION = '2.0.0';
 
 export * from './errors.ts';
 export * from './units.ts';
@@ -36,6 +37,7 @@ export * from './eval.ts';
 export * from './laws.ts';
 export * from './roll.ts';
 export * from './frame.ts';
+export * from './scale.ts';
 export { CATALOG } from './catalog/index.ts';
 export { DEFAULT_HSL_BANDS } from './catalog/adjust.ts';
 export { COMBINE_ROLES } from './catalog/capture-film-print.ts';

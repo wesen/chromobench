@@ -135,3 +135,7 @@ Things to know:
 - **Density masks lighten the print.** A positive mask is 0 at the densest area (here the ramp's highlight end,
   pixel (95, 6)) and adds density everywhere else (γ 0.6 at 25 µm: mean 0.46 D), so the print gets much lighter;
   `neg-dm-unmetered` keeps that, the other density-mask cases are re-metered with the first print.
+
+CHB-047 (contract 1.6) changed the stored documents, not the pictures: `output.export.scale` became `size`
+(`{ "by": "original" }`) and `quality` (90) in every `document.json` (`translate.ts` maps the recipes' `scale` the same
+way); `render.ts --check` passes unchanged.

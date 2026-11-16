@@ -103,3 +103,22 @@ describe('lowering the digital ops (core prepares every parameter)', () => {
   });
 });
 
+
+describe('output.display knees (CHB-047 OUT-3)', () => {
+  it('cam16-ucs lowers to its own kernel (knee 3): the RGB ↔ cone matrices and the eight CAM16 constants in the op data', async () => {
+    const { displaySetup, cam16Knee, perceptual } = await import('@chromobench/core');
+    const { KNEE, lowerDisplay } = await import('../src/chain/program.ts');
+    for (const space of ['srgb', 'display-p3', 'prophoto'] as const) {
+      const ds = displaySetup({ rendering: 'print-as-seen', white: [0.9505, 1, 1.089], paperWhite: [0.77, 0.81, 0.86], space, knee: 'cam16-ucs' });
+      const d = lowerDisplay(ds);
+      expect(d.op.flags).toBe(KNEE.cam16);
+      expect(d.op.data).toHaveLength(8);
+      const k = cam16Knee(space);
+      expect(d.ok).toEqual([k.fwd, k.inv]);
+      // J′ of the space's white is the model's (core perceptual) and F_L^¼ is F_L's
+      expect(d.op.data![6]).toBe(perceptual('cam16-ucs', space).white);
+      expect(d.op.data![7]).toBeCloseTo(d.op.data![0]! ** 0.25, 14);
+      expect(lowerDisplay(displaySetup({ rendering: 'print-as-seen', white: [0.9505, 1, 1.089], paperWhite: [0.77, 0.81, 0.86], space, knee: 'oklch' })).op.flags).toBe(KNEE.oklch);
+    }
+  });
+});

@@ -5,6 +5,7 @@ import type { Document } from '@chromobench/contract';
 import { strip } from '@chromobench/shell';
 import { frameRef, type FrameRef } from './handles.ts';
 import type { ViewMode } from './model/settings.ts';
+import type { ExportPrefs, ExportRun } from './model/export.ts';
 import type { OpenAs } from './bridge/frames.ts';
 import type { HostFlags, LogView, Proposal } from './studio.ts';
 
@@ -70,6 +71,8 @@ export interface CbUi {
   log?: LogView;
   /** what the host publishes (Studio.setHost): its folder and the layouts it can switch to */
   host?: HostFlags;
+  /** the export running and the last one's results (CHB-047, the Output module) */
+  export?: ExportRun;
 }
 export interface CbPrefs {
   agentMode: 'read-only' | 'ask' | 'auto';
@@ -81,6 +84,8 @@ export interface CbPrefs {
   dust?: boolean;
   /** D8 (CHB-046): how much of each frame's colour cast a first print takes out, in percent (default 75) */
   neutralise: number;
+  /** his export settings (CHB-047; exportPrefsOf fills the defaults) */
+  export?: Partial<ExportPrefs>;
 }
 /**
  * The state cb.core declares (the kits add their slices: roll, rollView, finish, looks, looksView). `docs.<frame>` is

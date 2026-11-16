@@ -38,7 +38,7 @@ log that selects CAM16-UCS under its own name would silently become OkLCh. Two w
 
 **Workaround.** Core's `displaySetupAt` maps `'cam16-ucs'` and `'cam16ucs'` to the CAM16-UCS knee; the
 binder refuses both until the change, so only direct calls (`displaySetup({knee: 'cam16-ucs'})`) reach
-it. The GPU engine lowers it to the OkLCh kernel with `W_PREVIEW_APPROX` (no CAM16 WGSL yet).
+it. The GPU engine lowered it to the OkLCh kernel with `W_PREVIEW_APPROX` until CHB-047 OUT-3 gave it its own WGSL kernel.
 
 **One deliberate difference from spektrafilm** (review): D = 1 (illuminant discounted). With
 spektrafilm's D(L_A = 64) = 0.912 the output white sits at a′, b′ = (−1.33, −0.76) off the neutral axis,

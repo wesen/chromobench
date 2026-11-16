@@ -147,7 +147,8 @@ export function translate(r: R): Document {
 
   const masks = Coll.of(Object.entries(r['masks'] as Record<string, { nodes: NodeRec[] }>).map(([id, m]) => [id, translateMask(id, id, m, paper)] as const));
   const out = view['output'];
-  const { recipe: travel, ...exp } = out['export'];
+  // CHB-047 (contract 1.6): the recipe's scale ('full' in every P0 recipe) is the export size; JPEG quality is new
+  const { recipe: travel, scale: _scale, ...exp } = out['export'];
   const stages: R = {
     darkroom: { medium: { paper: pr['paper'], aim: pr['aim'], mode: e['mode'], lamp: e['lamp'], magnification, grade: pr['grade'] }, stack: Coll.of(dark) },
     print: { medium: { illuminant: view['illuminant'], flare: view['flare'] }, stack: Coll.of(printStack) },
@@ -168,7 +169,7 @@ export function translate(r: R): Document {
   }
   const doc = {
     format: 3, frame: r['frame'], source: r['source'], data: r['data'], stages, masks, probes: Coll.empty(),
-    geometry: view['frame'], output: { rendering: out['rendering'], white: out['white'], display: out['display'], export: { ...exp, document: travel }, printer: out['printer'] },
+    geometry: view['frame'], output: { rendering: out['rendering'], white: out['white'], display: out['display'], export: { ...exp, size: { by: 'original' }, quality: 90, document: travel }, printer: out['printer'] },
   };
   const parsed = JSON.parse(canonicalJSON(doc as unknown as Json)) as Document;
   assertDocument(parsed);

@@ -35,8 +35,6 @@ export const hostCommands = (): CommandTable<CbState> => ({
       return host(ctx).dust!(on);
     },
   },
-  // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
-  'file.export': { label: 'Export…', ...needFrame, run: ctx => (ctx.rt.capable('host.exportPrint') ? host(ctx).exportPrint!() : ctx.run('output.save')) },
   // D8 (CHB-046): the first print anew, with the Neutralise amount (a negative: a photo keeps the camera's colour)
   'print.firstPrint': {
     label: 'First Print Again',

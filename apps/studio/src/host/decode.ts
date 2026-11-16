@@ -52,22 +52,26 @@ export const BINNED_PHOTO_MAX_LONG = 1024;
 /** EXIF orientation tag → the turn that shows the picture upright (mirrored tags do not occur in camera RAW). */
 const EXIF_TURN: Partial<Record<number, Orientation>> = { 3: 'rot180', 6: 'cw90', 8: 'ccw90' };
 
-/** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
-export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw' | 'analysisLong'>): Promise<Decoded> {
-  const binned = o.long > 0 && o.long <= BINNED_PHOTO_MAX_LONG;
-  let raw = await decodeAsync(bytes, { fileName: name, options: binned ? { mode: 'scan', bin: 'cfa-half' } : { mode: 'photo' }, raw: o.raw });
+/**
+ * A photo's pixels at `long` (0 = the file's own size): the decode (camera RAW binned up to BINNED_PHOTO_MAX_LONG, else
+ * demosaiced), linear, area-averaged, turned upright when the binned read is in sensor orientation. The working image
+ * and an export's image (CHB-047, decodePixels) are both made here, so they are the same picture at two sizes.
+ */
+async function photoPixels(bytes: Uint8Array, sha256: string, name: string, long: number, rawDecoder: RawDecoder) {
+  const binned = long > 0 && long <= BINNED_PHOTO_MAX_LONG;
+  let raw = await decodeAsync(bytes, { fileName: name, options: binned ? { mode: 'scan', bin: 'cfa-half' } : { mode: 'photo' }, raw: rawDecoder });
   // binning applies to camera RAW only; a camera whose binned image is smaller than the working size: the demosaic
   const k = raw.meta.format === 'raw' && binned ? (raw.meta.cfa === 'xtrans' ? 3 : 2) : 1;
   let fullW = raw.width * k, fullH = raw.height * k;
-  if (k > 1 && Math.max(raw.width, raw.height) < o.long) {
-    raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'photo' }, raw: o.raw });
+  if (k > 1 && Math.max(raw.width, raw.height) < long) {
+    raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'photo' }, raw: rawDecoder });
     fullW = raw.width;
     fullH = raw.height;
   }
   const read = raw.width < fullW ? `, read binned ${raw.width}×${raw.height} (${k} × ${k} photosites a pixel)` : '';
   const lin = linearise(raw, { sha256, ir: false });
   const W = lin.width, H = lin.height;
-  const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
+  const s = long > 0 ? Math.min(1, long / Math.max(W, H)) : 1;
   let w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
   let data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
   // LibRaw's demosaic (dcraw_make_mem_image) comes out turned by the camera's orientation tag; the binned read is in
@@ -79,6 +83,12 @@ export async function decodePhoto(bytes: Uint8Array, sha256: string, name: strin
     [w, h] = [o.width, o.height];
     if (turn !== 'rot180') [fullW, fullH] = [fullH, fullW];
   }
+  return { raw, lin, data, w, h, W, H, fullW, fullH, read, turn, s };
+}
+
+/** A photo (CHB-012): decode (camera RAW in photo mode) → linear → area-averaged working image; no conditioning. */
+export async function decodePhoto(bytes: Uint8Array, sha256: string, name: string, o: Pick<DecodeOptions, 'long' | 'raw' | 'analysisLong'>): Promise<Decoded> {
+  const { raw, lin, data, w, h, W, H, fullW, fullH, read, turn, s } = await photoPixels(bytes, sha256, name, o.long, o.raw);
   const cam = raw.meta.camera;
   const notes = [raw.meta.format === 'raw'
     ? `photo: camera RAW${cam ? ` (${cam.make} ${cam.model})` : ''} via LibRaw, photo mode, ${fullW}×${fullH}${read}${cam?.camToXyz ? `, camera matrix from ${cam.from ?? 'LibRaw'}` : ', no camera matrix (taken as linear sRGB)'}`
@@ -256,4 +266,24 @@ function withAnalysis(d: Decoded, sha256: string, a: Decoded): Decoded {
 export function decodeFile(bytes: Uint8Array, sha256: string, name: string, mode: DecodeMode, o: DecodeOptions): Promise<Decoded> {
   if (mode === 'photo') o.roll.delete(sha256);
   return mode === 'photo' ? decodePhoto(bytes, sha256, name, o) : decodeScan(bytes, sha256, name, o);
+}
+
+/**
+ * The pixels of a file at an export's size (CHB-047): the decode its working image is made from, area-averaged to
+ * `long` (0 = the file's own size), registered under `id` (exportSourceSha). No conditioning, no analysis image, no
+ * dust: the document carries those, mapped onto this image (scaleDocument). A scan's pixels stay as scanned, so this
+ * is the working image at another size.
+ */
+export async function decodePixels(bytes: Uint8Array, sha256: string, id: string, name: string, mode: DecodeMode, o: { long: number; raw: RawDecoder }): Promise<{ info: SourceInfo; data: Float32Array }> {
+  if (mode === 'photo') {
+    const p = await photoPixels(bytes, sha256, name, o.long, o.raw);
+    return { info: { ...sourceInfo(sha256, p.raw, p.lin), sha256: id, width: p.w, height: p.h, channels: 3, notes: [] }, data: p.data };
+  }
+  const raw = await decodeAsync(bytes, { fileName: name, options: { mode: 'scan', bin: 'cfa' }, raw: o.raw });
+  const lin = linearise(raw, { sha256, ir: false });
+  const W = lin.width, H = lin.height;
+  const s = o.long > 0 ? Math.min(1, o.long / Math.max(W, H)) : 1;
+  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  const data = region(lin, { x: 0, y: 0, w: W, h: H }, w, h, { channels: 3 });
+  return { info: { ...sourceInfo(sha256, raw, lin), sha256: id, width: w, height: h, channels: 3, notes: [] }, data };
 }

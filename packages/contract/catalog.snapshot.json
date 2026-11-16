@@ -21,7 +21,7 @@
     "colour",
     "luminosity"
   ],
-  "contractVersion": "1.6.0",
+  "contractVersion": "2.0.0",
   "cuts": {
     "darkroom.H": {
       "domain": "paper-logH",
@@ -2629,6 +2629,18 @@
             "png8",
             "jpeg"
           ]
+        },
+        "quality": {
+          "default": 90,
+          "integer": true,
+          "max": 100,
+          "min": 1,
+          "type": "number",
+          "unit": "none",
+          "usual": [
+            70,
+            95
+          ]
         }
       },
       "binding": "setting",
@@ -3694,8 +3706,16 @@
       "type": "number",
       "unit": "none"
     },
-    "export.scale": {
-      "type": "custom"
+    "export.quality": {
+      "integer": true,
+      "max": 100,
+      "min": 1,
+      "type": "number",
+      "unit": "none",
+      "usual": [
+        70,
+        95
+      ]
     },
     "export.signal": {
       "type": "enum",
@@ -3704,6 +3724,9 @@
         "icc+cicp",
         "none"
       ]
+    },
+    "export.size": {
+      "type": "custom"
     },
     "export.space": {
       "type": "enum",

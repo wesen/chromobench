@@ -76,8 +76,24 @@ export interface Cam16 {
   inv(JMh: ArrayLike<number>): Vec3;
 }
 
-/** CAM16 for an adapting white; `vc.D` overrides the degree of adaptation (default: from F and L_A). */
-export function cam16(XYZ_w: ArrayLike<number>, vc: { L_A: number; Y_b: number; F: number; c: number; N_c: number; D?: number } = CAM16_VIEWING): Cam16 {
+/** The constants of CAM16 for an adapting white and viewing conditions (Li et al. 2017, step 0). */
+export interface Cam16Viewing {
+  F_L: number;
+  N_bb: number;
+  N_cb: number;
+  /** c · z: the exponent of J */
+  cz: number;
+  /** (1.64 − 0.29^n)^0.73: the factor of C */
+  tk: number;
+  /** per channel D·Y_w / RGB_w + 1 − D */
+  D_RGB: Vec3;
+  /** the achromatic response of the white */
+  A_w: number;
+  N_c: number;
+}
+
+/** CAM16's step 0 for an adapting white (the constants cam16 and the GPU's knee share; CHB-047 OUT-3). */
+export function cam16Viewing(XYZ_w: ArrayLike<number>, vc: { L_A: number; Y_b: number; F: number; c: number; N_c: number; D?: number } = CAM16_VIEWING): Cam16Viewing {
   const { L_A, Y_b, F, c, N_c } = vc;
   const Y_w = XYZ_w[1]!;
   const k = 1 / (5 * L_A + 1);
@@ -86,10 +102,18 @@ export function cam16(XYZ_w: ArrayLike<number>, vc: { L_A: number; Y_b: number; 
   const n = Y_b / Y_w;
   const z = 1.48 + Math.sqrt(n);
   const N_bb = 0.725 * (1 / n) ** 0.2;
-  const N_cb = N_bb;
   const D = vc.D ?? Math.min(1, Math.max(0, F * (1 - (1 / 3.6) * Math.exp((-L_A - 42) / 92))));
   const RGB_w = mulMV(M16, XYZ_w);
   const D_RGB = RGB_w.map((v) => (D * Y_w) / v + 1 - D) as Vec3;
+  const y = (x: number): number => (F_L * Math.abs(x) / 100) ** 0.42;
+  const Ra_w = RGB_w.map((v, i) => (400 * Math.sign(D_RGB[i]! * v) * y(D_RGB[i]! * v)) / (27.13 + y(D_RGB[i]! * v)) + 0.1);
+  const A_w = (2 * Ra_w[0]! + Ra_w[1]! + 0.05 * Ra_w[2]! - 0.305) * N_bb;
+  return { F_L, N_bb, N_cb: N_bb, cz: c * z, tk: (1.64 - 0.29 ** n) ** 0.73, D_RGB, A_w, N_c };
+}
+
+/** CAM16 for an adapting white; `vc.D` overrides the degree of adaptation (default: from F and L_A). */
+export function cam16(XYZ_w: ArrayLike<number>, vc: { L_A: number; Y_b: number; F: number; c: number; N_c: number; D?: number } = CAM16_VIEWING): Cam16 {
+  const { F_L, N_bb, N_cb, cz, tk, D_RGB, A_w, N_c } = cam16Viewing(XYZ_w, vc);
   const post = (x: number): number => {
     const y = (F_L * Math.abs(x) / 100) ** 0.42;
     return (400 * Math.sign(x) * y) / (27.13 + y) + 0.1;
@@ -98,10 +122,6 @@ export function cam16(XYZ_w: ArrayLike<number>, vc: { L_A: number; Y_b: number; 
     const a = Math.abs(x - 0.1);
     return Math.sign(x - 0.1) * (100 / F_L) * ((27.13 * a) / (400 - a)) ** (1 / 0.42);
   };
-  const Ra_w = RGB_w.map((v, i) => post(D_RGB[i]! * v));
-  const A_w = (2 * Ra_w[0]! + Ra_w[1]! + 0.05 * Ra_w[2]! - 0.305) * N_bb;
-  const cz = c * z;
-  const tk = (1.64 - 0.29 ** n) ** 0.73;
   return {
     fwd(XYZ) {
       const RGB = mulMV(M16, XYZ);
@@ -203,6 +223,21 @@ export function perceptual(kind: 'oklch' | 'cam16-ucs', space: OutputSpaceId = '
   }
   PERCEPTUAL.set(key, p);
   return p;
+}
+
+/**
+ * What the GPU's CAM16-UCS knee needs for an output space (CHB-047 OUT-3; perceptual('cam16-ucs', space) in WGSL):
+ * the matrix from the space's linear RGB to the adapted cone signals, diag(D_RGB)·M16·(100·toXYZ), its inverse, and
+ * the scalars F_L, A_w, N_bb, c·z, t_k, (50000/13)·N_c·N_cb, the white's J′ and F_L^¼.
+ */
+export function cam16Knee(space: OutputSpaceId): { fwd: Mat3; inv: Mat3; scalars: number[] } {
+  const S = outputSpace(space);
+  const v = cam16Viewing(S.white.map((x) => 100 * x));
+  const toXYZ100 = mulMM([[100, 0, 0], [0, 100, 0], [0, 0, 100]], S.toXYZ);
+  const D: Mat3 = [[v.D_RGB[0], 0, 0], [0, v.D_RGB[1], 0], [0, 0, v.D_RGB[2]]];
+  const fwd = mulMM(D, mulMM(M16, toXYZ100));
+  const white = perceptual('cam16-ucs', space).white;
+  return { fwd, inv: inv3(fwd), scalars: [v.F_L, v.A_w, v.N_bb, v.cz, v.tk, ((50000 / 13) * v.N_c * v.N_cb), white, v.F_L ** 0.25] };
 }
 
 /** Largest in-gamut chroma at lightness L and hue angle h (radians) of a perceptual model, by bisection. */

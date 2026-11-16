@@ -30,6 +30,22 @@ test('output.display: GPU oklch knee and TRC match core f64 in all five spaces a
   expect(r.maxCodes16).toBeLessThanOrEqual(fallback ? 1 : 6);
 });
 
+// CHB-047 OUT-3: the CAM16-UCS knee in WGSL (forward and inverse CAM16 with spektrafilm's viewing conditions, D = 1,
+// the knee in J′a′b′) against core's f64, every space and both renderings. Measured (61,440 values): SwiftShader 1.08 %
+// beyond 2e-6, 1.67e-5 at most, 4 codes in 16 bits; Metal (M1 Max) 0.83 %, 1.89e-5, 3 codes. The f32 power functions of
+// CAM16's post-adaptation and the bisection near the top of the cube carry the error, as for the oklch knee. Bounds
+// about 1.5× the larger measurement.
+test('output.display: GPU cam16-ucs knee matches core f64 in all five spaces and both renderings', async ({ page }) => {
+  const fallback = (await run(page, 'caps')).caps.adapter.fallback as boolean;
+  const r = await run(page, 'output:display', { knee: 'cam16-ucs' });
+  console.log(`cam16-ucs on ${fallback ? 'SwiftShader' : 'a real GPU'}: over2e6 ${(r.over2e6 / r.values).toFixed(5)}, maxLin ${r.maxLin}, maxCodes16 ${r.maxCodes16}`);
+  expect(r.outside).toBe(0);
+  expect(r.paperWhiteScan.every((v: number) => v === 65535)).toBe(true);
+  expect(r.over2e6 / r.values).toBeLessThan(0.02);
+  expect(r.maxLin).toBeLessThan(3e-5);
+  expect(r.maxCodes16).toBeLessThanOrEqual(6);
+});
+
 test('output.display: clip and tanh shoulder match core f64', async ({ page }) => {
   for (const knee of ['clip', 'tanh-shoulder']) {
     const r = await run(page, 'output:display', { knee });

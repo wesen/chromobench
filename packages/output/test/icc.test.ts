@@ -105,6 +105,11 @@ describe('grey card in the five spaces (guide §2.1, textbook §2.7)', () => {
 });
 
 describe('embedding', () => {
+  it('cICP code points are H.273\'s (CHB-047 OUT-6): sRGB 1 13 0 1, Display P3 12 13 0 1 (PNG-3 Example 4), none for the rest', () => {
+    expect(getSpace('srgb').cicp).toEqual([1, 13, 0, 1]);
+    expect(getSpace('display-p3').cicp).toEqual([0x0c, 0x0d, 0x00, 0x01]);
+    for (const id of ['rec2020', 'adobe-rgb', 'prophoto'] as const) expect(getSpace(id).cicp).toBeUndefined();
+  });
   const tiny = new Uint16Array([1000, 2000, 3000, 4000, 5000, 6000]);
   for (const id of SPACE_IDS) {
     it(`${id}: PNG colour chunks follow the policy table; iCCP inflates to the profile`, async () => {

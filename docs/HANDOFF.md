@@ -471,6 +471,21 @@ Ticket `ttmp/2026/11/15/CHB-041--…/` (spec `design-doc/01-…`, diary `diary/0
   `GPU_MEMORY_HIGH` (each 32 MB step of the highest), `GPU_EVICT`, `GPU_OOM_RECOVERED`, `GPU_OOM`. The engine's
   `memory()` (through `window.chromobench.engine.primary`) answers the same numbers.
 
+## 9d. Output and export (CHB-047)
+
+Ticket `ttmp/2026/11/15/CHB-047--…/` (spec `design-doc/01-…`, diary `diary/01-diary.md`).
+
+- **Sizes.** Documents are in working-image pixels (the contract's comment says full-resolution pixels; see the open
+  task). An export at another size than the working image decodes the file again at that size (`decode.ts
+  decodePixels`, the engine worker's `pixels` job), maps the document with the contract's `scaleDocument`, renders it
+  tile by tile and lets it go (`apps/studio/src/host/export.ts`). Sizes: original, long edge (exact), percentage.
+- **Formats.** TIFF 16, PNG 16, PNG 8 and JPEG (`packages/output/src/encode/jpeg.ts`, 4:4:4, ICC in APP2); a file for a
+  printer: ProPhoto converted by lcms to his printer profile, the profile embedded (`export/printer.ts`).
+- **The Output module** (Classic; File ▸ Export… everywhere): his settings in `prefs.export`; `output.set`,
+  `output.export`, `output.cancel`, `output.addPrinterProfile`. A 24 MP camera file exports at its own size in ≈ 8.3 s
+  on the M1 Max (4.6 s of it the decode), within a 512 MiB GPU budget.
+- **The cam16-ucs knee** runs on the GPU (`kernels/pointwise.wgsl`, `c16Knee`). Soft proofing is still open.
+
 ## 10. Things that live outside the repository
 
 | What | Where | How to recreate |

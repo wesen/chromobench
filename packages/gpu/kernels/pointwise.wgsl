@@ -305,6 +305,93 @@ fn okKnee(rgb: vec3<f32>, lightOn: bool, lightT: f32) -> vec3<f32> {
   return clamp(okInv(vec3<f32>(L, Cn * ca, Cn * sa)), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// ---- the CAM16-UCS knee (CHB-047 OUT-3; core gamut.ts perceptual('cam16-ucs'), compressOutput) ----
+// spektrafilm's viewing conditions with D = 1 (core CAM16_VIEWING). U.okM1 = diag(D_RGB)·M16·(100·toXYZ): the output
+// space's linear RGB to the adapted cone signals; U.okM1i its inverse (core cam16Knee). The op's data at o: F_L, A_w,
+// N_bb, c·z, t_k, (50000/13)·N_c·N_cb, J′ of white, F_L^¼. The hue travels as a unit vector (ca, sa) = (cos h, sin h)
+// (as the oklch knee: WGSL's sin and cos need only 2^-11 absolute accuracy), so cos(h + 2) = ca·cos 2 − sa·sin 2.
+struct C16 { FL: f32, Aw: f32, Nbb: f32, cz: f32, tk: f32, ncb: f32, Jw: f32, FL4: f32 }
+fn c16At(o: u32) -> C16 { return C16(opd[o], opd[o + 1u], opd[o + 2u], opd[o + 3u], opd[o + 4u], opd[o + 5u], opd[o + 6u], opd[o + 7u]); }
+fn c16Et(ca: f32, sa: f32) -> f32 { return 0.25 * (ca * -0.4161468365471424 - sa * 0.9092974268256817 + 3.8); }
+fn c16Post(x: vec3<f32>, FL: f32) -> vec3<f32> {
+  let y = pow(FL * abs(x) / 100.0, vec3<f32>(0.42));
+  return 400.0 * sign(x) * y / (27.13 + y) + 0.1;
+}
+// J′, M′ and the hue direction of linear RGB (core cam16 fwd, jmhToUcs)
+fn c16Fwd(rgb: vec3<f32>, k: C16) -> vec4<f32> {
+  let Ra = c16Post(U.okM1 * rgb, k.FL);
+  let a = Ra.x - 12.0 * Ra.y / 11.0 + Ra.z / 11.0;
+  let b = (Ra.x + Ra.y - 2.0 * Ra.z) / 9.0;
+  let r = length(vec2<f32>(a, b));
+  var ca = 1.0;
+  var sa = 0.0;
+  if (r > 1e-20) { ca = a / r; sa = b / r; }
+  let A = (2.0 * Ra.x + Ra.y + 0.05 * Ra.z - 0.305) * k.Nbb;
+  let J = 100.0 * sign(A) * pow(abs(A / k.Aw), k.cz);
+  let t = k.ncb * c16Et(ca, sa) * r / (Ra.x + Ra.y + 1.05 * Ra.z);
+  let M = pow(abs(t), 0.9) * sqrt(abs(J) / 100.0) * k.tk * k.FL4;
+  return vec4<f32>(1.7 * J / (1.0 + 0.007 * J), log(1.0 + 0.0228 * M) / 0.0228, ca, sa);
+}
+// linear RGB of J′, M′ along (ca, sa) (core ucsToJmh, cam16 inv); not finite where the model has no answer
+fn c16Inv(Jp: f32, Mp: f32, ca: f32, sa: f32, k: C16) -> vec3<f32> {
+  let J = Jp / (1.7 - 0.007 * Jp);
+  let M = (exp(0.0228 * Mp) - 1.0) / 0.0228;
+  let C = M / k.FL4;
+  var t = 0.0;
+  if (J != 0.0) { t = pow(C / (sqrt(abs(J) / 100.0) * k.tk), 1.0 / 0.9); }
+  let A = k.Aw * pow(abs(J / 100.0), 1.0 / k.cz);
+  let p2 = A / k.Nbb + 0.305;
+  let p3 = 21.0 / 20.0;
+  var a = 0.0;
+  var b = 0.0;
+  if (t != 0.0) {
+    let p1 = k.ncb * c16Et(ca, sa) / t;
+    if (abs(sa) >= abs(ca)) {
+      b = p2 * (2.0 + p3) * (460.0 / 1403.0) / (p1 / sa + (2.0 + p3) * (220.0 / 1403.0) * (ca / sa) - 27.0 / 1403.0 + p3 * (6300.0 / 1403.0));
+      a = b * ca / sa;
+    } else {
+      a = p2 * (2.0 + p3) * (460.0 / 1403.0) / (p1 / ca + (2.0 + p3) * (220.0 / 1403.0) - (27.0 / 1403.0 - p3 * (6300.0 / 1403.0)) * (sa / ca));
+      b = a * sa / ca;
+    }
+  }
+  let Ra = vec3<f32>(460.0 * p2 + 451.0 * a + 288.0 * b, 460.0 * p2 - 891.0 * a - 261.0 * b, 460.0 * p2 - 220.0 * a - 6300.0 * b) / 1403.0;
+  let d = abs(Ra - 0.1);
+  let RGB = sign(Ra - 0.1) * (100.0 / k.FL) * pow(27.13 * d / (400.0 - d), vec3<f32>(1.0 / 0.42));
+  return U.okM1i * RGB;
+}
+// inside the cube and finite (core inGamut: Number.isFinite and inCube); d < 400 keeps the post-adaptation invertible
+fn c16Ok(Jp: f32, Mp: f32, ca: f32, sa: f32, k: C16) -> bool {
+  let v = c16Inv(Jp, Mp, ca, sa, k);
+  return all(v == v) && inCube(v);
+}
+// largest in-gamut M′ at (J′, h) by bisection (core maxChromaOf from cHi 150; 30 halvings reach f32 resolution)
+fn c16MaxChroma(Jp: f32, ca: f32, sa: f32, k: C16) -> f32 {
+  var lo = 0.0;
+  var hi = 150.0;
+  for (var i = 0; i < 8; i++) {
+    if (c16Ok(Jp, hi, ca, sa, k)) { lo = hi; hi = 2.0 * hi; } else { break; }
+  }
+  for (var i = 0; i < 30; i++) {
+    let m = 0.5 * (lo + hi);
+    if (c16Ok(Jp, m, ca, sa, k)) { lo = m; } else { hi = m; }
+  }
+  return lo;
+}
+// core compressOutput, algorithm 'cam16-ucs': as okKnee with lightness J′ normalised by the white's J′
+fn c16Knee(rgb: vec3<f32>, lightOn: bool, lightT: f32, o: u32) -> vec3<f32> {
+  let k = c16At(o);
+  let f = c16Fwd(rgb, k);
+  let L0 = f.x;
+  if (!(L0 > 0.0)) { return vec3<f32>(0.0); }
+  var L = min(L0, k.Jw);
+  if (lightOn) { L = min(k.Jw * kneeR(L0 / k.Jw, lightT, 1.0, 2.2), k.Jw); }
+  if (L >= k.Jw) { return vec3<f32>(1.0); }
+  let Cmax = c16MaxChroma(L, f.z, f.w, k);
+  var Cn = 0.0;
+  if (Cmax > 0.0) { Cn = Cmax * kneeR(f.y / Cmax, 0.0, 1.0, 6.0); }
+  return clamp(c16Inv(L, Cn, f.z, f.w, k), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 // ---- the digital layers (core composite/*.ts) ----
 
 fn opMat(o: u32) -> mat3x3<f32> {
@@ -423,13 +510,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       case 7u: { v = vec4<f32>((v.rgb + p0.rgb) * p1.x, v.a); }
       case 8u: {
         // XYZ → linear RGB by U.disp (core displaySetup: fromXYZ(space) · Bradford(source white → space
-        // white)); op.y: knee 0 clip, 1 tanh shoulder at p1.w (core tanhShoulder), 2 oklch (core
-        // compressOutput); then the space's TRC (p0, p1.x). Nothing but the TRC follows the knee.
+        // white)); op.y: knee 0 clip, 1 tanh shoulder at p1.w (core tanhShoulder), 2 oklch, 3 cam16-ucs (core
+        // compressOutput; its constants in opd at op.z); then the space's TRC (p0, p1.x). Nothing but the TRC follows the knee.
         var rgb = U.disp * v.rgb;
         // (the tanh argument is capped at 20, where tanh is 1 in f32, so an exp-based tanh cannot overflow)
         let s = p1.w;
         if (op.y == 1u) { rgb = select(s + (1.0 - s) * tanh(min((rgb - vec3<f32>(s)) / (1.0 - s), vec3<f32>(20.0))), rgb, rgb <= vec3<f32>(s)); }
         if (op.y == 2u) { rgb = okKnee(rgb, p1.z > 0.5, p1.y); }
+        if (op.y == 3u) { rgb = c16Knee(rgb, p1.z > 0.5, p1.y, op.z); }
         v = vec4<f32>(paraEnc(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), p0, p1.x), 0.0);
       }
       case 9u: {

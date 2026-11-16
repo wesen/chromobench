@@ -19,11 +19,11 @@ import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import {
   buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, LIGHTS, LIGHTS_PATH, mainExposure, memoryKV, modelAt, NEUTRALISE, neutraliseOf, read,
-  resetStorage, sel, setKnownValues, STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
-  type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
+  resetStorage, sel, setKnownValues, STORAGE_RESET_MESSAGE, storePath, TIME_PATH, EXPORT_SPACES, exportPrefsOf,
+  type CatalogFrame, type ExportPrefs, type ExportRequestOf, type ExportResult, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
-import { CB_RENDERERS } from '@chromobench/studio-kit/dom';
+import { CB_RENDERERS, exportForm } from '@chromobench/studio-kit/dom';
 import { ROLL_RENDERERS } from '@chromobench/studio-kit/kits/roll/dom';
 import '@chromobench/studio-kit/kits/roll/roll.css';
 import '@chromobench/studio-kit/studio-kit.css';
@@ -37,7 +37,7 @@ import { themeHandle } from '@chromobench/shell/dom';
 import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/layouts';
 import { lazyChat, type BridgeLike, type LazyChat } from './host/lazy-chat.ts';
 import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
-import { download, EXPORT_FORMATS, EXPORT_SPACES, exportPrint, type ExportFormat } from './host/export.ts';
+import { addPrinterProfile, download, exportBatch, printerProfiles, type Exported } from './host/export.ts';
 import { firstPrint, firstPrintAim, photoDocument, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
@@ -300,8 +300,6 @@ async function main(): Promise<void> {
       }
     },
   });
-  const exportState = { format: 'tiff16' as ExportFormat, space: 'srgb' as (typeof EXPORT_SPACES)[number]['id'] };
-  const save = (f: string): Promise<unknown> => exportFrame(f, 'picker');
 
   root.innerHTML = '';
   bootTheme.dispose();
@@ -315,7 +313,7 @@ async function main(): Promise<void> {
     openFiles: (files, as) => openFiles(files, { as }),
     settings: () => ({ dust: host.settings?.dust ?? null, engine: q.get('engine') ?? 'auto', debug: journal.debugOn }),
   });
-  const mountOpts = { presenter, save, chat, journal, diagnostics, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS, ...DIAGNOSTICS_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}), ...(host.darkroomMath ? { darkroomMath: host.darkroomMath } : {}) };
+  const mountOpts = { presenter, exportForm, chat, journal, diagnostics, themeRoot: document.documentElement, renderers: { ...ROLL_RENDERERS, ...LOOKS_RENDERERS, ...CHAT_RENDERERS, ...DIAGNOSTICS_RENDERERS }, ...(host.rollPhysics ? { rollPhysics: host.rollPhysics } : {}), ...(host.editorMath ? { editorMath: host.editorMath } : {}), ...(host.darkroomMath ? { darkroomMath: host.darkroomMath } : {}) };
   /**
    * Mounts a built layout with the studio's services and renderers, then attaches the studio (studio-kit's
    * mountStudio, in two halves): `adopt` takes over the log and the mounted documents of the runtime before (View ▸
@@ -716,7 +714,14 @@ async function main(): Promise<void> {
     void openFiles(fromFileList(folderInput.files ?? []));
     folderInput.value = '';
   });
-  document.body.append(fileInput, folderInput);
+  // CHB-047 OUT-5: a printer profile for his library (the Output panel's "Add printer profile…")
+  const printerInput = el('input', { type: 'file', id: 'printer-profile', hidden: '', accept: '.icc,.icm' });
+  printerInput.addEventListener('change', () => {
+    const f = printerInput.files?.[0];
+    printerInput.value = '';
+    if (f) void f.arrayBuffer().then((b) => importPrinter(new Uint8Array(b)));
+  });
+  document.body.append(fileInput, folderInput, printerInput);
   let lastDir = hasDirectoryPicker() ? await kv.get<FileSystemDirectoryHandle>('handles', 'last-folder').catch(() => undefined) : undefined;
   if (host.settings) host.settings.dust = !!rt.store.peek(['prefs', 'dust']);
   const layouts = (): { id: string; label: string }[] => [
@@ -749,7 +754,9 @@ async function main(): Promise<void> {
       await openFiles(await listScans(lastDir));
     },
     folder: lastDir?.name ?? null,
-    exportPrint: () => exportDialog(),
+    exportFrames: (req: ExportRequestOf) => exportFrames(req),
+    addPrinterProfile: () => printerInput.click(),
+    printers: [],
     // D8: the current negative printed anew with the Neutralise amount now: its time, printer lights and their record
     firstPrint: async (f: string) => {
       const e = studio.frames.get(f);
@@ -852,23 +859,6 @@ async function main(): Promise<void> {
     if (always || rt.module === mods[0]?.id) rt.go('print');
   }
 
-  /** File ▸ Export…: format and colour space, then where to (the picker) */
-  async function exportDialog(): Promise<void> {
-    const f = studio.current;
-    if (!f || !studio.frames.get(f)) return;
-    const fmt = el('select', { id: 'export-format', 'aria-label': 'Export format' }, ...EXPORT_FORMATS.map((x) => el('option', { value: x.id, text: x.label })));
-    fmt.value = exportState.format;
-    const sp = el('select', { id: 'export-space', 'aria-label': 'Export colour space' }, ...EXPORT_SPACES.map((x) => el('option', { value: x.id, text: x.label })));
-    sp.value = exportState.space;
-    const row = (label: string, c: HTMLElement): HTMLElement => el('label', { class: 'cb-export-row' }, el('span', { text: label }), c);
-    const body = el('div', { class: 'cb-export' }, row('Format', fmt), row('Colour space', sp),
-      el('p', { class: 'small', text: pickerAvailable() ? 'You choose where the file goes next.' : 'The file is downloaded.' }));
-    const r = await rt.chrome.dialog({ title: `Export ${studio.frames.get(f)!.name}`, body, buttons: [{ label: 'Cancel', value: 'cancel' }, { label: 'Export', value: 'export', primary: true }] }).result;
-    if (r !== 'export') return;
-    exportState.format = fmt.value as ExportFormat;
-    exportState.space = sp.value as typeof exportState.space;
-    await exportFrame(f, 'picker');
-  }
   // service worker state, in the status line
   const offline = el('span', { id: 'offline-state', class: 'small', title: 'Whether the studio starts without a network connection' });
   statusBarEl.insertBefore(offline, statusEl);
@@ -884,26 +874,66 @@ async function main(): Promise<void> {
     if (!e || !d) return null;
     return { json: documentPayload(d).json, fileName: `${e.name.replace(/\.[^.]+$/, '')}.chromobench.json` };
   }
-  async function exportFrame(f: string, to: 'picker' | 'memory', o: { format?: ExportFormat; space?: typeof exportState.space } = {}) {
-    const e = studio.frames.get(f);
-    // links resolved (a roll's scan settings, looks as groups): the export and its sidecar stand on their own
-    const doc = studio.resolved(f);
-    if (!e || !doc) return null;
-    const format = o.format ?? exportState.format;
-    const sp = o.space ?? exportState.space;
+  /** Adds a printer profile to his library and chooses it for the next export (CHB-047 OUT-5). */
+  async function importPrinter(bytes: Uint8Array): Promise<void> {
     try {
-      status('exporting…', { sticky: true });
-      const x = await exportPrint({
-        engine: studio.engine, graph: e.graph, doc, name: e.name, format, space: sp, to,
-        onProgress: (p) => status(`exporting: ${p.phase}${p.tilesTotal > 1 ? ` ${p.tilesDone}/${p.tilesTotal}` : ''}`, { sticky: true }),
-      });
-      status(`exported ${x.name} · ${x.width}×${x.height} · ${x.bits}-bit ${EXPORT_SPACES.find((s) => s.id === sp)?.label ?? sp}`, { sticky: true });
-      return x;
+      const e = await addPrinterProfile(bytes);
+      hostActions.printers = await printerProfiles();
+      studio.publishHost();
+      const p = exportPrefsOf(rt.store.readonly());
+      void rt.runCommand('output.set', null, { printer: { profile: e.sha256, intent: p.printer?.intent ?? 'relative', bpc: p.printer?.bpc ?? true } });
+      status(`printer profile added: ${e.description}`);
     } catch (err) {
-      const cancelled = (err as Error)?.name === 'AbortError' || /E_CANCELLED/.test(msgOf(err));
-      status(cancelled ? 'export cancelled' : `export failed: ${plainMsg(err)}`, { error: !cancelled, sticky: true, ...(cancelled ? {} : { detail: `Technical: ${msgOf(err)}` }) });
-      return null;
+      status(`the printer profile was not added: ${plainMsg(err)}`, { error: true, detail: `Technical: ${msgOf(err)}` });
     }
+  }
+  // his printer profiles, listed once at start (OPFS)
+  void printerProfiles().then((list) => {
+    if (!list.length) return;
+    hostActions.printers = list;
+    studio.publishHost();
+  });
+
+  /**
+   * The export of frames with his settings (CHB-047: the Output module, File ▸ Export…, output.export): at the size he
+   * chose, decoded again for the export; the status line says what was written.
+   */
+  async function exportFrames(req: ExportRequestOf, onFile?: (x: Exported, data: Uint8Array | null) => void): Promise<ExportResult[]> {
+    status('exporting…', { sticky: true });
+    const results = await exportBatch({
+      engine: studio.engine as StudioEngine,
+      frame: (id) => {
+        const e = studio.frames.get(id);
+        return e ? { sha: e.sha, name: e.name, strip: e.strip, graph: e.graph } : undefined;
+      },
+      // links resolved (a roll's scan settings, looks as groups): the export and its document stand on their own
+      doc: (id) => studio.resolved(id),
+      bytes: (id) => studio.frames.sourceBytes(id),
+      explain: (e) => plainMsg(e),
+      ...(onFile ? { onFile } : {}),
+    }, {
+      ...req,
+      onProgress: (p) => {
+        req.onProgress(p);
+        status(`exporting${p.total > 1 ? ` ${p.at} of ${p.total}` : ''}: ${p.phase}${p.tilesTotal > 1 ? ` ${p.tilesDone}/${p.tilesTotal}` : ''}`, { sticky: true });
+      },
+    });
+    const ok = results.filter((r) => r.ok);
+    const bad = results.find((r) => !r.ok);
+    const space = req.settings.printer ? 'for the printer' : (EXPORT_SPACES.find((x) => x.id === req.settings.space)?.label ?? req.settings.space);
+    if (req.signal.aborted) status(`export cancelled${ok.length ? ` after ${ok.length}` : ''}`, { sticky: true });
+    else if (bad) status(`export failed: ${bad.error}`, { error: true, sticky: true });
+    else if (ok.length === 1) status(`exported ${ok[0]!.file} · ${ok[0]!.width}×${ok[0]!.height} · ${ok[0]!.bits}-bit ${space}`, { sticky: true });
+    else if (ok.length) status(`exported ${ok.length} photos · ${space}`, { sticky: true });
+    else status('nothing exported', { sticky: true });
+    return results;
+  }
+  /** An export of one frame into memory with his settings changed by `o` (the hook, the bench). */
+  async function exportFrame(f: string, o: Partial<ExportPrefs> = {}): Promise<Exported | null> {
+    let got: Exported | null = null;
+    const settings = { ...exportPrefsOf(rt.store.readonly()), ...o };
+    await exportFrames({ frames: [f], settings, to: 'memory', signal: new AbortController().signal, onProgress: () => undefined }, (x) => void (got = x));
+    return got;
   }
 
   // ── service worker (offline start) ──
@@ -984,7 +1014,7 @@ function viewports(rt: Runtime): DomViewport[] {
   return all.sort((a, b) => Number(b.el.isConnected && b.el.offsetParent !== null) - Number(a.el.isConnected && a.el.offsetParent !== null));
 }
 
-type ExportFn = (f: string, to: 'picker' | 'memory', o?: { format?: ExportFormat; space?: 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' }) => Promise<{ width: number; height: number; bytes: number; mime: string; name: string; bits: number } | null>;
+type ExportFn = (f: string, o?: Partial<ExportPrefs>) => Promise<Exported | null>;
 
 function hook(rt: Runtime, studio: Studio, layout: string, host: Host, exportFrame: ExportFn, chat: LazyChat, diagnostics: StudioDiagnostics): void {
   window.chromobench = makeHook(rt, studio, layout, host, exportFrame, chat, diagnostics);
@@ -1138,8 +1168,8 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       return d ? studio.measure(f, d, x, y) : Promise.resolve(null);
     },
     /** exports the selected frame's print into memory; returns its description, not the bytes */
-    async exportPng(space: 'srgb' | 'display-p3' = 'srgb', format: ExportFormat = 'png8') {
-      const x = await exportFrame(cur(), 'memory', { format, space });
+    async exportPng(space: 'srgb' | 'display-p3' = 'srgb', format: ExportPrefs['format'] = 'png8', o: Partial<ExportPrefs> = {}) {
+      const x = await exportFrame(cur(), { format, space, size: 'original', ...o });
       return x ? { width: x.width, height: x.height, bytes: x.bytes, type: x.mime, fileName: x.name, bits: x.bits } : null;
     },
     /**
@@ -1166,7 +1196,7 @@ function makeHook(rt: Runtime, studio: Studio, layout: string, host: Host, expor
       await idle();
       const screen = performance.now() - b;
       const c = performance.now();
-      const x = await exportFrame(f, 'memory', { format: 'png8', space: 'srgb' });
+      const x = await exportFrame(f, { format: 'png8', space: 'srgb', size: 'original' });
       const exportMs = performance.now() - c;
       drafts.sort((p, q2) => p - q2);
       return {

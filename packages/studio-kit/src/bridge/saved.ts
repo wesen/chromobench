@@ -71,8 +71,11 @@ export function replayFrame(log: Log, f: string, s: FrameSave): Log {
   return next;
 }
 
-/** The format of the studio's stored data; bumped when a hard cut-off makes older data unreadable. */
-export const STORAGE_FORMAT = 3;
+/**
+ * The format of the studio's stored data; bumped when a hard cut-off makes older data unreadable. 4 (CHB-047, contract
+ * 1.6): documents' output.export has size and quality instead of scale.
+ */
+export const STORAGE_FORMAT = 4;
 /** The stores that held data in the older formats (EditLogs of recipes, the workspace with recipes in it). */
 const OLD_STORES: readonly KvStore[] = ['logs', 'workspace', 'snapshots', 'frames', 'rolls'];
 export const STORAGE_RESET_MESSAGE =

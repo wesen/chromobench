@@ -132,17 +132,6 @@ export const printCommands = (): CommandTable<CbState> => ({
       ctx.set({ ui: { tool: null } });
     },
   },
-  'output.save': {
-    label: 'Save the Print',
-    // in menus as File ▸ Export… (file.export, CHB-027), which runs this where the host has no export dialog
-    ...needFrame,
-    run: ctx => {
-      const save = ctx.services['save'] as ((f: string) => unknown) | undefined;
-      if (save) return save(sel.current(ctx.state)!);
-      ctx.toast('Export with colour management comes with CHB-011', { kind: 'info' });
-      return null;
-    },
-  },
 });
 
 /** The confirmation's text: which frame the settings come from, onto which frames, and what is copied (in his units). */
