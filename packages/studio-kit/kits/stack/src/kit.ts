@@ -177,7 +177,8 @@ export function createStackKit(ck: Ck, cb: Cb) {
   const finish = (o: LayersOptions = {}): any => layers('print', { id: 'finish-layers', title: 'Retouch and clarity', filter: model.byOps(['heal', 'clone', 'clarity']), add: ['clarity'], ...o });
 
   // ── modules ──
-  const viewer = (id: string, tools: string[] = [...MASK_TOOLS]) => cb.viewer((s: any) => sel.frame(s)?.print() ?? null, { id, compare: true, tools, hud: cb.hud.readout() });
+  // the select kit's tools join the mask tools where the studio has it (CHB-049)
+  const viewer = (id: string, tools: string[] = [...MASK_TOOLS, ...((cb.kits['select']?.tools as string[] | undefined) ?? [])]) => cb.viewer((s: any) => sel.frame(s)?.print() ?? null, { id, compare: true, tools, hud: cb.hud.readout() });
   /** Edit (E): the print stage's stack, history left; the finished print with the mask tools; the layer and its mask right */
   const editModule = (o: { id?: string; key?: string } = {}) =>
     ck

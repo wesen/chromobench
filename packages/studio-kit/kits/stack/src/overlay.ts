@@ -25,7 +25,7 @@ export const MODE_WORDS: Record<OverlayMode, string> = { tint: 'Where it acts', 
 export const COLOUR_WORDS: Record<OverlayColour, string> = { red: 'Red', green: 'Green', white: 'White', black: 'Black' };
 
 /** the mask tools whose activity shows the overlay by itself */
-const TOOLS = new Set(['mask-linear', 'mask-radial', 'mask-paint', 'mask-luminance', 'mask-colour']);
+const TOOLS = new Set(['mask-linear', 'mask-radial', 'mask-paint', 'mask-luminance', 'mask-colour', 'mask-edit', 'select-rect', 'select-ellipse', 'select-lasso', 'select-polygon', 'select-wand']);
 
 export const overlayOf = (s: any): OverlayView => ({ ...OVERLAY_STATE, ...(s?.stack?.overlay ?? {}) });
 

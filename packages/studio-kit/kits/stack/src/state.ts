@@ -33,7 +33,13 @@ export interface StackView {
    * range component the eyedropper samples into (null: a click adds a new colour range), and the layer the brush was
    * armed for (frame and entry; CHB-046: a stroke on another layer disarms it instead of painting there)
    */
-  mask: { combine: MaskCombine; radius: number; sample: Id | null; armedFor?: { f: string | null; layer: Id | null } | null };
+  mask: {
+    combine: MaskCombine; radius: number; sample: Id | null; armedFor?: { f: string | null; layer: Id | null } | null;
+    /** the brush's hardness and flow (0…1; CHB-049, MASK-3): the next strokes' */
+    hardness: number; flow: number;
+    /** the component whose handles the Edit Mask tool shows (CHB-049), or null: the first it can edit */
+    edit: Id | null;
+  };
   /** what the HSL editor's sliders change */
   hsl: 'hue_deg' | 'saturation' | 'lightness';
   /** the mask overlay (CHB-039): shown, how, in which colour and opacity */
@@ -41,7 +47,7 @@ export interface StackView {
   /** D5 (CHB-046): how the Enlarger lists the darkroom: his order (the stack's), or by kind */
   darkroomOrder: 'stack' | 'kind';
 }
-export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12, sample: null }, hsl: 'saturation', overlay: { ...OVERLAY_STATE }, darkroomOrder: 'stack' } };
+export const STACK_STATE: { stack: StackView } = { stack: { selected: {}, collapsed: {}, mask: { combine: 'add', radius: 12, sample: null, hardness: 0.5, flow: 1, edit: null }, hsl: 'saturation', overlay: { ...OVERLAY_STATE }, darkroomOrder: 'stack' } };
 
 /** the selected entry of a frame (the current one by default), when it is still in its document */
 export function selectedIn(s: any, f: string | null = sel.current(s)): Id | null {

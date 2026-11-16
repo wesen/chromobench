@@ -7,6 +7,7 @@ import type { NodeData } from '@chromobench/shell';
 import { getPath } from '@chromobench/values';
 import type { Document } from '@chromobench/contract';
 import { storePath } from '../../../../src/model/doc.ts';
+import { dragTo, FINE_DRAG, type Feel } from '../../../../src/kit/args.ts';
 import { sel } from '../../../../src/sel.ts';
 
 export const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
@@ -41,6 +42,13 @@ export interface NumberSpec {
   /** a CSS background for the track: what the value does (a hue band's colours) */
   track?: string;
 }
+/**
+ * How the kit's sliders answer the hand (CHB-049, CHB-046's rule for the darkroom controls): a drag moves the value
+ * relative to where it started, the slider's usual range over 300 px, in whole steps; Alt ten times finer. The arrow
+ * keys step by the slider's step, Shift ten steps, Alt a tenth.
+ */
+export const numberFeel = (o: Pick<NumberSpec, 'min' | 'max' | 'step'>): Feel => ({ perPx: Math.abs(o.max - o.min) / 300 || o.step, key: o.step, bigKey: o.step * 10, smallKey: o.step * FINE_DRAG, unit: null });
+
 export function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
   const st = m.store;
   const input = h('input', { type: 'range', class: 'cb-range', min: String(o.min), max: String(o.max), step: String(o.step), 'aria-label': o.label }) as HTMLInputElement;
@@ -66,20 +74,71 @@ export function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
     if (!p) return;
     m.rctx().tx(`${o.stepLabel} ${o.show(hold(x))}`, (t: any) => t.$set(p, hold(x)), { ...m.txOpts(), ...(coalesce ? { coalesce: `${f}:${o.path}` } : {}), source: { kind: 'control', control: o.path } });
   };
-  listen(m.scope, input, 'pointerdown', () => void (dragging = true));
-  listen(m.scope, input, 'input', () => {
-    if (o.commit) {
-      if (!dragging) write(Number(input.value));
-      return;
+  const feel = numberFeel(o);
+  // a drag moves the value from where it started by the feel per pixel (Alt ten times finer); a click without a
+  // drag puts the thumb where it was clicked, as the native track does
+  listen(m.scope, input, 'pointerdown', (e: PointerEvent) => {
+    if (e.button !== 0 || v === undefined) return;
+    e.preventDefault();
+    input.focus({ preventScroll: true });
+    const x0 = v;
+    const cx = e.clientX;
+    let moved = false;
+    let last = x0;
+    dragging = true;
+    try {
+      input.setPointerCapture(e.pointerId);
+    } catch {
+      /* a synthetic event has no active pointer */
     }
+    const show = (x: number): void => {
+      last = hold(x);
+      input.value = String(Math.min(o.max, Math.max(o.min, last)));
+      if (o.commit) return;
+      const p = where();
+      if (p) st.preview(p, last);
+    };
+    const move = (ev: PointerEvent): void => {
+      const dx = ev.clientX - cx;
+      if (!moved && Math.abs(dx) < 3) return;
+      moved = true;
+      show(dragTo(feel, x0, dx, { fine: ev.altKey, step: o.step, hard: { min: lo, max: hi } }));
+    };
+    const end = (): void => {
+      input.removeEventListener('pointermove', move);
+      input.removeEventListener('pointerup', up);
+      input.removeEventListener('pointercancel', cancel);
+      dragging = false;
+    };
+    const up = (ev: PointerEvent): void => {
+      end();
+      if (!moved) {
+        const b = input.getBoundingClientRect();
+        const at = o.min + (o.max - o.min) * Math.min(1, Math.max(0, (ev.clientX - b.left) / Math.max(1, b.width)));
+        show(Math.round(at / o.step) * o.step);
+      }
+      if (o.commit) return write(last);
+      if (st.previewing) st.commit(`${o.stepLabel} ${o.show(last)}`, m.txOpts());
+    };
+    const cancel = (): void => {
+      end();
+      if (!o.commit) st.cancel();
+    };
+    input.addEventListener('pointermove', move);
+    input.addEventListener('pointerup', up);
+    input.addEventListener('pointercancel', cancel);
+  });
+  listen(m.scope, input, 'input', () => {
+    // a value set by script or assistive tech (the pointer is handled above): commit at once
+    if (dragging) return;
+    if (o.commit) return write(Number(input.value));
     const p = where();
     if (!p) return;
     st.preview(p, hold(Number(input.value)));
-    if (!dragging) st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
+    st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
   });
   listen(m.scope, input, 'change', () => {
-    dragging = false;
-    if (o.commit) return write(Number(input.value));
+    if (dragging || o.commit) return;
     if (st.previewing) st.commit(`${o.stepLabel} ${o.show(hold(Number(input.value)))}`, m.txOpts());
   });
   listen(m.scope, input, 'keydown', (e: KeyboardEvent) => {
@@ -90,7 +149,7 @@ export function numberControl(m: MountCtx, o: NumberSpec): HTMLElement {
     // the store's value, not the cell's: a second press before the cell has seen the first must not repeat it
     const p = o.commit ? null : where();
     const now = p ? st.peek(p) : undefined;
-    write((typeof now === 'number' ? now : v) + dir * o.step * (e.shiftKey ? 10 : 1), true);
+    write((typeof now === 'number' ? now : v) + dir * (e.shiftKey ? feel.bigKey : e.altKey ? feel.smallKey : feel.key), true);
   });
   listen(m.scope, field, 'keydown', (e: KeyboardEvent) => {
     e.stopPropagation();

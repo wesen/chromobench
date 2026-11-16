@@ -14,7 +14,7 @@ import { gradeToGamma, gradeX, paperDeveloper } from '../print/paper.ts';
 import { clarity, claritySigma } from '../print/clarity.ts';
 import { combineRatio } from '../print/combine.ts';
 import { frameImage } from '../print/geometry.ts';
-import { colourAt, ellipseAt, featherSigma, fullGrid, gaussianBlur1, gridCentres, linearAt, luminanceAt, paintMask, radialAt, type Stroke } from '../print/masks.ts';
+import { colourAt, ellipseAt, featherSigma, fullGrid, gaussianBlur1, gridCentres, growMask, linearAt, luminanceAt, paintMask, polygonMask, radialAt, rectAt, wandMask, wandSeedPixel, type Stroke } from '../print/masks.ts';
 import { gradeAt, gradeWheels, hslAt, hslBands, mixerMatrix, vibranceAt, vignetteGain } from '../composite/adjust.ts';
 import { blendPixel } from '../composite/blend.ts';
 import { channelIndex, evalCurve, evalLevels, toneAt, toneCurve, type Levels } from '../composite/tone.ts';
@@ -408,6 +408,23 @@ export const IMAGE_OPS: Record<string, ImageOp> = {
   'mask.paint': (ctx) => {
     const info = ctx.info!;
     return { w: info.width, h: info.height, c: 1, data: paintMask(A(ctx, 'strokes') as Stroke[], fullGrid(info.width, info.height)) };
+  },
+  'mask.rect': (ctx) => coordMask(ctx, (X, Y) => rectAt(X, Y, A(ctx, 'box') as Box, num(ctx, 'angle_deg'))),
+  'mask.polygon': (ctx) => {
+    const info = ctx.info!;
+    return { w: info.width, h: info.height, c: 1, data: polygonMask(A(ctx, 'points') as number[][], fullGrid(info.width, info.height)) };
+  },
+  'mask.wand': (ctx) => {
+    // the receiver is the cut the mask reads, at full resolution; the seed's pixel holds its document point
+    const r = recv(ctx);
+    const [lo, hi] = DOMAINS[ctx.recvDomain ?? 'mask'].range;
+    const seed = A(ctx, 'seed') as Point;
+    const px = wandSeedPixel(seed.x, 0, r.w, r.w), py = wandSeedPixel(seed.y, 0, r.h, r.h);
+    return { w: r.w, h: r.h, c: 1, data: wandMask(r.data, r.w, r.h, r.c, px, py, { tolerance: num(ctx, 'tolerance'), softness: num(ctx, 'softness'), contiguous: A(ctx, 'contiguous') as boolean, lo, hi }) };
+  },
+  'mask.grow': (ctx) => {
+    const r = recv(ctx);
+    return { w: r.w, h: r.h, c: 1, data: growMask(r.data, r.w, r.h, num(ctx, 'radius_px')) };
   },
   'mask.feather': (ctx) => {
     const r = recv(ctx);

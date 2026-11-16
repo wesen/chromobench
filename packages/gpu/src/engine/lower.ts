@@ -110,6 +110,12 @@ export function lowerChain(P: CorePhysics, graph: Graph, nodes: Node[], treb: Ma
         push({ code: OP.MASK_ELLIPSE, p0: [b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w / 2, 1e-9), Math.max(b.h / 2, 1e-9)], p1: [Math.cos(th), Math.sin(th)], node: n.id });
         break;
       }
+      case 'mask.rect': {
+        const b = a['box'] as Box;
+        const th = ((a['angle_deg'] as number) * Math.PI) / 180;
+        push({ code: OP.MASK_RECT, p0: [b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2], p1: [Math.cos(th), Math.sin(th)], node: n.id });
+        break;
+      }
       case 'mask.invert': push({ code: OP.MASK_INVERT, node: n.id }); break;
       case 'mask.constant': push({ code: OP.MASK_CONSTANT, p0: [a['value'] as number], node: n.id }); break;
       case 'composite.mix': {

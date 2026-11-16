@@ -74,6 +74,17 @@ test('mask algebra: components and add / subtract / intersect / feather / invert
   expect(r.halfScale.maxAbs).toBeLessThanOrEqual(1e-5);
 });
 
+test('selections (contract 1.6): rect, lasso, wand, grow and contract, flow match core; the grow, feather and wand laws hold on the GPU; a part of a wand is the whole frame\'s cut', async ({ page }) => {
+  const r = await run(page, 'law:selections');
+  expect(r.error).toBeUndefined();
+  for (const [k, d] of Object.entries(r.parity as Record<string, { maxAbs: number }>)) expect(d.maxAbs, k).toBeLessThanOrEqual(1e-5);
+  expect(r.laws).toEqual({ closeOut: 0, openOut: 0, dualMax: expect.any(Number), featherUp: 0, wandOut: 0 });
+  expect(r.laws.dualMax).toBeLessThanOrEqual(1e-6);
+  expect(r.selected).toBeGreaterThan(20);
+  expect(r.partDiff).toBe(0);
+  expect(r.exactDiff).toBeLessThanOrEqual(1e-5);
+});
+
 test('heal and clone: sequential spots, coalesced like layers kept apart; density heal in the scan; tiles equal one pass', async ({ page }) => {
   const r = await run(page, 'law:heal');
   expect(r.error).toBeUndefined();
@@ -195,12 +206,13 @@ test('an export tile by tile equals the whole-frame export for every spatial op 
   expect(r.error).toBeUndefined();
   const want: Record<string, string[]> = {
     densityNarrow: ['print.densityMask'], densityWide: ['print.densityMask'], featherNarrow: ['mask.feather'], featherWide: ['mask.feather'],
-    clarity: ['clarity'], sharpen: ['sharpen'], heal: ['heal'],
+    clarity: ['clarity'], sharpen: ['sharpen'], heal: ['heal'], grow: ['mask.grow'], wand: ['mask.wand'],
   };
   for (const [k, ops] of Object.entries(want)) for (const op of ops) expect(r[k].ops, k).toContain(op);
   for (const k of [...Object.keys(want), 'stack']) {
     expect(r[k].codes, k).toBe(0);
     // the check can fail: the preview path, every texture on the tile's own grid, differs at the tile borders
-    if (k !== 'heal') expect(r[k].before, k).toBeGreaterThan(0);
+    // (heal reads its windows itself; the wand's coverage is the whole frame's in a preview too)
+    if (k !== 'heal' && k !== 'wand') expect(r[k].before, k).toBeGreaterThan(0);
   }
 });

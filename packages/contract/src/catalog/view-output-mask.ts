@@ -126,6 +126,26 @@ export const maskOps: OpDef[] = [
     doc: "Mask component 'ellipse': the ellipse inscribed in the box. The edge is antialiased over one pixel; the mask's feather softens it.",
   }),
   defineOp({
+    name: 'mask.rect', area: 'mask', owner: 'CHB-049', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
+    class: 'pointwise', binding: 'setting',
+    args: {
+      box: { type: 'box', unit: 'px', default: { x: 0, y: 0, w: 16, h: 16 }, doc: 'The rectangle in document px (before rotation).' },
+      angle_deg: { type: 'number', unit: 'deg', min: -90, max: 90, default: 0, doc: 'Rotation about the box centre.' },
+    },
+    ui: { label: 'Rectangle', menu: 'mask', order: 32 },
+    doc: "Mask component 'rect' (the rectangular marquee, contract 1.6): 1 inside the box, 0 outside, the edge antialiased over one pixel as the ellipse's: m = clamp(½ − d), d the signed distance outside the rotated box (max(|u| − w/2, |v| − h/2)). The receiver only gives the size.",
+  }),
+  defineOp({
+    name: 'mask.polygon', area: 'mask', owner: 'CHB-049', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
+    class: 'pointwise', binding: 'setting',
+    args: {
+      points: { type: 'polyline', default: [[0, 0], [16, 0], [0, 16]], doc: 'The closed outline in document px ([x, y] or [x, y, pressure]; the pressure is not used): the last point joins the first.' },
+    },
+    validate: (a) => ((a['points'] as unknown[]).length >= 3 ? null : 'a polygon needs at least three points'),
+    ui: { label: 'Lasso', menu: 'mask', order: 34 },
+    doc: "Mask component 'polygon' (the freehand and polygonal lasso, contract 1.6): inside by the even-odd rule, the edge antialiased over one pixel: m = clamp(½ ± d), d the distance from the pixel centre to the outline, + inside. The receiver only gives the size.",
+  }),
+  defineOp({
     name: 'mask.paint', area: 'mask', owner: 'CHB-009', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
     class: 'pointwise', binding: 'setting',
     args: {
@@ -136,6 +156,7 @@ export const maskOps: OpDef[] = [
           radius: { type: 'number', unit: 'px', min: 0.1, max: 5000, doc: 'Brush radius in document px.' },
           hardness: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 0.5, doc: 'Brush hardness.' },
           mode: { type: 'enum', values: ['add', 'erase'], default: 'add', doc: 'add takes the maximum; erase multiplies by 1 − coverage.' },
+          flow: { type: 'number', unit: 'fraction', min: 0, max: 1, optional: true, doc: 'How far one stroke builds the mask up (contract 1.6; absent: 1): the stroke is folded in with the one algebra at this amount, so at 1 add is the maximum and erase multiplies by 1 − coverage, and below 1 strokes over the same place build up.' },
         },
       },
     },
@@ -151,7 +172,21 @@ export const maskOps: OpDef[] = [
       softness: { type: 'number', unit: 'none', min: 0, max: 1, usual: [0, 0.3], default: 0.05, doc: 'Distance over which it falls to 0 beyond the tolerance (a smoothstep).', ui: { widget: 'slider', step: 0.005, label: 'Softness' } },
     },
     ui: { label: 'Colour range', menu: 'mask', order: 60 },
+    see: ['mask.wand'],
     doc: "Mask component 'colour': how close the image's colour is to a sample, 1 − smoothstep(tolerance, tolerance + softness, ΔE_OK) (Editor lab's colour range, in OkLab ΔE instead of an RGB distance). The receiver is the cut the mask reads, encoded to OkLab by the compiler.",
+  }),
+  defineOp({
+    name: 'mask.wand', area: 'mask', owner: 'CHB-049', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
+    class: 'global', binding: 'setting',
+    args: {
+      seed: { type: 'point', unit: 'px', default: { x: 0, y: 0 }, doc: 'Where the wand was clicked (document px): the pixel whose value is matched.' },
+      tolerance: { type: 'number', unit: 'fraction', min: 0, max: 1, usual: [0, 0.4], default: 0.1, doc: 'How far a pixel may differ from the clicked one and still be selected: the largest difference over the channels, as a fraction of the image\'s range (Photoshop\'s 32 of 255 is 0.125).', ui: { widget: 'slider', step: 0.005, label: 'Tolerance' } },
+      softness: { type: 'number', unit: 'fraction', min: 0, max: 0.5, usual: [0, 0.1], default: 0.02, doc: 'The soft edge beyond the tolerance (a smoothstep; 0 is a hard edge).', ui: { widget: 'slider', step: 0.005, label: 'Softness' } },
+      contiguous: { type: 'bool', default: true, doc: 'Only the pixels connected to the clicked one (side by side, through pixels the wand selects); off: every pixel close enough anywhere.', ui: { widget: 'toggle', label: 'Contiguous' } },
+    },
+    ui: { label: 'Magic wand', menu: 'mask', order: 70 },
+    doc: "Mask component 'wand' (the magic wand, contract 1.6): c = 1 − smoothstep(tolerance, tolerance + softness, d), d = max over the channels of |v − v_seed| / (hi − lo) of the receiver's domain, v_seed the receiver's pixel under the seed (on the evaluation grid). Contiguous: c where the pixel is 4-connected to the seed's pixel through pixels with c > 0, else 0. The receiver is the cut the mask reads (as for the luminance range), so the wand samples the image the mask reads: by default the stage's input.",
+    see: ['mask.colour', 'mask.luminance'],
   }),
   defineOp({
     name: 'mask.constant', area: 'mask', owner: 'CHB-037', on: 'Image', returns: 'Mask', domainIn: ANY_IMAGE, domainOut: 'mask',
@@ -174,6 +209,12 @@ export const maskOps: OpDef[] = [
     class: 'spatial', binding: 'setting',
     args: { radius_px: { type: 'number', unit: 'px', min: 0, max: 100000, usual: [0.5, 500], default: 10, doc: "Feather radius in document px: a Gaussian of σ = radius/2 (the 10–90 % edge is 1.28 × radius wide). The compiler converts the mask's feather_mm on the print with the print's pitch." } },
     doc: 'Feathers (blurs) a mask.',
+  }),
+  defineOp({
+    name: 'mask.grow', area: 'mask', owner: 'CHB-049', on: 'Mask', returns: 'Mask', domainIn: 'mask', domainOut: 'mask',
+    class: 'spatial', binding: 'setting',
+    args: { radius_px: { type: 'number', unit: 'px', min: -100000, max: 100000, usual: [-100, 100], default: 4, doc: "Grow (> 0) or contract (< 0) by this radius in document px. The compiler converts the mask's grow_mm on the print with the print's pitch." } },
+    doc: 'Grows a mask (the maximum over a near-disc of radius r) or contracts it (the minimum), contract 1.6: the regular octagon closest to the disc, a square of half-side s = round(r(√2 − 1)) and two diagonals of half-length a = round(r(1 − √2/2)), each a one-dimensional pass in that order (rows, columns, the diagonal, the anti-diagonal); pixels outside the image are left out. On a preview grid r is scaled with the grid.',
   }),
   defineOp({
     name: 'mask.invert', area: 'mask', owner: 'CHB-010', on: 'Mask', returns: 'Mask', domainIn: 'mask', domainOut: 'mask',

@@ -80,6 +80,17 @@ button.cb-stack-chip:hover { border-color: var(--accent); color: var(--text); }
 
 /* a mask tool's gesture drawn on the print */
 .cb-stack-gesture { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+/* the Edit Mask tool (CHB-049): the parts' outlines, the active part's handles */
+.cb-stack-part { fill: none; stroke: var(--text); stroke-opacity: 0.55; stroke-width: 1; stroke-dasharray: 3 3; }
+.cb-stack-part.is-active { stroke: var(--accent); stroke-opacity: 1; stroke-width: 1.5; stroke-dasharray: none; }
+.cb-stack-handle { fill: var(--panel, var(--field)); stroke: var(--accent); stroke-width: 1.5; }
+.cb-stack-handle.is-move { fill: var(--accent); fill-opacity: 0.35; }
+.cb-stack-comp.is-editing { outline: 1px solid var(--accent); outline-offset: -1px; }
+.cb-stack-comp-edit.is-on { background: var(--accent); color: var(--onaccent); }
+.cb-stack-brush, .cb-stack-mtools > .cb-select { flex-basis: 100%; }
+.cb-select-tools .is-on { background: var(--accent); color: var(--onaccent); }
+/* a selection being drawn (the select kit) */
+.cb-select-gesture { fill: none; stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 3; }
 
 /* the editors of the params panel (curve, levels, HSL, grading, mixer): the shell's planes and the one number control
    in the panel's rhythm — a bar (a segmented choice, Reset), the plane, a dim readout and hint */

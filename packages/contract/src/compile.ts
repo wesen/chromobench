@@ -188,8 +188,9 @@ class Compiler {
     for (const [cid, c] of Coll.entries(m.components)) {
       if (!c.enabled) continue;
       const op = getOp(`mask.${c.kind}`);
-      const recv = c.kind === 'luminance' ? lum : c.kind === 'colour' ? this.colourInput(lum, reads, `${id}.components.${cid}`) : geom;
-      const node = this.I(op.name, [recv], paramsToArgs(op, this.bind(c.params, stage, 'binding', id) as Params));
+      const recv = c.kind === 'luminance' || c.kind === 'wand' ? lum : c.kind === 'colour' ? this.colourInput(lum, reads, `${id}.components.${cid}`) : geom;
+      let node = this.I(op.name, [recv], paramsToArgs(op, this.bind(c.params, stage, 'binding', id) as Params));
+      if (c.invert) node = this.I('mask.invert', [node], {});
       if (v === undefined && c.combine === 'add' && c.amount === 1) {
         v = node; // the empty mask's identity: 0 + (max(0, c) − 0) = c
         continue;
@@ -198,8 +199,13 @@ class Compiler {
       if (c.amount !== 0) v = this.I('mask.combine', [v], { other: node, mode: c.combine, amount: c.amount });
     }
     v ??= this.I('mask.constant', [geom], { value: 0 });
+    // contract 1.6: grow or contract, feather, invert, then the density (1 − d·(1 − m): the one algebra's add of a full
+    // mask at amount 1 − d)
+    if (m.grow_mm) v = this.I('mask.grow', [v], { radius_px: (m.grow_mm * 1000) / this.paper });
     if (m.feather_mm > 0) v = this.I('mask.feather', [v], { radius_px: (m.feather_mm * 1000) / this.paper });
     if (m.invert) v = this.I('mask.invert', [v], {});
+    const density = m.density ?? 1;
+    if (density < 1) v = this.I('mask.combine', [v], { other: this.I('mask.constant', [geom], { value: 1 }), mode: 'add', amount: 1 - density });
     this.masks.set(key, v);
     return v;
   }

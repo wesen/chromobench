@@ -110,7 +110,7 @@ export { exposureStep };
 export type Pt3 = [number, number, number];
 /** What a mask tool drew, in document pixels. */
 export type MaskShape =
-  | { kind: 'stroke'; points: Pt3[]; radius: number; hardness: number; mode: 'add' | 'erase' }
+  | { kind: 'stroke'; points: Pt3[]; radius: number; hardness: number; mode: 'add' | 'erase'; flow?: number }
   | { kind: 'linear'; from: [number, number]; to: [number, number] }
   /** angle: rotation about the centre in degrees (mask.ellipse.angle_deg). */
   | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; angle?: number };
@@ -141,7 +141,7 @@ export function maskComponent(shape: MaskShape, strokeId = 's1'): [MaskComponent
     return ['ellipse', { box, ...(shape.angle ? { angle_deg: shape.angle } : {}) }];
   }
   if (shape.kind === 'linear') return ['linear', { from: { x: shape.from[0], y: shape.from[1] }, to: { x: shape.to[0], y: shape.to[1] } }];
-  const stroke = { points: simplify(shape.points).map((p) => [Number(p[0].toFixed(2)), Number(p[1].toFixed(2)), Number(p[2].toFixed(3))]), radius: shape.radius, hardness: shape.hardness, mode: shape.mode };
+  const stroke = { points: simplify(shape.points).map((p) => [Number(p[0].toFixed(2)), Number(p[1].toFixed(2)), Number(p[2].toFixed(3))]), radius: shape.radius, hardness: shape.hardness, mode: shape.mode, ...(shape.flow !== undefined && shape.flow < 1 ? { flow: shape.flow } : {}) };
   return ['paint', { strokes: Coll.of([[strokeId, stroke]]) as unknown as Params[string] }];
 }
 

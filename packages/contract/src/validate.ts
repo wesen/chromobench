@@ -135,12 +135,17 @@ function checkMask(doc: Document, id: Id, m: unknown, out: Out): void {
     out.push(diag('E_DOCUMENT', `mask ${id} must be an object`, { path: id }));
     return;
   }
-  const all = ['name', 'components', 'feather_mm', 'invert', 'reads'];
+  const all = ['name', 'components', 'feather_mm', 'invert', 'reads', 'grow_mm', 'density'];
   for (const f of Object.keys(m)) if (!all.includes(f)) out.push(diag('E_PATH', `mask ${id} has no field "${f}"`, { path: `${id}.${f}`, valid: all }));
   if (typeof m['name'] !== 'string') out.push(diag('E_ARG_TYPE', `${id}.name must be a string`, { path: `${id}.name` }));
   const f = m['feather_mm'];
   if (typeof f !== 'number' || !Number.isFinite(f) || f < 0 || f > 1000) out.push(diag('E_ARG_RANGE', `${id}.feather_mm must be in [0, 1000] (mm on the print)`, { path: `${id}.feather_mm` }));
   if (typeof m['invert'] !== 'boolean') out.push(diag('E_ARG_TYPE', `${id}.invert must be a boolean`, { path: `${id}.invert` }));
+  // contract 1.6: absent means the default (0, 1), as a layer's params may omit a defaulted argument
+  const g = m['grow_mm'];
+  if (g !== undefined && (typeof g !== 'number' || !Number.isFinite(g) || Math.abs(g) > 1000)) out.push(diag('E_ARG_RANGE', `${id}.grow_mm must be in [-1000, 1000] (mm on the print)`, { path: `${id}.grow_mm` }));
+  const dn = m['density'];
+  if (dn !== undefined && (typeof dn !== 'number' || !Number.isFinite(dn) || dn < 0 || dn > 1)) out.push(diag('E_ARG_RANGE', `${id}.density must be in [0, 1]`, { path: `${id}.density` }));
   const reads = m['reads'];
   const cut = typeof reads === 'string' ? cutDef(reads) : undefined;
   if (reads !== 'stage-input' && (!cut || !cut.kinds.includes(kind))) {
@@ -157,7 +162,7 @@ function checkMask(doc: Document, id: Id, m: unknown, out: Out): void {
       out.push(diag('E_DOCUMENT', `component ${cid} must be an object`, { path: cid }));
       continue;
     }
-    const call = ['kind', 'params', 'combine', 'amount', 'enabled'];
+    const call = ['kind', 'params', 'combine', 'amount', 'enabled', 'invert'];
     for (const x of Object.keys(c)) if (!call.includes(x)) out.push(diag('E_PATH', `component ${cid} has no field "${x}"`, { path: `${cid}.${x}`, valid: call }));
     if (!MASK_COMPONENT_KINDS.includes(c['kind'] as never)) {
       out.push(diag('E_DOCUMENT', `${cid}.kind must be one of ${MASK_COMPONENT_KINDS.join(', ')}`, { path: `${cid}.kind`, valid: [...MASK_COMPONENT_KINDS] }));
@@ -167,6 +172,7 @@ function checkMask(doc: Document, id: Id, m: unknown, out: Out): void {
     const a = c['amount'];
     if (typeof a !== 'number' || !Number.isFinite(a) || a < 0 || a > 1) out.push(diag('E_ARG_RANGE', `${cid}.amount must be in [0, 1]`, { path: `${cid}.amount` }));
     if (typeof c['enabled'] !== 'boolean') out.push(diag('E_ARG_TYPE', `${cid}.enabled must be a boolean`, { path: `${cid}.enabled` }));
+    if (c['invert'] !== undefined && typeof c['invert'] !== 'boolean') out.push(diag('E_ARG_TYPE', `${cid}.invert must be a boolean`, { path: `${cid}.invert` }));
     checkParams(getOp(`mask.${c['kind'] as string}`), c['params'], `${cid}.params`, { kind, use: 'binding' }, out);
   }
 }

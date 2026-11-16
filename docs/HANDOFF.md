@@ -78,7 +78,12 @@ and `cb` (`packages/studio-kit`, the studio's builders and kits). **The stack ki
 `packages/studio-kit/kits/stack/`) gives every stage one layers panel, one params panel (with editors: curve, levels,
 HSL, colour grading wheels, mixer; the colour-range eyedropper), one masks panel, the "+ Layer" menu from the
 catalogue, mask tools and the `layer.*`/`mask.*`/`link.*` commands; the Enlarger, Exposures and Finish panels are
-specialised stack views. A stage policy pass warns when a module shows a stage it does not declare. Layouts are in
+specialised stack views. A stage policy pass warns when a module shows a stage it does not declare. **Masks and
+selections (CHB-049, contract 1.6):** a mask has Expand/Contract, Feather, Invert and Density, each part its own
+Invert; the Edit Mask tool (V) moves, resizes and turns gradients and shapes on the picture; a mask gesture shows as a
+draft before release. **The select kit** (`cb.kits.select`, `kits/select/`) makes selections as the selected layer's
+mask (D3: no other selection state): marquees, lassos, the magic wand (samples what the mask reads), Select ▸ All,
+Deselect, Inverse, Grow, Contract, Feather, Use Selection as Mask. Layouts are in
 `packages/studio-kit/layouts/*.js`: **classic** (Library, Roll, Scene, Print, Edit, Finish, Assistant, Output),
 **darkroom** ("Darkroom first": strip, print, Enlarger, Paper and a collapsed "Digital (after the print)" palette),
 simple, tiny, lab, roll, finish, looks. View ▸ Layout switches in place (open frames and the history stay).

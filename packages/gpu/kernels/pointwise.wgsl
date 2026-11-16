@@ -48,6 +48,7 @@ const OP_MASK_COLOUR: u32 = 27u;   // p0 = (L, a, b, tolerance), p1.x = softness
 const OP_MASK_RADIAL: u32 = 28u;   // p0 = (cx, cy, a, b), p1 = (cos, sin, feather)
 const OP_SAVE: u32 = 29u;          // the backdrop of a fused composite.mix: bk = v
 const OP_MIX: u32 = 30u;           // v = wkMix(bk, v, p0.x, blend = flags, encoding = op.w)
+const OP_MASK_RECT: u32 = 31u;     // p0 = (cx, cy, w/2, h/2), p1 = (cos, sin): antialiased tilted rectangle (contract 1.6)
 
 // Bradford (core print/colour.ts BRADFORD) and its inverse, column by column (WGSL matrices are column-major)
 const BRAD = mat3x3<f32>(vec3<f32>(0.8951, -0.7502, 0.0389), vec3<f32>(0.2664, 1.7135, -0.0685), vec3<f32>(-0.1614, 0.0367, 1.0296));
@@ -530,6 +531,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         let inner = 1.0 - p1.z;
         var m = 1.0;
         if (d > inner) { let u = min(1.0, (d - inner) / max(1e-4, p1.z)); m = 1.0 - u * u * (3.0 - 2.0 * u); }
+        v = vec4<f32>(m, m, m, 1.0);
+      }
+      case 31u: {
+        // core rectAt: clamp(½ − d), d the signed distance outside the rotated box
+        let e = vec2<f32>(fp) + 0.5 - p0.xy;
+        let u = p1.x * e.x + p1.y * e.y;
+        let w = -p1.y * e.x + p1.x * e.y;
+        let m = clamp(0.5 - max(abs(u) - p0.z, abs(w) - p0.w), 0.0, 1.0);
         v = vec4<f32>(m, m, m, 1.0);
       }
       case 29u: { bk = v; }

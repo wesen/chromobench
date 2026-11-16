@@ -270,6 +270,67 @@ export const LAW_TESTS: Record<string, T> = {
     return { parity, laws, halfScale: diff(half, await law.sampled(c3.id, half.w, half.h), 1) };
   },
 
+  /**
+   * Contract 1.6 (CHB-049): the selections' components (rect, polygon, wand contiguous and not), grow and contract,
+   * a stroke's flow, a component's invert, the mask's density, against RefEngine exact; the laws on the GPU (grow then
+   * contract between the mask and the grown mask, contract then grow under it, duality, feather monotone); the wand
+   * and grow on a half-scale grid and on a part of the frame (the whole frame's coverage, cut).
+   */
+  async 'law:selections'() {
+    const { f, g, law } = await setup();
+    const c = compile(scanDocument(f.sha, {}), g);
+    const src = c.cuts.source!;
+    const neg = c.cuts['negative']!;
+    const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => g.intern(op, inputs, args).node;
+    const rect = I('mask.rect', [src.id], { box: { x: 12.5, y: 9, w: 40, h: 26 }, angle_deg: 30 });
+    const poly = I('mask.polygon', [src.id], { points: [[8, 6], [80, 12], [60, 58], [30, 20], [10, 50]] });
+    const wandC = I('mask.wand', [neg.id], { seed: { x: 48, y: 32 }, tolerance: 0.06, softness: 0.02, contiguous: true });
+    const wandN = I('mask.wand', [neg.id], { seed: { x: 48, y: 32 }, tolerance: 0.06, softness: 0.02, contiguous: false });
+    const ell = I('mask.ellipse', [src.id], { box: { x: 20, y: 12, w: 50, h: 36 }, angle_deg: 10 });
+    const holey = I('mask.combine', [ell.id], { other: I('mask.rect', [src.id], { box: { x: 40, y: 26, w: 5, h: 4 } }).id, mode: 'subtract', amount: 1 });
+    const grown = I('mask.grow', [holey.id], { radius_px: 5 });
+    const shrunk = I('mask.grow', [holey.id], { radius_px: -3.5 });
+    const closed = I('mask.grow', [grown.id], { radius_px: -5 });
+    const opened = I('mask.grow', [I('mask.grow', [holey.id], { radius_px: -5 }).id], { radius_px: 5 });
+    const dual = I('mask.invert', [I('mask.grow', [I('mask.invert', [holey.id]).id], { radius_px: 3.5 }).id]);
+    const flow = I('mask.paint', [src.id], { strokes: [
+      { points: [[10, 30, 0.5], [86, 34, 0.5]], radius: 6, hardness: 0.4, mode: 'add', flow: 0.5 },
+      { points: [[50, 4, 0.5], [50, 60, 0.5]], radius: 5, hardness: 0.7, mode: 'add', flow: 0.5 },
+      { points: [[20, 50, 0.5], [70, 10, 0.5]], radius: 3, hardness: 1, mode: 'erase', flow: 0.6 },
+    ] });
+    const parity: Record<string, unknown> = {};
+    for (const [k, n] of Object.entries({ rect, poly, wandC, wandN, grown, shrunk, closed, opened, flow })) parity[k] = diff(await gpuRead(f, g, n), await law.image(n.id), 1);
+    const read = async (n: Node) => (await gpuRead(f, g, n)).data;
+    const [m, gm, cm, om, dm, sm, wc, wn] = [await read(holey), await read(grown), await read(closed), await read(opened), await read(dual), await read(shrunk), await read(wandC), await read(wandN)];
+    const blurLo = await read(I('mask.feather', [I('mask.combine', [holey.id], { other: rect.id, mode: 'intersect', amount: 1 }).id], { radius_px: 4 }));
+    const blurHi = await read(I('mask.feather', [holey.id], { radius_px: 4 }));
+    let closeOut = 0, openOut = 0, dualMax = 0, featherUp = 0, wandOut = 0, selected = 0;
+    for (let i = 0; i < m.length; i += 4) {
+      if (cm[i]! < m[i]! - 1e-6 || cm[i]! > gm[i]! + 1e-6) closeOut++;
+      if (om[i]! > m[i]! + 1e-6) openOut++;
+      dualMax = Math.max(dualMax, Math.abs(dm[i]! - sm[i]!));
+      if (blurLo[i]! > blurHi[i]! + 1e-6) featherUp++;
+      if (wc[i]! > wn[i]! + 1e-6) wandOut++;
+      if (wc[i]! > 0.5) selected++;
+    }
+    // the wand on a half-scale grid of the whole frame, and on a part of the frame (preview): its contiguous region is
+    // computed on the whole frame's grid, so the part is the whole half-scale coverage cut out
+    const half = await gpuRead(f, g, wandC, { scale: 0.5 });
+    const part = await gpuRead(f, g, wandC, { scale: 0.5, precision: 'preview', region: { x: 50, y: 30, w: 40, h: 30 } });
+    let partDiff = 0;
+    for (let y = 0; y < part.h; y++) for (let x = 0; x < part.w; x++) {
+      const X = 50 + Math.floor(((2 * x + 1) * 40) / (2 * part.w)), Y = 30 + Math.floor(((2 * y + 1) * 30) / (2 * part.h));
+      const hx = Math.min(half.w - 1, Math.floor(((X + 0.5) * half.w) / W)), hy = Math.min(half.h - 1, Math.floor(((Y + 0.5) * half.h) / H));
+      partDiff = Math.max(partDiff, Math.abs(part.data[(y * part.w + x) * part.c]! - half.data[(hy * half.w + hx) * half.c]!));
+    }
+    // an exact export of a part equals the whole frame's, cut out
+    const exactPart = await gpuRead(f, g, wandC, { region: { x: 50, y: 30, w: 40, h: 30 } });
+    const whole = await law.image(wandC.id);
+    let exactDiff = 0;
+    for (let y = 0; y < 30; y++) for (let x = 0; x < 40; x++) exactDiff = Math.max(exactDiff, Math.abs(exactPart.data[(y * 40 + x) * exactPart.c]! - whole.data[(30 + y) * W + 50 + x]!));
+    return { parity, laws: { closeOut, openOut, dualMax, featherUp, wandOut }, selected, partDiff, exactDiff };
+  },
+
   /** heal and clone: sequential spots, coalesced, in the scan (density, additive seam) and on the print. */
   async 'law:heal'(o) {
     const { f, g, law, kernel } = await setup();
@@ -470,6 +531,14 @@ async function tilesTest(): Promise<Record<string, unknown>> {
     clarity: scanDocument(sha, { print: [['cl', L('clarity', { strength: 0.6, radius_mm: 2 })]] }, [], size),
     sharpen: scanDocument(sha, { print: [['sh', L('sharpen', { strength: 0.8, radius_mm: 0.1 })]] }, [], size),
     heal: scanDocument(sha, { print: [['h', L('heal', { spots })]] }, [], size),
+    // contract 1.6 (CHB-049): a grown and a contracted mask (a halo) and a contiguous wand (the whole frame's coverage)
+    grow: scanDocument(sha, { darkroom: [main, ['b', L('burn', { stops: 0.7 }, { mask: 'g' })], ['d', L('dodge', { stops: 0.5 }, { mask: 'k' })]] }, [
+      ['g', M([['c', C('ellipse', { box: { x: 70, y: 50, w: 150, h: 110 }, angle_deg: 20 })]], { grow_mm: 0.6 })],
+      ['k', M([['c', C('rect', { box: { x: 40, y: 120, w: 200, h: 60 }, angle_deg: 10 })]], { grow_mm: -0.3 })],
+    ], size),
+    wand: scanDocument(sha, { darkroom: [main, ['b', L('burn', { stops: 0.7 }, { mask: 'w' })]] }, [
+      ['w', M([['c', C('wand', { seed: { x: 180, y: 120 }, tolerance: 0.08, softness: 0.02, contiguous: true })]])],
+    ], size),
     stack: scanDocument(sha, {
       darkroom: [main, ['dm', L('densityMask', { gamma: 0.4, radius_um: 200, polarity: 'positive' })], ['b', L('burn', { stops: 0.5 }, { mask: 'e' })]],
       print: [['h', L('heal', { spots })], ['sh', L('sharpen', { strength: 0.5, radius_mm: 0.15 })], ['cl', L('clarity', { strength: 0.4, radius_mm: 1.5 })]],
@@ -496,7 +565,7 @@ async function tilesTest(): Promise<Record<string, unknown>> {
       worst = Math.max(worst, Math.abs(tiled[i]! - whole.data[i]!));
       if (Math.abs(prev[i]! - pw[i]!) > 1 / 65535) before++;
     }
-    out[name] = { ops: [...new Set(g.closure(n.id).map((m) => m.op))].filter((op) => ['print.densityMask', 'mask.feather', 'clarity', 'sharpen', 'heal'].includes(op)), codes, worst, before };
+    out[name] = { ops: [...new Set(g.closure(n.id).map((m) => m.op))].filter((op) => ['print.densityMask', 'mask.feather', 'mask.grow', 'mask.wand', 'clarity', 'sharpen', 'heal'].includes(op)), codes, worst, before };
   }
   gpu.dispose();
   return out;

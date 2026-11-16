@@ -295,6 +295,52 @@ const CASES: SemanticCase[] = [
     },
   },
   {
+    id: 'selection semantics (contract 1.6): the rectangle and the lasso are 1 inside and 0 outside, the rectangle\'s edge is clamp(½ − d); the wand selects what is close to its seed, contiguous only what is connected', op: 'mask.wand', needs: ['mask.rect', 'mask.polygon', 'mask.wand', 'mask.combine'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const W = widthOf(r);
+      const box = { x: 1.25, y: 1, w: 3.5, h: 7 };
+      const a = env.build('mask.rect', [r.id], { box, angle_deg: 0 });
+      const ma = await read(env, a);
+      const rect = (i: number): number => {
+        const X = (i % W) + 0.5, Y = Math.floor(i / W) + 0.5;
+        return Math.min(1, Math.max(0, 0.5 - Math.max(Math.abs(X - (box.x + box.w / 2)) - box.w / 2, Math.abs(Y - (box.y + box.h / 2)) - box.h / 2)));
+      };
+      check(worst(ma, 1, rect) <= 1e-5, 'mask.rect is not clamp(½ − d)');
+      const p = await read(env, env.build('mask.polygon', [r.id], { points: [[6, 1], [11, 1], [11, 8], [6, 8]] }));
+      check(p[4 * W + 8]! === 1 && p[4 * W + 2]! === 0 && p[0]! === 0, `mask.polygon: inside ${p[4 * W + 8]}, outside ${p[4 * W + 2]}`);
+      // two blocks of 1 with a gap: the wand from the left block, contiguous and not
+      const b = env.build('mask.rect', [r.id], { box: { x: 8, y: 1, w: 3, h: 7 }, angle_deg: 0 });
+      const two = env.build('mask.combine', [a.id], { other: b.id, mode: 'add', amount: 1 });
+      const left = await read(env, env.build('mask.wand', [two.id], { seed: { x: 3, y: 4 }, tolerance: 0.1, softness: 0, contiguous: true }));
+      const both = await read(env, env.build('mask.wand', [two.id], { seed: { x: 3, y: 4 }, tolerance: 0.1, softness: 0, contiguous: false }));
+      check(left[4 * W + 3]! === 1 && left[4 * W + 9]! === 0 && left[0]! === 0, `contiguous wand: seed ${left[4 * W + 3]}, other block ${left[4 * W + 9]}, ground ${left[0]}`);
+      check(both[4 * W + 9]! === 1 && both[0]! === 0, `wand, not contiguous: other block ${both[4 * W + 9]}, ground ${both[0]}`);
+    },
+  },
+  {
+    id: 'grow semantics (contract 1.6): grow then contract by the same radius lies between the mask and the grown mask, contract then grow under it, contract is grow of the inverse inverted; feather is monotone; invert twice is the identity', op: 'mask.grow', needs: ['mask.grow', 'mask.ellipse', 'mask.linear', 'mask.combine', 'mask.invert', 'mask.feather'],
+    async run(env) {
+      const r = env.input('camera-linear');
+      const e = env.build('mask.ellipse', [r.id], { box: { x: 1, y: 1, w: 9, h: 8 }, angle_deg: 15 });
+      const hole = env.build('mask.ellipse', [r.id], { box: { x: 4, y: 4, w: 2, h: 2 } });
+      const m = env.build('mask.combine', [e.id], { other: hole.id, mode: 'subtract', amount: 1 });
+      const [mm] = [await read(env, m)];
+      const grown = env.build('mask.grow', [m.id], { radius_px: 2 });
+      const [mg, mc, mo] = [await read(env, grown), await read(env, env.build('mask.grow', [grown.id], { radius_px: -2 })), await read(env, env.build('mask.grow', [env.build('mask.grow', [m.id], { radius_px: -2 }).id], { radius_px: 2 }))];
+      for (let i = 0; i < mm.length; i++) {
+        check(mc[i]! >= mm[i]! - 1e-6 && mc[i]! <= mg[i]! + 1e-6, `grow then contract at ${i}: ${mc[i]} not within [${mm[i]}, ${mg[i]}]`);
+        check(mo[i]! <= mm[i]! + 1e-6, `contract then grow at ${i}: ${mo[i]} above ${mm[i]}`);
+      }
+      const dual = await read(env, env.build('mask.invert', [env.build('mask.grow', [env.build('mask.invert', [m.id], {}).id], { radius_px: 2 }).id], {}));
+      check(worst(await read(env, env.build('mask.grow', [m.id], { radius_px: -2 })), 1, (i) => dual[i]!) <= 1e-6, 'contract is not grow of the inverse, inverted');
+      const lo = env.build('mask.combine', [m.id], { other: env.build('mask.linear', [r.id], { from: { x: 0, y: 0 }, to: { x: 12, y: 0 } }).id, mode: 'intersect', amount: 1 });
+      const [fl, fm] = [await read(env, env.build('mask.feather', [lo.id], { radius_px: 2 })), await read(env, env.build('mask.feather', [m.id], { radius_px: 2 }))];
+      for (let i = 0; i < fl.length; i++) check(fl[i]! <= fm[i]! + 1e-6, `feather not monotone at ${i}: ${fl[i]} > ${fm[i]}`);
+      check(worst(await read(env, env.build('mask.invert', [env.build('mask.invert', [m.id], {}).id], {})), 1, (i) => mm[i]!) <= 1e-6, 'invert twice is not the identity');
+    },
+  },
+  {
     id: 'mask semantics: a painted stroke covers its path and nothing far from it; erase removes', op: 'mask.paint', needs: ['mask.paint'],
     async run(env) {
       const r = env.input('camera-linear');

@@ -83,7 +83,7 @@ export function planGraph(graph: Graph, id: string, check: (n: Node) => void, ch
   const mat = new Set<string>([id]);
   for (const nid of order) {
     const n = graph.get(nid)!;
-    if ((consumers.get(nid) ?? 0) >= 2 || n.op === 'mask.paint') mat.add(nid);
+    if ((consumers.get(nid) ?? 0) >= 2 || n.op === 'mask.paint' || n.op === 'mask.polygon') mat.add(nid);
     if (isBarrier(n, graph)) {
       mat.add(nid);
       for (const i of readsOf(n, graph)) mat.add(i);

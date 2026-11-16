@@ -23,6 +23,7 @@ import { COLOUR_WORDS, coverageMasks, MODE_WORDS, OVERLAY_COLOURS, OVERLAY_MODES
 import { btn, frameOf, numAt, numberControl, parsePercent, peekDoc, readPath, run, words } from './controls/dom.ts';
 import { EDITOR_RENDERERS } from './editors/dom.ts';
 import { EDITOR_FORMS, mathOf, oklabCss, type Editors } from './editors.ts';
+import { hasHandles } from './handles.ts';
 
 /** The one amount control: the law's range and unit hint ("Amount · opacity"). */
 function amountControl(m: MountCtx, frame: (s: any) => string | null, id: Id, stage: StageName, e: Pick<Entry, 'kind'> & { op?: string }, o: { compact?: boolean } = {}): HTMLElement {
@@ -418,6 +419,21 @@ function specControl(m: MountCtx, frame: (s: any) => string | null, path: string
       },
     });
   }
+  if (spec.type === 'bool') {
+    // a switch (the wand's Contiguous): one step
+    const cb = h('input', { type: 'checkbox', 'aria-label': spec.ui?.label ?? words(arg) }) as HTMLInputElement;
+    listen(m.scope, cb, 'change', () => {
+      const f = frame(m.store.readonly());
+      const d = f ? peekDoc(m, f) : undefined;
+      if (f && d) m.rctx().tx(`${spec.ui?.label ?? words(arg)} ${cb.checked ? 'on' : 'off'}`, (t: any) => t.$set(storePath(f, d, path), cb.checked));
+    });
+    m.cell((st) => {
+      const f = frame(st);
+      const d = f ? sel.doc(st, f) : undefined;
+      return d ? (readPath(d, path) ?? spec.default) === true : false;
+    }, (v) => void (cb.checked = v));
+    return h('label', { class: 'cb-stack-num', 'data-path': path }, h('span', { class: 'cb-stack-num-l', text: spec.ui?.label ?? words(arg) }), cb);
+  }
   if (spec.type === 'enum' && spec.values) {
     const s = h('select', { class: 'cb-select', 'aria-label': words(arg) }) as HTMLSelectElement;
     for (const v of spec.values) s.append(h('option', { value: v, text: v }));
@@ -642,6 +658,15 @@ const masks: Renderer = (n, m) => {
       listen(pm.scope, b, 'click', () => run(pm, `tool.${tool}`));
       tools.append(b);
     }
+    tools.append(brushOptions(pm));
+    // the selection tools (the select kit, CHB-049): a selection is this layer's mask
+    let selectRow: Node | null = null;
+    try {
+      selectRow = pm.child('select').mount(makeNode('select.tools', {})) as Node | null;
+    } catch {
+      selectRow = null; // a studio without the select kit
+    }
+    if (selectRow) tools.append(selectRow);
     if (!mk) {
       // a layer in a masked group acts through the group's mask: the overlay shows that
       if (coverageMasks(d, id).length) el.append(h('p', { class: 'cb-dim cb-stack-ov-note', text: `${entryName(p.entry)} acts through its group's mask.` }), overlayControls(pm));
@@ -670,7 +695,13 @@ const masks: Renderer = (n, m) => {
       listen(pm.scope, cs, 'change', () => run(pm, 'mask.set', `${cid}.combine`, cs.value, `Mask component: ${COMBINE_WORDS[cs.value as MaskCombine]}`));
       const rm = btn('×', 'cb-stack-comp-rm', { 'aria-label': `Remove ${cid}` });
       listen(pm.scope, rm, 'click', () => run(pm, 'mask.removeComponent', cid));
-      li.append(h('div', { class: 'cb-stack-line' }, on, h('span', { class: 'cb-stack-name', text: KIND_WORDS[c.kind] ?? c.kind }), cs, rm));
+      // MASK-3 (CHB-049): this part inverted before it joins the mask; its handles on the picture
+      const ci = h('input', { type: 'checkbox', 'aria-label': `${cid} inverted`, 'data-tip': 'Invert this part (where it acted, it does not)' }) as HTMLInputElement;
+      listen(pm.scope, ci, 'change', () => run(pm, 'mask.set', `${cid}.invert`, ci.checked, `${ci.checked ? 'Invert' : 'Do not invert'} a mask part`));
+      const ed = hasHandles(c.kind) ? btn('✥', 'cb-stack-comp-edit', { 'aria-label': `Move ${cid} on the picture`, 'data-tip': 'Move, resize and turn it on the picture (V)' }) : null;
+      if (ed) listen(pm.scope, ed, 'click', () => run(pm, 'mask.edit', cid));
+      li.append(h('div', { class: 'cb-stack-line' }, on, h('span', { class: 'cb-stack-name', text: KIND_WORDS[c.kind] ?? c.kind }), cs, ed, rm));
+      li.append(h('label', { class: 'cb-stack-num cb-stack-comp-inv' }, h('span', { class: 'cb-stack-num-l', text: 'Invert' }), ci));
       li.append(numberControl(pm, { label: 'Amount', path: `${cid}.amount`, frame, min: 0, max: 1, step: 0.01, show: formatAmount, parse: parsePercent, stepLabel: 'Mask component amount', read: (s) => numAt(s, frame, `${cid}.amount`) }));
       if (c.kind === ('colour' as never)) li.append(colourSample(pm, frame, cid));
       for (const [k, spec] of Object.entries(getOp(`mask.${c.kind}`).args)) {
@@ -680,17 +711,23 @@ const masks: Renderer = (n, m) => {
       pm.cell((s) => {
         const dd = sel.doc(s, frame(s));
         const x = dd ? Coll.get(Coll.get(dd.masks, mid)?.components ?? Coll.empty<MaskComponent>(), cid) : undefined;
-        return x ? `${x.enabled}|${x.combine}` : '';
+        return x ? `${x.enabled}|${x.combine}|${x.invert === true}|${s.stack?.mask?.edit === cid && s.ui?.tool === 'mask-edit'}` : '';
       }, (x) => {
-        const [en, cb] = x.split('|');
+        const [en, cb, inv, editing] = x.split('|');
         on.checked = en === 'true';
         cs.value = cb ?? 'add';
+        ci.checked = inv === 'true';
         li.classList.toggle('is-off', en !== 'true');
+        li.classList.toggle('is-editing', editing === 'true');
+        ed?.classList.toggle('is-on', editing === 'true');
       });
       ol.append(li);
     }
     el.append(ol);
+    // MASK-3 (CHB-049): grow or contract (mm on the print), the feather, and the mask's density (Photoshop's)
+    el.append(numberControl(pm, { label: 'Expand', path: `${mid}.grow_mm`, frame, min: -5, max: 5, hard: [-1000, 1000], step: 0.05, show: (x) => `${x > 0 ? '+' : ''}${x.toFixed(2)} mm`, stepLabel: 'Mask expand', tip: 'Grow the mask outwards (+) or contract it (−), in mm on the print', read: (s) => numAt(s, frame, `${mid}.grow_mm`) ?? (sel.doc(s, frame(s)) ? 0 : undefined) }));
     el.append(numberControl(pm, { label: 'Feather', path: `${mid}.feather_mm`, frame, min: 0, max: 20, hard: [0, 1000], step: 0.1, show: (x) => `${x.toFixed(1)} mm`, stepLabel: 'Mask feather', tip: 'The soft edge, in mm on the print (the same at every export size)', read: (s) => numAt(s, frame, `${mid}.feather_mm`) }));
+    el.append(numberControl(pm, { label: 'Density', path: `${mid}.density`, frame, min: 0, max: 1, step: 0.01, show: formatAmount, parse: parsePercent, stepLabel: 'Mask density', tip: 'How much the mask holds the layer back: 100 % fully, 0 % the layer acts everywhere', read: (s) => numAt(s, frame, `${mid}.density`) ?? (sel.doc(s, frame(s)) ? 1 : undefined) }));
     const inv = h('input', { type: 'checkbox', 'aria-label': 'Invert the mask' }) as HTMLInputElement;
     listen(pm.scope, inv, 'change', () => run(pm, 'mask.set', `${mid}.invert`, inv.checked, inv.checked ? 'Invert the mask' : 'Mask not inverted'));
     const reads = h('select', { class: 'cb-select', 'aria-label': 'The mask reads' }) as HTMLSelectElement;
@@ -713,5 +750,17 @@ const masks: Renderer = (n, m) => {
   }, { equals: (a: any, b: any) => a.key === b.key });
   return el;
 };
+/** The brush's options (MASK-3): size in picture px, hardness and flow, for the next strokes (view state, mask.brush). */
+function brushOptions(pm: MountCtx): HTMLElement {
+  const v = (s: any, k: 'radius' | 'hardness' | 'flow', d: number): number => Number(s?.stack?.mask?.[k] ?? d);
+  const always = (): string | null => null;
+  const el = h('div', { class: 'cb-stack-brush' },
+    numberControl(pm, { label: 'Size', path: 'stack.mask.radius', frame: always, min: 1, max: 200, hard: [0.5, 2000], step: 1, show: (x) => `${Math.round(x)} px`, stepLabel: 'Brush size', tip: 'The brush\'s radius, in pixels of the picture', commit: (x) => void run(pm, 'mask.brush', { size: x }), read: (s) => v(s, 'radius', 12) }),
+    numberControl(pm, { label: 'Hardness', path: 'stack.mask.hardness', frame: always, min: 0, max: 1, step: 0.01, show: formatAmount, parse: parsePercent, stepLabel: 'Brush hardness', tip: 'How hard the brush\'s edge is', commit: (x) => void run(pm, 'mask.brush', { hardness: x }), read: (s) => v(s, 'hardness', 0.5) }),
+    numberControl(pm, { label: 'Flow', path: 'stack.mask.flow', frame: always, min: 0.01, max: 1, step: 0.01, show: formatAmount, parse: parsePercent, stepLabel: 'Brush flow', tip: 'How much one stroke builds up: strokes over the same place add up to the full mask', commit: (x) => void run(pm, 'mask.brush', { flow: x }), read: (s) => v(s, 'flow', 1) }));
+  pm.cell((s) => s.ui?.tool === 'mask-paint', (on) => void (el.hidden = !on));
+  return el;
+}
+
 /** the stack kit's renderers (part of CB_RENDERERS) */
 export const STACK_RENDERERS: Record<string, Renderer> = { 'stack.layers': layers, 'stack.row': row, 'stack.params': params, 'stack.masks': masks, ...EDITOR_RENDERERS };

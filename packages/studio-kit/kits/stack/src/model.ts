@@ -442,7 +442,7 @@ export function nudgeEntry(doc: Document, id: Id, by: -1 | 1): Mutation[] {
 export const componentKinds = (): readonly MaskComponentKind[] => MASK_COMPONENT_KINDS;
 export const COMBINE_WORDS: Record<MaskCombine, string> = { add: 'Add', subtract: 'Subtract', intersect: 'Intersect' };
 export const combines = (): readonly MaskCombine[] => MASK_COMBINES;
-export const KIND_WORDS: Record<string, string> = { linear: 'Linear gradient', radial: 'Radial', ellipse: 'Ellipse', paint: 'Brush', luminance: 'Luminance range', colour: 'Colour range' };
+export const KIND_WORDS: Record<string, string> = { linear: 'Linear gradient', radial: 'Radial', ellipse: 'Ellipse', rect: 'Rectangle', polygon: 'Lasso', paint: 'Brush', luminance: 'Luminance range', colour: 'Colour range', wand: 'Magic wand' };
 
 /** The cuts a mask used by an entry of `stage` may read (range components measure them). */
 export function readsChoices(doc: Document, stage: StageName): ('stage-input' | CutName)[] {
@@ -545,4 +545,67 @@ export function provenance(log: Log, f: string): Map<Id, Why> {
   }
   per.set(f, out);
   return out;
+}
+
+// ---- selections (CHB-049, D3: a selection is the selected layer's mask) ------------------------------------------
+
+/** a mask's entry can take a selection: not the main exposure (its mask is the light law's own) */
+export const selectable = (doc: Document, id: Id | null): boolean => {
+  const t = id ? findEntry(doc, id) : undefined;
+  return !!t && !(t.entry.kind === 'layer' && getOp(t.entry.op).term === 'main');
+};
+
+/** Select All: the layer's mask is the whole picture (one rectangle over the frame, not inverted). */
+export function selectAll(doc: Document, id: Id, w: number, h: number): Mutation[] {
+  const full = { box: { x: 0, y: 0, w, h }, angle_deg: 0 } as Params;
+  const mk = maskOf(doc, id);
+  if (!mk) return newMaskOn(doc, id, 'rect', full).mutations;
+  const cid = `${mk.id}c1`;
+  const rest = mk.components.map(([c]) => remove(c));
+  // the first part's id is free again once the old parts go (ids are unique in the whole document)
+  const free = mk.components.some(([c]) => c === cid) || !findAnyId(doc, cid) ? cid : addComponent(doc, mk.id, 'rect').id;
+  return [...rest, insert(`${mk.id}.components`, free, { kind: 'rect', params: full, combine: 'add', amount: 1, enabled: true } as MaskComponent), ...(mk.mask.invert ? [set(`${mk.id}.invert`, false)] : [])];
+}
+
+/** Deselect: no selection is everything (Photoshop): the layer's mask goes, it acts everywhere again. */
+export const selectNone = (doc: Document, id: Id): Mutation[] => detachMask(doc, id);
+
+/** Inverse: the layer's mask inverted (its invert toggled). */
+export function selectInverse(doc: Document, id: Id): Mutation[] {
+  const mk = maskOf(doc, id);
+  return mk ? [set(`${mk.id}.invert`, !mk.mask.invert)] : [];
+}
+
+/** Grow (mm > 0) or contract (mm < 0) the layer's mask by mm on the print, added to what it has. */
+export function growBy(doc: Document, id: Id, mm: number): Mutation[] {
+  const mk = maskOf(doc, id);
+  if (!mk || !Number.isFinite(mm) || mm === 0) return [];
+  return [set(`${mk.id}.grow_mm`, Number(((mk.mask.grow_mm ?? 0) + mm).toFixed(3)))];
+}
+
+/** Feather the layer's mask by mm on the print (replaces its feather). */
+export function featherTo(doc: Document, id: Id, mm: number): Mutation[] {
+  const mk = maskOf(doc, id);
+  return mk && Number.isFinite(mm) && mm >= 0 ? [set(`${mk.id}.feather_mm`, Number(mm.toFixed(3)))] : [];
+}
+
+/**
+ * Use Selection as Mask (Editor lab's "selection → mask"): a copy of mask `mid` (fresh ids for it, its parts and
+ * strokes) becomes the mask of entry `id`, replacing the one it had (which goes when nothing else uses it).
+ */
+export function copyMaskOnto(doc: Document, mid: Id, id: Id): { mask: Id; mutations: Mutation[] } {
+  const m = Coll.get(doc.masks, mid);
+  if (!m) throw new Error(`no mask ${mid}`);
+  const nid = nextId(doc, 'm');
+  const taken = new Set<Id>([nid]);
+  const map = new Map<Id, Id>();
+  for (const x of collIds(m)) {
+    let probe = x.startsWith(mid) ? `${nid}${x.slice(mid.length)}` : x;
+    let n = 1;
+    while (findAnyId(doc, probe) || taken.has(probe)) probe = `${nid}x${n++}`;
+    taken.add(probe);
+    map.set(x, probe);
+  }
+  const copy = { ...renameIds(m, map), name: `${m.name} copy` } as Mask;
+  return { mask: nid, mutations: [...detachMask(doc, id), insert('masks', nid, copy), set(`${id}.mask`, nid)] };
 }

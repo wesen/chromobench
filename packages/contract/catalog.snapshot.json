@@ -21,7 +21,7 @@
     "colour",
     "luminosity"
   ],
-  "contractVersion": "1.5.0",
+  "contractVersion": "1.6.0",
   "cuts": {
     "darkroom.H": {
       "domain": "paper-logH",
@@ -419,9 +419,12 @@
     "linear",
     "radial",
     "ellipse",
+    "rect",
+    "polygon",
     "paint",
     "luminance",
-    "colour"
+    "colour",
+    "wand"
   ],
   "mutationOps": [
     "set",
@@ -1984,6 +1987,29 @@
       "owner": "CHB-010",
       "returns": "Mask"
     },
+    "mask.grow": {
+      "area": "mask",
+      "args": {
+        "radius_px": {
+          "default": 4,
+          "max": 100000,
+          "min": -100000,
+          "type": "number",
+          "unit": "px",
+          "usual": [
+            -100,
+            100
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "spatial",
+      "domainIn": "mask",
+      "domainOut": "mask",
+      "on": "Mask",
+      "owner": "CHB-049",
+      "returns": "Mask"
+    },
     "mask.invert": {
       "area": "mask",
       "args": {},
@@ -2072,6 +2098,13 @@
         "strokes": {
           "default": [],
           "of": {
+            "flow": {
+              "max": 1,
+              "min": 0,
+              "optional": true,
+              "type": "number",
+              "unit": "fraction"
+            },
             "hardness": {
               "default": 0.5,
               "max": 1,
@@ -2113,6 +2146,40 @@
         "order": 40
       }
     },
+    "mask.polygon": {
+      "area": "mask",
+      "args": {
+        "points": {
+          "default": [
+            [
+              0,
+              0
+            ],
+            [
+              16,
+              0
+            ],
+            [
+              0,
+              16
+            ]
+          ],
+          "type": "polyline"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": "any",
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-049",
+      "returns": "Mask",
+      "ui": {
+        "label": "Lasso",
+        "menu": "mask",
+        "order": 34
+      }
+    },
     "mask.radial": {
       "area": "mask",
       "args": {
@@ -2152,6 +2219,91 @@
         "label": "Radial gradient",
         "menu": "mask",
         "order": 20
+      }
+    },
+    "mask.rect": {
+      "area": "mask",
+      "args": {
+        "angle_deg": {
+          "default": 0,
+          "max": 90,
+          "min": -90,
+          "type": "number",
+          "unit": "deg"
+        },
+        "box": {
+          "default": {
+            "h": 16,
+            "w": 16,
+            "x": 0,
+            "y": 0
+          },
+          "type": "box",
+          "unit": "px"
+        }
+      },
+      "binding": "setting",
+      "class": "pointwise",
+      "domainIn": "any",
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-049",
+      "returns": "Mask",
+      "ui": {
+        "label": "Rectangle",
+        "menu": "mask",
+        "order": 32
+      }
+    },
+    "mask.wand": {
+      "area": "mask",
+      "args": {
+        "contiguous": {
+          "default": true,
+          "type": "bool"
+        },
+        "seed": {
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "type": "point",
+          "unit": "px"
+        },
+        "softness": {
+          "default": 0.02,
+          "max": 0.5,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction",
+          "usual": [
+            0,
+            0.1
+          ]
+        },
+        "tolerance": {
+          "default": 0.1,
+          "max": 1,
+          "min": 0,
+          "type": "number",
+          "unit": "fraction",
+          "usual": [
+            0,
+            0.4
+          ]
+        }
+      },
+      "binding": "setting",
+      "class": "global",
+      "domainIn": "any",
+      "domainOut": "mask",
+      "on": "Image",
+      "owner": "CHB-049",
+      "returns": "Mask",
+      "ui": {
+        "label": "Magic wand",
+        "menu": "mask",
+        "order": 70
       }
     },
     "measure.densitometer": {

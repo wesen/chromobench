@@ -13,6 +13,7 @@ import type { Studio } from '../studio.ts';
 import { renderArg } from './arg.ts';
 import { sel } from '../sel.ts';
 import { STACK_RENDERERS } from '../../kits/stack/src/dom.ts';
+import { SELECT_RENDERERS } from '../../kits/select/src/dom.ts';
 
 const studioOf = (m: MountCtx): Studio => m.rt.services['studio'] as Studio;
 const frameOf = (n: NodeData, s: any): string | null => (typeof n.props['frame'] === 'function' ? (n.props['frame'] as (s: any) => string | null)(s) : ((n.props['frame'] as string | undefined) ?? sel.current(s)));
@@ -381,4 +382,6 @@ export const CB_RENDERERS: Record<string, Renderer> = {
   'cb.filter': filter,
   // the stack kit is in every studio (cb.studio installs it)
   ...STACK_RENDERERS,
+  // and the select kit (CHB-049)
+  ...SELECT_RENDERERS,
 };
