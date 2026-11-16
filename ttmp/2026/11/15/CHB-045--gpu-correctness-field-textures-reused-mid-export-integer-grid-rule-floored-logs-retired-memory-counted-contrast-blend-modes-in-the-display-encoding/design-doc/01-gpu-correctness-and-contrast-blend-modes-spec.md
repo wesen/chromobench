@@ -8,13 +8,16 @@ Topics:
 DocType: design-doc
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://packages/contract/CONTRACT-DECISIONS.md
+      Note: CC-024
 ExternalSources: []
-Summary: "Phase 1 GPU correctness (GPUC-1..4) and D7 contrast blend modes in the display encoding: what changes, where, and how each is tested"
+Summary: 'Phase 1 GPU correctness (GPUC-1..4) and D7 contrast blend modes in the display encoding: what changes, where, and how each is tested'
 LastUpdated: 2026-11-15T18:23:46.947003-05:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # GPU correctness and contrast blend modes (CHB-045)
 
