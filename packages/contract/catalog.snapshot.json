@@ -10,6 +10,10 @@
     "colour-burn",
     "hard-light",
     "soft-light",
+    "vivid-light",
+    "linear-light",
+    "pin-light",
+    "hard-mix",
     "difference",
     "exclusion",
     "hue",
@@ -17,7 +21,7 @@
     "colour",
     "luminosity"
   ],
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "cuts": {
     "darkroom.H": {
       "domain": "paper-logH",
@@ -665,6 +669,10 @@
             "colour-burn",
             "hard-light",
             "soft-light",
+            "vivid-light",
+            "linear-light",
+            "pin-light",
+            "hard-mix",
             "difference",
             "exclusion",
             "hue",

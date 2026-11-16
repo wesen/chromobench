@@ -47,7 +47,7 @@ The composite law per entry (design §4, §22): out = back + a·m·(B(back, top)
 | `top` | Image |  |  |  |  | What the entry made from the backdrop (its op applied, or a group's children). |
 | `amount` | number | fraction | [0, 1] |  | `1` | Opacity. |
 | `mask` (optional) | Mask |  |  |  |  | Coverage; absent = everywhere. |
-| `blend` | enum normal/multiply/screen/overlay/darken/lighten/colour-dodge/colour-burn/hard-light/soft-light/difference/exclusion/hue/saturation/colour/luminosity |  |  |  | `"normal"` | Blend mode B(back, top), the W3C set: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), hue, saturation, colour and luminosity in OkLCh. A mode other than normal needs a working encoding (rgb or oklab). |
+| `blend` | enum normal/multiply/screen/overlay/darken/lighten/colour-dodge/colour-burn/hard-light/soft-light/vivid-light/linear-light/pin-light/hard-mix/difference/exclusion/hue/saturation/colour/luminosity |  |  |  | `"normal"` | Blend mode B(back, top), the W3C set and Photoshop's vivid light, linear light, pin light and hard mix: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), except the contrast modes overlay, hard light, soft light, vivid light, linear light, pin light and hard mix, which act on the display-encoded channels (the sRGB curve) so they switch at display mid-grey, as in Photoshop; hue, saturation, colour and luminosity act in OkLCh. The amount mixes in the entry's encoding. A mode other than normal needs a working encoding (rgb or oklab). |
 
 ## `curve`
 

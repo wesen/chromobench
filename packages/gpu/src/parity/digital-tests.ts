@@ -181,6 +181,8 @@ export const DIGITAL_TESTS: Record<string, T> = {
       blends: printDocument(f.sha, [
         ['mu', L('curve', { points: P('mu', [[0, 0], [0.5, 0.42], [1, 1]]) }, { blend: 'multiply', amount: 0.5 })],
         ['sc', L('exposure', { stops: -1 }, { blend: 'screen', amount: 0.6 })],
+        ['ov', L('exposure', { stops: 0.4 }, { blend: 'overlay', amount: 0.8 })],
+        ['ll', L('exposure', { stops: -0.3 }, { blend: 'linear-light', amount: 0.5 })],
         ['lu', L('curve', { points: P('lu', [[0, 0], [0.4, 0.3], [1, 1]]) }, { blend: 'luminosity' })],
         ['co', L('vibrance', { vibrance: 0.6, saturation: 0.2 }, { blend: 'colour', amount: 0.8 })],
         ['iso', groupEntry('tone', coll([['i1', L('exposure', { stops: 0.4 })], ['i2', L('vibrance', { vibrance: 1 })]]) as never, { blend: 'luminosity', mask: 'spot', amount: 0.9 })],

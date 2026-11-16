@@ -134,7 +134,7 @@ export const compositeOps: OpDef[] = [
       top: { type: 'Image', doc: 'What the entry made from the backdrop (its op applied, or a group\'s children).' },
       amount: { type: 'number', unit: 'fraction', min: 0, max: 1, default: 1, doc: 'Opacity.' },
       mask: { type: 'Mask', optional: true, doc: 'Coverage; absent = everywhere.' },
-      blend: { type: 'enum', values: [...BLEND_MODES], default: 'normal', doc: 'Blend mode B(back, top), the W3C set: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), hue, saturation, colour and luminosity in OkLCh. A mode other than normal needs a working encoding (rgb or oklab).' },
+      blend: { type: 'enum', values: [...BLEND_MODES], default: 'normal', doc: 'Blend mode B(back, top), the W3C set and Photoshop\'s vivid light, linear light, pin light and hard mix: normal is top; the separable modes act per channel in linear RGB (an OkLab entry is converted for B and back), except the contrast modes overlay, hard light, soft light, vivid light, linear light, pin light and hard mix, which act on the display-encoded channels (the sRGB curve) so they switch at display mid-grey, as in Photoshop; hue, saturation, colour and luminosity act in OkLCh. The amount mixes in the entry\'s encoding. A mode other than normal needs a working encoding (rgb or oklab).' },
     },
     doc: 'The composite law per entry (design §4, §22): out = back + a·m·(B(back, top) − back), in the encoding back and top share. The receiver is the backdrop. mixPixel (pixel.ts) is the mix; core composite/blend.ts defines B.',
   }),

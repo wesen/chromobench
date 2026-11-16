@@ -2,10 +2,12 @@
 // functions, the colour tools, the blend modes and their laws (design §37: identity at amount 0 and at identity params,
 // blend identities, curve monotonicity), and documents through compile on the M1 negative and a camera file.
 import { describe, expect, it } from 'vitest';
-import { BLEND_MODES, compile, edit, mixPixel, newDocument, type BlendMode, type Document } from '@chromobench/contract';
+import {
+  BLEND_MODES, blendChannel, compile, CONTRAST_BLENDS, displayDecode, displayEncode, edit, mixPixel, newDocument, type BlendMode, type Document,
+} from '@chromobench/contract';
 import { Coll, insert, type Json } from '@chromobench/values';
 import {
-  applyEncode, blendChannel, blendPixel, colourAt, D50, D65, encodeTransform, evalCurve, evalLevels, gradeAt, gradeWheels, hslAt, hslBands,
+  applyEncode, blendPixel, colourAt, D50, D65, encodeTransform, evalCurve, evalLevels, gradeAt, gradeWheels, hslAt, hslBands,
   mixerMatrix, oklabToRgb, radialAt, rgbToOklab, toneCurve, vibranceAt, vibranceGain, vignetteGain, xyzToWorking, mulMV, RefEngine, nodePacksData,
 } from '../src/index.ts';
 import { component, compiled, G, L, m1Engine, maskOf, pixels, push, withEdits } from './doc-helpers.ts';
@@ -215,6 +217,50 @@ describe('blend modes: the laws', () => {
     expect(blendChannel('colour-burn', 0.7, 0.5)).toBeCloseTo(0.4, 15);
     expect(blendChannel('colour-dodge', 0, 1)).toBe(0);
     expect(blendChannel('colour-burn', 1, 0)).toBe(1);
+  });
+
+  it("Photoshop's vivid, linear and pin light and hard mix on [0, 1]", () => {
+    expect(blendChannel('vivid-light', 0.6, 0.25)).toBeCloseTo(1 - 0.4 / 0.5, 15); // burn by 2s
+    expect(blendChannel('vivid-light', 0.3, 0.75)).toBeCloseTo(0.3 / 0.5, 15); // dodge by 2s − 1
+    expect(blendChannel('linear-light', 0.3, 0.6)).toBeCloseTo(0.5, 15);
+    expect(blendChannel('linear-light', 0.9, 0.9)).toBe(1);
+    expect(blendChannel('pin-light', 0.6, 0.2)).toBeCloseTo(0.4, 15);
+    expect(blendChannel('pin-light', 0.3, 0.9)).toBeCloseTo(0.8, 15);
+    expect(blendChannel('hard-mix', 0.4, 0.6)).toBe(1);
+    expect(blendChannel('hard-mix', 0.4, 0.59)).toBe(0);
+  });
+});
+
+describe('the contrast modes switch at display mid-grey (D7, contract 1.5)', () => {
+  const grey = displayDecode(0.5); // linear 0.214
+  const r = rng(9);
+  it('the display encoding is the sRGB curve, odd below 0, and its inverse', () => {
+    expect(grey).toBeCloseTo(0.21404, 5);
+    for (const v of [-2, -0.5, -0.001, 0, 0.002, 0.0031308, 0.1, 0.5, 1, 3]) expect(displayDecode(displayEncode(v))).toBeCloseTo(v, 12);
+    expect(displayEncode(1)).toBeCloseTo(1, 15);
+  });
+
+  it('a source at display mid-grey leaves the backdrop unchanged in overlay\'s kin; before D7 that was linear ½', () => {
+    for (const m of CONTRAST_BLENDS.filter((x) => x !== 'hard-mix')) {
+      for (let n = 0; n < 50; n++) {
+        const b = [r(), r(), r()];
+        expect(close(blendPixel(m, b, [grey, grey, grey], 'linear'), b, 1e-12), m).toBe(true);
+      }
+    }
+    // overlay multiplies below display mid-grey and screens above it, on the encoded values
+    const se = displayEncode(0.7);
+    const at = (be: number): number => blendPixel('overlay', [displayDecode(be), 0, 0], [0.7, 0, 0], 'linear')[0];
+    expect(at(0.4)).toBeCloseTo(displayDecode(2 * 0.4 * se), 12);
+    expect(at(0.6)).toBeCloseTo(displayDecode(1 - 2 * 0.4 * (1 - se)), 12);
+    // hard mix thresholds b + s at 1 in the encoding: the backdrop's display complement
+    expect(blendPixel('hard-mix', [grey, grey, grey], [grey * 1.01, 0.1, 0.1], 'linear')).toEqual([1, 0, 0]);
+  });
+
+  it('the other separable modes stay in linear light', () => {
+    for (const m of BLEND_MODES.filter((x) => !CONTRAST_BLENDS.includes(x) && !['hue', 'saturation', 'colour', 'luminosity'].includes(x))) {
+      const b = [0.3, 0.1, 0.8], s = [0.6, 0.2, 0.05];
+      expect(blendPixel(m, b, s, 'linear')).toEqual(b.map((v, k) => blendChannel(m, v, s[k]!)));
+    }
   });
 });
 

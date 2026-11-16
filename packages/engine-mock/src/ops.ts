@@ -2,7 +2,7 @@
 // in the same direction as the physics (more red light → more cyan print; longer time → darker).
 // Formulas: CHB-002 guide §5.10.
 import {
-  DOMAINS, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
+  blendSeparable, DOMAINS, encodingOfDomain, fail, lightH, LOGH_PER_POINT, maskCombine, mixPixel, mulberry32, NON_SEPARABLE_BLENDS, straighten,
   type BlendMode, type Box, type Cmy, type Domain, type ImageInfo, type LightTermSample, type Point, type Vec3,
 } from '@chromobench/contract';
 
@@ -330,24 +330,7 @@ function polyline(points: readonly { x: number; y: number }[]): (v: number) => n
   };
 }
 const smoothstep = (e0: number, e1: number, x: number): number => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
-/** The W3C separable blend of one channel. */
-function blendChannel(mode: BlendMode, b: number, s: number): number {
-  switch (mode) {
-    case 'multiply': return b * s;
-    case 'screen': return b + s - b * s;
-    case 'overlay': return b <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
-    case 'darken': return Math.min(b, s);
-    case 'lighten': return Math.max(b, s);
-    case 'colour-dodge': return b <= 0 ? 0 : s >= 1 ? 1 : Math.min(1, b / (1 - s));
-    case 'colour-burn': return b >= 1 ? 1 : s <= 0 ? 0 : 1 - Math.min(1, (1 - b) / s);
-    case 'hard-light': return s <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
-    case 'soft-light': return s <= 0.5 ? b - (1 - 2 * s) * b * (1 - b) : b + (2 * s - 1) * ((b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b)) - b);
-    case 'difference': return Math.abs(b - s);
-    case 'exclusion': return b + s - 2 * b * s;
-    default: return s;
-  }
-}
-/** B(b, s) of one pixel in encoding e: separable modes per channel in linear RGB, the others on OkLab's L and chroma. */
+/** B(b, s) of one pixel in encoding e: separable modes per channel in linear RGB (the contrast modes in the display encoding: contract blendSeparable), the others on OkLab's L and chroma. */
 function blend(mode: BlendMode, b: number[], s: number[], e: Enc): number[] {
   if (mode === 'normal') return s;
   if (NON_SEPARABLE_BLENDS.includes(mode)) {
@@ -360,7 +343,7 @@ function blend(mode: BlendMode, b: number[], s: number[], e: Enc): number[] {
     return e === 'oklab' ? r : fromLinear(fromOklab(r), e);
   }
   const bl = toLinear(b, e), sl = toLinear(s, e);
-  return fromLinear([0, 1, 2].map((k) => blendChannel(mode, bl[k]!, sl[k]!)), e);
+  return fromLinear([0, 1, 2].map((k) => blendSeparable(mode, bl[k]!, sl[k]!)), e);
 }
 
 export const IMAGE_OPS: Record<string, ImageOp> = {

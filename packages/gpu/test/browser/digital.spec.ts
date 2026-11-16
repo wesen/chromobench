@@ -21,16 +21,16 @@ test('digital layers: every op and encoding matches the reference engine', async
   for (const [k, d] of Object.entries(r)) expect(d.maxAbs, k).toBeLessThanOrEqual(2e-5);
 });
 
-test('blend modes: all 16, fused into the pointwise kernel and as a masked pass, in linear RGB and OkLab', async ({ page }) => {
+test('blend modes: all 20 (the contrast modes in the display encoding), fused into the pointwise kernel and as a masked pass, in linear RGB and OkLab', async ({ page }) => {
   const r = await run(page, 'law:blend');
   expect(r.error).toBeUndefined();
   expect(r.fusedCount).toBe(r.total);
   expect(r.saveMix).toBe(true);
   expect(r.top).toEqual(['hsl', 'curve']);
   // a separable mode in OkLab converts both colours to RGB and its result back: where the result's LMS nears 0
-  // (exclusion of two light colours), the cube root's slope amplifies f32 rounding (SwiftShader: 1.1e-4 in OkLab, a third
-  // of an 8-bit level); everywhere else 1e-5
-  const sep = new Set(['multiply', 'screen', 'overlay', 'darken', 'lighten', 'colour-dodge', 'colour-burn', 'hard-light', 'soft-light', 'difference', 'exclusion']);
+  // (exclusion of two light colours), the cube root's slope amplifies f32 rounding (SwiftShader: 1.1e-4 in OkLab, 0.03 of
+  // an 8-bit level); everywhere else 1e-5
+  const sep = new Set(['multiply', 'screen', 'overlay', 'darken', 'lighten', 'colour-dodge', 'colour-burn', 'hard-light', 'soft-light', 'vivid-light', 'linear-light', 'pin-light', 'hard-mix', 'difference', 'exclusion']);
   for (const [k, d] of Object.entries(r.modes as Record<string, { fused: number; masked: number }>)) {
     const bound = k.startsWith('oklab') && sep.has(k.slice(6)) ? 3e-4 : 2e-5;
     expect(d.fused, `${k} fused`).toBeLessThanOrEqual(bound);
@@ -43,7 +43,10 @@ test('documents with print stacks (every op, masks, blends, groups) match the re
   expect(r.error).toBeUndefined();
   for (const k of ['tone', 'colour', 'masked', 'blends']) {
     expect(r[k].display.max8bit, k).toBeLessThanOrEqual(1);
-    expect(r[k].finished.maxAbs, k).toBeLessThanOrEqual(3e-4);
+    // the contrast modes (overlay, linear light here) blend display-encoded values (D7): the sRGB curve's slope in the
+    // darks (up to 12.92) amplifies the stack's upstream f32 error (9.8e-5 without them; 4.3e-4 with them on SwiftShader);
+    // the blend kernels alone agree with core to 2e-6 (law:blend)
+    expect(r[k].finished.maxAbs, k).toBeLessThanOrEqual(k === 'blends' ? 8e-4 : 3e-4);
   }
   expect(r.colour.fusedMixes).toBeGreaterThanOrEqual(1); // the mixer at 0.7 fuses
   expect(r.blends.fusedMixes).toBeGreaterThanOrEqual(3);
