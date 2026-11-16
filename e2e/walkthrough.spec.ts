@@ -275,6 +275,12 @@ test('a roll: frames link to the roll, an override, sync, a look over the roll, 
   const before = await hook<number>(page, 'cb.log.cursor');
   await page.locator('.ck-menubar-t', { hasText: 'Settings' }).click();
   await page.locator('.ck-menu-i[data-command="looks.sync"]').click();
+  // D4 (CHB-046): Sync asks in the page; it copies values unless he chooses Link
+  const sync = page.getByRole('dialog');
+  await expect(sync).toContainText('Sync copies the values of');
+  await expect(sync.getByRole('radio', { name: /Copy values/ })).toBeChecked();
+  await expect(sync.getByRole('radio', { name: /Link/ })).not.toBeChecked();
+  await sync.getByRole('button', { name: 'Sync 2 frames' }).click();
   await idle(page);
   expect(await hook<number[]>(page, `${JSON.stringify(ids)}.map((f) => cb.studio.doc(f).stages.darkroom.stack.items.main.params.time_s)`)).toEqual([9, expect.any(Number), 9, 9]);
   expect(await hook<number>(page, 'cb.log.cursor')).toBe(before + 1);

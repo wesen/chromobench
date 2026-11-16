@@ -6,6 +6,7 @@ import { canonicalJSON, remove, set, transaction, type Batch, type Log, type Mut
 import { bakeLink, insertLink, lookAsPreset, removeLink, setLinkAmount, type Document, type Entry, type Preset } from '@chromobench/contract';
 import type { Cb } from '../../../src/cb.ts';
 import { read } from '../../../src/model/doc.ts';
+import { modelAt } from '../../../src/kit/args.ts';
 import { sel } from '../../../src/sel.ts';
 import { presetToFile, readPresetFile } from './engine/files.ts';
 import { appliedKey, changing, newBatchId, type LookItem } from './engine/looks.ts';
@@ -35,7 +36,9 @@ export function looksCommands(cb: Cb, M: LooksModel): CommandTable {
     if (!f || !r) return null;
     const to = selection(ctx.state).filter((x) => x !== f);
     const groups = looksView(ctx.state).groups;
-    const lines = copyLines(copyValues(r, groups, linksFor(ctx, f)), copiedLinks(r, groups), r);
+    // what is copied in his words: each value's control label (Time, Printer lights, Paper…), then the looks by name
+    const values = copyValues(r, groups, linksFor(ctx, f));
+    const lines = [...new Set([...values.map((v) => modelAt(v.path, r)?.label ?? v.path.split('.').pop()!), ...copiedLinks(r, groups).map((l) => l.name)])];
     let choice: SyncMode = 'copy';
     const body = (el: HTMLElement): Node => syncBody(el, { from: nameOf(ctx, f), to: to.map((x) => nameOf(ctx, x)), groups, lines, choose: (x) => (choice = x) });
     const yes = await ctx.rt.chrome.dialog({
