@@ -37,11 +37,12 @@ const PROFILE_FILES: Record<OutputSpaceId, { v4: string; v2: string; label: stri
 };
 
 /**
- * cICP code points (H.273 Table 2 primaries, Table 3 transfer): sRGB is BT.709 primaries (1) with the
- * IEC 61966-2-1 transfer (13); Display P3 is SMPTE EG 432-1 primaries (12) with the same transfer. None
- * for Adobe RGB and ProPhoto (H.273 has no code points), and none for Rec.2020 until its transfer is
- * decided (guide §9). Review note (task bk2k): the sRGB value (1, 13, 0, 1) is from H.273 as recalled,
- * not checked against the recommendation's text.
+ * cICP code points (PNG-3 §11.3.2.6: the parameters of the same names in ITU-T H.273): sRGB is ColourPrimaries 1
+ * (Rec. ITU-R BT.709-6) with TransferCharacteristics 13 (IEC 61966-2-1 sRGB, "with MatrixCoefficients equal to 0"),
+ * MatrixCoefficients 0 (identity: RGB, the only colour model PNG allows) and VideoFullRangeFlag 1; Display P3 is
+ * ColourPrimaries 12 (SMPTE EG 432-1) with the same transfer, PNG-3's Example 4 ("Display P3, full-range": 0C 0D 00 01).
+ * Checked against H.273 (07/2021) as transcribed by colour-science and the PNG-3 Recommendation (CHB-047 OUT-6). None
+ * for Adobe RGB and ProPhoto (H.273 has no code points), and none for Rec.2020 until its transfer is decided (guide §9).
  */
 const CICP: Partial<Record<OutputSpaceId, readonly [number, number, number, number]>> = {
   'srgb': [1, 13, 0, 1],

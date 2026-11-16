@@ -22,7 +22,7 @@ RelatedFiles:
     - Path: repo://ttmp/2026/11/11/CHB-001--source-import-and-analysis-colour-negative-modelling-for-a-darkroom-suite/various/extracted/chromogen-studio/st-data/book/10-ch10.md
       Note: The Studio's own output order and encoding, and its not-built list (ICC soft proofing, output sharpening)
     - Path: repo://ttmp/2026/11/11/CHB-001--source-import-and-analysis-colour-negative-modelling-for-a-darkroom-suite/various/extracted/chromogen-studio/st-data/cg/stocks/kodak_portra_endura.json
-      Note: Paper data behind the paper white (Y 0.813) and Dmax (2.37) used in the two renderings
+      Note: 'The Portra Endura paper stock (listed, not parsed here). The paper white (Y 0.813) and Dmax (2.37) used in the two renderings come from the textbook §2.7 single-pass reflectance model, not from this file (CHB-047 OUT-6)'
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-11-11T10:38:25.023901516-05:00
@@ -110,7 +110,7 @@ A **colour management module** (CMM) such as Little CMS (lcms2) chains two profi
 
 **Black point compensation** (BPC) additionally maps the source's black to the destination's black, so shadows do not block up.
 
-**Embedding.** PNG carries a profile in an `iCCP` chunk (W3C *PNG Specification, Third Edition*, a Recommendation of 24 June 2025, §11.3.2.3: profile name of 1–79 bytes, a null byte, compression method 0, then the zlib-compressed profile). The same edition adds `cICP` (§11.3.2.6), four bytes of ITU-T H.273 code points: colour primaries, transfer function, matrix coefficients (always 0 for RGB) and a full-range flag. Display P3 is `12, 13, 0, 1`; sRGB is `1, 13, 0, 1`. When several colour chunks are present, `cICP` takes precedence over `iCCP`, which takes precedence over `sRGB`, which takes precedence over `cHRM`/`gAMA`; `iCCP` and `sRGB` should not both be present (§4.3 Table 1 and §5.6 Table 7). TIFF carries a profile as tag 34675 (`InterColorProfile`, type UNDEFINED), the whole profile byte for byte, as defined in Annex B of the ICC specification.
+**Embedding.** PNG carries a profile in an `iCCP` chunk (W3C *PNG Specification, Third Edition*, a Recommendation of 24 June 2025, §11.3.2.3: profile name of 1–79 bytes, a null byte, compression method 0, then the zlib-compressed profile). The same edition adds `cICP` (§11.3.2.6), four bytes of ITU-T H.273 code points: colour primaries, transfer function, matrix coefficients (always 0 for RGB) and a full-range flag. Display P3 is `12, 13, 0, 1` (PNG-3 §11.3.2.6 Example 4: Display P3, full range, `0C 0D 00 01`); sRGB is `1, 13, 0, 1` (H.273 (07/2021) ColourPrimaries 1 = Rec. ITU-R BT.709-6, TransferCharacteristics 13 = IEC 61966-2-1 sRGB "with MatrixCoefficients equal to 0", MatrixCoefficients 0 = identity (RGB), VideoFullRangeFlag 1; checked in CHB-047 OUT-6). When several colour chunks are present, `cICP` takes precedence over `iCCP`, which takes precedence over `sRGB`, which takes precedence over `cHRM`/`gAMA`; `iCCP` and `sRGB` should not both be present (§4.3 Table 1 and §5.6 Table 7). TIFF carries a profile as tag 34675 (`InterColorProfile`, type UNDEFINED), the whole profile byte for byte, as defined in Annex B of the ICC specification.
 
 ### 2.4 Gamut, knees, and why compression comes last
 
