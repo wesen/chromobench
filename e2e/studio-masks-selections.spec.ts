@@ -149,8 +149,11 @@ test('MASK-4 and MASK-3: the radial gesture shows before release; handles move a
   await run(page, 'tool.mask-paint');
   await expect(page.locator(`${MASKS} .cb-stack-brush`)).toBeVisible();
   expect(await run(page, 'mask.brush', { size: 30, flow: 0.5 })).toMatchObject({ size: 30, flow: 0.5 });
-  await drag(page, [0.1 * W, 0.8 * H], [0.9 * W, 0.8 * H]);
+  await page.evaluate(() => void ((window as unknown as { ms: { print: number[]; cover: number[] } }).ms = { print: [], cover: [] }));
+  await drag(page, [0.1 * W, 0.8 * H], [0.9 * W, 0.8 * H], { steps: 16 });
   await idle(page);
+  const bms = await page.evaluate(() => (window as unknown as { ms: { print: number[]; cover: number[] } }).ms);
+  console.log(`${W}×${H}: brush stroke (16 moves), picture renders ${bms.print.length} (ms ${bms.print.map((x) => x.toFixed(1)).join(' ')}), cover renders ${bms.cover.length} (ms ${bms.cover.map((x) => x.toFixed(1)).join(' ')})`);
   const strokes = await hook<{ items: Record<string, { radius: number; flow?: number }> }>(page, `cb.get('m1c2.params.strokes')`);
   expect(Object.values(strokes.items)[0]).toMatchObject({ radius: 30, flow: 0.5 });
   await run(page, 'tool.none');
