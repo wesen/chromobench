@@ -21,4 +21,6 @@ export * from './model/history.ts';
 export * from './model/arrangement.ts';
 export * from './model/tools.ts';
 export * from './model/settings.ts';
+export * from './model/enlarger-mode.ts';
+export * from './model/aim.ts';
 export * from './model/doc.ts';

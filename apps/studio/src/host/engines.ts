@@ -11,9 +11,10 @@
 import type { Box, Document, Engine, Group, Vec3 } from '@chromobench/contract';
 import type { Mutation } from '@chromobench/values';
 import {
-  applyEncode, bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, encodeTransform, evalCurve, evalLevels, integrateToGrey, Lights, SCANNER_IDS,
-  scannerForward, toneCurve, type PhysicsData,
+  applyEncode, bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, encodeTransform, evalCurve, evalLevels, integrateToGrey, Lights, modeShiftLogH,
+  PhysicsEnv, SCANNER_IDS, scannerForward, toneCurve, type PhysicsData,
 } from '@chromobench/core';
+import type { DarkroomMath } from '@chromobench/studio-kit';
 import { GpuEngine, loadDefaultPhysicsData } from '@chromobench/gpu';
 import {
   classifyImage, dustGroup, filmLayout, openPrior, rankStocks, RAW_EXTENSIONS, rollBase, sigmaD, workerRawDecoder, type FrameBase, type RawDecoder,
@@ -89,12 +90,20 @@ export function buildEditorMath() {
 }
 export type HostEditorMath = ReturnType<typeof buildEditorMath>;
 
+/** core's darkroom numbers for the studio's commands (one PhysicsEnv: its chains are cached per setting). */
+function buildDarkroomMath(data: PhysicsData): DarkroomMath {
+  const env = new PhysicsEnv(data, DEFAULT_CONVENTIONS);
+  return { modeShift: (s) => modeShiftLogH(env, s) };
+}
+
 export interface HostEngine {
   engine: StudioEngine;
   /** The service `editorMath` of the stack kit's editors (CHB-037 P8b). */
   editorMath: HostEditorMath;
   /** The service `rollPhysics` of the roll kit (CHB-020). */
   rollPhysics: HostRollPhysics;
+  /** The service `darkroomMath`: the enlarger modes' shift, so Real ↔ Normalised keeps the print (CHB-046, F44). */
+  darkroomMath: DarkroomMath;
   /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
   catalog: Record<string, string[]>;
   integrate: IntegrateToGrey;
@@ -267,6 +276,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   journal.info('engine', `engine: ${engine.label}`, { code: 'ENGINE', data: { id: primary.id, long, worker: client !== null, ...(why ? { why } : {}) } });
   return {
     engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []), editorMath: buildEditorMath(),
+    darkroomMath: buildDarkroomMath(data),
     bake: (d) => bakeLights(d, data, DEFAULT_CONVENTIONS).mutations,
     dustGroup: (spots) => dustGroup(spots),
     integrate: (latd, alpha) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as Vec3,

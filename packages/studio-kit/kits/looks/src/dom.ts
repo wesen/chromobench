@@ -203,7 +203,8 @@ const groups = form('cb-looks-groups', (el, v, m) => {
   const paste = btn('Paste', '', { id: 'looks-paste' });
   run(m, paste, 'looks.paste');
   const sync = btn(v.mode === 'link' ? 'Link selection' : 'Sync to selection', '', { id: 'looks-sync' });
-  run(m, sync, 'looks.sync');
+  // the panel's own choice (Copy values / Link above) is explicit: no dialog
+  run(m, sync, 'looks.sync', v.mode);
   el.append(mode, h('div', { class: 'cb-dim', id: 'looks-sync-says', text: v.mode === 'link' ? 'The selected frames will link one preset made from this frame’s layers: a change to it reaches all of them.' : 'The selected frames get copies of this frame’s values and looks: each is on its own afterwards.' }), h('div', { class: 'cb-looks-actions' }, copy, paste, sync));
   if (v.clipboard) el.append(h('div', { class: 'cb-dim', id: 'looks-clipboard', text: `Copied from ${v.clipboard.from}: ${v.clipboard.lines.join(', ') || 'nothing'}` }));
 });

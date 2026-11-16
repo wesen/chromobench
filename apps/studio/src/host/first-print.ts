@@ -13,11 +13,11 @@
 // image is larger, so the GPU engine (4000 px) and the CPU engine (640 px) meter the same picture and propose the same Time.
 import { compile, cutNode, documentKind, edit, Graph, type Box, type Document, type Engine, type FrameKind, type Node, type ScanMedium, type Vec3 } from '@chromobench/contract';
 import { set, type Mutation } from '@chromobench/values';
-import { darkroomMedium, layerOf, LIGHTS, LIGHTS_PATH, lightsOf, mainExposure, TIME_PATH } from '@chromobench/studio-kit';
+import { darkroomMedium, firstPrintLights, layerOf, LIGHTS, LIGHTS_PATH, lightsOf, mainExposure, NEUTRALISE, TIME_PATH, type IntegrateToGrey } from '@chromobench/studio-kit';
 import type { AnalysisImage } from './studio-engine.ts';
 
-/** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights. */
-export type IntegrateToGrey = (frameLatd: Vec3, alpha: number) => Vec3;
+/** Core's integrateToGrey with aim LATD 0 and aim lights 0: frame LATD (relative to the aim) → lights (studio-kit's type). */
+export type { IntegrateToGrey };
 
 /**
  * A lab printer's subject-failure rule (CHB-031 F30): the pixels the integration leaves out, so that a large area
@@ -52,27 +52,29 @@ export const LAB_SUBJECT_FAILURE: Readonly<SubjectFailure> = { chroma: 0.1, trim
 
 /**
  * THE setting: the first print's aim per kind of frame (one place; main.ts and the scripts read it).
- * - A negative integrates the whole frame to grey (density and alpha 1, no subject-failure rule). The owner kept
- *   this neutral aim (2026-11-14, F30: Negative Lab Pro prints his Epson scans warmer and more saturated; the
- *   numbers for other alphas and for LAB_SUBJECT_FAILURE are in CHB-031 diary 04). Try another aim with
- *   ?alpha=0.75&subjectFailure=1.
+ * - A negative prints its whole density at the aim and its colour cast neutralised by 75 % (D8, CHB-046: one aim for
+ *   the roll and the studio, studio-kit's NEUTRALISE; the photographer changes it as "Neutralise", prefs.neutralise).
+ *   Until CHB-046 the studio integrated a negative fully to grey (alpha 1, F30) while the Roll module kept a quarter of
+ *   the cast; the numbers for other alphas and for LAB_SUBJECT_FAILURE are in CHB-031 diary 04. Try another aim with
+ *   ?alpha=1&subjectFailure=1.
  * - A photo keeps the camera's as-shot white balance as its colour (alpha 0) and moves half way from the camera's
  *   exposure to the frame's integrated grey (density 0.5): a camera has metered the scene already, and the full
  *   integration prints large shadows and night scenes too light (a lab printer's density failure; diary 04, F31).
  *   Try another share with ?photoDensity=1.
  */
 export const FIRST_PRINT_AIM: Readonly<Record<FrameKind, Readonly<FirstPrintAim>>> = {
-  'negative-scan': { density: 1, alpha: 1, subjectFailure: null },
+  'negative-scan': { density: 1, alpha: NEUTRALISE, subjectFailure: null },
   'digital-raw': { density: 0.5, alpha: 0, subjectFailure: null },
 };
 
 /**
- * The aim for `kind`, with the page's overrides: for a negative `alpha` (0…1) and `subjectFailure` (`1` for
- * LAB_SUBJECT_FAILURE, `0` for none, or `chroma:0.12,trim:0.01`); for a photo `photoDensity` (0…1). A photo's colour
- * stays the camera's.
+ * The aim for `kind`: a negative's colour share is the photographer's Neutralise amount (`neutralise`, 0…1; default
+ * 75 %); the page's overrides: for a negative `alpha` (0…1) and `subjectFailure` (`1` for LAB_SUBJECT_FAILURE, `0` for
+ * none, or `chroma:0.12,trim:0.01`); for a photo `photoDensity` (0…1). A photo's colour stays the camera's.
  */
-export function firstPrintAim(kind: FrameKind, param: (k: string) => string | null = () => null): FirstPrintAim {
+export function firstPrintAim(kind: FrameKind, param: (k: string) => string | null = () => null, neutralise?: number): FirstPrintAim {
   const aim = { ...FIRST_PRINT_AIM[kind] };
+  if (kind === 'negative-scan' && neutralise !== undefined && Number.isFinite(neutralise)) aim.alpha = Math.min(1, Math.max(0, neutralise));
   const share = (k: string): number | null => {
     const v = Number(param(k) ?? NaN);
     return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null;
@@ -271,7 +273,8 @@ export async function firstPrint(engine: Engine, g: Graph, doc: Document, o: Fir
     const D0 = delta.map((v, k) => v - off[k]!) as Vec3;
     // core's integrate-to-grey (the mean in full, the colour by alpha), less the share of the density kept
     const kept = ((1 - density) * (D0[0] + D0[1] + D0[2])) / 3;
-    const want = o.integrate(D0.map((v) => -v) as Vec3, alpha).map((w) => w + kept) as Vec3;
+    // the colour: the first print's one aim (studio-kit firstPrintLights, as the Roll module's first prints)
+    const want = firstPrintLights(o.integrate, D0.map((v) => -v) as Vec3, alpha).map((w) => w + kept) as Vec3;
     const total = lights0.map((l, k) => l + want[k]!) as Vec3;
     // real: density (the mean) into the time, as at an enlarger; the colour remainder stays in the lights.
     // normalised: the time does nothing; density and colour both stay in the lights

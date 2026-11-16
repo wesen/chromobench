@@ -19,6 +19,7 @@ import { CB_FORMS } from './kit/forms.ts';
 import { frameRef, type ImageHandle } from './handles.ts';
 import { DARKROOM, allParameters, type Arrangement } from './model/arrangement.ts';
 import { DOCS, defaultDocument, LIGHTS_PATH } from './model/doc.ts';
+import { NEUTRALISE } from './model/aim.ts';
 import { VIEW_MODES, type ViewMode } from './model/settings.ts';
 import { ringTiles } from './model/tools.ts';
 import { sel, type CatalogFrame, type CbState } from './sel.ts';
@@ -41,6 +42,9 @@ import { maskCover } from '../kits/stack/src/overlay.ts';
 libraryRoot(new URL('.', import.meta.url).href);
 
 /** cb.core's state slices, typed by CbState (the kits declare theirs: ROLL_STATE, FINISH_STATE, LOOKS_STATE) */
+/** what Neutralise means, in his words (D8) */
+const NEUTRALISE_TIP = 'How much of each frame’s colour cast a first print takes out: 100 % prints it to neutral grey, 75 % keeps a quarter of a sunset’s warmth.';
+
 export const CORE_STATE: Pick<CbState, 'catalog' | 'ratings' | 'snapshots' | 'view' | 'ui' | 'prefs'> = {
   catalog: { frames: {}, order: [] },
   ratings: {},
@@ -55,7 +59,7 @@ export const CORE_STATE: Pick<CbState, 'catalog' | 'ratings' | 'snapshots' | 'vi
     showProposal: null,
     approvals: {},
   },
-  prefs: { agentMode: 'ask' },
+  prefs: { agentMode: 'ask', neutralise: NEUTRALISE * 100 },
 };
 
 /** the thumbnail context menu (CHB-027, F6) */
@@ -345,6 +349,19 @@ export function createCb(ck: Ck) {
       library: panel('cb.library', 'library', 'Library'),
       densitometer: panel('cb.densitometer', 'densitometer', 'Densitometer'),
       output: panel('cb.output', 'output', 'Save'),
+      /**
+       * D8 (CHB-046): the first print's colour aim as an amount he can change, "Neutralise" (prefs.neutralise, 75 % by
+       * default: a quarter of each frame's cast stays), used by the studio's first print and the Roll module's; "First
+       * print again" prints the current frame anew with it (where the host can).
+       */
+      firstPrint: (o: { id?: string } = {}) =>
+        ck.panel.define(
+          o.id ?? 'first-print',
+          { title: 'First print' },
+          ck.ui.slider({ min: 0, max: 100, step: 5, bind: (s: any) => s.prefs.neutralise, label: 'Neutralise', unit: '%', decimals: 0, reset: NEUTRALISE * 100, tip: NEUTRALISE_TIP } as any),
+          ck.text(NEUTRALISE_TIP, { dim: true, wrap: true }),
+          ck.ui.button({ run: 'print.firstPrint', text: 'First print again', small: true } as any),
+        ),
       navigator: (o: { id?: string } = {}) => ck.panel.define(o.id ?? 'navigator', { title: 'Navigator' }, ck.view.thumb({ image: (s: any) => sel.committed(s)?.print() ?? null, max: 240 } as any), ck.text((s: any) => sel.name(s) || 'No frame', { dim: true })),
     },
     /** the children while a frame is selected, else "Select a photo to print it." (CHB-031 F19) */
@@ -389,7 +406,7 @@ export function createCb(ck: Ck) {
               hud: cb.hud.readout(),
             }),
           )
-          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.kits['stack'].panels.exposures(), cb.kits['stack'].panels.params({ id: 'layer-params-print' }), cb.kits['stack'].panels.masks({ id: 'layer-masks-print' }), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
+          .right(ck.dock.column({ width: 300 }, cb.panels.tools(), cb.panels.densitometer(), cb.panels.controls('darkroom'), cb.panels.firstPrint(), cb.kits['stack'].panels.exposures(), cb.kits['stack'].panels.params({ id: 'layer-params-print' }), cb.kits['stack'].panels.masks({ id: 'layer-masks-print' }), cb.panels.approvals(), ...((o.extraRight ?? []) as any[])))
           .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-print' })))
           .keys({ ...cb.keys.views, ...cb.keys.darkroom }),
     },

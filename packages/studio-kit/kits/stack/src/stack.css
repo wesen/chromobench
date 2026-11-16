@@ -22,6 +22,12 @@
 .cb-stack-tw[hidden] { display: none; }
 .cb-stack-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .cb-stack-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-stack-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+/* D5 (CHB-046): a darkroom row's kind, whatever he named it; the Enlarger's one-line summary by kind */
+.cb-stack-kind { flex: none; font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 7px; color: var(--text2); background: var(--hover); border: 1px solid var(--line2); }
+.cb-stack-kind[hidden] { display: none; }
+.cb-stack-kinds { margin: 0 10px 4px; font-size: 11px; }
+.cb-stack-bykind.is-on { background: var(--accent); border-color: var(--accent); color: var(--onaccent); }
 .cb-stack-detail { color: var(--text3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .cb-stack-rename { flex: 1; height: 18px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--accent); border-radius: var(--radius, 2px); padding: 0 3px; }
 .cb-stack-blend { height: 20px; max-width: 8.5em; background: var(--field); color: var(--text); border: 1px solid var(--line2); border-radius: var(--radius, 3px); font: inherit; font-size: 11px; }

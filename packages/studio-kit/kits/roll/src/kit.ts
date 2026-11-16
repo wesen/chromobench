@@ -30,9 +30,10 @@ import { frameRef } from '../../../src/handles.ts';
 import { FILTRATION_PATH, LIGHTS_PATH, lightsOf, linksOf, mainExposure, read, TIME_PATH } from '../../../src/model/doc.ts';
 import { stockName } from '../../../src/model/names.ts';
 import type { Studio } from '../../../src/studio.ts';
-import { analyseRoll } from './engine/analyse.ts';
+import { analyseRoll, withNeutralise } from './engine/analyse.ts';
 import { plain, previewOf, staleDiagnostics, staleOf, withoutFrames, type MutationBatch } from './engine/batch.ts';
-import { ALPHA, ROLL_CONSISTENCY, ROLL_TX, rollField, SHARED_PATHS } from './engine/constants.ts';
+import { ROLL_CONSISTENCY, ROLL_TX, rollField, SHARED_PATHS } from './engine/constants.ts';
+import { neutraliseOf } from '../../../src/model/aim.ts';
 import { autoOf, clearMatchBatch, firstPrintBatch, handEdited, matchBatch, splitTotal, totalOf } from './engine/lower.ts';
 import { baseOfVeilFree, diverging, flareOfVeil, linkFrame, newRoll, rollValue, sharedOf, withRollValue, type FrameId, type Roll, type RollPhysics } from './engine/model.ts';
 
@@ -182,7 +183,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
     setView(ctx, 'error', null);
     try {
       const analysis = await analyseRoll(studio.engine, entries, physics, {
-        alpha: ALPHA,
+        // the first print's one aim (D8): his Neutralise amount
+        alpha: neutraliseOf(ctx.state),
         rejected: rejectedOf(ctx.state),
         onProgress: (done, total, frame) => setView(ctx, 'progress', { done, total, frame }),
         now: () => ctx.rt.clock?.now?.() ?? Date.now(),
@@ -216,7 +218,10 @@ export function createRollKit(ck: Ck, cb: Cb) {
     if (!roll?.analysis) return null;
     const pending = only ?? roll.frames.filter((f) => { const d = recipeOf(ctx)(f); return !d || !['roll', 'match'].includes(String(autoOf(d)['method'] ?? '')); });
     if (!pending.length) return null;
-    return firstPrintBatch(roll, recipeOf(ctx), { rejected: rejectedOf(ctx.state), consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, only: pending });
+    // D8: the first print with his Neutralise amount now (the analysis keeps each frame's LATD, so no new measurement)
+    const physics = physicsOf(ctx);
+    const at = physics ? { ...roll, analysis: withNeutralise(roll.analysis, neutraliseOf(ctx.state), physics) } : roll;
+    return firstPrintBatch(at, recipeOf(ctx), { rejected: rejectedOf(ctx.state), consistency: ctx.state.rollView?.consistency ?? ROLL_CONSISTENCY, only: pending });
   }
   /** the automatic first print of a new roll: applied at once, by 'auto', one undo step */
   function firstPrint(ctx: any, only?: FrameId[], of?: Roll): MutationBatch | null {
@@ -516,7 +521,8 @@ export function createRollKit(ck: Ck, cb: Cb) {
   const rollModule = (o: { id?: string } = {}) =>
     ck
       .module(o.id ?? 'roll', { label: 'Roll', key: 'Mod+Alt+R' })
-      .left(ck.dock.column({ width: 300 }, panels.library(), panels.setup()))
+      // D8: the first print's Neutralise amount, the same one the studio's first print uses
+      .left(ck.dock.column({ width: 300 }, panels.library(), cb.panels.firstPrint({ id: 'first-print-roll' }), panels.setup()))
       .center(contactSheet({ size: 180 }))
       .right(ck.dock.column({ width: 320 }, panels.balanceBar(), panels.inspector(), cb.panels.history({ id: 'history-roll' })))
       .keys(keys.cull);

@@ -3,8 +3,8 @@
 // seconds) changes nothing; real mode exposes the paper for the time, so a longer time prints darker.
 import { compile, edit, Graph, newDocument, type Document, type SourceInfo } from '@chromobench/contract';
 import { set, type Mutation } from '@chromobench/values';
-import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
-import { darkroomMedium, lightsOf, mainExposure, MODE_PATH, stripMutation, stripValues, TIME_PATH } from '@chromobench/studio-kit';
+import { DEFAULT_CONVENTIONS, integrateToGrey, Lights, modeShiftLogH, nodePacksData, PhysicsEnv, RefEngine } from '@chromobench/core';
+import { darkroomMedium, exposureSettingsOf, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, modeSwitch, referenceOpticsShift, stripMutation, stripValues, TIME_PATH } from '@chromobench/studio-kit';
 import { describe, expect, it } from 'vitest';
 import { FIRST_PRINT_AIM, firstPrint, measureExposure } from '../src/host/first-print.ts';
 
@@ -126,5 +126,68 @@ describe('enlarger mode and time (CHB-031 F17)', () => {
       expect(lightsMean(norm)).toBeCloseTo(lightsMean(real) + Math.log10(timeOf(real) / 10), 2);
       for (const r of [real, norm]) (await measureExposure(e, g, r)).forEach((v, k) => expect(Math.abs(v - colour0[k]!)).toBeLessThan(0.01));
     }
+  });
+});
+
+// CHB-046 (CHB-028 F44): switching a print between Real and Normalised darkened it (luma 105 → 52 in the session): the
+// mode's shift was dropped. modeSwitch carries it into the printer lights, so the print keeps its density.
+describe('Real ↔ Normalised keeps the print (CHB-046, F44)', () => {
+  const env = new PhysicsEnv(nodePacksData(), DEFAULT_CONVENTIONS);
+  const shift = (s: Parameters<typeof modeShiftLogH>[1]) => modeShiftLogH(env, s);
+  /** a corrected print away from the calibration: a long time, another aperture, some yellow, lights off zero */
+  const corrected = (r0: Document): Document => edit(r0, [set(TIME_PATH, 31.75), set('main.params.fstop', 11), set('main.params.filtration', { c: 0, m: 5, y: 15 }), set(LIGHTS_PATH, [0.05, -0.02, 0.03])]).doc;
+  const luma = (p: Float32Array): number => {
+    let s = 0;
+    for (let i = 0; i < p.length; i += 3) s += 0.2126 * p[i]! + 0.7152 * p[i + 1]! + 0.0722 * p[i + 2]!;
+    return (255 * s) / (p.length / 3);
+  };
+
+  for (const kind of ['negative-scan', 'digital-raw'] as const) {
+    it(`${kind}: the switch there and back keeps every pixel; the bare mode change does not`, async () => {
+      const { r0, print } = setup(kind);
+      const real = corrected(r0);
+      const p0 = await print(real);
+      // the bug: the mode alone (the time's density dropped)
+      const bare = await print(withEnlarger(real, { mode: 'normalised' }));
+      const s = modeSwitch(real, 'normalised', shift);
+      const norm = edit(real, s.mutations).doc;
+      expect(modeOf(norm)).toBe('normalised');
+      const p1 = await print(norm);
+      const before = luma(p0), dropped = luma(bare), kept = luma(p1);
+      expect(Math.abs(dropped - before)).toBeGreaterThan(2);
+      expect(Math.abs(kept - before)).toBeLessThan(0.05);
+      expect(maxDiff(p1, p0)).toBeLessThan(1e-4);
+      // and back: the same document as before (lights and time), the same print
+      const back = edit(norm, modeSwitch(norm, 'real', shift).mutations).doc;
+      expect(modeOf(back)).toBe('real');
+      expect(timeOf(back)).toBe(31.75);
+      lightsOf(back).forEach((l, k) => expect(l).toBeCloseTo(lightsOf(real)[k]!, 6));
+      expect(maxDiff(await print(back), p0)).toBeLessThan(1e-4);
+    });
+  }
+
+  it('the shift is the optics alone at the neutral pack (the fallback without the physics); a filter adds its cost in real mode', () => {
+    const { r0 } = setup('negative-scan');
+    const at = edit(r0, [set(TIME_PATH, 20), set('main.params.fstop', 5.6)]).doc;
+    const s = exposureSettingsOf(at);
+    expect(shift(s)).toBeCloseTo(referenceOpticsShift(s), 9);
+    expect(referenceOpticsShift(s)).toBeCloseTo(Math.log10(2) - 2 * Math.log10(5.6 / 8), 12);
+    // yellow in the pack: real mode (κ at the calibration pack) loses light that normalised mode renormalises away
+    const y = exposureSettingsOf(edit(at, [set('main.params.filtration', { c: 0, m: 0, y: 30 })]).doc);
+    expect(shift(y)).toBeLessThan(shift(s) - 0.01);
+    // no change when the document is in the mode already
+    expect(modeSwitch(at, 'real', shift).mutations).toEqual([]);
+  });
+
+  it('lights at their limit: the rest goes into the time on the way to real mode', () => {
+    const { r0 } = setup('negative-scan');
+    const norm = edit(r0, [set(MODE_PATH, 'normalised'), set(TIME_PATH, 10), set(LIGHTS_PATH, [-1.4, -1.45, -1.4])]).doc;
+    // a long time hidden in normalised mode: back in real mode its shift (≈ +0.6 log H) cannot come off the lights
+    const at = edit(norm, [set(TIME_PATH, 40)]).doc;
+    const r = modeSwitch(at, 'real', referenceOpticsShift);
+    const set_ = Object.fromEntries(r.mutations.map((m) => (m.op === 'set' ? [m.path, m.value] : [m.op, null])));
+    expect(set_[LIGHTS_PATH]).toEqual([-1.5, -1.5, -1.5]);
+    // what the lights could not take off comes off the time
+    expect(set_[TIME_PATH] as number).toBeLessThan(40);
   });
 });

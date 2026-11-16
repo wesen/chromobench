@@ -46,13 +46,16 @@ test('darkroom: the Enlarger is the darkroom stack; the digital palette is colla
   // the main exposure's controls sit in its row, the printer lights' pad in theirs
   await expect(enlarger.locator('.cb-stack-main .cb-arg[data-path="main.params.time_s"]')).toBeVisible();
   await expect(enlarger.locator('.cb-stack-main .cb-arg[data-path="lights.params.logH"]')).toBeVisible();
-  // a burn: ordered by kind (after the main exposure, before the printer lights' filter)
+  // a burn: in his order (D5, CHB-046: the order he made it, after the printer lights); By kind puts it before them
   await enlarger.locator('.cb-stack-add').click();
   await page.getByRole('menuitem', { name: 'Burn', exact: true }).click();
   // the rows redraw after the step lands: wait for the new row before reading their order
   await expect(enlarger.locator('.cb-stack-row')).toHaveCount(3);
   const ids = await enlarger.locator('.cb-stack-row').evaluateAll(rs => rs.map(r => (r as HTMLElement).dataset['id']));
-  expect(ids).toEqual(['main', 'burn1', 'lights']);
+  expect(ids).toEqual(['main', 'lights', 'burn1']);
+  await enlarger.locator('.cb-stack-bykind').click();
+  await expect.poll(() => enlarger.locator('.cb-stack-row').evaluateAll(rs => rs.map(r => (r as HTMLElement).dataset['id']))).toEqual(['main', 'burn1', 'lights']);
+  await enlarger.locator('.cb-stack-bykind').click();
   // the digital palette: closed, its title says it acts after the print
   const digital = panel(page, 'digital');
   await expect(digital).toContainText('Digital (after the print)');

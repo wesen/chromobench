@@ -12,7 +12,8 @@
 import type { LogEntry } from '@chromobench/values';
 import { documentKind, type Document, type Vec3 } from '@chromobench/contract';
 import { FILTRATION_PATH, FSTOP_PATH, GRADE_PATH, LIGHTS, layerOf, LIGHTS_PATH, lightsOf, mainExposure, MODE_PATH, read, TIME_PATH } from '../../../../src/model/doc.ts';
-import { ALPHA, LIGHTS_PATHS, ROLL_CONSISTENCY, ROLL_TX, TIME_MAX_S, TIME_MIN_S, TIME_REF_S } from './constants.ts';
+import { LIGHTS_PATHS, ROLL_CONSISTENCY, ROLL_TX, TIME_MAX_S, TIME_MIN_S, TIME_REF_S } from './constants.ts';
+import { NEUTRALISE } from '../../../../src/model/aim.ts';
 import { frameSets, type MutationBatch } from './batch.ts';
 import { meanVec, r6, r6v, type FrameId, type Roll, type RollPhysics } from './model.ts';
 
@@ -94,7 +95,7 @@ export interface FirstPrintOptions {
 export function firstPrintBatch(roll: Roll, recipeOf: (f: FrameId) => Document | undefined, o: FirstPrintOptions = {}): MutationBatch {
   const a = roll.analysis;
   if (!a) throw new Error('roll.firstPrint: analyse the roll first');
-  const alpha = o.alpha ?? a.alpha ?? ALPHA;
+  const alpha = o.alpha ?? a.alpha ?? NEUTRALISE;
   const r = o.consistency ?? ROLL_CONSISTENCY;
   const totals = rollTotals(roll, { consistency: r, ...(o.rejected ? { rejected: o.rejected } : {}) });
   const id = o.id ?? `${ROLL_TX}first-print-${roll.id}-${a.at}`;

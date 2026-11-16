@@ -165,7 +165,8 @@ export function createLooksKit(ck: Ck, cb: Cb) {
     modules: { print: printModule },
     menus: {
       /** Lightroom's Settings menu: copy, paste and sync a frame's settings (the everyday layouts' way to sync) */
-      settings: () => ck.menu('Settings', ['looks.copy', 'looks.paste', 'looks.sync', 'looks.syncMode']),
+      // D4: Sync asks (copy values by default, Link as an explicit choice in its dialog): no mode toggle in the menu
+      settings: () => ck.menu('Settings', ['looks.copy', 'looks.paste', 'looks.sync']),
       looks: () =>
         ck.menu('Looks', [
           'looks.apply', 'looks.applyToRoll', 'looks.applyToLibrary', '-', 'looks.survey.open', 'looks.preview', 'looks.setReference', 'looks.snapshot', '-',

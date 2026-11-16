@@ -377,8 +377,9 @@ on the two arrangements, agent layouts and looks persisted, this guide). The int
 
 ### Decisions taken
 
-- **First-print colour aim for scans** (CHB-026 F30): neutral grey (`FIRST_PRINT_AIM` alpha 1,
-  `apps/studio/src/host/first-print.ts`). The Roll module's `ALPHA = 0.75` keeps a quarter of each frame's cast.
+- **First-print colour aim for scans** (D8, CHB-046): one aim for the Roll module and the studio, neutralise 75 %
+  (a quarter of each frame's cast stays), `NEUTRALISE` and `firstPrintLights` in `packages/studio-kit/src/model/aim.ts`;
+  the photographer changes it as "Neutralise" (`prefs.neutralise`) in the First print panel (Classic's Print, Roll).
 - **RAW colour** (CHB-033): ours stays (the camera's colour matrix); no Adobe look table.
 - **No backwards compatibility** for saved edits across the CHB-037 cut-off (2026-11-14).
 

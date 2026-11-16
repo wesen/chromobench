@@ -107,6 +107,31 @@ export function rowsOf(doc: Document | null | undefined, stage: StageName, o: Ro
   return out;
 }
 
+/** A row's kind as a badge (D5, CHB-046): the op in his words ("Burn", "Dodge", "Contrast mask"), "Group", "Look". */
+export function kindBadge(e: Entry): string {
+  if (e.kind === 'layer') return opWord(e.op);
+  return e.kind === 'group' ? 'Group' : 'Look';
+}
+
+/**
+ * The darkroom by kind in one line (D5, CHB-046: the Enlarger lists his layers in his order and keeps this summary as
+ * a view): each kind in the light law's order (the main exposure, light added or held back, then filters and masks),
+ * counted over groups too: "Main exposure · Printer lights · Burn ×2 · Dodge".
+ */
+export function kindSummary(doc: Document | null | undefined, stage: StageName = 'darkroom'): string {
+  if (!doc?.stages[stage]) return '';
+  const counts = new Map<string, { n: number; rank: number; first: number }>();
+  entriesOf(doc, stage).forEach((p, i) => {
+    const e = p.entry;
+    if (e.kind === 'group') return;
+    const word = p.id === 'lights' ? 'Printer lights' : kindBadge(e);
+    const c = counts.get(word) ?? { n: 0, rank: rankOf(e), first: i };
+    c.n++;
+    counts.set(word, c);
+  });
+  return [...counts.entries()].sort((a, b) => a[1].rank - b[1].rank || a[1].first - b[1].first).map(([w, c]) => (c.n > 1 ? `${w} ×${c.n}` : w)).join(' · ');
+}
+
 /** A filter of rows by op (the finish view: `ops(['heal', 'clone', 'clarity'])`). */
 export const byOps = (ops: readonly string[]) => (p: Placed): boolean => p.entry.kind === 'layer' && ops.includes(p.entry.op);
 

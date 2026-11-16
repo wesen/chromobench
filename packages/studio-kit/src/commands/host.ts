@@ -37,6 +37,14 @@ export const hostCommands = (): CommandTable<CbState> => ({
   },
   // Export…: the host's dialog (format, colour space), else output.save (the Output panel's Save)
   'file.export': { label: 'Export…', ...needFrame, run: ctx => (ctx.rt.capable('host.exportPrint') ? host(ctx).exportPrint!() : ctx.run('output.save')) },
+  // D8 (CHB-046): the first print anew, with the Neutralise amount (a negative: a photo keeps the camera's colour)
+  'print.firstPrint': {
+    label: 'First Print Again',
+    requires: 'host.firstPrint',
+    enabled: s => !!sel.doc(s)?.stages.scan,
+    why: s => (sel.doc(s) ? 'A photo keeps the camera’s colour: its first print has no cast to neutralise' : 'Open a negative first'),
+    run: ctx => host(ctx).firstPrint!(sel.current(ctx.state)!),
+  },
   'file.saveDocument': { label: 'Save Document', ...needFrame, requires: 'host.saveDocument', run: ctx => host(ctx).saveDocument!() },
   'view.layout': {
     label: 'Layout…',

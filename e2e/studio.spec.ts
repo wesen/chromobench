@@ -55,13 +55,13 @@ test('a reload keeps the edit by hash; opening the file again re-attaches it', a
   await boot(page);
   await open(page);
   await expect(page.locator('.ck-side-bottom .ck-thumb[data-rendered]')).toHaveCount(1);
-  // a run of key presses on Filtration Y: three transactions that coalesce into one step at once
+  // a run of key presses on Filtration Y (5 CC each, CHB-046): three transactions that coalesce into one step at once
   const y = page.getByRole('slider', { name: 'Filtration Y' });
   await y.focus();
   for (let i = 0; i < 3; i++) await y.press('ArrowRight');
   await expect.poll(() => units(page)).toBe(1);
-  await expect(y).toHaveAttribute('aria-valuetext', /Y 3 CC/);
-  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +3 CC');
+  await expect(y).toHaveAttribute('aria-valuetext', /Y 15 CC/);
+  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +15 CC');
   const h1 = await hash(page);
   await page.evaluate(() => window.chromobench.studio.flush());
 
@@ -69,7 +69,7 @@ test('a reload keeps the edit by hash; opening the file again re-attaches it', a
   await expect(page.locator('#status')).toContainText('ready');
   await open(page);
   expect(await hash(page)).toBe(h1);
-  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +3 CC');
+  await expect(page.locator('#history')).toContainText('Filtration Y 0 → +15 CC');
 });
 
 test('a folder of scans opens every scan in it, the first one selected', async ({ page }) => {
@@ -218,7 +218,8 @@ test('tools: test strip band, ring-around tile, masks and darkroom layers, apply
     const ids = cb.studio.frames.ids();
     const primary = cb.studio.current!;
     cb.rt.ctx().set({ ui: { selection: { ids, primary, anchor: primary } } });
-    cb.run('print.applyToSelection');
+    // without asking (CHB-046: the menu asks in the page first; e2e/studio-editing-blockers.spec.ts covers that)
+    cb.run('print.applyToSelection', { ask: false });
   });
   await idle(page);
   const others = await page.evaluate(() => {

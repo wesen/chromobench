@@ -5,8 +5,8 @@
 export const ANALYSIS_LONG = 512;
 /** Pixels analysed for a frame's integrated exposure (the demo's first print uses 200 000). */
 export const EXPOSURE_PIXELS = 200_000;
-/** Colour correction share of integrate-to-grey (core's default). */
-export const ALPHA = 0.75;
+// The first print's colour share (integrate-to-grey α) is not a roll constant any more: D8 (CHB-046) made it one aim
+// for the roll and the studio, studio-kit's NEUTRALISE (src/model/aim.ts), an amount the photographer changes.
 /** First print: how far each frame's colour moves to the roll's mean colour (guide §6.3, open question 8.5). */
 export const ROLL_CONSISTENCY = 0.5;
 /** Top two stocks closer than this: the scan cannot tell them apart (W_ROLL_STOCK_AMBIGUOUS). Gold 200 and C200

@@ -41,7 +41,8 @@ test('classic print: a run of key presses is one step, Mod+Z undoes it, typed +1
   await t.locator('input[type=range]').focus();
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
   expect(await steps(page)).toBe(1);
-  expect(await time(page)).toBeCloseTo(14.142, 2);
+  // ⅓ stop per key (CHB-046): three presses are one stop
+  expect(await time(page)).toBeCloseTo(20, 2);
   await page.locator('.cb-hist').click();
   await page.keyboard.press('ControlOrMeta+z');
   expect(await steps(page)).toBe(0);

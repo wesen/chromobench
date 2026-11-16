@@ -25,3 +25,30 @@ export function copySettings(from: Document, to: Document, paths: readonly strin
 }
 
 export { getPath };
+
+/** One print setting Apply Print Settings would copy: its name, the source's value in his units, the frames it changes. */
+export interface SettingCopy {
+  path: string;
+  label: string;
+  value: string;
+  /** the targets whose value differs (their names) */
+  changes: string[];
+}
+
+/**
+ * What "Apply Print Settings to Selection" will do (CHB-046, P9-9: it copied silently from the last-clicked frame):
+ * every print setting that differs on at least one target, with the source's value as the controls show it and the
+ * targets it changes. `label` names a setting (the control's own label).
+ */
+export function settingsPlan(from: Document, targets: readonly { name: string; doc: Document }[], describe: (path: string) => { label: string; format(v: unknown): string } | null): SettingCopy[] {
+  const out: SettingCopy[] = [];
+  for (const p of PRINT_SETTINGS) {
+    const v = read(from, p);
+    if (v === undefined) continue;
+    const changes = targets.filter((t) => copySettings(from, t.doc, [p]).length > 0).map((t) => t.name);
+    if (!changes.length) continue;
+    const m = describe(p);
+    out.push({ path: p, label: m?.label ?? p, value: m ? m.format(v) : String(v), changes });
+  }
+  return out;
+}

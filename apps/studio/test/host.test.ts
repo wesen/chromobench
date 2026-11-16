@@ -118,18 +118,25 @@ describe('StudioEngine host ops', () => {
 describe('first print (core RefEngine)', () => {
   const integrate = (latd: number[], alpha: number) => [...integrateToGrey(latd, { latd: [0, 0, 0], lights: Lights.zero() }, alpha).logH] as [number, number, number];
 
-  it('integrates the frame to grey: real mode, time on the 1/6-stop grid, exposure ≈ aim', async () => {
+  it('integrates the frame to the aim, neutralising 75 % of its cast (D8): real mode, time on the 1/6-stop grid', async () => {
     const e = new RefEngine({ data: nodePacksData() });
     const info = await e.open({ kind: 'file', sha256: sha, bytes });
     const g = new Graph();
     g.registerSource(info);
     const r0 = neg(sha, info.width, info.height);
+    const x0 = await measureExposure(e, g, r0);
+    const m0 = (x0[0] + x0[1] + x0[2]) / 3;
     const r = await firstPrint(e, g, r0, { integrate });
     expect((r.stages.darkroom.medium as { mode: string }).mode).toBe('real');
     expect(gridTime(timeOf(r))).toBe(timeOf(r));
-    expect(autoOf(r)).toMatchObject({ kind: 'auto', method: 'integrate', alpha: 1, applied: true, logH: lightsOf(r) });
+    expect(autoOf(r)).toMatchObject({ kind: 'auto', method: 'integrate', alpha: 0.75, applied: true, logH: lightsOf(r) });
+    // the density at the aim; a quarter of the frame's cast kept (it was taken out in full until CHB-046)
     const x = await measureExposure(e, g, r);
-    for (const v of x) expect(Math.abs(v)).toBeLessThan(0.01);
+    expect(Math.abs((x[0] + x[1] + x[2]) / 3)).toBeLessThan(0.01);
+    x.forEach((v, k) => expect(Math.abs(v - 0.25 * (x0[k]! - m0))).toBeLessThan(0.01));
+    // with Neutralise 100 % the frame prints to grey
+    const grey = await firstPrint(e, g, r0, { integrate, aim: { alpha: 1 } });
+    for (const v of await measureExposure(e, g, grey)) expect(Math.abs(v)).toBeLessThan(0.01);
     // the colour remainder is in the lights, the density in the time: the lights' mean is within half a grid step
     const l = lightsOf(r);
     const m = (l[0] + l[1] + l[2]) / 3;

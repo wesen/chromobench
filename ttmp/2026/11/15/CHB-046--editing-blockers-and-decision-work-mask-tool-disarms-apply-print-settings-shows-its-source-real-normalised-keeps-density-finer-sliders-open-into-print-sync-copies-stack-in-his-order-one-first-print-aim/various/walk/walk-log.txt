@@ -1,0 +1,15 @@
+· boot: layout classic · module library
+· D1: after open, module print · neutralise 75 % · lights [0.020726,-0.016256,0.045449] · source alpha 0.75
+· F44: luma real 23.17 → normalised 23.17 → real 23.17; History: Auto Frame added | You Time 4.45 → 31.0 s (+2.8 stops) | You Enlarger mode Real enlarger (time and aperture) → Normalised (grey card at the aim); Printer lights +20 pt (all three) | You Enlarger mode Normalised (grey card at the aim) → Real enlarger (time and aperture); Printer lights −20 pt (all three)
+· P9-6: 60 px of Time from 10 s → 14 s
+· P9-9 dialog: Apply the print settings of roll-12-frame-1.tif? | From roll-12-frame-1.tif: the frame shown, outlined in the film strip. | Onto roll-12-frame-2.tif. | These settings are copied; the frames keep their other edits: | Time: 31.75 s | Printer lights: (+1, −1, +2) pt | One undo takes it back. | Cancel | Apply to 1 frame
+· P9-9: frame 2 time 31.75
+· D4 dialog: Sync the settings of roll-12-frame-1.tif? | Sync copies the values of roll-12-frame-1.tif onto roll-12-frame-2.tif: Film simulation, Paper, Exposure, Colour balance, Contrast, Dodge and burn, Looks, Finishing. | Copied: Time, Printer lights, Paper, Grade, Filtration, Aperture. |  Copy values — Each frame is on its own afterwards (as in Lightroom). Link — The frames share one preset made from this frame’s layers: a later change to it reaches all of them. | Cancel | Sync 1 frame
+· P9-1: after a click: tool mask-linear · masks 0
+· P9-1: after a drag: tool null · masks 1
+· P9-1: a later drag on the picture: masks 1
+· D5: rows ["Main exposure","Printer lights","Contrast mask [Density mask]","Burn","Dodge"] · summary Main exposure · Burn · Dodge · Printer lights · Density mask
+· D5: by kind ["main","burn1","dodge1","lights","densityMask1"]
+· D1: back in Classic, module print
+· D8: First print panel First print | Neutralise | How much of each frame’s colour cast a first print takes out: 100 % prints it to neutral grey, 75 % keeps a quarter of a sunset’s warmth. | First print again
+· page errors []

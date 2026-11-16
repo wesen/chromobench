@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { compile, edit, Graph, newDocument, type Document, type FrameKind, type SourceInfo, type Vec3 } from '@chromobench/contract';
 import { set } from '@chromobench/values';
-import { darkroomMedium, layerOf, lightsOf, mainExposure, MODE_PATH } from '@chromobench/studio-kit';
+import { darkroomMedium, layerOf, lightsOf, mainExposure, MODE_PATH, NEUTRALISE } from '@chromobench/studio-kit';
 import { integrateToGrey, Lights, nodePacksData, RefEngine } from '@chromobench/core';
 import { LibRawDecoder } from '@chromobench/ingest';
 import { describe, expect, it } from 'vitest';
@@ -48,16 +48,22 @@ const withMode = (d: Document, mode: 'real' | 'normalised'): Document => edit(d,
 
 describe('the first print\'s aim (CHB-031 F30): one setting', () => {
   it('FIRST_PRINT_AIM: a negative integrates to grey; a photo keeps its colour and half its exposure; no subject-failure rule', () => {
-    expect(FIRST_PRINT_AIM['negative-scan']).toEqual({ density: 1, alpha: 1, subjectFailure: null });
+    // D8 (CHB-046): one aim for the roll and the studio, neutralise 75 % (a quarter of the cast stays)
+    expect(FIRST_PRINT_AIM['negative-scan']).toEqual({ density: 1, alpha: 0.75, subjectFailure: null });
+    expect(FIRST_PRINT_AIM['negative-scan'].alpha).toBe(NEUTRALISE);
+    // his Neutralise amount for a negative; a photo keeps the camera's colour whatever the amount
+    expect(firstPrintAim('negative-scan', undefined, 0.4).alpha).toBe(0.4);
+    expect(firstPrintAim('negative-scan', undefined, 1.7).alpha).toBe(1);
+    expect(firstPrintAim('digital-raw', undefined, 0.4).alpha).toBe(0);
     expect(FIRST_PRINT_AIM['digital-raw']).toEqual({ density: 0.5, alpha: 0, subjectFailure: null });
     expect(firstPrintAim('negative-scan')).toEqual(FIRST_PRINT_AIM['negative-scan']);
   });
 
   it('page overrides: ?alpha and ?subjectFailure (1, 0, or chroma:…,trim:…) for a negative, ?photoDensity for a photo', () => {
     const p = (o: Record<string, string>) => (k: string): string | null => o[k] ?? null;
-    expect(firstPrintAim('negative-scan', p({ alpha: '0.75' }))).toEqual({ density: 1, alpha: 0.75, subjectFailure: null });
+    expect(firstPrintAim('negative-scan', p({ alpha: '1' }))).toEqual({ density: 1, alpha: 1, subjectFailure: null });
     expect(firstPrintAim('negative-scan', p({ alpha: '3' })).alpha).toBe(1);
-    expect(firstPrintAim('negative-scan', p({ alpha: 'warm' })).alpha).toBe(1);
+    expect(firstPrintAim('negative-scan', p({ alpha: 'warm' })).alpha).toBe(0.75);
     expect(firstPrintAim('negative-scan', p({ subjectFailure: '1' })).subjectFailure).toEqual(LAB_SUBJECT_FAILURE);
     expect(firstPrintAim('negative-scan', p({ subjectFailure: '0' })).subjectFailure).toBeNull();
     expect(firstPrintAim('negative-scan', p({ subjectFailure: 'chroma:0.12,trim:0.01,bogus:3' })).subjectFailure).toEqual({ chroma: 0.12, trim: 0.01 });

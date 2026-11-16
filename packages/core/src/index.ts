@@ -22,6 +22,7 @@ export * from './print/gamut.ts';
 export * from './scan/scanner.ts';
 export * from './print/chain.ts';
 export * from './print/balance.ts';
+export * from './print/enlarger-mode.ts';
 export * from './print/masks.ts';
 export * from './print/combine.ts';
 export * from './print/clarity.ts';
