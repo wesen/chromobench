@@ -2,7 +2,8 @@
 // - LAY-1 (D2): a camera file opens with its raw's as-shot white balance; Classic's Print shows the White balance panel
 //   (preset, Temperature, Tint, Pick a neutral); a preset is one undo step; the eyedropper makes the clicked grey
 //   neutral and disarms; picking it again changes nothing; a negative says why it has no white balance;
-// - Darkroom first's "Before the film" palette carries the same controls; agents set it with scene.whiteBalance.
+// - Darkroom first's "Before the film" palette carries the same controls and the film; agents set it with scene.whiteBalance;
+// - LOOK-6 (D6): film stocks, papers and grades are medium presets named as the data pack names them; one step each.
 import { expect, test, type Page } from '@playwright/test';
 import { writeTiff } from '@chromobench/ingest';
 import { negativeScan, tif } from './scenes.ts';
@@ -121,6 +122,8 @@ test('LAY-1 in Darkroom first: the Before the film palette; an agent sets the wh
   const p = panel(page, 'before-film');
   await expect(p).toBeVisible();
   await expect(p.locator('.cb-preset select')).toHaveValue('as-shot');
+  // the film the scene is shot on is in the palette too (a medium preset, LOOK-6)
+  await expect(p.locator('.cb-arg[data-path="stages.film.medium.stock"] select')).toHaveValue('kodak_portra_400');
   // the agent's command (the DSL's wb.run reaches the same table), in auto mode: one step, the picker follows
   await hook(page, `cb.run('agent.mode', 'auto')`);
   const r = await page.evaluate(() => window.chromobench.eval("return JSON.stringify(await wb.run('scene.whiteBalance', { temperature_K: 6500, tint: 10 }))") as Promise<{ yaml: string; error?: unknown }>);
@@ -128,5 +131,51 @@ test('LAY-1 in Darkroom first: the Before the film palette; an agent sets the wh
   await idle(page);
   expect(await wbNow(page)).toEqual({ temperature_K: 6500, tint: 10 });
   await expect(p.locator('.cb-preset select')).toHaveValue('cloudy');
+  expect(errors).toEqual([]);
+});
+
+test('LOOK-6: film stocks, papers and grades as medium presets by the data pack\'s names, one step each, undo; an agent picks one', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors = await boot(page, 'classic');
+  await openCard(page);
+  const film = page.locator('.cb-arg[data-path="stages.film.medium.stock"]:visible select').first();
+  const paper = page.locator('.cb-arg[data-path="stages.darkroom.medium.paper"]:visible select').first();
+  const grade = page.locator('.cb-preset[data-kind="grade"]:visible select').first();
+  const medium = () => hook<{ stock: string; push: number; paper: string; grade: number }>(page, '({ stock: cb.doc.stages.film.medium.stock, push: cb.doc.stages.film.medium.push, paper: cb.doc.stages.darkroom.medium.paper, grade: cb.doc.stages.darkroom.medium.grade })');
+  await expect(film).toHaveValue('kodak_portra_400');
+  await expect(film.locator('option:checked')).toHaveText('Kodak Portra 400');
+  // the pack's films in two groups; no slide film
+  expect(await film.locator('optgroup').evaluateAll((g) => g.map((x) => x.getAttribute('label')))).toEqual(['Colour negative film', 'Cinema negative film']);
+  expect(await film.locator('option', { hasText: 'Velvia' }).count()).toBe(0);
+  const before = await centre(page);
+
+  // a pushed profile: Portra 800 developed one stop pushed, one step, the print changes; undo
+  await film.selectOption('kodak_portra_800_push1');
+  await idle(page);
+  expect(await medium()).toMatchObject({ stock: 'kodak_portra_800', push: 1 });
+  await expect(film.locator('option:checked')).toHaveText('Kodak Portra 800 (Push 1)');
+  const pushed = await centre(page);
+  expect(pushed.some((v, i) => Math.abs(v - before[i]!) > 1 / 255)).toBe(true);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('ControlOrMeta+z');
+  await idle(page);
+  expect(await medium()).toMatchObject({ stock: 'kodak_portra_400', push: 0 });
+
+  // a paper and a grade, each one step
+  await paper.selectOption('kodak_supra_endura');
+  await idle(page);
+  await expect(paper.locator('option:checked')).toHaveText('Kodak Professional Supra Endura');
+  await grade.selectOption('grade-3');
+  await idle(page);
+  expect(await medium()).toMatchObject({ paper: 'kodak_supra_endura', grade: 3 });
+  await expect(grade.locator('option:checked')).toHaveText('Grade 3 (hard)');
+
+  // the agent: medium.preset in auto mode
+  await hook(page, `cb.run('agent.mode', 'auto')`);
+  const r = await page.evaluate(() => window.chromobench.eval("return JSON.stringify(await wb.run('medium.preset', { kind: 'film', preset: 'kodak_gold_200' }))") as Promise<{ yaml: string; error?: unknown }>);
+  expect(r.error, r.yaml).toBeUndefined();
+  await idle(page);
+  expect(await medium()).toMatchObject({ stock: 'kodak_gold_200', push: 0 });
+  await expect(film.locator('option:checked')).toHaveText('Kodak Gold 200');
   expect(errors).toEqual([]);
 });

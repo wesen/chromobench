@@ -18,7 +18,7 @@ import { argModel, argProblem, controlModels, parseStep, stepUnits, STRIPPABLE }
 import { CB_FORMS } from './kit/forms.ts';
 import { frameRef, type ImageHandle } from './handles.ts';
 import { DARKROOM, allParameters, type Arrangement } from './model/arrangement.ts';
-import { DOCS, defaultDocument, LIGHTS_PATH } from './model/doc.ts';
+import { DOCS, defaultDocument, GRADE_PATH, LIGHTS_PATH } from './model/doc.ts';
 import { NEUTRALISE } from './model/aim.ts';
 import { VIEW_MODES, type ViewMode } from './model/settings.ts';
 import { ringTiles } from './model/tools.ts';
@@ -30,6 +30,7 @@ import { printCommands } from './commands/print.ts';
 import { agentCommands } from './commands/agent.ts';
 import { coreTools } from './commands/tools.ts';
 import { sceneCommands, sceneTools } from './commands/scene.ts';
+import { mediaCommands } from './commands/media.ts';
 import { NEGATIVE_WB_NOTE, TEMPERATURE_PATH, TINT_PATH, WB_NOTE, whiteBalanceIn } from './model/white-balance.ts';
 import { createRollKit, rollTag } from '../kits/roll/src/kit.ts';
 import { createFinishKit } from '../kits/finish/src/kit.ts';
@@ -150,6 +151,7 @@ export function createCb(ck: Ck) {
     .commands(printCommands())
     .commands(agentCommands())
     .commands(sceneCommands())
+    .commands(mediaCommands())
     .tools(coreTools())
     .tools(sceneTools())
     .docs(CORE_DOCS);
@@ -296,8 +298,10 @@ export function createCb(ck: Ck) {
   const controls = (which: 'darkroom' | 'all' | Arrangement, o: { id?: string; title?: string } = {}): any => {
     const a = which === 'darkroom' ? DARKROOM : which === 'all' ? allParameters(controlModels()) : which;
     const id = o.id ?? `controls-${typeof which === 'string' ? which : a.name.toLowerCase().replace(/\W+/g, '-')}`;
+    // the paper's grade is a preset picker (named grades, CHB-048); the stock selects are pickers in cb.arg itself
+    const control = (p: string): any => (p === GRADE_PATH ? node('cb.preset', { kind: 'grade' }) : arg(p, p === LIGHTS_PATH ? { widget: 'pad' } : {}));
     const sections = a.groups.map(g =>
-      ck.section({ title: g.title }, ...g.paths.map(p => arg(p, p === LIGHTS_PATH ? { widget: 'pad' } : {})), ...(g.note ? [ck.text((s: any) => { const d = sel.doc(s); return d ? g.note!(d) : ''; }, { dim: true, wrap: true })] : [])),
+      ck.section({ title: g.title }, ...g.paths.map(control), ...(g.note ? [ck.text((s: any) => { const d = sel.doc(s); return d ? g.note!(d) : ''; }, { dim: true, wrap: true })] : [])),
     );
     return ck.panel.define(id, { title: o.title ?? a.name }, ifFrame(...sections));
   };
@@ -339,6 +343,8 @@ export function createCb(ck: Ck) {
         // and the diagnostics kit: Help ▸ Report a Problem… wherever he is (CHB-038)
         .use(cb.kits['diagnostics'].kit),
     arg,
+    /** a preset picker in his words (CHB-048): 'white-balance', 'film', 'paper' or 'grade' */
+    preset: (kind: string, o: Record<string, unknown> = {}): any => node('cb.preset', { kind, ...o }),
     viewer,
     /** library and print views (not panels): grid, strip, loupe, compare, survey, the ring-around, the Library module's centre */
     views: { grid, strip, loupe, compare: compareView, survey, ringAround: ring_, library: libraryViews, whiteBalance: whiteBalanceView },

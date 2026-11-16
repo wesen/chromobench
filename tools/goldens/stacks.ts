@@ -6,7 +6,8 @@
 //
 //   node tools/goldens/stacks.ts                    write every stack's document.json and its index entry (no pictures)
 //   node tools/goldens/render.ts --only <ids>       render them (the ids are printed)
-import { edit, type Document, type Entry, type Mask, type MaskComponent, type Params } from '@chromobench/contract';
+import { edit, filmPresets, presetSets, type Document, type Entry, type Mask, type MaskComponent, type Params, type StockFacts } from '@chromobench/contract';
+import { nodePacksData } from '../../packages/core/src/index.ts';
 import { Coll, insert, set, type Json, type Mutation } from '@chromobench/values';
 import { readIndex, readJSON, writeData, type IndexCase } from './golden.ts';
 
@@ -21,6 +22,14 @@ const mask = (name: string, components: [string, MaskComponent][], over: Partial
 const print = (id: string, e: Entry): Mutation => insert('stages.print.stack', id, e);
 const scene = (id: string, e: Entry): Mutation => insert('stages.scene.stack', id, e);
 const curve = (k: string, pts: [number, number][]): Json => C(pts.map(([x, y], i) => [`${k}-p${i}`, { x, y }]));
+/** A film preset of the data pack the goldens render with (contract media-presets.ts, CHB-048): its medium sets. */
+function filmPreset(id: string): Mutation[] {
+  const data = nodePacksData();
+  const facts: StockFacts[] = data.stockIds().map((s) => { const x = data.stock(s); return { id: s, ...(x.name ? { name: x.name } : {}), role: x.role, type: x.type, ...(x.meta.use ? { use: x.meta.use } : {}) }; });
+  const p = filmPresets(facts).find((x) => x.id === id);
+  if (!p) throw new Error(`no film preset ${id}`);
+  return presetSets(p).map((s) => set(s.path, s.value));
+}
 
 export interface Stack { id: string; title: string; exercises: string[]; base: 'neg-auto-lights' | 'cam-auto'; edits: Mutation[] }
 
@@ -104,6 +113,12 @@ export const STACKS: readonly Stack[] = [
     title: 'White balance before the film (CHB-048): 3200 K, +10 in Lightroom\'s units on the balanced camera file, whose light is about 5400 K: the film sees a scene corrected for a much warmer light, so the print goes blue (display mean 0.30 0.53 0.64 against cam-auto\'s 0.51 0.47 0.38 with no correction)',
     exercises: ['source.xyz', 'white balance', 'temperature', 'tint'],
     edits: [set('stages.scene.medium.whiteBalance', { temperature_K: 3200, tint: 10 })],
+  },
+  {
+    id: 'cam-film-portra-800-push1', base: 'cam-auto',
+    title: 'A film stock preset (CHB-048 LOOK-6): the data pack\'s "Kodak Portra 800 (Push 1)" on the balanced camera file, which sets the film to Kodak Portra 800 developed one stop pushed (its measured push profile)',
+    exercises: ['medium preset', 'film stock', 'push', 'film.develop'],
+    edits: filmPreset('kodak_portra_800_push1'),
   },
 ];
 

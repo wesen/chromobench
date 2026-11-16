@@ -24,6 +24,7 @@ export * from './encodings.ts';
 export * from './graph.ts';
 export * from './pixel.ts';
 export * from './white-balance.ts';
+export * from './media-presets.ts';
 export * from './stage-laws.ts';
 export * from './links.ts';
 export * from './links-looks.ts';

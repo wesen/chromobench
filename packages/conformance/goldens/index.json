@@ -2111,6 +2111,39 @@
         "output.display",
         "output.frame"
       ]
+    },
+    {
+      "id": "cam-film-portra-800-push1",
+      "title": "A film stock preset (CHB-048 LOOK-6): the data pack's \"Kodak Portra 800 (Push 1)\" on the balanced camera file, which sets the film to Kodak Portra 800 developed one stop pushed (its measured push profile)",
+      "exercises": [
+        "medium preset",
+        "film stock",
+        "push",
+        "film.develop"
+      ],
+      "fixture": "camera",
+      "document": "cases/cam-film-portra-800-push1/document.json",
+      "cuts": {
+        "print": "cases/cam-film-portra-800-push1/print.json",
+        "display": "cases/cam-film-portra-800-push1/display.json"
+      },
+      "ops": [
+        "source.open",
+        "source.xyz",
+        "capture.expose",
+        "film.couple",
+        "film.halation",
+        "film.develop",
+        "film.grain",
+        "print.expose",
+        "print.combine",
+        "print.develop",
+        "view.reflect",
+        "view.flare",
+        "view.adapt",
+        "output.display",
+        "output.frame"
+      ]
     }
   ]
 }

@@ -1,0 +1,32 @@
+{
+  "case": "cam-film-portra-800-push1",
+  "cut": "print",
+  "op": "view.adapt",
+  "domain": "print-xyz",
+  "width": 96,
+  "height": 64,
+  "channels": 3,
+  "dtype": "float32",
+  "endian": "little",
+  "layout": "interleaved, row-major, top row first",
+  "file": "cases/cam-film-portra-800-push1/print.f32",
+  "sha256": "c614bceea4f0b6ad7f503f81c0f791634bde0fab96bd7d8b988d823a9ce0891e",
+  "stats": {
+    "min": [
+      0.004650382,
+      0.004854069,
+      0.006487452
+    ],
+    "max": [
+      0.7532743,
+      0.7945853,
+      0.856427
+    ],
+    "mean": [
+      0.2030358,
+      0.2072998,
+      0.1731114
+    ]
+  },
+  "warnings": []
+}

@@ -7,7 +7,7 @@ import { canonicalJSON, Coll } from '@chromobench/values';
 import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/shell/dom';
 import type { NodeData } from '@chromobench/shell';
 import { describe, historyRows, jumpCrosses, whyRows, WHO, type ModelLookup } from '../model/history.ts';
-import { TIME_PATH } from '../model/doc.ts';
+import { linksOf, TIME_PATH } from '../model/doc.ts';
 import { pickerOf, type Picker, type PickerKind } from '../model/presets.ts';
 import { modelAt } from '../kit/args.ts';
 import type { Studio } from '../studio.ts';
@@ -373,10 +373,10 @@ const preset: Renderer = (n, m) => {
   m.cell(
     (s) => {
       const f = frameOf(n, s);
-      return { r: f ? s.docs?.[f] : undefined, shot: f ? s.catalog?.frames?.[f]?.asShot : undefined };
+      return { r: f ? s.docs?.[f] : undefined, shot: f ? s.catalog?.frames?.[f]?.asShot : undefined, links: linksOf(s) };
     },
     (v: any) => {
-      picker = pickerOf(kind, v.r, { asShot: v.shot ?? null });
+      picker = pickerOf(kind, v.r, { asShot: v.shot ?? null, links: v.links });
       el.hidden = !picker;
       if (!picker) return;
       lab.textContent = picker.label;
@@ -386,7 +386,7 @@ const preset: Renderer = (n, m) => {
       if (picker.current === null) opts.push(h('option', { value: '', text: picker.custom, selected: true }));
       let group: HTMLElement | null = null;
       for (const o of picker.options) {
-        const opt = h('option', { value: o.value, text: o.label, disabled: !!o.disabled, selected: o.value === picker.current });
+        const opt = h('option', { value: o.value, text: o.label, disabled: !!o.disabled, selected: o.value === picker.current, ...(o.tip ? { title: o.tip } : {}) });
         if (o.group) {
           if (!group || group.getAttribute('label') !== o.group) {
             group = h('optgroup', { label: o.group });

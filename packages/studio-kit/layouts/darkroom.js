@@ -3,7 +3,8 @@
 // main exposure and the printer lights as rows of the darkroom stack with their controls, every burn, dodge, flash
 // and contrast mask a row beside them, ordered by kind. Below it, a collapsed digital palette: the print stage's
 // layers, labelled as acting after the print. The module shows the stages and says so. CHB-048: a "Before the film"
-// palette for camera files (the white balance in scene light, the scene's layers); a negative says why it has none.
+// palette for camera files (the white balance in scene light, the film, the scene's layers); a negative says why it has
+// none. The paper and its grade are medium presets from the data pack.
 
 /** no open frame selected: the panels that only show a frame's settings are not drawn (CHB-031 8iv8) */
 const noFrame = cb => s => !cb.sel.doc(s);
@@ -43,10 +44,11 @@ export default {
                 { title: 'Before the film' },
                 cb.ifFrame(
                   cb.views.whiteBalance(),
-                  ck.when(s => cb.sel.isPhoto(s), stack.views.layers('scene', { density: 'compact' })),
+                  // the film the scene is shot on (a medium preset from the data pack, CHB-048 LOOK-6) and the scene's layers
+                  ck.when(s => cb.sel.isPhoto(s), ck.column({}, cb.arg('stages.film.medium.stock'), stack.views.layers('scene', { density: 'compact' }))),
                 ),
               ).hidden(noFrame(cb)),
-              ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('stages.darkroom.medium.paper'), cb.arg('stages.darkroom.medium.grade'))).hidden(noFrame(cb)),
+              ck.panel.define('paper', { title: 'Paper' }, cb.ifFrame(cb.arg('stages.darkroom.medium.paper'), cb.preset('grade'))).hidden(noFrame(cb)),
               // the digital zone: the print stage, after the darkroom; closed until it is wanted
               ck.panel.define('digital', { title: 'Digital (after the print)', open: false }, stack.views.layers('print', { density: 'compact' })).hidden(noFrame(cb)),
               stack.panels.params().hidden(noFrame(cb)),

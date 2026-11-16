@@ -185,7 +185,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
                      cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
@@ -352,6 +352,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -458,7 +460,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 200 · keys 126 in 22 scopes · tools 11 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+commands 202 · keys 126 in 22 scopes · tools 11 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
@@ -536,7 +538,9 @@ module main "Darkroom" stages scene, darkroom, print
                          text "The light the scene was lit by, corrected befo…  dim  wrap
                    when  cond τ  else null
                      then:
-                       stack.layers  density "compact"  stage "scene"  composite law · + Layer 8 ops
+                       column
+                         cb.arg  path "stages.film.medium.stock"  select
+                         stack.layers  density "compact"  stage "scene"  composite law · + Layer 8 ops
            panel paper "Paper"  hidden τ
              when  cond τ
                else:
@@ -544,7 +548,7 @@ module main "Darkroom" stages scene, darkroom, print
                then:
                  column
                    cb.arg  path "stages.darkroom.medium.paper"  select
-                   cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                   cb.preset  kind "grade"  kind grade
            panel digital "Digital (after the print)"  hidden τ
              stack.layers  density "compact"  stage "print"  composite law · + Layer 10 ops
            panel layer-params "Layer"  hidden τ
@@ -601,6 +605,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -670,7 +676,7 @@ commands
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 154 · keys 40 in 7 scopes · tools 9 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 156 · keys 40 in 7 scopes · tools 9 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -805,7 +811,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -929,6 +935,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -981,7 +989,7 @@ commands
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour, crop (R), spot (Q)
-commands 142 · keys 82 in 12 scopes · tools 11 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 144 · keys 82 in 12 scopes · tools 11 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -1116,7 +1124,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -1192,7 +1200,7 @@ module lab "Lab" key L stages darkroom
                    section "Print"
                      cb.arg  path "stages.darkroom.medium.paper"  select
                      cb.arg  path "stages.darkroom.medium.mode"  segmented
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "View"
                      cb.arg  path "stages.print.medium.illuminant"  select
                      cb.arg  path "stages.print.medium.flare"  slider  percent  step 0.01 percent
@@ -1312,6 +1320,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1344,7 +1354,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 120 · keys 90 in 14 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 122 · keys 90 in 14 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1523,6 +1533,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1609,7 +1621,7 @@ commands
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 173 · keys 74 in 11 scopes · tools 9 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+commands 175 · keys 74 in 11 scopes · tools 9 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1735,7 +1747,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
                      cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
@@ -1805,6 +1817,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1854,7 +1868,7 @@ commands
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 136 · keys 60 in 7 scopes · tools 9 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+commands 138 · keys 60 in 7 scopes · tools 9 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1969,6 +1983,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -2001,7 +2017,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 117 · keys 34 in 5 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 119 · keys 34 in 5 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -2030,7 +2046,7 @@ module main "Chromobench" stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -2087,6 +2103,8 @@ commands
   proposal.approveAll "Approve All Agent Changes" (Edit) ← cb.core
   agent.mode "Agent Mode" ← cb.core
   scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -2119,7 +2137,7 @@ commands
   diagnostics.openReport "Open Report…" (File) ← cb.diagnostics
   diagnostics.copySummary "Copy Problem Summary" (Help) ← cb.diagnostics
 tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-colour
-commands 117 · keys 31 in 5 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+commands 119 · keys 31 in 5 scopes · tools 9 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

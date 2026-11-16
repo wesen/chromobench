@@ -1,6 +1,7 @@
 // Names for the ids the document stores (CHB-027 F9): 'kodak_portra_endura' is "Kodak Portra Endura", 'fujifilm_c200'
 // is "Fujifilm C200". The document, the DSL and the agents keep the ids; only what a person reads changes. The data
-// packs carry no display names, so the names are made from the ids, with a table for the ones the rule gets wrong.
+// pack's own names come first (the host registers them, CHB-048); without a pack (the mock) the names are made from
+// the ids, with a table for the ones the rule gets wrong.
 
 /** Stock ids whose name the rule below would get wrong. */
 const STOCK_NAMES: Record<string, string> = {
@@ -26,8 +27,17 @@ function word(w: string): string {
   return w.charAt(0).toUpperCase() + w.slice(1);
 }
 
-/** A film or paper stock's name: 'kodak_portra_endura' → "Kodak Portra Endura". Unknown shapes come back readable. */
+/** The data pack's own names (CHB-048: "stock names as the data pack gives them"); the host registers them. */
+const PACK_NAMES = new Map<string, string>();
+/** Registers the data pack's stock names (the host, from its packs, before a layout is built). */
+export function setStockNames(names: Readonly<Record<string, string>>): void {
+  for (const [id, n] of Object.entries(names)) PACK_NAMES.set(id, n);
+}
+
+/** A film or paper stock's name: the pack's, else 'kodak_portra_endura' → "Kodak Portra Endura" (unknown shapes readable). */
 export function stockName(id: string): string {
+  const pack = PACK_NAMES.get(id);
+  if (pack) return pack;
   if (STOCK_NAMES[id]) return STOCK_NAMES[id]!;
   const parts = id.split(/[_\s]+/).filter(Boolean);
   if (!parts.length) return id;

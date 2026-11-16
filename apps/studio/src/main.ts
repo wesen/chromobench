@@ -19,7 +19,7 @@ import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import {
   buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, LIGHTS, LIGHTS_PATH, mainExposure, memoryKV, modelAt, NEUTRALISE, neutraliseOf, read,
-  resetStorage, sel, setKnownValues, STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
+  resetStorage, sel, setKnownValues, setMediumStocks, setStockNames, STORAGE_RESET_MESSAGE, storePath, TIME_PATH,
   type CatalogFrame, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
@@ -170,6 +170,9 @@ async function startEngine(): Promise<Host> {
     worker: q.get('worker') !== '0', onStatus: (s) => status(s), journal, debug: q.has('debug'),
   });
   setKnownValues(h.catalog);
+  // the medium presets (CHB-048, D6): the data pack's films and papers, by the pack's names
+  setMediumStocks(h.stocks);
+  setStockNames(Object.fromEntries(h.stocks.filter((s) => s.name).map((s) => [s.id, s.name!])));
   addScanExtensions(h.extensions);
   const se: StudioEngine = h.engine;
   return {

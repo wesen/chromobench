@@ -8,7 +8,7 @@
 // CHB-027 (F4): decoding, linearising, the working-image resample and conditioning run in the engine worker for
 // both engines, and so does the reference engine (WorkerEngine proxies it); GpuEngine stays on this thread and gets
 // the decoded pixels back as a transferable. ?worker=0 (HostOptions.worker false) runs everything on this thread.
-import type { Box, Document, Engine, Group, Vec3 } from '@chromobench/contract';
+import type { Box, Document, Engine, Group, StockFacts, Vec3 } from '@chromobench/contract';
 import type { Mutation } from '@chromobench/values';
 import {
   applyEncode, bakeLights, CLASS_CODE, classify, DEFAULT_CONVENTIONS, DEFAULT_SIGMA_D, encodeTransform, evalCurve, evalLevels, integrateToGrey, Lights, modeShiftLogH,
@@ -106,6 +106,8 @@ export interface HostEngine {
   darkroomMath: DarkroomMath;
   /** valuesFrom lists from the data packs (film and paper stocks, scanners, lights). */
   catalog: Record<string, string[]>;
+  /** The data pack's stocks as the medium presets need them (CHB-048, D6: names, role, type, use, print stock). */
+  stocks: StockFacts[];
   integrate: IntegrateToGrey;
   /** CHB-010: a document's printer lights as filtration and time (core's bakeLights), for the first print's `bake` option. */
   bake: (d: Document) => Mutation[];
@@ -178,6 +180,20 @@ function buildRollPhysics(data: PhysicsData, stocks: string[]) {
     // absolute base density needs an open gate; without one no stock is named
     rank: (base: { absD: Vec3 | null }, ids?: string[]) => (base.absD ? rankStocks(base.absD, ids ?? stocks, fwd) : null),
   };
+}
+
+/** The data pack's stocks for the medium presets (contract media-presets.ts): what the pack says of each. */
+function stockFactsOf(data: PhysicsData): StockFacts[] {
+  const out: StockFacts[] = [];
+  for (const id of data.stockIds()) {
+    try {
+      const s = data.stock(id);
+      out.push({ id, ...(s.name ? { name: s.name } : {}), role: s.role, type: s.type, ...(s.meta.use ? { use: s.meta.use } : {}), targetPrint: s.meta.targetPrint ?? null });
+    } catch {
+      // a stock the pack lists but cannot serve is not offered
+    }
+  }
+  return out;
 }
 
 function catalogOf(data: PhysicsData): Record<string, string[]> {
@@ -275,7 +291,7 @@ export async function createHostEngine(o: HostOptions): Promise<HostEngine> {
   const engine = new StudioEngine(primary, host, `${label} · ${long > 0 ? `${long} px` : 'full size'}`);
   journal.info('engine', `engine: ${engine.label}`, { code: 'ENGINE', data: { id: primary.id, long, worker: client !== null, ...(why ? { why } : {}) } });
   return {
-    engine, catalog: catalogOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []), editorMath: buildEditorMath(),
+    engine, catalog: catalogOf(data), stocks: stockFactsOf(data), settings, rollPhysics: buildRollPhysics(data, catalogOf(data)['stocks:film'] ?? []), editorMath: buildEditorMath(),
     darkroomMath: buildDarkroomMath(data),
     bake: (d) => bakeLights(d, data, DEFAULT_CONVENTIONS).mutations,
     dustGroup: (spots) => dustGroup(spots),
