@@ -7,20 +7,32 @@ import { clear, h, listen, type MountCtx, type Renderer } from '@chromobench/she
 import type { Runtime } from '@chromobench/shell';
 import { sel } from '../sel.ts';
 import {
-  bytesText, EXPORT_FORMATS, EXPORT_SIZES, EXPORT_SPACES, exportFileNames, exportPrefsOf, exportSummary,
-  type ExportPrefs, type ExportRun,
+  bytesText, EXPORT_FORMATS, EXPORT_SIZES, EXPORT_SPACES, exportFileNames, exportPrefsOf, exportSummary, PRINTER_INTENTS,
+  type ExportPrefs, type ExportRun, type PrinterProfileRef,
 } from '../model/export.ts';
 
 const QUALITY_TIP = 'JPEG quality: 100 keeps the most detail in the largest file; 90 is hard to tell from it at half the size.';
 const NAME_TIP = 'The file name: {name} is the photo’s file name (a frame of a strip adds its number), {n} its place in this export, {date} today.';
 
+const PRINTER_TIP = 'A file for your printer: rendered in ProPhoto RGB, then converted to the printer profile with the intent you choose; the printer profile is embedded. Print it with colour management off in the driver.';
+const ADD_PRINTER = 'add-printer';
+
 type Write = (patch: Partial<ExportPrefs>) => void;
 
+/** What the form needs besides the settings: the photo's name, his printer profiles, and adding one (when the host can). */
+interface FormEnv {
+  nameOf: () => string | null;
+  printers: () => readonly PrinterProfileRef[];
+  addPrinter: (() => void) | null;
+}
+
 /** The settings controls, written through `write`; `refresh(p)` shows settings changed elsewhere (a focused control keeps its text). */
-function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HTMLElement, ev: string, f: () => void) => void, nameOf: () => string | null) {
+function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HTMLElement, ev: string, f: () => void) => void, env: FormEnv) {
   const opt = (id: string, label: string) => h('option', { value: id, text: label });
   const format = h('select', { id: `${prefix}format`, 'aria-label': 'Format' }, ...EXPORT_FORMATS.map((f) => opt(f.id, f.label))) as HTMLSelectElement;
-  const space = h('select', { id: `${prefix}space`, 'aria-label': 'Colour space' }, ...EXPORT_SPACES.map((f) => opt(f.id, f.label))) as HTMLSelectElement;
+  const space = h('select', { id: `${prefix}space`, 'aria-label': 'Colour space', title: PRINTER_TIP }) as HTMLSelectElement;
+  const intent = h('select', { id: `${prefix}intent`, 'aria-label': 'Printer intent' }, ...PRINTER_INTENTS.map((f) => opt(f.id, f.label))) as HTMLSelectElement;
+  const bpc = h('input', { id: `${prefix}bpc`, type: 'checkbox', 'aria-label': 'Black point compensation' }) as HTMLInputElement;
   const size = h('select', { id: `${prefix}size`, 'aria-label': 'Size' }, ...EXPORT_SIZES.map((f) => opt(f.id, f.label))) as HTMLSelectElement;
   const long = h('input', { id: `${prefix}long`, type: 'number', min: '16', max: '100000', step: '1', 'aria-label': 'Long edge in pixels', class: 'cb-export-num' }) as HTMLInputElement;
   const pct = h('input', { id: `${prefix}pct`, type: 'number', min: '1', max: '100', step: '1', 'aria-label': 'Percentage of the original size', class: 'cb-export-num' }) as HTMLInputElement;
@@ -32,7 +44,10 @@ function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HT
   const row = (label: string, ...c: (HTMLElement | string)[]) => h('label', { class: 'cb-export-row' }, h('span', { class: 'cb-export-l', text: label }), h('span', { class: 'cb-export-c' }, ...c));
   const qRow = row('JPEG quality', quality, qv);
   const sizeVal = row('', long, pct, unit);
-  const el = h('div', { class: 'cb-export' }, row('Format', format), row('Colour space', space), row('Size', size), sizeVal, qRow, row('File name', name), sample);
+  const intentRow = row('Intent', intent);
+  const bpcRow = row('', bpc, h('span', { text: 'Black point compensation' }));
+  const el = h('div', { class: 'cb-export' }, row('Format', format), row('Colour space', space), intentRow, bpcRow, row('Size', size), sizeVal, qRow, row('File name', name), sample);
+  let spaceKey = '';
   // keys typed in the form are the form's, not the studio's shortcuts
   el.addEventListener('keydown', (e) => e.stopPropagation());
   let p = p0;
@@ -42,7 +57,21 @@ function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HT
       if (c.ownerDocument.activeElement !== c && c.value !== v) c.value = v;
     };
     set(format, p.format);
-    set(space, p.space);
+    // the colour spaces, his printer profiles, and "Add printer profile…" (rebuilt when the list changes)
+    const printers = env.printers();
+    const key = `${printers.map((x) => x.sha256).join()}|${!!env.addPrinter}`;
+    if (key !== spaceKey) {
+      spaceKey = key;
+      space.replaceChildren(...EXPORT_SPACES.map((f) => opt(f.id, f.label)), ...printers.map((x) => opt(`printer:${x.sha256}`, `Printer: ${x.description}`)), ...(env.addPrinter ? [opt(ADD_PRINTER, 'Add printer profile…')] : []));
+      space.value = '';
+    }
+    set(space, p.printer ? `printer:${p.printer.profile}` : p.space);
+    if (p.printer) {
+      set(intent, p.printer.intent);
+      bpc.checked = p.printer.bpc;
+    }
+    intentRow.hidden = !p.printer;
+    bpcRow.hidden = !p.printer;
     set(size, p.size);
     set(long, String(p.longPx));
     set(pct, String(p.pct));
@@ -54,8 +83,9 @@ function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HT
     unit.textContent = p.size === 'long' ? 'px, long edge' : p.size === 'percent' ? '% of original' : '';
     sizeVal.hidden = p.size === 'original';
     qRow.hidden = p.format !== 'jpeg';
-    const n = nameOf();
-    sample.textContent = n ? `${exportFileNames([{ name: n }], p)[0]} · ${exportSummary(p)}` : exportSummary(p);
+    const n = env.nameOf();
+    const sum = exportSummary(p, printers);
+    sample.textContent = n ? `${exportFileNames([{ name: n }], p)[0]} · ${sum}` : sum;
   };
   const num = (c: HTMLInputElement, key: 'longPx' | 'pct' | 'quality', lo: number, hi: number, whole: boolean) => {
     const v = Number(c.value);
@@ -64,7 +94,16 @@ function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HT
     write({ [key]: x });
   };
   on(format, 'change', () => write({ format: format.value as ExportPrefs['format'] }));
-  on(space, 'change', () => write({ space: space.value as ExportPrefs['space'] }));
+  on(space, 'change', () => {
+    const v = space.value;
+    if (v === ADD_PRINTER) {
+      space.value = p.printer ? `printer:${p.printer.profile}` : p.space;
+      env.addPrinter?.();
+    } else if (v.startsWith('printer:')) write({ printer: { profile: v.slice(8), intent: p.printer?.intent ?? 'relative', bpc: p.printer?.bpc ?? true } });
+    else write({ space: v as ExportPrefs['space'], printer: null });
+  });
+  on(intent, 'change', () => p.printer && write({ printer: { ...p.printer, intent: intent.value as 'perceptual' | 'relative' } }));
+  on(bpc, 'change', () => p.printer && write({ printer: { ...p.printer, bpc: bpc.checked } }));
   on(size, 'change', () => write({ size: size.value as ExportPrefs['size'] }));
   on(long, 'change', () => num(long, 'longPx', 16, 100000, true));
   on(pct, 'change', () => num(pct, 'pct', 1, 100, false));
@@ -75,6 +114,12 @@ function settingsForm(prefix: string, p0: ExportPrefs, write: Write, on: (el: HT
   return { el, refresh };
 }
 
+const envOf = (rt: Runtime): FormEnv => ({
+  nameOf: () => sel.name(rt.store.readonly()) || null,
+  printers: () => sel.host(rt.store.readonly())?.printers ?? [],
+  addPrinter: rt.capable('host.addPrinterProfile') ? () => void rt.runCommand('output.addPrinterProfile', null) : null,
+});
+
 /** File ▸ Export…'s body: the settings form, reading and writing his preferences (a service: services.exportForm). */
 export function exportForm(ctx: { rt: Runtime; state: unknown }): HTMLElement {
   const rt = ctx.rt;
@@ -82,7 +127,7 @@ export function exportForm(ctx: { rt: Runtime; state: unknown }): HTMLElement {
     void rt.runCommand('output.set', null, patch);
     f.refresh(exportPrefsOf(rt.store.readonly()));
   };
-  const f = settingsForm('export-', exportPrefsOf(ctx.state), write, (el, ev, fn) => el.addEventListener(ev, fn), () => sel.name(rt.store.readonly()) || null);
+  const f = settingsForm('export-', exportPrefsOf(ctx.state), write, (el, ev, fn) => el.addEventListener(ev, fn), envOf(rt));
   const n = sel.targets(rt.store.readonly() as never).length;
   f.el.append(h('p', { class: 'small cb-dim', text: n > 1 ? `${n} photos; you choose a folder for them next (or they are downloaded).` : 'You choose where the file goes next (or it is downloaded).' }));
   return f.el;
@@ -128,8 +173,8 @@ export const outputPanel: Renderer = (n, m) => {
     return h('div', { class: 'cb-panel cb-output is-simple' }, b, progressView(m));
   }
   const write: Write = (patch) => void m.rt.runCommand('output.set', null, patch);
-  const f = settingsForm('output-', exportPrefsOf(st()), write, (el, ev, fn) => listen(m.scope, el, ev, fn), () => sel.name(st()) || null);
-  m.cell((s: any) => ({ p: s.prefs?.export, name: sel.name(s) }), () => f.refresh(exportPrefsOf(st())), { equals: (a: any, b: any) => a.p === b.p && a.name === b.name });
+  const f = settingsForm('output-', exportPrefsOf(st()), write, (el, ev, fn) => listen(m.scope, el, ev, fn), envOf(m.rt));
+  m.cell((s: any) => ({ p: s.prefs?.export, name: sel.name(s), printers: s.ui?.host?.printers }), () => f.refresh(exportPrefsOf(st())), { equals: (a: any, b: any) => a.p === b.p && a.name === b.name && a.printers === b.printers });
   const one = h('button', { type: 'button', class: 'ck-btn cb-save is-primary', id: 'output-export', text: 'Export' });
   const many = h('button', { type: 'button', class: 'ck-btn', id: 'output-export-selected' });
   listen(m.scope, one, 'click', () => go('current'));

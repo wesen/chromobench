@@ -92,6 +92,11 @@ export const outputCommands = (): CommandTable<CbState> => ({
     requires: 'host.exportFrames',
     run: (ctx, o?: { frames?: 'current' | 'selected' | string[]; to?: 'files' | 'memory' }) => runExport(ctx, o ?? {}),
   },
+  'output.addPrinterProfile': {
+    label: 'Add Printer Profile…',
+    requires: 'host.addPrinterProfile',
+    run: ctx => (ctx.host as StudioHost).addPrinterProfile!(),
+  },
   'output.cancel': {
     label: 'Cancel Export',
     palette: false,

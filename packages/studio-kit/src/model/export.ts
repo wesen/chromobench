@@ -20,10 +20,29 @@ export interface ExportPrefs {
   quality: number;
   /** the file name pattern: {name} the file's name (a frame of a strip adds its number), {n} the place in this export, {date} today */
   name: string;
+  /**
+   * A file for a printer (CHB-047 OUT-5): rendered in ProPhoto and converted to this printer profile (by its SHA-256,
+   * from his profile library) with the intent and black point compensation; null: a file in `space`.
+   */
+  printer: ExportPrinter | null;
 }
 
+export interface ExportPrinter {
+  profile: string;
+  intent: 'perceptual' | 'relative';
+  bpc: boolean;
+}
+
+/** A printer profile of his library, as the Output panel lists it (HostFlags.printers). */
+export interface PrinterProfileRef { sha256: string; description: string }
+
+export const PRINTER_INTENTS: readonly { id: ExportPrinter['intent']; label: string }[] = [
+  { id: 'perceptual', label: 'Perceptual' },
+  { id: 'relative', label: 'Relative colorimetric' },
+];
+
 /** His export settings with the studio's defaults filled in: JPEG, sRGB, original size, quality 90, "{name}". */
-export const EXPORT_DEFAULTS: Readonly<ExportPrefs> = Object.freeze({ format: 'jpeg', space: 'srgb', size: 'original', longPx: 2048, pct: 50, quality: 90, name: '{name}' });
+export const EXPORT_DEFAULTS: Readonly<ExportPrefs> = Object.freeze({ format: 'jpeg', space: 'srgb', size: 'original', longPx: 2048, pct: 50, quality: 90, name: '{name}', printer: null });
 
 export const EXPORT_FORMATS: readonly { id: ExportFormat; label: string; ext: string; mime: string }[] = [
   { id: 'jpeg', label: 'JPEG', ext: 'jpg', mime: 'image/jpeg' },
@@ -70,13 +89,21 @@ export function exportPrefsProblem(p: Partial<ExportPrefs>): string | null {
   if (p.pct !== undefined && !(typeof p.pct === 'number' && p.pct >= 1 && p.pct <= 100)) return 'Percentage must be from 1 to 100';
   if (p.quality !== undefined && !(Number.isInteger(p.quality) && p.quality >= 1 && p.quality <= 100)) return 'JPEG quality must be a whole number from 1 to 100';
   if (p.name !== undefined && (typeof p.name !== 'string' || !p.name.trim())) return 'The file name must not be empty';
+  if (p.printer !== undefined && p.printer !== null) {
+    const r = p.printer as Partial<ExportPrinter>;
+    if (typeof r.profile !== 'string' || !/^[0-9a-f]{64}$/.test(r.profile)) return 'The printer profile is named by its SHA-256 (one of his printer profiles)';
+    if (!PRINTER_INTENTS.some((x) => x.id === r.intent)) return "The printer intent must be 'perceptual' or 'relative'";
+    if (typeof r.bpc !== 'boolean') return 'Black point compensation is on or off (true or false)';
+  }
   return null;
 }
 
 /** One line of what an export with these settings writes ("JPEG · sRGB · long edge 2048 px · quality 90"). */
-export function exportSummary(p: ExportPrefs): string {
+export function exportSummary(p: ExportPrefs, printers: readonly PrinterProfileRef[] = []): string {
   const f = EXPORT_FORMATS.find((x) => x.id === p.format)?.label ?? p.format;
-  const sp = EXPORT_SPACES.find((x) => x.id === p.space)?.label ?? p.space;
+  const sp = p.printer
+    ? `printer ${printers.find((x) => x.sha256 === p.printer!.profile)?.description ?? 'profile'} (${PRINTER_INTENTS.find((x) => x.id === p.printer!.intent)?.label.toLowerCase()}${p.printer.bpc ? ', black point compensation' : ''})`
+    : (EXPORT_SPACES.find((x) => x.id === p.space)?.label ?? p.space);
   const size = p.size === 'long' ? `long edge ${p.longPx} px` : p.size === 'percent' ? `${p.pct} % of the original` : 'original size';
   return [f, sp, size, ...(p.format === 'jpeg' ? [`quality ${p.quality}`] : [])].join(' · ');
 }

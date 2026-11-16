@@ -8,11 +8,11 @@
 // (StudioEngine.openExport: the same decode, area-averaged there), maps the document onto it (contract scaleDocument)
 // and renders that, so the file is the print the studio would show had it worked at that size; previews stay at the
 // working size. The export image is let go when the export (or a batch of frames) ends.
-import { EXPORT_FORMATS, exportFileNames, exportSizeOf, type ExportRequestOf, type ExportResult, type ExportSettingsOf } from '@chromobench/studio-kit';
+import { EXPORT_FORMATS, exportFileNames, exportSizeOf, type ExportRequestOf, type ExportResult, type ExportSettingsOf, type PrinterProfileRef } from '@chromobench/studio-kit';
 import { Graph, scaleDocument, type Box, type Document, type Engine, type ExportSettings } from '@chromobench/contract';
 import {
-  documentPayload, exportFrame, exportNode, MemorySink, opfsSink, pickerAvailable, pickerSink,
-  type ByteSink, type DirHandleLike, type EncodedFile, type ExportProgress,
+  documentPayload, exportFrame, exportNode, lcmsInWorker, MemorySink, opfsSink, pickerAvailable, pickerSink, printerConversion, ProfileLibrary,
+  type ByteSink, type DirHandleLike, type EncodedFile, type ExportProgress, type Lcms, type PrinterOut,
 } from '@chromobench/output';
 import type { StudioEngine } from './studio-engine.ts';
 
@@ -35,6 +35,8 @@ export interface ExportJob {
   sink: ByteSink;
   /** The export images of this batch (frames of one file share theirs). */
   sources: ExportSources;
+  /** A file for a printer (OUT-5): the conversion to his printer profile (rendered in ProPhoto). */
+  printer?: PrinterOut;
   signal?: AbortSignal;
   onProgress?: (p: ExportProgress) => void;
 }
@@ -81,9 +83,17 @@ export class ExportSources {
   }
 }
 
-/** The document with his export settings (the rest of output.export as the document has it). */
+/** The working space a printer file is rendered in before the conversion (guide §5.8). */
+export const PRINTER_WORKING = 'prophoto' as const;
+
+/**
+ * The document with his export settings (the rest of output.export as the document has it); a file for a printer
+ * renders in ProPhoto and records the printer (output.printer).
+ */
 export function withExport(d: Document, s: ExportSettingsOf): Document {
-  return { ...d, output: { ...d.output, export: { ...d.output.export, format: s.format, space: s.space, size: exportSizeOf(s), quality: s.quality } } };
+  const space = s.printer ? PRINTER_WORKING : s.space;
+  const printer = s.printer ? { profile: s.printer.profile, intent: s.printer.intent, bpc: s.printer.bpc, working: PRINTER_WORKING } : null;
+  return { ...d, output: { ...d.output, export: { ...d.output.export, format: s.format, space, size: exportSizeOf(s), quality: s.quality }, printer } };
 }
 
 /**
@@ -144,11 +154,12 @@ export async function exportPrint(job: ExportJob): Promise<Exported> {
     node,
     // the file's metadata names the document by its hash (documentSha256): the frame's document with these export
     // settings, in the working image's pixels (the document he edits; File ▸ Save Document saves it)
-    settings: { format: s.format, space: s.space, quality: s.quality, dpi: ex.dpi, compression: ex.compression, signal: ex.signal === 'none' ? 'none' : 'icc', document: 'none' },
+    settings: { format: s.format, space: ex.space, quality: s.quality, dpi: ex.dpi, compression: ex.compression, signal: ex.signal === 'none' ? 'none' : 'icc', document: 'none' },
     sink: job.sink,
     name: job.fileName,
     document: documentPayload(withExport(job.doc, s)),
     rendering: d.output.rendering,
+    ...(job.printer ? { printer: job.printer } : {}),
     ...(job.signal ? { signal: job.signal } : {}),
     ...(job.onProgress ? { onProgress: job.onProgress } : {}),
   });
@@ -197,6 +208,16 @@ export async function exportBatch(deps: BatchDeps, req: ExportRequestOf): Promis
       // no activation (an agent's run) or no permission: downloads instead
     }
   }
+  // a file for a printer: the conversion to his printer profile, once for the batch (lcms in its worker)
+  let printer: (PrinterOut & { close(): Promise<void> }) | null = null;
+  if (req.settings.printer && frames.length) {
+    try {
+      const bytes = await (await printerLibrary()).get(req.settings.printer.profile);
+      printer = await printerConversion(await hostLcms(), bytes, { intent: req.settings.printer.intent, bpc: req.settings.printer.bpc, working: PRINTER_WORKING });
+    } catch (e) {
+      return frames.map(({ id }, i) => ({ frame: id, file: names[i]!, ok: false, error: deps.explain(e) }));
+    }
+  }
   const sources = new ExportSources(deps.engine, async (sha) => {
     const x = frames.find((y) => y.f.sha === sha);
     return x ? deps.bytes(x.id) : null;
@@ -212,6 +233,7 @@ export async function exportBatch(deps: BatchDeps, req: ExportRequestOf): Promis
       try {
         const x = await exportPrint({
           engine: deps.engine, graph: f.graph, doc: deps.doc(id)!, sha: f.sha, name: f.name, fileName: file, settings: req.settings, sink, sources, signal: req.signal,
+          ...(printer ? { printer } : {}),
           onProgress: (p) => req.onProgress({ at: i + 1, total: frames.length, file, phase: p.phase, tilesDone: p.tilesDone, tilesTotal: p.tilesTotal, results: [...results] }),
         });
         const data = sink instanceof MemorySink ? sink.bytes() : null;
@@ -225,8 +247,33 @@ export async function exportBatch(deps: BatchDeps, req: ExportRequestOf): Promis
     }
   } finally {
     await sources.close();
+    await printer?.close();
   }
   return results;
+}
+
+let lcmsP: Promise<Lcms> | null = null;
+/** lcms in its module worker (started on the first printer file or profile). */
+export function hostLcms(): Promise<Lcms> {
+  return (lcmsP ??= lcmsInWorker(new Worker(new URL('../../../../packages/output/src/icc/lcms/worker.ts', import.meta.url), { type: 'module' })));
+}
+let libraryP: Promise<ProfileLibrary> | null = null;
+/** His printer profiles, kept in the browser's private storage (OPFS profiles/) by SHA-256. */
+export function printerLibrary(): Promise<ProfileLibrary> {
+  return (libraryP ??= ProfileLibrary.open());
+}
+/** The printer profiles of his library, for the Output panel. */
+export async function printerProfiles(): Promise<PrinterProfileRef[]> {
+  try {
+    return (await (await printerLibrary()).list()).map((e) => ({ sha256: e.sha256, description: e.description }));
+  } catch {
+    return [];
+  }
+}
+/** Adds a printer profile to his library (checked: an RGB output profile lcms opens); its entry. */
+export async function addPrinterProfile(bytes: Uint8Array): Promise<PrinterProfileRef> {
+  const e = await (await printerLibrary()).import(bytes, { lcms: await hostLcms() });
+  return { sha256: e.sha256, description: e.description };
 }
 
 /** Hands a blob to the browser as a download. */

@@ -10,6 +10,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { cameraDng, dng, negativeScan, tif } from './scenes.ts';
 import { opened } from './support.ts';
+import { syntheticPrinterProfile } from '../packages/output/test/helpers.ts';
 
 const idle = (page: Page) => page.evaluate(() => window.chromobench.idle());
 const hook = <T>(page: Page, f: string): Promise<T> => page.evaluate(`(async () => { const cb = window.chromobench; return ${f}; })()`) as Promise<T>;
@@ -211,5 +212,43 @@ test('OUT-2 on the CPU engine and with a camera file: original size decoded in t
   await hook(page, `cb.run('output.set', { format: 'jpeg', space: 'srgb', size: 'long', longPx: 400 })`);
   const c = await hook<{ ok: boolean; width: number; height: number }[]>(page, `cb.run('output.export', { frames: 'current', to: 'memory' })`);
   expect(c).toMatchObject([{ ok: true, width: 400, height: Math.round(400 * 160 / 240) }]);
+  expect(errors).toEqual([]);
+});
+
+test('OUT-5: a file for the printer — a printer profile added to his library, the export converted to it and the profile embedded', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors = await boot(page, 'engine=gpu&long=240');
+  await page.setInputFiles('#file', tif('neg-p.tif', negativeScan(480, 320)));
+  await opened(page, 1, 120_000);
+  await hook(page, `cb.rt.go('output')`);
+  const p = panel(page);
+  await expect(p.locator('#output-space option', { hasText: 'Add printer profile…' })).toHaveCount(1);
+  // "Add printer profile…" (the panel opens the host's file input; the test hands it the file)
+  const icc = Buffer.from(syntheticPrinterProfile());
+  await page.setInputFiles('#printer-profile', { name: 'inkjet-paper.icc', mimeType: 'application/vnd.iccprofile', buffer: icc });
+  await page.waitForFunction(() => !!window.chromobench.state().prefs.export?.printer, null, { timeout: 60_000 });
+  await expect(p.locator('#output-space')).toHaveValue(/^printer:[0-9a-f]{64}$/);
+  await expect(p.locator('#output-intent')).toBeVisible();
+  await expect(p.locator('#output-intent')).toHaveValue('relative');
+  await expect(p.locator('#output-bpc')).toBeChecked();
+  await p.locator('#output-intent').selectOption('perceptual');
+  await p.locator('#output-format').selectOption('tiff16');
+  expect(await hook(page, 'cb.state().prefs.export.printer')).toMatchObject({ intent: 'perceptual', bpc: true });
+  await exportClick(page, '#output-export');
+  await expect(p.locator('#output-results li').first()).toContainText('✓ neg-p.tif · 480 × 320 px');
+  // the file carries the printer profile byte for byte (TIFF tag 34675)
+  const has = await page.evaluate((profile) => {
+    const b = (window as unknown as { __written: Record<string, number[]> }).__written['neg-p.tif']!;
+    outer: for (let i = 0; i + profile.length <= b.length; i++) {
+      for (let k = 0; k < profile.length; k++) if (b[i + k] !== profile[k]) continue outer;
+      return true;
+    }
+    return false;
+  }, Array.from(icc));
+  expect(has).toBe(true);
+  // back to a colour space: the printer choice goes
+  await p.locator('#output-space').selectOption('srgb');
+  expect(await hook(page, 'cb.state().prefs.export.printer')).toBeNull();
+  await expect(p.locator('#output-intent')).toBeHidden();
   expect(errors).toEqual([]);
 });

@@ -11,7 +11,10 @@ import { writeTiff16 } from '@chromobench/ingest';
 import { toU16 } from '../src/encode/quantise.ts';
 import { MemorySink, opfsSink } from '../src/encode/sinks.ts';
 import { documentPayload, documentSha256, exportFrame, exportNode, type ExportProgress } from '../src/export/run.ts';
-import { memoryDir } from './helpers.ts';
+import { memoryDir, syntheticPrinterProfile } from './helpers.ts';
+import { createLcms } from '../src/icc/lcms/api.ts';
+import { printerConversion } from '../src/export/printer.ts';
+import { getSpace } from '../src/spaces.ts';
 import { decodeJpeg } from './jpeg-decode.ts';
 import { ditherTo8 } from '../src/encode/quantise.ts';
 
@@ -160,6 +163,40 @@ describe('tiled export (stage 5)', () => {
       sum += Math.abs(j.rgb[i]! - ditherTo8(want[i]!, x, y, k));
     }
     expect(sum / (96 * 64 * 3)).toBeLessThan(1.5);
+  });
+
+  it('printer output (CHB-047 OUT-5): ProPhoto rows converted by lcms band by band, the printer profile embedded; bands do not matter', async () => {
+    const { e, display } = await setup(makeM1Tiff(), 'prophoto');
+    const lcms = await createLcms();
+    const icc = syntheticPrinterProfile();
+    const one = async (tile: number, intent: 'perceptual' | 'relative', bpc: boolean) => {
+      const printer = await printerConversion(lcms, icc, { intent, bpc });
+      const sink = new MemorySink();
+      const f = await exportFrame(e, { node: display, settings: { ...SETTINGS, format: 'tiff16', space: 'prophoto', compression: 'none' }, sink, name: 'p.tif', tile, printer });
+      await printer.close();
+      const b = sink.bytes();
+      const ifds = UTIF.decode(b.slice().buffer);
+      UTIF.decodeImage(b.slice().buffer, ifds[0]!);
+      return { f, px: new Uint16Array(ifds[0]!.data.slice().buffer), iccTag: ifds[0]!['t34675'] as number[] | undefined, bytes: b };
+    };
+    const a = await one(24, 'relative', true);
+    const b = await one(64, 'relative', true);
+    expect(Buffer.from(a.px.buffer).equals(Buffer.from(b.px.buffer))).toBe(true);
+    // the file's pixels are lcms's conversion of the plain ProPhoto export, and its profile is the printer's
+    const plain = await pixels(e, display);
+    const src = await lcms.open(getSpace('prophoto').icc), dst = await lcms.open(icc);
+    const t = await lcms.transform(src, dst, { intent: 'relative', bpc: true, in: 'RGB_16', out: 'RGB_16' });
+    const want = (await lcms.run(t, plain, plain.length / 3)) as Uint16Array;
+    expect(Buffer.from(a.px.buffer).equals(Buffer.from(want.buffer))).toBe(true);
+    expect(a.f.iccSha256).toBe(sha256Hex(icc));
+    expect(a.f.printer).toBeTruthy();
+    expect(Buffer.from(a.bytes).indexOf(Buffer.from(icc))).toBeGreaterThan(0);
+    // the synthetic printer's gamut is narrower: the conversion changes the pixels. It is a matrix/TRC profile with a
+    // black of 0, so perceptual has no table of its own and BPC moves nothing: both choices give the same file here
+    expect(Buffer.from(a.px.buffer).equals(Buffer.from(plain.buffer))).toBe(false);
+    const p = await one(24, 'perceptual', false);
+    expect(Buffer.from(p.px.buffer).equals(Buffer.from(a.px.buffer))).toBe(true);
+    lcms.dispose();
   });
 
   it('document sidecar and embedding; documentSha256 is the hash of the canonical document', async () => {

@@ -19,6 +19,7 @@ import { toU16 } from '../encode/quantise.ts';
 import type { ByteSink } from '../encode/sinks.ts';
 import { Tiff16Writer } from '../encode/tiff16.ts';
 import { getSpace, pngColour } from '../spaces.ts';
+import type { PrinterOut } from './printer.ts';
 
 export interface ExportProgress {
   phase: 'plan' | 'tiles' | 'finalise' | 'done';
@@ -41,6 +42,8 @@ export interface EncodedFile {
   iccSha256: string;
   /** documentSha256 of the document the file was made from ('' when none was given). */
   documentSha256: string;
+  /** The printer profile's description when the file is for a printer (its profile is embedded; iccSha256 is its). */
+  printer?: string;
   /** The document JSON to save next to the file when settings.document is 'sidecar'. */
   sidecar?: { name: string; json: string };
 }
@@ -61,6 +64,11 @@ export interface ExportRequest {
   rendering?: string;
   /** Tile size for engines without plan() (default 1024). */
   tile?: number;
+  /**
+   * Printer output (CHB-047 OUT-5): each band of rows, rendered in `settings.space` (the working space), is converted
+   * to the printer's RGB before it is written, and the printer profile is embedded instead of the space's.
+   */
+  printer?: PrinterOut;
 }
 
 /** What GpuEngine adds: 16-bit codes packed on the GPU. */
@@ -91,7 +99,9 @@ interface Encoder { writeRows(rgb16: Uint16Array, rows: number): Promise<void>; 
 
 async function openEncoder(req: ExportRequest, w: number, h: number): Promise<{ enc: Encoder; mime: EncodedFile['mime']; bits: 8 | 16; iccSha256: string }> {
   const s = req.settings;
-  const space = getSpace(s.space);
+  const space0 = getSpace(s.space);
+  // a printer file carries the printer's profile (its RGB is the printer's, not the working space's)
+  const space = req.printer ? { ...space0, id: s.space, label: req.printer.description, icc: req.printer.icc, iccSha256: req.printer.sha256, cicp: undefined } : space0;
   const meta: FileMeta = { space: space.label, ...(req.rendering ? { rendering: req.rendering } : {}), ...(req.document ? { documentSha256: req.document.sha256 } : {}), ...(req.document && s.document === 'embedded' ? { documentJson: req.document.json } : {}) };
   if (s.format === 'tiff16') {
     const description = tiffDescription(meta);
@@ -102,7 +112,7 @@ async function openEncoder(req: ExportRequest, w: number, h: number): Promise<{ 
     return { enc, mime: 'image/tiff', bits: 16, iccSha256: s.signal !== 'none' ? space.iccSha256 : '' };
   }
   if (s.format === 'png16' || s.format === 'png8') {
-    const colour = pngColour(space, s.signal);
+    const colour = req.printer ? (s.signal === 'none' ? {} : { icc: { name: latin1Name(space.label), bytes: space.icc } }) : pngColour(space0, s.signal);
     const enc = await Png16Writer.open(req.sink, { width: w, height: h, bits: s.format === 'png8' ? 8 : 16, colour, dpi: s.dpi, text: pngText(meta) });
     return { enc, mime: 'image/png', bits: s.format === 'png8' ? 8 : 16, iccSha256: colour.icc ? space.iccSha256 : '' };
   }
@@ -167,7 +177,7 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
         progress();
       }
       void y0;
-      await enc.writeRows(rows, bh);
+      await enc.writeRows(req.printer ? await req.printer.convert(rows, outW * bh) : rows, bh);
     }
     tileAt = -1;
     phase = 'finalise';
@@ -179,6 +189,7 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
     const documentSha256 = req.document?.sha256 ?? '';
     return {
       name: req.name, format: s.format, mime, bytes: req.sink.size, width: outW, height: outH, bits, space: s.space, iccSha256, documentSha256,
+      ...(req.printer ? { printer: req.printer.description } : {}),
       ...(req.document && s.document === 'sidecar' ? { sidecar: { name: sidecarName(req.name), json: req.document.json } } : {}),
     };
   } catch (e) {
@@ -188,6 +199,9 @@ export async function exportFrame(engine: Engine, req: ExportRequest): Promise<E
     throw new ChromobenchError({ ...d, message: `export failed in ${phase}${tileAt >= 0 ? ` (tile ${tileAt})` : ''}: ${d.message}` });
   }
 }
+
+/** A PNG iCCP profile name: 1–79 Latin-1 characters. */
+const latin1Name = (s: string): string => s.replace(/[^\x20-\x7e\xa0-\xff]/g, '?').slice(0, 79) || 'printer';
 
 /** The sidecar's name beside an exported file: `frame_0042.png` → `frame_0042.chromobench.json`. */
 export const sidecarName = (file: string): string => `${file.replace(/\.[^.]+$/, '')}.chromobench.json`;
