@@ -1279,3 +1279,86 @@ important is it to test the entire thing now?"
 
 ### Technical details
 - Logs: scratchpad `p1-swiftshader.log`, `p1-metal.log`.
+
+## Step 23: Phase 2, first round — Output (CHB-047), before the film (CHB-048), masks (CHB-049) merged
+
+Three agents worked in parallel worktrees from main 697e036, each with its own ticket, diary, ports (5571–5579,
+5581–5589, 5591–5599) and the GPU lock for Metal. Shared brief: scratchpad `phase2-brief.md`. All three finished
+their items; I merged them in the order they reported (CHB-049, CHB-047, CHB-048) and integrated.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok" (to starting Phase 2 with three agents: Output; before the film; masks and selections)
+
+**Assistant interpretation:** Run the first round of Phase 2 and bring it to main like Phase 1.
+
+**Inferred user intent:** Every feature the photographer needs for the beta, built and checked, without owner
+round-trips.
+
+### What I did
+- Merged CHB-049 (79b9c05): mask controls and on-picture handles, selections as mask components (marquee, lasso,
+  polygonal lasso, magic wand, Select menu), live preview of mask gestures. Contract 1.6.0, CC-025.
+- Merged CHB-047 (790453a): Output module, export at the file's own size (decode again, `scaleDocument`, tiled), size
+  choice, JPEG, cICP check, RAW colour test, CAM16 knee on the GPU, printer output. Conflict with CHB-049 on the contract
+  number: CHB-047 removes `output.export.scale` (breaking; its branch failed `contract:check`), so it became 2.0.0 and
+  CC-026 with its own CONTRACT-DECISIONS section.
+- Merged CHB-048 (76209af): white balance before the film (CAT16, Lightroom's temperature/tint, as shot, presets,
+  eyedropper), film stocks and papers as medium presets, ClipColor for the OkLCh blend modes, first-exit chroma search.
+  Ten conflicts: contract 3.0.0 (CC-027…029), STORAGE_FORMAT 5, `gamut.ts` (both cam16Knee and the first-exit search),
+  the Darkroom-first tools (select tools and the white-balance picker), `cb.ts` commands, `main.ts` imports, generated
+  files and layout snapshots regenerated.
+- Integration fixes: W claimed by both the magic wand and the white-balance picker in Print → W stays white balance
+  (Lightroom's Develop key), the wand is Shift+W; CHB-047's RAW colour test used core's deleted `cameraMatrix` → the
+  contract's `sceneMatrix(cam, asShotWhiteBalance(cam))`, same ΔE2000 on the four private pairs (median 0.13–0.51,
+  p99 0.66–1.32); golden documents re-translated (`translate.ts`, `stacks.ts`).
+- fb6e744: the GPU's CAM16 knee (`c16MaxChroma`) marches to the first exit like core (see What didn't work).
+- Backlog: OUT-1, 2, 3, 5, 6, 7, LAY-1, LAY-2, LOOK-6, MASK-2, 3, 4 marked done; a Phase 2 round-one note with the
+  leftovers and what the photographer should judge.
+
+### Why
+- Merging in report order let each integration be checked while the next agent was still running.
+
+### What worked
+- Telling the last running agent which contract numbers were taken: CHB-048 numbered itself 3.0.0 / CC-027…029 and
+  STORAGE_FORMAT 5, so the contract conflicts were mechanical.
+- Checks on the combined code: typecheck, lint (536 file checks), gen:check, contract:check (3.0.0), vitest 160 files,
+  3606 passed, 20 skipped; goldens 68/68.
+
+### What didn't work
+- First combined browser run: SwiftShader 175 passed, 2 skipped, 2 failed; Metal gpu-parity 63 passed, 2 skipped,
+  1 failed. The shared failure was `output.spec.ts:38` (cam16-ucs knee against core): max 0.092 in linear RGB, 7456
+  16-bit codes. Cause: CHB-048 made core's `maxChromaOf` find the first gamut exit and updated the GPU's OkLCh search;
+  CHB-047's new CAM16 search on the GPU still bisected over [0, 150]. Each branch passed alone; only the combination
+  failed. After fb6e744: output.spec 5/5 on SwiftShader and Metal.
+- `studio-real.spec.ts:156` (offline start from the service worker) failed in the full SwiftShader run at 2.0 min
+  ("#engine" not found after the offline reload); alone it passed in 55 s. A load flake, like Phase 1's chain.spec
+  hang.
+
+### What I learned
+- Parallel branches can each be correct and still be wrong together when one changes a shared definition (the chroma
+  search) and the other adds a new copy of the old one. The parity tests caught it; a generated WGSL constant or a
+  shared search kernel would prevent it (GPUC-7 territory).
+
+### What was tricky to build
+- Three contract bumps in one round; the breaking ones (2.0.0, 3.0.0) each clear saved edits once via
+  STORAGE_FORMAT.
+
+### What warrants a second pair of eyes
+- The key decision W → white balance, Shift+W → magic wand.
+- CHB-048's display-knee first-exit change on real deep-blue pictures.
+- The export defaults and the photographer-facing choices listed in the backlog note.
+
+### What should be done in the future
+- Merge to main and push.
+- Phase 2, next round: DARK-1 (Darkroom first complete) and the rest of the darkroom group; finish and retouch;
+  looks, roll workflow and the interface; leftovers of this round (OUT-4 soft proofing, banded CPU export, saved
+  edits recording the working size, handles under crop/rotation).
+- Test time: the SwiftShader suite is now about 14 minutes; flakes under load (page open, offline reload) want
+  their own timeouts and retries.
+
+### Code review instructions
+- CHB-047, CHB-048, CHB-049 specs and diaries; the merge commits 790453a and 76209af (conflict resolutions in their
+  messages); fb6e744.
+
+### Technical details
+- Logs: scratchpad `p2-swiftshader.log`, `p2-metal.log`. Resolver scripts: `resolve-047.py`, `resolve-048.py`.
