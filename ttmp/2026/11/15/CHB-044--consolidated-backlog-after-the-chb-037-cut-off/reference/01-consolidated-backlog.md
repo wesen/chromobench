@@ -81,6 +81,21 @@ the rest of group 2. Darkroom: DARK-1 (Finish and before-the-film palettes in Da
 Finish (group 4), looks and library (group 6), roll workflow and scan conditioning (group 5; SCAN-1 and DARK-4
 checked on real scans first), interface (group 10). Then switch the default arrangement per D1.
 
+*Phase 2, first round (2026-11-15/16):* CHB-047 (Output: OUT-1, 2, 3, 5, 6, 7), CHB-048 (before the film: LAY-1,
+LOOK-6, LAY-2) and CHB-049 (masks: MASK-2, 3, 4) done and merged (rows marked below). Contract 3.0.0, STORAGE_FORMAT 5
+(saved edits are cleared once). Left open from this round: OUT-4 soft proofing (not started); the CPU engine cannot
+export a 24 MP file (needs a banded export in core); the full-size export decodes the file again each time (4.6 s of
+8.3 s); saved edits do not record the working size, so a frame edited on one engine reads at the wrong scale on the
+other (`scaleDocument` is the piece the fix needs); the cam16-ucs knee has no control in his words; printer intents
+untested on a real LUT profile; handles and selection tools assume document pixels (wrong under a crop or a turned
+frame); menu Grow/Contract/Feather use fixed amounts; no brush-size key; a superseded mask draft can stay on screen
+under load; double-click on Temperature resets to None, not As shot; a negative's scan stock is a plain select, not a
+preset; the display-knee first-exit fix wants a check on real deep-blue pictures. Key decision at merge: W is the
+white-balance picker (Lightroom's Develop key), the magic wand is Shift+W. For the photographer to judge: export
+defaults (JPEG, sRGB, original, q90) and export settings as preferences; Deselect removes the mask; Draw defaults to
+Add; the wand samples the image the mask reads (the negative for a darkroom layer); Lightroom's white-balance numbers
+and presets; the grade as a half-step picker.
+
 **Phase 3 — Performance (beside phase 2).** PERF-1 (open-loop bench with requirements as numbers, a gate) first, then
 PERF-2 (present from GPU textures, T1), the pyramid (T2), checkpoints (T3), early cutoff, and the GPU debts of
 group 9.
@@ -104,17 +119,17 @@ New items created by the decisions (not in the triage):
 | # | Item | Severity | Sources | Depends on |
 |---|---|---|---|---|
 | MASK-1 | A mask tool disarms after one mask (or needs a drag): today a later click on the picture adds a gradient mask to whatever layer is selected — done in CHB-046 (5a9350c) | major | CHB-037 P9-1 t:hqwh | — |
-| MASK-2 | Selections as mask components in their own kit: marquee (rect, ellipse), lasso (freehand, polygonal), magic wand (tolerance, contiguous, sample cut), all/none/invert, grow/contract, feather, selection → mask | later | CHB-040 t:f4vl | D3 |
-| MASK-3 | Mask controls: mask-level density, per-component invert and on/off, on-picture handles to move/resize/rotate linear, radial and ellipse components (snapping), brush size/hardness/flow in the tool options | minor | CHB-040 t:srjo | — |
-| MASK-4 | Live preview of a mask tool's gesture before release (the new component as a draft; today only the outline shows) | minor | CHB-039 diary Step 2 (future) | — |
+| MASK-2 | Selections as mask components in their own kit: marquee (rect, ellipse), lasso (freehand, polygonal), magic wand (tolerance, contiguous, sample cut), all/none/invert, grow/contract, feather, selection → mask — done in CHB-049 (5a0c9c3, b025b42) | later | CHB-040 t:f4vl | D3 |
+| MASK-3 | Mask controls: mask-level density, per-component invert and on/off, on-picture handles to move/resize/rotate linear, radial and ellipse components (snapping), brush size/hardness/flow in the tool options — done in CHB-049 (5a0c9c3, 85d86d9) | minor | CHB-040 t:srjo | — |
+| MASK-4 | Live preview of a mask tool's gesture before release (the new component as a draft; today only the outline shows) — done in CHB-049 (85d86d9) | minor | CHB-039 diary Step 2 (future) | — |
 | MASK-5 | Subject/sky selection and fill through a licence-gated provider adapter | later | CHB-022 t:5krk | MASK-2, D3 |
 
 ## 2. Layers and adjustments
 
 | # | Item | Severity | Sources | Depends on |
 |---|---|---|---|---|
-| LAY-1 | White balance before the film for camera files: a scene-stage white-balance layer/control; a "before the film" palette in Darkroom first | major | CHB-037 P9-12 t:ig9q | D2 |
-| LAY-2 | OkLCh hue/saturation/colour/luminosity blend modes apply W3C ClipColor (luminosity can leave the gamut today) | correctness | CHB-037 P10-9 t:dpba | — |
+| LAY-1 | White balance before the film for camera files: a scene-stage white-balance layer/control; a "before the film" palette in Darkroom first — done in CHB-048 (16fae66, b225e76) | major | CHB-037 P9-12 t:ig9q | D2 |
+| LAY-2 | OkLCh hue/saturation/colour/luminosity blend modes apply W3C ClipColor (luminosity can leave the gamut today) — done in CHB-048 (43dc1d6) | correctness | CHB-037 P10-9 t:dpba | — |
 | LAY-3 | Overlay, hard light and soft light switch at linear 0.5 (display 0.735), not at mid-grey: document it or encode the switch point — done in CHB-045 (d2a45b3) | minor | CHB-037 P10-23 t:fd6s | D7 |
 | LAY-4 | Layer multi-select; grouping (Mod+G) of one layer refused or meaningful ("1 entries" today) | minor | CHB-037 P9-13 t:tkue | — |
 | LAY-5 | Layer descriptions in the photographer's words (no formulas, op ids, "Editor lab", cut names or SHA-256 in catalogue `ui` docs) | minor | CHB-037 P9-7 t:6cgv | — |
@@ -173,7 +188,7 @@ New items created by the decisions (not in the triage):
 | LOOK-3 | Match to reference for single frames (`looks.match` is a disabled stub; the roll has it); the auto-lights bookkeeping | minor | CHB-021 t:ji7o | — |
 | LOOK-4 | Library: collections and a keyword-editing UI (`frame.keywords` exists) | minor | CHB-028 t:39pe | — |
 | LOOK-5 | File ▸ Import Look (`.cblook.js`); remove a kept assistant layout from View ▸ Layout | minor | CHB-037 t:1qlj | — |
-| LOOK-6 | Medium presets (film/paper and grade looks were deleted with the cut-off) | later | CHB-021 t:xw53 (superseded), HANDOFF §9 | D6 |
+| LOOK-6 | Medium presets (film/paper and grade looks were deleted with the cut-off) — done in CHB-048 (0588159) | later | CHB-021 t:xw53 (superseded), HANDOFF §9 | D6 |
 | LOOK-7 | Cache look captions per (look, params, document hash) before the library passes ~20 looks | later | CHB-021 t:kzh2 | — |
 | LOOK-8 | `cb.arg(…).vsSnapshot()` marker fragment (check whether still wanted) | later | CHB-021 t:8neb | — |
 
@@ -181,13 +196,13 @@ New items created by the decisions (not in the triage):
 
 | # | Item | Severity | Sources | Depends on |
 |---|---|---|---|---|
-| OUT-1 | Classic's Output module: export with format, space and size (today a placeholder that says "come with CHB-011") | major | CHB-037 P9-10 t:936y | OUT-2 |
-| OUT-2 | Export at the file's own size on both engines (decode full size, tiled; previews stay at working size), an output size choice, JPEG | major | CHB-028 t:qfae, CHB-037 P9-14 t:baq3 | — |
-| OUT-3 | The CAM16-UCS knee on the GPU (WGSL) with parity; a document asking for it renders with the OkLCh knee on the GPU today (W_PREVIEW_APPROX) | minor | CHB-011 t:s4tf | — |
+| OUT-1 | Classic's Output module: export with format, space and size (today a placeholder that says "come with CHB-011") — done in CHB-047 (bd2df3b) | major | CHB-037 P9-10 t:936y | OUT-2 |
+| OUT-2 | Export at the file's own size on both engines (decode full size, tiled; previews stay at working size), an output size choice, JPEG — done in CHB-047 (bd2df3b) | major | CHB-028 t:qfae, CHB-037 P9-14 t:baq3 | — |
+| OUT-3 | The CAM16-UCS knee on the GPU (WGSL) with parity; a document asking for it renders with the OkLCh knee on the GPU today (W_PREVIEW_APPROX) — done in CHB-047 (423eec4) | minor | CHB-011 t:s4tf | — |
 | OUT-4 | Soft proofing: the 33³ proof table with a gamut channel in the output kernel, tested against lcms (the lcms transform and `output.display.proof` exist) | minor | CHB-011 t:069x | — |
-| OUT-5 | Printer output: strip-wise lcms to the printer profile (intent, BPC), profile embedded (`output.printer` exists, unused) | minor | CHB-011 t:joib | OUT-2 |
-| OUT-6 | Check the sRGB/P3 cICP code points against H.273; fix the design doc's note crediting paper white and Dmax to the Endura data | minor | CHB-011 t:bk2k | — |
-| OUT-7 | RAW colour regression test from CHB-033 script 01 (skips without the private files) | minor | CHB-033 t:y8dh | — |
+| OUT-5 | Printer output: strip-wise lcms to the printer profile (intent, BPC), profile embedded (`output.printer` exists, unused) — done in CHB-047 (d9ee526) | minor | CHB-011 t:joib | OUT-2 |
+| OUT-6 | Check the sRGB/P3 cICP code points against H.273; fix the design doc's note crediting paper white and Dmax to the Endura data — done in CHB-047 (1d4b361) | minor | CHB-011 t:bk2k | — |
+| OUT-7 | RAW colour regression test from CHB-033 script 01 (skips without the private files) — done in CHB-047 (c8e8875) | minor | CHB-033 t:y8dh | — |
 | OUT-8 | Forward matrices / the camera's dual matrices, only if a colour chart says Adobe's colour is closer | later | CHB-033 t:s66f | CAL-8, D11 |
 | OUT-9 | Lightroom / Adobe Color rendering as a taste reference (optional) | later | CHB-033 t:xvhd | D11 |
 

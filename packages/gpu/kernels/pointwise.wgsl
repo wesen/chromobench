@@ -373,12 +373,20 @@ fn c16Ok(Jp: f32, Mp: f32, ca: f32, sa: f32, k: C16) -> bool {
   let v = c16Inv(Jp, Mp, ca, sa, k);
   return all(v == v) && inCube(v);
 }
-// largest in-gamut M′ at (J′, h) by bisection (core maxChromaOf from cHi 150; 30 halvings reach f32 resolution)
+// largest M′ at (J′, h) whose whole way from grey is in the gamut (core maxChromaOf with cHi 150): the first exit,
+// found by a march of CHROMA_MARCH steps over [0, 150] (as okMaxChroma), the reach doubled up to 8 times while still
+// inside at 150, then 30 halvings of the step reach f32 resolution
 fn c16MaxChroma(Jp: f32, ca: f32, sa: f32, k: C16) -> f32 {
   var lo = 0.0;
   var hi = 150.0;
+  var left = false;
+  for (var s = 1; s <= CHROMA_MARCH; s++) {
+    let c = f32(s) * (150.0 / f32(CHROMA_MARCH));
+    if (!c16Ok(Jp, c, ca, sa, k)) { hi = c; left = true; break; }
+    lo = c;
+  }
   for (var i = 0; i < 8; i++) {
-    if (c16Ok(Jp, hi, ca, sa, k)) { lo = hi; hi = 2.0 * hi; } else { break; }
+    if (!left && c16Ok(Jp, hi, ca, sa, k)) { lo = hi; hi = 2.0 * hi; } else { break; }
   }
   for (var i = 0; i < 30; i++) {
     let m = 0.5 * (lo + hi);
