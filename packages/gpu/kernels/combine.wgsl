@@ -1,4 +1,5 @@
 //! include working.wgsl
+//! include contract-constants
 // Multi-input steps of the GPU engine (contract 1.0), one pass each on output-grid textures a, b and a mask m:
 // the light law of print.combine as passes in linear H (src/engine/light.ts plans them; the formula is the
 // contract's lightH), print.densityMask's transmittance and density, composite.mix (mixPixel), mask.combine
@@ -14,8 +15,9 @@
 // mode 4  UNIFORM:       H = A + m · w.xyz                      (a flash w = a·r·10^x_flash; a preflash w = a·φ)
 // mode 5  FILTER:        H = A · 10^(m · w.xyz)                 (w = a·logH)
 // mode 6  TRANSMITTANCE: T = mean_k 10^(a_k − w_k)              (the mask film's exposure: PD = w − x, w = x_clear)
-// mode 7  DENSITY:       d = w.x · (log10 b − w.y)              (w.x = ±γ, w.y = log10 of the smallest (positive) or
-//                                                               largest (same) blurred T; w.x = 0 gives 0)
+// mode 7  DENSITY:       d = w.x · (log10 max(b, T_floor) − w.y) (w.x = ±γ, w.y = log10 of the smallest (positive) or
+//                                                               largest (same) blurred T, floored alike; w.x = 0 gives 0;
+//                                                               T_floor = contract MASK_T_FLOOR: a flushed 0 has no log)
 // mode 8  COPY:          a
 // mode 9  MIX:           k = w.x · m; out = wkMix(a, b, k, blend w.y, encoding w.z) (kernels/working.wgsl): k = 0 → a,
 //                        k = 1 → B(a, b), else a + k·(B − a); a the backdrop, b the top (contract mixPixel, core blendPixel)
@@ -54,14 +56,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
   switch (U.mode) {
     case 0u: { out = vec4<f32>(U.w.x * cov * p10(va.rgb), 0.0); }
     case 1u: { out = vec4<f32>(A + U.w.x * cov * p10(textureLoad(b, p, 0).rgb), 0.0); }
-    case 2u: { out = vec4<f32>(lg10(max(A, vec3<f32>(1e-8))), 0.0); }
+    case 2u: { out = vec4<f32>(lg10(max(A, vec3<f32>(H_FLOOR))), 0.0); }
     case 3u: { out = vec4<f32>(A * exp2(-LOG2_10 * U.w.x * cov * textureLoad(b, p, 0).r), 0.0); }
     case 4u: { out = vec4<f32>(A + cov * U.w.xyz, 0.0); }
     case 5u: { out = vec4<f32>(A * p10(cov * U.w.xyz), 0.0); }
     case 6u: { let t = dot(p10(va.rgb - U.w.xyz), vec3<f32>(1.0 / 3.0)); out = vec4<f32>(t, t, t, 1.0); }
     case 7u: {
       var d = 0.0;
-      if (U.w.x != 0.0) { d = U.w.x * (log2(textureLoad(b, p, 0).r) * LOG10_2 - U.w.y); }
+      if (U.w.x != 0.0) { d = U.w.x * (log2(max(textureLoad(b, p, 0).r, MASK_T_FLOOR)) * LOG10_2 - U.w.y); }
       out = vec4<f32>(d, d, d, 1.0);
     }
     case 9u: {

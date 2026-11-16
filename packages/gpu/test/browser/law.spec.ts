@@ -148,6 +148,47 @@ test('output.frame: crop and the eight orientations are a pixel permutation of o
   expect(r.straighten.core8bit).toBeLessThanOrEqual(1);
 });
 
+// CHB-045 GPUC-1: a preview starting while an export tile holds a whole-frame field it has not read yet (forced: the
+// preview and another render's write run inside the tile's upsampleAt). The field goes back to the pool only after the
+// tile's pass is submitted; without the leases (broken) the pool hands the field to the other render, which writes it.
+test('an export tile keeps its field while a preview starts and another render takes a texture (field textures leased)', async ({ page }) => {
+  test.setTimeout(300_000);
+  const r = await run(page, 'law:field-race');
+  expect(r.error).toBeUndefined();
+  expect(r.firstCodes).toBe(0);
+  expect(r.same).toBe(false);
+  expect(r.codes).toBe(0);
+  expect(r.pending).toBe(0);
+});
+
+test('broken variant: without leases the pool hands the tile\'s field to the other render and the tile reads its writes', async ({ page }) => {
+  test.setTimeout(300_000);
+  const r = await run(page, 'law:field-race', { broken: true });
+  expect(r.same).toBe(true);
+  expect(r.codes).toBeGreaterThan(0);
+});
+
+// CHB-045 GPUC-3: the density mask's log of the blurred transmittance is floored (0 and subnormals are finite).
+test('density-mask density pass: 0, subnormal and tiny transmittances give finite densities, floored at MASK_T_FLOOR', async ({ page }) => {
+  const r = await run(page, 'law:density-floor');
+  expect(r.error).toBeUndefined();
+  expect(r.finite).toBe(true);
+  expect(r.maxAbs).toBeLessThan(1e-5);
+});
+
+// CHB-045 GPUC-2: one integer grid rule. Every output width 1…4000 of a 4000-px frame and every height 1…2674 of a
+// 2674-px one, GPU (proxies on and off: the host's gridAxis and kernels/grid.wgsl) against core, column by column; the
+// sweep meets thousands of ties (before: 554 widths of 3901 had a column on another pixel).
+test('the grid rule: every output width and height reads the same pixels on the GPU as in core, ties included', async ({ page }) => {
+  test.setTimeout(900_000);
+  const r = await run(page, 'law:grid');
+  expect(r.error).toBeUndefined();
+  for (const k of ['widths.proxies', 'widths.kernel', 'heights.proxies', 'heights.kernel']) {
+    expect(r[k].columns, k).toBe(0);
+    expect(r[k].ties, k).toBeGreaterThan(1000);
+  }
+});
+
 test('an export tile by tile equals the whole-frame export for every spatial op (halos, whole-frame fields and extremes)', async ({ page }) => {
   test.setTimeout(600_000);
   const r = await run(page, 'law:tiles');

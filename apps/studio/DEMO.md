@@ -68,7 +68,7 @@ plus every parameter, the raw journal and the node list. Synthetic files to try:
   cursor, and in the Densitometer panel); `p` pins a probe into the document.
 - **Layers on every stage** (CHB-037): the darkroom's stack (main exposure, printer lights, burns, dodges, flashes,
   preflash, filters, contrast masks) in the Exposures / Enlarger panel; the print's digital layers (curve, levels,
-  HSL, colour grading, vibrance, channel mixer, clarity, sharpen, vignette) with 16 blend modes, groups and an amount;
+  HSL, colour grading, vibrance, channel mixer, clarity, sharpen, vignette) with 20 blend modes, groups and an amount;
   a camera file's scene stage (before the film). "+ Layer" adds from the catalogue; the Layer panel shows the selected
   layer's controls (editors for curve, levels, HSL, grading wheels, mixer); the Mask panel its mask (linear, radial,
   brush, luminance and colour ranges; the colour from the picture with Sample).

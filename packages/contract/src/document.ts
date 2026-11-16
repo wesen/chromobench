@@ -101,15 +101,22 @@ export function readableCuts(stage: StageName, kind: FrameKind, use: 'mask' | 'b
 // ---- entries ---------------------------------------------------------------------------------------------------
 
 /**
- * Blend modes of the composite law (contract 1.1): the W3C Compositing and Blending set. Separable modes act per
- * channel in linear RGB (white = 1); hue, saturation, colour and luminosity act in OkLCh (design §5, §22).
+ * Blend modes of the composite law (contract 1.1; 1.5: D7): the W3C Compositing and Blending set and Photoshop's
+ * vivid light, linear light, pin light and hard mix. Separable modes act per channel in linear RGB (white = 1), except
+ * the contrast modes (CONTRAST_BLENDS), which act in the display encoding so they switch at display mid-grey; hue,
+ * saturation, colour and luminosity act in OkLCh (design §5, §22; pixel.ts blendSeparable).
  */
 export const BLEND_MODES = [
   'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'colour-dodge', 'colour-burn', 'hard-light', 'soft-light',
-  'difference', 'exclusion', 'hue', 'saturation', 'colour', 'luminosity',
+  'vivid-light', 'linear-light', 'pin-light', 'hard-mix', 'difference', 'exclusion', 'hue', 'saturation', 'colour', 'luminosity',
 ] as const;
 /** The blend modes defined through lightness, chroma and hue (OkLCh), not per channel. */
 export const NON_SEPARABLE_BLENDS: readonly BlendMode[] = ['hue', 'saturation', 'colour', 'luminosity'];
+/**
+ * The contrast modes (D7, contract 1.5): evaluated per channel in the display encoding (pixel.ts displayEncode), so they
+ * switch at display mid-grey (encoded ½, linear 0.214) as in Photoshop; every other separable mode acts in linear light.
+ */
+export const CONTRAST_BLENDS: readonly BlendMode[] = ['overlay', 'hard-light', 'soft-light', 'vivid-light', 'linear-light', 'pin-light', 'hard-mix'];
 export type BlendMode = (typeof BLEND_MODES)[number];
 /** A layer blends with a mode; a group is 'pass' (children act on the backdrop) or isolated with a mode. */
 export type EntryBlend = BlendMode | 'pass';

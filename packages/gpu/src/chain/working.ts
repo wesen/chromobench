@@ -2,6 +2,7 @@
 // (core composite/working.ts): one definition of OkLab and the working RGB for both engines. The pointwise and
 // combine kernels include it (`//! include working.wgsl`, linked by linkKernel).
 import { BLEND_MODES, encodingOfDomain, type BlendMode, type Domain } from '@chromobench/contract';
+import gridCode from '../../kernels/grid.wgsl?raw';
 import workingCode from '../../kernels/working.wgsl?raw';
 import type { Mat3 } from '../tables/inputs.ts';
 import { linkWgsl } from './wgsl-link.ts';
@@ -9,7 +10,7 @@ import { linkWgsl } from './wgsl-link.ts';
 export { wgslMat3 } from './wgsl-link.ts';
 
 /** The kernel files other kernels include (`//! include <file>`, chain/wgsl-link.ts). */
-const KERNEL_FILES: Readonly<Record<string, string>> = { 'working.wgsl': workingCode };
+const KERNEL_FILES: Readonly<Record<string, string>> = { 'working.wgsl': workingCode, 'grid.wgsl': gridCode };
 
 /** A kernel's WGSL with the modules it includes prepended (the engine's pipelines compile this). */
 export function linkKernel(code: string): string {

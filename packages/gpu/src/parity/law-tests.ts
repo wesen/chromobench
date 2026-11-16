@@ -4,14 +4,15 @@
 // same 33³ tables), `kernel` the law ops in f64 (reference.ts, core's functions) on the GPU's own export of every node
 // before them, so only the law kernels differ. `law:core` compares whole documents at display.
 import {
-  compile, edit, Graph, layerEntry, groupEntry, newDocument,
+  compile, edit, Graph, MASK_T_FLOOR, layerEntry, groupEntry, newDocument,
   type Document, type Entry, type EntryBase, type ImageInfo, type Mask, type MaskComponent, type Node, type Params, type ScanMedium,
 } from '@chromobench/contract';
 import { frameImage, RefEngine, retouch } from '@chromobench/core';
 import { OP } from '../chain/program.ts';
 import { GpuEngine } from '../engine-gpu.ts';
 import { isBarrier } from '../engine/dag.ts';
-import { combineArgs } from '../engine/light.ts';
+import { combineArgs, MODE } from '../engine/light.ts';
+import { combinePass } from '../engine/textures.ts';
 import { defaultPhysicsData } from '../physics/data.ts';
 import { gold, runtime } from './page-shared.ts';
 import { EngineReference, LawReference, type Img64 } from './reference.ts';
@@ -501,6 +502,153 @@ async function tilesTest(): Promise<Record<string, unknown>> {
   return out;
 }
 LAW_TESTS['law:tiles'] = tilesTest;
+
+/**
+ * CHB-045 GPUC-1 (CHB-037 P10-10): an exact export tile that has taken a whole-frame field and not yet submitted the pass
+ * that reads it, while a preview starts (dropFields) and another render takes a texture of the field's descriptor from
+ * the pool and writes it. The interleaving is forced: the tile's first upsampleAt runs the preview and the intruder
+ * before it reads the field. With leases the field returns to the pool only after the tile's pass is submitted, so the
+ * intruder gets another texture and the tile equals the whole-frame export; `broken` turns the leases off (the code
+ * before the fix): the pool hands the field itself to the intruder and the tile reads its writes.
+ */
+async function fieldRaceTest(o: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  const TW = 352, TH = 232;
+  const rt = await runtime();
+  const { tiff } = syntheticScan(gold().solve, TW, TH);
+  const gpu = await GpuEngine.create({ runtime: rt, workers: 4, opfs: false, exactBox: 96 });
+  const sha = (await gpu.open({ kind: 'file', sha256: '', bytes: tiff })).sha256;
+  const g = new Graph();
+  g.registerSource(gpu.graph.source(sha)!);
+  const main: [Id, Entry] = ['main', L('expose', { time_s: 12, fstop: 8, filtration: { c: 0, m: 0, y: 0 } })];
+  const d = scanDocument(sha, { darkroom: [main, ['dm', L('densityMask', { gamma: 0.5, radius_um: 300, polarity: 'same' })]] }, [], [TW, TH]);
+  const n = compile(d, g).display;
+  gpu.adopt(g.closure(n.id));
+  const pool = rt.textures as unknown as { lease(t: GPUTexture): () => void };
+  const lease = pool.lease;
+  if (o['broken']) pool.lease = () => () => undefined;
+  const blur = (gpu as unknown as { blur: { upsampleAt(f: GPUTexture, ...rest: unknown[]): Promise<GPUTexture> } }).blur;
+  const upsampleAt = blur.upsampleAt;
+  let intruder: GPUTexture | null = null;
+  let same: boolean | null = null;
+  try {
+    const whole = await gpu.evaluateU16(n, { scale: 'full' });
+    const region = { x: 128, y: 64, w: 64, h: 64 };
+    const first = await gpu.evaluateU16(n, { scale: 'full', region }); // builds the fields; the next tile takes them from the cache
+    blur.upsampleAt = async function (this: unknown, field: GPUTexture, ...rest: unknown[]): Promise<GPUTexture> {
+      if (same === null) {
+        // the tile holds the field and awaits its pipeline: a preview starts, and another render takes a texture
+        await gpu.evaluate(n, { scale: 0.5, precision: 'preview' });
+        intruder = rt.textures.acquire({ format: field.format, w: field.width, h: field.height, usage: field.usage }, 'test.intruder');
+        same = intruder === field;
+        rt.device.queue.writeTexture({ texture: intruder }, new Float32Array(field.width * field.height * 4).fill(0.25), { bytesPerRow: field.width * 16 }, [field.width, field.height]);
+      }
+      return upsampleAt.call(blur, field, ...rest);
+    };
+    const raced = await gpu.evaluateU16(n, { scale: 'full', region });
+    let codes = 0, firstCodes = 0;
+    for (let y = 0; y < region.h; y++) for (let x = 0; x < region.w; x++) for (let k = 0; k < 3; k++) {
+      const want = whole.data[((region.y + y) * TW + region.x + x) * 3 + k]!;
+      if (raced.data[(y * region.w + x) * 3 + k] !== want) codes++;
+      if (first.data[(y * region.w + x) * 3 + k] !== want) firstCodes++;
+    }
+    return { same, codes, firstCodes, pending: rt.budget.pending };
+  } finally {
+    blur.upsampleAt = upsampleAt;
+    pool.lease = lease;
+    if (intruder) rt.textures.release(intruder);
+    gpu.dispose();
+  }
+}
+LAW_TESTS['law:field-race'] = fieldRaceTest;
+
+/**
+ * CHB-045 GPUC-2 (CHB-037 P10-15): the grid rule, engine against engine, column by column. A 4000 × 2 pattern (seeded
+ * noise: every column its own values) rendered at every output width 1…4000 (scale n/4000), and a 2 × 2674 pattern at
+ * every output height 1…2674, on the GPU — with proxies (the host samples the source by the contract's gridAxis) and
+ * without (kernels/grid.wgsl in the pointwise kernel) — against core's reference engine at the same scale. A column
+ * differs when its values do (beyond f32 rounding). `ties` counts the output pixels whose centre falls exactly on a
+ * boundary between two image pixels ((2p + 1)·w divisible by 2n): where the f32 rule picked the left pixel.
+ */
+async function gridTest(): Promise<Record<string, unknown>> {
+  const rt = await runtime();
+  const data = defaultPhysicsData();
+  const ref = new RefEngine({ data });
+  const out: Record<string, unknown> = {};
+  for (const [name, PW, PH] of [['widths', 4000, 2], ['heights', 2, 2674]] as const) {
+    const g = new Graph();
+    const node = g.intern('source.pattern', [], { domain: 'camera-linear', width: PW, height: PH, seed: 7 }).node;
+    ref.adopt(g.closure(node.id));
+    const N = Math.max(PW, PH);
+    for (const proxies of [true, false]) {
+      const gpu = await GpuEngine.create({ runtime: rt, workers: 0, opfs: false, proxies, prewarm: false });
+      gpu.adopt(g.closure(node.id));
+      let sizes = 0, columns = 0, ties = 0, worst = '';
+      const t0 = performance.now();
+      for (let n = 1; n <= N; n++) {
+        const scale = n / N;
+        const a = await gpu.evaluate(node, { scale, precision: 'preview' });
+        const b = await ref.evaluate(node, { scale, precision: 'preview' });
+        const ga = (await a.read()) as Float32Array, rb = await b.read();
+        const c = a.info.channels;
+        const len = name === 'widths' ? a.width : a.height;
+        if (len !== n || b.width !== a.width || b.height !== a.height) throw new Error(`grid ${a.width}×${a.height} vs ${b.width}×${b.height} for n = ${n}`);
+        let bad = 0;
+        for (let p = 0; p < n; p++) {
+          if (((2 * p + 1) * N) % (2 * n) === 0) ties++;
+          const i = name === 'widths' ? p : p * a.width;
+          let d = 0;
+          for (let k = 0; k < c; k++) d = Math.max(d, Math.abs(ga[i * c + k]! - rb[i * c + k]!));
+          if (d > 1e-5) bad++;
+        }
+        if (bad) {
+          sizes++;
+          columns += bad;
+          if (!worst) worst = `n = ${n}: ${bad}`;
+        }
+      }
+      out[`${name}.${proxies ? 'proxies' : 'kernel'}`] = { sizes, columns, ties, first: worst, ms: Math.round(performance.now() - t0) };
+      gpu.dispose();
+    }
+  }
+  return out;
+}
+LAW_TESTS['law:grid'] = gridTest;
+
+/**
+ * CHB-045 GPUC-3 (CHB-037 P10-26): print.densityMask's density pass (combine.wgsl mode 7) on a blurred transmittance
+ * with 0, f32 subnormals, values below the floor and ordinary ones, the reference extreme floored as the engine floors
+ * it (the smallest T here is 0). Each density must be finite and equal γ·(log10 max(T, MASK_T_FLOOR) − log10 max(min T,
+ * MASK_T_FLOOR)); unfloored, log2(0) is −∞ (WGSL may even assume it never happens).
+ */
+async function densityFloorTest(): Promise<Record<string, unknown>> {
+  const rt = await runtime();
+  const dev = rt.device;
+  const T = [0, 1e-40, 1e-45, 1e-30, 1e-12, 1e-8, 1e-6, 0.01, 0.5, 1];
+  const w = T.length;
+  const make = (label: string, data: Float32Array<ArrayBuffer>): GPUTexture => {
+    const t = dev.createTexture({ label, size: [w, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    dev.queue.writeTexture({ texture: t }, data, { bytesPerRow: w * 16 }, [w, 1]);
+    return t;
+  };
+  const b = make('test.T', Float32Array.from(T.flatMap((v) => [v, v, v, 1])));
+  const a = make('test.recv', new Float32Array(w * 4));
+  const dummy = make('test.dummy', new Float32Array(w * 4));
+  const gamma = 0.5;
+  const lref = Math.log10(Math.max(Math.min(...T), MASK_T_FLOOR));
+  const out = await combinePass(rt, dummy, MODE.DENSITY, a, b, null, 0, [gamma, lref]);
+  const buf = dev.createBuffer({ label: 'test.read', size: 256, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+  const enc = dev.createCommandEncoder();
+  enc.copyTextureToBuffer({ texture: out }, { buffer: buf, bytesPerRow: 256 }, [w, 1]);
+  dev.queue.submit([enc.finish()]);
+  const got = new Float32Array(await rt.readBuffer(buf, w * 16));
+  rt.textures.release(out);
+  for (const t of [a, b, dummy]) t.destroy();
+  buf.destroy();
+  const d = T.map((_, i) => got[i * 4]!);
+  const want = T.map((v) => gamma * (Math.log10(Math.max(v, MASK_T_FLOOR)) - lref));
+  return { d, finite: d.every(Number.isFinite), maxAbs: Math.max(...d.map((x, i) => Math.abs(x - want[i]!))) };
+}
+LAW_TESTS['law:density-floor'] = densityFloorTest;
 
 function max8(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let m = 0;

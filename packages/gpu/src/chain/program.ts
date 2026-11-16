@@ -1,5 +1,6 @@
 // Pointwise programs for kernels/pointwise.wgsl: op codes and the uniform layout. The f64 reference of
 // a program is core's reference engine on the same graph (parity/chain-tests.ts, CHB-017).
+import { gridCheck } from '@chromobench/contract';
 import { oklabFor, outputSpace, type DisplaySetup } from '@chromobench/core';
 import { defineStruct } from '../layout.ts';
 import type { CurveRow } from '../physics/core.ts';
@@ -25,7 +26,7 @@ export const PROG = defineStruct('Prog', [
   ['ops', { array: 'vec4u', n: MAXOPS }],
   ['params', { array: 'vec4f', n: 2 * MAXOPS }],
   ['Kinv', 'mat3x3f'], ['K', 'mat3x3f'], ['Dbase', 'vec4f'],
-  ['rangesA', 'vec4f'], ['rangesB', 'vec4f'], ['outMap', 'vec4f'],
+  ['rangesA', 'vec4f'], ['rangesB', 'vec4f'], ['outMap', 'vec4u'],
   ['frame', 'vec4u'], ['srcOrigin', 'vec4i'], ['misc', 'vec4u'], ['solver', 'vec4f'], ['disp', 'mat3x3f'],
   ['okM1', 'mat3x3f'], ['okM1i', 'mat3x3f'],
 ]);
@@ -98,6 +99,8 @@ export interface PackArgs {
 
 export function packProgram(a: PackArgs): ArrayBuffer {
   const { seg } = a;
+  gridCheck(a.region.w, a.outW);
+  gridCheck(a.region.h, a.outH);
   if (seg.ops.length > MAXOPS) throw new Error(`program of ${seg.ops.length} ops exceeds ${MAXOPS}`);
   const ops: number[][] = [];
   const params: number[][] = [];
@@ -113,7 +116,7 @@ export function packProgram(a: PackArgs): ArrayBuffer {
     ops, params,
     Kinv: s ? inv(s.K) : I, K: s ? s.K : I, Dbase: s ? [...s.Dbase, 0] : [0, 0, 0, 0],
     rangesA: [A_RANGE[0], A_RANGE[1], C_RANGE[0], C_RANGE[1]], rangesB: [CP_RANGE[0], CP_RANGE[1], X_RANGE[0], X_RANGE[1]],
-    outMap: [a.region.x, a.region.y, a.region.w / a.outW, a.region.h / a.outH],
+    outMap: [a.region.x, a.region.y, a.region.w, a.region.h],
     frame: [a.outW, a.outH, a.frameW, a.frameH],
     srcOrigin: [a.srcOrigin[0], a.srcOrigin[1], a.srcIsPrev ? 1 : 0, 0],
     misc: [seg.ops.length, a.lookup, exactBits(seg, a.exact), spectralSamples(seg)],

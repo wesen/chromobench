@@ -15,10 +15,11 @@
 //      samples, so tiles, drafts and exports agree.
 import retouchCode from '../kernels/retouch.wgsl?raw';
 import { healCoefficients, HEAL_M, HEAL_R_OFFSET, spotWindow, type PixelAt } from '@chromobench/core';
-import type { Box } from '@chromobench/contract';
+import { gridCheck, type Box } from '@chromobench/contract';
+import { linkKernel } from './chain/working.ts';
 import type { GpuRuntime } from './device.ts';
 
-export const RETOUCH_WGSL: string = retouchCode;
+export const RETOUCH_WGSL: string = linkKernel(retouchCode);
 /** vec4s per spot record (kernels/retouch.wgsl STRIDE). */
 const STRIDE = 22;
 
@@ -83,7 +84,13 @@ export class Retouch {
     const pipe = await rt.pipelines.get({ name: 'retouch', code: RETOUCH_WGSL });
     const W = base.width, H = base.height;
     const out = rt.textures.acquire({ format: 'rgba32float', w: W, h: H, usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST }, 'retouch.out');
-    const u = new Float32Array([t.region.x, t.region.y, t.region.w / t.outW, t.region.h / t.outH, t.frameW, t.frameH, n, 0]);
+    // the kernel's grid is the base texture's size (grid.wgsl gridSample over U.outMap)
+    if (W !== t.outW || H !== t.outH) throw new Error(`retouch: a ${W}×${H} base on a ${t.outW}×${t.outH} grid`);
+    gridCheck(t.region.w, t.outW);
+    gridCheck(t.region.h, t.outH);
+    const u = new ArrayBuffer(32);
+    new Uint32Array(u, 0, 4).set([t.region.x, t.region.y, t.region.w, t.region.h]);
+    new Float32Array(u, 16, 4).set([t.frameW, t.frameH, n, 0]);
     const ub = rt.buffers.acquire({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }, 'retouch.u');
     dev.queue.writeBuffer(ub, 0, u);
     const rec: Float32Array<ArrayBuffer> = a?.rec.length ? a.rec : new Float32Array(STRIDE * 4);

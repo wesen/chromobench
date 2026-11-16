@@ -195,34 +195,37 @@ test('regression (the owner\'s WebGPU error), the interleaving itself: a ones te
   await page.goto('/?nosw&canvas2d&fresh&engine=gpu&long=600');
   await ready(page);
   const r = await page.evaluate(async () => {
-    type Tex = { width: number; height: number; createView(): unknown };
-    const g = (window.chromobench.engine as unknown as { primary: { runtime: { device: GPUDevice; busy<T>(f: () => Promise<T>): Promise<T>; retiring: number }; film: { ones(like: { width: number; height: number }): Promise<Tex> } } }).primary;
+    type Leased = { tex: GPUTexture; done(): void };
+    type Pool = { pendingCount: number };
+    const g = (window.chromobench.engine as unknown as { primary: { runtime: { device: GPUDevice; textures: Pool; budget: { pending: number } }; film: { ones(like: { width: number; height: number }): Leased } } }).primary;
     const rt = g.runtime;
     const dev = rt.device;
     const errors: string[] = [];
     dev.addEventListener('uncapturederror', (e) => errors.push((e as GPUUncapturedErrorEvent).error.message));
-    let retiring = 0;
-    await rt.busy(async () => {
-      // render A (a 160×107 thumbnail) takes its texture of ones and awaits its pipeline...
-      const a = await g.film.ones({ width: 160, height: 107 });
-      // ...meanwhile renders at other sizes ask for theirs (the viewer, other thumbnails)
-      for (const [w, h] of [[900, 600], [640, 427], [480, 320], [320, 213], [1200, 800]]) await g.film.ones({ width: w!, height: h! });
-      retiring = rt.retiring;
-      // ...then A submits a command buffer that uses its texture (a copy of ones into it: its content stays ones)
-      const src = dev.createTexture({ label: 'test.ones', size: [160, 107], format: 'rgba32float', usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST });
-      dev.queue.writeTexture({ texture: src }, new Float32Array(160 * 107 * 4).fill(1), { bytesPerRow: 160 * 16 }, [160, 107]);
-      const enc = dev.createCommandEncoder();
-      enc.copyTextureToTexture({ texture: src }, { texture: a as unknown as GPUTexture }, [160, 107]);
-      dev.queue.submit([enc.finish()]);
-      await dev.queue.onSubmittedWorkDone();
-      src.destroy();
-    });
+    // render A (a 160×107 thumbnail) takes its texture of ones (a lease) and awaits its pipeline...
+    const a = g.film.ones({ width: 160, height: 107 });
+    await Promise.resolve();
+    // ...meanwhile renders at other sizes take theirs and submit (the viewer, other thumbnails): A's is let go
+    for (const [w, h] of [[900, 600], [640, 427], [480, 320], [320, 213], [1200, 800]]) g.film.ones({ width: w!, height: h! }).done();
+    const waiting = rt.textures.pendingCount;
+    const pendingBytes = rt.budget.pending;
+    // ...then A submits a command buffer that uses its texture (a copy of ones into it: its content stays ones)
+    const src = dev.createTexture({ label: 'test.ones', size: [160, 107], format: 'rgba32float', usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST });
+    dev.queue.writeTexture({ texture: src }, new Float32Array(160 * 107 * 4).fill(1), { bytesPerRow: 160 * 16 }, [160, 107]);
+    const enc = dev.createCommandEncoder();
+    enc.copyTextureToTexture({ texture: src }, { texture: a.tex }, [160, 107]);
+    dev.queue.submit([enc.finish()]);
+    a.done();
     await dev.queue.onSubmittedWorkDone();
+    src.destroy();
     await new Promise((ok) => setTimeout(ok, 200));
-    return { errors, retiring, after: rt.retiring };
+    return { errors, waiting, pendingBytes, after: rt.textures.pendingCount, afterBytes: rt.budget.pending };
   });
-  // before the fix: "Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit"
+  // before CHB-038: "Destroyed texture [Texture (unlabeled 160x107 px, TextureFormat::RGBA32Float)] used in a submit"
   expect(r.errors).toEqual([]);
-  expect(r.retiring).toBeGreaterThan(0);
+  // A's texture was let go while A held it: not destroyed, its bytes counted as pending (CHB-045), until A submitted
+  expect(r.waiting).toBe(1);
+  expect(r.pendingBytes).toBe(160 * 107 * 16);
   expect(r.after).toBe(0);
+  expect(r.afterBytes).toBe(0);
 });

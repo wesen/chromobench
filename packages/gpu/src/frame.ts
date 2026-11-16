@@ -3,11 +3,12 @@
 // pixels: the receiver renders on the grid the output grid maps to (crop offset, un-oriented region, swapped size)
 // and one pass reorients it. A straightened frame renders the receiver over the crop's footprint at full resolution
 // and samples it bilinearly at the output grid's nearest full-resolution pixels (contract straighten, as core).
-import { sensorAngleSign, straightenFootprint, type Box } from '@chromobench/contract';
+import { gridCheck, sensorAngleSign, straightenFootprint, type Box } from '@chromobench/contract';
 import frameCode from '../kernels/frame.wgsl?raw';
+import { linkKernel } from './chain/working.ts';
 import type { GpuRuntime } from './device.ts';
 
-export const FRAME_WGSL: string = frameCode;
+export const FRAME_WGSL: string = linkKernel(frameCode);
 
 const ORIENTATIONS = ['none', 'flipH', 'flipV', 'rot180', 'cw90', 'ccw90', 'transpose', 'transverse'] as const;
 export const orientationCode = (o: unknown): number => Math.max(0, ORIENTATIONS.indexOf(o as (typeof ORIENTATIONS)[number]));
@@ -39,6 +40,10 @@ export function frameSource(f: FrameArgs, region: Box, outW: number, outH: numbe
 export async function framePass(rt: GpuRuntime, entry: 'orient' | 'straighten' | 'crop', src: GPUTexture, outW: number, outH: number, f: FrameArgs, region: Box, origin: { x: number; y: number }, frameW: number, frameH: number): Promise<GPUTexture> {
   rt.check();
   const dev = rt.device;
+  if (entry === 'straighten') {
+    gridCheck(region.w, outW);
+    gridCheck(region.h, outH);
+  }
   const pipe = await rt.pipelines.get({ name: `frame.${entry}`, code: FRAME_WGSL, entryPoint: entry });
   const out = rt.textures.acquire({ format: 'rgba32float', w: outW, h: outH, usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC }, `frame.${entry}`);
   const u = new ArrayBuffer(80);

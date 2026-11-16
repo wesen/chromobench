@@ -10,7 +10,7 @@
 // combine and blur passes), engine/reduce.ts (measure reductions), engine/results.ts (result cache policy).
 // This file keeps the Engine surface, device-loss handling, sources, and execute() (one materialised node).
 import {
-  ChromobenchError, fail, getOp, isChromobenchError, Graph, quantizeScale, sha256Hex,
+  ChromobenchError, fail, getOp, isChromobenchError, Graph, MASK_T_FLOOR, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey, type TilePlan,
 } from '@chromobench/contract';
@@ -75,7 +75,9 @@ export interface GpuEngineOptions extends RuntimeOptions {
 export interface GpuMemory {
   limit: number;
   live: number;
-  /** the most live at once since the last call with reset (or since the engine started) */
+  /** let go but not destroyed yet: a render that has not submitted still binds it (CHB-045) */
+  pending: number;
+  /** the most held at once (live + pending) since the last call with reset (or since the engine started) */
   peak: number;
   /** how the budget was chosen */
   rule: string;
@@ -144,12 +146,12 @@ export class GpuEngine implements Engine {
   }
 
   /**
-   * The residency of a runtime: its textures go back to the runtime's pool (discard: out of the budget at once,
-   * destroyed after the work in flight), and the runtime asks it for room when an allocation does not fit — frames not on
-   * screen first, least recently used first (CHB-041).
+   * The residency of a runtime: its textures go back to the runtime's pool (discard: out of the live bytes at once,
+   * destroyed when no render holds them: the residency's leases are pool leases too), and the runtime asks it for room
+   * when an allocation does not fit — frames not on screen first, least recently used first (CHB-041).
    */
   private residencyOn(rt: GpuRuntime): Residency {
-    const r = new Residency((t) => rt.textures.discard(t));
+    const r = new Residency((t) => rt.textures.discard(t), (t) => rt.textures.lease(t));
     r.pin(this.pinned);
     this.unreclaim?.();
     this.unreclaim = rt.addReclaimer((need, all) => {
@@ -174,7 +176,7 @@ export class GpuEngine implements Engine {
   memory(o: { reset?: boolean } = {}): GpuMemory {
     const rt = this.rt;
     const out: GpuMemory = {
-      limit: rt.budget.limit, live: rt.budget.live, peak: rt.budget.peak, rule: rt.caps.budgetRule,
+      limit: rt.budget.limit, live: rt.budget.live, pending: rt.budget.pending, peak: rt.budget.peak, rule: rt.caps.budgetRule,
       textures: { live: rt.textures.bytesLive, free: rt.textures.bytesFree }, buffers: { live: rt.buffers.bytesLive, free: rt.buffers.bytesFree },
       resident: this.residency.stats(), pinned: [...this.pinned],
     };
@@ -242,8 +244,7 @@ export class GpuEngine implements Engine {
     await this.ensure();
     const rt = this.rt;
     try {
-      // while GPU work is in flight, textures the engine lets go are retired, not destroyed (CHB-038)
-      return await rt.busy(f);
+      return await f();
     } catch (e) {
       if (rt.lost) throw new ChromobenchError({ code: 'E_DEVICE_LOST', message: `GPU device lost: ${rt.lost.message || rt.lost.reason}`, hint: 'retry: the engine recreates the device' });
       throw e;
@@ -298,7 +299,7 @@ export class GpuEngine implements Engine {
     this.results.clear();
     this.rebateT.clear();
     this.dropFields();
-    // a render of the old decode may be between taking its source texture and submitting (CHB-038): retired, not destroyed
+    // a render of the old decode may be between taking its source texture and submitting (CHB-038): its lease defers the destruction
     this.residency.forget(sha);
     this.graph = new Graph();
     for (const k of this.sources.keys()) {
@@ -423,10 +424,7 @@ export class GpuEngine implements Engine {
     const frame = root.op === 'source.open' ? String(root.args['source']) : root.id;
     const full = rect.x === 0 && rect.y === 0 && rect.w === img.w && rect.h === img.h;
     // a kept texture: the full-size one is read at the frame position (its texel 0,0 is the frame's), a proxy at the pixel
-    const kept = (key: string, tex: GPUTexture, onGrid: boolean) => {
-      this.residency.lease(key);
-      return { tex, origin: [0, 0] as [number, number], onGrid, done: () => this.residency.unlease(key) };
-    };
+    const kept = (key: string, tex: GPUTexture, onGrid: boolean) => ({ tex, origin: [0, 0] as [number, number], onGrid, done: this.residency.lease(key) });
     const fullKey = `full|${root.id}`;
     const resident = this.residency.get(fullKey);
     // a frame whose full-size texture is kept reads it, for any region and size: no new memory, no upload
@@ -653,7 +651,7 @@ export class GpuEngine implements Engine {
         // the reference is the whole frame's extreme: in an exact export of a part, from the whole frame (extremesOf)
         const mo = t.exact && !this.whole(t) ? await this.extremesOf(nid, sigma, t, produceT) : await this.extremes1(Hm, { x: 0, y: 0, w: t.outW, h: t.outH });
         const same = a['polarity'] === 'same';
-        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(same ? mo.max : mo.min)]);
+        const out = await this.mix(MODE.DENSITY, recv, Hm, null, 0, [same ? -gamma : gamma, Math.log10(Math.max(same ? mo.max : mo.min, MASK_T_FLOOR))]);
         this.rt.textures.release(Hm);
         return out;
       }
@@ -765,14 +763,24 @@ export class GpuEngine implements Engine {
   private async blurAt(key: string, src: GPUTexture, sigma: number, t: GridTarget, produce: (g: GridTarget) => Promise<GPUTexture>, channel?: number): Promise<GPUTexture> {
     if (!t.exact || this.whole(t) || !(sigma > MAX_PASS_SIGMA)) return this.gaussian(src, sigma, channel);
     const F = await this.fieldOf(key, sigma, t, produce, channel);
-    return this.blur.upsampleAt(F.tex, F.s, F.pad, t.outW, t.outH, [t.region.x, t.region.y]);
+    try {
+      return await this.blur.upsampleAt(F.tex, F.s, F.pad, t.outW, t.outH, [t.region.x, t.region.y]);
+    } finally {
+      F.done();
+    }
   }
 
-  /** The whole frame's padded, blurred field of a wide blur (engine/textures.ts gaussianBlur's), built box by box. */
-  private async fieldOf(key: string, sigma: number, t: GridTarget, produce: (g: GridTarget) => Promise<GPUTexture>, channel?: number): Promise<{ tex: GPUTexture; s: number; pad: number }> {
+  /**
+   * The whole frame's padded, blurred field of a wide blur (engine/textures.ts gaussianBlur's), built box by box, leased
+   * (CHB-045): call done() once the pass that reads it is submitted. A preview drops the fields (dropFields) and the
+   * cache keeps the newest few; a field a tile has taken returns to the pool only when its lease ends, so no other
+   * render can be handed it (and write it) between this tile's taking it and its submit.
+   */
+  private async fieldOf(key: string, sigma: number, t: GridTarget, produce: (g: GridTarget) => Promise<GPUTexture>, channel?: number): Promise<{ tex: GPUTexture; s: number; pad: number; done: () => void }> {
     const k = `${key}|${sigma}|${channel ?? 'all'}`;
     const hit = this.fields.get(k);
-    if (hit) return hit;
+    // the lease in the same synchronous step as the lookup: nothing can drop the field in between
+    if (hit) return { ...hit, done: this.rt.textures.lease(hit.tex) };
     const s = Math.ceil(sigma / MAX_PASS_SIGMA);
     const fs = fieldSigma(sigma, s);
     const pad = Math.ceil(3 * fs) + 1;
@@ -789,6 +797,7 @@ export class GpuEngine implements Engine {
       const sig = [0, 1, 2, 3].map((c) => (channel === undefined || c === channel ? fs : 0));
       const F = { tex: await this.blur.gaussian(down, sig), s, pad };
       this.fields.set(k, F);
+      const done = this.rt.textures.lease(F.tex);
       // a field at s = 2 of a 4000-px frame is ~40 MB: keep the newest few, within a quarter of the budget
       const bytes = (): number => [...this.fields.values()].reduce((b, f) => b + f.tex.width * f.tex.height * 16, 0);
       while (this.fields.size > 1 && (this.fields.size > 4 || bytes() > this.rt.caps.budgetBytes / 4)) {
@@ -796,12 +805,13 @@ export class GpuEngine implements Engine {
         this.rt.textures.release(v.tex);
         this.fields.delete(old);
       }
-      return F;
+      return { ...F, done };
     } finally {
       this.rt.textures.release(down);
     }
   }
 
+  /** Lets go of the fields (an exact export is over): each returns to the pool when no tile holds it (fieldOf). */
   private dropFields(): void {
     for (const f of this.fields.values()) this.rt.textures.release(f.tex);
     this.fields.clear();
@@ -826,27 +836,31 @@ export class GpuEngine implements Engine {
     const wide = sigma > MAX_PASS_SIGMA;
     const F = wide ? await this.fieldOf(`${nid}|density`, sigma, t, produceT) : null;
     const reach = wide ? 0 : Math.min(96, Math.ceil(3 * sigma));
-    for (const box of this.boxes(t, F?.s ?? 1)) {
-      let tex: GPUTexture;
-      let core: Box;
-      if (F) {
-        tex = await this.blur.upsampleAt(F.tex, F.s, F.pad, box.w, box.h, [box.x, box.y]);
-        core = { x: 0, y: 0, w: box.w, h: box.h };
-      } else {
-        const x0 = Math.max(0, box.x - reach), y0 = Math.max(0, box.y - reach);
-        const big = { x: x0, y: y0, w: Math.min(t.frameW, box.x + box.w + reach) - x0, h: Math.min(t.frameH, box.y + box.h + reach) - y0 };
-        const T = await produceT({ ...t, region: big, outW: big.w, outH: big.h });
-        tex = await this.gaussian(T, sigma);
-        this.rt.textures.release(T);
-        core = { x: box.x - x0, y: box.y - y0, w: box.w, h: box.h };
+    try {
+      for (const box of this.boxes(t, F?.s ?? 1)) {
+        let tex: GPUTexture;
+        let core: Box;
+        if (F) {
+          tex = await this.blur.upsampleAt(F.tex, F.s, F.pad, box.w, box.h, [box.x, box.y]);
+          core = { x: 0, y: 0, w: box.w, h: box.h };
+        } else {
+          const x0 = Math.max(0, box.x - reach), y0 = Math.max(0, box.y - reach);
+          const big = { x: x0, y: y0, w: Math.min(t.frameW, box.x + box.w + reach) - x0, h: Math.min(t.frameH, box.y + box.h + reach) - y0 };
+          const T = await produceT({ ...t, region: big, outW: big.w, outH: big.h });
+          tex = await this.gaussian(T, sigma);
+          this.rt.textures.release(T);
+          core = { x: box.x - x0, y: box.y - y0, w: box.w, h: box.h };
+        }
+        try {
+          const m = await this.extremes1(tex, core);
+          min = Math.min(min, m.min);
+          max = Math.max(max, m.max);
+        } finally {
+          this.rt.textures.release(tex);
+        }
       }
-      try {
-        const m = await this.extremes1(tex, core);
-        min = Math.min(min, m.min);
-        max = Math.max(max, m.max);
-      } finally {
-        this.rt.textures.release(tex);
-      }
+    } finally {
+      F?.done();
     }
     const out = { min, max };
     this.extremes.set(nid, out);
@@ -907,7 +921,7 @@ export class GpuEngine implements Engine {
         }
       } finally {
         // the render's high-water mark (CHB-041), for the journal
-        rt.events?.({ kind: 'memory', what: 'render', during, peak: mark.end(), live: rt.budget.live, limit: rt.budget.limit, resident: this.residency.stats().bytes });
+        rt.events?.({ kind: 'memory', what: 'render', during, peak: mark.end(), live: rt.budget.live, pending: rt.budget.pending, limit: rt.budget.limit, resident: this.residency.stats().bytes });
       }
     });
     let r: Awaited<ReturnType<typeof once>>;

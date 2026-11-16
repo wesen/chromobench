@@ -1,9 +1,49 @@
 // The laws' arithmetic per pixel (contract 1.0, design §22, §25): one definition, which the reference engine calls
 // and the GPU engine mirrors in WGSL, as frame.ts's straighten is the one definition of output.frame's sampling.
-// The contract still evaluates no image; these are the formulas of print.combine, composite.mix and mask.combine.
+// The contract still evaluates no image; these are the formulas of print.combine, composite.mix and mask.combine,
+// the grid rule every engine samples by, and the blend modes' channel formulas.
+import { CONTRAST_BLENDS, type BlendMode } from './document.ts';
+import { fail } from './errors.ts';
+
+// ---- the grid rule (CHB-045, docs/patterns/gpu/03 "One grid rule") ------------------------------------------------
+
+/**
+ * A grid of n output pixels over [origin, origin + span) of the full-resolution image cannot be computed in u32 when
+ * (2p + 1)·span may reach 2³²: n·span < GRID_LIMIT keeps it below (the GPU's kernels compute the rule in u32).
+ */
+export const GRID_LIMIT = 2 ** 31;
+
+/** Refuses a grid whose rule would wrap in u32 (n·span ≥ 2³¹; 4000 px on 4000 px is 2²³·1.9). */
+export function gridCheck(span: number, n: number): void {
+  if (!(n * span < GRID_LIMIT)) fail('E_ARG_RANGE', `a grid of ${n} pixels over ${span} image pixels exceeds the grid rule's range (n·span < 2³¹)`);
+}
+
+/**
+ * The grid rule: output pixel p of an n-pixel grid over [origin, origin + span) reads image pixel
+ * origin + ⌊(2p + 1)·span / 2n⌋ — its centre (p + ½)·span/n, floored — in integers, so every engine picks the same pixel,
+ * ties ((2p + 1)·span divisible by 2n) included. In f64 the product and the quotient's floor are exact below 2⁵³.
+ */
+export function gridSample(origin: number, span: number, n: number, p: number): number {
+  return origin + Math.floor(((2 * p + 1) * span) / (2 * n));
+}
+
+/** The image pixels of every output pixel 0…n−1 along one axis (gridSample). */
+export function gridAxis(origin: number, span: number, n: number): Int32Array {
+  gridCheck(span, n);
+  const out = new Int32Array(n);
+  for (let p = 0; p < n; p++) out[p] = gridSample(origin, span, n, p);
+  return out;
+}
 
 /** Lowest paper exposure the light law keeps (x = −8: paper white). */
 export const H_FLOOR = 1e-8;
+
+/**
+ * Lowest blurred transmittance a density mask takes the log of (CHB-045, GPUC-3): density 8, denser than any negative.
+ * The mask film's exposure underflows to 0 in f64 below 10⁻³²⁴ and in f32 below 10⁻⁴⁵ (and a GPU may flush subnormals
+ * below 10⁻³⁸): an unfloored log is −∞, and the mask density with it.
+ */
+export const MASK_T_FLOOR = 1e-8;
 
 /** One light term at a pixel: its paper log exposure (per layer) and its weight w = amount · mask · ratio. */
 export interface LightTermSample {
@@ -74,4 +114,71 @@ export function mixPixel(back: number, top: number, k: number): number {
 export function maskCombine(mode: 'add' | 'subtract' | 'intersect', v: number, c: number, amount = 1): number {
   const r = mode === 'add' ? Math.max(v, c) : mode === 'subtract' ? v * (1 - c) : v * c;
   return amount === 1 ? r : v + amount * (r - v);
+}
+
+// ---- the blend modes' channel formulas (contract 1.1; 1.5: D7) ------------------------------------------------------
+// core's blendPixel and the mock call these; kernels/working.wgsl mirrors them branch for branch.
+
+/**
+ * The display encoding (D7): the sRGB transfer curve (IEC 61966-2-1) on a linear channel, extended oddly below 0 (above
+ * 1 the formula continues). The contrast modes are evaluated in it; it is not the viewer's display space.
+ */
+export function displayEncode(v: number): number {
+  const a = Math.abs(v);
+  const e = a <= 0.0031308 ? 12.92 * a : 1.055 * a ** (1 / 2.4) - 0.055;
+  return v < 0 ? -e : e;
+}
+
+/** The inverse of displayEncode. */
+export function displayDecode(e: number): number {
+  const a = Math.abs(e);
+  const v = a <= 0.04045 ? a / 12.92 : ((a + 0.055) / 1.055) ** 2.4;
+  return e < 0 ? -v : v;
+}
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+const dodge = (b: number, s: number): number => (b <= 0 ? 0 : s >= 1 ? 1 : Math.min(1, b / (1 - s)));
+const burn = (b: number, s: number): number => (b >= 1 ? 1 : s <= 0 ? 0 : 1 - Math.min(1, (1 - b) / s));
+
+/**
+ * The separable blend B(b, s) of one channel, as written: the W3C formulas, and Photoshop's vivid light (burn by 2s
+ * below ½, dodge by 2s − 1 above), linear light (b + 2s − 1, clamped to [0, 1]), pin light (min(b, 2s) below ½,
+ * max(b, 2s − 1) above) and hard mix (1 where b + s ≥ 1, else 0). Values need not lie in [0, 1].
+ */
+export function blendChannel(mode: BlendMode, b: number, s: number): number {
+  switch (mode) {
+    case 'normal': return s;
+    case 'multiply': return b * s;
+    case 'screen': return b + s - b * s;
+    case 'overlay': return b <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
+    case 'darken': return Math.min(b, s);
+    case 'lighten': return Math.max(b, s);
+    case 'colour-dodge': return dodge(b, s);
+    case 'colour-burn': return burn(b, s);
+    case 'hard-light': return s <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
+    case 'soft-light': {
+      if (s <= 0.5) return b - (1 - 2 * s) * b * (1 - b);
+      const d = b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b);
+      return b + (2 * s - 1) * (d - b);
+    }
+    case 'vivid-light': return s <= 0.5 ? burn(b, 2 * s) : dodge(b, 2 * s - 1);
+    case 'linear-light': return clamp01(b + 2 * s - 1);
+    case 'pin-light': return s <= 0.5 ? Math.min(b, 2 * s) : Math.max(b, 2 * s - 1);
+    case 'hard-mix': return b + s >= 1 ? 1 : 0;
+    case 'difference': return Math.abs(b - s);
+    case 'exclusion': return b + s - 2 * b * s;
+    default: return s;
+  }
+}
+
+/** Whether a mode is evaluated in the display encoding (D7). */
+export const isContrastBlend = (mode: BlendMode): boolean => CONTRAST_BLENDS.includes(mode);
+
+/**
+ * A separable mode on linear channels (the composite law's B for an RGB entry): a contrast mode encodes both channels
+ * for display, blends and decodes (it switches at display mid-grey); every other mode blends the linear values.
+ */
+export function blendSeparable(mode: BlendMode, b: number, s: number): number {
+  if (!isContrastBlend(mode)) return blendChannel(mode, b, s);
+  return displayDecode(blendChannel(mode, displayEncode(b), displayEncode(s)));
 }

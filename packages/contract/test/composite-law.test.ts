@@ -78,8 +78,8 @@ describe('the mix', () => {
     expect(g.get(mix.args['mask'] as string)!.op).toBe('mask.radial');
   });
 
-  it('every W3C mode is allowed on composite layers and isolated groups; a stage-encoded layer blends in linear RGB', () => {
-    expect(BLEND_MODES).toHaveLength(16);
+  it('every mode (the W3C set and Photoshop\'s vivid, linear and pin light and hard mix) is allowed on composite layers and isolated groups; a stage-encoded layer blends in linear RGB', () => {
+    expect(BLEND_MODES).toHaveLength(20);
     for (const b of BLEND_MODES) expect(validateDocument(withPrint(scanDoc(), [['c', L('clarity', { strength: 0.3, radius_mm: 5 }, { blend: b })]]))).toEqual([]);
     const g = graph();
     const c = compile(withPrint(scanDoc(), [['c', L('clarity', { strength: 0.3, radius_mm: 5 }, { blend: 'multiply' })]]), g);

@@ -117,6 +117,15 @@ Each `recipe.json` was translated into a format-3 document by design §23's mapp
 
 The H < 1e-8 floor (now after the lights, P0 before them) changed no stored pixel.
 
+Later deliberate re-renders:
+
+| Case | Before → after max / mean \|Δ\| (print; display) | Why |
+|---|---|---|
+| `stack-print-blends` | 0 / 0; 1.22e-1 / 5.05e-2 (display mean RGB 0.249 0.261 0.267 → 0.299 0.314 0.316) | D7 (CHB-045, contract 1.5): soft light, like every contrast mode, is evaluated in the display encoding and switches at display mid-grey; its top (a curve of 0.1…0.9) is above display mid-grey more often than above linear ½, so the layer lightens more |
+
+CHB-045's integer grid rule and the density mask's log floor changed no stored pixel (the reference already divided in
+f64, and no golden's mask exposure is below 1e-8).
+
 Things to know:
 
 - **Auto balance is frozen.** The first print ran when the goldens were made; its result is in each document (main

@@ -2,7 +2,7 @@
 // Full-resolution results are cached per node id; previews and regions are sampled from them,
 // so a region result is bit-identical to the crop of the full result.
 import {
-  allOps, ChromobenchError, fail, getOp, Graph, nodeSlots, quantizeScale, sha256Hex,
+  allOps, ChromobenchError, fail, getOp, Graph, gridAxis, nodeSlots, quantizeScale, sha256Hex,
   type Box, type Diagnostic, type Engine, type EngineCaps, type EvalTarget, type ImageInfo, type ImageResult,
   type Measurement, type MeasureSpec, type Node, type NodeDef, type NodeRef, type SourceInfo, type SourceRef, type TableKey,
 } from '@chromobench/contract';
@@ -137,10 +137,11 @@ export class MockEngine implements Engine {
       const width = Math.max(1, Math.round(region.w * scale));
       const height = Math.max(1, Math.round(region.h * scale));
       const data = new Float64Array(width * height * img.c);
+      const xs = gridAxis(region.x, region.w, width), ys = gridAxis(region.y, region.h, height);
       for (let y = 0; y < height; y++) {
-        const sy = region.y + Math.min(region.h - 1, Math.floor(((y + 0.5) * region.h) / height));
+        const sy = ys[y]!;
         for (let x = 0; x < width; x++) {
-          const sx = region.x + Math.min(region.w - 1, Math.floor(((x + 0.5) * region.w) / width));
+          const sx = xs[x]!;
           for (let k = 0; k < img.c; k++) data[(y * width + x) * img.c + k] = img.data[(sy * img.w + sx) * img.c + k]!;
         }
       }

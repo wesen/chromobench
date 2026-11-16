@@ -21,7 +21,7 @@ A browser application (a PWA, "the studio") for a photographer who works with fi
   enlarger with time, aperture and filtration, paper curves), using stock data from spektrafilm (Andrea Volpato,
   CC BY-SA 4.0; see CHB-004 for the data pipeline and licence questions);
 - around the darkroom it has the **digital tools of Lightroom and Photoshop** (from the "Editor lab" prototype):
-  curve, levels, HSL, colour grading, vibrance, channel mixer, clarity, sharpen, vignette, 16 blend modes, groups,
+  curve, levels, HSL, colour grading, vibrance, channel mixer, clarity, sharpen, vignette, 20 blend modes, groups,
   masks (gradients, brush, luminance and colour ranges), heal and clone;
 - a library, rolls (first print per roll, matching), looks and presets, export (16-bit TIFF, PNG, ICC).
 
@@ -52,8 +52,9 @@ links. The stage's **law** (`packages/contract/src/stage-laws.ts`) says what amo
 `light` (the darkroom: every entry adds or modulates light on the paper — main exposure, printer lights, burns,
 dodges, flashes, preflash, filters, density "contrast" masks; amount scales time or density; the order does not
 change the print), `composite` (the print and the scene stage: layers apply from the top down, amount is opacity,
-16 W3C blend modes, in an encoding — `print-rgb`, `print-oklab`, … — the compiler inserts), `repair` (the scan:
-heal and clone spots in order). Any entry can use a mask from the document's mask library (one algebra: add, subtract,
+20 blend modes — the W3C set and Photoshop's vivid, linear and pin light and hard mix; overlay and the other contrast
+modes act in the display encoding, so they switch at display mid-grey (D7, CHB-045) — in an encoding — `print-rgb`,
+`print-oklab`, … — the compiler inserts), `repair` (the scan: heal and clone spots in order). Any entry can use a mask from the document's mask library (one algebra: add, subtract,
 intersect; feather in mm on the print; range components read the stage input or a named cut).
 
 **Cuts and one compiler.** `CutName` (`source`, `scan`, `scene.input`, `scene`, `film`, `negative`, `darkroom.main`,

@@ -1,4 +1,5 @@
 //! include working.wgsl
+//! include grid.wgsl
 // Pointwise chain kernel (guide §5.5, decision D2 adapted): one compute kernel evaluates a *program*
 // of up to 12 pointwise ops held in a uniform, so every run of pointwise ops between two
 // neighbourhood operators is one dispatch, and stopping the program early gives any tap. Branches
@@ -63,7 +64,7 @@ struct Prog {
   Dbase: vec4<f32>,
   rangesA: vec4<f32>,
   rangesB: vec4<f32>,
-  outMap: vec4<f32>,
+  outMap: vec4<u32>,
   frame: vec4<u32>,
   srcOrigin: vec4<i32>,
   misc: vec4<u32>,
@@ -73,7 +74,7 @@ struct Prog {
   okM1i: mat3x3<f32>,
 };
 // rangesA = (aLo, aHi, cLo, cHi); rangesB = (cpLo, cpHi, xLo, xHi)
-// outMap  = (region.x, region.y, region.w / outW, region.h / outH): output pixel → full-res frame
+// outMap  = (region.x, region.y, region.w, region.h): output pixel → full-res frame by the grid rule (grid.wgsl)
 // frame   = (outW, outH, frameW, frameH); srcOrigin = full-res position of source texel (0,0)
 // misc    = (nOps, lookup mode 0 hw-trilinear | 1 tetra | 2 manual trilinear | 3 no half-texel,
 //            exact bits: 1 solve, 2 printing density, 4 print XYZ (export, CHB-017), n spectral samples)
@@ -382,7 +383,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
   let p = gid.xy;
   if (p.x >= U.frame.x || p.y >= U.frame.y) { return; }
   // output pixel → full-res frame pixel (nearest sample, like the mock engine) → source texel
-  let fp = vec2<u32>(U.outMap.xy + floor((vec2<f32>(p) + 0.5) * U.outMap.zw));
+  let fp = gridSample(p, U.outMap, U.frame.xy);
   // srcOrigin.z = 1: the source is the previous segment's output, read at p
   let sp = select(vec2<i32>(fp) - U.srcOrigin.xy, vec2<i32>(p), U.srcOrigin.z == 1);
   var v = textureLoad(src, sp, 0);
