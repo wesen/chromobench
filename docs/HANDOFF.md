@@ -60,7 +60,7 @@ intersect; feather in mm on the print; range components read the stage input or 
 **Cuts and one compiler.** `CutName` (`source`, `scan`, `scene.input`, `scene`, `film`, `negative`, `darkroom.main`,
 `darkroom.H`, `print`, `finished`, `display`) names every point of the pipeline; the contract's compiler turns a
 document into a node graph up to a cut, and both engines evaluate the same graph (`packages/conformance` checks them:
-524/524 cases; `tools/goldens` holds 66 golden pictures of the reference engine that P2 used to prove the cut-off
+524/524 cases; `tools/goldens` holds 68 golden pictures of the reference engine that P2 used to prove the cut-off
 reproduced the old darkroom).
 
 **One history** (`packages/values`): the store's document log holds every frame's transactions with one cursor
@@ -136,7 +136,7 @@ pnpm typecheck        # tsc over the workspace
 pnpm lint             # package-boundary and literal-colour checks
 pnpm gen:check        # generated docs and references are up to date (regenerate with: pnpm gen)
 pnpm test             # vitest: 137 files, ~3380 tests, ~30 s
-node tools/goldens/render.ts --check    # 66 golden pictures of the reference engine
+node tools/goldens/render.ts --check    # 68 golden pictures of the reference engine
 CI=1 pnpm test:browser   # Playwright: 147 tests incl. GPU conformance 524/524, ~8 min on SwiftShader
 ```
 
@@ -396,7 +396,9 @@ on the two arrangements, agent layouts and looks persisted, this guide). The int
 3. Whether selections are wanted.
 4. Whether "sync" defaults to copying values or to linking (today: copy).
 5. Whether the darkroom stack shows his order or groups by kind (today: the Enlarger groups by kind).
-6. Medium presets: the film-stock and grade looks were deleted with the cut-off (media have no group form).
+6. Medium presets: the film-stock and grade looks were deleted with the cut-off (media have no group form). Done in
+   CHB-048 (D6): film stocks, papers and grades are medium presets from the data pack (contract `media-presets.ts`);
+   a camera file's white balance before the film is temperature and tint in Lightroom's units (`white-balance.ts`, D2).
 
 ### Next, in order
 

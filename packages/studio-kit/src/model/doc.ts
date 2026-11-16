@@ -11,8 +11,8 @@ import {
   Coll, getPath, indexOf, isPlainObject, resolvePath, type Id, type Mutation,
 } from '@chromobench/values';
 import {
-  documentKind, getOp, isLinked, layerEntry, newDocument, readField, stagesOf, storedPath, termSeconds,
-  type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type LinkContext, type Preset, type Roll,
+  asShotWhiteBalance, documentKind, getOp, isLinked, layerEntry, newDocument, readField, stagesOf, storedPath, termSeconds,
+  type CameraColour, type Cmy, type DarkroomMedium, type Document, type Entry, type FrameKind, type Group, type Layer, type LinkContext, type Preset, type Roll,
   type StageName, type Vec3,
 } from '@chromobench/contract';
 import { strip } from '@chromobench/shell';
@@ -343,7 +343,11 @@ export function groupOf(doc: Document, id: Id): Group | undefined {
   return e?.kind === 'group' ? e : undefined;
 }
 
-/** A neutral document for a decoded source (the first print replaces it on open). */
-export function defaultDocument(kind: FrameKind, src: { sha256: string; name?: string; width: number; height: number }, frame?: string): Document {
-  return newDocument(kind, { sha256: src.sha256, ...(src.name ? { name: src.name } : {}), width: src.width, height: src.height }, frame ? { frame } : {});
+/**
+ * A neutral document for a decoded source (the first print replaces it on open). A camera file opens with its raw's
+ * as-shot white balance (CHB-048, D2: the default white balance is the camera's own; none recorded: no correction).
+ */
+export function defaultDocument(kind: FrameKind, src: { sha256: string; name?: string; width: number; height: number; camera?: CameraColour }, frame?: string): Document {
+  const wb = kind === 'digital-raw' ? asShotWhiteBalance(src.camera) : null;
+  return newDocument(kind, { sha256: src.sha256, ...(src.name ? { name: src.name } : {}), width: src.width, height: src.height }, { ...(frame ? { frame } : {}), ...(wb ? { whiteBalance: wb } : {}) });
 }

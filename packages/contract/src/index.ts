@@ -5,8 +5,9 @@
 // with LOG_RULES). Contract 1.1 (CHB-037 P8a): the composite op set, blend modes, working encodings, colour and radial
 // masks. Contract 1.6 (CHB-049): selections as mask components, grow, density, a component's invert, a stroke's flow.
 // Contract 2.0 (CHB-047): export size and quality replace scale (breaking, hard cut-off), scaleDocument.
-// Importing this module registers the catalogue.
-export const CONTRACT_VERSION = '2.0.0';
+// Contract 3.0 (CHB-048): the white balance before the film (white-balance.ts). Importing this module registers
+// the catalogue.
+export const CONTRACT_VERSION = '3.0.0';
 
 export * from './errors.ts';
 export * from './units.ts';
@@ -24,6 +25,8 @@ export {
 export * from './encodings.ts';
 export * from './graph.ts';
 export * from './pixel.ts';
+export * from './white-balance.ts';
+export * from './media-presets.ts';
 export * from './stage-laws.ts';
 export * from './links.ts';
 export * from './links-looks.ts';

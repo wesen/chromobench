@@ -18,7 +18,7 @@ exports[`cb.arg > controls("darkroom") explains as sections of generated control
           cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
         section "Paper"
           cb.arg  path "stages.darkroom.medium.paper"  select
-          cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+          cb.preset  kind "grade"  kind grade
         section "Film and viewing"
           cb.arg  path "stages.film.medium.stock"  select
           cb.arg  path "stages.scan.medium.stock"  select

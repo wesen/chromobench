@@ -58,10 +58,26 @@ module roll "Roll" key Mod+Alt+R
 module scene "Scene" key Mod+Alt+S stages scene
   center column  class "cb-viewer"  grow 1
            cb.ribbon
-           viewport scene τ  before τ  compare  cover τ  image τ  overlays:   tools [mask-linear, mask-radial, mask-paint, mask-lum…
+           viewport scene τ  before τ  compare  cover τ  image τ  overlays:   tools [white-balance, mask-linear, mask-radial, mask-…
              hud:
                cb.readout
   right  dockcol  width 300
+           panel white-balance-scene "White balance (before the film)"
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  rollScope "frame"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  rollScope "frame"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
            panel layers-scene "Scene (before the film)"
              stack.layers  empty "A negative scan has no scene stage: its edits …  stage "scene"  composite law · + Layer 8 ops
            panel layer-params-scene "Layer"
@@ -84,7 +100,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, white-balance, mask-linear,…
                  hud:
                    cb.readout
              cases.ring:
@@ -134,6 +150,22 @@ module print "Print" key D stages darkroom
                button  run tool.test-strip  small  text "Test strip"
                button  run tool.ring-around  small  text "Ring-around"
                button  run view.beforeAfter  small  text "Before / after"
+           panel white-balance "White balance (before the film)"
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  rollScope "frame"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  rollScope "frame"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -153,7 +185,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
                      cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
@@ -322,6 +354,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -441,13 +476,13 @@ commands
   looks.syncGroup "Sync Group" ← cb.looks
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W), crop (R), spot (Q)
-commands 221 · keys 142 in 23 scopes · tools 16 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W), crop (R), spot (Q)
+commands 225 · keys 140 in 23 scopes · tools 17 · passes 18 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > darkroom: zero errors, explain snapshot 1`] = `
 "shell "Chromobench" · theme craftkit · kits: cb.core@1, cb.stack@1 (requires cb.core), cb.diagnostics@1 (requires cb.core), cb.select@1 (requires cb.core), cb.looks@1 (requires cb.core)
-module main "Darkroom" stages darkroom, print
+module main "Darkroom" stages scene, darkroom, print
   left   dockcol  width 200
            listview strip-v  context [frame.reopenAsPhoto, frame.reopenAsNegative, -…  empty "No photos yet: File ▸ Open Files… (Ctrl+O), or…  items τ  key θ  keys {Delete, Backspace}  row θ  rowHeight 150  select ui.selection
            panel history "History"  hidden τ
@@ -456,7 +491,7 @@ module main "Darkroom" stages darkroom, print
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, white-balance, mask-linear,…
                  hud:
                    cb.readout
              cases.ring:
@@ -502,6 +537,27 @@ module main "Darkroom" stages darkroom, print
   right  dockcol  width 300
            panel enlarger "Enlarger"
              stack.layers  order "choice"  row θ  stage "darkroom"  light law · + Layer 6 ops
+           panel before-film "Before the film"  hidden τ
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
+                   when  cond τ  else null
+                     then:
+                       column
+                         cb.arg  path "stages.film.medium.stock"  select
+                         stack.layers  density "compact"  stage "scene"  composite law · + Layer 8 ops
            panel paper "Paper"  hidden τ
              when  cond τ
                else:
@@ -509,7 +565,7 @@ module main "Darkroom" stages darkroom, print
                then:
                  column
                    cb.arg  path "stages.darkroom.medium.paper"  select
-                   cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                   cb.preset  kind "grade"  kind grade
            panel digital "Digital (after the print)"  hidden τ
              stack.layers  density "compact"  stage "print"  composite law · + Layer 10 ops
            panel layer-params "Layer"  hidden τ
@@ -568,6 +624,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -650,8 +709,8 @@ commands
   looks.syncGroup "Sync Group" ← cb.looks
   looks.virtualCopy "Virtual Copy" ← cb.looks
   looks.match "Match to Reference" ← cb.looks
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 175 · keys 47 in 8 scopes · tools 14 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 179 · keys 48 in 8 scopes · tools 15 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > finish: zero errors, explain snapshot 1`] = `
@@ -701,7 +760,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, white-balance, mask-linear,…
                  hud:
                    cb.readout
              cases.ring:
@@ -751,6 +810,22 @@ module print "Print" key D stages darkroom
                button  run tool.test-strip  small  text "Test strip"
                button  run tool.ring-around  small  text "Ring-around"
                button  run view.beforeAfter  small  text "Before / after"
+           panel white-balance "White balance (before the film)"
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -770,7 +845,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -896,6 +971,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -961,8 +1039,8 @@ commands
   spot.prev "Previous Spot" Shift+[ ← cb.finish
   spot.select "Select Spot" ← cb.finish
   finish.toggle "Before / After Finishing" (Finish) \\ ← cb.finish
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W), crop (R), spot (Q)
-commands 163 · keys 89 in 13 scopes · tools 16 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W), crop (R), spot (Q)
+commands 167 · keys 90 in 13 scopes · tools 17 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > lab: zero errors, explain snapshot 1`] = `
@@ -1012,7 +1090,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, white-balance, mask-linear,…
                  hud:
                    cb.readout
              cases.ring:
@@ -1062,6 +1140,22 @@ module print "Print" key D stages darkroom
                button  run tool.test-strip  small  text "Test strip"
                button  run tool.ring-around  small  text "Ring-around"
                button  run view.beforeAfter  small  text "Before / after"
+           panel white-balance "White balance (before the film)"
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -1081,7 +1175,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -1141,10 +1235,10 @@ module lab "Lab" key L stages darkroom
                      cb.arg  path "stages.scan.medium.scanner"  select
                      cb.arg  path "stages.scan.medium.stock"  select
                      cb.arg  path "stages.scan.medium.flare"  slider  percent  step 0.05 percent
-                   section "Capture"
-                     cb.arg  path "stages.scene.medium.whiteBalance.mode"  segmented
+                   section "White balance"
                      cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  slider  K  step 50 K
                      cb.arg  path "stages.scene.medium.whiteBalance.tint"  slider  step 1 none
+                   section "Capture"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.film.medium.exposureEV"  slider  st  step 0.333 st
                    section "Film"
@@ -1157,7 +1251,7 @@ module lab "Lab" key L stages darkroom
                    section "Print"
                      cb.arg  path "stages.darkroom.medium.paper"  select
                      cb.arg  path "stages.darkroom.medium.mode"  segmented
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "View"
                      cb.arg  path "stages.print.medium.illuminant"  select
                      cb.arg  path "stages.print.medium.flare"  slider  percent  step 0.01 percent
@@ -1279,6 +1373,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1324,8 +1421,8 @@ commands
   select.lasso "Select Lasso" ← cb.select
   select.wand "Select with the Magic Wand" ← cb.select
   select.options "Selection Options" ← cb.select
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 141 · keys 97 in 15 scopes · tools 14 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 145 · keys 98 in 15 scopes · tools 15 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > looks: zero errors, explain snapshot 1`] = `
@@ -1506,6 +1603,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1605,8 +1705,8 @@ commands
   looks.syncGroup "Sync Group" ← cb.looks
   looks.virtualCopy "Virtual Copy" (Looks) ← cb.looks
   looks.match "Match to Reference" (Looks) ← cb.looks
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 194 · keys 81 in 12 scopes · tools 14 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 198 · keys 82 in 12 scopes · tools 15 · passes 18 · diagnostics ✓ 0 errors · 2 warnings"
 `;
 
 exports[`layouts build headless > roll: zero errors, explain snapshot 1`] = `
@@ -1647,7 +1747,7 @@ module print "Print" key D stages darkroom
            cb.ribbon
            match  of [view, ring]  on τ
              cases.view:
-               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, mask-linear, mask-radial, m…
+               viewport main τ  before τ  compare  cover τ  image τ  overlays:   tools [probe, test-strip, white-balance, mask-linear,…
                  hud:
                    cb.readout
              cases.ring:
@@ -1697,6 +1797,22 @@ module print "Print" key D stages darkroom
                button  run tool.test-strip  small  text "Test strip"
                button  run tool.ring-around  small  text "Ring-around"
                button  run view.beforeAfter  small  text "Before / after"
+           panel white-balance "White balance (before the film)"
+             when  cond τ
+               else:
+                 text "Select a photo to print it."  dim  wrap
+               then:
+                 column
+                   when  cond τ
+                     else:
+                       text "A negative has no white balance before the fil…  dim  wrap
+                     then:
+                       column  class "cb-wb"
+                         cb.preset  kind "white-balance"  kind white-balance
+                         cb.arg  path "stages.scene.medium.whiteBalance.temperature_K"  rollScope "frame"  slider  K  step 50 K
+                         cb.arg  path "stages.scene.medium.whiteBalance.tint"  rollScope "frame"  slider  step 1 none
+                         button  run tool.white-balance  small  text "Pick a neutral"  tip "Click something grey or white in the picture: …
+                         text "The light the scene was lit by, corrected befo…  dim  wrap
            panel densitometer "Densitometer"
              cb.densitometer
            panel controls-darkroom "Darkroom"
@@ -1716,7 +1832,7 @@ module print "Print" key D stages darkroom
                      cb.arg  path "lights.params.logH"  rollScope "frame"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  rollScope "frame"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  rollScope "frame"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  rollScope "frame"  select
                      cb.arg  path "stages.scan.medium.stock"  rollScope "frame"  select
@@ -1788,6 +1904,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -1850,8 +1969,8 @@ commands
   roll.contact.mode "Contact Sheet: One Time and Pack" (Roll) ← cb.roll
   roll.cull.sweep "Cull the Roll" (Roll) ← cb.roll
   roll.exportSheet "Export Contact Sheet…" (Roll) ← cb.roll
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 157 · keys 67 in 8 scopes · tools 14 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 161 · keys 68 in 8 scopes · tools 15 · passes 17 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > simple: zero errors, explain snapshot 1`] = `
@@ -1968,6 +2087,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -2013,8 +2135,8 @@ commands
   select.lasso "Select Lasso" ← cb.select
   select.wand "Select with the Magic Wand" ← cb.select
   select.options "Selection Options" ← cb.select
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 138 · keys 41 in 6 scopes · tools 14 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 142 · keys 42 in 6 scopes · tools 15 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > tiny: zero errors, explain snapshot 1`] = `
@@ -2043,7 +2165,7 @@ module main "Chromobench" stages darkroom
                      cb.arg  path "lights.params.logH"  widget "pad"  pad  pt  step 1 pt  aside log H  detent 0
                    section "Paper"
                      cb.arg  path "stages.darkroom.medium.paper"  select
-                     cb.arg  path "stages.darkroom.medium.grade"  slider  step 0.5 none
+                     cb.preset  kind "grade"  kind grade
                    section "Film and viewing"
                      cb.arg  path "stages.film.medium.stock"  select
                      cb.arg  path "stages.scan.medium.stock"  select
@@ -2102,6 +2224,9 @@ commands
   output.addPrinterProfile "Add Printer Profile…" ← cb.core
   output.cancel "Cancel Export" ← cb.core
   file.export "Export…" (File) Ctrl+E ← cb.core
+  scene.whiteBalance "White Balance…" ← cb.core
+  medium.preset "Film Stock, Paper or Grade…" ← cb.core
+  medium.presets "List Medium Presets" ← cb.core
   layer.select "Select Layer" ← cb.stack
   layer.add "Add Layer" ← cb.stack
   layer.duplicate "Duplicate Layer" (Layer) Ctrl+J ← cb.stack
@@ -2147,8 +2272,8 @@ commands
   select.lasso "Select Lasso" ← cb.select
   select.wand "Select with the Magic Wand" ← cb.select
   select.options "Selection Options" ← cb.select
-tools probe (I), test-strip (T), ring-around (R), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (W)
-commands 138 · keys 38 in 6 scopes · tools 14 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
+tools probe (I), test-strip (T), ring-around (R), white-balance (W), mask-linear, mask-radial (M), mask-paint (K), mask-luminance, mask-edit (V), mask-colour, select-rect (Shift+M), select-ellipse, select-lasso (L), select-polygon (Shift+L), select-wand (Shift+W)
+commands 142 · keys 39 in 6 scopes · tools 15 · passes 16 · diagnostics ✓ 0 errors · 0 warnings"
 `;
 
 exports[`layouts build headless > warnings are listed (reviewed, not zero) 1`] = `

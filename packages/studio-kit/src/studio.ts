@@ -12,7 +12,7 @@
 //   await studio.open(bytes, 'frame-12.tif');
 import { Coll, transaction, type Author, type JsonObject, type Log, type Mutation } from '@chromobench/values';
 import {
-  isChromobenchError, LOG_RULES, resolveLinks, storedMutations,
+  asShotWhiteBalance, isChromobenchError, LOG_RULES, resolveLinks, storedMutations,
   type AgentMode, type Diagnostic, type Document, type Engine, type LinkContext, type OutputSpaceId,
 } from '@chromobench/contract';
 import { memoryPersistence, type Runtime, type Services } from '@chromobench/shell';
@@ -410,10 +410,13 @@ export class Studio {
     const st = rt.store;
     const cat = st.peek(['catalog']) as { frames: Record<string, CatalogFrame>; order: string[] } | undefined;
     const had = cat?.frames?.[f.id];
+    // a camera file's as-shot white balance (CHB-048): what "As shot" means for this frame
+    const shot = f.kind === 'digital-raw' ? asShotWhiteBalance(f.info.camera) : null;
+    const asShot = shot ? { asShot: { temperature_K: shot.temperature_K, tint: shot.tint } } : {};
     const entry: CatalogFrame | null = !had
-      ? { id: f.id, sha256: f.sha, name: frameName(f), kind: asOf(f.kind), ...(f.strip ? { file: f.name } : {}) }
+      ? { id: f.id, sha256: f.sha, name: frameName(f), kind: asOf(f.kind), ...(f.strip ? { file: f.name } : {}), ...asShot }
       // re-opened in the other mode: the catalog says how it is open
-      : had.kind !== asOf(f.kind) || had.sha256 !== f.sha ? { ...had, sha256: f.sha, kind: asOf(f.kind) } : null;
+      : had.kind !== asOf(f.kind) || had.sha256 !== f.sha || (shot && !had.asShot) ? { ...(({ asShot: _a, ...rest }) => rest)(had), sha256: f.sha, kind: asOf(f.kind), ...asShot } : null;
     const order = (cat?.order ?? []).includes(f.id) ? null : [...(cat?.order ?? []), f.id];
     // the library is the view tier: opening a file is not an edit (nothing to undo)
     const writes = [...(entry ? [{ path: ['catalog', 'frames', f.id], value: entry }] : []), ...(order ? [{ path: ['catalog', 'order'], value: order }] : [])];

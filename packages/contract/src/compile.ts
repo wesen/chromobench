@@ -312,7 +312,7 @@ class Compiler {
       neg = I('invert.dyes', [n], { stock: s.stock, scanner: s.scanner });
     } else {
       const wb = this.medium('scene').whiteBalance;
-      let n = I('source.xyz', [src], { mode: wb.mode, temperature_K: wb.temperature_K, tint: wb.tint });
+      let n = I('source.xyz', [src], { temperature_K: wb.temperature_K, tint: wb.tint });
       this.setCut('scene.input', n);
       n = this.stack('scene', n);
       this.setCut('scene', n);

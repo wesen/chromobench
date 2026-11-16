@@ -37,7 +37,7 @@ Opens a decoded source as linear sensor values (T = signal / flat after scan.fla
 
 ## `source.xyz`
 
-Photo mode: camera RGB to scene XYZ with the camera matrices in SourceInfo.camera (consumed by CHB-012).
+Photo mode: camera RGB to white-balanced scene XYZ: the camera matrix (SourceInfo.camera), then the CAT16 adaptation from the white of the temperature and tint to D65 (contract white-balance.ts sceneMatrix).
 
 - Owner: CHB-006
 - On: Image (camera-linear) → Image (scene-xyz)
@@ -47,6 +47,5 @@ Photo mode: camera RGB to scene XYZ with the camera matrices in SourceInfo.camer
 
 | Argument | Type | Unit | Range | Usual | Default | Doc |
 |---|---|---|---|---|---|---|
-| `mode` | enum daylight/as-shot/custom |  |  |  | `"daylight"` | White balance source. |
-| `temperature_K` | number | K | [2000, 15000] | [2800, 10000] | `5500` | Custom white balance temperature. |
-| `tint` | number | none | [-150, 150] |  | `0` | Custom white balance tint (green–magenta). |
+| `temperature_K` | number | K | [2000, 50000] | [2500, 10000] | `6502.073737141535` | White balance: the temperature of the light the scene was lit by (Lightroom's Temperature; higher makes the picture warmer). Default: no correction (D65). |
+| `tint` | number | none | [-150, 150] | [-50, 50] | `9.766663536235953` | White balance: the light's tint, green (−) to magenta (+) correction, in Lightroom's units (Adobe's: 1 = 1/3000 of a CIE 1960 uv unit across the isotemperature line). |

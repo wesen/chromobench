@@ -162,9 +162,8 @@
     "scene": {
       "medium": {
         "whiteBalance": {
-          "mode": "custom",
-          "temperature_K": 4000,
-          "tint": 10
+          "temperature_K": 4022.71075938452,
+          "tint": 5.967001465298657
         }
       },
       "stack": {

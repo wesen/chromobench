@@ -19,7 +19,7 @@ import type { PresentImage, Runtime } from '@chromobench/shell';
 import '@chromobench/shell/shell.css';
 import {
   buildLayout, createStudio, DOCS, DUST, explainError, frameRef, liftComponents, LIGHTS, LIGHTS_PATH, mainExposure, memoryKV, modelAt, NEUTRALISE, neutraliseOf, read,
-  resetStorage, sel, setKnownValues, STORAGE_RESET_MESSAGE, storePath, TIME_PATH, EXPORT_SPACES, exportPrefsOf,
+  resetStorage, sel, setKnownValues, setMediumStocks, setStockNames, STORAGE_RESET_MESSAGE, storePath, TIME_PATH, EXPORT_SPACES, exportPrefsOf,
   type CatalogFrame, type ExportPrefs, type ExportRequestOf, type ExportResult, type FrameEntry, type InitialDocument, type KV, type LayoutDef, type OpenAs, type SourceOpener, type Studio, type StudioHost,
 } from '@chromobench/studio-kit';
 import { Canvas2DPresenter, mount, type DomServices, type DomViewport, type Mounted } from '@chromobench/shell/dom';
@@ -38,7 +38,7 @@ import { DEFAULT_LAYOUT, LAYOUTS, type LayoutId } from '@chromobench/studio-kit/
 import { lazyChat, type BridgeLike, type LazyChat } from './host/lazy-chat.ts';
 import { engineSummary, engineTip, guessWhy, notesSummary, notesTip, passWords, plainError } from './status-text.ts';
 import { addPrinterProfile, download, exportBatch, printerProfiles, type Exported } from './host/export.ts';
-import { firstPrint, firstPrintAim, photoDocument, withMeasured } from './host/first-print.ts';
+import { firstPrint, firstPrintAim, withMeasured } from './host/first-print.ts';
 import type { HostSettings } from './host/engines.ts';
 import type { AskOpenMode, OpenGuess, StudioEngine } from './host/studio-engine.ts';
 import { hostPresenter, presentDevice } from './present/host-presenter.ts';
@@ -170,6 +170,9 @@ async function startEngine(): Promise<Host> {
     worker: q.get('worker') !== '0', onStatus: (s) => status(s), journal, debug: q.has('debug'),
   });
   setKnownValues(h.catalog);
+  // the medium presets (CHB-048, D6): the data pack's films and papers, by the pack's names
+  setMediumStocks(h.stocks);
+  setStockNames(Object.fromEntries(h.stocks.filter((s) => s.name).map((s) => [s.id, s.name!])));
   addScanExtensions(h.extensions);
   const se: StudioEngine = h.engine;
   return {
@@ -180,7 +183,8 @@ async function startEngine(): Promise<Host> {
     // into the enlarger's filtration and time (CHB-010 bake), not the printer lights
     initial: async (d, g) => {
       const n = se.notes.get(d.source.sha256);
-      const doc = n?.kind === 'digital-raw' ? photoDocument(d, n.info.camera?.asShotNeutral !== undefined) : withMeasured(d, n);
+      // a photo's document has the raw's as-shot white balance already (studio-kit defaultDocument, CHB-048)
+      const doc = n?.kind === 'digital-raw' ? d : withMeasured(d, n);
       // CHB-034 fusz: metered on the file's analysis image, so both engines propose the same Time
       const kind = doc.stages.scan ? 'negative-scan' : 'digital-raw';
       const fp = await firstPrint(se, g, doc, { integrate: h.integrate, aim: firstPrintAim(kind, (k) => q.get(k), neutraliseNow()), analysis: se.analysisOf(doc.source.sha256), ...(q.get('filtration') === '1' ? { bake: h.bake } : {}) });

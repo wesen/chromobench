@@ -304,7 +304,7 @@ export class Frames {
       const graph = new Graph();
       graph.registerSource(d.info);
       const saved = await this.savedEdit(sha, d.kind, p.index || undefined);
-      let defaults = defaultDocument(d.kind, { sha256: sha, name: d.name, width: d.info.width, height: d.info.height });
+      let defaults = defaultDocument(d.kind, { sha256: sha, name: d.name, width: d.info.width, height: d.info.height, ...(d.info.camera ? { camera: d.info.camera } : {}) });
       if (p.box) defaults = stripFrameDocument(defaults, p.id!, p.box, turn);
       let first = saved ? null : typeof initial === 'function' ? await initial(defaults, graph) : initial && kindOfDoc(initial) === d.kind ? initial : null;
       if (first && p.box) first = stripFrameDocument(first, p.id!, p.box, turn);

@@ -4,11 +4,12 @@
 // the tests that need it are skipped when it is absent.
 import { existsSync, readFileSync } from 'node:fs';
 import { openPackFromDisk } from '@chromobench/data/node';
+import { cat16, xyToXYZ } from '@chromobench/contract';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  autoExposureEV, buildFilmTable, cat16Matrix, D65, erf4Window, filmTableFromLog2, nodePacksData, lookupBilinear, lookupCubic, makeExposer, makeFilmModel,
+  autoExposureEV, buildFilmTable, D65, erf4Window, filmTableFromLog2, nodePacksData, lookupBilinear, lookupCubic, makeExposer, makeFilmModel,
   mulMM, mulMV, quad2tri, rawOfLinearSRGB, resampleFilmTable, resolveStock, sigmoidSpectraTable, spdXY, spectraFromF16, spectralLocus, SPEKTRAFILM,
-  SRGB_TO_XYZ, tri2quad, windowNormalisers, xyToXYZ, compressXY, midgrayFilmDensity, mulberryish, type FilmModel, type FilmTable, type SpectraTable,
+  SRGB_TO_XYZ, tri2quad, windowNormalisers, compressXY, midgrayFilmDensity, mulberryish, type FilmModel, type FilmTable, type SpectraTable,
 } from './film-helpers.ts';
 
 const SF = JSON.parse(readFileSync(new URL('../../../fixtures/golden/film/spektrafilm-forward.json', import.meta.url), 'utf8'));
@@ -58,13 +59,13 @@ describe('stage 1: CAT16 and moderate red (LFP §1.2)', () => {
     expect(1 / data.cmf()[1].reduce((a, b) => a + b, 0)).toBeCloseTo(0.046792, 5);
   });
   it('M_D55 reproduces the guide within 1e-4 and spektrafilm within 2e-4', () => {
-    const M = mulMM(cat16Matrix(D65, D55()), SRGB_TO_XYZ);
+    const M = mulMM(cat16(D65, D55()), SRGB_TO_XYZ);
     near(M.flat(), [0.4197, 0.3744, 0.1628, 0.2131, 0.7137, 0.0732, 0.0150, 0.0965, 0.8099], 1e-4);
     near(M.flat(), (SF.M_sRGB_D55 as number[][]).flat(), 2e-4);
     near(spdXY(data.illuminant('D55'), data.cmf()), SF.refXY, 1e-9);
   });
   it('moderate red: XYZ (0.2841, 0.1854, 0.1087), b 0.5783, xy (0.4913, 0.3207)', () => {
-    const X = mulMV(mulMM(cat16Matrix(D65, D55()), SRGB_TO_XYZ), MRED);
+    const X = mulMV(mulMM(cat16(D65, D55()), SRGB_TO_XYZ), MRED);
     near(X, [0.2841, 0.1854, 0.1087], 1e-4);
     const b = X[0] + X[1] + X[2];
     expect(b).toBeCloseTo(0.5783, 4);
@@ -166,7 +167,7 @@ describe.skipIf(!haveHanatos)('stage 1: the hanatos2025 192² table against spek
     const small = resampleFilmTable(film!.table, 64);
     const r = mulberryish(3);
     const errs: number[] = [];
-    const M = mulMM(cat16Matrix(D65, film!.refWhite), SRGB_TO_XYZ);
+    const M = mulMM(cat16(D65, film!.refWhite), SRGB_TO_XYZ);
     const px = new Float64Array(3), py = new Float64Array(3);
     for (let i = 0; i < 2000; i++) {
       const X = mulMV(M, [r(), r(), r()]);

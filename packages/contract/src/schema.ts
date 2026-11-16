@@ -62,7 +62,7 @@ export function schemas(): { media: Record<StageName, Schema>; geometry: Schema;
         openGate: custom('a box, "flat" or null (document px)', (v) => (boxOr(v, [null, 'flat']) ? null : 'expected a box, "flat" or null')),
         flare: arg('scan.flare', 'flare'),
       },
-      scene: { whiteBalance: { mode: arg('source.xyz', 'mode'), temperature_K: arg('source.xyz', 'temperature_K'), tint: arg('source.xyz', 'tint') } },
+      scene: { whiteBalance: { temperature_K: arg('source.xyz', 'temperature_K'), tint: arg('source.xyz', 'tint') } },
       film: {
         stock: arg('capture.expose', 'stock'),
         exposureEV: arg('capture.expose', 'exposureEV'),

@@ -38,9 +38,9 @@ what it `exercises` (P0's recipe fields) and the compiled chain's `ops` (closure
 
 ## The cases
 
-66 cases, named by what they exercise (`index.json` has the titles): the 60 translated from P0's recipes and six
+68 cases, named by what they exercise (`index.json` has the titles): the 60 translated from P0's recipes, six
 golden stacks of the digital layers (P8a), built as documents by `stacks.ts` on the balanced cases `neg-auto-lights`
-and `cam-auto` (no recipe: `stacks.ts` is their provenance; `node tools/goldens/stacks.ts` rewrites their documents,
+and `cam-auto`, and the changed-media cases of CHB-048 on `cam-auto` (no recipe: `stacks.ts` is their provenance; `node tools/goldens/stacks.ts` rewrites their documents,
 then `render.ts --only <ids>` their pictures). The stacks change only the cut `display` of a negative (the print
 stage comes after `print`) and both cuts of the camera file (its scene stage comes before the film).
 
@@ -55,6 +55,7 @@ stage comes after `print`) and both cuts of the camera file (its scene stage com
 | retouch | `neg-retouch-heal` (three spots and a disabled one), `neg-retouch-clone`, `cam-retouch` |
 | crop, orientation | `neg-crop`, `neg-orient-cw90-crop`, `neg-orient-flipH`, `neg-orient-transverse`, `neg-straighten` (4° in a crop, rot180), `cam-crop-ccw90` |
 | scan, view, capture | `neg-scan-flare`, `neg-scan-baseT`, `neg-view-print-as-seen`, `neg-knee-clip`, `cam-exposure-plus1`, `cam-wb-as-shot`, `cam-wb-custom`, `cam-development`, `cam-grade-lights` |
+| changed media (CHB-048) | `cam-wb-tungsten` (white balance 3200 K, +10 on the balanced camera file: the print goes blue, the light was about 5400 K), `cam-film-portra-800-push1` (the data pack's film preset "Kodak Portra 800 (Push 1)": stock Portra 800, push 1) |
 | stacks (P8a) | `stack-print-tone` (exposure, an S-curve on L, levels on blue, vibrance), `stack-print-colour` (HSL bands, colour grading, a mixer at 0.7), `stack-print-masked` (a curve under a radial mask, exposure under a colour range ∩ gradient, vignette, sharpen), `stack-print-blends` (multiply, screen, soft light, luminosity and colour layers; an isolated luminosity group under a mask; a pass group at 0.6), `stack-print-mono` (monochrome mixer, levels, split toning), `stack-scene` (a camera file's scene stage: exposure under a luminance mask reading `scene.input`, a curve on R, HSL; a print vignette) |
 | new in P2b | `neg-dust-heal` (a scan-stage group `dust` of three one-spot heal layers, coalesced into one `heal` node on scanner density), `neg-finishing-clarity` (a print-stage `clarity` layer, strength 0.4, radius 0.576 mm = P0's 12 px × 48 µm) |
 
@@ -122,6 +123,16 @@ Later deliberate re-renders:
 | Case | Before → after max / mean \|Δ\| (print; display) | Why |
 |---|---|---|
 | `stack-print-blends` | 0 / 0; 1.22e-1 / 5.05e-2 (display mean RGB 0.249 0.261 0.267 → 0.299 0.314 0.316) | D7 (CHB-045, contract 1.5): soft light, like every contrast mode, is evaluated in the display encoding and switches at display mid-grey; its top (a curve of 0.1…0.9) is above display mid-grey more often than above linear ½, so the layer lightens more |
+| `stack-print-blends` | 0 / 0; 8.17e-2 / 1.41e-3 (display mean RGB 0.2993 0.3141 0.3164 → 0.2991 0.3144 0.3201; 903 of 6144 pixels change, 591 by more than one 8-bit level) | LAY-2 (CHB-048, contract 3.0): the luminosity and colour layers and the isolated luminosity group keep the gamut by ClipColor in OkLCh; before, their results had channels below 0 or above white in the print's working RGB (the display clamped them, so they showed as clipped colour); now the chroma is reduced at the same lightness and hue |
+
+CHB-048 (contract 3.0) replaced the camera file's white balance mode (daylight / as-shot / custom) by the white of the
+light as a temperature and a tint in Lightroom's units, applied as CAT16 to D65. The documents were re-translated
+(`translate.ts`: P0's daylight → `NO_CORRECTION`, D65's white; as-shot → the camera fixture's as-shot white, 5391.6 K
++12.69; P0's custom 4000 K +10 on its own daylight-locus scale → 4022.7 K +5.97) and `stacks.ts` re-ran; **every stored
+picture is reproduced bit for bit** (`render.ts --check`: 66/66 cases, max |Δ| = 0 at both cuts), so the as-shot
+white, no correction and the old custom white are the same pictures as before. New case: `cam-wb-tungsten` (3200 K,
++10 on `cam-auto`; built by `stacks.ts`), and LOOK-6's `cam-film-portra-800-push1` (a film stock preset from the data
+pack, `stacks.ts` takes it from contract `filmPresets` over the pack's stocks).
 
 CHB-045's integer grid rule and the density mask's log floor changed no stored pixel (the reference already divided in
 f64, and no golden's mask exposure is below 1e-8).

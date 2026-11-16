@@ -1,7 +1,7 @@
 // CHB-047 OUT-7 (CHB-033 t:y8dh): the RAW colour regression test from CHB-033 script 01. Our camera colour of a NEF
 // (LibRaw's single Adobe D65 colour matrix, the as-shot neutral from the camera's multipliers) against Adobe's colour
 // of the same photo (Adobe DNG Converter's DNG: dual-illuminant ColorMatrix1/2 and AsShotNeutral, read by our DNG
-// path): both through core's cameraMatrix (as-shot) to CIE Lab (D65) at 256 px, exposure matched on mean Y, deep
+// path): both through the contract's sceneMatrix (as-shot) to CIE Lab (D65) at 256 px, exposure matched on mean Y, deep
 // shadows and highlights left out. CHB-033 measured ΔE2000 median 0.13–0.51 and p99 ≤ 1.3 on four photos and the
 // same white balance; the bounds here leave room for LibRaw updates but catch a wrong matrix, white balance or decode.
 //
@@ -12,7 +12,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LibRawDecoder } from '@chromobench/ingest';
-import { cameraMatrix } from '@chromobench/core';
+import { asShotWhiteBalance, sceneMatrix } from '@chromobench/contract';
 import { decodePhoto } from '../src/host/decode.ts';
 
 const PRIVATE = process.env['CHROMOBENCH_PRIVATE'] ?? join(import.meta.dirname, '../../../.playwright-mcp');
@@ -53,11 +53,11 @@ function de2000([L1, a1, b1]: number[], [L2, a2, b2]: number[]): number {
 
 const raw = new LibRawDecoder();
 
-/** The photo's scene XYZ (D65) at 256 px through core's camera matrix, as shot. */
+/** The photo's scene XYZ (D65) at 256 px through the contract's scene matrix, as shot. */
 async function scene(path: string) {
   const d = await decodePhoto(new Uint8Array(readFileSync(path)), 'd'.repeat(64), path.split('/').pop()!, { long: 256, raw });
   const cam = d.info.camera!;
-  const { M } = cameraMatrix(cam, { mode: 'as-shot' });
+  const M = sceneMatrix(cam, asShotWhiteBalance(cam)!);
   const n = d.info.width * d.info.height, xyz = new Float64Array(n * 3);
   let Y = 0;
   for (let i = 0; i < n; i++) for (let r = 0; r < 3; r++) {

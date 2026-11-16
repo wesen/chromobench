@@ -203,7 +203,12 @@ export const DIGITAL_TESTS: Record<string, T> = {
       const mixes = g.closure(fin.id).map((x) => x).filter((x) => x.op === 'composite.mix');
       const ids = [...new Set(c.entries ? Object.values(c.entries).flat() : [])];
       const fusedMixes = ids.map((id) => g.get(id)!).filter((n) => n.op === 'composite.mix' && !isBarrier(n, g)).length;
-      out[name] = { display: { ...diff(got, { data: want, c: 3 }), max8bit: max8(got.data, want) }, finished: diff(await gpuRead(f, g, fin), wantF), mixes: mixes.length, fusedMixes };
+      const dd = diff(got, { data: want, c: 3 });
+      const gotF = await gpuRead(f, g, fin);
+      // the worst display pixel's values in both engines, at display and at finished (where a difference comes from)
+      const px = (a: ArrayLike<number>, c: number, i: number): number[] => [0, 1, 2].map((k) => a[i * c + k]!);
+      const worstAt = { display: [px(got.data, got.c, dd.at), px(want, 3, dd.at)], finished: [px(gotF.data, gotF.c, dd.at), px(wantF.data, 3, dd.at)] };
+      out[name] = { display: { ...dd, max8bit: max8(got.data, want), worstAt }, finished: diff(gotF, wantF), mixes: mixes.length, fusedMixes };
     }
     return out;
   },

@@ -45,7 +45,6 @@ export {
 } from './ops/ops.ts';
 export * from './film/upsample.ts';
 export * from './film/expose.ts';
-export * from './film/camera.ts';
 export * from './film/curves.ts';
 export * from './film/couple.ts';
 export * from './film/blur.ts';

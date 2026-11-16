@@ -10,7 +10,7 @@
   "endian": "little",
   "layout": "interleaved, row-major, top row first",
   "file": "cases/stack-print-blends/display.f32",
-  "sha256": "1f0b7d45ec5cdad356bab716a244cefef533e0a6ee21c3086cb7e711c2be1255",
+  "sha256": "c53d5b878302a6d5f970cb36919638641c7d09907acc981b977f05cf68d8093d",
   "stats": {
     "min": [
       0.0003351921,
@@ -23,9 +23,9 @@
       1
     ],
     "mean": [
-      0.299293,
-      0.3141034,
-      0.3164445
+      0.2990529,
+      0.3143978,
+      0.3201352
     ]
   },
   "warnings": []

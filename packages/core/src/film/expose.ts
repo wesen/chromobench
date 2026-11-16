@@ -1,22 +1,12 @@
 // Exposure of film to scene light (CHB-012 guide §2.4, §5.2; textbook §2.1; spektrafilm
 // runtime/stages/filming.py, utils/autoexposure.py). The forward path's first stage:
-// scene XYZ → (CAT16 to the film's reference white) → b, (u, v) → raw = b · table(u, v) · 2^EV.
-import { CAT16 } from '../print/colour.ts';
-import { inv3, mulMM, mulMV, type Mat3, type Vec3 } from '../spectral/linalg.ts';
+// scene XYZ → (CAT16 to the film's reference white) → b, (u, v) → raw = b · table(u, v) · 2^EV. The CAT16 adaptation
+// is the contract's (white-balance.ts cat16): the white balance before the film uses the same one, so the two compose.
+import { cat16 } from '@chromobench/contract';
+import { mulMV, type Mat3 } from '../spectral/linalg.ts';
 import { lookupBilinear, lookupCubic, tri2quad, type FilmTable } from './upsample.ts';
 
 export type AdaptMode = 'to-film-reference' | 'none';
-
-/** The 3 × 3 CAT16 von Kries adaptation (complete) from white `from` to white `to` (XYZ). */
-export function cat16Matrix(from: ArrayLike<number>, to: ArrayLike<number>): Mat3 {
-  const s = mulMV(CAT16, from);
-  const d = mulMV(CAT16, to);
-  const D: Mat3 = [[d[0] / s[0], 0, 0], [0, d[1] / s[1], 0], [0, 0, d[2] / s[2]]];
-  return mulMM(inv3(CAT16), mulMM(D, CAT16));
-}
-
-/** XYZ of a chromaticity at Y = 1. */
-export const xyToXYZ = (x: number, y: number): Vec3 => [x / y, 1, (1 - x - y) / y];
 
 /** XYZ and xy of an SPD through the CMFs (k = 1/Σȳ, so Y of the SPD itself is normalised away by xy). */
 export function spdXY(spd: ArrayLike<number>, cmf: readonly ArrayLike<number>[]): [number, number] {
@@ -50,7 +40,7 @@ export interface Exposer {
 }
 
 export function makeExposer(table: FilmTable, o: ExposeOptions): Exposer {
-  const M: Mat3 = o.adapt === 'to-film-reference' ? cat16Matrix(o.sourceWhite, o.refWhite) : [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const M: Mat3 = o.adapt === 'to-film-reference' ? cat16(o.sourceWhite, o.refWhite) : [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const scale = 2 ** o.ev;
   const look = o.interp === 'cubic' ? lookupCubic : lookupBilinear;
   return {

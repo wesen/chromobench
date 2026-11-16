@@ -64,4 +64,7 @@ export const CB_FORMS: FormSpec[] = [
   spec('cb.readout', { frame: t<string | null>() }, 'The densitometer line under the probe'),
   spec('cb.ribbon', { frame: t<string | null>() }, 'The ribbon over a shown agent proposal'),
   spec('cb.filter', { onChange: h() }, 'Search and flag filter for the library'),
+  spec('cb.preset', { kind: b<string>("'white-balance' · 'film' · 'paper' · 'grade'"), frame: t<string | null>() },
+    'A preset picker in his words (the white balance: As shot, Lightroom\'s presets, None; the data pack\'s films and papers; the paper grades): shows the frame\'s preset or Custom; choosing one is one step',
+    { explain: (n: NodeData) => `kind ${String(n.props['kind'])}` }),
 ];

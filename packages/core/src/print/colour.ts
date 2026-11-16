@@ -1,10 +1,12 @@
 // Viewing and colour (§2.7): single-pass reflectance, XYZ with Y(white) = 1, flare, Bradford/CAT16,
 // CIELAB, CIEDE2000, sRGB/P3 encoding. Ported from Chromogen colour.js (05-inline.js 866–932).
+import { CAT16_M, D65_XYZ, SRGB_TO_XYZ_M } from '@chromobench/contract';
 import { inv3, mulMM, mulMV, type Mat3, type Vec3 } from '../spectral/linalg.ts';
 import type { Stock } from '../spectral/stock.ts';
 import { NW } from '../spectral/spectrum.ts';
 
-export const D65: Vec3 = [0.95047, 1, 1.08883];
+/** D65 (Y = 1): the contract's scene white (white-balance.ts D65_XYZ). */
+export const D65: Vec3 = [...D65_XYZ] as Vec3;
 export const D50: Vec3 = [0.96422, 1, 0.82521];
 
 export interface Viewing {
@@ -47,7 +49,8 @@ export const addFlare = (X: ArrayLike<number>, fraction: number, flareWhite: Arr
 
 export const BRADFORD: Mat3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
 export const BRADFORD_INV: Mat3 = inv3(BRADFORD);
-export const CAT16: Mat3 = [[0.401288, 0.650173, -0.051461], [-0.250268, 1.204414, 0.045854], [-0.002079, 0.048952, 0.953127]];
+/** The CAT16 cone matrix (the contract's, white-balance.ts). */
+export const CAT16: Mat3 = CAT16_M.map((r) => [...r]) as Mat3;
 
 function vonKries(M: Mat3, Minv: Mat3, X: ArrayLike<number>, from: ArrayLike<number>, to: ArrayLike<number>): Vec3 {
   const s = mulMV(M, from);
@@ -66,7 +69,7 @@ export function bradfordMatrix(from: ArrayLike<number>, to: ArrayLike<number> = 
 }
 
 export const XYZ_TO_SRGB: Mat3 = [[3.2404542, -1.5371385, -0.4985314], [-0.969266, 1.8760108, 0.041556], [0.0556434, -0.2040259, 1.0572252]];
-export const SRGB_TO_XYZ: Mat3 = [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.072175], [0.0193339, 0.119192, 0.9503041]];
+export const SRGB_TO_XYZ: Mat3 = SRGB_TO_XYZ_M.map((r) => [...r]) as Mat3;
 
 export const encodeSRGB = (v: number): number => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
 export const hex = (rgb: ArrayLike<number>): string => '#' + Array.from(rgb, (v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');

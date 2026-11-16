@@ -303,7 +303,7 @@ export function selectTools(): ToolTable {
       },
     },
     'select-wand': {
-      label: 'Magic Wand', icon: 'wand', key: 'W', cursor: 'crosshair', ...needTarget,
+      label: 'Magic Wand', icon: 'wand', key: 'Shift+W', cursor: 'crosshair', ...needTarget,
       // a click selects what is like the picture there (the image the layer's mask reads), one selection
       on: {
         down: (e: any, ctx: any) => {

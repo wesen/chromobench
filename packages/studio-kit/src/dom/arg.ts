@@ -14,6 +14,7 @@ import { unset } from '@chromobench/values';
 import { argModel, dragTo, feelOf, keyStepOf, parseEntry, parseStep, stepValue, trackRange, type ArgModel } from '../kit/args.ts';
 import { badEntryText, clampedText, clampEntry, controlTip, entryHint, entryPlaceholder, isRelativeEntry, relativeText } from '../kit/messages.ts';
 import { componentOf, withComponent } from '../model/controls.ts';
+import { pickerOf, PRESET_PATHS } from '../model/presets.ts';
 import { exposureStep, isInert, linksOf, MODE_PATH, read, storePath, TIME_PATH } from '../model/doc.ts';
 import { printerSeconds, PT } from '../model/units.ts';
 import { sel } from '../sel.ts';
@@ -258,7 +259,47 @@ export function renderArg(n: NodeData, m: MountCtx): HTMLElement {
   const body = h('div', { class: 'cb-arg-b' });
   el.append(body);
 
-  if (widget === 'select' || model.type === 'enum' || model.type === 'string') {
+  const presetKind = PRESET_PATHS[model.path];
+  if (presetKind) {
+    // a stock is a medium preset (CHB-048, D6): the data pack's films (a pushed profile with its push) or papers, by
+    // the pack's names and groups; choosing one runs medium.preset (one step); "Custom" when the medium is none of them
+    const sel = h('select', { class: 'cb-select cb-preset-s', 'aria-label': label }) as HTMLSelectElement;
+    let shown = '';
+    const fill = (): void => {
+      const f = now.f;
+      const pk = pickerOf(presetKind, f ? docNow(f) : undefined, { links: linksOf(st.readonly()) });
+      if (!pk) return;
+      const key = `${pk.current}|${pk.custom}|${pk.options.length}`;
+      if (key === shown) return;
+      shown = key;
+      const kids: HTMLElement[] = [];
+      if (pk.current === null) kids.push(h('option', { value: '', text: pk.custom }));
+      let group: HTMLElement | null = null;
+      for (const o of pk.options) {
+        const opt = h('option', { value: o.value, text: o.label, ...(o.tip ? { title: o.tip } : {}) });
+        if (!o.group) {
+          group = null;
+          kids.push(opt);
+          continue;
+        }
+        if (!group || group.getAttribute('label') !== o.group) {
+          group = h('optgroup', { label: o.group });
+          kids.push(group);
+        }
+        group.append(opt);
+      }
+      sel.replaceChildren(...kids);
+      sel.value = pk.current ?? '';
+      sel.title = pk.tip;
+    };
+    listen(m.scope, sel, 'change', () => {
+      if (!now.f || !sel.value) return;
+      rt.runCommand('medium.preset', null, { kind: presetKind, preset: sel.value });
+    });
+    body.append(sel);
+    tracks.push({ set: () => fill(), reset: () => void (shown = '') });
+    m.cell((s: any) => { const f = frameOf(s); return f ? read(s.docs?.[f], `stages.${presetKind === 'film' ? 'film' : 'darkroom'}.medium`, linksOf(s)) : undefined; }, () => fill());
+  } else if (widget === 'select' || model.type === 'enum' || model.type === 'string') {
     const sel = h('select', { class: 'cb-select', 'aria-label': label }) as HTMLSelectElement;
     for (const v of model.values ?? []) sel.append(h('option', { value: v, text: model.valueLabel(v) }));
     listen(m.scope, sel, 'change', () => now.f && commitSet(now.f, sel.value));

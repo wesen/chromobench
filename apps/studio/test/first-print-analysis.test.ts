@@ -12,7 +12,7 @@ import { plantedFrames, writeTiff16, type RawDecoder } from '@chromobench/ingest
 import { afterEach, describe, expect, it } from 'vitest';
 import { decodeFile, decodeScan } from '../src/host/decode.ts';
 import { serveEngine, type EngineScope } from '../src/host/engine-serve.ts';
-import { firstPrint, onAnalysis, photoDocument } from '../src/host/first-print.ts';
+import { firstPrint, onAnalysis } from '../src/host/first-print.ts';
 import { ANALYSIS_LONG, analysisSha, StudioEngine, type AnalysisImage, type HostServices } from '../src/host/studio-engine.ts';
 import { WorkerClient, WorkerEngine, type WorkerLike } from '../src/host/worker-engine.ts';
 
@@ -95,7 +95,7 @@ describe('the first print meters the analysis image (first-print.ts)', () => {
       if (d.analysis) e.openDecoded(d.analysis.info, d.analysis.data!);
       const g = new Graph();
       g.registerSource(d.info);
-      const r0 = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'p' }), false);
+      const r0 = newDocument('digital-raw', { sha256: sha, name: 'p' });
       return firstPrint(e, g, r0, { integrate, analysis });
     };
     const a = big.analysis!.info;
@@ -187,7 +187,7 @@ describe('the analysis image through the engine worker and StudioEngine', () => 
     expect([a.kx, a.ky]).toEqual([50 / 200, a.info.height / studio.graph.source(sha)!.height]);
     expect(studio.notes.get(sha)!.analysis!.data).toBeUndefined();
     // the first print meters it in the worker: the analysis source is open there
-    const r0 = photoDocument(newDocument('digital-raw', { sha256: sha, name: 'p' }), false);
+    const r0 = newDocument('digital-raw', { sha256: sha, name: 'p' });
     const g = new Graph();
     g.registerSource(studio.graph.source(sha)!);
     const r = await firstPrint(studio, g, r0, { integrate, analysis: a });

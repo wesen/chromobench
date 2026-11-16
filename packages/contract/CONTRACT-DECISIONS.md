@@ -635,6 +635,59 @@ migration: none (hard cut-off: studio-kit STORAGE_FORMAT 4 clears edits saved be
 tests:     contract scale-document.test.ts; output jpeg.test.ts, export.test.ts; e2e studio-output.spec.ts
 ```
 
+## Contract 3.0 (CHB-048: before the film)
+
+`CONTRACT_VERSION = '3.0.0'` (major: the scene medium's `whiteBalance.mode` is removed; numbered after CHB-049's 1.6.0
+/ CC-025 and CHB-047's 2.0.0 / CC-026 at the integrator's request). Phase 2's "before the film" work: the white balance of a camera file defined once in the
+contract (decision D2), the OkLCh blend modes kept in the gamut (LAY-2), and film stocks, papers and grades as medium
+presets (D6).
+
+| Request | Item | Status | Notes |
+|---|---|---|---|
+| D2 (CHB-044), CHB-037 P9-12 | White balance before the film (`white-balance.ts`) | accepted | The scene medium's `whiteBalance` is the white of the light the scene was lit by: `{ temperature_K, tint }` in Lightroom's units (Robertson's isotemperature lines in CIE 1960 uv, the tint the offset along the line × −3000, as Adobe's DNG SDK; `temperatureToWhite` and its closed-form inverse `whiteToTemperature`, exact to 1e-13). `source.xyz` applies, after the camera matrix, the CAT16 adaptation (complete, in XYZ) from that white to D65; capture.expose then adapts D65 to the film's reference white with the same CAT16 (`cat16`, moved from core), so the two compose. A camera file opens with its raw's as-shot white (`asShotWhiteBalance`); `NO_CORRECTION` is D65 itself (the light as it was, as a daylight film sees it). `mode` (daylight / as-shot / custom) is gone: as-shot and none are values now, and every stored golden is reproduced bit for bit (max \|Δ\| = 0) with the translated values. `pickedWhiteBalance` is the eyedropper's rule; `WHITE_BALANCE_PRESETS` are Lightroom's presets for raw files |
+| CHB-037 P10-9 (LAY-2) | W3C ClipColor for the OkLCh blend modes | accepted | `blendOkLch` (the four modes' formulas, moved from core) and `clipColour`: a result whose linear RGB leaves [0, `gamutTop`] (the brighter of white and the inputs' brightest channel: W3C's cube for inputs in [0, 1], room for a scene-linear highlight) keeps its OkLab L and hue and takes the chroma factor of the first exit from grey (`CLIP_MARCH` = 32 steps out, then `CLIP_STEPS` = 24 halvings; the GPU runs the same): along a ray of constant L and hue the gamut need not be one interval (deep blues). A channel within `CLIP_EPS` (1e-6 of the top) of the gamut counts as inside, so f32 noise on an edge colour cannot send it through the search in one engine only. A result in the gamut is unchanged bit for bit. The display knee's chroma search (core `maxChromaOf`, the GPU's `okMaxChroma`) had the same flaw and now also returns the first exit (`CHROMA_MARCH` = 64): it jumped between two exits for print colours 1e-5 apart (0.037 in blue); no golden changed |
+| D6 (CHB-044), CHB-021 t:xw53 (LOOK-6) | Medium presets (`media-presets.ts`) | accepted | Film stocks, papers and paper grades are presets of the film and darkroom media, built from the data pack's stocks (`StockFacts`: id, name, role, type, use, print stock): `filmPresets` (negative films; a pushed profile `<stock>_push<n>` is `{ stock: base, push: n }`; slide films are not offered), `paperPresets` (papers, then cinema print films), `GRADE_PRESETS` (grades 0 … 5 in halves). A preset is a set of medium fields (`presetSets`), recognised by `presetOf`; not a link, not a look |
+
+```text
+CC-027  stages.scene.medium.whiteBalance, source.xyz: the white of the light as temperature and tint, CAT16 to D65 (CHB-048; contract 3.0.0)
+class:     breaking (major for documents: whiteBalance.mode is removed; hard cut-off, no migration)
+changes:   white-balance.ts (D65_XYZ, CAT16_M, SRGB_TO_XYZ_M, cat16, xyToXYZ, xyOf, temperatureToWhite, whiteToTemperature,
+           whiteBalanceOf, NO_CORRECTION, whiteOf, cameraToXyz, asShotWhite, asShotWhiteBalance, whiteBalanceMatrix,
+           sceneMatrix, pickedWhiteBalance, WHITE_BALANCE_PRESETS, sameWhiteBalance, TEMPERATURE_RANGE 2000…50000 K,
+           TINT_RANGE ±150); SceneMedium.whiteBalance: WhiteBalance; NewDocumentOptions.whiteBalance; source.xyz args
+           temperature_K, tint (defaults NO_CORRECTION; mode removed)
+consumers: engines (core sceneMatrixAt calls sceneMatrix, core's camera.ts and cat16Matrix deleted; gpu binds core's
+           matrix; mock applies whiteBalanceMatrix after its sRGB camera); studio (defaultDocument takes the raw's as-shot
+           white; the white balance panel); DSL (generated)
+migration: none (hard cut-off); the golden documents were re-translated (tools/goldens/translate.ts), pictures unchanged
+tests:     contract white-balance.test.ts (round trip, Lightroom anchors, identity at as shot and none, composition,
+           eyedropper); core white-balance.test.ts (a white-balanced tungsten grey is the daylight grey through the film);
+           mock white-balance.test.ts; GPU film.spec.ts (a changed white balance against core); golden cam-wb-tungsten
+```
+
+```text
+CC-028  composite.mix hue, saturation, colour, luminosity: ClipColor in OkLCh (CHB-048 LAY-2; contract 3.0.0)
+class:     changed meaning (minor): out-of-gamut results of the four modes are brought into the gamut
+changes:   pixel.ts blendOkLch, clipColour, gamutTop, CLIP_MARCH, CLIP_STEPS, CLIP_EPS; core blendOklab deleted (blendPixel calls
+           the contract); core maxChromaOf and the GPU's okMaxChroma return the first exit (CHROMA_MARCH)
+consumers: engines (core blendPixel; gpu working.wgsl wkClipColour, CLIP_STEPS generated into blend-codes; mock blend)
+migration: none
+tests:     contract clip-colour.test.ts (in-gamut unchanged, in gamut after, L and hue kept, maximal chroma, idempotent);
+           core composite.test.ts; conformance semantics (luminosity, colour: chroma never raised, hue kept); GPU
+           law:blend, law:digital-doc; core knee-first-exit.test.ts; golden stack-print-blends re-rendered
+```
+
+```text
+CC-029  medium presets: film stocks, papers, grades from the data pack (CHB-048 LOOK-6, D6; contract 3.0.0)
+class:     additive (minor)
+changes:   media-presets.ts StockFacts, PresetKind, PRESET_KINDS, PRESET_STAGE, MediumPreset, filmPresets, paperPresets,
+           GRADE_PRESETS, mediumPresets, presetSets, presetOf
+consumers: studio (the host registers the pack's stocks; the stock selects of cb.arg and cb.preset are pickers;
+           medium.preset, medium.presets commands); tools/goldens stacks.ts
+migration: none
+tests:     core media-presets.test.ts (the pack's lists, names, push mapping); golden cam-film-portra-800-push1; e2e
+```
+
 ## Change-note template
 
 ```text

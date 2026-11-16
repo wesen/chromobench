@@ -6,7 +6,8 @@ import { D65, SRGB_TO_XYZ } from '../print/colour.ts';
 import { mulMV, type Vec3 } from '../spectral/linalg.ts';
 import type { Stock } from '../spectral/stock.ts';
 import { FilmCurves } from './curves.ts';
-import { logRaw, makeExposer, spdXY, xyToXYZ, type AdaptMode } from './expose.ts';
+import { xyToXYZ } from '@chromobench/contract';
+import { logRaw, makeExposer, spdXY, type AdaptMode } from './expose.ts';
 import { buildFilmTable, sigmoidSpectraTable, spectralLocus, type FilmTable, type SpectraTable } from './upsample.ts';
 
 export interface FilmModel {

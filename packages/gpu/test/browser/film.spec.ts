@@ -28,6 +28,14 @@ test('forward stages match core: camera matrix, exposure, coupling, halation, de
   for (const k of ['xyz', 'expose', 'couple', 'coupleDiffused', 'halation', 'develop', 'developPush']) expect(r[k].max, k).toBeLessThan(2e-5);
 });
 
+test('white balance before the film (CHB-048): a changed temperature and tint match core at the scene and through the film', async ({ page }) => {
+  test.setTimeout(300_000);
+  // a tungsten white with a green tint, away from the as-shot white (the GPU binds core's matrix: contract sceneMatrix)
+  const r = await run(page, 'film:stages', { wb: { temperature_K: 3200, tint: 15 } });
+  expect(r.error).toBeUndefined();
+  for (const k of ['xyz', 'expose', 'develop']) expect(r[k].max, k).toBeLessThan(2e-5);
+});
+
 test('grain: the same Poisson model, mean and variance of core on a uniform field', async ({ page }) => {
   test.setTimeout(300_000);
   const r = await run(page, 'film:grain');

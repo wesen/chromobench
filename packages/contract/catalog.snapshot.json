@@ -21,7 +21,7 @@
     "colour",
     "luminosity"
   ],
-  "contractVersion": "2.0.0",
+  "contractVersion": "3.0.0",
   "cuts": {
     "darkroom.H": {
       "domain": "paper-logH",
@@ -3429,32 +3429,27 @@
     "source.xyz": {
       "area": "source",
       "args": {
-        "mode": {
-          "default": "daylight",
-          "type": "enum",
-          "values": [
-            "daylight",
-            "as-shot",
-            "custom"
-          ]
-        },
         "temperature_K": {
-          "default": 5500,
-          "max": 15000,
+          "default": 6502.073737141535,
+          "max": 50000,
           "min": 2000,
           "type": "number",
           "unit": "K",
           "usual": [
-            2800,
+            2500,
             10000
           ]
         },
         "tint": {
-          "default": 0,
+          "default": 9.766663536235953,
           "max": 150,
           "min": -150,
           "type": "number",
-          "unit": "none"
+          "unit": "none",
+          "usual": [
+            -50,
+            50
+          ]
         }
       },
       "binding": "scan",
@@ -3982,21 +3977,13 @@
       ],
       "law": "composite",
       "medium": {
-        "whiteBalance.mode": {
-          "type": "enum",
-          "values": [
-            "daylight",
-            "as-shot",
-            "custom"
-          ]
-        },
         "whiteBalance.temperature_K": {
-          "max": 15000,
+          "max": 50000,
           "min": 2000,
           "type": "number",
           "unit": "K",
           "usual": [
-            2800,
+            2500,
             10000
           ]
         },
@@ -4004,7 +3991,11 @@
           "max": 150,
           "min": -150,
           "type": "number",
-          "unit": "none"
+          "unit": "none",
+          "usual": [
+            -50,
+            50
+          ]
         }
       },
       "mediumAfter": "source",

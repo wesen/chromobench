@@ -191,8 +191,9 @@ export function createStackKit(ck: Ck, cb: Cb) {
   const sceneModule = (o: { id?: string; key?: string } = {}) =>
     ck
       .module(o.id ?? 'scene', { label: 'Scene', key: o.key ?? 'Mod+Alt+S', stages: ['scene'] })
-      .center(viewer('scene'))
-      .right(ck.dock.column({ width: 300 }, layers('scene', { id: 'layers-scene', empty: 'A negative scan has no scene stage: its edits start on the negative and in the darkroom.' }), params({ id: 'layer-params-scene' }), masks({ id: 'layer-masks-scene' })))
+      .center(viewer('scene', ['white-balance', ...MASK_TOOLS]))
+      // CHB-048: the white balance before the film, above the scene's layers
+      .right(ck.dock.column({ width: 300 }, cb.panels.whiteBalance({ id: 'white-balance-scene' }), layers('scene', { id: 'layers-scene', empty: 'A negative scan has no scene stage: its edits start on the negative and in the darkroom.' }), params({ id: 'layer-params-scene' }), masks({ id: 'layer-masks-scene' })))
       .bottom(ck.dock.column({ width: 124 }, cb.views.strip({ id: 'strip-scene' })));
 
   return ck.product(kit, {

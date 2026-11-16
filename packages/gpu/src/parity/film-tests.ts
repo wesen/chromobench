@@ -2,7 +2,7 @@
 // (guide §5.6 kernel table): source.xyz, capture.expose, film.couple (pointwise and diffused),
 // film.halation, film.develop and film.grain; pcg4d uniforms bit-identical; grain statistics; a
 // digital-raw document end to end. Each stage reports its worst difference so the spec can bound it.
-import { compile, cutNode, Graph, layerEntry, newDocument, sha256Hex, type Document, type FilmMedium, type Node, type SceneMedium, type SourceInfo } from '@chromobench/contract';
+import { asShotWhiteBalance, compile, cutNode, Graph, layerEntry, newDocument, NO_CORRECTION, sha256Hex, type Document, type FilmMedium, type Node, type SourceInfo, type WhiteBalance } from '@chromobench/contract';
 import { gaussianKernelSum, RefEngine, uniformAt } from '@chromobench/core';
 import { GpuEngine } from '../engine-gpu.ts';
 import { FilmGpu } from '../film.ts';
@@ -95,7 +95,8 @@ export const FILM_TESTS: Record<string, T> = {
     const W = f.info.width, H = f.info.height;
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => f.g.intern(op, inputs, args).node;
     const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear', umPerPx: 36000 / Math.max(f.info.width, f.info.height) });
-    const xyz = I('source.xyz', [src.id], { mode: (o['wb'] as string | undefined) ?? 'as-shot', temperature_K: 5500, tint: 0 });
+    // the white balance: the raw's as-shot white unless the test names one (contract white-balance.ts, CHB-048)
+    const xyz = I('source.xyz', [src.id], { ...((o['wb'] as WhiteBalance | undefined) ?? asShotWhiteBalance(f.info.camera)!) });
     const ex = I('capture.expose', [xyz.id], { stock: 'kodak_portra_400', exposureEV: 0.5 });
     const cp = I('film.couple', [ex.id], { amount: 1, diffusion_um: 0 });
     const cd = I('film.couple', [ex.id], { amount: 1, diffusion_um: 20 });
@@ -121,7 +122,7 @@ export const FILM_TESTS: Record<string, T> = {
     const W = f.info.width, H = f.info.height;
     const I = (op: string, inputs: string[], args: Record<string, unknown> = {}): Node => f.g.intern(op, inputs, args).node;
     const src = I('source.open', [], { source: f.info.sha256, encoding: 'linear', umPerPx: 36000 / Math.max(f.info.width, f.info.height) });
-    const ex = I('capture.expose', [I('source.xyz', [src.id], { mode: 'daylight', temperature_K: 5500, tint: 0 }).id], { stock: 'kodak_portra_400', exposureEV: 0 });
+    const ex = I('capture.expose', [I('source.xyz', [src.id], { ...NO_CORRECTION }).id], { stock: 'kodak_portra_400', exposureEV: 0 });
     const dv = I('film.develop', [ex.id], { push: 0, curves: 'datasheet' });
     const gr = I('film.grain', [dv.id], { amount: 1, size_um: 12, seed: 7 });
     const { a, b } = await both(f, gr);
@@ -167,14 +168,13 @@ export const FILM_TESTS: Record<string, T> = {
   /** A digital-raw document through compile (contract 1.0): the display image of both engines. */
   async 'film:recipe'() {
     const f = await frame();
-    const d = newDocument('digital-raw', { sha256: f.info.sha256, name: 'synthetic.dng', width: f.info.width, height: f.info.height });
-    const scene = d.stages.scene!, film = d.stages.film!;
-    const sm = scene.medium as SceneMedium, fm = film.medium as FilmMedium; // newDocument's media are values, not links
+    const d = newDocument('digital-raw', { sha256: f.info.sha256, name: 'synthetic.dng', width: f.info.width, height: f.info.height }, { whiteBalance: asShotWhiteBalance(f.info.camera)! });
+    const film = d.stages.film!;
+    const fm = film.medium as FilmMedium; // newDocument's media are values, not links
     const doc: Document = {
       ...d,
       stages: {
         ...d.stages,
-        scene: { ...scene, medium: { ...sm, whiteBalance: { ...sm.whiteBalance, mode: 'as-shot' } } },
         film: { ...film, medium: { ...fm, grain: { ...fm.grain, amount: 0 } } },
       },
     };
