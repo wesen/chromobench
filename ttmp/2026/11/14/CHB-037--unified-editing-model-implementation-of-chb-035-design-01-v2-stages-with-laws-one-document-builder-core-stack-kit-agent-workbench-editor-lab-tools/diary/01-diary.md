@@ -1216,3 +1216,66 @@ on product questions.
 
 ### Technical details
 - Item ids for Phase 1: GPUC-1…4, LAY-3, MASK-1, DARK-2, DARK-3, DARK-5, NEW-1…3, SCAN-5.
+
+## Step 22: Phase 1 merged (CHB-045, CHB-046); full checks on the combined branch
+
+Both Phase 1 agents finished and their branches were merged into this one: CHB-046 (editing blockers and the decision
+work) as fdc2378, CHB-045 (GPU correctness and the contrast blend modes) as e346dc9. Both merges were clean. All
+thirteen Phase 1 items are done and marked in the CHB-044 backlog, with the small items left for Phase 2 listed under
+the roadmap.
+
+### Prompt Context
+
+**User prompt (verbatim):** "now what's next? what are we still waiting for?" — then "maybe something's hanging. how
+important is it to test the entire thing now?"
+
+**Assistant interpretation:** Finish Phase 1: merge, check the combined code, merge to main and push (D13).
+
+**Inferred user intent:** Get the fixes into his hands without spending time on checks that add nothing.
+
+### What I did
+- Merged task/chb-046-editing-blockers (5a9350c, d494096, 4cf6727) and task/chb-045-gpu-correctness (fd3e834,
+  b148f6f, 3add9fd, d2a45b3, c5e1250) with `merge-phase.sh`.
+- Combined checks: typecheck clean; lint clean (506 file checks, 201 CSS files); gen:check ok (26 files); vitest 147
+  files, 3458 passed, 19 skipped; goldens 66/66 within 1e-5.
+- SwiftShader browser suite (ports 5571–5574): 165 passed, 2 skipped, 1 timed out. Metal gpu-parity under the GPU lock
+  (ports 5575–5578, apple metal-3): 61 passed, 2 skipped, conformance 524/524.
+- Marked MASK-1, DARK-2, DARK-3, DARK-5, NEW-1…3, SCAN-5, GPUC-1…4, LAY-3 done in the backlog with their commits;
+  wrote the Phase 1 result and leftovers under the roadmap.
+
+### Why
+- The combined branch is what goes to main; the two branches touched different code (studio/print against
+  packages/gpu and the blends), but only a combined run shows they agree.
+
+### What worked
+- Parallel worktrees with separate port ranges and the GPU lock: no interference between the two agents.
+
+### What didn't work
+- One SwiftShader test (`chain.spec.ts:15`, film dyes against the f64 solve) timed out after 180 s in its
+  `beforeEach` (opening the parity page; "browser.newContext: Test ended"). It took about 31–33 s in both agents'
+  runs. Rerun alone, the whole file passed (9 passed, 2.1 min). A hang at page open, not a wrong number; the full
+  suite was not rerun.
+
+### What I learned
+- The SwiftShader suite now takes about 12 minutes; law.spec.ts alone is 8 minutes since the grid sweep (every width
+  1–4000 and height 1–2674). That is worth splitting or sharding (PERF/test time, Phase 3).
+
+### What was tricky to build
+- GPUC-4 counted pending bytes, which broke the old global "wait until no render runs" retirement; CHB-045 replaced it
+  with per-object leases (see its diary).
+
+### What warrants a second pair of eyes
+- The print-stack document bound at the "finished" cut was raised from 3e-4 to 8e-4 (measured 4.3e-4) because the
+  display encoding magnifies existing error in the darks; the 8-bit difference stays ≤ 1 level. Accepted.
+- D8 changes the studio's first print to keep a quarter of the cast; D7 changed one golden (`stack-print-blends`).
+
+### What should be done in the future
+- Merge to main and push (D13); then Phase 2, starting with the Output module.
+- The occasional page-open hang on SwiftShader: give `openParity` its own timeout and a retry, so a hang reports as a
+  hang.
+
+### Code review instructions
+- CHB-045 and CHB-046 diaries and specs; the CHB-044 backlog roadmap section ("Phase 1 result").
+
+### Technical details
+- Logs: scratchpad `p1-swiftshader.log`, `p1-metal.log`.
