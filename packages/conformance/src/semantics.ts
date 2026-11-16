@@ -127,7 +127,7 @@ const COMPOSITE_CASES: SemanticCase[] = [
       const s = env.build('curve', [env.build('vibrance', [b.id], { vibrance: 0, saturation: 0.5 }).id], { points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] });
       const ba = await read(env, b);
       // the lightness is the one blended exactly; the colour is the other's, its chroma reduced (never raised, the hue
-      // kept) where it would leave the gamut (ClipColor in OkLCh, contract 1.6)
+      // kept) where it would leave the gamut (ClipColor in OkLCh, contract 3.0)
       const chromaOf = (out: ArrayLike<number>, want: (i: number, k: number) => number, what: string): void => {
         let bad = 0;
         for (let i = 0; i < out.length / 3; i++) {

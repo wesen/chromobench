@@ -3,9 +3,9 @@
 // masks, links with registered look functions, bindings), the op catalogue with stages and encodings, the stage laws (light, composite, repair), the
 // one compiler with named cuts, validation through the values hooks (a frame's history is the values document log
 // with LOG_RULES). Contract 1.1 (CHB-037 P8a): the composite op set, blend modes, working encodings, colour and radial
-// masks. Contract 1.6 (CHB-048): the white balance before the film (white-balance.ts). Importing this module registers
+// masks. Contract 3.0 (CHB-048): the white balance before the film (white-balance.ts). Importing this module registers
 // the catalogue.
-export const CONTRACT_VERSION = '1.6.0';
+export const CONTRACT_VERSION = '3.0.0';
 
 export * from './errors.ts';
 export * from './units.ts';

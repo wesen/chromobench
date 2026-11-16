@@ -123,9 +123,9 @@ Later deliberate re-renders:
 | Case | Before → after max / mean \|Δ\| (print; display) | Why |
 |---|---|---|
 | `stack-print-blends` | 0 / 0; 1.22e-1 / 5.05e-2 (display mean RGB 0.249 0.261 0.267 → 0.299 0.314 0.316) | D7 (CHB-045, contract 1.5): soft light, like every contrast mode, is evaluated in the display encoding and switches at display mid-grey; its top (a curve of 0.1…0.9) is above display mid-grey more often than above linear ½, so the layer lightens more |
-| `stack-print-blends` | 0 / 0; 8.17e-2 / 1.41e-3 (display mean RGB 0.2993 0.3141 0.3164 → 0.2991 0.3144 0.3201; 903 of 6144 pixels change, 591 by more than one 8-bit level) | LAY-2 (CHB-048, contract 1.6): the luminosity and colour layers and the isolated luminosity group keep the gamut by ClipColor in OkLCh; before, their results had channels below 0 or above white in the print's working RGB (the display clamped them, so they showed as clipped colour); now the chroma is reduced at the same lightness and hue |
+| `stack-print-blends` | 0 / 0; 8.17e-2 / 1.41e-3 (display mean RGB 0.2993 0.3141 0.3164 → 0.2991 0.3144 0.3201; 903 of 6144 pixels change, 591 by more than one 8-bit level) | LAY-2 (CHB-048, contract 3.0): the luminosity and colour layers and the isolated luminosity group keep the gamut by ClipColor in OkLCh; before, their results had channels below 0 or above white in the print's working RGB (the display clamped them, so they showed as clipped colour); now the chroma is reduced at the same lightness and hue |
 
-CHB-048 (contract 1.6) replaced the camera file's white balance mode (daylight / as-shot / custom) by the white of the
+CHB-048 (contract 3.0) replaced the camera file's white balance mode (daylight / as-shot / custom) by the white of the
 light as a temperature and a tint in Lightroom's units, applied as CAT16 to D65. The documents were re-translated
 (`translate.ts`: P0's daylight → `NO_CORRECTION`, D65's white; as-shot → the camera fixture's as-shot white, 5391.6 K
 +12.69; P0's custom 4000 K +10 on its own daylight-locus scale → 4022.7 K +5.97) and `stacks.ts` re-ran; **every stored

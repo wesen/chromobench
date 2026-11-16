@@ -83,16 +83,16 @@ describe('the adaptation: CAT16 from the white of the light to D65, in scene lig
     expect(maxDiff(mul(cat16(b, c), cat16(a, b)), cat16(a, c))).toBeLessThan(1e-14);
   });
 
-  it('identity at the as-shot white: the as-shot temperature and tint reproduce the camera\'s white balance (the pre-1.6 evaluation)', () => {
+  it('identity at the as-shot white: the as-shot temperature and tint reproduce the camera\'s white balance (the pre-3.0 evaluation)', () => {
     const wb = asShotWhiteBalance(CAM)!;
-    // before contract 1.6, 'as-shot' was cat16(as-shot neutral's XYZ → D65) after the camera matrix
+    // before contract 3.0, 'as-shot' was cat16(as-shot neutral's XYZ → D65) after the camera matrix
     const before = mul(cat16(asShotWhite(CAM)!, D65_XYZ), CAM.camToXyz!);
     expect(maxDiff(sceneMatrix(CAM, wb), before)).toBeLessThan(1e-13);
     // the as-shot neutral itself comes out D65-neutral
     const n = mv(sceneMatrix(CAM, wb), CAM.asShotNeutral!);
     const [x, y] = xyOf(n), [x0, y0] = xyOf(D65_XYZ);
     expect(Math.abs(x - x0) + Math.abs(y - y0)).toBeLessThan(1e-13);
-    // "None": the camera's own XYZ, untouched (pre-1.6 'daylight'); a file without a camera reads as linear sRGB
+    // "None": the camera's own XYZ, untouched (pre-3.0 daylight mode); a file without a camera reads as linear sRGB
     expect(maxDiff(sceneMatrix(CAM, NO_CORRECTION), CAM.camToXyz!)).toBeLessThan(1e-13);
     expect(maxDiff(whiteBalanceMatrix(NO_CORRECTION), I3)).toBeLessThan(1e-13);
     expect(asShotWhiteBalance({ make: 'x', model: 'y' })).toBeNull();

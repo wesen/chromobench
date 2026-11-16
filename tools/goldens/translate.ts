@@ -19,7 +19,7 @@
 //     scan dust spots → scan-stage heal layers in a group `dust` (sources chosen beside each speck: the recipe had none);
 //   - finishing clarity (radius in preview px) → a print-stage clarity layer, radius px × 48 µm / 1000 mm;
 //   - view.frame → geometry, view.output → output (export.recipe → export.document);
-//   - the camera file's white balance (CHB-048, contract 1.6: a temperature and a tint in Lightroom's units, applied as
+//   - the camera file's white balance (CHB-048, contract 3.0: a temperature and a tint in Lightroom's units, applied as
 //     CAT16 to D65): P0's 'daylight' (no adaptation) → NO_CORRECTION (D65's white), 'as-shot' → the camera fixture's
 //     as-shot white, 'custom' → the temperature and tint of P0's white (daylight locus ≥ 4000 K, its own tint scale).
 import { readFileSync } from 'node:fs';
@@ -68,7 +68,7 @@ function p0CustomWhite(T: number, tint: number): [number, number] {
 /** The camera fixture's colour (its as-shot neutral). */
 const cameraFixture = (): SourceInfo['camera'] => (JSON.parse(readFileSync(dataPath('fixtures/camera-96x64.json'), 'utf8')) as SourceInfo).camera;
 
-/** A P0 white balance ({ mode, temperature_K, tint }) as contract 1.6's temperature and tint. */
+/** A P0 white balance ({ mode, temperature_K, tint }) as contract 3.0's temperature and tint. */
 export function translateWhiteBalance(wb: R): WhiteBalance {
   if (wb['mode'] === 'daylight') return { ...NO_CORRECTION };
   if (wb['mode'] === 'as-shot') return asShotWhiteBalance(cameraFixture()) ?? fail('the camera fixture has no as-shot neutral');

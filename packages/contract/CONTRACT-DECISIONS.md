@@ -583,9 +583,10 @@ tests:     contract grid-rule.test.ts, composite-law.test.ts; core composite.tes
            GPU law:grid, law:density-floor, law:blend (20 modes)
 ```
 
-## Contract 1.6 (CHB-048: before the film)
+## Contract 3.0 (CHB-048: before the film)
 
-`CONTRACT_VERSION = '1.6.0'`. Phase 2's "before the film" work: the white balance of a camera file defined once in the
+`CONTRACT_VERSION = '3.0.0'` (major: the scene medium's `whiteBalance.mode` is removed; numbered after CHB-049's 1.6.0
+/ CC-025 and CHB-047's 2.0.0 / CC-026 at the integrator's request). Phase 2's "before the film" work: the white balance of a camera file defined once in the
 contract (decision D2), the OkLCh blend modes kept in the gamut (LAY-2), and film stocks, papers and grades as medium
 presets (D6).
 
@@ -596,7 +597,7 @@ presets (D6).
 | D6 (CHB-044), CHB-021 t:xw53 (LOOK-6) | Medium presets (`media-presets.ts`) | accepted | Film stocks, papers and paper grades are presets of the film and darkroom media, built from the data pack's stocks (`StockFacts`: id, name, role, type, use, print stock): `filmPresets` (negative films; a pushed profile `<stock>_push<n>` is `{ stock: base, push: n }`; slide films are not offered), `paperPresets` (papers, then cinema print films), `GRADE_PRESETS` (grades 0 … 5 in halves). A preset is a set of medium fields (`presetSets`), recognised by `presetOf`; not a link, not a look |
 
 ```text
-CC-025  stages.scene.medium.whiteBalance, source.xyz: the white of the light as temperature and tint, CAT16 to D65 (CHB-048; contract 1.6.0)
+CC-027  stages.scene.medium.whiteBalance, source.xyz: the white of the light as temperature and tint, CAT16 to D65 (CHB-048; contract 3.0.0)
 class:     breaking (major for documents: whiteBalance.mode is removed; hard cut-off, no migration)
 changes:   white-balance.ts (D65_XYZ, CAT16_M, SRGB_TO_XYZ_M, cat16, xyToXYZ, xyOf, temperatureToWhite, whiteToTemperature,
            whiteBalanceOf, NO_CORRECTION, whiteOf, cameraToXyz, asShotWhite, asShotWhiteBalance, whiteBalanceMatrix,
@@ -613,7 +614,7 @@ tests:     contract white-balance.test.ts (round trip, Lightroom anchors, identi
 ```
 
 ```text
-CC-026  composite.mix hue, saturation, colour, luminosity: ClipColor in OkLCh (CHB-048 LAY-2; contract 1.6.0)
+CC-028  composite.mix hue, saturation, colour, luminosity: ClipColor in OkLCh (CHB-048 LAY-2; contract 3.0.0)
 class:     changed meaning (minor): out-of-gamut results of the four modes are brought into the gamut
 changes:   pixel.ts blendOkLch, clipColour, gamutTop, CLIP_MARCH, CLIP_STEPS, CLIP_EPS; core blendOklab deleted (blendPixel calls
            the contract); core maxChromaOf and the GPU's okMaxChroma return the first exit (CHROMA_MARCH)
@@ -625,7 +626,7 @@ tests:     contract clip-colour.test.ts (in-gamut unchanged, in gamut after, L a
 ```
 
 ```text
-CC-027  medium presets: film stocks, papers, grades from the data pack (CHB-048 LOOK-6, D6; contract 1.6.0)
+CC-029  medium presets: film stocks, papers, grades from the data pack (CHB-048 LOOK-6, D6; contract 3.0.0)
 class:     additive (minor)
 changes:   media-presets.ts StockFacts, PresetKind, PRESET_KINDS, PRESET_STAGE, MediumPreset, filmPresets, paperPresets,
            GRADE_PRESETS, mediumPresets, presetSets, presetOf

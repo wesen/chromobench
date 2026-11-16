@@ -1,4 +1,4 @@
-// Medium presets (contract 1.6, CHB-048 LOOK-6, decision D6): film stocks and papers from the data pack, and the
+// Medium presets (contract 3.0, CHB-048 LOOK-6, decision D6): film stocks and papers from the data pack, and the
 // paper grades, as presets of the film and darkroom media. A preset is a set of medium fields: choosing it sets the
 // medium (one undo step); nothing is linked, so it is not a look (looks are versioned link functions for edits; a
 // stock is the medium itself). The data pack names the stocks; the contract only says how a pack's stocks become

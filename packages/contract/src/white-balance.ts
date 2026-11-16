@@ -1,4 +1,4 @@
-// White balance before the film (contract 1.6, CHB-048, decision D2): the one definition every engine, the studio and
+// White balance before the film (contract 3.0, CHB-048, decision D2): the one definition every engine, the studio and
 // the agents use.
 //
 // A camera file's white balance is the white of the light the scene was lit by, as a temperature (K) and a tint, in

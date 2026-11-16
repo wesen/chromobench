@@ -10,7 +10,7 @@
 //     as in Photoshop (D7); the mix with the amount stays in the entry's encoding;
 //   - hue, saturation, colour and luminosity act in OkLCh: luminance is OkLab L, defined once, in the working space:
 //       hue        (L_b, C_b, h_s)      saturation (L_b, C_s, h_b)      colour (L_b, a_s, b_s)      luminosity (L_s, a_b, b_b)
-//     and the result keeps the gamut by W3C's ClipColor in OkLCh (contract 1.6, LAY-2: blendOkLch, clipColour): its
+//     and the result keeps the gamut by W3C's ClipColor in OkLCh (contract 3.0, LAY-2: blendOkLch, clipColour): its
 //     chroma is reduced at its lightness and hue until no RGB channel is below 0 or above gamutTop (white, or the
 //     inputs' brightest channel). A source without hue keeps the backdrop's (hue); a backdrop without hue stays grey.
 import { blendOkLch, blendSeparable, clipColour, gamutTop, NON_SEPARABLE_BLENDS, type BlendMode } from '@chromobench/contract';

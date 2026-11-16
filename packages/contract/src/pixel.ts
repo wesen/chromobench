@@ -183,7 +183,7 @@ export function blendSeparable(mode: BlendMode, b: number, s: number): number {
   return displayDecode(blendChannel(mode, displayEncode(b), displayEncode(s)));
 }
 
-// ---- the non-separable modes in OkLCh, and ClipColor (contract 1.1; 1.6: CHB-048, LAY-2) ---------------------------
+// ---- the non-separable modes in OkLCh, and ClipColor (contract 1.1; 3.0: CHB-048, LAY-2) ---------------------------
 // core's blendPixel and the mock call these with their OkLab conversions; kernels/working.wgsl mirrors them.
 
 /**
