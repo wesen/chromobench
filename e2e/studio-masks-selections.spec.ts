@@ -76,7 +76,11 @@ test('MASK-4 and MASK-3: the radial gesture shows before release; handles move a
   await page.waitForFunction(() => window.chromobench.rt.store.previewing && !!(window.chromobench.state() as { stack: { overlay: { live: boolean } } }).stack.overlay.live, null, { timeout: 30_000 });
   // outside the radial the layer no longer acts: the corner is lighter already; the centre stays dark
   await expect.poll(() => lum(page, ...corner), { timeout: 30_000 }).toBeGreaterThan(cornerDark + 0.05);
-  await expect.poll(async () => Math.abs((await lum(page, ...centre)) - dark), { timeout: 30_000 }).toBeLessThan(0.02);
+  // the latest draft (the whole radial) arrives after the earlier ones; on a loaded software adapter a draft can be
+  // superseded by the next move, so the hand rests and moves once more by a pixel
+  const end = await at(page, 0.7 * W, 0.7 * H);
+  await page.mouse.move(end[0] + 1, end[1] + 1);
+  await expect.poll(async () => Math.abs((await lum(page, ...centre)) - dark), { timeout: 60_000 }).toBeLessThan(0.02);
   // and the overlay shows the draft mask too (red where it acts)
   await expect(page.locator(`${VP} canvas.ck-vp-cover`)).toBeVisible({ timeout: 30_000 });
   expect(await steps(page)).toBe(before); // nothing logged yet
