@@ -1,0 +1,14 @@
+{
+  "chapter": "../09-vector-edit-document.md",
+  "contexts": [
+    "A generative image editor where users mask regions and run diffusion inpainting with prompts, then keep refining with brushes, layers and colour adjustments; edits must reopen on another machine and re-render at print resolution.",
+    "A colour-grading application for video whose grades (nodes with curves, qualifiers and power windows that track objects) must be stored per shot, shared between colourists, and rendered at proxy and full resolution."
+  ],
+  "questions": {
+    "q1": "What coordinate bug did the originating project ship, and what two kinds of unit does the chapter offer as fixes?",
+    "q2": "How are masks and painted strokes stored in the document?",
+    "q3": "How does an agent's proposed edit differ from a user's edit in the journal?",
+    "q4": "Why does the chapter say live gestures are drafts, and what happens when the hand stops?",
+    "q5": "How many migrations has the originating project's recipe format had in total, and what is the latest migration's number?"
+  }
+}

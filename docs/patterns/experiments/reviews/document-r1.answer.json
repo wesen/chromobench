@@ -1,0 +1,717 @@
+{
+ "implementations": {
+  "A": {
+   "summary": "A close rendering of the chapter: a table-driven field schema (pattern, unit tag, check, read, write), transactions that record inverse mutations, an undo cursor over applied units, and the only real migrations table with a step-by-step runner. Geometry is stored in frame fractions with r as a fraction of the width, the tools convert at the boundary, and a drag is committed as the net diff between the committed state and the preview state.",
+   "seams": [
+    "FIELD_SCHEMA rule table / ruleFor, impl-A/src/index.ts:336, impl-A/src/index.ts:390",
+    "applyMutation returns the inverse, impl-A/src/index.ts:440",
+    "runTransaction (draft clone, all-or-nothing), impl-A/src/index.ts:469",
+    "diffStates (preview state -> mutations), impl-A/src/index.ts:483",
+    "startNewUnit (undo cursor, truncates redo), impl-A/src/index.ts:701",
+    "MIGRATIONS / runMigrations / normalizeStoredV2, impl-A/src/index.ts:760, impl-A/src/index.ts:764, impl-A/src/index.ts:785",
+    "tool boundary setCropFromView / addSpotFromView, impl-A/src/index.ts:857, impl-A/src/index.ts:871",
+    "geometryAt compiler, impl-A/src/index.ts:913"
+   ],
+   "participants": {
+    "Document": "impl-A/src/index.ts:94 (DocumentStateV2), impl-A/src/index.ts:522 (PhotoDocument)",
+    "Field schema": "impl-A/src/index.ts:336",
+    "Mutation": "impl-A/src/index.ts:29",
+    "Transaction": "impl-A/src/index.ts:469",
+    "Journal": "impl-A/src/index.ts:524-526 (_entries, _units, _cursor)",
+    "Tool boundary": "impl-A/src/index.ts:857, impl-A/src/index.ts:871",
+    "Compiler": "impl-A/src/index.ts:913 (geometry only, no graph)",
+    "Migrations": "impl-A/src/index.ts:760"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: the tools divide by the view size once, impl-A/src/index.ts:860-864, impl-A/src/index.ts:885-889; geometryAt multiplies back, impl-A/src/index.ts:919-938",
+     "simple mutation against reviewable history: inverse-recording transactions plus an append-only journal and a cursor, impl-A/src/index.ts:440-463, impl-A/src/index.ts:596-614, impl-A/src/index.ts:701",
+     "free-form against validated: every path goes through the rule table and unknown paths are refused, impl-A/src/index.ts:390-396; deleting a missing spot is an unknown path, impl-A/src/index.ts:457",
+     "stability against evolution: a migrations table and a loop with a guard, impl-A/src/index.ts:760-782",
+     "live gestures are drafts: the preview is a state, and the commit journals only the net diff, impl-A/src/index.ts:618-644"
+    ],
+    "in_tension": [
+     "stability against validation: v1 spots and crops are checked strictly after conversion, so an old document with a spot slightly outside the frame is refused, impl-A/src/index.ts:750-752",
+     "unit tags exist only as strings in error messages; nothing scales by tag, impl-A/src/index.ts:322, impl-A/src/index.ts:454"
+    ],
+    "unnoticed": [
+     "non-uniform aspect: r is a fraction of the width only, so an anisotropic view turns a circle into a width-scaled radius, impl-A/src/index.ts:888, impl-A/src/index.ts:936",
+     "the version-2 shape is hard-coded in several places (literal 'version: 2'), impl-A/src/index.ts:95, impl-A/src/index.ts:424, impl-A/src/index.ts:809, impl-A/src/index.ts:834"
+    ]
+   },
+   "adapted_not_copied": "Partly transcribed. The structure and vocabulary come from the chapter (the header cites it, impl-A/src/index.ts:4; FieldRule.unit, impl-A/src/index.ts:322; MIGRATIONS[1], impl-A/src/index.ts:760; 'Compiler' section, impl-A/src/index.ts:910). It also carries chapter features the task does not need: spots.<id>.x|y|r field paths, impl-A/src/index.ts:371-387, and unit tags. The domain work (crop clamping, spot ids, -0 handling) is adapted to the task.",
+   "wholeness": [
+    "the field-level spot paths spots.<id>.x|y|r are not required by the task, and recordPathOf exists only to invert them, impl-A/src/index.ts:371-387, impl-A/src/index.ts:399-403",
+    "FieldRule.unit is ornamental and used only in an error message, impl-A/src/index.ts:322, impl-A/src/index.ts:454",
+    "a duck-typed allocateSpotId fallback for 'foreign Document implementations' that never exist, impl-A/src/index.ts:898-907",
+    "coerceState accepts JSON strings for geometryAt and exposureOf, which nobody asked for, impl-A/src/index.ts:815-821"
+   ],
+   "habitability": "Well sectioned and commented, with good names, but dense: 945 lines in one file. FieldRule bundles six callbacks plus needsExisting and the MISSING sentinel, impl-A/src/index.ts:316-328, impl-A/src/index.ts:150, so a newcomer has to understand the read/write/inverse protocol before adding a field. Three overlapping spot validators, impl-A/src/index.ts:272-310, add friction.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-A/src/index.ts:94 (DocumentStateV2)",
+      "impl-A/src/index.ts:336 (new FIELD_SCHEMA rules and check function)",
+      "impl-A/src/index.ts:417 (cloneState enumerates fields)",
+      "impl-A/src/index.ts:483 (diffStates enumerates fields)",
+      "impl-A/src/index.ts:785 (normalizeStoredV2)",
+      "impl-A/src/index.ts:834 (createDocument default)",
+      "impl-A/src/index.ts:88, impl-A/src/index.ts:913 (Geometry, geometryAt)",
+      "impl-A/src/index.ts:857 (new gradient tool beside the other tools)"
+     ],
+     "local": false,
+     "notes": "The rule table and unit convention show where the points (fractions) and the feather (a width fraction, like r) go, but cloneState and diffStates list fields by hand, so the change is shotgun surgery across about eight places."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-A/src/index.ts:760 (add MIGRATIONS[2])",
+      "impl-A/src/index.ts:140 (CURRENT_VERSION)",
+      "impl-A/src/index.ts:94-100 (state type)",
+      "impl-A/src/index.ts:424-426 (cloneState)",
+      "impl-A/src/index.ts:337-346 (exposure rule and path)",
+      "impl-A/src/index.ts:485 (diffStates)",
+      "impl-A/src/index.ts:785-809 (normalizeStoredV2 becomes V3)",
+      "impl-A/src/index.ts:834, impl-A/src/index.ts:944"
+     ],
+     "local": false,
+     "notes": "This is the only implementation with a chain, so v1 -> v2 -> v3 composes without touching migrateV1ToV2. The internal shape, however, is spelled out in several places."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-A/src/index.ts:373, impl-A/src/index.ts:400",
+     "smell": "duplicated knowledge",
+     "note": "the spot-field regex is written twice"
+    },
+    {
+     "where": "impl-A/src/index.ts:417-430, impl-A/src/index.ts:483-507",
+     "smell": "shotgun surgery",
+     "note": "the clone and the diff list every field by hand, in parallel with the schema"
+    },
+    {
+     "where": "impl-A/src/index.ts:283-310",
+     "smell": "duplicated knowledge",
+     "note": "the spot range rules are repeated in checkSpotFields and checkSpotFieldValue"
+    },
+    {
+     "where": "impl-A/src/index.ts:371-387, impl-A/src/index.ts:898",
+     "smell": "speculative generality",
+     "note": "field-level spot paths and a foreign-Document fallback"
+    },
+    {
+     "where": "impl-A/src/index.ts:513-519, impl-A/src/index.ts:679",
+     "smell": "primitive obsession",
+     "note": "spot ids are built as `s${n}` and parsed back with a regex"
+    }
+   ],
+   "tests_as_laws": "The strongest of the six. A deterministic fuzz session checks invariants after every step (the journal only grows, exposure stays in range, geometry is finite at three sizes, the document round-trips) and then the laws 'undo everything = initial state' and 'redo everything = final state' (impl-A/test/fuzz.test.ts:25-117). Each requirement has its own file with negative controls: an atomic batch (impl-A/test/validation.test.ts:91), an invalid preview keeps the previous one (impl-A/test/preview.test.ts:87).",
+   "scores_1to5": {
+    "forces": 5,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 3,
+    "piecemeal_growth": 3,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "B": {
+   "summary": "A closure-based document that keeps a baseline and replays the first `cursor` applied entries (cached) to get the committed state, so undo and redo only move the cursor and no inverses are needed. Validation is an if-chain in setPath, geometry is stored in frame fractions, and v1 is converted by one migrateV1 function picked by a hard-coded dispatch.",
+   "seams": [
+    "setPath / applyAll (pure, return a new value), impl-B/src/index.ts:218, impl-B/src/index.ts:244",
+    "committed() replay with cache, impl-B/src/index.ts:365",
+    "applyAsUnit (cursor, truncate redo), impl-B/src/index.ts:399",
+    "normaliseState version dispatch, impl-B/src/index.ts:339",
+    "tools, impl-B/src/index.ts:519, impl-B/src/index.ts:544",
+    "geometryAt, impl-B/src/index.ts:571"
+   ],
+   "participants": {
+    "Document": "impl-B/src/index.ts:59, impl-B/src/index.ts:354",
+    "Field schema": "impl-B/src/index.ts:218 (if-chain) with validators at impl-B/src/index.ts:164-202",
+    "Mutation": "impl-B/src/index.ts:12",
+    "Transaction": "impl-B/src/index.ts:244 (applyAll, no inverse recorded)",
+    "Journal": "impl-B/src/index.ts:356-360 (records, applied, cursor)",
+    "Tool boundary": "impl-B/src/index.ts:519, impl-B/src/index.ts:544",
+    "Compiler": "impl-B/src/index.ts:571",
+    "Migrations": "impl-B/src/index.ts:290 (named migrations[1] only in a comment; no table)"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: fractions at the tools, impl-B/src/index.ts:528-535, impl-B/src/index.ts:557-561",
+     "simple mutation against reviewable history: undo by replay over a cursor keeps both simple and reviewable, impl-B/src/index.ts:365-376, impl-B/src/index.ts:435-447",
+     "stability against validation: strict for mutations, lenient (shape only) for stored crops, impl-B/src/index.ts:172-191, impl-B/src/index.ts:325",
+     "drafts: the preview is kept as mutations and validated, and the commit goes through apply, impl-B/src/index.ts:449-460"
+    ],
+    "in_tension": [
+     "validated: deleting a missing spot is a silent no-op rather than an unknown path, impl-B/src/index.ts:232",
+     "a missing version is read as v2, impl-B/src/index.ts:343"
+    ],
+    "unnoticed": [
+     "evolution: there is no migration chain; migrateV1 returns the current DocumentState directly, so a v3 needs v1 rewritten, impl-B/src/index.ts:290-320",
+     "spot ids are reused: nextSpotId takes the first free spot_n, so a deleted spot's id can name a new spot in the journal, impl-B/src/index.ts:538-542",
+     "anisotropic views: r is a fraction of the width only, impl-B/src/index.ts:560"
+    ]
+   },
+   "adapted_not_copied": "Adapted. The chapter's words appear in comments (impl-B/src/index.ts:161, impl-B/src/index.ts:289), but the code takes the simplest structure that fits this task (replay instead of inverses, an if-chain instead of a rule table), and it adds a task-specific guard against prototype-polluting record ids (impl-B/src/index.ts:204-212).",
+   "wholeness": [
+    "`export default createDocument` is unused ornament, impl-B/src/index.ts:600",
+    "the strict flag on cropValue exists only to separate load from mutate, and the spot validator has no lenient twin (inconsistent), impl-B/src/index.ts:176, impl-B/src/index.ts:193",
+    "a test/index.js aggregator works around a Node quirk, impl-B/test/index.js:1-19"
+   ],
+   "habitability": "Good. One 600-line file in clear sections, small pure functions, and undo that is easy to reason about (a cursor plus replay). A newcomer can find every path in setPath (impl-B/src/index.ts:218-242). The internal closure has no types for its pieces, but it is short.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-B/src/index.ts:44-65 (types)",
+      "impl-B/src/index.ts:145 (cloneDoc)",
+      "impl-B/src/index.ts:218 (setPath branch and validator)",
+      "impl-B/src/index.ts:322 (readV2)",
+      "impl-B/src/index.ts:319 (migrateV1 default)",
+      "impl-B/src/index.ts:507 (createDocument)",
+      "impl-B/src/index.ts:571 (geometryAt)",
+      "impl-B/src/index.ts:519 (new tool)"
+     ],
+     "local": false,
+     "notes": "Undo needs no change because replay covers it, but the field is spelled out in about seven places."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-B/src/index.ts:339 (dispatch)",
+      "impl-B/src/index.ts:290-320 (migrateV1 must emit v3 or be composed)",
+      "impl-B/src/index.ts:322 (readV2 becomes a migration)",
+      "impl-B/src/index.ts:59-60, impl-B/src/index.ts:152 (version literal)",
+      "impl-B/src/index.ts:223 (exposure path)",
+      "impl-B/src/index.ts:507, impl-B/src/index.ts:597"
+     ],
+     "local": false,
+     "notes": "There is no chain to extend, so the change has to invent one."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-B/src/index.ts:259-276",
+     "smell": "duplicated knowledge",
+     "note": "checkSource and checkSize repeat the positive-width and positive-height rules"
+    },
+    {
+     "where": "impl-B/src/index.ts:296-303, impl-B/src/index.ts:176-190",
+     "smell": "duplicated knowledge",
+     "note": "the v1 cropRect check re-implements cropValue"
+    },
+    {
+     "where": "impl-B/src/index.ts:315, impl-B/src/index.ts:538-541",
+     "smell": "primitive obsession",
+     "note": "spot ids are built by concatenation (spot_${n}) in two places"
+    },
+    {
+     "where": "impl-B/src/index.ts:339-345",
+     "smell": "other",
+     "note": "the version dispatch is hard-coded, with no migration table"
+    }
+   ],
+   "tests_as_laws": "Mostly examples, with good negative controls (an atomic batch, impl-B/test/document.test.ts:110; reserved ids, impl-B/test/document.test.ts:484). Geometry is checked over a list of sizes, an awkward gesture and an off-aspect viewer (impl-B/test/geometry.test.ts:103, impl-B/test/geometry.test.ts:180), which comes close to a property. There is no generated test.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 2,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  },
+  "C": {
+   "summary": "Snapshot history: every applied entry keeps full before and after states, and undo and redo pop and push two id stacks and restore a snapshot. Mutations are validated by an if-chain with strict parsers, while load uses separate lenient parsers; v1 goes through migrateVersion1 behind a dispatch that also guesses the version from field names.",
+   "seams": [
+    "applyMutation if-chain, impl-C/src/index.ts:253",
+    "commit (snapshot before/after), impl-C/src/index.ts:417",
+    "undo/redo stacks, impl-C/src/index.ts:481, impl-C/src/index.ts:494",
+    "normaliseDocumentState dispatch, impl-C/src/index.ts:375",
+    "uniqueSpotId over the state and the journal, impl-C/src/index.ts:569-594",
+    "geometryAt, impl-C/src/index.ts:646"
+   ],
+   "participants": {
+    "Document": "impl-C/src/index.ts:50, impl-C/src/index.ts:397",
+    "Field schema": "impl-C/src/index.ts:253 (if-chain)",
+    "Mutation": "impl-C/src/index.ts:12",
+    "Transaction": "impl-C/src/index.ts:417 (clone-apply plus before/after snapshots)",
+    "Journal": "impl-C/src/index.ts:400-405",
+    "Tool boundary": "impl-C/src/index.ts:600, impl-C/src/index.ts:618",
+    "Compiler": "impl-C/src/index.ts:646",
+    "Migrations": "impl-C/src/index.ts:326 (no table)"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: fractions at the tools, impl-C/src/index.ts:604-612, impl-C/src/index.ts:632-638",
+     "simple mutation against reviewable history: snapshot undo is trivial and correct, impl-C/src/index.ts:425-426, impl-C/src/index.ts:489",
+     "stable ids: a new spot id avoids every id named anywhere in the journal, impl-C/src/index.ts:569-594",
+     "a proposal is revalidated at approve time, impl-C/src/index.ts:467"
+    ],
+    "in_tension": [
+     "validated: deleting a missing spot is a no-op, impl-C/src/index.ts:284-286; exposure is not range-checked on load, impl-C/src/index.ts:355-356",
+     "stability: the version is guessed from field names when it is missing, impl-C/src/index.ts:379"
+    ],
+    "unnoticed": [
+     "evolution: there is no migration chain, impl-C/src/index.ts:375-381",
+     "anisotropic views: r is a fraction of the width, impl-C/src/index.ts:634"
+    ]
+   },
+   "adapted_not_copied": "Shaped by the task, not by the chapter: there is no chapter vocabulary, and the header is a task-level design paragraph (impl-C/src/index.ts:1-10). It adds paths the task does not ask for: a whole-map 'spots' path and a read-only 'source' message (impl-C/src/index.ts:266-279, impl-C/src/index.ts:292).",
+   "wholeness": [
+    "a whole-map 'spots' path (set or clear all) that nothing needs, impl-C/src/index.ts:266-279",
+    "cloneJson and cloneValue are two cloning helpers, impl-C/src/index.ts:109-123",
+    "the version guess for unversioned input, impl-C/src/index.ts:379"
+   ],
+   "habitability": "Readable: plain functions and an obvious undo model. The strict and lenient parser pairs (impl-C/src/index.ts:174-233) mean every field has two homes, so editing one rule needs care to keep its twin in step. Error types (TypeError, RangeError) are used meaningfully.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-C/src/index.ts:50-56 (DocumentState)",
+      "impl-C/src/index.ts:174-233 (new strict and lenient parser pair)",
+      "impl-C/src/index.ts:253 (applyMutation branch)",
+      "impl-C/src/index.ts:307, impl-C/src/index.ts:311 (emptyState, serialise)",
+      "impl-C/src/index.ts:352 (parseVersion2)",
+      "impl-C/src/index.ts:349 (migrateVersion1)",
+      "impl-C/src/index.ts:646 (geometryAt)",
+      "impl-C/src/index.ts:600 (new tool)"
+     ],
+     "local": false,
+     "notes": "Undo is free (snapshots), but the parsers have to be added twice."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-C/src/index.ts:375 (dispatch)",
+      "impl-C/src/index.ts:326-350 (migrateVersion1 emits v2)",
+      "impl-C/src/index.ts:352 (parseVersion2)",
+      "impl-C/src/index.ts:51-53, impl-C/src/index.ts:308, impl-C/src/index.ts:317-319",
+      "impl-C/src/index.ts:256, impl-C/src/index.ts:671"
+     ],
+     "local": false,
+     "notes": "There is no chain, and the version heuristic would need a v3 rule too."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-C/src/index.ts:174-196, impl-C/src/index.ts:198-233",
+     "smell": "duplicated knowledge",
+     "note": "parallel strict and lenient parsers for spots and crops"
+    },
+    {
+     "where": "impl-C/src/index.ts:143-158",
+     "smell": "duplicated knowledge",
+     "note": "parseSource and parseSize repeat the dimension rules"
+    },
+    {
+     "where": "impl-C/src/index.ts:266-279",
+     "smell": "speculative generality",
+     "note": "a whole-map spots path"
+    },
+    {
+     "where": "impl-C/src/index.ts:346, impl-C/src/index.ts:588-593",
+     "smell": "primitive obsession",
+     "note": "spot ids are built as spot-${n} and parsed back with a regex"
+    }
+   ],
+   "tests_as_laws": "Examples, organised by concern, with negative controls (a mid-batch failure, impl-C/test/document.test.ts:62; an invalid preview keeps the previous one, impl-C/test/preview.test.ts:70). A chain of viewer sizes (impl-C/test/geometry.test.ts:181) is the closest thing to a property, plus a realistic session test (impl-C/test/flows.test.ts:18).",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 4,
+    "wholeness": 3,
+    "habitability": 4,
+    "piecemeal_growth": 2,
+    "smell_free": 2,
+    "tests_as_laws": 3
+   }
+  },
+  "D": {
+   "summary": "Command-style transactions: step() validates each path and pushes its inverse, and transact() applies a batch to a clone. Undo and redo are stacks of units holding forward and inverse mutations, both replayed through the same validator. Stored documents are read leniently by separate readers, and spot ids come from a WeakMap controller that scans the journal.",
+   "seams": [
+    "step (validate, apply, record inverse), impl-D/src/index.ts:262",
+    "transact (atomic clone), impl-D/src/index.ts:322",
+    "undo/redo apply inverse/forward via transact, impl-D/src/index.ts:539-563",
+    "parseStored dispatch / migrateFromVersion1, impl-D/src/index.ts:431, impl-D/src/index.ts:379",
+    "controllers WeakMap for spot ids, impl-D/src/index.ts:456, impl-D/src/index.ts:478",
+    "rectToDocumentUnits tool boundary, impl-D/src/index.ts:647",
+    "geometryAt, impl-D/src/index.ts:718"
+   ],
+   "participants": {
+    "Document": "impl-D/src/index.ts:90, impl-D/src/index.ts:458",
+    "Field schema": "impl-D/src/index.ts:262 (step if-chain) plus readStrict*, impl-D/src/index.ts:216-256",
+    "Mutation": "impl-D/src/index.ts:24",
+    "Transaction": "impl-D/src/index.ts:322",
+    "Journal": "impl-D/src/index.ts:460-462 (entries, undoStack, redoStack)",
+    "Tool boundary": "impl-D/src/index.ts:647, impl-D/src/index.ts:666, impl-D/src/index.ts:690",
+    "Compiler": "impl-D/src/index.ts:718",
+    "Migrations": "impl-D/src/index.ts:379 (named migrations[1]; no table)"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: rectToDocumentUnits and the spot tool, impl-D/src/index.ts:647-654, impl-D/src/index.ts:703-709",
+     "reviewable history: inverses recorded per step and replayed through the validator, so undo cannot corrupt, impl-D/src/index.ts:262-313, impl-D/src/index.ts:543",
+     "validated: deleting a missing spot is an unknown path and source paths are refused, impl-D/src/index.ts:281, impl-D/src/index.ts:309",
+     "stability: stored values are read leniently (exposure unbounded, crop clamped), impl-D/src/index.ts:356-376",
+     "stable ids: spot ids skip every id named in the journal, impl-D/src/index.ts:478-494"
+    ],
+    "in_tension": [
+     "reading the view has a side effect: view() silently drops a stale preview, impl-D/src/index.ts:594-599",
+     "the stored-spot reader allows r = 0 while the strict reader refuses it, impl-D/src/index.ts:351, impl-D/src/index.ts:246"
+    ],
+    "unnoticed": [
+     "evolution: there is no migration chain; parseStored hard-codes two versions, impl-D/src/index.ts:431-437",
+     "anisotropic views: r is a fraction of the width, impl-D/src/index.ts:709"
+    ]
+   },
+   "adapted_not_copied": "Mostly adapted, with chapter vocabulary (header, impl-D/src/index.ts:18-21; 'Field schema: every settable path pattern with its rule', impl-D/src/index.ts:189). It copies the chapter's `spots.s7.r` field addressing, which the task does not need (impl-D/src/index.ts:193, impl-D/src/index.ts:292-307). Error messages and validation are tailored to the domain.",
+   "wholeness": [
+    "field-level spot paths, impl-D/src/index.ts:292-307",
+    "parseStateArgument also accepts a Document object, which nobody asks for, impl-D/src/index.ts:440-445",
+    "a foreign-Document allocateSpotId fallback that duplicates nextSpotId, impl-D/src/index.ts:673-688"
+   ],
+   "habitability": "Good. Clear names, informative messages (describe, impl-D/src/index.ts:149), and step() keeps validation, application and inversion together per path, so a newcomer sees the whole rule in one place. The strict and stored reader pairs and the WeakMap indirection cost some orientation.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-D/src/index.ts:90 (DocValue)",
+      "impl-D/src/index.ts:162 (cloneDoc)",
+      "impl-D/src/index.ts:262 (new step branch with inverse)",
+      "impl-D/src/index.ts:216-256 and impl-D/src/index.ts:345-376 (strict and stored readers)",
+      "impl-D/src/index.ts:411, impl-D/src/index.ts:414 (v1 default, readVersion2)",
+      "impl-D/src/index.ts:634 (createDocument)",
+      "impl-D/src/index.ts:718 (geometryAt)",
+      "impl-D/src/index.ts:666 (new tool)"
+     ],
+     "local": false,
+     "notes": "The inverse for the new record follows the spot pattern, but the change touches about eight places."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-D/src/index.ts:71 (DOCUMENT_VERSION)",
+      "impl-D/src/index.ts:431 (dispatch)",
+      "impl-D/src/index.ts:379-412 (v1 output)",
+      "impl-D/src/index.ts:414 (readVersion2 becomes a migration)",
+      "impl-D/src/index.ts:93, impl-D/src/index.ts:168",
+      "impl-D/src/index.ts:263, impl-D/src/index.ts:746"
+     ],
+     "local": false,
+     "notes": "migrateFromVersion1 returns the current internal value, with no chain."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-D/src/index.ts:216-256, impl-D/src/index.ts:345-376",
+     "smell": "duplicated knowledge",
+     "note": "strict and stored readers for each field"
+    },
+    {
+     "where": "impl-D/src/index.ts:478-494, impl-D/src/index.ts:673-688",
+     "smell": "duplicated knowledge",
+     "note": "the spot-id allocation algorithm is written twice"
+    },
+    {
+     "where": "impl-D/src/index.ts:262-313",
+     "smell": "long function",
+     "note": "step handles four path kinds plus inverses"
+    },
+    {
+     "where": "impl-D/src/index.ts:193, impl-D/src/index.ts:440",
+     "smell": "speculative generality",
+     "note": "field paths, and a Document accepted as state"
+    },
+    {
+     "where": "impl-D/src/index.ts:407, impl-D/src/index.ts:493",
+     "smell": "primitive obsession",
+     "note": "s${n} ids parsed back by regex"
+    }
+   ],
+   "tests_as_laws": "Good. One file per requirement; a sweep of 4 viewer sizes by 5 rendering sizes asserts the one-pixel law (impl-D/test/resolution.test.ts:31-58); negative controls for refused proposals and invalid previews (impl-D/test/proposals.test.ts:75, impl-D/test/validation.test.ts:125). There is no randomised testing.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 4,
+    "piecemeal_growth": 2,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "E": {
+   "summary": "Event-sourced: the committed state is always rebuilt from a base state plus the stack of applied entry ids, and a separate redo stack holds undone ids. The immutable source sits outside the mutable state, spot radii are fractions of the shorter side, and v1 is handled inline in readDocument with no migration seam.",
+   "seams": [
+    "mutate (one path, in place on a probe), impl-E/src/index.ts:252",
+    "validateMutations (probe clone), impl-E/src/index.ts:285",
+    "#rebuild (base + applied stack), impl-E/src/index.ts:415",
+    "#json serialiser (sorted, own keys), impl-E/src/index.ts:429",
+    "readDocument / readState / isVersionOne, impl-E/src/index.ts:346, impl-E/src/index.ts:313, impl-E/src/index.ts:308",
+    "tools and geometryAt, impl-E/src/index.ts:554, impl-E/src/index.ts:580, impl-E/src/index.ts:618"
+   ],
+   "participants": {
+    "Document": "impl-E/src/index.ts:96 (DocState), impl-E/src/index.ts:378",
+    "Field schema": "impl-E/src/index.ts:252 (if-chain)",
+    "Mutation": "impl-E/src/index.ts:13",
+    "Transaction": "impl-E/src/index.ts:285 (validate on a probe; no inverse)",
+    "Journal": "impl-E/src/index.ts:383-387",
+    "Tool boundary": "impl-E/src/index.ts:554, impl-E/src/index.ts:580",
+    "Compiler": "impl-E/src/index.ts:618",
+    "Migrations": "absent as a unit (v1 is inline, impl-E/src/index.ts:350-366)"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: fractions, with r over min(width, height), which also behaves for off-aspect views, impl-E/src/index.ts:594-599, impl-E/src/index.ts:629-634",
+     "reviewable history: one invariant (state = base + applied), impl-E/src/index.ts:415-422; a proposal is revalidated at approve time, impl-E/src/index.ts:465",
+     "validated: deleting a missing spot is refused, impl-E/src/index.ts:273-275; the source cannot be mutated by construction, impl-E/src/index.ts:95-100",
+     "drafts: preview mutations live beside the journal, and a stale preview never hides the committed state, impl-E/src/index.ts:515-525"
+    ],
+    "in_tension": [
+     "stability against validation: v1 exposure and v2 crops are range-checked on load, so an old out-of-range value is refused, impl-E/src/index.ts:351, impl-E/src/index.ts:320",
+     "rebuild replays the whole history on every change and #find is a linear search inside it (quadratic in history length), impl-E/src/index.ts:415-419"
+    ],
+    "unnoticed": [
+     "evolution: there is no version chain, and v1 detection by field names lives in two places, impl-E/src/index.ts:308-310, impl-E/src/index.ts:315",
+     "spot ids are reused: nextSpotId starts from taken.size + 1, so a deleted id can come back, impl-E/src/index.ts:612"
+    ]
+   },
+   "adapted_not_copied": "Shaped by the task (header at impl-E/src/index.ts:4-9, with no chapter vocabulary). Its choices come from the domain: the min-side radius, a source kept outside the state, and own-property handling for odd ids (impl-E/src/index.ts:156, impl-E/src/index.ts:224).",
+   "wholeness": [
+    "ReadState duplicates DocState field for field, impl-E/src/index.ts:296-301 vs impl-E/src/index.ts:96-100",
+    "readState and readDocument call each other for v1, impl-E/src/index.ts:315, impl-E/src/index.ts:369"
+   ],
+   "habitability": "Small (642 lines, one file) with one stated invariant, which makes it easy to live in. Private class fields and short methods help. Knowledge of the min-side radius is spread across four places, and the v1 logic is buried in readDocument.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-E/src/index.ts:96, impl-E/src/index.ts:296 (two state types)",
+      "impl-E/src/index.ts:223, impl-E/src/index.ts:232 (clone, empty)",
+      "impl-E/src/index.ts:252 (mutate branch)",
+      "impl-E/src/index.ts:313 (readState)",
+      "impl-E/src/index.ts:365 (v1 default)",
+      "impl-E/src/index.ts:429 (#json)",
+      "impl-E/src/index.ts:618 (geometryAt)",
+      "impl-E/src/index.ts:554 (new tool)"
+     ],
+     "local": false,
+     "notes": "Undo and redo are free (replay), and the min-side convention gives the feather a unit, but the field crosses about eight places."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-E/src/index.ts:109 (DOCUMENT_VERSION)",
+      "impl-E/src/index.ts:346-372 (readDocument branches)",
+      "impl-E/src/index.ts:308 (isVersionOne)",
+      "impl-E/src/index.ts:318 (readState exposure)",
+      "impl-E/src/index.ts:438 (#json)",
+      "impl-E/src/index.ts:260, impl-E/src/index.ts:641"
+     ],
+     "local": false,
+     "notes": "There is no migration seam, and the version detection is a heuristic, so a v3 must thread through readState as well."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-E/src/index.ts:296-301",
+     "smell": "duplicated knowledge",
+     "note": "ReadState is a copy of DocState"
+    },
+    {
+     "where": "impl-E/src/index.ts:356, impl-E/src/index.ts:594, impl-E/src/index.ts:629",
+     "smell": "duplicated knowledge",
+     "note": "the min-side radius rule is restated at each site"
+    },
+    {
+     "where": "impl-E/src/index.ts:308-315",
+     "smell": "other",
+     "note": "version detection by field presence, used from two readers"
+    },
+    {
+     "where": "impl-E/src/index.ts:363, impl-E/src/index.ts:613",
+     "smell": "primitive obsession",
+     "note": "spot-${n} ids counted from the number of spots"
+    }
+   ],
+   "tests_as_laws": "Examples in two files. They cover each requirement and include useful edge cases, such as approving a proposal against a deleted spot (impl-E/test/edge-cases.test.ts:50) and approval not resurrecting redo (impl-E/test/edge-cases.test.ts:29). Resolution is checked at a few sizes (impl-E/test/document.test.ts:100); there are no generated properties.",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 2,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  },
+  "F": {
+   "summary": "Replay with a cursor over undo units and a string cache key. Following the chapter, a spot radius is a length in pixels of the original, scaled by sqrt(sx*sy). Spots can be created only through an internal symbol-keyed tool channel (the allowSpotSet flag), and successive previews merge by path instead of replacing each other.",
+   "seams": [
+    "applyMutation with ApplyMode flags, impl-F/src/index.ts:207, impl-F/src/index.ts:87",
+    "transact, impl-F/src/index.ts:263",
+    "_committed replay with cache key, impl-F/src/index.ts:415",
+    "[INTERNAL] channel / _createSpot, impl-F/src/index.ts:373, impl-F/src/index.ts:407, impl-F/src/index.ts:461",
+    "mergePreview, impl-F/src/index.ts:579",
+    "parseDocument dispatch, impl-F/src/index.ts:348",
+    "viewScale / tools / geometryAt, impl-F/src/index.ts:622, impl-F/src/index.ts:647, impl-F/src/index.ts:679"
+   ],
+   "participants": {
+    "Document": "impl-F/src/index.ts:68, impl-F/src/index.ts:380",
+    "Field schema": "impl-F/src/index.ts:207 (if-chain)",
+    "Mutation": "impl-F/src/index.ts:14",
+    "Transaction": "impl-F/src/index.ts:263 (no inverse)",
+    "Journal": "impl-F/src/index.ts:382-388",
+    "Tool boundary": "impl-F/src/index.ts:622, impl-F/src/index.ts:626, impl-F/src/index.ts:647",
+    "Compiler": "impl-F/src/index.ts:679",
+    "Migrations": "impl-F/src/index.ts:290 (named migrations[1]; no table)"
+   },
+   "forces": {
+    "resolved": [
+     "gesture coordinates against document units: positions in fractions, lengths in original pixels, with an explicit anisotropic rule, impl-F/src/index.ts:666-671, impl-F/src/index.ts:685-703",
+     "reviewable history: replay over a cursor, a proposal revalidated at approve time, impl-F/src/index.ts:415-431, impl-F/src/index.ts:499",
+     "stability: stored exposure is taken as saved, impl-F/src/index.ts:296-297"
+    ],
+    "in_tension": [
+     "drafts against the spec: previews merge instead of replacing, impl-F/src/index.ts:527, impl-F/src/index.ts:579-587; committing an empty preview returns '' and records no entry, impl-F/src/index.ts:535-538",
+     "free-form against validated pushed too far: public apply and propose cannot set a spot value, so an agent cannot propose a spot, impl-F/src/index.ts:252-254",
+     "replay with strict: false hides inconsistent histories, impl-F/src/index.ts:425",
+     "v1 spots with radius <= 0 are silently dropped, which shifts the migrated ids, impl-F/src/index.ts:311"
+    ],
+    "unnoticed": [
+     "evolution: there is no migration chain, and an unversioned document is detected by field names, impl-F/src/index.ts:358-366"
+    ]
+   },
+   "adapted_not_copied": "Mixed. It cites the chapter (impl-F/src/index.ts:3) and takes the chapter's unit split literally (impl-F/src/index.ts:5-6). It reads the task's 'value null only' as a prohibition and builds machinery around that (ApplyMode, allowSpotSet stored on entries, impl-F/src/index.ts:84, impl-F/src/index.ts:87-92), plus crop.x|y|w|h paths the task does not ask for (impl-F/src/index.ts:226-238).",
+   "wholeness": [
+    "allowSpotSet is stored on every entry and threaded through modes only so that tool entries can be replayed, impl-F/src/index.ts:84, impl-F/src/index.ts:440",
+    "the InternalDocument type declares `source: Source`, but a function is returned and called, impl-F/src/index.ts:376, impl-F/src/index.ts:409, impl-F/src/index.ts:664",
+    "crop field paths, impl-F/src/index.ts:226-238",
+    "a string cache key built from joined ids, impl-F/src/index.ts:417"
+   ],
+   "habitability": "Moderate. The file is clear in small pieces, but the two-boolean ApplyMode, the symbol back-channel and the merge semantics of previews surprise a newcomer, and the type lie at impl-F/src/index.ts:376 misleads. Changing what tools may create means editing the mode protocol.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-F/src/index.ts:65-74 (types)",
+      "impl-F/src/index.ts:207 (branch, plus a mode flag if only the tool may create masks)",
+      "impl-F/src/index.ts:84-92 (allowSpotSet is spot-specific and would need generalising)",
+      "impl-F/src/index.ts:324, impl-F/src/index.ts:321 (parse v2, v1 default)",
+      "impl-F/src/index.ts:602 (createDocument)",
+      "impl-F/src/index.ts:375, impl-F/src/index.ts:407 (internal channel createMask)",
+      "impl-F/src/index.ts:679 (geometryAt)",
+      "impl-F/src/index.ts:647 (new tool)"
+     ],
+     "local": false,
+     "notes": "The unit rule for lengths is clear (the feather in original pixels), but the spot-specific permission flag turns into shotgun surgery."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-F/src/index.ts:348-367 (dispatch)",
+      "impl-F/src/index.ts:290-322 (v1 output)",
+      "impl-F/src/index.ts:324 (v2 becomes a migration)",
+      "impl-F/src/index.ts:68-71, impl-F/src/index.ts:602",
+      "impl-F/src/index.ts:211, impl-F/src/index.ts:709"
+     ],
+     "local": false,
+     "notes": "There is no chain, and the unversioned heuristic also needs updating."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-F/src/index.ts:87-92, impl-F/src/index.ts:207",
+     "smell": "other",
+     "note": "boolean flag arguments (allowSpotSet, strict) change the behaviour of the core validator"
+    },
+    {
+     "where": "impl-F/src/index.ts:226-238",
+     "smell": "speculative generality",
+     "note": "crop field paths"
+    },
+    {
+     "where": "impl-F/src/index.ts:417",
+     "smell": "primitive obsession",
+     "note": "the cache key is a string concatenation of the cursor and ids"
+    },
+    {
+     "where": "impl-F/src/index.ts:376, impl-F/src/index.ts:409",
+     "smell": "other",
+     "note": "a declared type contradicts the implementation"
+    },
+    {
+     "where": "impl-F/src/index.ts:156-168, impl-F/src/index.ts:273-287",
+     "smell": "duplicated knowledge",
+     "note": "the crop clamp rules are repeated in the migration"
+    }
+   ],
+   "tests_as_laws": "Examples. Several of them make deviations from the task law: merged previews (impl-F/test/history.test.mjs:196), commitPreview returning '' (impl-F/test/history.test.mjs:216-225), and spots being settable only by tools (impl-F/test/validation.test.mjs:59). Negative controls exist (impl-F/test/validation.test.mjs:39, impl-F/test/validation.test.mjs:129). There are no size sweeps beyond a few sizes and no properties.",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 3,
+    "wholeness": 2,
+    "habitability": 3,
+    "piecemeal_growth": 2,
+    "smell_free": 2,
+    "tests_as_laws": 2
+   }
+  }
+ },
+ "cross": {
+  "generativity": "Yes, strongly. All six independently arrived at the same core. Crop and spot centres are stored as fractions of the frame and converted once in setCropFromView and addSpotFromView. Validation is one central applyMutation/setPath dispatch. Atomicity comes from applying to a clone. An append-only entries list sits beside a separate undo structure. A v1 document is converted to fractions on load. geometryAt multiplies and rounds at 1e-6 or 1e-9. The details differ in three places. Undo mechanism: inverse mutations (A, D), replay from a base (B, E, F) or before/after snapshots (C). Radius unit: a fraction of the width (A to D), of the shorter side (E), or original pixels with sqrt(sx*sy) (F). Migration seam: only A has a table and a runner; the rest use a hard-coded dispatch. The chapter's Compiler shrank everywhere to geometryAt, and its unit tags appear only in A, as strings.",
+  "clusters": [
+   [
+    "A",
+    "D"
+   ],
+   [
+    "B",
+    "E",
+    "F"
+   ],
+   [
+    "C"
+   ]
+  ],
+  "worse_is_better": "Partly. B (600 lines) and E (642 lines) reach almost the same behavioural quality as A (945 lines) with replay-based undo: undo is a cursor move or a stack pop, and no inverses, MISSING sentinel, recordPathOf or diffStates are needed. For a document of a few fields, replay or snapshots (C) are simpler and correct, so the chapter's 'transactions that record their inverse' asks for more than this task needs. A's extra size does pay off in one place: its migrations table is the only design where change request 2 composes without rewriting the v1 migration. That part of the yardstick is worth its cost.",
+  "ranking": [
+   "A",
+   "D",
+   "B",
+   "E",
+   "C",
+   "F"
+  ],
+  "ideas_the_yardstick_lacks": [
+   "commit a drag as the net diff between the committed state and the preview state, so the journal records the net change and not the last draft's mutation list, impl-A/src/index.ts:483-507, impl-A/src/index.ts:631",
+   "allocate new record ids so they never reuse an id named anywhere in the journal, keeping history explanations unambiguous, impl-C/src/index.ts:569-594, impl-D/src/index.ts:478-494",
+   "strict validation for mutations and lenient reading of stored values, so old edits load as they were saved, impl-B/src/index.ts:172-175, impl-D/src/index.ts:372-376, impl-F/src/index.ts:296",
+   "revalidate a pending proposal against the current state at approve time, and validate at propose time so impossible proposals never enter the journal, impl-E/src/index.ts:464-465, impl-A/src/index.ts:561-563",
+   "keep the source reference outside the mutable state, so it is immutable by construction, impl-E/src/index.ts:95-100, impl-E/src/index.ts:379",
+   "an explicit rule for radii under anisotropic renderings (min side, or the area-preserving sqrt(sx*sy)), impl-E/src/index.ts:594, impl-F/src/index.ts:670, impl-F/src/index.ts:687",
+   "refuse or safely store record ids such as __proto__, impl-B/src/index.ts:204-212, impl-E/src/index.ts:156-158",
+   "snap derived pixels to 1e-6 to remove floating-point noise while keeping stored fractions at full precision, impl-A/src/index.ts:172-180",
+   "a deterministic fuzz session that checks the journal and undo laws after every step, impl-A/test/fuzz.test.ts:25-117"
+  ],
+  "yardstick_problems": [
+   "'migrate, then validate' with the edit schema refuses old documents the editor once accepted; A follows it and rejects v1 spots outside the frame (impl-A/src/index.ts:750-752), while B, D and F deliberately split strict and lenient readers",
+   "unit tags owned by an operation catalogue have nothing to attach to in this task, and in A they became ornamental strings (impl-A/src/index.ts:322)",
+   "record-field addressing (`spots.s7.r`) led to unneeded field paths and inverse bookkeeping, impl-A/src/index.ts:371-403, impl-D/src/index.ts:292-307",
+   "inverse-recording transactions are more machinery than a tiny document needs; replay (B, E) or snapshots (C) are simpler and equally correct",
+   "the chapter's mixed units (fractions for positions, original pixels for lengths) force every geometry computation to know the source size and an anisotropic rule (impl-F/src/index.ts:685-687), where a fraction of the width or of the shorter side is simpler",
+   "a Compiler into an operation graph is out of scope here; geometryAt is all the task needs"
+  ]
+ },
+ "guess_yardstick_used": {
+  "A": 0.97,
+  "B": 0.85,
+  "C": 0.15,
+  "D": 0.85,
+  "E": 0.15,
+  "F": 0.93
+ },
+ "confidence": 0.7
+}

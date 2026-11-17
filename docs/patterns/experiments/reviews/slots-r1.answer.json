@@ -1,0 +1,653 @@
+{
+ "implementations": {
+  "A": {
+   "summary": "A single closure holds a Map of slots. Each slot has a generation, shownGeneration, shownAt, at most one waiting request and one running render, and the lane is stored on each request. A re-entrancy-guarded pumpAll starts live work before background work, and close() detaches the running render and keeps a global inFlight counter so idle() can account for it.",
+   "seams": [
+    "impl-A/src/index.ts:149 pump(slot) starts one waiting request",
+    "impl-A/src/index.ts:189 pumpAll() re-entrancy-guarded live-then-background pass",
+    "impl-A/src/index.ts:128 canStartBackground() live-lane gate",
+    "impl-A/src/index.ts:223 finishSuccess / impl-A/src/index.ts:254 finishFailure completion handlers",
+    "impl-A/src/index.ts:267 request() adopt / supersede / starve decision",
+    "impl-A/src/index.ts:119 callSafely() wall around user callbacks"
+   ],
+   "participants": {
+    "Slot": "impl-A/src/index.ts:66",
+    "Request": "impl-A/src/index.ts:45 (Waiting)",
+    "Render bridge": "absent (opts.render called directly, impl-A/src/index.ts:172)",
+    "Queue": "impl-A/src/index.ts:80 (createScheduler closure)",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: the starved check spares a running render only for a draft after progressMs, impl-A/src/index.ts:296-297",
+     "never backwards: present only if job.generation > shownGeneration, impl-A/src/index.ts:234",
+     "foreground against background: live slots are pumped first and background is gated, impl-A/src/index.ts:200-209, impl-A/src/index.ts:128-136",
+     "no duplicate work: adoption bumps the running render's generation and drops the waiting request, impl-A/src/index.ts:283-290",
+     "failures do not wedge: the running render is cleared before onError, impl-A/src/index.ts:261-262"
+    ],
+    "in_tension": [
+     "bounded work against close: close() nulls slot.running (impl-A/src/index.ts:320), so a request that reopens the slot can start a second render while the detached one still runs (impl-A/src/index.ts:270-277, impl-A/src/index.ts:152)",
+     "no leaks against close: the shown result is deliberately not released on close (impl-A/src/index.ts:321-323), and the test locks that in (impl-A/test/scheduler.test.ts:473-482)",
+     "exact idle against close: close() calls settleAccounting on a render that has not settled (impl-A/src/index.ts:327), which contradicts the inFlight comment (impl-A/src/index.ts:86)"
+    ],
+    "unnoticed": [
+     "aborting against wasting: every superseded render is aborted whatever the engine is; there is no preemption policy (impl-A/src/index.ts:297)",
+     "the previous result is released before the new one is presented (impl-A/src/index.ts:244-245), so the on-screen result is freed before its replacement shows"
+    ]
+   },
+   "adapted_not_copied": "Mostly adapted. It follows the sketch's shape (starved at impl-A/src/index.ts:296, the 'drop it, free its memory' wording at impl-A/src/index.ts:235) but keeps the lane on each request (impl-A/src/index.ts:49, impl-A/src/index.ts:55) as the task's per-request lane option requires. It adds its own detach/inFlight machinery (impl-A/src/index.ts:61-63) and leaves out the chapter's bridge, target chooser and cache.",
+   "wholeness": [
+    "Running.counted is a number used only as a 0/1 flag, impl-A/src/index.ts:63, impl-A/src/index.ts:217-220",
+    "the !running.detached check in canStartBackground is dead because close() already nulls slot.running, impl-A/src/index.ts:131, impl-A/src/index.ts:320",
+    "the comment 'detached ones included' is contradicted by settleAccounting in close, impl-A/src/index.ts:86, impl-A/src/index.ts:327"
+   ],
+   "habitability": "Moderate. Names are clear and functions are short, but lifecycle state is spread across aborted/detached/counted/closed/hasShown (impl-A/src/index.ts:59-75). A newcomer must hold four flags and a global counter in mind to change close or idle. idle() repeats maybeResolveIdle's busy scan (impl-A/src/index.ts:333-343 vs impl-A/src/index.ts:138-147).",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-A/src/index.ts:8 Pass type",
+      "impl-A/src/index.ts:293 waiting replacement (a waiting proof must not be overwritten)",
+      "impl-A/src/index.ts:295-298 abort decision (never abort a running proof)",
+      "impl-A/src/index.ts:234 stale/aborted drop in finishSuccess"
+     ],
+     "local": true,
+     "notes": "The change stays inside request() and finishSuccess, but the single-waiting invariant (impl-A/src/index.ts:73) has to grow a protected proof entry, and close() (impl-A/src/index.ts:314) needs a decision about proofs."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-A/src/index.ts:128-136 canStartBackground",
+      "impl-A/src/index.ts:205-209 pumpAll background loop",
+      "impl-A/src/index.ts:320-327 close detaches renders from slots"
+     ],
+     "local": false,
+     "notes": "Counting running background renders by scanning slot.running misses detached renders that are still on the engine (impl-A/src/index.ts:320). Respecting a real engine cap needs a lane-aware in-flight registry next to inFlight (impl-A/src/index.ts:87)."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-A/src/index.ts:225-229 and impl-A/src/index.ts:256-259",
+     "smell": "duplicated knowledge",
+     "note": "The 'detached or replaced' guard and the pumpAll()+maybeResolveIdle() tail are repeated in both finish functions and again at impl-A/src/index.ts:250-251 and impl-A/src/index.ts:263-264."
+    },
+    {
+     "where": "impl-A/src/index.ts:70-71, impl-A/src/index.ts:113",
+     "smell": "primitive obsession",
+     "note": "hasShown plus shown: R|undefined, and release(result, has) takes a boolean flag."
+    },
+    {
+     "where": "impl-A/src/index.ts:63",
+     "smell": "other",
+     "note": "The counted number is used as a boolean."
+    },
+    {
+     "where": "impl-A/src/index.ts:320",
+     "smell": "other",
+     "note": "Dropping the running render on close allows two concurrent renders per slot after a reopen (requirement 2)."
+    },
+    {
+     "where": "impl-A/src/index.ts:333-343",
+     "smell": "duplicated knowledge",
+     "note": "idle() rescans slots the same way maybeResolveIdle does."
+    }
+   ],
+   "tests_as_laws": "Good. A seeded random driver uses an abort-unaware, flaky engine (impl-A/test/scheduler.test.ts:742-770) and asserts order, single release, release of each replaced result, that the shown result is not released, and no duplicate job signatures (impl-A/test/scheduler.test.ts:772-812). However, per-slot concurrency is asserted only in the run without closes (impl-A/test/scheduler.test.ts:805-808), which hides the overlap after a reopen, and the close test ends with a tautology (impl-A/test/scheduler.test.ts:819). Negative controls are present: the progress rule is disabled at 0 (impl-A/test/scheduler.test.ts:299) and a different pass is not adopted (impl-A/test/scheduler.test.ts:348).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 3,
+    "habitability": 3,
+    "piecemeal_growth": 3,
+    "smell_free": 2,
+    "tests_as_laws": 4
+   }
+  },
+  "B": {
+   "summary": "A slot record carries its lane, generation, shownGeneration, a shown holder, shownAt, one waiting request and one running render. A guarded pump runs live slots and then background slots when liveBusy() is false. close() aborts the running render, keeps it occupying the slot until it settles, and releases the shown result.",
+   "seams": [
+    "impl-B/src/index.ts:229 pump() / impl-B/src/index.ts:217 pumpPass()",
+    "impl-B/src/index.ts:210 tryStart(slot)",
+    "impl-B/src/index.ts:150 startRender",
+    "impl-B/src/index.ts:182 finishSuccess / impl-B/src/index.ts:203 finishFailure",
+    "impl-B/src/index.ts:247 progressProtected(slot, pass) is the progress rule as one predicate",
+    "impl-B/src/index.ts:93 invoke() callback wall"
+   ],
+   "participants": {
+    "Slot": "impl-B/src/index.ts:67",
+    "Request": "impl-B/src/index.ts:50 (PendingRequest)",
+    "Render bridge": "absent",
+    "Queue": "impl-B/src/index.ts:83",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: a named predicate, impl-B/src/index.ts:247-251, used at impl-B/src/index.ts:292-295",
+     "never backwards: present only if running.generation > shownGeneration, impl-B/src/index.ts:188",
+     "bounded work across close: the aborted render keeps slot.running until it settles (impl-B/src/index.ts:183, impl-B/src/index.ts:211), so a reopen waits",
+     "no leaks on close: the shown result is released exactly once, impl-B/src/index.ts:314-318",
+     "no duplicate work: adoption bumps the generation, impl-B/src/index.ts:283-288"
+    ],
+    "in_tension": [
+     "foreground against background: the lane is stored per slot and overwritten on every request (impl-B/src/index.ts:69, impl-B/src/index.ts:274). A background request to a slot that is running a live render makes liveBusy (impl-B/src/index.ts:118) ignore that live render",
+     "idle against leaks: busy() skips closed slots (impl-B/src/index.ts:126), so idle() resolves before a closed slot's late result is released",
+     "progress clock: a reopened slot keeps its old shownAt (impl-B/src/index.ts:272-275)"
+    ],
+    "unnoticed": [
+     "aborting against wasting: there is no preemption policy and every superseded render is aborted (impl-B/src/index.ts:294)",
+     "the previous result is released before the new one is presented, impl-B/src/index.ts:193-194"
+    ]
+   },
+   "adapted_not_copied": "Close to the chapter: the Slot participant with a lane field (impl-B/src/index.ts:69), liveBusy (impl-B/src/index.ts:116) and shownAt follow the sketch, and the header cites the chapter (impl-B/src/index.ts:2). It is adapted where it counts: requirement-numbered comments, close() releasing the shown result, and adoption refusing aborted renders (impl-B/src/index.ts:282). Copying the per-slot lane from the Slot participant is the one place where copying hurt.",
+   "wholeness": [
+    "RunningJob.job is stored but never read, impl-B/src/index.ts:57, impl-B/src/index.ts:160",
+    "RunningJob duplicates key/pass/generation that are already in job, impl-B/src/index.ts:59-61"
+   ],
+   "habitability": "Good. Small single-purpose functions (tryStart, pumpPass, progressProtected), requirement numbers in comments (impl-B/src/index.ts:281, impl-B/src/index.ts:293, impl-B/src/index.ts:312), and clear close/release reasoning in comments. The busy/liveBusy scans are near-duplicates (impl-B/src/index.ts:116-130).",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-B/src/index.ts:11 Pass type",
+      "impl-B/src/index.ts:247-251 progressProtected (also protect a running proof)",
+      "impl-B/src/index.ts:290 waiting replacement must not drop a waiting proof",
+      "impl-B/src/index.ts:185-198 finishSuccess drop branches"
+     ],
+     "local": true,
+     "notes": "The protection decision already lives in one predicate, but it receives only the new pass, so it also needs the running render's pass. A waiting proof needs its own field."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-B/src/index.ts:224-226 pumpPass background loop",
+      "impl-B/src/index.ts:56-65 RunningJob needs its own lane",
+      "impl-B/src/index.ts:69 slot.lane"
+     ],
+     "local": true,
+     "notes": "A counter in pumpPass is enough, but counting by slot.lane is wrong when the lane changed after the render started, so the lane has to move onto RunningJob first."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-B/src/index.ts:57",
+     "smell": "speculative generality",
+     "note": "The job field is kept 'just in case' and never used."
+    },
+    {
+     "where": "impl-B/src/index.ts:69, impl-B/src/index.ts:274",
+     "smell": "other",
+     "note": "A per-request attribute (lane) is stored per slot, so liveBusy can misclassify a running render."
+    },
+    {
+     "where": "impl-B/src/index.ts:116-130",
+     "smell": "duplicated knowledge",
+     "note": "liveBusy and busy are the same loop with one extra filter."
+    },
+    {
+     "where": "impl-B/src/index.ts:93-113",
+     "smell": "duplicated knowledge",
+     "note": "Three thin wrappers around invoke(); acceptable."
+    }
+   ],
+   "tests_as_laws": "Mostly examples organised by requirement number, with good negative controls: the draft before the threshold still aborts (impl-B/test/lanes-progress.test.ts:116), progressMs 0 disables the rule (impl-B/test/lanes-progress.test.ts:144), and a different pass is not adopted (impl-B/test/latest-wins.test.ts:150). There is one deterministic stress loop with continuous per-slot concurrency and accounting checks (impl-B/test/robustness.test.ts:81-138). Its lane assignment makes 'main' the background slot (impl-B/test/robustness.test.ts:86-88) while the requirement-4 guard treats main as live (impl-B/test/robustness.test.ts:101), so that law is mis-stated. A real-clock drag integration test covers progress (impl-B/test/robustness.test.ts:146).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 4,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  },
+  "C": {
+   "summary": "Each slot holds a generation, presentedGeneration, lastPresentedAt, one waiting request and one Run that carries its own lane. All decisions are made in request/close/finish, each of which ends in a single pump. request() is a chain of early returns (idle, duplicate, stalled draft, abort), and adoption does not bump the running render's generation.",
+   "seams": [
+    "impl-C/src/index.ts:161 pump() / impl-C/src/index.ts:178 maybeStart(slot)",
+    "impl-C/src/index.ts:186 startRun",
+    "impl-C/src/index.ts:216 finish(slot, run, Outcome) is one completion path for both outcomes",
+    "impl-C/src/index.ts:259 stalled(slot) progress predicate",
+    "impl-C/src/index.ts:264 request() decision chain"
+   ],
+   "participants": {
+    "Slot": "impl-C/src/index.ts:81",
+    "Request": "impl-C/src/index.ts:64 (WaitingRequest)",
+    "Render bridge": "absent",
+    "Queue": "impl-C/src/index.ts:98",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: a stalled draft leaves the run alone, impl-C/src/index.ts:308-311",
+     "foreground against background: lane per Run/WaitingRequest, impl-C/src/index.ts:136-144, impl-C/src/index.ts:181",
+     "never backwards: generation check plus the aborted/closed flags, impl-C/src/index.ts:220",
+     "one completion path for success and failure through the Outcome union, impl-C/src/index.ts:96, impl-C/src/index.ts:216-246"
+    ],
+    "in_tension": [
+     "no duplicate work against identity: an adopted render keeps its old generation (impl-C/src/index.ts:297-305), so present() reports generation 1 for a request that returned 3, and the test locks that in (impl-C/test/scheduler.test.ts:359-362)",
+     "bounded work against close: close() drops slot.running (impl-C/src/index.ts:326), so a reopen starts a second concurrent render for the slot (impl-C/src/index.ts:179)",
+     "no leaks on close: the presented result is kept (impl-C/src/index.ts:90) and is released only when a later present replaces it"
+    ],
+    "unnoticed": [
+     "aborting against wasting: no preemption policy, impl-C/src/index.ts:314",
+     "the previous result is released before the new one is presented, impl-C/src/index.ts:229-230"
+    ]
+   },
+   "adapted_not_copied": "Adapted. Its own vocabulary (stalled, presentedGeneration, Run, Outcome), a request() decision chain with requirement comments, and no transcription of the chapter's sketch (no 'starved', no adoption that bumps the generation).",
+   "wholeness": [
+    "the >= in the showable check implies equal generations can be presented, which can only happen because adoption does not bump the generation, impl-C/src/index.ts:220",
+    "abortRun checks both run.aborted and signal.aborted, impl-C/src/index.ts:249-252"
+   ],
+   "habitability": "Good locally: there is one completion function and one start site. request() has four exits that each assign slot.waiting (impl-C/src/index.ts:290, impl-C/src/index.ts:301, impl-C/src/index.ts:309, impl-C/src/index.ts:315), so a newcomer has to re-check every branch when changing the policy.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-C/src/index.ts:14 Pass type",
+      "impl-C/src/index.ts:297-316 request() decision chain (proof exemption before abortRun at :314; waiting proof not overwritten at :309/:315)",
+      "impl-C/src/index.ts:220 showable condition"
+     ],
+     "local": true,
+     "notes": "This is one function plus finish, but it adds a branch to an ordered chain of early returns, and the order matters."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-C/src/index.ts:181 maybeStart background gate",
+      "impl-C/src/index.ts:326 close drops running"
+     ],
+     "local": false,
+     "notes": "The gate is local, but closed slots' runs are no longer tracked (impl-C/src/index.ts:326), so a cap computed from slot.running undercounts renders still on the engine."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-C/src/index.ts:297-305",
+     "smell": "other",
+     "note": "Adoption does not record the newer generation, so the present info and the request() return value disagree."
+    },
+    {
+     "where": "impl-C/src/index.ts:290, impl-C/src/index.ts:309, impl-C/src/index.ts:315",
+     "smell": "duplicated knowledge",
+     "note": "slot.waiting = request appears on three exits."
+    },
+    {
+     "where": "impl-C/src/index.ts:89-90",
+     "smell": "primitive obsession",
+     "note": "presented flag plus presentedResult R|undefined."
+    },
+    {
+     "where": "impl-C/src/index.ts:109-133",
+     "smell": "duplicated knowledge",
+     "note": "Three identical try/catch wrappers."
+    },
+    {
+     "where": "impl-C/src/index.ts:326",
+     "smell": "other",
+     "note": "Up to two renders per slot after close/reopen."
+    }
+   ],
+   "tests_as_laws": "Strong but partly bent to fit the implementation. A seeded randomised invariant run (7 seeds, failures and closes) checks monotone presentation, exactly-once release, release of each replaced result, and that something was presented and errors were reported (impl-C/test/invariants.test.ts:146-180). Its concurrency law is weakened to 'per slot per epoch' (impl-C/test/invariants.test.ts:46, impl-C/test/invariants.test.ts:156-158), which allows exactly C's overlap after a reopen. The acceptance-style suite uses abort-aware engines (impl-C/test/acceptance-style.test.ts:44-68). Negative controls include a duplicate of an aborted render (impl-C/test/scheduler.test.ts:772) and progress disabled (impl-C/test/scheduler.test.ts:333).",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 3,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "D": {
+   "summary": "One Work record type serves as both the waiting request and the running render (its controller is null until it starts). Slots keep gen, shownGen, shownAt and a sticky lane, and a guarded pumpAll starts slots whose background work is not blocked by liveBusy(). close() only drops waiting work and aborts; the slot stays occupied until the aborted render settles.",
+   "seams": [
+    "impl-D/src/index.ts:236 pumpAll() / impl-D/src/index.ts:228 pumpSlot",
+    "impl-D/src/index.ts:200 start(slot, work)",
+    "impl-D/src/index.ts:163 settle(slot, work, ok, value) is the single completion path",
+    "impl-D/src/index.ts:120 liveBusy()",
+    "impl-D/src/index.ts:155 looksAborted(error) error classifier"
+   ],
+   "participants": {
+    "Slot": "impl-D/src/index.ts:55",
+    "Request": "impl-D/src/index.ts:45 (Work)",
+    "Render bridge": "absent",
+    "Queue": "impl-D/src/index.ts:71",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: starved predicate, impl-D/src/index.ts:277-282",
+     "never backwards: work.gen > slot.shownGen, impl-D/src/index.ts:178",
+     "bounded work across close: the slot stays occupied until the render settles, impl-D/src/index.ts:165, impl-D/src/index.ts:281, impl-D/src/index.ts:292",
+     "foreground against background: lane per Work, impl-D/src/index.ts:122-123",
+     "no duplicate work: adoption bumps the generation, impl-D/src/index.ts:265-268"
+    ],
+    "in_tension": [
+     "failures against aborts: any rejection named AbortError is silently swallowed even when the scheduler did not abort it (impl-D/src/index.ts:155-161, impl-D/src/index.ts:174), which weakens requirement 7",
+     "no leaks on close: the shown result is not released on close (impl-D/src/index.ts:288-294)",
+     "robustness against correctness: the pump loop silently stops after 10,000 passes, impl-D/src/index.ts:248"
+    ],
+    "unnoticed": [
+     "aborting against wasting: no preemption policy",
+     "lane semantics: an omitted lane silently inherits the previous request's lane (impl-D/src/index.ts:260), although the task's default reads as live",
+     "the previous result is released before the new one is presented, impl-D/src/index.ts:185-187"
+    ]
+   },
+   "adapted_not_copied": "It leans on the chapter: the field names gen/shownGen/shownAt are the sketch's, as are liveBusy and starved, and the header paraphrases the chapter's thumbnail sentence (impl-D/src/index.ts:4-6). It is adapted in the unified Work type and in keeping the aborted render in the slot, which matches the sketch's close(). The AbortError sniffing is its own addition.",
+   "wholeness": [
+    "the trailing .catch(() => {}) is unreachable because both handlers already contain errors, impl-D/src/index.ts:223-225",
+    "the ?? 'live' fallback is dead because slot.lane is never undefined, impl-D/src/index.ts:260",
+    "if (generation > running.gen) is always true, impl-D/src/index.ts:266",
+    "the 10_000 guard is ornamental safety, impl-D/src/index.ts:244-248"
+   ],
+   "habitability": "Good. It is the smallest source (304 lines), has one completion function, and its comments state invariants ('The slot stays occupied until that render settles', impl-D/src/index.ts:281). The unified Work type is economical, but the nullable controller (impl-D/src/index.ts:52) encodes state by null. looksAborted is a trap for a newcomer debugging missing errors.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-D/src/index.ts:9 Pass type",
+      "impl-D/src/index.ts:274 waiting replacement",
+      "impl-D/src/index.ts:277-282 starved/abort decision",
+      "impl-D/src/index.ts:168-178 settle drop branches"
+     ],
+     "local": true,
+     "notes": "The abort decision is a single expression, and Work can carry a 'protected' flag because it is shared by both states."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-D/src/index.ts:228-234 pumpSlot",
+      "impl-D/src/index.ts:120-126 next to liveBusy (a new backgroundRunning count)"
+     ],
+     "local": true,
+     "notes": "Aborted renders stay in slot.running and carry their lane, so a count over slots is accurate for the engine."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-D/src/index.ts:155-161",
+     "smell": "speculative generality",
+     "note": "A name-based heuristic for aborts that the scheduler already knows through work.aborted."
+    },
+    {
+     "where": "impl-D/src/index.ts:248",
+     "smell": "other",
+     "note": "A magic iteration cap that silently drops work."
+    },
+    {
+     "where": "impl-D/src/index.ts:45-53",
+     "smell": "primitive obsession",
+     "note": "One type for two states, told apart by controller === null."
+    },
+    {
+     "where": "impl-D/src/index.ts:63-64",
+     "smell": "primitive obsession",
+     "note": "hasShown plus shown R|undefined."
+    },
+    {
+     "where": "impl-D/src/index.ts:223-225",
+     "smell": "other",
+     "note": "A dead catch."
+    }
+   ],
+   "tests_as_laws": "Examples only, but well instrumented. The harness records per-slot and total maxActive (impl-D/test/harness.ts:35-37) and has abort-ignoring engines (impl-D/test/harness.ts:18). Negative controls: before the threshold a draft aborts (impl-D/test/progress.test.ts:56), progressMs 0 (impl-D/test/progress.test.ts:99), a different pass is not adopted (impl-D/test/scheduler.test.ts:141), and closing the live slot unblocks background work (impl-D/test/lanes.test.ts:92). There is no randomised or property test, and the 'burst' release test is a fixed five-request example (impl-D/test/release.test.ts:96-111). One test legitimises the AbortError heuristic (impl-D/test/api.test.ts:83-97).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 4,
+    "piecemeal_growth": 4,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  },
+  "E": {
+   "summary": "There is no shown-generation comparison. A run is presented only if it still serves the slot's newest generation (servedGeneration, bumped by deduplication) or if the progress rule marked it presentAnyway. The running render stays in the slot until it settles, and the previous result is released only after the new one has been presented.",
+   "seams": [
+    "impl-E/src/index.ts:259 pump() / impl-E/src/index.ts:246 startEligible()",
+    "impl-E/src/index.ts:159 startRender",
+    "impl-E/src/index.ts:196 settleRender (show = !closed && !aborted && (presentAnyway || !stale))",
+    "impl-E/src/index.ts:231 presentResult (present, then release previous)",
+    "impl-E/src/index.ts:276 request() with the sameWork / beyondProgress branches"
+   ],
+   "participants": {
+    "Slot": "impl-E/src/index.ts:70",
+    "Request": "impl-E/src/index.ts:48 (WaitEntry)",
+    "Render bridge": "absent",
+    "Queue": "impl-E/src/index.ts:83",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: the run itself carries the decision as presentAnyway (impl-E/src/index.ts:67, impl-E/src/index.ts:302-303), and an abort revokes it (impl-E/src/index.ts:124)",
+     "never backwards: strict one-run-per-slot plus 'serves newest' (impl-E/src/index.ts:208-209); the run stays until it settles (impl-E/src/index.ts:55, impl-E/src/index.ts:197-203)",
+     "foreground against background: lane per entry, impl-E/src/index.ts:143-149, impl-E/src/index.ts:252",
+     "no leaks with on-screen safety: the previous result is released after the new present, impl-E/src/index.ts:236-242"
+    ],
+    "in_tension": [
+     "no duplicate work against identity: servedGeneration is bumped (impl-E/src/index.ts:289), but present info uses run.generation (impl-E/src/index.ts:235), so an adopted render is reported with its start generation, and the test locks that in (impl-E/test/scheduler.test.ts:237)",
+     "no leaks on close: the shown result is not released on close (impl-E/src/index.ts:316-324)",
+     "the progress baseline is split across createdAt and lastPresentedAt|null, impl-E/src/index.ts:74, impl-E/src/index.ts:77, impl-E/src/index.ts:299"
+    ],
+    "unnoticed": [
+     "aborting against wasting: no preemption policy, impl-E/src/index.ts:306"
+    ]
+   },
+   "adapted_not_copied": "Clearly adapted. Its own model (servedGeneration, presentAnyway, 'progress mode', beyondProgress) is shaped by the task's requirements rather than by the chapter's sketch. It drops shownGen and relies on strict one-run-per-slot.",
+   "wholeness": [
+    "a self-declared 'cannot happen' defensive branch, impl-E/src/index.ts:197-202",
+    "the slot.closed checks in startEligible are dead because close clears waiting and request clears closed, impl-E/src/index.ts:248, impl-E/src/index.ts:254, impl-E/src/index.ts:278, impl-E/src/index.ts:322",
+    "the stale check is effectively unreachable, since every newer request aborts, adopts or protects the run, impl-E/src/index.ts:208",
+    "pumpDepth is a counter used as a boolean, impl-E/src/index.ts:88"
+   ],
+   "habitability": "Good. The flags on RunEntry say why a result is shown (impl-E/src/index.ts:62-67), and the comments explain each requirement. Inconsistent helpers (onError inlined at impl-E/src/index.ts:215-223 while release has a helper) and the two-field baseline add friction.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-E/src/index.ts:8 Pass type",
+      "impl-E/src/index.ts:297-307 request(): mark a proof presentAnyway and skip abortRun",
+      "impl-E/src/index.ts:311 waiting replacement must keep a waiting proof",
+      "impl-E/src/index.ts:124 abortRun clears presentAnyway (close only)"
+     ],
+     "local": true,
+     "notes": "Most of the mechanism exists already: presentAnyway is exactly 'presented even when stale'."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-E/src/index.ts:253-256 startEligible second loop"
+     ],
+     "local": true,
+     "notes": "Runs stay in slot.running until they settle and carry their lane, so a count before the second loop is accurate."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-E/src/index.ts:197-202",
+     "smell": "speculative generality",
+     "note": "A defensive branch the author says cannot happen."
+    },
+    {
+     "where": "impl-E/src/index.ts:57, impl-E/src/index.ts:63, impl-E/src/index.ts:235",
+     "smell": "duplicated knowledge",
+     "note": "Two generations per run; the present info picks the wrong one after adoption."
+    },
+    {
+     "where": "impl-E/src/index.ts:74, impl-E/src/index.ts:77",
+     "smell": "primitive obsession",
+     "note": "A nullable timestamp plus a fallback timestamp for one concept."
+    },
+    {
+     "where": "impl-E/src/index.ts:215-223",
+     "smell": "duplicated knowledge",
+     "note": "Inline try/catch next to helper wrappers that do the same."
+    }
+   ],
+   "tests_as_laws": "Strong. A 12-seed fuzz asserts per-slot concurrency inside render (impl-E/test/fuzz.test.ts:76), monotone presentation, that each result is presented or released and none is released twice, and a liveness law: the last request's key is what ends on screen (impl-E/test/fuzz.test.ts:172-179). The fuzz engine always rejects on abort (impl-E/test/fuzz.test.ts:83-86), so 'aborted but still resolved' is not fuzzed. Negative controls: refine and screen abort in progress mode (impl-E/test/progress.test.ts:116, impl-E/test/progress.test.ts:137), progressMs 0 and absent (impl-E/test/progress.test.ts:148, impl-E/test/progress.test.ts:159), and a never-started request is not aborted (impl-E/test/scheduler.test.ts:204).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 5,
+    "wholeness": 3,
+    "habitability": 4,
+    "piecemeal_growth": 5,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "F": {
+   "summary": "A slot record holds generation, shownGeneration, a shown holder, shownAt, a sticky lane and a closed flag, and RunningRender keeps a back-reference to its slot. pumpAll starts live slots first and then background slots gated by liveBusy(), where aborted renders no longer count as live or as work. close() aborts, keeps the render in the slot until it settles, and releases the shown result.",
+   "seams": [
+    "impl-F/src/index.ts:244 pumpAll() / impl-F/src/index.ts:237 pump(slot)",
+    "impl-F/src/index.ts:204 start",
+    "impl-F/src/index.ts:175 settle(running, outcome)",
+    "impl-F/src/index.ts:149 liveBusy() / impl-F/src/index.ts:158 hasWork()",
+    "impl-F/src/index.ts:253 request()"
+   ],
+   "participants": {
+    "Slot": "impl-F/src/index.ts:70",
+    "Request": "impl-F/src/index.ts:51 (WaitingRequest)",
+    "Render bridge": "absent",
+    "Queue": "impl-F/src/index.ts:87",
+    "Target chooser": "absent",
+    "Thumbnail cache": "absent"
+   },
+   "forces": {
+    "resolved": [
+     "freshness against progress: starved predicate, impl-F/src/index.ts:276-283",
+     "never backwards: generation compare, impl-F/src/index.ts:180-181",
+     "bounded work across close: the render stays in slot.running until it settles, impl-F/src/index.ts:177, impl-F/src/index.ts:238, impl-F/src/index.ts:295",
+     "no leaks on close: the shown result is released, impl-F/src/index.ts:296-299",
+     "foreground against background: lane per running render, and an aborted live render does not hold back background work, impl-F/src/index.ts:151-152"
+    ],
+    "in_tension": [
+     "idle against leaks: hasWork ignores aborted renders (impl-F/src/index.ts:160-161), so idle() resolves before their releases arrive",
+     "lane semantics: an omitted lane inherits the slot's last lane (impl-F/src/index.ts:255), while its own test title claims per-request use (impl-F/test/lanes.test.ts:105)",
+     "re-entrancy: pumpAll has no guard and relies on slot.running being set before render() (impl-F/src/index.ts:223, impl-F/src/index.ts:244-251)"
+    ],
+    "unnoticed": [
+     "aborting against wasting: no preemption policy",
+     "the previous result is released before the new one is presented, impl-F/src/index.ts:185-189"
+    ]
+   },
+   "adapted_not_copied": "Chapter-shaped: the header paraphrases the chapter's thumbnail sentence (impl-F/src/index.ts:4-8), and liveBusy, starved, shownAt and 'adopt it for the newer generation' (impl-F/src/index.ts:262) follow the sketch. Its own adaptations are excluding aborted renders from liveBusy and hasWork, releasing the shown result on close, and the slot back-reference.",
+   "wholeness": [
+    "a defensive checkIdle inside the Promise executor runs synchronously right after an equivalent check, impl-F/src/index.ts:305-309",
+    "an indirection that wraps opts.now in another arrow, impl-F/src/index.ts:90"
+   ],
+   "habitability": "Good. Short functions, a single settle(), clear comments on why aborted renders do not count (impl-F/src/index.ts:151, impl-F/src/index.ts:160), and the smallest decision code in request(). The sticky lane is an undocumented surprise.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-F/src/index.ts:11 Pass type",
+      "impl-F/src/index.ts:273 waiting replacement",
+      "impl-F/src/index.ts:276-283 starved/abort decision",
+      "impl-F/src/index.ts:180-181 settle drop condition"
+     ],
+     "local": true,
+     "notes": "One predicate and one condition change, plus a protected waiting entry."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-F/src/index.ts:237-242 pump",
+      "impl-F/src/index.ts:248-250 background loop in pumpAll"
+     ],
+     "local": true,
+     "notes": "Running renders carry their lane and stay in their slot until they settle, so the count is accurate. It must decide, unlike liveBusy, whether aborted renders still count against the cap."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-F/src/index.ts:255",
+     "smell": "other",
+     "note": "Hidden sticky default for the lane."
+    },
+    {
+     "where": "impl-F/src/index.ts:305-309",
+     "smell": "speculative generality",
+     "note": "A defensive re-check that cannot change the outcome."
+    },
+    {
+     "where": "impl-F/src/index.ts:93-117",
+     "smell": "duplicated knowledge",
+     "note": "Three identical try/catch wrappers."
+    },
+    {
+     "where": "impl-F/src/index.ts:149-165",
+     "smell": "duplicated knowledge",
+     "note": "liveBusy and hasWork repeat the same aborted-render rule."
+    }
+   ],
+   "tests_as_laws": "Good. A 4000-step seeded stress test checks monotone presentation after every step, asserts one render per slot inside render, and checks that every result is presented or released and none is released twice (impl-F/test/stress.test.ts:44-45, impl-F/test/stress.test.ts:84-142). The engine always rejects on abort (impl-F/test/stress.test.ts:68), so late resolution of aborted renders is not stressed. The second stress test has no assertion despite its title (impl-F/test/stress.test.ts:145-162). Negative controls: before the threshold a draft aborts (impl-F/test/progress.test.ts:29), refine aborts when starved (impl-F/test/progress.test.ts:53), and a request after close waits for the aborted render (impl-F/test/core.test.ts:406).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 4,
+    "smell_free": 4,
+    "tests_as_laws": 4
+   }
+  }
+ },
+ "cross": {
+  "generativity": "Yes. All six converged on the same seams: a Map of slot records closed over by createScheduler, one waiting and one running record per slot, a pump that starts live slots before background ones (A/B/C/D/E/F at impl-A/src/index.ts:189, impl-B/src/index.ts:229, impl-C/src/index.ts:161, impl-D/src/index.ts:236, impl-E/src/index.ts:259, impl-F/src/index.ts:244), an aborted flag on the running record, a re-entrancy guard (all except F), try/catch walls around user callbacks, and adoption by key+pass. They differ in detail on four axes. (1) Present rule: shownGeneration comparison (A, B, C, D, F) versus 'serves newest or presentAnyway' (impl-E/src/index.ts:208-209). (2) Adoption: the generation is bumped (A, B, D, F) or not (C, E). (3) Close: the slot stays occupied until the render settles (B, D, E, F) or is detached (A, C, which allows two renders per slot after a reopen). (4) Close releases the shown result (B, F) or not (A, C, D, E). The lane is per request in A, C and E, per slot in B, and per slot with a sticky default in D and F.",
+  "clusters": [
+   [
+    "A",
+    "B",
+    "D",
+    "F"
+   ],
+   [
+    "C",
+    "E"
+   ]
+  ],
+  "worse_is_better": "Sizes are within 15% of each other (304 to 350 source lines), so there is no dramatic worse-is-better result. The smallest, D (304 lines), reaches the quality of B and F with a single Work type and a single settle(). It spends its savings on two hacks (impl-D/src/index.ts:155-161, impl-D/src/index.ts:248) and has the weakest tests. The largest, A (350 lines), is the only one whose extra machinery (detached/counted/inFlight, impl-A/src/index.ts:61-63, impl-A/src/index.ts:87) buys nothing and introduces the close/reopen overlap. The yardstick did not inflate any implementation: none built the bridge, target chooser or cache.",
+  "ranking": [
+   "B",
+   "F",
+   "E",
+   "D",
+   "A",
+   "C"
+  ],
+  "ideas_the_yardstick_lacks": [
+   "Release the replaced result only after the new one has been presented, so the on-screen buffer is never freed first (impl-E/src/index.ts:236-242); the sketch's order is release then present",
+   "A per-run 'must present' flag (presentAnyway) set by the progress rule and revoked by abort, instead of relying only on generation comparison (impl-E/src/index.ts:67, impl-E/src/index.ts:124, impl-E/src/index.ts:303)",
+   "Keep an aborted render occupying its slot until it settles, so close() followed by a new request cannot run two renders per slot (impl-D/src/index.ts:281, impl-F/test/core.test.ts:406)",
+   "Release the shown result on close, exactly once (impl-B/src/index.ts:312-318, impl-F/src/index.ts:296-299)",
+   "Contain exceptions from present/release/onError/abort listeners so a buggy callback cannot wedge the pump (impl-A/src/index.ts:119-125, impl-B/src/index.ts:93-99)",
+   "A re-entrancy guard on pump for request() calls made from inside present() or render() (impl-B/src/index.ts:229-244, impl-A/test/scheduler.test.ts:659)",
+   "Treat a synchronous throw from render() as a failure rather than a crash (impl-A/src/index.ts:179-182)",
+   "Hold results in a { result } box so that undefined/null results are still tracked for release (impl-B/src/index.ts:75, impl-E/src/index.ts:79)",
+   "Do not adopt an already-aborted render (impl-B/src/index.ts:282, impl-C/test/scheduler.test.ts:772)",
+   "Do not let an aborted live render block background work (impl-F/src/index.ts:151-152)",
+   "A fuzz liveness law: the last request of an open slot is what ends up on screen (impl-E/test/fuzz.test.ts:172-179)"
+  ],
+  "yardstick_problems": [
+   "The Slot participant and the sketch put the lane on the slot ('queue.slot(slotId, lane)'). Where B followed this literally, a lane change while a render runs makes liveBusy misjudge it (impl-B/src/index.ts:69, impl-B/src/index.ts:118, impl-B/src/index.ts:274); the task's per-request lane wants the lane on the render (impl-A/src/index.ts:55, impl-F/src/index.ts:64)",
+   "The sketch's present step releases s.shown before present(result) (CHAPTER.md:133), and A, B, C, D and F copied that order (impl-B/src/index.ts:193-194, impl-D/src/index.ts:185-187), which frees the on-screen result before its replacement is shown",
+   "The sketch's close() says nothing about the result on screen or whether idle() waits for an aborted render. The implementations split four ways (impl-A/src/index.ts:321-323, impl-B/src/index.ts:314-318, impl-F/src/index.ts:160-161, impl-D/src/index.ts:130), and the task's 'release what will not be shown' is left ambiguous",
+   "The key-with-maxSide/region, Render bridge, Target chooser and Thumbnail cache are out of scope here; building them would have been speculative structure (no implementation did)",
+   "Implementation note 1 makes the generation comparison 'the whole defence'. E shows that with a strictly occupied slot, 'serves the newest generation' plus an explicit progress flag is enough and maps more directly onto change request 1"
+  ]
+ },
+ "guess_yardstick_used": {
+  "A": 0.75,
+  "B": 0.9,
+  "C": 0.3,
+  "D": 0.85,
+  "E": 0.15,
+  "F": 0.8
+ },
+ "confidence": 0.7
+}

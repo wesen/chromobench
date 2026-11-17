@@ -1,0 +1,14 @@
+{
+  "chapter": "../04-latest-wins-render-slots.md",
+  "contexts": [
+    "A colour-grading application whose scopes panel (waveform, vectorscope, histogram) must update while the colourist drags grading wheels on a 4K frame.",
+    "A generative image-editing tool where a diffusion model streams intermediate previews (every few denoising steps) while the user keeps editing the prompt and repainting the mask."
+  ],
+  "questions": {
+    "q1": "What single check prevents the screen from stepping backwards to an older result?",
+    "q2": "What failure did the originating project see when it aborted every superseded render, and what rule fixed it?",
+    "q3": "When should live requests abort background renders, according to the chapter?",
+    "q4": "How does the originating project choose the size of a draft pass, and how does Editor lab choose its preview level?",
+    "q5": "Which programming language is the originating project's render queue written in?"
+  }
+}

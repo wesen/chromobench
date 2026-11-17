@@ -1,0 +1,580 @@
+{
+ "implementations": {
+  "A": {
+   "summary": "One-file engine that follows the chapter closely. A declarative REGISTRY of ArgDefs drives canonicalise(), which feeds a length-prefixed SHA-256 computeId() inside intern(). Results go into a separate 'id@scale' map, evaluated by a recursive visit; export writes a flat inputs-first closure and import re-interns it through a recursive adopt that detects cycles.",
+   "seams": [
+    "impl-A/src/index.ts:51 OpDef/ArgDef registry (REGISTRY at :56)",
+    "impl-A/src/index.ts:131 canonicalise(opName, spec, raw) -> frozen Args",
+    "impl-A/src/index.ts:179 canonicalArgsText(args)",
+    "impl-A/src/index.ts:207 computeId(opName, inputIds, argsText)",
+    "impl-A/src/index.ts:417 intern(opName, inputIds, args)",
+    "impl-A/src/index.ts:365 execute(node, inputs, scale) switch",
+    "impl-A/src/index.ts:470 evaluate.visit(nodeId) over results map",
+    "impl-A/src/index.ts:495 exportNode / impl-A/src/index.ts:530 importData with adopt at :567"
+   ],
+   "participants": {
+    "Operation registry": "impl-A/src/index.ts:56",
+    "Canonicaliser": "impl-A/src/index.ts:131 (and canonicalArgsText at :179)",
+    "Graph": "impl-A/src/index.ts:408 (intern at :417)",
+    "Node": "impl-A/src/index.ts:223 (no inferred info such as size)",
+    "Node definition": "impl-A/src/index.ts:401 ExportedNode",
+    "Result cache": "impl-A/src/index.ts:414"
+   },
+   "forces": {
+    "resolved": [
+     "rebuilding against reuse: every op() goes through intern and returns the same frozen ref, impl-A/src/index.ts:417-433",
+     "spelling against meaning: sorted keys, defaults filled, unknown keys refused, -0 folded to 0, NaN refused, impl-A/src/index.ts:131-176, :118-120",
+     "cheap against safe names: full 256-bit SHA-256, every field length-prefixed, input count prefixed, impl-A/src/index.ts:199-217",
+     "one process against many: flat inputs-first closure; import re-interns and refuses cycles, impl-A/src/index.ts:499-527, :567-579",
+     "fine names against coarse caches: cache key adds the scale, impl-A/src/index.ts:471",
+     "canonicalisation is versioned: the format version is in the hashed domain, impl-A/src/index.ts:194-197"
+    ],
+    "in_tension": [
+     "the cache is described as evictable (impl-A/src/index.ts:7) but is an unbounded Map (impl-A/src/index.ts:414)",
+     "deep chains: export is iterative (impl-A/src/index.ts:499-518) but evaluate (impl-A/src/index.ts:470-485) and adopt (impl-A/src/index.ts:567-579) recurse, so stack-depth safety is only partial",
+     "import treats the sender's ids as labels and never checks that the recomputed id equals payload.root, impl-A/src/index.ts:576-581"
+    ],
+    "unnoticed": [
+     "nodes carry no inferred size, so a blend size mismatch only surfaces at evaluate, impl-A/src/index.ts:347-351",
+     "seed is hashed even when kind is 'ramp', so one computation gets two ids, impl-A/src/index.ts:65",
+     "no quantisation of slider values (0.1+0.2 against 0.3)"
+    ]
+   },
+   "adapted_not_copied": "Mostly adapted. The registry speaks the task's domain (ramp/noise, blend modes, int radius, impl-A/src/index.ts:56-107), only scale is in the target key, and nothing for region or precision was added. The header and comments paraphrase the chapter ('names say what, the key adds the target', impl-A/src/index.ts:413), but nothing from the sketch was transplanted without use.",
+   "wholeness": [
+    "the export's 'version' is written (impl-A/src/index.ts:527) but never checked on import (impl-A/src/index.ts:534-537): ornamental",
+    "'argument has no default' branch is unreachable for the current registry, impl-A/src/index.ts:150",
+    "trivial wrappers numberToString (impl-A/src/index.ts:122-125) and scaleKeyOf (impl-A/src/index.ts:397-399)",
+    "ExportedNode repeats the shape of InternedNode, impl-A/src/index.ts:401-406 against :223-228",
+    "the 'evictable' claim in the header has no code behind it, impl-A/src/index.ts:7"
+   ],
+   "habitability": "Good. Banner-separated sections, a declarative registry, small pixel functions (impl-A/src/index.ts:269-363) and error messages that name the op and the argument (impl-A/src/index.ts:133-170). A newcomer finds each concern in one place. importData is long (about 50 lines, impl-A/src/index.ts:530-582), and op names are listed twice (registry and switch).",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-A/src/index.ts:56-107 (REGISTRY entry: x, y, w, h as int with min)",
+      "impl-A/src/index.ts:318-329 (new makeCrop next to makeBlur, scaling like :319)",
+      "impl-A/src/index.ts:365-380 (execute switch case)"
+     ],
+     "local": true,
+     "notes": "Three spots in one file. Bounds against the input size can only be checked at evaluate, because nodes have no shape info."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-A/src/index.ts:414 (results Map -> LRU with byte accounting via data.byteLength)",
+      "impl-A/src/index.ts:470-485 (visit get/set; add a per-evaluation memo)"
+     ],
+     "local": true,
+     "notes": "Local to createGraph. visit relies on the cache for sharing within one evaluation, so an eviction in the middle of an evaluation could re-run a shared node unless a per-call memo is added."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-A/src/index.ts:365-380",
+     "smell": "shotgun surgery",
+     "note": "Op names are listed in REGISTRY and again in the execute switch; a new op touches both, plus a make* function."
+    },
+    {
+     "where": "impl-A/src/index.ts:471",
+     "smell": "primitive obsession",
+     "note": "The cache key is built by string concatenation, `${nodeId}@${scale}`."
+    },
+    {
+     "where": "impl-A/src/index.ts:530-582",
+     "smell": "long function",
+     "note": "importData does shape validation, indexing and recursive adoption in one function."
+    },
+    {
+     "where": "impl-A/src/index.ts:499-518 vs :567-579",
+     "smell": "duplicated knowledge",
+     "note": "Two traversal styles (iterative post-order for export, recursion for adopt and visit) for the same DAG walk."
+    }
+   ],
+   "tests_as_laws": "Strongest at stating laws. There is a seeded generator property test for both halves of canonicalisation (shuffled key order gives the same id and object; any changed number gives a different id), impl-A/test/identity.test.ts:142-177. Negative controls cover delimiter collisions (impl-A/test/identity.test.ts:78-87), refused imports including cycles (impl-A/test/transfer.test.ts:85-106) and bad arguments and scales (impl-A/test/operations.test.ts:108-135). There is no separate-process test and no deep-chain test.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 4,
+    "smell_free": 4,
+    "tests_as_laws": 4
+   }
+  },
+  "B": {
+   "summary": "Registry of ParamSpecs with per-parameter coerce closures, canonical JSON and a length-prefixed SHA-256 nodeId inside intern(). Evaluation and closure() are explicit-stack post-order walks. adopt() validates the whole description first (recomputing each id and refusing mismatches and forward references), then interns, so an import is all-or-nothing.",
+   "seams": [
+    "impl-B/src/index.ts:39-51 ParamSpec{fallback, coerce}/OpSpec, OP_SPECS at :88",
+    "impl-B/src/index.ts:166 canonicalArgs(spec, raw) -> {args, json}",
+    "impl-B/src/index.ts:203 nodeId(opName, argsJson, inputIds)",
+    "impl-B/src/index.ts:393 intern(name, inputs, args)",
+    "impl-B/src/index.ts:332 runOperation(node, inputs, scale)",
+    "impl-B/src/index.ts:434 compute(rootId, scale) explicit-stack evaluator",
+    "impl-B/src/index.ts:469 closure(rootId)",
+    "impl-B/src/index.ts:502 adopt(data) two-pass import"
+   ],
+   "participants": {
+    "Operation registry": "impl-B/src/index.ts:88",
+    "Canonicaliser": "impl-B/src/index.ts:166 (canonicalJson at :159, numberJson at :145)",
+    "Graph": "impl-B/src/index.ts:386 (intern :393, closure :469, adopt :502)",
+    "Node": "impl-B/src/index.ts:215 (no inferred info)",
+    "Node definition": "impl-B/src/index.ts:354 NodeDefinition, Description at :361",
+    "Result cache": "impl-B/src/index.ts:390 (resultKey at :424)"
+   },
+   "forces": {
+    "resolved": [
+     "rebuilding against reuse: intern returns the stored frozen ref, impl-B/src/index.ts:409-420",
+     "spelling against meaning: defaults filled, unknown keys refused, -0 folded, non-finite refused, impl-B/src/index.ts:66-69, :145-151, :166-190",
+     "cheap against safe names: SHA-256 with a length prefix on every field and on the input count, impl-B/src/index.ts:196-211",
+     "one process against many: the closure goes inputs-first; on import each definition's id is recomputed and a mismatch is refused, so tampered or version-skewed descriptions fail, impl-B/src/index.ts:547-553",
+     "fine names against coarse caches: the result key adds the canonical scale, impl-B/src/index.ts:424-426",
+     "deep graphs: evaluate and closure use explicit stacks, impl-B/src/index.ts:439-466, :473-488",
+     "a failed import leaves the graph untouched (validation pass, then intern pass), impl-B/src/index.ts:516-567"
+    ],
+    "in_tension": [
+     "the cache is unbounded, and compute uses it as its working storage, so adding eviction is not free, impl-B/src/index.ts:448, :457-458",
+     "lenient inputs (bare string ids and {id} objects in definitions) widen the trusted surface, impl-B/src/index.ts:223, :536-538"
+    ],
+    "unnoticed": [
+     "no inferred size on nodes; the blend mismatch is only caught at evaluate, impl-B/src/index.ts:316-320",
+     "seed is hashed for ramp sources, impl-B/src/index.ts:98",
+     "no quantisation of slider values"
+    ]
+   },
+   "adapted_not_copied": "Adapted. It takes the chapter's vocabulary (intern, closure, adopt) but builds on it: per-parameter coerce closures fit this task's small argument set (impl-B/src/index.ts:95-136), the import is atomic and checks ids against content (impl-B/src/index.ts:516-557), and the walks are iterative because of long editor chains. Nothing beyond scale was added to the target.",
+   "wholeness": [
+    "OpSpec.name repeats the map key, impl-B/src/index.ts:88-92 (and every entry)",
+    "a bare string id is accepted as a NodeRef 'as a convenience', impl-B/src/index.ts:223: speculative",
+    "{id} objects are accepted inside definition inputs, impl-B/src/index.ts:536-538: speculative",
+    "parallel nodes/refs maps, impl-B/src/index.ts:387-388"
+   ],
+   "habitability": "Good. Every non-obvious choice carries a comment that explains why (impl-B/src/index.ts:428-433, :516-518, :559). Errors are typed and carry the value they got (impl-B/src/index.ts:53-64). The explicit-stack loops (impl-B/src/index.ts:439-466) are harder to read than recursion, and adopt is long (75 lines).",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-B/src/index.ts:88-140 (OP_SPECS entry with integer(...) coercers)",
+      "impl-B/src/index.ts:276-307 (new makeCrop near makeBlur)",
+      "impl-B/src/index.ts:332-347 (runOperation case, scaling like :339)"
+     ],
+     "local": true,
+     "notes": "Three places in one file; the import validation picks up the new spec automatically."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-B/src/index.ts:390 (results -> LRU with byte size)",
+      "impl-B/src/index.ts:434-466 (compute reads inputs back from the cache at :448 and :457 and the root at :465)"
+     ],
+     "local": false,
+     "notes": "compute treats the cache as its scratch store, so an eviction between computing an input and its user makes it throw 'input evaluated out of order' (impl-B/src/index.ts:458). The walk needs a per-evaluation map, which means restructuring the algorithm, not just swapping the Map."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-B/src/index.ts:439-453 vs :473-487",
+     "smell": "duplicated knowledge",
+     "note": "The same explicit-stack post-order walk is written twice (compute and closure)."
+    },
+    {
+     "where": "impl-B/src/index.ts:502-577",
+     "smell": "long function",
+     "note": "adopt does format checks, a validation pass, an intern pass and root resolution."
+    },
+    {
+     "where": "impl-B/src/index.ts:332-347",
+     "smell": "shotgun surgery",
+     "note": "Op names appear in OP_SPECS and in the runOperation switch, with unchecked 'as number' casts."
+    },
+    {
+     "where": "impl-B/src/index.ts:425",
+     "smell": "primitive obsession",
+     "note": "The cache key is a concatenated string, `${id}@${scale}`."
+    }
+   ],
+   "tests_as_laws": "Rich, but example-based. There are independent reference implementations compared bit for bit (impl-B/test/helpers/reference.js:1-74) and a real separate-process test (impl-B/test/identity.test.js:188-216). Negative controls include an id that does not match its content, forward references, bad arguments on import, and an import that still succeeds after failed ones with zero evaluations (impl-B/test/robustness.test.js:65-116). A 5000-deep chain is tested (impl-B/test/reuse.test.js:168-186). There is no generator or property test for canonicalisation.",
+   "scores_1to5": {
+    "forces": 5,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 3,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "C": {
+   "summary": "A compact table of per-op objects that each carry arity, normalize() and compute(), with a 128-bit truncated SHA-256 over newline/comma-delimited fields. The cache is an (id, scale) map evaluated recursively; export writes a nested tree (each input inlined) and import rebuilds it recursively.",
+   "seams": [
+    "impl-C/src/index.ts:152-158 OpSpec{arity, normalize, compute}",
+    "impl-C/src/index.ts:202 OPS table",
+    "impl-C/src/index.ts:94 canonicalArgs / impl-C/src/index.ts:100 hashId",
+    "impl-C/src/index.ts:352 build(op, inputIds, rawArgs) + register at :345",
+    "impl-C/src/index.ts:389 evalNode(rec, scale)",
+    "impl-C/src/index.ts:403 exportNode (nested) / impl-C/src/index.ts:418 importNode"
+   ],
+   "participants": {
+    "Operation registry": "impl-C/src/index.ts:202 (merged with execution)",
+    "Canonicaliser": "per-op normalize at impl-C/src/index.ts:205-291, plus canonicalArgs at :94",
+    "Graph": "impl-C/src/index.ts:330 (build at :352)",
+    "Node": "impl-C/src/index.ts:319 NodeRecord (not frozen, no inferred info)",
+    "Node definition": "absent as a flat definition; a nested tree at impl-C/src/index.ts:408-413",
+    "Result cache": "impl-C/src/index.ts:333 (key at :326-328)"
+   },
+   "forces": {
+    "resolved": [
+     "rebuilding against reuse: build() returns the registered record and refFor gives one ref per id, impl-C/src/index.ts:337-350",
+     "spelling against meaning for key order, defaults and -0, impl-C/src/index.ts:65-82, :94-98",
+     "fine names against coarse caches: the cache key adds the scale, impl-C/src/index.ts:326-328"
+    ],
+    "in_tension": [
+     "cheap against safe names: the id is truncated to 128 bits (impl-C/src/index.ts:111) and fields are delimited by '\\n' and ',' instead of length prefixes (impl-C/src/index.ts:102-110); safe for these op names, fragile as ops grow",
+     "one process against many: the nested-tree export inlines shared inputs repeatedly, so repeated diamonds grow the export and the import exponentially, impl-C/src/index.ts:403-416, :425",
+     "spelling against meaning is over-resolved: normalize silently drops unknown keys, so a typo such as {factr: 2} becomes the default gain instead of an error, impl-C/src/index.ts:237-242",
+     "scale validation accepts scale > 1, against the task's 0 < s <= 1, impl-C/src/index.ts:445",
+     "recursive evalNode/export/import overflow the stack on long chains, impl-C/src/index.ts:393, :412, :425"
+    ],
+    "unnoticed": [
+     "no format version on the exported payload; only the hash domain carries 'v1', impl-C/src/index.ts:102",
+     "no inferred size on nodes",
+     "the comment says 'irrelevant args dropped' (impl-C/src/index.ts:154), yet seed is still hashed for ramp, impl-C/src/index.ts:211-212"
+    ]
+   },
+   "adapted_not_copied": "Adapted to the task, not transcribed. Its vocabulary is its own (normalize, compute, build, register, lookup), and the per-op object is a natural shape for five small ops. The prefix-sum blur (impl-C/src/index.ts:163-200) is a task-driven optimisation. It does not show the chapter's participants (no flat closure, no length prefixes).",
+   "wholeness": [
+    "a cycle guard in export that its own comment calls impossible, impl-C/src/index.ts:405-406",
+    "NumberOpts.max is never used by any op, impl-C/src/index.ts:62, :77-79",
+    "the NaN-fallback hack for required args, impl-C/src/index.ts:206-209",
+    "output-type check on every compute, impl-C/src/index.ts:395-397: defensive ornament",
+    "export default createGraph, impl-C/src/index.ts:468",
+    "test index keeps an unused import alive with 'void join', impl-C/test/index.js:16"
+   ],
+   "habitability": "Pleasant at first sight: small, and each op's validation and pixel code sit together (impl-C/src/index.ts:235-251). But a newcomer meets traps: unknown arguments are accepted silently, required arguments rely on NaN as a sentinel (impl-C/src/index.ts:206-209), and the nested export format scales badly. Typed casts such as args.width as number (impl-C/src/index.ts:215) leave the canonical record untyped.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-C/src/index.ts:202-313 (one new OPS entry with normalize and compute)"
+     ],
+     "local": true,
+     "notes": "The most local of the five: one object. Required x, y, w, h need the NaN-fallback pattern of impl-C/src/index.ts:206-209 or a new helper."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-C/src/index.ts:333 (cache Map -> LRU by data.byteLength)",
+      "impl-C/src/index.ts:389-401 (evalNode get/set; add a per-evaluation memo)"
+     ],
+     "local": true,
+     "notes": "Local. The same caveat as A applies: sharing within one evaluation depends on the cache surviving the evaluation."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-C/src/index.ts:100-112",
+     "smell": "other",
+     "note": "Delimiter-based hashing without length prefixes, truncated to 128 bits."
+    },
+    {
+     "where": "impl-C/src/index.ts:237-242",
+     "smell": "other",
+     "note": "Unknown arguments are silently ignored, so typos produce a valid node with a misleading id."
+    },
+    {
+     "where": "impl-C/src/index.ts:206-209",
+     "smell": "primitive obsession",
+     "note": "NaN is used as a 'required' sentinel through a numeric fallback."
+    },
+    {
+     "where": "impl-C/src/index.ts:403-416",
+     "smell": "duplicated knowledge",
+     "note": "The nested export repeats each shared subgraph once per path."
+    },
+    {
+     "where": "impl-C/src/index.ts:327",
+     "smell": "primitive obsession",
+     "note": "The cache key is the string `${id}@${scale}`."
+    },
+    {
+     "where": "impl-C/src/index.ts:62",
+     "smell": "speculative generality",
+     "note": "A max bound that no op uses."
+    }
+   ],
+   "tests_as_laws": "Mostly examples. The best law is the blur that must match a brute-force reference bit for bit over several shapes and radii (impl-C/test/ops.test.ts:81-99). There is a separate-process test (impl-C/test/crossprocess.test.ts:50-80) and a key-reordering import (impl-C/test/edge.test.ts:30-55). One test contradicts its own comment: 'importing into the graph that already has the work must reuse it', but it uses a fresh graph and asserts 6 evaluations (impl-C/test/crossprocess.test.ts:41-44). There is no negative control for unknown arguments or scale > 1, which is why those gaps survive.",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 4,
+    "wholeness": 3,
+    "habitability": 3,
+    "piecemeal_growth": 4,
+    "smell_free": 2,
+    "tests_as_laws": 3
+   }
+  },
+  "D": {
+   "summary": "Chapter-structured engine: an OPS registry of ArgSpecs, a Canoniciser producing an argKey, and a length-prefixed versioned SHA-256 inside intern(), which also verifies canonical bytes on an id hit. Evaluation is recursive with an id|scale cache and sliding-window blur; import maps exported ids to local ids and accepts several payload shapes.",
+   "seams": [
+    "impl-D/src/index.ts:48-60 ArgSpec/OpSpec, OPS at :88",
+    "impl-D/src/index.ts:155 canonicaliseArgs / impl-D/src/index.ts:203 encodeArgs",
+    "impl-D/src/index.ts:218 hashNodeId",
+    "impl-D/src/index.ts:417 intern (collision check at :450-458)",
+    "impl-D/src/index.ts:364 executeNode switch",
+    "impl-D/src/index.ts:486 evaluateNode",
+    "impl-D/src/index.ts:514 exportNode / impl-D/src/index.ts:535 importNode"
+   ],
+   "participants": {
+    "Operation registry": "impl-D/src/index.ts:88",
+    "Canonicaliser": "impl-D/src/index.ts:155 and :203",
+    "Graph": "impl-D/src/index.ts:410 (intern at :417)",
+    "Node": "impl-D/src/index.ts:62 InternalNode (frozen, stores argKey, no inferred info)",
+    "Node definition": "impl-D/src/index.ts:70 NodeDefJson, ExportJson at :77",
+    "Result cache": "impl-D/src/index.ts:414 (key at :487)"
+   },
+   "forces": {
+    "resolved": [
+     "rebuilding against reuse: intern returns the stored ref, impl-D/src/index.ts:450-458",
+     "spelling against meaning: defaults filled, unknown keys refused, explicit undefined treated as omitted, -0 folded, impl-D/src/index.ts:155-194, :130-136",
+     "cheap against safe names: SHA-256 with length-prefixed fields plus a check of the canonical bytes on a hit, impl-D/src/index.ts:214-226, :452-456",
+     "a canonicalisation change renames everything: FORMAT_VERSION is hashed and checked on import, impl-D/src/index.ts:43-44, :220, :542",
+     "one process against many: flat inputs-first closure, impl-D/src/index.ts:514-533",
+     "fine names against coarse caches: key = id|scale, impl-D/src/index.ts:487"
+    ],
+    "in_tension": [
+     "import maps the exported id to the local id without verifying that they are equal (impl-D/src/index.ts:585-591), so a tampered or version-skewed id is silently accepted",
+     "recursive evaluateNode and export overflow the stack on long chains, impl-D/src/index.ts:491, :522",
+     "the cache is called evictable (impl-D/src/index.ts:10-11) but is an unbounded Map (impl-D/src/index.ts:414)"
+    ],
+    "unnoticed": [
+     "no inferred size on nodes",
+     "a ramp with seed 1 gets a different id from seed 0, and a test even enforces it (impl-D/test/03-canonical.test.ts:95)"
+    ]
+   },
+   "adapted_not_copied": "Partly transcribed. Its section headings are the chapter's participant names ('Operation registry', 'Canonicaliser: one spelling per meaning', impl-D/src/index.ts:84, :127). Note 6's verify-on-hit is applied to a 256-bit hash where it buys nothing (impl-D/src/index.ts:452-456), and a boolean argument type exists that no op of this task has (impl-D/src/index.ts:46, :199). The pixel code is task-shaped (sliding-window blur, impl-D/src/index.ts:260-295).",
+   "wholeness": [
+    "boolean ArgValue and its encoder branch with no boolean argument anywhere, impl-D/src/index.ts:46, :199",
+    "ArgSpec.max and its check, used by no op, impl-D/src/index.ts:53, :148-150",
+    "argKey stored on every node only for the collision check, impl-D/src/index.ts:67, :454",
+    "import accepts a bare array or a 'defs' alias, impl-D/src/index.ts:538-545: speculative",
+    "op() is a pass-through to intern, impl-D/src/index.ts:498-500"
+   ],
+   "habitability": "Readable and consistent; error messages name the op and the argument. But the lenient import paths and unused generality enlarge what a newcomer must understand, and the NodeRef validation is written twice (impl-D/src/index.ts:431-445, :473-484). importNode is long (about 68 lines).",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-D/src/index.ts:88-124 (OPS entry)",
+      "impl-D/src/index.ts:333-339 (new executeCrop scaling like executeBlur)",
+      "impl-D/src/index.ts:364-379 (executeNode case)"
+     ],
+     "local": true,
+     "notes": "Three spots in one file, the same as A and B."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-D/src/index.ts:414 (results -> LRU)",
+      "impl-D/src/index.ts:486-496 (evaluateNode get/set and a per-call memo)"
+     ],
+     "local": true,
+     "notes": "Local; same caveat about shared nodes within one evaluation."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-D/src/index.ts:46",
+     "smell": "speculative generality",
+     "note": "A boolean argument type with no consumer."
+    },
+    {
+     "where": "impl-D/src/index.ts:538-545",
+     "smell": "speculative generality",
+     "note": "Three accepted import shapes (array, nodes, defs)."
+    },
+    {
+     "where": "impl-D/src/index.ts:431-445 vs :473-484",
+     "smell": "duplicated knowledge",
+     "note": "NodeRef shape and membership checks are written twice."
+    },
+    {
+     "where": "impl-D/src/index.ts:535-603",
+     "smell": "long function",
+     "note": "importNode parses, validates, maps ids and resolves the root in one function."
+    },
+    {
+     "where": "impl-D/src/index.ts:364-379",
+     "smell": "shotgun surgery",
+     "note": "Op names appear in OPS and in the executeNode switch."
+    },
+    {
+     "where": "impl-D/src/index.ts:487",
+     "smell": "primitive obsession",
+     "note": "The cache key is the string `${id}|${scale}`."
+    }
+   ],
+   "tests_as_laws": "Examples with some deliberate negative controls: the documented choice not to quantise 0.30000000000000004 (impl-D/test/03-canonical.test.ts:74-79), different-id collections (impl-D/test/03-canonical.test.ts:82-110) and refused imports (impl-D/test/04-transfer.test.ts:91-111). There is no separate-process test and no property test. One assertion is vacuous: JSON.stringify(payload) equals itself (impl-D/test/04-transfer.test.ts:57).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 3,
+    "piecemeal_growth": 4,
+    "smell_free": 2,
+    "tests_as_laws": 3
+   }
+  },
+  "E": {
+   "summary": "A REGISTRY of ArgSpecs feeds canonicaliseArgs and a length-prefixed, domain-tagged SHA-256 inside intern(); pixel code lives in a separate OPS table of functions keyed by op name. Evaluation is a recursive masterFor over an id|scale cache; export is a flat closure, and import re-interns and accepts JSON text, bare arrays or single definitions.",
+   "seams": [
+    "impl-E/src/index.ts:46-60 ArgSpec/OpSpec, REGISTRY at :62",
+    "impl-E/src/index.ts:144 canonicaliseArgs",
+    "impl-E/src/index.ts:209 hashNode",
+    "impl-E/src/index.ts:426 intern",
+    "impl-E/src/index.ts:320 OPS (node, inputs, scale) => Image",
+    "impl-E/src/index.ts:476 masterFor(nodeId, scale, scaleKey)",
+    "impl-E/src/index.ts:498 closure / impl-E/src/index.ts:513 readDefs"
+   ],
+   "participants": {
+    "Operation registry": "impl-E/src/index.ts:62",
+    "Canonicaliser": "impl-E/src/index.ts:144 (canonicalNumber at :125)",
+    "Graph": "impl-E/src/index.ts:419 (intern at :426, closure at :498)",
+    "Node": "impl-E/src/index.ts:224 (not frozen, no inferred info)",
+    "Node definition": "untyped object at impl-E/src/index.ts:554-557",
+    "Result cache": "impl-E/src/index.ts:423"
+   },
+   "forces": {
+    "resolved": [
+     "rebuilding against reuse: intern returns existing.ref, impl-E/src/index.ts:457-458",
+     "spelling against meaning: one number routine, sorted keys, defaults, unknown keys refused, impl-E/src/index.ts:125-130, :144-193",
+     "cheap against safe names: SHA-256 over 32-bit length-prefixed fields with a versioned domain, impl-E/src/index.ts:199-218",
+     "one process against many: a flat closure, inputs first; the root is checked against the recomputed ids, impl-E/src/index.ts:498-511, :587-589",
+     "fine names against coarse caches: key = id|scale, impl-E/src/index.ts:477",
+     "refusals carry a fix ('build it with op() first or transfer it with export()/import()'), impl-E/src/index.ts:445-448"
+    ],
+    "in_tension": [
+     "the exported version is written (impl-E/src/index.ts:552) but never checked on import, so a canonicalisation change would be met silently",
+     "recursion in masterFor and closure overflows the stack on long chains, impl-E/src/index.ts:485, :506",
+     "canonical JSON depends on JSON.stringify keeping the sorted insertion order (impl-E/src/index.ts:160, :454): correct, but implicit"
+    ],
+    "unnoticed": [
+     "no inferred size on nodes",
+     "seed hashed for ramp",
+     "no quantisation of slider values",
+     "unbounded cache"
+    ]
+   },
+   "adapted_not_copied": "Adapted. It splits a declarative registry (arguments) from an OPS table (pixels), task-shaped error messages list the known operations and arguments (impl-E/src/index.ts:154-155, :429-430), and the header names the task's own reason for caching every node (impl-E/src/index.ts:11-12). The chapter's vocabulary is used, but only where it fits.",
+   "wholeness": [
+    "Node.argsJson is stored but never read, impl-E/src/index.ts:228, :461",
+    "an unreachable second 'no nodes' check, impl-E/src/index.ts:591 (already thrown at :563)",
+    "an unreachable 'no implementation' guard, impl-E/src/index.ts:488",
+    "import accepts JSON text, bare arrays and single definitions, impl-E/src/index.ts:513-527: speculative",
+    "masterFor takes both scale and scaleKey, impl-E/src/index.ts:476",
+    "export default createGraph, impl-E/src/index.ts:597"
+   ],
+   "habitability": "Good. Each op's pixel code is a short function in one table (impl-E/src/index.ts:320-379), names are clear, and the comments explain aliasing decisions (impl-E/src/index.ts:491-492). Error messages tell the caller what to do next. Small dead bits and the lenient readDefs add noise.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-E/src/index.ts:62-118 (REGISTRY entry)",
+      "impl-E/src/index.ts:320-379 (OPS entry, scaling like blur at :349)"
+     ],
+     "local": true,
+     "notes": "Two tables keyed by the same name in one file, no switch. Bounds can only be checked at evaluate."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-E/src/index.ts:423 (results -> LRU)",
+      "impl-E/src/index.ts:476-496 (masterFor get/set and a per-call memo)"
+     ],
+     "local": true,
+     "notes": "Local; the 'master copy' design already separates cached from handed-out images (impl-E/src/index.ts:539-541)."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-E/src/index.ts:228",
+     "smell": "other",
+     "note": "Dead field argsJson."
+    },
+    {
+     "where": "impl-E/src/index.ts:513-527",
+     "smell": "speculative generality",
+     "note": "Four accepted input shapes for import."
+    },
+    {
+     "where": "impl-E/src/index.ts:57 and :62-118",
+     "smell": "duplicated knowledge",
+     "note": "OpSpec.name repeats the map key, and op names are repeated again in OPS at :320."
+    },
+    {
+     "where": "impl-E/src/index.ts:477",
+     "smell": "primitive obsession",
+     "note": "The cache key is the string `${nodeId}|${scaleKey}`."
+    }
+   ],
+   "tests_as_laws": "Example-based with useful negative controls: inputs listed after their users are refused (impl-E/test/transfer.test.ts:122-144), as are malformed descriptions (impl-E/test/transfer.test.ts:146-158). A separate-process test compares ids and pixels at scale 0.5 (impl-E/test/transfer.test.ts:179-202), and order-independent interning is covered (impl-E/test/canonical.test.ts:81-95). There is no generator or property test and no deep-chain test.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 3,
+    "habitability": 4,
+    "piecemeal_growth": 4,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  }
+ },
+ "cross": {
+  "generativity": "Yes, strongly. All five converged on the same core: an op table with arity and defaults, canonical sorted-key arguments with -0 folded, SHA-256 over op + args + input ids, one frozen NodeRef per id, a separate result map keyed by id plus scale, and a copy on return. A, B, D and E also share a flat inputs-first closure with {id, op, inputs, args} and a domain/version tag in the hash. They differ in detail: B makes the walks iterative and the import atomic with id verification; A adds a cycle-detecting root-driven adopt; D verifies canonical bytes on a hit; E separates the argument registry from a pixel-function table. C departs: per-op objects merge registry and executor, the hash is delimiter-based and truncated, and the export is a nested tree.",
+  "clusters": [
+   [
+    "A",
+    "B",
+    "D",
+    "E"
+   ],
+   [
+    "C"
+   ]
+  ],
+  "worse_is_better": "Not here. C is the smallest (468 src lines) and its per-op co-location makes adding crop the most local, but it lost quality the bigger ones kept: unknown arguments are accepted, scale > 1 is accepted, the hash is truncated and not length-prefixed, and the nested export blows up on diamonds. Among the full-quality designs, A (585 lines) reaches nearly B's quality with less machinery. The chapter's extras that cost code without paying back (D's collision check on SHA-256, export versions that A and E never read) suggest the yardstick asks slightly too much in its implementation notes, not in its core.",
+  "ranking": [
+   "B",
+   "A",
+   "E",
+   "D",
+   "C"
+  ],
+  "ideas_the_yardstick_lacks": [
+   "Recompute each imported definition's id and refuse a mismatch, in a validation pass before any interning, so imports are all-or-nothing (impl-B/src/index.ts:516-567)",
+   "Explicit-stack evaluation and closure so editor-length chains cannot overflow the stack, tested at depth 5000 (impl-B/src/index.ts:434-466, impl-B/test/reuse.test.js:168-186)",
+   "Co-locate each op's normalisation and computation in one object so a new op is one edit (impl-C/src/index.ts:152-158, :202-313)",
+   "O(1)-per-pixel blur (prefix sums in Float64 or a sliding window) checked bit for bit against a brute-force reference (impl-C/src/index.ts:163-200, impl-C/test/ops.test.ts:81-99; impl-D/src/index.ts:260-295)",
+   "Derive the PRNG state by hashing the canonical seed so any numeric seed maps deterministically and -0 equals 0 (impl-B/src/index.ts:236-238, impl-D/src/index.ts:250, impl-E/src/index.ts:243)",
+   "Independent reference implementations in the tests for exact pixel comparison (impl-B/test/helpers/reference.js:1-74)",
+   "A real separate-process test that checks ids and pixels, not only a second Graph instance (impl-B/test/identity.test.js:188-216, impl-E/test/transfer.test.ts:179-202)",
+   "Keep the cached image as a private master and copy only at the API boundary, documented as an aliasing invariant (impl-E/src/index.ts:491-492, :539-541)"
+  ],
+  "yardstick_problems": [
+   "Note 6's verify-on-hit, applied with a 256-bit hash, adds a stored field and a branch for no practical safety (impl-D/src/index.ts:67, :452-456)",
+   "Note 8's format version leads to version fields that are written but never checked on import (impl-A/src/index.ts:527 vs :534-537, impl-E/src/index.ts:552)",
+   "Note 7's suggestion to quantise slider values conflicts with Requirement 3 ('different computations must give different ids'); D had to write a test to document rejecting it (impl-D/test/03-canonical.test.ts:74-79)",
+   "Note 5 warns to cache only chosen checkpoints, but Requirement 2 needs every node cached; following it would break shared-work reuse",
+   "The Node participant's 'inferred info (size, domain)' and the receiver-kind checks from Chapter 5 are absent from all five and not needed by the task; adding them would be extra structure. It would help only crop's bounds check",
+   "Note 3 (node-typed arguments become inputs) and the region/precision parts of the target key do not apply to this task"
+  ]
+ },
+ "guess_yardstick_used": {
+  "A": 0.9,
+  "B": 0.85,
+  "C": 0.1,
+  "D": 0.9,
+  "E": 0.85
+ },
+ "confidence": 0.75
+}

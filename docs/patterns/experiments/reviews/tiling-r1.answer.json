@@ -1,0 +1,709 @@
+{
+ "implementations": {
+  "A": {
+   "summary": "A planner picks one of three tiers: exact haloed tiles when the summed reach fits, an exact whole-image streaming pass with a (2R+1) ring buffer working in place in the output, or stages separated by reduced-resolution fields. Each stage evaluates a tile by propagating regions of interest backwards through its ops, and a wide blur can be split into a truncated local Gaussian plus a residual field.",
+   "seams": [
+    "internChain: public Op to InternOp with pixel radius, impl-A/src/index.ts:266",
+    "planRender: tier choice tiled/stream/field, impl-A/src/index.ts:356",
+    "evalStage: backward ROI propagation then forward evaluation, impl-A/src/index.ts:483",
+    "buildField: tiled prefix evaluation accumulated into a reduced grid, impl-A/src/index.ts:567",
+    "renderStreaming: exact in-place ring-buffer blur, impl-A/src/index.ts:716",
+    "stage compilation splitting the chain at fields, impl-A/src/index.ts:862-894"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "InternOp with per-op R, impl-A/src/index.ts:54-57",
+    "Frame": "Env (W, H; umPerPx is not kept, only converted), impl-A/src/index.ts:77-84",
+    "Device caps": "budget in Env, impl-A/src/index.ts:80, from impl-A/src/index.ts:819-821",
+    "Planner": "planRender, impl-A/src/index.ts:356",
+    "Tile": "no type; core Rect plus reported read rect inline, impl-A/src/index.ts:914-930",
+    "Global field": "FieldImage / buildField, impl-A/src/index.ts:59, impl-A/src/index.ts:567",
+    "Tile executor": "evalStage, impl-A/src/index.ts:483"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: the halo is the exact sum of radii (impl-A/src/index.ts:363), and ROI propagation sizes every intermediate to what the next op needs (impl-A/src/index.ts:488-490)",
+     "physical against pixel units: sigmaUm/umPerPx happens once, at compile time, impl-A/src/index.ts:272",
+     "exact wide kernels against fields: an exact streaming tier comes before any field (impl-A/src/index.ts:385-389), and a wide blur is split into a local truncated part plus a residual-variance field (impl-A/src/index.ts:877-886)",
+     "device limits: the tile side comes from sqrt(budget), and alloc throws past the budget, impl-A/src/index.ts:154-161, impl-A/src/index.ts:357"
+    ],
+    "in_tension": [
+     "small against large tiles: T = S - 2h with no read-minimising choice; the tile size comes only from the halo, impl-A/src/index.ts:378",
+     "exactness against runtime: hard-coded WORK_LIMIT/STREAM_WORK_LIMIT decide when to give up exactness, impl-A/src/index.ts:87-97, impl-A/src/index.ts:380"
+    ],
+    "unnoticed": [
+     "honest read reporting: the stream tier reports read = core although it reads whole rows, impl-A/src/index.ts:855",
+     "the field tiles report the stage-0 reach as input reads while they actually sample the field, impl-A/src/index.ts:906"
+    ]
+   },
+   "adapted_not_copied": "Adapted. It keeps the chapter's vocabulary (planner, field, variance bookkeeping at impl-A/src/index.ts:695-700) but drops the power-of-two downsample for a cell grid whose centres span the image (impl-A/src/index.ts:526-559). It adds edge-line accumulators for clamped borders and a streaming tier the chapter does not have.",
+   "wholeness": [
+    "ornamental aliases R=Rx, wts=wtsX, RV=Ry, impl-A/src/index.ts:189-190, impl-A/src/index.ts:215-216",
+    "estimateWork is a one-line wrapper, impl-A/src/index.ts:340-342",
+    "placeholder field pushed and later overwritten, impl-A/src/index.ts:889, impl-A/src/index.ts:900",
+    "stages array is only used for its first and last element, impl-A/src/index.ts:905-906",
+    "renderWhole builds a fake Env with budget Infinity to reuse blurRects, impl-A/src/index.ts:786, impl-A/src/index.ts:803",
+    "Plan and Geometry duplicate h/T, impl-A/src/index.ts:859-860"
+   ],
+   "habitability": "Medium to low. The tiers are documented well (impl-A/src/index.ts:344-355), but buildField is a 136-line dense accumulator with corner and edge special cases (impl-A/src/index.ts:567-703), blurRects takes 11 positional parameters (impl-A/src/index.ts:173-185), and the planner's thresholds are magic numbers. Everything sits in one 935-line file.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-A/src/index.ts:18",
+      "impl-A/src/index.ts:54-57",
+      "impl-A/src/index.ts:266-283",
+      "impl-A/src/index.ts:362-366",
+      "impl-A/src/index.ts:500-510",
+      "impl-A/src/index.ts:716-721",
+      "impl-A/src/index.ts:787-808",
+      "impl-A/src/index.ts:867-893"
+     ],
+     "local": false,
+     "notes": "Exact tiles are easy because every InternOp carries R and evalStage propagates rects generically. The 'blur' kind checks in the planner, the stage compiler and the streaming tier all need a new branch. A wide sharpen cannot become a field, because the stage after the field has lost v."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-A/src/index.ts:77-84",
+      "impl-A/src/index.ts:107-119",
+      "impl-A/src/index.ts:488-490",
+      "impl-A/src/index.ts:826",
+      "impl-A/src/index.ts:909-933",
+      "impl-A/src/index.ts:716"
+     ],
+     "local": false,
+     "notes": "Of the six, A's backward ROI propagation is the closest seam to a resampling op (inputRectFor(outputRect) per op). But W/H are global in Env, the output is allocated at input size, and streaming and fields assume a single frame."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-A/src/index.ts:567-703",
+     "smell": "long function",
+     "note": "buildField mixes grid accumulation, edge lines, corners, normalisation and the residual blur"
+    },
+    {
+     "where": "impl-A/src/index.ts:133",
+     "smell": "primitive obsession",
+     "note": "weight cache keyed by string concatenation `${R}|${sigma}`"
+    },
+    {
+     "where": "impl-A/src/index.ts:173-185",
+     "smell": "other",
+     "note": "long parameter list (11 params) for the core blur primitive"
+    },
+    {
+     "where": "impl-A/src/index.ts:362, impl-A/src/index.ts:718, impl-A/src/index.ts:868",
+     "smell": "shotgun surgery",
+     "note": "'blur' kind checks for reach and taps are spread over the planner, the streaming tier and the stage compiler"
+    },
+    {
+     "where": "impl-A/src/index.ts:87-97",
+     "smell": "speculative generality",
+     "note": "tuned runtime caps (WORK_LIMIT, STREAM_WORK_LIMIT, MAX_TILES, MAX_FIELD_SIGMA) with no derivation"
+    },
+    {
+     "where": "impl-A/src/index.ts:850-856",
+     "smell": "other",
+     "note": "stream tier emits synthetic tiles whose read rectangle is the core, so the read reports are not real"
+    }
+   ],
+   "tests_as_laws": "Partly laws. assertTileInvariants states coverage-once, read-contains-core and the budget as properties (impl-A/test/tiling.test.ts:44-68), and a seeded fuzz checks the error bounds plus the invariants over random chains and budgets (impl-A/test/tiling.test.ts:367-401). The oracle is the implementation's own renderWhole. There is no independent reference and no negative control (for example, showing that a smaller halo produces seams).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 3,
+    "habitability": 2,
+    "piecemeal_growth": 3,
+    "smell_free": 2,
+    "tests_as_laws": 3
+   }
+  },
+  "B": {
+   "summary": "Each blur gets an OpInfo record; a greedy pass marks a blur local while 1 + 2\u00b7reach fits the tile side, and a cost-driven re-plan forces the widest local blurs into fields. Fields use the chapter's power-of-two downsample, residual sigma from the box and bilinear variances, a clamped-extension margin and budget-sized chunks, and tiles evaluate the chain segment after the last field.",
+   "seams": [
+    "buildInfos: Op to OpInfo, impl-B/src/index.ts:201",
+    "applyOps: in-place op range on a region buffer, impl-B/src/index.ts:259",
+    "classify / assignLocality: local or wide per blur, impl-B/src/index.ts:378, impl-B/src/index.ts:441",
+    "planField: power-of-two s, residual, margin, impl-B/src/index.ts:503",
+    "buildField: reduced image built from prefix evaluations, impl-B/src/index.ts:514",
+    "evalPrefixRegion: tile executor reading input or the previous field, impl-B/src/index.ts:680",
+    "sampleField: bilinear by frame coordinates, impl-B/src/index.ts:708"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "OpInfo (sigma, radius, wide, field), impl-B/src/index.ts:143-159",
+    "Frame": "absent (W, H, umPerPx passed loose; conversion at impl-B/src/index.ts:231)",
+    "Device caps": "budget and S = floor(sqrt(budget)), impl-B/src/index.ts:309, impl-B/src/index.ts:331",
+    "Planner": "classify + assignLocality + planField, impl-B/src/index.ts:378, impl-B/src/index.ts:441, impl-B/src/index.ts:503",
+    "Tile": "core Rect plus expandRect read, impl-B/src/index.ts:345, impl-B/src/index.ts:690",
+    "Global field": "Field (chunked) / buildField, impl-B/src/index.ts:166, impl-B/src/index.ts:514",
+    "Tile executor": "evalPrefixRegion, impl-B/src/index.ts:680"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: the reach is summed per segment between fields, and the tile is S - 2\u00b7lastReach, impl-B/src/index.ts:441-453, impl-B/src/index.ts:342",
+     "physical against pixel units: sigmaUm/umPerPx once per op, impl-B/src/index.ts:231",
+     "exact wide kernels against fields: a per-kernel Strategy (local or field), and the field's variance bookkeeping follows the chapter, impl-B/src/index.ts:505-509",
+     "device limits against generality: the field is stored in budget-sized chunks, so even a reduced image larger than one buffer works, impl-B/src/index.ts:179-187"
+    ],
+    "in_tension": [
+     "seamless against cheap: estimateCost with COST_LIMIT = 3e9 trades exactness for time, and the forced-wide loop re-plans by trial, impl-B/src/index.ts:378-398",
+     "small against large tiles: square tiles of S - 2\u00b7reach with no read-minimising grid, impl-B/src/index.ts:342"
+    ],
+    "unnoticed": [
+     "the reduced-field accumulation buffer `sums` is never reported through onBuffer, impl-B/src/index.ts:541",
+     "nonlinear ops between a field and the next blur are evaluated on the bilinear field (accepted silently)"
+    ]
+   },
+   "adapted_not_copied": "Close to a transcription of the chapter: the power-of-two rule at impl-B/src/index.ts:505, the variance formula at impl-B/src/index.ts:507-509, and the comment naming the chapter's Strategy at impl-B/src/index.ts:385. The adaptations are task-specific: chunked fields, a clamped-extension margin, and multiplicity spans for clamped blocks (impl-B/src/index.ts:667-677).",
+   "wholeness": [
+    "segmentReaches computes maxReach that nobody reads, impl-B/src/index.ts:456-468",
+    "duplicated doc comment, impl-B/src/index.ts:706-707",
+    "OpInfo carries gainFactor/gammaExp/sigma for kinds that do not use them, impl-B/src/index.ts:205-244",
+    "field.s and field.margin are assigned twice, impl-B/src/index.ts:527-528, impl-B/src/index.ts:577-578"
+   ],
+   "habitability": "Fair. The top-level flow in renderTiled is short and readable (impl-B/src/index.ts:306-367), and the function names say what they do. But OpInfo is a mutable bag that holds both the declaration and the plan (wide, field), the cost model repeats the field geometry, and buildField has a fast and a slow path that a newcomer must keep in sync.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-B/src/index.ts:17-20",
+      "impl-B/src/index.ts:143-159",
+      "impl-B/src/index.ts:201-248",
+      "impl-B/src/index.ts:259-285",
+      "impl-B/src/index.ts:389",
+      "impl-B/src/index.ts:436",
+      "impl-B/src/index.ts:444",
+      "impl-B/src/index.ts:460",
+      "impl-B/src/index.ts:476"
+     ],
+     "local": false,
+     "notes": "Every reach and taps helper tests kind === 'blur', so a new neighbourhood op is shotgun surgery. A wide sharpen cannot be a field, because the field replaces the source and the centre value is lost."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-B/src/index.ts:58-64",
+      "impl-B/src/index.ts:316",
+      "impl-B/src/index.ts:342-364",
+      "impl-B/src/index.ts:680-704",
+      "impl-B/src/index.ts:708-729"
+     ],
+     "local": false,
+     "notes": "The frame W\u00d7H is threaded everywhere as a single coordinate system. A grid change needs per-segment frames and a rect mapping in evalPrefixRegion."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-B/src/index.ts:143-159",
+     "smell": "primitive obsession",
+     "note": "a flat record with a kind tag plus a nullable pointKind instead of a union; planning state (wide, field) is mutated into the op declaration at impl-B/src/index.ts:338"
+    },
+    {
+     "where": "impl-B/src/index.ts:415-427",
+     "smell": "duplicated knowledge",
+     "note": "estimateCost re-derives the field geometry, prefix reach and window that buildField computes at impl-B/src/index.ts:519-525"
+    },
+    {
+     "where": "impl-B/src/index.ts:536-559",
+     "smell": "duplicated knowledge",
+     "note": "the fast path duplicates fillSample's windowed prefix evaluation (impl-B/src/index.ts:583-616)"
+    },
+    {
+     "where": "impl-B/src/index.ts:389, impl-B/src/index.ts:436, impl-B/src/index.ts:444, impl-B/src/index.ts:460, impl-B/src/index.ts:476",
+     "smell": "shotgun surgery",
+     "note": "the 'blur && effective && !wide' predicate is repeated across five helpers"
+    },
+    {
+     "where": "impl-B/src/index.ts:583-596",
+     "smell": "other",
+     "note": "long parameter list (12 params)"
+    }
+   ],
+   "tests_as_laws": "The best of the six at stating laws. There is an independent direct 2-D reference (impl-B/test/helpers.ts:30-56). The fuzz predicts from the chain when the result must be exact and asserts 1e-5 there, the tolerance otherwise (impl-B/test/fuzz.test.ts:41-44). A constant image stays constant through a wide blur (impl-B/test/wide.test.ts:54-59), and coverage and budget are general helpers. There are no explicit negative controls.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 3,
+    "piecemeal_growth": 2,
+    "smell_free": 3,
+    "tests_as_laws": 4
+   }
+  },
+  "C": {
+   "summary": "There are three global paths: the whole image in one buffer, exact haloed tiles with a grid chosen to minimise total reads, or the whole chain run once on a single reduced image. The reduced path uses an anti-alias prefilter, one variance-scale factor shared by all blurs, and a padded border, and it renders the whole frame as one tile.",
+   "seams": [
+    "applyChain: shared in-place primitives on strided Float64 buffers, impl-C/src/index.ts:160",
+    "chooseTile: read-minimising tile size, impl-C/src/index.ts:259",
+    "renderTiled path switch, impl-C/src/index.ts:353, impl-C/src/index.ts:365, impl-C/src/index.ts:414",
+    "planReduction: factor k and border pad, impl-C/src/index.ts:458",
+    "approxTiled: prefilter, reduced chain, resample, impl-C/src/index.ts:503"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "absent (public Op used directly; radius recomputed by radiusFor, impl-C/src/index.ts:56)",
+    "Frame": "imageDims (W, H only), impl-C/src/index.ts:206",
+    "Device caps": "P from maxTilePixels, impl-C/src/index.ts:335",
+    "Planner": "chooseTile + planReduction (whole chain, not per kernel), impl-C/src/index.ts:259, impl-C/src/index.ts:458",
+    "Tile": "read rect inline, impl-C/src/index.ts:379-386",
+    "Global field": "the reduced image `red` of the whole middle chain, impl-C/src/index.ts:540",
+    "Tile executor": "tile loop, impl-C/src/index.ts:377-407"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: an exact halo of the summed radii, with the tile grid chosen to minimise sum(readW\u00b7readH), impl-C/src/index.ts:344-350, impl-C/src/index.ts:259-313",
+     "physical against pixel units: converted per op at use, impl-C/src/index.ts:190",
+     "device limits: one reduced image sized to fit P including its pad, impl-C/src/index.ts:458-478"
+    ],
+    "in_tension": [
+     "exact wide kernels against fields: all-or-nothing. If the total halo does not fit, every blur (narrow ones too) and every interior gamma runs at reduced resolution, impl-C/src/index.ts:365, impl-C/src/index.ts:607-632",
+     "small against large tiles: the wide path does not tile at all; one tile reports the whole frame, impl-C/src/index.ts:659"
+    ],
+    "unnoticed": [
+     "per-kernel local/global strategy: no notion of mixing local halos with a field",
+     "nonlinear ops between blurs are approximated at reduced resolution without comment on the error, impl-C/src/index.ts:622-631"
+    ]
+   },
+   "adapted_not_copied": "Shaped by the task rather than the chapter. It uses its own terms (reduction, pre-filter, padding) and an integer, non-power-of-two k. The anti-aliasing and the border-pad reasoning answer this task's error bounds (impl-C/src/index.ts:448-457, impl-C/src/index.ts:494-502).",
+   "wholeness": [
+    "the hasBlur parameter is redundant with middle.length === 0, impl-C/src/index.ts:343, impl-C/src/index.ts:524",
+    "the defensive fallback duplicates path 1, impl-C/src/index.ts:524-534 vs impl-C/src/index.ts:353-362",
+    "srcLen guards that cannot trigger for valid images, impl-C/src/index.ts:388-394, impl-C/src/index.ts:573",
+    "Scratch is an interface wrapping a single field, impl-C/src/index.ts:46-49"
+   ],
+   "habitability": "Good for most of the file: small primitives, one shared applyChain, and clear comments. approxTiled is a 157-line function (impl-C/src/index.ts:503-660) with closures and magic numbers (0.6 at impl-C/src/index.ts:463, 512 at impl-C/src/index.ts:272), and the reduced path's variance-split logic is hard to change safely.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-C/src/index.ts:18-21",
+      "impl-C/src/index.ts:160-200",
+      "impl-C/src/index.ts:344-350",
+      "impl-C/src/index.ts:423-432",
+      "impl-C/src/index.ts:516-519",
+      "impl-C/src/index.ts:607-632"
+     ],
+     "local": false,
+     "notes": "The exact path needs one branch in applyChain plus the padTotal loop. The reduced path breaks, because sharpen at reduced resolution loses the full-resolution v that it re-adds, and the lead/trail split assumes only blurs need neighbourhoods."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-C/src/index.ts:322",
+      "impl-C/src/index.ts:365-410",
+      "impl-C/src/index.ts:503-660"
+     ],
+     "local": false,
+     "notes": "The in-place strided-buffer design assumes the buffer geometry never changes during the chain. Both paths need per-op output dimensions and remapped tile coordinates."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-C/src/index.ts:190, impl-C/src/index.ts:348, impl-C/src/index.ts:428, impl-C/src/index.ts:610",
+     "smell": "duplicated knowledge",
+     "note": "sigmaUm/umPerPx with the umPerPx>0 guard is repeated in four places instead of compiling ops once"
+    },
+    {
+     "where": "impl-C/src/index.ts:503-660",
+     "smell": "long function",
+     "note": "approxTiled does planning, prefilter weights, sampling, the reduced chain and resampling in one body"
+    },
+    {
+     "where": "impl-C/src/index.ts:463",
+     "smell": "other",
+     "note": "magic 0.6 share of variance for the prefilter, with no stated derivation"
+    },
+    {
+     "where": "impl-C/src/index.ts:459-477",
+     "smell": "other",
+     "note": "a linear search over k up to 2^20 to find a reduction factor"
+    }
+   ],
+   "tests_as_laws": "Mostly examples. renderWhole is checked against an independent separable reference (impl-C/test/renderWhole.test.ts:8-59). The tiled tests compare to renderWhole with a coverage/budget checker (impl-C/test/tiledExact.test.ts:46-69), and there is one range property ([0,1] in, [0,1] out, impl-C/test/wideBlur.test.ts:157-168). There are no negative controls and a dead `void r` in the helper (impl-C/test/wideBlur.test.ts:70, impl-C/test/wideBlur.test.ts:77).",
+   "scores_1to5": {
+    "forces": 2,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 4,
+    "piecemeal_growth": 2,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  },
+  "D": {
+   "summary": "Ops are compiled into LocalSteps, and makePlan tries an exact plan first. Otherwise it marks blurs wider than min(sqrtM/4, ...) as fields and lowers the local limit until a work estimate fits. Each field is a power-of-two box-downsampled image blurred with a variance-corrected coarse kernel, and the clamped-edge mass of the wide kernel is re-attached per pixel from exact 1-D border-line convolutions.",
+   "seams": [
+    "buildLocalSteps: Op to Step with kernel, impl-D/src/index.ts:812",
+    "makePlan: exact plan or wide plan with iterative local limit, impl-D/src/index.ts:586",
+    "assemble: splits the steps into segments and fields, impl-D/src/index.ts:499",
+    "RegionEval.run: evaluates steps on a rect from input or field, impl-D/src/index.ts:422",
+    "computeFields: block means, coarse blur, border lines, impl-D/src/index.ts:659",
+    "fillFromField: bilinear sampling plus clamped-tail corrections, impl-D/src/index.ts:291"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "BlurStep (sigma, radius, kernel), impl-D/src/index.ts:200-205",
+    "Frame": "absent (W, H, umPerPx passed loose)",
+    "Device caps": "M and sqrtM, impl-D/src/index.ts:836, impl-D/src/index.ts:589",
+    "Planner": "makePlan + assemble + chooseScale, impl-D/src/index.ts:586, impl-D/src/index.ts:499, impl-D/src/index.ts:479",
+    "Tile": "read rect inline, impl-D/src/index.ts:851-856",
+    "Global field": "Field / computeFields, impl-D/src/index.ts:208-238, impl-D/src/index.ts:659",
+    "Tile executor": "RegionEval, impl-D/src/index.ts:402"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: an exact plan with halo = total reach when it fits, impl-D/src/index.ts:594-611",
+     "physical against pixel units: converted once in buildLocalSteps, impl-D/src/index.ts:820",
+     "exact wide kernels against fields: a power-of-two field with variance bookkeeping (3s^2-1)/12 = box + bilinear (impl-D/src/index.ts:471-476), and the chapter's 'reads more than a quarter of a tile' rule used as a local limit, not a refusal (impl-D/src/index.ts:615-618)",
+     "clamped borders under a wide kernel: exact tail mass re-attached from the border lines, impl-D/src/index.ts:309-336, impl-D/src/index.ts:707-719"
+    ],
+    "in_tension": [
+     "small against large tiles: square cores of sqrtM - 2\u00b7reach, with no read optimisation, impl-D/src/index.ts:594, impl-D/src/index.ts:631",
+     "exactness against work: WORK_LIMIT 1.2e9 pushes exact-capable chains to fields, impl-D/src/index.ts:48, impl-D/src/index.ts:600"
+    ],
+    "unnoticed": [
+     "border-line buffers have length H or W and are not checked against the budget, impl-D/src/index.ts:755, impl-D/src/index.ts:716-719",
+     "the per-row correction arrays are not reported, impl-D/src/index.ts:296-323"
+    ]
+   },
+   "adapted_not_copied": "Follows the chapter closely (header cites it, impl-D/src/index.ts:4-11): power-of-two scale, the T/4 rule, the variance formula. The border-tail correction is a task-driven addition that the chapter does not describe.",
+   "wholeness": [
+    "Plan.steps is assigned but never read, impl-D/src/index.ts:252, impl-D/src/index.ts:602, impl-D/src/index.ts:645",
+    "Field.sigma is never read, impl-D/src/index.ts:210, impl-D/src/index.ts:522",
+    "Step union and Field.kind exist only for the unused Plan.steps, impl-D/src/index.ts:209, impl-D/src/index.ts:240",
+    "redundant null checks after doCorr, impl-D/src/index.ts:358",
+    "two zero-padded blur variants alongside the clamped ones, impl-D/src/index.ts:131-161"
+   ],
+   "habitability": "Low to medium. The planner reads clearly and RegionEval is a tidy executor. Field has about 20 fields (impl-D/src/index.ts:208-238), fillFromField is a 110-line numeric kernel (impl-D/src/index.ts:291-400), and corrTop/corrBottom actually hold the left/right column convolutions (impl-D/src/index.ts:716-717), which misleads the reader.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-D/src/index.ts:20-23",
+      "impl-D/src/index.ts:192-206",
+      "impl-D/src/index.ts:261-271",
+      "impl-D/src/index.ts:431-447",
+      "impl-D/src/index.ts:812-826",
+      "impl-D/src/index.ts:515"
+     ],
+     "local": false,
+     "notes": "Locally it is a new LocalStep kind plus branches in stepsReach, stepsTaps and RegionEval.run, which is fairly contained. A wide sharpen would need the field and the pre-field value combined, and the tail corrections are blur-specific."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-D/src/index.ts:251-259",
+      "impl-D/src/index.ts:282-291",
+      "impl-D/src/index.ts:422-449",
+      "impl-D/src/index.ts:829-866"
+     ],
+     "local": false,
+     "notes": "W/H come from img everywhere (RegionEval uses this.img.width). A per-segment frame and rect mapping would be needed."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-D/src/index.ts:208-238",
+     "smell": "other",
+     "note": "a large record mixing plan, data and correction caches"
+    },
+    {
+     "where": "impl-D/src/index.ts:291-400",
+     "smell": "long function",
+     "note": "fillFromField interleaves bilinear sampling, mass ratios and four-edge corrections"
+    },
+    {
+     "where": "impl-D/src/index.ts:716-719",
+     "smell": "other",
+     "note": "misleading names: corrTop is the convolution of the left column"
+    },
+    {
+     "where": "impl-D/src/index.ts:79-161",
+     "smell": "duplicated knowledge",
+     "note": "four nearly identical tap-accumulation loops (clamped/zero \u00d7 H/V)"
+    },
+    {
+     "where": "impl-D/src/index.ts:48, impl-D/src/index.ts:483",
+     "smell": "other",
+     "note": "magic WORK_LIMIT and coarse radius 64"
+    }
+   ],
+   "tests_as_laws": "Good. There is an independent naive reference (impl-D/test/reference.test.ts:8-54). A constant image must stay constant through every planner path and shape, which is a stated invariant (impl-D/test/wide.test.ts:140-157). Wide chains are checked across five image classes including stripes and steps (impl-D/test/wide.test.ts:47-85), and determinism and coverage over degenerate shapes too (impl-D/test/tiled.test.ts:146-164). There are no negative controls, and the test helper has an unreachable duplicate return (impl-D/test/reference.test.ts:60).",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 3,
+    "wholeness": 3,
+    "habitability": 2,
+    "piecemeal_growth": 3,
+    "smell_free": 2,
+    "tests_as_laws": 4
+   }
+  },
+  "E": {
+   "summary": "There are three strategies. renderRegion evaluates a tile exactly from the input grown by the summed radii. renderStaged runs the chain over the whole output buffer in place with ring buffers, which is exact. wideBlurState approximates an unaffordable blur by splitting the clamped convolution into a coarse block-mean interior term plus exact edge-strip and corner terms.",
+   "seams": [
+    "renderRegion: recursive exact or wide evaluation of chain[0, end) over a rect, impl-E/src/index.ts:232",
+    "wideBlurState: interior + strips + corners decomposition, impl-E/src/index.ts:675",
+    "getCoarse / getBlurredCoarse: block means at the finest scale that fits, impl-E/src/index.ts:334, impl-E/src/index.ts:480",
+    "getStrips: edge lines, exact or coarse, impl-E/src/index.ts:523",
+    "blurWholeInPlace: ring-buffer staging, impl-E/src/index.ts:725",
+    "chooseExactGrid / chooseWideGrid, impl-E/src/index.ts:856, impl-E/src/index.ts:878",
+    "strategy selection in renderTiled, impl-E/src/index.ts:957-978"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "parallel arrays radii/sigmas indexed by chain position, impl-E/src/index.ts:164-165, impl-E/src/index.ts:937-938",
+    "Frame": "Ctx (W, H, umPerPx), impl-E/src/index.ts:158-170",
+    "Device caps": "Ctx.maxPx, impl-E/src/index.ts:166",
+    "Planner": "strategy block in renderTiled + chooseExactGrid, impl-E/src/index.ts:957-978, impl-E/src/index.ts:856",
+    "Tile": "Rect + readRectFor, impl-E/src/index.ts:285",
+    "Global field": "Coarse (non-power-of-two block means), impl-E/src/index.ts:312-320",
+    "Tile executor": "renderRegion, impl-E/src/index.ts:232"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: the grid is chosen to minimise total reads under the haloed-tile budget, impl-E/src/index.ts:856-875",
+     "exact wide kernels against fields: exact staging is kept whenever (2R+1) fits, and approximation only when (2R+1)^2 exceeds the budget, impl-E/src/index.ts:793-812",
+     "clamped borders: exact mass decomposition into interior, strips and corners, impl-E/src/index.ts:292-310, impl-E/src/index.ts:697-713",
+     "device limits: strips fall back to coarse lines when a scan line exceeds the budget, impl-E/src/index.ts:530, impl-E/src/index.ts:551-588"
+    ],
+    "in_tension": [
+     "physical against pixel units: sigma conversion silently falls back to umPerPx = 1 for invalid input, impl-E/src/index.ts:121",
+     "variance bookkeeping: the coarse blur uses sigma/s directly with no box/upsample variance subtraction, relying on Catmull-Rom instead, impl-E/src/index.ts:483, impl-E/src/index.ts:609"
+    ],
+    "unnoticed": [
+     "honest tile reporting: on the staged path the tiles are synthetic; the haloed reads are reported but never performed, impl-E/src/index.ts:980-993",
+     "per-chain segmentation: renderRegion re-derives the wide split per call by scanning the tail halos, impl-E/src/index.ts:243-273"
+    ]
+   },
+   "adapted_not_copied": "Task-shaped and independent of the chapter's vocabulary (coarse, strips, staged). Its scale is the finest integer that fits, found by binary search (impl-E/src/index.ts:338-349), and its novel exact border decomposition is the chapter's 'field' turned into a clamped-convolution identity.",
+   "wholeness": [
+    "Ctx.umPerPx is stored but never read, impl-E/src/index.ts:162, impl-E/src/index.ts:944",
+    "sampleCoarse takes ctx and never uses it, impl-E/src/index.ts:603",
+    "`hit !== null` on a Map of non-null values, impl-E/src/index.ts:525",
+    "exactInPlacePossible and exactRequired are near-duplicates, impl-E/src/index.ts:793-812",
+    "Grid.nx/ny are recomputed alongside tw/th, impl-E/src/index.ts:826"
+   ],
+   "habitability": "Low. At 1019 lines it is the largest. The strategy predicate combines waste > 1.4, stagedCost <= 1e8 and an exact-required flag in one expression (impl-E/src/index.ts:969-970). renderRegion is recursive through getCoarse and getStrips with caches keyed by chain index, and getCoarse has three chunking variants (impl-E/src/index.ts:376-434). The comments are excellent, but the decision logic is hard to change.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-E/src/index.ts:26",
+      "impl-E/src/index.ts:117-131",
+      "impl-E/src/index.ts:205-217",
+      "impl-E/src/index.ts:815-822",
+      "impl-E/src/index.ts:913-922",
+      "impl-E/src/index.ts:937-938"
+     ],
+     "local": false,
+     "notes": "The tile path needs a branch in applyOpsRegion, but the in-place staged blur would have to keep the original v for every pixel (the ring holds only 2R+1 samples). The wide decomposition is blur-specific, and the parallel arrays need a new 'amount' array."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-E/src/index.ts:158-170",
+      "impl-E/src/index.ts:232-279",
+      "impl-E/src/index.ts:815-822",
+      "impl-E/src/index.ts:927-1019"
+     ],
+     "local": false,
+     "notes": "The staged path writes in place into a single W\u00d7H output and Ctx fixes W/H. A resolution change breaks both the staging and the halo arithmetic."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-E/src/index.ts:937-938",
+     "smell": "primitive obsession",
+     "note": "op properties kept in parallel arrays indexed by chain position instead of a compiled op"
+    },
+    {
+     "where": "impl-E/src/index.ts:45",
+     "smell": "primitive obsession",
+     "note": "kernel cache keyed by string concatenation `${sigma}|${R}`"
+    },
+    {
+     "where": "impl-E/src/index.ts:334-439",
+     "smell": "long function",
+     "note": "getCoarse with three chunking strategies"
+    },
+    {
+     "where": "impl-E/src/index.ts:960-978",
+     "smell": "other",
+     "note": "dense strategy predicate mixing exactness, waste and cost thresholds"
+    },
+    {
+     "where": "impl-E/src/index.ts:980-993",
+     "smell": "other",
+     "note": "the tile reports are decoupled from the computation (synthetic tiles)"
+    },
+    {
+     "where": "impl-E/src/index.ts:77-106, impl-E/src/index.ts:446-472",
+     "smell": "duplicated knowledge",
+     "note": "the clamped and truncated 1-D convolutions repeat the window logic"
+    }
+   ],
+   "tests_as_laws": "A few laws. Separable equals the direct 2-D definition (impl-E/test/exact.test.ts:128-160). The reported read rectangle must equal the halo formula (impl-E/test/api.test.ts:75-88). A clamped impulse conserves mass (impl-E/test/exact.test.ts:115-126). The rest are example sweeps over images and chains; coverage and budget are checked in memory.test, and there are no negative controls.",
+   "scores_1to5": {
+    "forces": 3,
+    "adapted": 4,
+    "wholeness": 2,
+    "habitability": 2,
+    "piecemeal_growth": 2,
+    "smell_free": 2,
+    "tests_as_laws": 3
+   }
+  },
+  "F": {
+   "summary": "renderTiled walks the compiled ops and accumulates a pending local segment while its reach fits floor((sqrt(budget)-1)/2). A blur that does not fit is either streamed exactly in full-width strips (if it is the last blur) or turned into a field: an anti-alias pre-blur, a box downsample with a ring of clamped edge cells, and a residual sigma, coarsened until its kernel can be haloed. The final segment is tiled from the current source on a grid chosen to minimise reads.",
+   "seams": [
+    "toPxOps: Op to PxOp with kernel, impl-F/src/index.ts:159",
+    "applySegment: evaluate ops over a core grown by reach from image or field, impl-F/src/index.ts:189",
+    "chooseGrid: read-minimising balanced grid, impl-F/src/index.ts:249",
+    "chooseFieldPlan: scale, pre-blur, pad tiers, impl-F/src/index.ts:287",
+    "buildField / blurField: reduced image and residual blur, impl-F/src/index.ts:487, impl-F/src/index.ts:454",
+    "renderStreamed: exact strip streaming, impl-F/src/index.ts:589",
+    "segment loop in renderTiled, impl-F/src/index.ts:676-698"
+   ],
+   "participants": {
+    "Spatial kernel declaration": "PxOp blur + Kernel (sigmaPx, R), impl-F/src/index.ts:35, impl-F/src/index.ts:154-157",
+    "Frame": "absent (img.width/height and umPerPx passed loose)",
+    "Device caps": "budget and maxReach, impl-F/src/index.ts:655, impl-F/src/index.ts:665",
+    "Planner": "segment loop + chooseFieldPlan + chooseGrid, impl-F/src/index.ts:676-698, impl-F/src/index.ts:287, impl-F/src/index.ts:249",
+    "Tile": "core plus read rect, impl-F/src/index.ts:716-734",
+    "Global field": "Field (scale, pad) / buildField, impl-F/src/index.ts:109, impl-F/src/index.ts:487",
+    "Tile executor": "applySegment via grab sampling by frame coordinates, impl-F/src/index.ts:189, impl-F/src/index.ts:114"
+   },
+   "forces": {
+    "resolved": [
+     "seamless against cheap: the pending reach is the exact halo, and chooseGrid minimises the read total, impl-F/src/index.ts:679-682, impl-F/src/index.ts:249-269",
+     "physical against pixel units: converted once in toPxOps, impl-F/src/index.ts:165",
+     "exact wide kernels against fields: exact strip streaming for the last blur before any field, then a field with variance bookkeeping (pre-blur + box + bilinear), impl-F/src/index.ts:684-690, impl-F/src/index.ts:320-323",
+     "device limits: the field's pad ring shrinks under a tight budget, and a degenerate budget falls back to point-sampled cells, impl-F/src/index.ts:327-333, impl-F/src/index.ts:506-520",
+     "small against large tiles: a balanced grid avoids sliver tiles, impl-F/src/index.ts:245-269"
+    ],
+    "in_tension": [
+     "exact against time: STREAM_BUDGET_OPS gates the exact stream, and COST_CAP/AA_COST_CAP shape the field plan, impl-F/src/index.ts:578, impl-F/src/index.ts:373, impl-F/src/index.ts:395",
+     "only the last blur can be streamed; an earlier wide blur always becomes a field, impl-F/src/index.ts:672-690"
+    ],
+    "unnoticed": [
+     "a pointwise op that follows a streamed blur is applied, but the postOps filter silently drops any later blur (none can exist by construction), impl-F/src/index.ts:624-626"
+    ]
+   },
+   "adapted_not_copied": "Adapted. It cites the chapter (impl-F/src/index.ts:4-13) but adds what this task needs and the chapter lacks. It chooses non-power-of-two scales (1..64, then powers, impl-F/src/index.ts:343-348) and has an exact strip-streaming path, an anti-alias pre-blur and a clamped-edge pad ring with a careful note on not pre-blurring the extension (impl-F/src/index.ts:542-546).",
+   "wholeness": [
+    "unused variable `up`, impl-F/src/index.ts:87",
+    "Kernel.sigmaPx duplicates PxOp.sigmaPx, impl-F/src/index.ts:35, impl-F/src/index.ts:157",
+    "Math.min(pendingReach, sumReach(pending)) where both are equal, impl-F/src/index.ts:707",
+    "fitsMemory takes s and p although p.scale === s, impl-F/src/index.ts:337"
+   ],
+   "habitability": "Good at the top: the segment loop in renderTiled is the clearest expression of the pattern in the set (impl-F/src/index.ts:667-698), and applySegment/grab are small. chooseFieldPlan is a 100-line function of nested closures, six preference tiers and cost caps (impl-F/src/index.ts:287-390), and a newcomer would struggle there.",
+   "change_requests": [
+    {
+     "change": 1,
+     "touches": [
+      "impl-F/src/index.ts:17",
+      "impl-F/src/index.ts:154-170",
+      "impl-F/src/index.ts:201-207",
+      "impl-F/src/index.ts:220-224",
+      "impl-F/src/index.ts:675-683"
+     ],
+     "local": false,
+     "notes": "Nearly local on the exact path: a new PxOp kind, a branch in applySegment, and the reach in sumReach and the loop. A wide sharpen does not fit, because the field replaces src and v is gone, and renderStreamed is blur-only."
+    },
+    {
+     "change": 2,
+     "touches": [
+      "impl-F/src/index.ts:114-150",
+      "impl-F/src/index.ts:189-218",
+      "impl-F/src/index.ts:650-738"
+     ],
+     "local": false,
+     "notes": "The Source abstraction (image or field sampled by frame coordinates) is a good seam for a different grid, but applySegment clips to img.width/height and the output is allocated at W\u00d7H."
+    }
+   ],
+   "smells": [
+    {
+     "where": "impl-F/src/index.ts:287-390",
+     "smell": "long function",
+     "note": "chooseFieldPlan with nested closures and ranked tiers"
+    },
+    {
+     "where": "impl-F/src/index.ts:469-475",
+     "smell": "duplicated knowledge",
+     "note": "the truncated kernel re-implements makeKernel's weights"
+    },
+    {
+     "where": "impl-F/src/index.ts:609-622",
+     "smell": "duplicated knowledge",
+     "note": "the inline vertical pass duplicates blurVertical with different clamping bounds"
+    },
+    {
+     "where": "impl-F/src/index.ts:373, impl-F/src/index.ts:395, impl-F/src/index.ts:578",
+     "smell": "other",
+     "note": "magic cost caps"
+    }
+   ],
+   "tests_as_laws": "Mostly examples, with a few honest-contract checks. There is a reference implementation, but it mirrors the implementation's half-kernel formulation (impl-F/test/render.test.ts:30-74). Read rectangles must contain the written rect (impl-F/test/render.test.ts:209-225), and the streamed path must emit many strips (impl-F/test/render.test.ts:435-448). The whole-frame route covers the 'wide short frame' trap (impl-F/test/render.test.ts:464-479), but there are no negative controls.",
+   "scores_1to5": {
+    "forces": 4,
+    "adapted": 4,
+    "wholeness": 4,
+    "habitability": 3,
+    "piecemeal_growth": 3,
+    "smell_free": 3,
+    "tests_as_laws": 3
+   }
+  }
+ },
+ "cross": {
+  "generativity": "Yes, largely. Every implementation compiles sigmaUm to pixels once, sums radii along the chain into the halo, evaluates a tile from its read rectangle, and has one fallback for kernels that do not fit. A, B, D and F converged on the same participants (local segment with summed reach, per-blur global field sampled bilinearly by frame coordinates, variance-corrected residual), each different in detail: A's cell grid spanning the domain, B's chunked power-of-two field, D's exact tail corrections, F's padded ring with a pre-blur. Independently, A, E and F each found an exact path that streams with small buffers instead of tiling (ring buffers in the output, or full-width strips). E replaced the field with an exact interior/strip/corner decomposition, and C collapsed the whole thing to one global switch.",
+  "clusters": [
+   [
+    "B",
+    "D",
+    "F"
+   ],
+   [
+    "A",
+    "E"
+   ],
+   [
+    "C"
+   ]
+  ],
+  "worse_is_better": "Partly. C is the smallest (660 lines) and the most habitable. Its single switch (exact tiles, or the whole chain on one padded reduced image) meets the task's stated tolerances in its tests, which suggests the chapter's per-kernel local/global strategy is more than this task's contract demands. But C pays where it counts: in a mixed chain the narrow blurs and interior gammas are also approximated, and the wide path does not tile. The per-kernel split of B/D/F is the better design for mixed chains, so the yardstick is not over-asking on that point. It over-asks on alignment, power-of-two tiles and refusal.",
+  "ranking": [
+   "B",
+   "F",
+   "D",
+   "A",
+   "C",
+   "E"
+  ],
+  "ideas_the_yardstick_lacks": [
+   "choose the tile grid by minimising total reads sum(readW\u00b7readH), with balanced counts to avoid slivers, instead of the largest power of two (impl-C/src/index.ts:259, impl-E/src/index.ts:856, impl-F/src/index.ts:249)",
+   "an exact streaming path that needs no halo: separable passes with (2R+1) ring buffers in place in the exempt output (impl-A/src/index.ts:716, impl-E/src/index.ts:725), or full-width strips for the vertical pass (impl-F/src/index.ts:589)",
+   "clamped borders dominate the field error for wide kernels: exact edge-line or tail-mass corrections (impl-A/src/index.ts:583-693, impl-D/src/index.ts:309-336, impl-E/src/index.ts:292-310) or a padded ring of clamped edge values (impl-B/src/index.ts:510, impl-C/src/index.ts:448-457, impl-F/src/index.ts:103-109)",
+   "split a wide Gaussian into a truncated local part plus a residual-variance field, using additivity of variances (impl-A/src/index.ts:877-886)",
+   "an anti-alias pre-blur before decimation, counted in the variance budget (impl-C/src/index.ts:463-466, impl-F/src/index.ts:318-321)",
+   "a cost model that pushes exact-capable but too-expensive plans to fields (impl-B/src/index.ts:378-398, impl-D/src/index.ts:559-584)",
+   "store a field larger than one buffer in budget-sized chunks (impl-B/src/index.ts:179-199)",
+   "a whole-frame route when the image fits the budget, even if no tile could carry the halo (impl-F/src/index.ts:703-711, impl-B/src/index.ts:320-328)"
+  ],
+  "yardstick_problems": [
+   "'refuse with a diagnostic' contradicts requirement 3 (must still complete); no implementation refuses, and D reuses the T/4 rule as a classification threshold instead (impl-D/src/index.ts:615-618)",
+   "rounding the halo up to a multiple of 8 and adding 1 px for bilinear safety is GPU-specific and would raise reads against the 3\u00d7 limit for small budgets; nobody does it",
+   "'largest power-of-two tile fitting half the budget' wastes half of maxTilePixels and increases reads; implementations use the full budget and read-minimising grids",
+   "a power-of-two downsample is not needed on CPU; E and C pick the finest integer scale that fits (impl-E/src/index.ts:338-349, impl-C/src/index.ts:461), and F tries 1..64 first (impl-F/src/index.ts:344)",
+   "fields replace the source of later stages, so the chapter's structure cannot express an op that needs both its neighbourhood and its own centre value (change request 1)",
+   "the chapter assumes one frame per evaluation; a grid-changing op (change request 2) needs demand-driven region mapping, which the chapter lists only as a variation"
+  ]
+ },
+ "guess_yardstick_used": {
+  "A": 0.85,
+  "B": 0.95,
+  "C": 0.1,
+  "D": 0.95,
+  "E": 0.15,
+  "F": 0.9
+ },
+ "confidence": 0.65
+}

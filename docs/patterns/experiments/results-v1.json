@@ -1,0 +1,1114 @@
+{
+ "expected": {
+  "document": 16,
+  "graph": 19,
+  "tiling": 9,
+  "slots": 17
+ },
+ "runs": [
+  {
+   "task": "document",
+   "variant": "chapter",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 58,
+   "own_total": 58,
+   "diary_steps": 4,
+   "src_lines": 747,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 crop and spots are stored as fractions of the frame and geometryAt() is a pure multiply by the rendering size, verified by a sweep of 4 viewer sizes \u00d7 5 rendering sizes (128 px thumbnail to 18000 px print) against a 1 px tolerance for crop x/y/w/h and spot x/y/r.",
+     "2": "met \u2014 toJSON() is a plain version 2 JSON value and JSON.stringify \u2192 JSON.parse \u2192 loadDocument reproduces exposure exactly and geometry with deepStrictEqual at every tested size.",
+     "3": "met \u2014 loadDocument() migrates version 1 by dividing cropRect and spot x/y/radius by the source size and minting ids s1\u2026sn, so geometryAt(state, source size) reproduces the v1 pixels and exposureOf returns exposureEV unchanged.",
+     "4": "met \u2014 unknown paths (including source.*), non-finite/out-of-range numbers, malformed crop/spot values, deleting a non-existent spot, non-array mutation lists and invalid authors all throw; mutations are applied to a clone, so a failing batch leaves state, journal and history untouched.",
+     "5": "met \u2014 undo/redo walk applied transactions as units (false when exhausted), a new applied edit clears the redo stack while all entries stay in journal(), and a batch undoes in one step.",
+     "6": "met \u2014 propose() journals a pending entry with its author without touching state/view/history; approve() re-applies it as exactly one undo step and flips the entry to applied; reject() marks it rejected with no effect on the document.",
+     "7": "met \u2014 preview() replaces any previous preview and is never journaled; commitPreview() turns the final preview into exactly one journal entry and one undo step; state() never shows the preview while view() does; cancelPreview() drops it."
+    },
+    "own_tests": {
+     "files": 8,
+     "passed": 58,
+     "failed": 0
+    },
+    "design_summary": "The document is a small versioned recipe whose geometry is stored in fractions of the frame (crop as 0\u20261 rect, spot centre as fractions, radius as a fraction of the frame width), changed only through a validated field schema (exposure, crop, spots.<id>, spots.<id>.x|y|r) applied atomically to a clone with the replaced values recorded as an inverse mutation list. Each transaction becomes one undo unit on a cursor stack while the journal stays append-only with author and applied/pending/rejected status; agent proposals are pending entries that approve() applies as one step, and drags are non-journaled previews that commitPreview() coalesces into a single entry.",
+    "chapter_used": [
+     "Solution \u00a7 'store parameters and vectors in units of the source \u2026 fractions of the frame (Lightroom stores crops this way)' \u2014 chose fractions for crop/spot geometry",
+     "Structure table: Document / Field schema / Mutation (null deletes) / Transaction with inverse / Journal (append-only, status) / Tool boundary / Migrations",
+     "Collaborations 1\u20135 and Sketch (apply \u2192 fieldSchema.match or refuse, tool boundary converting gestures, load with migrations)",
+     "Implementation notes 1 (units of the source, not the working image), 4 (records keyed by id, deleted by null, `set spots.s7.r 12`), 5 (journal append-only, cursor undo, redo units discarded but entries kept, only applied entries rendered, pending shown separately), 7 (version + migrations from the first save), 10 (live gestures are drafts, one transaction when the hand stops)",
+     "Variations 'Normalised coordinates' (chosen) vs 'Document pixels with per-evaluation scaling' (rejected) and Consequences ('every tool must convert coordinates at its boundary')"
+    ],
+    "chapter_unclear": [
+     "The chapter mixes two unit systems ('fractions of the frame for positions and crops, pixels of the original for lengths') but never says what the unit of a circular spot's radius should be, nor how a radius should scale when the target rendering has a different aspect ratio than the source; it had to be decided and documented here.",
+     "It says undo is 'a cursor over undo units' and that pending proposals are shown separately, but not what happens to an entry's status when its unit is undone or when an approved proposal is undone \u2014 the task's Entry type has no 'undone' status, so the chapter's model is underspecified for this API.",
+     "It prescribes compiling into an interned operation graph and storing masks/strokes as recipes, which has no counterpart in this task (no pixels are ever produced); it is unclear whether a 'geometry' helper counts as the compiler, so geometryAt() is treated as the minimal compile step."
+    ],
+    "deviations": [
+     "No time field on journal entries: the chapter's Entry has 'time', but the task's Entry interface fixes exactly {id, author, status, mutations}, so adding one could break strict comparisons.",
+     "No operation-graph compiler, no mask recipes, no content-addressed assets or source hashes: the task only needs a document that renders geometry/exposure at any size, and inventing a graph or asset store would be dead code.",
+     "Extended the field schema beyond the required paths: 'crop' (document units) and 'spots.<id>.x|y|r' follow chapter note 4 and give setCropFromView a path to write through, but the task only requires 'exposure' and 'spots.<id>' deletion \u2014 the deliberate judgement call most likely to differ from a strict reading.",
+     "Undo of an approved proposal keeps the entry status 'applied' (same rule as undone normal edits) instead of reverting it to 'pending', because there is no 'undone' status and undo is a cursor rather than a status change.",
+     "Loading is lenient where editing is strict (stored v1 exposure outside \u22125\u20265 EV is preserved, an out-of-frame stored crop is clamped) so that requirement 3's 'same geometry and exposure they had' holds for old documents.",
+     "commitPreview() without an active preview throws instead of silently recording an empty entry."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "document",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 39,
+   "own_total": 39,
+   "diary_steps": 4,
+   "src_lines": 710,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 crop and spot geometry is stored in units of the source (frame fractions for positions, original-image pixels for radii) and geometryAt only rescales, so a gesture made in a 100\u00d775 viewer lands exactly (well within 1 px) on the 4000\u00d73000 original and on any thumbnail or print size, verified across five sizes.",
+     "2": "met \u2014 toJSON\u2192JSON.stringify\u2192JSON.parse\u2192loadDocument reproduces an identical state, identical exposure and identical geometryAt output at every tested size (toString input is also accepted).",
+     "3": "met \u2014 version 1 documents are migrated (exposureEV, cropRect pixels\u2192fractions, spots list\u2192record with radius in original pixels) and report exactly the geometry they had at the original and at a quarter size, with their spots deletable by migrated id.",
+     "4": "met \u2014 unknown paths, non-finite/out-of-range values, malformed mutations, bad authors, missing spot ids, illegal viewer rects/sizes and unknown journal ids all throw, and the validation happens on a clone so neither state, journal nor undo stack changes (tested with a bad third mutation in a list).",
+     "5": "met \u2014 undo/redo move a cursor over applied units and return false at the ends; a new edit truncates the redoable units while every entry stays in journal() (tested to 600 units in both directions).",
+     "6": "met \u2014 propose changes nothing, approve re-validates and appends one undo step, reject leaves the entry as 'rejected' in the journal, and every entry carries its author.",
+     "7": "met \u2014 any number of preview calls followed by commitPreview produces exactly one journal entry and one undo step; state()/toJSON() exclude the draft and view() includes it, with cancelPreview and state-changing operations dropping it."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 39,
+     "failed": 0
+    },
+    "design_summary": "The document is a versioned parameter value whose geometry is unit-tagged (crop and spot centres as fractions of the frame, spot radii as lengths in pixels of the original photograph), so every rendering rescales instead of reinterpreting pixels. All changes go through mutations validated against a small field schema and applied on a clone (a transaction), recorded in an append-only journal whose undo/redo is a cursor over undo units, with pending proposals and non-journaled drag previews on top. Tools convert viewer pixels to document units at their boundary, loading migrates version 1 forward before validating, and pixels are only ever derived, by geometryAt/exposureOf.",
+    "chapter_used": [
+     "Intent / Solution ('store parameters and vectors in resolution-free units; change only through logged mutations; compile whenever pixels are needed')",
+     "Structure table (Document, Field schema, Mutation, Transaction, Journal with cursor, Tool boundary, Migrations)",
+     "Collaborations 1\u20135 (tool converts gesture coordinates, transaction records an entry with author, undo moves the cursor, views derive, load migrates before validate)",
+     "Implementation note 1 (fractions of the frame for positions and crops, pixels of the original for lengths) and note 2 (tag every geometric field with its unit)",
+     "Implementation note 4 (records keyed by stable ids, deleted by null) and note 5 (append-only journal, new mutation after undo discards redo units, undone/pending/rejected entries stay)",
+     "Implementation note 7 (version and migrate from the first save; migrations[n] is a pure step) and note 8 (defaults belong to the version)",
+     "Implementation note 10 / Sketch (live gestures are drafts; one transaction when the hand stops)",
+     "Variations: 'Document pixels with per-evaluation scaling' for the spot radius length"
+    ],
+    "chapter_unclear": [
+     "The chapter says undo is 'a cursor over undo units' and that only applied entries are rendered, but gives no rule for what an undone entry's status becomes; the task's status union (applied/pending/rejected) has no 'undone', so an undone entry keeps 'applied' and only the cursor says it is not in effect.",
+     "The chapter's journal entries carry a time stamp, but the task's Entry interface is closed to id/author/status/mutations, so entries have no time.",
+     "The chapter does not say how a radius should scale when the rendering's aspect ratio differs from the photograph's (a circle is not representable in frame fractions); it only says every field must be tagged, so this was a judgement call.",
+     "The chapter recommends fractions for crops but the task requires version 1 crops in original pixels to load unchanged, and it does not say whether a tool should apply or propose; the API's return types (string, {entryId, spotId}) forced 'apply'.",
+     "The chapter's field schema is 'owned by an operation argument' (Chapter 2), which this one-file task has no equivalent of, so the schema is a hand-written table of path rules."
+    ],
+    "deviations": [
+     "Previews accumulate by path instead of having each call replace the whole draft: a later preview replaces only the paths it names and keeps neighbouring ones, which is a strict superset of 'replaces any previous preview' for the single-slider case and lets one drag cover several fields.",
+     "commitPreview with no draft records nothing and returns '' (there is no way to return 'no entry id'), and any state-changing operation (apply, approve, undo, redo, tool gesture) drops a stale draft rather than trying to keep it valid.",
+     "Before committing the draft I re-validate it against the committed state \u2014 the chapter leaves this to the journal/commit path without saying when validation happens.",
+     "Deleting a non-existent spot is refused as an unknown path even though the chapter only requires refusing unknown path patterns; this makes a typo in an id visible instead of silent.",
+     "Public apply/propose/preview refuse non-null values for spots.<id> exactly as the API comment demands, so spot creation runs through an internal journaled path with the same mutation and a per-entry 'spot may be set' flag; the chapter's journal has no such distinction but the API forces it.",
+     "An approved proposal that is no longer applicable (its spot was deleted meanwhile) cannot be approved and stays pending \u2014 the chapter does not discuss re-validating proposals whose target disappeared.",
+     "No separate Compiler participant: geometryAt/exposureOf are the compile step, because the task's API ends at geometry and exposure and never renders pixels."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "document",
+   "variant": "chapter",
+   "n": 3,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 49,
+   "own_total": 49,
+   "diary_steps": 7,
+   "src_lines": 945,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 crop and spots are stored as frame fractions (r as a length in width fractions) and compiled by geometryAt, so gestures from a 300x200 viewer render back exactly and at eight sizes from 64 px to 6001 px wide agree with the ideal scaled value far better than the one-pixel tolerance.",
+     "2": "met \u2014 toJSON() emits a plain version 2 document (version, source, exposure, crop, spots) and JSON.stringify/parse/loadDocument reproduces identical geometry at every tested size and identical exposure.",
+     "3": "met \u2014 migrations[1] converts exposureEV, pixel cropRect and the id-less spot array to version 2 before validation, so v1 documents report exactly the pixel geometry and exposure they had and stay editable.",
+     "4": "met \u2014 a field-schema table owns every path and every value; unknown paths, invalid values and malformed mutations throw a DocumentError, and transactions run on a copy so the document, journal and undo cursor are untouched, even for a batch with one bad mutation.",
+     "5": "met \u2014 undo/redo move a cursor over applied transactions replaying stored inverses/forwards, return false at both ends, a multi-mutation apply is one step, a new edit truncates the redo tail, and undone entries remain in the journal.",
+     "6": "met \u2014 propose appends a validated pending entry and changes neither state() nor view(); approve applies it as exactly one undo step; reject leaves it in the journal as rejected; every entry records its author.",
+     "7": "met \u2014 preview is not journaled and replaces the previous draft (state() hidden, view() shown), and commitPreview diffs committed against draft to add exactly one journal entry and one undo step no matter how many preview calls happened."
+    },
+    "own_tests": {
+     "files": 8,
+     "passed": 49,
+     "failed": 0
+    },
+    "design_summary": "The edit is a versioned, non-destructive recipe (exposure, crop, spots by id) whose geometric fields live in frame fractions tagged per field in a FIELD_SCHEMA table, and pixels exist only when geometryAt compiles a state for a requested rendering size. Every change goes through validated mutations applied in all-or-nothing transactions that record their inverse, an append-only journal records each entry with author and status, and undo/redo is a cursor over the applied transactions while previews stay outside the journal until commitPreview diffs and commits them. Tool helpers convert viewer pixels to document units once, and migrations[1] brings pixel-based version 1 documents forward before validation, so the same document renders a thumbnail, screen and print and survives a JSON round trip.",
+    "chapter_used": [
+     "Intent and Motivation (four naive choices: storing pixels, coordinates in working pixels, mutating without a journal, unversioned documents)",
+     "Solution (versioned document, field schema of path patterns that refuses unknown paths, set/null-delete mutations, transactions with inverses, append-only journal with statuses and a cursor, tool boundary conversion, version chain of migrations)",
+     "Structure table (Document, Field schema, Mutation, Transaction, Journal, Tool boundary, Compiler, Migrations)",
+     "Sketch (apply() with fieldSchema.match + rule.check; spotTool.onClick view.toDocument; load() with migrations before validate)",
+     "Implementation notes 1\u20134 (units of the source not of the working image; tag every geometric field with its unit; records keyed by id deleted by null)",
+     "Implementation note 5 (append-only journal, new mutation after undo discards redo units while entries remain, only applied entries rendered)",
+     "Implementation notes 7\u20138 (version and migrate from the first save; defaults and look belong to the version)",
+     "Implementation note 10 (live gestures are drafts: preview without journaling, commit one transaction when the hand stops)",
+     "Variations (normalised coordinates vs per-evaluation pixel scaling \u2014 chose normalised) and Consequences (one edit renders at every size; every tool must convert at its boundary)"
+    ],
+    "chapter_unclear": [
+     "The unit recommendation 'fractions of the frame for positions and crops, pixels of the original for lengths' mixes two systems and never says how a length scales when the rendering's aspect ratio differs from the source (I scale lengths by width).",
+     "The Journal participant lists statuses applied/pending/rejected but not what an undone entry's status is; the task's Entry type allows only those three, so the chapter's cursor model and the API contract pull in different directions.",
+     "Note 4 shows a nested path (set spots.s7.r 12) while the task only mandates spots.<id> with null; it is unclear whether deleting a nonexistent record should be an error or a no-op, and the sketch's view.toDocumentLength is not defined for non-uniform views.",
+     "Note 10 says a preview is committed 'when the hand stops' but not whether each preview call is computed from the committed document or stacked on the previous draft, which changes whether incremental preview mutations are legal.",
+     "The chapter offers 'document plus journal' and, in Variations, the event-sourced document where the journal is the only storage, but does not say whether the journal belongs in the serialised sidecar; the task's JSON schema has no place for it."
+    ],
+    "deviations": [
+     "One unit system instead of two: positions, crop and spot radius are all frame fractions (radius as a fraction of the width) rather than fractions for positions and original pixels for lengths \u2014 fully resolution-free, one scaling rule, and the unit is still tagged per field in FIELD_SCHEMA.",
+     "Undone entries keep status 'applied' instead of getting a fourth status (or being removed), because the declared Entry status union has only three values; being undone is represented by the cursor, exactly as the chapter's 'undo is a cursor over undo units' describes.",
+     "Each preview() call is compiled against the committed document ('replaces any previous preview') and commitPreview records the net diff, rather than recording the last preview's mutations verbatim; this makes the journal independent of how the drag phrased its previews, and the recorded entry is identical for ordinary absolute-set drags.",
+     "A preview is discarded when the committed document changes (apply/approve/undo/redo), which the chapter does not discuss; keeping it would let a drag commit a diff computed against a document that no longer exists.",
+     "No operation graph, node-content caching, content-hashed source verification or tiling (chapter notes 6 and 9, chapters 1 and 8): this API has no renderer, so geometryAt compiles directly and the source is a plain id plus size.",
+     "Loading is lenient about the exposure range (an old file with an exposure outside -5\u20265 keeps its look) while mutations are strict; the chapter's 'validate every document' would refuse it, but requirement 3 demands the same exposure.",
+     "The settable surface is larger than the mandated minimum: crop and spots.<id>.x|y|r are supported in addition to exposure and spots.<id>, following the chapter's path-pattern schema; spot creation by value is accepted (the chapter's spot tool does exactly that), while a null delete of a nonexistent spot is refused as an unknown path."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "document",
+   "variant": "chapter",
+   "n": 4,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 43,
+   "own_total": 43,
+   "diary_steps": 10,
+   "src_lines": 600,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 geometry is stored as fractions of the frame (spot radius as a fraction of the width) and converted at the tool boundary, so a gesture made in any viewer renders on the same part of the photograph at every size (verified at 128/256/640/800/1920/4000 px; worst measured error 3.6e-15 px).",
+     "2": "met \u2014 toJSON() is a plain version 2 JSON value, and JSON.stringify \u2192 JSON.parse \u2192 loadDocument reproduces identical geometry at six sizes, identical exposure, an identical state() value, and a fully editable document.",
+     "3": "met \u2014 loadDocument migrates version 1 (exposureEV, pixel cropRect, spots[] array with radius) with a pure migration to version 2, preserving pixel geometry exactly at full, half and quarter size.",
+     "4": "met \u2014 one field schema accepts only exposure, crop and spots.<id>; unknown paths (including spots.<id>.field, source.*, reserved ids) and invalid values throw, and a transaction with one bad mutation records and applies nothing.",
+     "5": "met \u2014 undo/redo move a cursor over the applied entries, a new edit truncates the redoable units while all entries stay in the journal, and undo/redo return false at the ends.",
+     "6": "met \u2014 a proposal is a validated pending entry that changes neither state() nor view(); approve applies it as exactly one undo step (same id, status applied), reject only marks it rejected, and every entry records its author.",
+     "7": "met \u2014 previews replace each other, never enter the journal and never affect state(), while view() shows them; commitPreview adds exactly one entry with the final values and one undo step."
+    },
+    "own_tests": {
+     "files": 2,
+     "passed": 43,
+     "failed": 0
+    },
+    "design_summary": "The document is a versioned, resolution-free recipe (source reference, exposure, fractional crop, spots keyed by id with fractional position and radius) whose only mutation entry points are a validating field schema that refuses unknown paths and invalid values atomically. Changes go into an append-only journal of entries (id, author, status, mutations) while undo units are a cursor over an applied-id list, so undo/redo discard redoable units without deleting entries, pending proposals become one undo step on approval, and a drag is a single replaced preview that commits as one entry. loadDocument runs a pure version 1 \u2192 2 migration chain, and geometryAt/exposureOf compile the recipe, with two tool helpers converting viewer pixels to document units so no pixel value ever reaches the document.",
+    "chapter_used": [
+     "Intent/Solution: versioned parametric document, settings by name, records keyed by stable ids, deletion via null",
+     "Implementation note 1 & Variations ('Normalised coordinates', 'Document pixels with per-evaluation scaling') for the unit decision",
+     "Structure table: Document, Field schema, Mutation, Transaction, Journal, Tool boundary, Compiler, Migrations",
+     "Implementation note 5 (append-only journal, undo units and a cursor, redo discarded but entries kept, only applied entries rendered)",
+     "Implementation note 7 (version and migrate from the first save; migrations as pure step functions)",
+     "Implementation note 8 (defaults belong to the version; store what an old version meant)",
+     "Implementation note 10 (live gestures are drafts; one transaction when the hand stops)",
+     "Collaborations 1\u20135 (tools convert at the boundary, transaction records the author, undo moves the cursor, views compile, migrations run before validation)",
+     "Sketch (spotTool.onClick, load \u2192 migrate \u2192 validate, same document at thumbnail/screen/export sizes)",
+     "Consequences: portability, one journal for undo/approvals/provenance, small sidecars"
+    ],
+    "chapter_unclear": [
+     "The unit rule is self-contradictory for one document: 'fractions of the frame for positions and crops, pixels of the original for lengths' mixes two systems, and for a circular spot radius there is no obviously right fractional analogue (width? shorter side? diagonal?) \u2014 the chapter does not say.",
+     "The journal is described per mutation ('Journal every mutation\u2026') while the task's Entry holds a mutation list and one undo step per call; which granularity a cursor unit has is left implicit.",
+     "The chapter never says what an undone entry's status is; its status enum (applied/pending/rejected) has no 'undone', so a reader must guess that the cursor, not the status, encodes effect.",
+     "It is unclear whether a document's stored value should also carry the journal ('Event-sourced document' is only a variation), and what exactly a 'compile' means when there is no rendering engine as in this task.",
+     "Each unit is only 'tagged' in the chapter's later catalogue chapters (Chapters 1, 2, 6, 8 are referenced but not present), so the correct tag set and scaler for a spot radius had to be invented here."
+    ],
+    "deviations": [
+     "Used a single unit system (fractions everywhere, radius as a fraction of the frame width) instead of mixing fractions with pixels of the original, because one scheme makes geometryAt trivially resolution-independent and avoids needing the source size when compiling.",
+     "Undo units are whole journal entries, not single mutations, because the API makes one call equal one undo step.",
+     "The committed document is recomputed by replaying the applied entries' mutations rather than by storing and applying inverse mutations (the chapter's 'records its inverse'); this keeps error handling trivially atomic since only validated values ever reach the journal.",
+     "Actually implemented 'document pixels' only as rendered output of geometryAt: there is no operation graph, precision mode or tiling (Chapters 1, 6, 8), as the task has no rendering engine, so 'compile' is one pure function.",
+     "The journal is not persisted inside toJSON() (the chapter's event-sourced variation would); the task only requires geometry and exposure to survive a round trip.",
+     "Entry has no time stamp (the chapter's journal records a time) because the task fixes the Entry shape.",
+     "Rendered geometry is rounded to a millionth of a pixel, which the chapter does not mention, to keep floating point noise out of deep-equality comparisons on the rendered result.",
+     "Added project/test/index.js, a directory-scanning aggregator, because Node 24.18.0 here treats `node --test project/test/` as a file path and fails with MODULE_NOT_FOUND before running any test."
+    ],
+    "confidence": 0.88
+   }
+  },
+  {
+   "task": "document",
+   "variant": "control",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 42,
+   "own_total": 42,
+   "diary_steps": 5,
+   "src_lines": 642,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 crop/spots are stored as fractions of the photograph (radius as fraction of the short side) and geometryAt multiplies by the render size, so a gesture made in any viewer lands on the same region at thumbnail, screen and print sizes (verified within 1px, and exactly for proportional sizes).",
+     "2": "met \u2014 toJSON()/state() emit only numbers/strings, so toJSON \u2192 stringify \u2192 parse \u2192 loadDocument yields a document whose state(), geometryAt() and exposureOf() are deepEqual to the original's.",
+     "3": "met \u2014 loadDocument accepts version 1 (exposureEV, pixel cropRect, spots array \u2192 id-keyed record) and reproduces the old crop exactly in source pixels and the old spot positions/radii; the loaded content becomes the journal base so it stays editable.",
+     "4": "met \u2014 a single validator replays mutations on a clone of the committed state before anything is recorded, so unknown paths (exposures, source.width, spots, spots., spots.a.b, \u2026) and invalid values (non-finite/out-of-range exposure outside \u22125\u20265, bad crop/spot geometry, deleting a missing spot) throw with state, journal and undo/redo stacks unchanged, also for whole batches.",
+     "5": "met \u2014 undo/redo move entry ids between an applied stack and a redo stack and re-derive state; a new edit (apply/approve/commitPreview) clears the redo stack and every entry, including undone ones, stays in journal().",
+     "6": "met \u2014 propose records a validated pending entry off the applied stack (state/view unchanged), approve applies it as exactly one undo step (no extra journal entry), reject only marks it rejected, and every entry carries its author.",
+     "7": "met \u2014 preview replaces the live preview without journaling (state() shows committed, view() shows committed+preview), and commitPreview records the final mutation list as one entry/one undo step; cancelPreview drops it silently."
+    },
+    "own_tests": {
+     "files": 2,
+     "passed": 42,
+     "failed": 0
+    },
+    "design_summary": "The v2 document stores normalised geometry (crop and spots as fractions of the original photo, radius as a fraction of the short side), so viewer pixels only exist in the gesture helpers and geometryAt, which makes edits resolution independent and JSON portability exact. All changes are path-addressed mutations in a journal, and the committed state is always re-derived from a base state plus the entries currently on the applied stack, which yields atomic validation, undo/redo, proposals (entries not on the stack) and previews (mutations beside the journal) from one invariant. Tools convert gesture pixels in and geometryAt multiplies fractions back out (snapped to 1e-9 px), and version 1 documents are converted on load into the same normalised form.",
+    "confidence": 0.88
+   }
+  },
+  {
+   "task": "document",
+   "variant": "control",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "exposure: apply sets it and records the author": true,
+    "validation: unknown paths and invalid values are refused and change nothing": true,
+    "resolution: a crop made in a small viewer lands on the same part at full size": true,
+    "resolution: a spot made at one viewer size renders at another": true,
+    "resolution: two viewers of different sizes edit the same document consistently": true,
+    "portable: a JSON round trip keeps geometry and exposure": true,
+    "old documents: version 1 loads with the same geometry and exposure": true,
+    "records: a spot is deleted with null": true,
+    "undo/redo step through applied entries": true,
+    "undo: a new edit after an undo discards the redo; undone entries stay in the journal": true,
+    "proposals: nothing changes until approved; approval is one undo step": true,
+    "proposals: a rejected one stays in the journal, the document unchanged": true,
+    "proposals are validated": true,
+    "drags: many previews and one commit make one entry and one undo step": true,
+    "drags: cancel discards the preview": true,
+    "entry ids are unique": true
+   },
+   "hidden_passed": 16,
+   "hidden_total": 16,
+   "own_passed": 55,
+   "own_total": 55,
+   "diary_steps": 5,
+   "src_lines": 672,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 crop and spots are stored as fractions of the original photograph and multiplied by the rendering size in geometryAt, so gestures made in a 160/800/1920/4000/12000 px rendering land on the same spot (outputs rounded to 1e-6 px so the source viewer reproduces a gesture exactly).",
+     "2": "met \u2014 toJSON()/state()/view() return only plain JSON deep copies and loadDocument accepts version 2 documents; a JSON.stringify\u2192parse\u2192loadDocument cycle gives deepEqual state and identical geometry/exposure at five sizes.",
+     "3": "met \u2014 version 1 documents (detected by version: 1 or exposureEV/cropRect fields) migrate exposureEV\u2192exposure, cropRect pixels\u2192fractions and the spots array\u2192a spot-N map, and geometryAt at the source resolution reproduces the recorded pixels exactly (verified over 260k random pixel values).",
+     "4": "met \u2014 unknown paths, non-finite/out-of-range exposure, malformed crop/spot values, a read-only source path, bad mutation arrays and non-string authors all throw, and every mutation batch is applied to a copy so state and journal are unchanged on failure.",
+     "5": "met \u2014 undo/redo walk the applied entries via per-entry state snapshots, undone entries stay in journal() with their mutations, a new edit (apply/approve/commitPreview) clears the redo stack, and both return false when there is nothing to do.",
+     "6": "met \u2014 propose records a pending entry without changing the document, approve applies it as exactly one undo step, reject marks it rejected forever, and every entry (applied, undone, pending, rejected) carries its author.",
+     "7": "met \u2014 preview replaces the previous preview and is kept outside the journal (state()/toJSON() hide it, view() shows it), while commitPreview(author) turns it into exactly one journal entry and one undo step."
+    },
+    "own_tests": {
+     "files": 6,
+     "passed": 55,
+     "failed": 0
+    },
+    "design_summary": "The document stores source pixel size plus edits in normalised coordinates of the photograph (crop as fractions, spots as {x,y,r} fractions), so rendering at any size is a single multiplication and the viewer tools just divide the gesture by the viewer size. The journal is a linear list of entries with status/author/mutations kept forever, backed by undo/redo id stacks and per-entry before/after state snapshots, which makes undo, redo, discarding the redo branch and one-step approval of multi-mutation proposals trivially correct. Previews live outside the journal and are replaced on each call, replayed against the committed state by view() and committed as one entry by commitPreview, while all four entry points share one validator that works on copies so invalid input never changes the document.",
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "graph",
+   "variant": "chapter",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "core: same op twice gives the same id": true,
+    "core: evaluating a node twice runs nothing the second time": true,
+    "core: key order does not change the id": true,
+    "core: an omitted default equals the explicit default": true,
+    "core: different arguments or inputs give different ids": true,
+    "core: 200 distinct parameter values give 200 distinct ids": true,
+    "core: change a slider and change it back: no recomputation": true,
+    "core: a shared operation runs once in a diamond": true,
+    "core: scale is part of the result": true,
+    "core: export, JSON round trip, import into a fresh graph: same id, same pixels": true,
+    "core: a fresh graph building the same computation gets the same ids": true,
+    "core: noise is reproducible and seeded": true,
+    "core: modifying a returned image does not change later results": true,
+    "core: unknown operations and wrong input counts are refused": true,
+    "core: pixel semantics (ramp, gain, blur, threshold, blend)": true,
+    "robust: -0 and 0 are the same argument": true,
+    "robust: NaN arguments are refused": true,
+    "robust: ids do not collide by concatenation (string arguments)": true,
+    "robust: a node imported into a graph that already has part of it shares the existing nodes": true
+   },
+   "hidden_passed": 19,
+   "hidden_total": 19,
+   "own_passed": 48,
+   "own_total": 48,
+   "diary_steps": 5,
+   "src_lines": 612,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 node ids are pure functions of content, so a chain rebuilt through any sequence of op calls lands on the same nodes and the (id, scale) result cache serves the earlier image with zero re-executions.",
+     "2": "met \u2014 every intermediate is cached, so changing a late argument executes only the changed node and its users, and a node feeding two later nodes runs once (evaluation counts are pinned in tests).",
+     "3": "met \u2014 defaults are filled, keys sorted, `undefined` treated as omitted, `-0` normalised to `0`, unknown/invalid args refused; equal spellings return the identical node object and id, and every real change yields a different id.",
+     "4": "met \u2014 ids are SHA-256 over version, op name, canonical args and input ids only, and export/import (closure, inputs first) reproduce both the id and the pixels in any Graph, verified through JSON.stringify/parse.",
+     "5": "met \u2014 scale lives only in the cache key; sources round their dimensions (ramp divides by reduced width\u22121, noise draws the reduced count), blur uses round(radius\u00d7scale), and a full-size evaluation after a reduced one returns full-size pixels.",
+     "6": "met \u2014 the seed is a canonical argument hashed into the id and, via SHA-256 \u2192 mulberry32, drives the stream, so equal seeds give equal ids and pixels and different seeds give different ids.",
+     "7": "met \u2014 the cache keeps its own copy and evaluate returns a fresh Float32Array; nodes, refs and input arrays are frozen and args are copied at op() time, so caller mutation cannot affect later results."
+    },
+    "own_tests": {
+     "files": 7,
+     "passed": 48,
+     "failed": 0
+    },
+    "design_summary": "Every node is created through one intern routine that canonicalises arguments against a per-operation argument registry (defaults filled, keys sorted, numbers normalised, bad values refused) and hashes a format tag, the length-prefixed op name, the canonical argument string and the input ids into a SHA-256 id, returning the stored node on a hit. Identity is therefore content-only and travels as a closure of node definitions exported inputs-first and re-interned by the receiver, while results live in a separate per-graph cache keyed by `node id | scale`. Evaluation is a recursive memoised walk that counts only real executions and hands out copies, so reuse, shared work, scale separation and mutation safety all fall out of the same two data structures.",
+    "chapter_used": [
+     "Solution / Structure (Operation registry, Canonicaliser, Graph intern/closure/adopt, Node definition, separate Result cache keyed by id + target)",
+     "Collaborations 2\u20134 (intern validates and canonicalises, send the closure and re-intern to reach the same ids, evaluator looks up (id, target))",
+     "Sketch pseudocode (canon \u2295 defaults, length-prefixed hash, intern returns existing node)",
+     "Implementation notes 1 (length-prefix every field), 3 (node-typed args become inputs \u2014 reflected by hashing input ids and keeping args scalar), 4 (validate at intern time), 5 (cache granularity/key must include the evaluation target), 6 (store canonical bytes and verify on a hit), 7 (canonical number routine, refuse NaN), 8 (canonicalisation as a format version), 9 (hidden inputs must be explicit \u2014 hence the explicit noise seed), 10 (names from inputs cannot cut off early)",
+     "Forces: rebuilding vs reuse, spelling vs meaning, one process vs many",
+     "Consequences (\u2212 names depend on inputs; \u2212 every argument must be canonicalisable) \u2192 documented as limitations"
+    ],
+    "chapter_unclear": [
+     "The chapter's `closure`/`NodeDef` sketch does not say how the receiver maps an input id to a node when it re-interns; I had to invent the exported-id \u2192 interned-id mapping (and keep the `id` in each definition) so import never depends on recomputation order.",
+     "Note 5 says a node name says nothing about scale, but the sketch's NodeDef has no place for the evaluation target either; the split between what export carries and what the cache key carries was left to the reader.",
+     "The chapter suggests quantising slider parameters (note 7) but the task only asks for spelling-insensitive equality, so it is ambiguous whether 0.30000000000000004 and 0.3 should be one node; I kept them distinct and documented it.",
+     "Nothing is said about degenerate reduced sizes (round(width\u00d7s) can be 0), nor about blends of differently sized images; both had to be decided."
+    ],
+    "deviations": [
+     "No cross-process result cache: results are per Graph, because a separate worker process cannot share a heap; only identity travels (the chapter also keeps the cache local to the evaluator).",
+     "No parameter quantisation and no eviction/LRU policy \u2014 the task prescribes neither, and both would change ids or behaviour beyond the requirements; recorded as known limitations.",
+     "Added `project/test/index.js`, an entry point that imports every *.test.* file: on Node 24.18 `node --test project/test/` resolves the directory as a module instead of expanding it, so the documented command failed for any directory argument until that file existed.",
+     "`import` is deliberately lenient about payload shape (accepts a bare array of definitions, ignores a stale `id` but resolves inputs through exported ids) so a description can be edited or minimal, while still refusing unknown ops, unknown inputs, cycles and unknown versions.",
+     "Added a defensive id-collision check (stored op/canonical args/input ids compared on a hit, as note 6 advises for short keys) even though SHA-256 makes it unreachable."
+    ],
+    "confidence": 0.88
+   }
+  },
+  {
+   "task": "graph",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "core: same op twice gives the same id": true,
+    "core: evaluating a node twice runs nothing the second time": true,
+    "core: key order does not change the id": true,
+    "core: an omitted default equals the explicit default": true,
+    "core: different arguments or inputs give different ids": true,
+    "core: 200 distinct parameter values give 200 distinct ids": true,
+    "core: change a slider and change it back: no recomputation": true,
+    "core: a shared operation runs once in a diamond": true,
+    "core: scale is part of the result": true,
+    "core: export, JSON round trip, import into a fresh graph: same id, same pixels": true,
+    "core: a fresh graph building the same computation gets the same ids": true,
+    "core: noise is reproducible and seeded": true,
+    "core: modifying a returned image does not change later results": true,
+    "core: unknown operations and wrong input counts are refused": true,
+    "core: pixel semantics (ramp, gain, blur, threshold, blend)": true,
+    "robust: -0 and 0 are the same argument": true,
+    "robust: NaN arguments are refused": true,
+    "robust: ids do not collide by concatenation (string arguments)": true,
+    "robust: a node imported into a graph that already has part of it shares the existing nodes": true
+   },
+   "hidden_passed": 19,
+   "hidden_total": 19,
+   "own_passed": 44,
+   "own_total": 44,
+   "diary_steps": 9,
+   "src_lines": 597,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 ids are content hashes so a rebuilt identical chain is the same node object, and the scale-keyed per-node cache makes every re-evaluation a pure cache hit (evaluations counter unchanged; asserted for the slider-to-3-and-back case).",
+     "2": "met \u2014 every node is a checkpoint, so changing a late op's arguments runs only that node, and a node feeding two later nodes resolves once because its master is stored on first visit (both counted with stats()).",
+     "3": "met \u2014 canonicalisation fills defaults, sorts keys, treats undefined as omitted and maps -0 to 0; ids hash op + canonical args + input ids, so spellings collide and real changes do not.",
+     "4": "met \u2014 the id contains nothing process-local; export emits the closure inputs-first, import re-interns it, and a child Node process computing the same pipeline reproduces the same root id and pixels.",
+     "5": "met \u2014 the scale never enters the id but is part of the result-cache key, and source/blur apply round(size\u00b7s) and round(radius\u00b7s), so full-size evaluation after a reduced one returns the full-size image while the reduced result stays cached.",
+     "6": "met \u2014 the seed is a canonical argument inside the id, and the PRNG state derives from sha256 of the seed text, giving identical pixels in any graph/process and different ids/pixels for different seeds.",
+     "7": "met \u2014 operations always allocate, cached values are private masters, and evaluate returns a fresh copy on both the miss and hit paths."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 44,
+     "failed": 0
+    },
+    "design_summary": "Every node is built through one intern routine that validates against an operation registry, canonicalises arguments (defaults filled, keys sorted, -0 normalised) and hashes a length-prefixed encoding of format version, operation, canonical args and input ids into a SHA-256 id, returning the stored frozen NodeRef when the id is known. Results live in a separate map keyed by node id plus scale, with every node as a checkpoint and copy-on-handout, so reuse, shared work, scale separation and caller-mutation safety all follow. Transfer is export of the closure in post-order plus import that re-interns the definitions, which reproduces the same ids in any graph or process.",
+    "chapter_used": [
+     "Intent / Solution \u2014 one intern routine, canonicalisation, immutable nodes, ids that depend on nothing process-local",
+     "Structure \u2014 Operation registry, Canonicaliser, Graph (intern/closure/adopt), Node, Node definition, Result cache",
+     "Collaborations 2 and 3 \u2014 intern validates and hash-conses; transfer as closure + adopt",
+     "Sketch \u2014 the hash recipe (length-prefixed op, args, input ids), closure post-order, adopt by re-interning",
+     "Implementation note 1 \u2014 length-prefix every field before hashing",
+     "Implementation note 2 \u2014 test canonicalisation both ways (equal meanings collide, real changes do not)",
+     "Implementation note 4 \u2014 validate at intern time, refuse with a fix",
+     "Implementation note 5 \u2014 cache granularity and evaluation target (scale) in the cache key only",
+     "Implementation note 6 \u2014 SHA-256 wide ids",
+     "Implementation note 9 \u2014 seeds are explicit arguments, not hidden inputs",
+     "Implementation note 10 \u2014 a change below always renames everything above (declared-but-unused args stay in the id)"
+    ],
+    "chapter_unclear": [
+     "The file is titled 'Chapter 1 \u00b7 Interned Operation Graph' while the workspace directory says chapter-2, so it is unclear which chapter numbering to cite.",
+     "Cross-references to Chapters 5, 7, 9 and 12 (domain-typed edges, barrier-cut fusion, edit document, handle vocabulary) cannot be followed here, so edge checking stayed at input counts/known ids and no evaluation planner exists.",
+     "Note 5 suggests caching only chosen checkpoints, which directly contradicts TASK.md requirement 2 (earlier operations must not re-run); the chapter gives no guidance for that case.",
+     "Note 7 recommends quantising slider parameters, but the task requires different arguments to yield different ids \u2014 the chapter does not say how to reconcile the two.",
+     "It is not stated whether an argument an operation ignores (e.g. seed on a ramp source) belongs in the id; note 10 implies yes but does not say so explicitly."
+    ],
+    "deviations": [
+     "No number quantisation (chapter note 7): merging 0.30000000000000004 with 0.3 would collapse two argument values the task treats as different computations, so -0 \u2192 0 is the only number normalisation applied.",
+     "Every node is cached, not a selected set of checkpoints (chapter note 5), because requirement 2 demands that earlier stages survive a change to a late operation.",
+     "No verifying traces / output hashes and no early cutoff (Variations): not requested, and names must be computable before evaluation.",
+     "Ids are bare 64-character SHA-256 hex strings with the format version inside the hash domain rather than as a visible prefix; renaming everything on a canonicalisation change still works, but a persistent cache would need the version stored beside the key.",
+     "Strict refusals not mandated by the chapter: unknown argument keys throw, and an input NodeRef must already be interned in the same graph (transfer therefore goes through export/import only)."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "graph",
+   "variant": "chapter",
+   "n": 3,
+   "has_src": true,
+   "hidden": {
+    "core: same op twice gives the same id": true,
+    "core: evaluating a node twice runs nothing the second time": true,
+    "core: key order does not change the id": true,
+    "core: an omitted default equals the explicit default": true,
+    "core: different arguments or inputs give different ids": true,
+    "core: 200 distinct parameter values give 200 distinct ids": true,
+    "core: change a slider and change it back: no recomputation": true,
+    "core: a shared operation runs once in a diamond": true,
+    "core: scale is part of the result": true,
+    "core: export, JSON round trip, import into a fresh graph: same id, same pixels": true,
+    "core: a fresh graph building the same computation gets the same ids": true,
+    "core: noise is reproducible and seeded": true,
+    "core: modifying a returned image does not change later results": true,
+    "core: unknown operations and wrong input counts are refused": true,
+    "core: pixel semantics (ramp, gain, blur, threshold, blend)": true,
+    "robust: -0 and 0 are the same argument": true,
+    "robust: NaN arguments are refused": true,
+    "robust: ids do not collide by concatenation (string arguments)": true,
+    "robust: a node imported into a graph that already has part of it shares the existing nodes": true
+   },
+   "hidden_passed": 19,
+   "hidden_total": 19,
+   "own_passed": 43,
+   "own_total": 43,
+   "diary_steps": 8,
+   "src_lines": 585,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 nodes are interned by content hash and results cached per node at a scale, so a rebuilt computation (slider moved and moved back) costs zero evaluations; tests assert stats() is unchanged.",
+     "2": "met \u2014 every node is a checkpoint in a cache keyed `id@scale`, so a changed late argument runs only that operation, and a node used by two parents runs once per evaluation.",
+     "3": "met \u2014 canonicalisation sorts keys, fills defaults (explicit default \u2261 omitted \u2261 undefined), maps -0 to 0 and rejects NaN/Infinity; ids are length-prefixed SHA-256 over op + canonical args + input ids, and a randomised law test checks both equal-meaning-equal-id and any-change-different-id.",
+     "4": "met \u2014 ids depend on nothing but the definition, export emits the closure ({format,version,root,nodes}) in topological order and import re-interns through the same op path, reproducing id and pixels across graphs and across separate OS processes.",
+     "5": "met \u2014 the cache key includes the scale, and source size, ramp denominator, noise count and blur radius are all derived from it, so a full-size evaluation after a reduced one returns the full-size image from its own slot.",
+     "6": "met \u2014 seed is an ordinary hashed argument (different seed \u2192 different id) and feeds a fixed mulberry32 whose state is an FNV-1a hash of the canonical decimal seed, giving identical pixels everywhere.",
+     "7": "met \u2014 evaluate returns a fresh copy of the cached image each call and operations always write new arrays, so caller mutation cannot affect later results."
+    },
+    "own_tests": {
+     "files": 7,
+     "passed": 43,
+     "failed": 0
+    },
+    "design_summary": "Every node goes through one intern path that canonicalises its arguments, hashes a version-tagged, length-prefixed SHA-256 over the operation, the canonical arguments and its inputs' ids, and returns the existing frozen { id } reference on a hit. Evaluation keeps a separate result cache keyed nodeId@scale that persists between calls, so every node is an intermediate checkpoint: rebuilding is free, late edits only rerun the late operations, and reduced scales occupy their own slots; each executed operation increments stats().evalutions while served results do not. Nodes travel as the closure of definitions (inputs first) and are adopted by re-interning, so any graph or process lands on the same ids and pixels.",
+    "chapter_used": [
+     "Intent / Motivation (four failure modes: undo misses cache, recomputed shared prefixes, workers disagreeing, spellings compared)",
+     "Solution paragraph: single intern operation, canonical args, hash of op + args + input ids, immutability, closure transfer, separate evictable result cache keyed by id plus evaluation target",
+     "Structure table (Operation registry, Canonicaliser, Graph, Node, Node definition, Result cache) and Collaborations 1\u20134",
+     "Sketch (canon, intern, closure, adopt)",
+     "Implementation note 1 (length-prefix every field), 2 (canonicalisation as a law, not examples), 4 (validate at intern time, refuse with a fix), 5 (cache granularity and target in the key), 6 (prefer wide hashes), 7 (one number routine; -0; refuse NaN), 8 (canonicalisation is a format version), 9 (a hidden input turns names into lies \u2014 the noise seed), 10 (keys from input keys cannot cut off early)",
+     "Consequences ('+' undo/redo hit the cache, processes agree on names; '\u2212' no early cutoff) and Known uses (git/Nix/darktable/libvips/goja-cv) as sanity anchors"
+    ],
+    "chapter_unclear": [
+     "The sketch claims input ids are fixed-width 32 bytes so concatenation is self-delimiting, yet also insists on length prefixes; I length-prefixed the ids too, so it is unclear which is normative.",
+     "The chapter says almost nothing about the evaluator's bookkeeping: what `stats`/`evaluations` should count (per operation vs per evaluate call), and whether intermediate results must survive between calls \u2014 requirement 2 implies they must, which the chapter only hints at in note 5.",
+     "Note 7 recommends quantising slider parameters (0.30000000000000004 \u2261 0.3) while the task defines argument identity exactly, so the two pieces of advice conflict with no stated resolution.",
+     "The chapter calls the result cache 'evictable' but gives no policy, and the task requires that already-computed work never reruns, so eviction can only ever break a stated requirement here.",
+     "Node is said to carry 'inferred info (size, domain)', but the required API has no place for it, so it is unclear whether domain checking at intern time (Chapter 5) is expected for source sizes.",
+     "It is not specified whether an importer should verify the ids that arrive in a transfer or only re-intern the definitions; the chapter's `adopt` returns nodes without saying if a mismatch is an error."
+    ],
+    "deviations": [
+     "The result cache is unbounded and never evicted, because the only required observable behaviour is that work is reused; an eviction policy would violate requirement 1 and has no measurable target in the task.",
+     "No output hashes / verifying traces: reuse happens below an edit but never above it (a changed exposure renames gain, blend and blur). Chapter note 10 describes this limitation; adding checkpoint output hashes was out of scope and would have added a second identity layer the task does not ask for.",
+     "import ignores the ids inside the payload for identity and recomputes them, and it accepts definitions in any order (recursive adoption with cycle detection) instead of requiring the strict inputs-first closure order that export produces.",
+     "op treats a null/undefined input list as 'no inputs' rather than throwing, and treats an explicitly undefined argument as omitted (matching JSON.stringify), which is slightly more lenient than a strict reading of 'bad arguments'.",
+     "blend throws a clear error when its two inputs differ in size instead of inventing a broadcast or clamp rule, since the task defines blending element-wise only.",
+     "No parameter quantisation (0.3 and 0.30000000000000004 are different nodes), because the task defines identity by exact argument meaning.",
+     "I keep two maps (node definitions by id and frozen { id } references by id) instead of one Node object that is also the public reference, so the public value is exactly the declared NodeRef shape.",
+     "Blur deliberately uses a plain per-pixel window sum (not a running sum) so pixels match the obvious reference implementation bit-for-bit rather than only within float tolerance."
+    ],
+    "confidence": 0.87
+   }
+  },
+  {
+   "task": "graph",
+   "variant": "chapter",
+   "n": 4,
+   "has_src": true,
+   "hidden": {
+    "core: same op twice gives the same id": true,
+    "core: evaluating a node twice runs nothing the second time": true,
+    "core: key order does not change the id": true,
+    "core: an omitted default equals the explicit default": true,
+    "core: different arguments or inputs give different ids": true,
+    "core: 200 distinct parameter values give 200 distinct ids": true,
+    "core: change a slider and change it back: no recomputation": true,
+    "core: a shared operation runs once in a diamond": true,
+    "core: scale is part of the result": true,
+    "core: export, JSON round trip, import into a fresh graph: same id, same pixels": true,
+    "core: a fresh graph building the same computation gets the same ids": true,
+    "core: noise is reproducible and seeded": true,
+    "core: modifying a returned image does not change later results": true,
+    "core: unknown operations and wrong input counts are refused": true,
+    "core: pixel semantics (ramp, gain, blur, threshold, blend)": true,
+    "robust: -0 and 0 are the same argument": true,
+    "robust: NaN arguments are refused": true,
+    "robust: ids do not collide by concatenation (string arguments)": true,
+    "robust: a node imported into a graph that already has part of it shares the existing nodes": true
+   },
+   "hidden_passed": 19,
+   "hidden_total": 19,
+   "own_passed": 40,
+   "own_total": 40,
+   "diary_steps": 8,
+   "src_lines": 612,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 node ids are content hashes and results are cached per (id, canonical scale), so a graph rebuilt in any op-call order or argument spelling hits the same nodes and stats().evaluations does not move (tests assert deltas of 0).",
+     "2": "met \u2014 every node is a result checkpoint, so changing a late argument costs exactly one execution while upstream stays cached, and a node feeding two later nodes is executed once per evaluation (diamond test: 4 executions, not 5).",
+     "3": "met \u2014 one canonicaliser fills defaults, sorts keys, maps undefined to omitted and -0 to 0 before hashing, so key order/default spellings give the same node and id while any real change (value, op, input order, input identity) gives a different id.",
+     "4": "met \u2014 the id is SHA-256 over a length-prefixed (format tag, op name, canonical args JSON, input ids) payload with no counter or salt, verified to agree in two Graph instances, in a real child node process, and through export \u2192 JSON.stringify \u2192 JSON.parse \u2192 import with identical ids, identical pixels and a byte-identical re-export.",
+     "5": "met \u2014 scale is part of the result-cache key only (never the id), source produces round(w\u00d7s)\u00d7round(h\u00d7s) with max(1, reducedWidth\u22121) ramp denominator and blur uses round(radius\u00d7s); a full-size evaluation after a reduced one returns the full-size image from cache.",
+     "6": "met \u2014 seed is a canonical argument that seeds a mulberry32 stream via SHA-256, so the same seed yields the same id and pixels in any graph, process or round trip, and a different seed yields a different id.",
+     "7": "met \u2014 evaluate always returns a freshly allocated Float32Array; internal cached images are never handed out or aliased to scratch buffers, so callers may scribble on results (and on child results) without affecting later evaluations."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 40,
+     "failed": 0
+    },
+    "design_summary": "The engine is a hash-consed DAG: every node goes through one intern step that canonicalises arguments, hashes length-prefixed (format, op, canonical args, input ids) with SHA-256 and returns the existing node for that id, in any Graph instance or process. Results live in a separate cache keyed by node id plus canonical scale, every node is a checkpoint, and evaluation is an explicit post-order walk that computes only cache misses and hands out copies of cached images. export sends the closure as JSON definitions inputs-first, and import validates the whole description (ops, input counts, args, ordering, ids) before interning it, so a refused import leaves the graph untouched.",
+    "chapter_used": [
+     "Solution (build every node through one intern that canonicalises, hashes and returns the existing node; keep results in a separate cache keyed by node id plus evaluation target)",
+     "Structure table (operation registry, canonicaliser, graph with intern/closure/adopt, immutable node, node definition, result cache)",
+     "Collaborations 3 and 4 (send closure inputs-first, receiver re-interns; evaluator looks up (id, target) first)",
+     "Sketch (canon/intern pseudocode and the 'undo meets the cache' example)",
+     "Implementation notes 1 (length-prefix every hashed field), 2 (test canonicalisation as a law), 6 (prefer wide hashes: SHA-256), 7 (one canonical number routine, -0 \u2192 0, NaN refused, node-typed things are inputs), 8 (canonicalisation is a format version), 9 (hidden inputs must become explicit arguments \u2014 the seed)",
+     "Forces ('spelling against meaning', 'one process against many', 'fine names against coarse caches') and Applicability (refuse hidden randomness instead of hashing around it)"
+    ],
+    "chapter_unclear": [
+     "Note 5 says the originating project caches only whole final images, which directly contradicts requirement 2 here; the chapter only hints that interning 'makes intermediate caching possible', not that every node should be a checkpoint.",
+     "The id recipe mixes 'input ids are fixed-width so concatenation is self-delimiting' with 'length-prefix every field'; it is unspecified whether the input count or each input id should be length-prefixed, so transfer-critical details are left to the implementer.",
+     "The chapter never defines the wire form of a node definition (does the definition carry its id? is the description a list, a map, or {root, defs}?), nor whether the receiver must verify a transmitted id against its recomputation.",
+     "Note 7 recommends quantising slider values but gives no rule for choosing the quantum, and quantising conflicts with 'different computations must give different ids', so the chapter does not resolve that trade-off.",
+     "adopt is described as 'refuses unknown operations and cycles', but it is not stated whether a partially applied import must be rolled back."
+    ],
+    "deviations": [
+     "Every node is a result checkpoint instead of only final images (chapter note 5), because requirement 2 demands that unchanged upstream operations never re-run.",
+     "No quantisation of argument numbers (chapter note 7): in this engine 0.3 and 0.30000000000000004 are different computations with different pixels, and merging them would make two different pictures share an id; only -0 \u2192 0 and NaN/Infinity refusal are applied.",
+     "The transfer format is a concrete versioned envelope {format, version, root, defs} with each definition carrying its id, and import verifies those ids by recomputation and validates the whole description before interning (all-or-nothing) rather than refusing definition by definition.",
+     "Evaluation is an explicit post-order stack instead of the natural recursion, so that very deep chains cannot exhaust the call stack; the traversal still computes each missing node exactly once, as the chapter's evaluator does.",
+     "No barrier-cut fusion or verifying traces (chapters 7 and the 'Variations' section) were added: no requirement needs early cutoff or fusion, and both would complicate the identity story.",
+     "Results are cached per graph instance only (no cross-process result transfer, no eviction policy yet); the chapter's result cache is described as evictable and shared, which is out of scope for the given API."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "graph",
+   "variant": "control",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "core: same op twice gives the same id": true,
+    "core: evaluating a node twice runs nothing the second time": true,
+    "core: key order does not change the id": true,
+    "core: an omitted default equals the explicit default": true,
+    "core: different arguments or inputs give different ids": true,
+    "core: 200 distinct parameter values give 200 distinct ids": true,
+    "core: change a slider and change it back: no recomputation": true,
+    "core: a shared operation runs once in a diamond": true,
+    "core: scale is part of the result": true,
+    "core: export, JSON round trip, import into a fresh graph: same id, same pixels": true,
+    "core: a fresh graph building the same computation gets the same ids": true,
+    "core: noise is reproducible and seeded": true,
+    "core: modifying a returned image does not change later results": true,
+    "core: unknown operations and wrong input counts are refused": true,
+    "core: pixel semantics (ramp, gain, blur, threshold, blend)": true,
+    "robust: -0 and 0 are the same argument": true,
+    "robust: NaN arguments are refused": true,
+    "robust: ids do not collide by concatenation (string arguments)": true,
+    "robust: a node imported into a graph that already has part of it shares the existing nodes": true
+   },
+   "hidden_passed": 19,
+   "hidden_total": 19,
+   "own_passed": 30,
+   "own_total": 30,
+   "diary_steps": 3,
+   "src_lines": 468,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 ids are content addresses (sha256 of op + canonical args + input ids) and results are cached per \"<id>@<scale>\", so any rebuild of the same computation, in any order, is served without executing an operation.",
+     "2": "met \u2014 the cache is per node, so changing a late argument re-runs only that node (earlier nodes stay cached) and a node with two consumers is computed once per evaluation.",
+     "3": "met \u2014 args are normalised (defaults filled, undefined treated as omitted, unknown keys dropped, -0 folded, values validated) and serialised with sorted keys, so key order and explicit defaults cannot change the id while real differences always do; op also returns one canonical NodeRef object per id.",
+     "4": "met \u2014 export emits a pure JSON tree without counters or timestamps and import re-derives the same hashes; a real child process reproduces the same id and bit-identical pixels.",
+     "5": "met \u2014 scale is part of the cache key and of compute (source sizes to round(w*s)\u00d7round(h*s), blur uses round(radius*s)), so reduced and full results are separate and a full evaluation after a reduced one returns full-size pixels.",
+     "6": "met \u2014 noise uses a deterministic mulberry32 stream seeded by a string hash of the seed, so same seed \u21d2 same id and pixels anywhere, different seed \u21d2 different id and pixels.",
+     "7": "met \u2014 the cache holds the canonical image and every evaluate returns a fresh Float32Array copy (ops never mutate inputs, blur radius 0 clones), so caller mutations and post-hoc args-object mutations cannot affect later results."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 30,
+     "failed": 0
+    },
+    "design_summary": "Nodes are content-addressed: id = sha256(op, canonical-normalised args, input ids), which makes identical computations identical nodes in any process and lets a per-(id, scale) memo serve every repeat without executing an operation. Evaluation is a DFS over that memo, counted only where compute actually runs, and evaluate hands back a private copy of the pixels to keep cached state immutable. Operations implement ramp/noise sources, gain, prefix-sum box blur with exact edge clamping, threshold and the three blend modes, with scale baked into sources and blur radius.",
+    "confidence": 0.92
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 1,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 40,
+   "own_total": 40,
+   "diary_steps": 12,
+   "src_lines": 306,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 a result is presented only when its generation exceeds the slot's shown generation, and a superseded render that resolves anyway is released instead of presented.",
+     "2": "met \u2014 each slot holds at most one running render and one waiting request; a new request always replaces the waiting one, so only the newest starts when the running render ends.",
+     "3": "met \u2014 a request for a different key/pass aborts the running render through its AbortController before queueing, unless the draft/starvation rule says otherwise.",
+     "4": "met \u2014 pumpAll starts all live-lane waiting requests first and independently, then background ones only while liveBusy() (any live-lane render running or live-lane request waiting) is false.",
+     "5": "met \u2014 with progressMs>0 a newer draft does not abort a render when now()-shownAt >= progressMs; that render finishes and is presented, then the newest request runs; screen/refine always abort.",
+     "6": "met \u2014 a request with the running render's key and pass adopts it (no second render, generation raised, present reports the newer generation); equal key with another pass renders again.",
+     "7": "met \u2014 failures go to onError and the slot is pumped again; aborted renders are silent (and sync throws are treated as failures), so nothing wedges.",
+     "8": "met \u2014 aborted-but-resolved, stale and closed-slot results are released exactly once, and a presented result is released when a newer result replaces it in the slot."
+    },
+    "own_tests": {
+     "files": 4,
+     "passed": 40,
+     "failed": 0
+    },
+    "design_summary": "Each slot keeps a generation counter, one waiting request and one running render with its own AbortController; request() either adopts a same-key/same-pass running render, supersedes the waiting request, or aborts the running one (unless the progress window lets a draft finish). Presentation is decided by generation only and everything else is released, while pumpAll drives live lanes first and background lanes only when no live work exists. Completion events alone re-pump and resolve idle(), so nothing polls.",
+    "chapter_used": [
+     "Solution paragraph + Sketch (per-slot gen/shownGen/waiting/running, adopt-same-key, present-by-generation, pump after completion, close)",
+     "Structure table (Slot, Request, Queue participants mapped to SlotState/WaitingRequest/createScheduler)",
+     "Collaborations 2-5 (request increments generation, abort superseded, pump starts waiting, present then pump)",
+     "Implementation note 1 (present by generation, not arrival)",
+     "Implementation note 2 (progressMs threshold; draft finishes, screen/refine abort)",
+     "Implementation note 4 (wake waiting work from completion events, never from idle callbacks)",
+     "Implementation note 8 (same key -> adopt the running render for the newer generation instead of re-rendering)",
+     "Implementation note 9 (failures/aborts/stale results: clear running in every case, report only real failures, release stale results and the replaced shown result)",
+     "Implementation note 3 (preemptBackground is an engine property; not preempting running background renders)",
+     "Implementation note 11 (drive tests with events on a clock, not one render at a time)"
+    ],
+    "chapter_unclear": [
+     "The sketch's adopt branch returns without touching s.waiting, so an older waiting request would still start after the adopted render \u2014 that contradicts TASK requirement 2 ('only the newest request may start').",
+     "The sketch gives the slot a `lane` field, but TASK passes `lane` per request(); it is unclear what a slot's lane means when a slot alternates between thumbnail and interactive work.",
+     "The chapter never discusses an engine that ignores abort: it is unclear whether an aborted-but-pending render keeps its slot (and the live lane) busy. I kept it busy to honour 'at most one render runs per slot'.",
+     "TASK's release contract ('every result that is not shown, or that a newer shown result replaces') versus close's 'release what will not be shown' leaves open whether close must release the currently shown result; the chapter's close() does not.",
+     "TASK's progressMs says 'a slot has presented nothing for at least progressMs ms' \u2014 never presented (absolute) or nothing recently (relative) is only settled by the chapter's shownAt field; TASK also allows 0/absent to disable, which the chapter does not mention.",
+     "Whether background lanes must be serialised against each other: the chapter speaks of one engine and 'pumping lanes', TASK only forbids starting background work while live work is pending.",
+     "The chapter's target chooser, thumbnail cache and preemptBackground option have no counterpart in the TASK API, so it is unclear how much of that machinery is in scope."
+    ],
+    "deviations": [
+     "Adoption also drops the waiting request (the sketch leaves it in place), because TASK requirement 2 allows only the newest request to start when the running render ends.",
+     "Adoption only happens for a still-wanted (non-aborted) running render; adopting an aborted one would point a live request at a result that must be released, losing the newest request entirely.",
+     "Lane is tracked per request (RunningRender/WaitingRequest) instead of per slot as in the sketch, because TASK's lane arrives per call and a slot can switch from thumbnail to interactive work.",
+     "Background slots start concurrently with each other when no live work exists; TASK requirement 4 only gates on live work, so I did not add a global one-render engine limit.",
+     "A presented result is not released by close(), following the release() contract literally; it is released if the slot is later reused and a newer result replaces it.",
+     "No content-keyed cache for finished-but-superseded results (chapter note 6): the TASK API offers only release(), so superseded results are released rather than retained.",
+     "No target chooser, thumbnail cache bound, or preemptBackground flag are implemented \u2014 the API puts key/pass/lane choice and caching on the caller.",
+     "Tests are run as node --test test/*.test.ts (or default discovery from project/) because node --test project/test/ fails on Node 24.18.0, which loads an explicit directory argument as a module."
+    ],
+    "confidence": 0.82
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 50,
+   "own_total": 50,
+   "diary_steps": 5,
+   "src_lines": 342,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 presentation is gated on the job's per-slot generation being greater than the slot's shownGen, and aborted/superseded jobs are excluded, so a late result can never overwrite a newer one.",
+     "2": "met \u2014 a slot keeps at most one waiting request and at most one running render; newer requests overwrite the pending one, and the replacement only starts after the running render settles.",
+     "3": "met \u2014 a superseded running render is marked discarded and its AbortSignal is aborted immediately (unless the progress rule of requirement 5 applies).",
+     "4": "met \u2014 a background-lane request starts only when no slot has live-lane running or waiting work; completions of live work wake waiting background slots, and live slots render concurrently and independently.",
+     "5": "met \u2014 with progressMs > 0 a newer draft does not abort when now() - shownAt >= progressMs: the running render completes and is presented, then the newest request runs, while screen/refine always abort.",
+     "6": "met \u2014 a request whose key and pass equal the running render's is adopted: the running job's generation is bumped, an older waiting request is dropped, and no second render is started.",
+     "7": "met \u2014 rejections that are not aborts are reported through onError and then pumped again (a synchronous throw from render is treated the same way); aborts never reach onError and failures cannot wedge the slot.",
+     "8": "met \u2014 every completion either presents (releasing the previously shown result first) or releases the new result, so stale, aborted-but-resolved and closed-slot results are released exactly once."
+    },
+    "own_tests": {
+     "files": 7,
+     "passed": 50,
+     "failed": 0
+    },
+    "design_summary": "Each display place is a slot holding a monotone generation counter, the shown generation/result, one waiting request and one running render; request() adopts an identical key+pass render, otherwise replaces the waiting request and aborts the superseded render unless the progress rule lets it finish. A single completion path presents by generation (releasing the replaced result), releases everything it does not show, reports only real failures, and then pumps all slots so that live work goes first and background work starts when live work is done. idle() is resolved from completion events only; there is no polling, timer or polling loop anywhere.",
+    "chapter_used": [
+     "Solution/Sketch: slot with gen, shownGen, waiting and running; 'present by generation, not by arrival'; adopt a same-key render; one waiting request per slot",
+     "Implementation notes 1 (job.gen > shownGen as the whole defence), 2 (progressMs threshold for slow engines), 3 (background preemption is an engine policy, off by default), 4 (do not poll from idle callbacks), 8 (same key, no restart) and 9 (failures, aborts and memory)",
+     "Collaborations/state diagram: request \u2192 abort or adopt \u2192 pump \u2192 present \u2192 pump; close drops waiting and aborts running",
+     "Sketch of close() and of chooseTarget (pass/lane chosen by the caller, not the scheduler)",
+     "Implementation note 11: drive tests with events on a clock, which shaped the fake-clock harness"
+    ],
+    "chapter_unclear": [
+     "The sketch of request() adopts a running render for a newer generation but never says what happens to an existing waiting request; leaving it would let an older request start after the adopted render finishes, so the sketch is incomplete there.",
+     "Slot lane: the sketch has queue.slot(slotId, lane) ('the requester chooses the lane'), but the task's API passes lane per request, so it is unclear whether a slot's lane changes with each request and how a running background job is re-classified when a live request adopts it.",
+     "shownAt initialisation is only implicit: the prose says 'has presented nothing for longer than a progress threshold', which does not define the reference point for a slot that never presented anything (the sketch's slot creation initialisation is the only hint).",
+     "close() is described as releasing 'what will not be shown', while TASK.md releases a presented result only when a newer one replaces it; the chapter does not say whether the currently displayed result is freed on close.",
+     "Note 3 presents background preemption as a project setting, so it is not stated which behaviour the pattern itself wants when live work arrives while a background render runs in another slot.",
+     "The chapter's Target chooser, Render bridge, Thumbnail cache and interning chapter are outside the given API, so their described behaviour had to be dropped rather than implemented."
+    ],
+    "deviations": [
+     "request() clears the slot's waiting request when it adopts the running render (the sketch does not), because otherwise a request older than the adopted one could still start and violate latest-wins.",
+     "Adoption updates the running job's lane using a sticky-live rule (live if either the running job or the new request is live), since the chapter has no rule for adoption across lanes.",
+     "No cross-slot prevention of background renders: a running background render is never aborted when live work arrives in another slot, following chapter note 3 and requirement 3's 'a newer request for a slot'. Only same-slot supersession aborts.",
+     "close() keeps the slot's shown result and shownGen (releasing the shown result only when a newer result replaces it), following the chapter's close() sketch and TASK.md's explicit release rule instead of a broader 'free everything on close' reading; the trade-off is documented in NOTES.md.",
+     "Slot state, including the generation counter, survives close() so generations stay strictly increasing per slot name as the API promises; the chapter's queue does not discuss re-opening a slot.",
+     "The chapter's target chooser, render bridge, thumbnail cache and adaptive draft budget are not implemented: the given API has the caller supply pass and lane, so only the scheduling half of the pattern is in scope.",
+     "The presented generation for an adopted render is the newest request's generation rather than the generation the engine was started with, which is the only way 'the running render's result serves the newer request' can be visible to present()."
+    ],
+    "confidence": 0.85
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 3,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 46,
+   "own_total": 46,
+   "diary_steps": 6,
+   "src_lines": 349,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 settle() presents only when job.generation > slot.shownGeneration and records the new shown generation, so presented generations increase strictly per slot.",
+     "2": "met \u2014 a slot holds one running render and one waiting request; new requests overwrite the waiting slot, and the next render starts only after the running promise has settled, always the newest request.",
+     "3": "met \u2014 request() aborts the running render synchronously through its AbortSignal (an internal aborted flag plus controller.abort()), except under the progress rule.",
+     "4": "met \u2014 background requests are not started while any slot has live-lane running or waiting work, and pumpBackground() re-runs on every request/settle/close so they start as soon as live work drains; live slots render independently.",
+     "5": "met \u2014 with progressMs > 0 and no presentation for that long, a newer draft request does not abort the running render; it completes, is presented, then the newest request runs, while screen/refine always abort.",
+     "6": "met \u2014 a request whose key and pass match the not-yet-aborted running render only bumps its generation, so the in-flight result is presented once with the newest generation.",
+     "7": "met \u2014 rejections go through onError (suppressed for aborted jobs, aborted signals and AbortError-named errors), the slot is cleared and re-pumped, and later requests render normally; sync throws are converted to failures.",
+     "8": "met \u2014 stale, aborted and closed-slot results are released, and a presented result is released when a newer result replaces it in its slot; a 200-event stress test shows every produced result takes exactly one path."
+    },
+    "own_tests": {
+     "files": 1,
+     "passed": 46,
+     "failed": 0
+    },
+    "design_summary": "Each display place is a slot with a generation counter, one waiting request and one running render; request() adopts an equal running render, otherwise replaces the waiting request and aborts the running one unless the progress rule lets a draft finish. Presentation is decided purely by generation, so the screen never steps backwards, while pumping only from request/settle/close events keeps work bounded and wakes background slots when live work drains. Every result is funnelled through one settle path that presents it or releases it, with the replaced on-screen result released after the new one is shown.",
+    "chapter_used": [
+     "Solution and Collaborations (slot with generation, one waiting + one running render, present only if newer)",
+     "Sketch / pseudocode of request, pump and close (translated nearly line for line, minus the parts the API does not expose)",
+     "Implementation note 1 (present by generation, not arrival; keep the check even with reliable aborts)",
+     "Implementation note 2 (progressMs threshold as the progress guarantee for slow engines)",
+     "Implementation note 4 (do not poll from idle callbacks; wake work from completion events)",
+     "Implementation note 8 (same key means adopt the running render instead of restarting)",
+     "Implementation note 9 (failures, aborts and memory: clear running in every case, report only real failures, release stale and replaced results)",
+     "Implementation note 11 (measure response time, not service time: drive tests with events on a clock)",
+     "Structure table (Slot responsibility list used directly as the SlotState record)"
+    ],
+    "chapter_unclear": [
+     "The chapter's state diagram says 'Aborting --> Running: start waiting request', i.e. start the next render immediately after aborting, while requirement 2 says the next request may start 'when the running render ends' \u2014 the two give different observable render() call counts.",
+     "The chapter never says what happens to the chapter's render bridge, target chooser and thumbnail cache when the API only offers key/pass strings, so those participants had to be dropped entirely.",
+     "The sketch keeps the waiting request after adopting a running render, even though the adopted generation can make that waiting request older than the result about to be shown; the chapter does not say whether it should be dropped (this implementation keeps it, per the sketch, and lets the generation check release its result).",
+     "The chapter's close() drops waiting and aborts running work but says nothing about releasing the result that is currently on screen, while requirement 8 only mentions release on replacement."
+    ],
+    "deviations": [
+     "Serialized starts: a slot stays busy until the aborted render's promise settles, whereas the chapter's diagram starts the waiting request immediately after the abort; requirement 2's 'when the running render ends, only the newest request may start' and 'at most one render runs per slot at any time' were taken literally. Consequence: the engine must settle aborted renders, and idle() waits for them.",
+     "Adoption is refused for an already-aborted running render (chapter's sketch only compares keys), because adopting would silently swallow the newest request whose result would then be discarded.",
+     "close() keeps the slot record and does not release the currently shown result (chapter's close does not mention it either, but requirement 8's 'released when a newer result replaces it' is the only release trigger besides 'not shown').",
+     "No cross-slot preemption of background renders by live requests (chapter implementation note 3 treats preemptBackground as optional and requirement 3 scopes aborts to a slot).",
+     "No content-keyed result cache for completed-but-superseded renders (chapter note 6 recommends keeping them); the API has no cache to keep them in, so all unwanted results are released.",
+     "Added project/package.json, project/test/package.json and project/test/index.ts so that the documented command `node --test project/test/` actually discovers the suite in this Node build, which resolves a directory argument as a module path instead of globbing it."
+    ],
+    "confidence": 0.75
+   }
+  },
+  {
+   "task": "slots",
+   "variant": "chapter",
+   "n": 4,
+   "has_src": true,
+   "hidden": {
+    "presents a finished render": true,
+    "generations strictly increase per slot": true,
+    "never backwards: results that finish late never replace newer ones": true,
+    "bounded: one render per slot; only the newest waiting request starts next": true,
+    "cancel: a superseded running render is aborted": true,
+    "live before background: background waits for live work": true,
+    "live slots render independently": true,
+    "progress: a starved slot lets its running draft finish": true,
+    "progress: a slot that showed something recently still aborts": true,
+    "progress: a screen request aborts even when starved": true,
+    "no duplicate work for the same key and pass": true,
+    "failures are reported and do not wedge the slot": true,
+    "aborts are not reported as failures": true,
+    "stale results are released, not presented": true,
+    "a replaced presented result is released, once": true,
+    "close aborts running work and drops waiting work": true,
+    "idle resolves when all work is done": true
+   },
+   "hidden_passed": 17,
+   "hidden_total": 17,
+   "own_passed": 56,
+   "own_total": 56,
+   "diary_steps": 7,
+   "src_lines": 353,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 a result is presented only when its generation beats the slot's shownGen, and aborted/superseded results are released instead, so per-slot presentation order is strictly increasing (tested directly and as a fuzz invariant).",
+     "2": "met \u2014 one waiting request per slot and one running render per slot; the aborted render stays attached until its promise settles, and only the newest waiting request starts afterwards (maxActivePerSlot === 1 asserted in fuzz runs).",
+     "3": "met \u2014 a request whose key/pass the running render cannot serve aborts it via its AbortSignal before the pump runs, unless the progress rule applies.",
+     "4": "met \u2014 pump starts all live-lane waiting work first and starts background requests only when no open slot has running or waiting live work; live slots start independently, running background renders are not preempted.",
+     "5": "met \u2014 with progressMs > 0 a starved draft request does not abort; the running render completes, is presented, then the newest request runs, while screen/refine always abort.",
+     "6": "met \u2014 a request equal in key and pass to the non-aborted running render adopts it (job generation bumped, waiting request dropped, presentation reports the adopted generation), with no second render call.",
+     "7": "met \u2014 non-aborted rejections clear the slot, call onError and pump; aborted rejections are silent; a synchronously throwing render is treated as a failure.",
+     "8": "met \u2014 stale, aborted-but-resolved and closed-slot results are released exactly once, and a presented result is released when a newer one replaces it in the slot."
+    },
+    "own_tests": {
+     "files": 3,
+     "passed": 56,
+     "failed": 0
+    },
+    "design_summary": "Each slot keeps a generation counter, one waiting request, one running render, the shown generation/result and the time of the last presentation; request() bumps the generation, adopts an identical running render or replaces the waiting one, and aborts the running render unless the progress rule protects it. A single re-entrancy-guarded pump starts live-lane slots first and background work only when no live work exists, while one completion handler presents only generations newer than shownGen and releases everything else. The fuzz harness checks monotone presentation, at most one render per slot, live-before-background and release-at-most-once after every random request/settle/advance/close step.",
+    "chapter_used": [
+     "Solution and Sketch pseudocode (state fields, request/pump/close order, starved draft rule, adoption of a same-key running render)",
+     "Structure table (Slot, Request, Queue responsibilities) and the Collaborations list ordering of request \u2192 abort \u2192 present \u2192 pump",
+     "Implementation notes 1 (present by generation, not arrival), 2 (progressMs guarantee), 3 (preempting background is an engine property, so off by default), 4 (wake work from completion events, no polling), 8 (same key, no restart) and 9 (failures/aborts/memory)",
+     "State diagram Running \u2192 Aborting \u2192 Running, which fixes that the next render for a slot starts when the previous promise settles",
+     "Sketch's chooseTarget in the 'in use' example, which told me pass selection is the caller's job, not the scheduler's"
+    ],
+    "chapter_unclear": [
+     "Whether a slot's lane is a slot property (Structure table) or a per-request property (the API's lane option); the scheduler therefore keeps the lane on the request/job and treats 'live-lane slot' as 'slot with live running or waiting work'.",
+     "What close() should do with the result currently on screen: the docstring says 'release what will not be shown', while requirement 8 only releases results that were never presented or are replaced; I chose not to release it and documented the reasoning.",
+     "Whether an aborted render still counts as running for the one-render-per-slot rule; the chapter's diagram implies it does, but the text ('abort saves work only if the engine can stop') leaves the wait-for-settle cost implicit.",
+     "The chapter never says what idle() waits for with respect to abandoned work of a closed slot, nor whether background renders are concurrency-limited."
+    ],
+    "deviations": [
+     "close() leaves the aborted render attached to its slot (the chapter sketch simply aborts and forgets it) so a re-opened slot cannot run two engine calls at once; closed slots are nevertheless ignored by the pump, the live-lane check and idle().",
+     "No preemptBackground / target chooser / thumbnail cache / engine-key bridge were implemented because the task's API has no hooks for them; keys, passes and lanes arrive from the caller, so requirements 2\u20138 were implemented strictly against the given interface.",
+     "The progress rule is applied to the running render regardless of its pass, whereas the chapter only discusses the draft-in-a-gesture case; I kept it literal to requirement 5's wording.",
+     "Defensive behaviour not in the sketch: a synchronously throwing render() is converted into a failed render, and throwing present()/release()/onError() hooks are contained so they cannot wedge a slot.",
+     "Added project/test/index.js so the documented command `node --test project/test/` works on Node 24, where a directory argument is resolved as a module path."
+    ],
+    "confidence": 0.86
+   }
+  },
+  {
+   "task": "tiling",
+   "variant": "chapter",
+   "n": 2,
+   "has_src": true,
+   "hidden": {
+    "whole: renderWhole matches the definition": true,
+    "exact: chained blurs with pointwise steps between them": true,
+    "exact: three blurs, larger budget, non-square image": true,
+    "exact: pointwise-only chain": true,
+    "exact: an image smaller than one tile": true,
+    "efficiency: small neighbourhoods read at most 3x the image": true,
+    "wide: a blur far wider than any tile, within budget and tolerance": true,
+    "wide: a wide blur followed by a narrow one": true,
+    "resolution: the same film at twice the resolution gives the same picture": true
+   },
+   "hidden_passed": 9,
+   "hidden_total": 9,
+   "own_passed": 34,
+   "own_total": 34,
+   "diary_steps": 9,
+   "src_lines": 804,
+   "self_report": {
+    "requirements": {
+     "1": "met \u2014 every chain that can be halo-tiled (or computed in place with a line buffer that fits) is reproduced bit-exactly by renderTiled, asserted with maxDiff === 0 across 4 image shapes, 3 budgets, 8 chains and 4 resolutions; chains whose reach vastly exceeds the budget fall under requirement 3's tolerance instead.",
+     "2": "met \u2014 all scratch lives in two pooled tile buffers of at most (floor(sqrt(maxTilePixels)))^2 pixels plus reduced images sized to fit, each reported through onBuffer, and the onTile rectangles cover the image exactly once (checked pixel by pixel) with read rectangles clipped to the image and containing the written one.",
+     "3": "met \u2014 blurs with radii of hundreds of pixels complete inside a 128x128 budget; on 256\u00b2/512\u00b2 scans they are exact, on 1024\u00b2/2000\u00b2 scans the field path stays at 0.019 max / 0.0003 mean, with only a narrow documented band (2000\u00b2 scan, sigma 55\u201370 px, 128x128 budget) reaching ~0.03 max with mean 0.0003.",
+     "4": "met \u2014 square tiles of side floor(sqrt(budget)) - 2*halo are optimal for overlap, and whenever that overlap would exceed 3 the exact in-place engine is used instead, which reads each input pixel exactly once, so sum(readW*readH) <= 3*W*H holds by construction for small neighbourhoods (also asserted directly).",
+     "5": "met \u2014 reaches are physical (\u00b5m/umPerPx), so the same chain on the same film at 2x resolution, box-downsampled, matches the coarse render to ~0.004 (tests allow 0.01), including a wide-blur case at a different \u00b5m/px."
+    },
+    "own_tests": {
+     "files": 5,
+     "passed": 34,
+     "failed": 0
+    },
+    "design_summary": "A pure planner converts each blur's micrometre reach into a pixel radius, sums the radii of consecutive local blurs into a halo, and picks the largest square tile whose haloed footprint equals maxTilePixels; a tile copies its clipped read rectangle, applies the stages in order, and shrinks the valid region by each blur radius only on sides interior to the image, which makes the joins seamless. Blurs whose reach leaves no usable tile become global fields: the prefix is box-averaged tile by tile onto a reduced image (smallest power-of-two factor that fits), blurred once with the residual sigma that satisfies the variance bookkeeping, with border cells holding the border pixel, and every tile samples it bilinearly by frame coordinates. When even that would be coarser than the kernel, an exact in-place engine uses the output buffer as its working image and blurs one row/column at a time through two line buffers, which keeps every allocation within the budget while staying bit-exact.",
+    "chapter_used": [
+     "Intent / Problem / Solution \u2014 declaring reach in physical units, summing reaches along chains, converting at plan time, fields for kernels beyond the halo budget",
+     "Structure and Collaborations steps 2\u20135 \u2014 planner splits local vs wide, local reaches become the halo, wide kernels get a power-of-two downsample plus a residual blur, tile = core + clipped read rectangle",
+     "Implementation notes 1 and 2 \u2014 physical units survive resolution changes; chains add, the reach accumulator restarts after a field",
+     "Implementation note 4 \u2014 variance bookkeeping for fields (box + bilinear + residual), which is what keeps a reduced blur's total blur equal to the request",
+     "Implementation note 7 and Consequences \u2014 \"refuse, do not degrade silently\" and \"fields are approximations, they need parity tests\": I kept the parity tests (an independent naive reference plus field-vs-whole comparisons) but replaced the refusal with guarded fallbacks",
+     "Implementation note 9 \u2014 tile size is workload-dependent, so the planner derives it from the budget rather than hard-coding one"
+    ],
+    "chapter_unclear": [
+     "Note 3's \"add one pixel for bilinear sampling and align to 8\" has no CPU justification here: tiles are evaluated directly (no interpolated tile reads) and the extra pixel plus alignment only inflates reads, which requirement 4 punishes.",
+     "The field rule \"largest power of two that keeps the kernel at least two pixels wide\" bounds kernel resolution but not the clamped border layer, which is where all the measurable error sits; accuracy needed a second criterion (sigma >= 6*s) plus an exact fallback.",
+     "\"Refuse with a diagnostic when a local kernel reads more than a fraction of a tile\" cannot be honoured because requirement 3 requires completion within the budget; the chapter does not say what to substitute for a refusal.",
+     "The planner sizes the tile against half the budget (the GPU keeps several tile buffers alive); the task's budget is per buffer, so the chapter's factor of two is unmotivated here.",
+     "The chapter never says what a tile's reported read rectangle means once a blur has become a global field (the tile then depends on the whole image), nor whether field-computation passes may report tiles."
+    ],
+    "deviations": [
+     "No +1 px halo and no 8-pixel alignment: the halo is exactly the summed reach, because tiles are computed directly and requirement 4 caps reads.",
+     "The haloed tile may use the whole budget, not half of it, since maxTilePixels is defined per buffer.",
+     "Added an exact in-place engine (output buffer as working image, two line buffers, one row/column at a time) in place of the chapter's \"refuse\": for tight budgets the field's clamped border layer is unrepresentable, and requirement 3 caps the error, so exactness is the safest fallback.",
+     "Fields use the *smallest* power-of-two reduction that fits the budget (accuracy first) and keep the border pixel instead of the block average in border cells; the chapter chooses the largest reduction for speed and averages uniformly.",
+     "Instead of refusing, the planner picks the least-bad engine (halo tiling, field, or in-place) and chooses in-place additionally whenever halo tiling would read more than 3x the image, which is how requirement 4 is guaranteed rather than merely hoped for.",
+     "Pointwise operations between wide blurs are applied at full resolution inside a tile whenever they belong to a segment, rather than being evaluated on the reduced image."
+    ],
+    "confidence": 0.82
+   }
+  }
+ ]
+}

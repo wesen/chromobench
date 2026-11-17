@@ -1,0 +1,91 @@
+{
+  "answers": {
+    "q1": "It stored crop, spots and masks in pixels of the engine's working image (4,000 px on the GPU engine, 640 px on the CPU engine), so an edit made on one engine pointed at the wrong place on the other and full-resolution export had to rescale every pixel-unit field. The two fixes offered are document pixels of the original image (goja-cv's \"original-image pixels; scaled per evaluation\") and fractions of the frame (as Lightroom stores crops).",
+    "q2": "Masks are stored as recipes: the node definitions that build them (a gradient, an ellipse, a painted stroke list, combinations), held in a map by id and shared by id between exposures. Painted strokes are stored as simplified point lists (simplified to within half a pixel), so a painted mask is still a vector.",
+    "q3": "An agent's mutations may be appended as pending entries that a person approves or rejects, while a user's edit is appended as applied; both are journal entries carrying author, time and status, and rejected agent proposals stay in the log.",
+    "q4": "During a drag the engine previews without journaling, because otherwise a single drag would fill the journal with hundreds of entries; when the hand stops it commits one transaction (and a keyboard burst coalesces into one undo unit).",
+    "q5": "The chapter states no total count: it only says the recipe is at version 2 and that migrations[1] renamed fields (the crop moving into a frame section, a knee method rename), so the latest migration named is migrations[1], implying one migration but with no total stated."
+  },
+  "review": {
+    "solution_stands_alone": false,
+    "unclear": [
+      "\"Validate every settable path against a field schema\" — the Solution never says what a field schema is or where the rules come from; the reader only learns later (Structure, Chapter 2) that a path pattern is owned by an operation argument or a custom check. One clause would fix it.",
+      "\"Derive pixels by compiling the document into a graph\" — the graph is Chapter 1's interned operation graph and is never described here, and \"precision\" is used in Collaborations and the sketch without ever being defined.",
+      "The two unit options (original-image pixels vs fractions of the frame) are presented as alternatives with no rule for choosing, and no statement of whether one document may mix them — which it must, since the sketch's spot radius comes from toDocumentLength(20 px) while the position is a fraction.",
+      "\"transactions that record their inverse\" does not say what the inverse of a set on an absent path is (delete? null?), nor how several mutations collapse into one undo unit.",
+      "\"append-only log whose undo is a cursor\" does not say what happens to forward entries after an undo when a new mutation arrives, nor whether undo skips pending and rejected entries, nor whether the compiler renders pending mutations.",
+      "Records \"keyed by stable ids\" — how ids are allocated, whether tools mint them, and whether migrations must preserve them is not said.",
+      "\"masks as stored definitions of the operations that build them\" is grammatically tangled; the intended meaning (a mask is a stored recipe of the nodes that build it) has to be reconstructed.",
+      "The sketch's apply() returns inverse but never shows a journal entry being appended, so the journal half of the pattern is described in prose only."
+    ],
+    "errors": [
+      "\"Editor lab (a browser photo editor) stores brush masks as pixel rasters, and they do not follow their layer when it moves\" is an uncited negative claim about a third-party product and reads doubtful; masks are usually attached in layer space and do translate with the layer. Soften or cite it.",
+      "\"darktable stores each image's edit history as a stack of module parameters in an XMP sidecar\" needs a caveat: by default the history stack lives in darktable's library database, with XMP sidecars written only optionally and covering a subset of history state.",
+      "The goja-cv unit is given as a quotation (\"original-image pixels; scaled per evaluation\") with no chapter or document pointer, so a reader cannot check it; either cite the source or drop the quotation marks.",
+      "\"OpenTimelineIO and edit decision lists describe video edits as references and time ranges, not frames\" is loose — both are expressed in timecode/rational time that indexes frames — and it slightly overstates how resolution-free those formats are.",
+      "Minor inconsistency: \"Strokes are point lists simplified to within half a pixel\" leaves the tolerance in an unnamed pixel space, which undercuts the chapter's own no-working-pixels rule."
+    ],
+    "missing": [
+      "One concrete mutation sequence: a set, its inverse, the resulting journal entry, and the pending → applied/rejected transition. Approvals are a headline benefit and appear only as prose.",
+      "Any note on concurrent editing: two colourists (or a person and an agent) touching the same document, diff/merge of journals, and id stability across merges.",
+      "How unparameterisable pixels are actually stored when you \"store pixels if you must\": a content-addressed blob record, its hash in the document, and how the compiler splices it in.",
+      "Caching and invalidation: the document is the source but recompiling is expensive — nothing says the cache key is the document version plus resolution plus precision, or how a subtree cache survives a small edit.",
+      "How the compiler consumes pending entries, i.e. whether the view shows the agent's proposal before approval.",
+      "Asset and data-pack references beyond the source hash (film data packs are mentioned only in note 6), and how a missing asset is surfaced.",
+      "How defaults-by-version are stored and applied (note 8 asserts the behaviour but not the mechanism), and how migrations are tested against a corpus of old documents.",
+      "Bounds on document growth: stroke point counts, pending-proposal limits, and refusal of pathological documents at load."
+    ],
+    "too_long": "The chapter tells the same four failures three times: Motivation item 2 (working-pixel coordinates), implementation note 1 (units of the source) and the first consequence say the same thing, and unit tagging recurs in note 1, note 2 and the Variations. Motivation item 1 (Editor lab, pixel masks) is also restated by note 3. Cut Motivation items 1–2 to one sentence each, fold notes 1 and 2 together, and drop the Editor lab product detail.",
+    "suggested_edits": [
+      "In the Solution, define the schema in one clause: \"Validate every settable path against a field schema — a table of path patterns such as spots.*.r mapped to rules supplied by the operation's argument (Chapter 2) or by a custom check — refusing unknown paths.\"",
+      "Add to the Solution: \"The inverse of a set is the previous value, and deletion where the entry was absent; entries appended as pending are visible to the author's view and rendered only after approval.\"",
+      "Add to the Solution: \"A view renders applied entries plus the author's own pending ones\"; and in Implementation note 5, say what a redo cursor does when a new mutation is appended after an undo.",
+      "Pick a default: \"Prefer fractions for positions and crop, original-image pixels for lengths, and tag every geometric field so a scaler can rescale by unit rather than by field list\" — then say mixed-unit documents are legal and why.",
+      "Rewrite \"masks as stored definitions of the operations that build them\" as \"masks as stored recipes: the identifier list of the operations that build them\".",
+      "Move the stroke tolerance into document units: \"strokes are simplified to within half a document pixel at the source resolution\", and say where simplification runs (tool boundary) so the tolerance is not resolution-bound.",
+      "Replace the Editor lab sentence with a neutral claim (\"pixel-raster masks are tied to the raster they were painted on\") or add a citation and date; qualify the darktable sidecar claim; cite or de-quote goja-cv.",
+      "Add a five-line journal excerpt after the sketch: set spots.s7.r 12, inverse, entry(pending, author: agent), then the same entry after approval, showing that the old entry is kept.",
+      "Replace \"Derive pixels by compiling the document into a graph\" with \"…into the interned operation graph of Chapter 1, for a requested resolution and precision\", and define precision once.",
+      "Add one implementation note on caching: \"Compile is cached on (document version, resolution, precision); a mutation invalidates the cache of the records its path reaches\", and mention the asset table for stored pixels."
+    ]
+  },
+  "applications": [
+    {
+      "context": "Generative image editor: masked diffusion inpainting with prompts, then brushes, layers and colour adjustments; documents must reopen on another machine and re-render at print resolution.",
+      "participants": {
+        "Document": "Project document per canvas: source/asset reference, layer stack, one record per generation (model hash, prompt, seed, steps, sampler, mask id, base layer, output asset hash), mask recipes, brush layers, adjustment settings",
+        "Field schema": "Rules per path: prompt string, seed integer, steps range, mask id must exist, curve point counts, layer blend enum",
+        "Mutation": "set(\"generations.g7.prompt\", …), set(\"generations.g7.seed\", …), set(\"layers.L3.opacity\", 0.6), set(\"masks.m2\", null)",
+        "Transaction": "One inpaint run (region + prompt + params + the inserted layer) as one undo unit; one slider drag or brush stroke as one unit",
+        "Journal": "Entries with author user|agent|script; agent-proposed prompts and regions land as pending for approval; output asset hashes recorded so the pixels can be restored",
+        "Tool boundary": "Brush and mask gestures in canvas pixels converted to fractions of the full frame, and a length in document units for brush radius; overlays converted back at whatever the on-screen scale is",
+        "Compiler": "Document → graph: diffusion node (keyed by model hash, seed, prompt, compiled mask) → stroke/adjustment nodes → render, tiled at print size per Chapter 8",
+        "Migrations": "v1 flat settings, v2 layer stack with generation records, v3 mask recipes; pure step functions"
+      },
+      "sketch": "inpaintTool.onDrag(screenPts, view):\n  pts <- [view.toFrameFraction(p) for p in screenPts]     -- 0..1 of the full frame\n  propose([set(\"masks.\" + mid, MaskDef(nodes: [Stroke(points: simplify(pts, 0.5 / frameSize))]))], author: user)\n\nrunInpaint(lid, mid, prompt, seed, steps):\n  txn: set(\"generations.\" + gid, Gen(modelHash, prompt, seed, steps, mask: mid, base: layerRef(lid)))\n       set(\"assets.\" + outHash, Blob(hash: outHash))       -- the produced pixels, keyed by hash\n       set(\"layers.\" + newLid, Layer(kind: pixel, from: gid, blend, opacity))\n  journal.append(entry(mutations, author, status: applied))\n\ncompile(doc, size, precision):\n  for layer in doc.layers in order:\n    if pixel layer:\n      cacheKey <- (modelHash, seed, prompt, maskCompiledAt(size), precision)\n      node <- diffusionOrAsset(cacheKey, asset: doc.assets[hash])\n    else: strokeNode(scale strokes to size); adjustmentNodes(scale radii by unit tag)\n  return render(graph, size, precision)\n\nload(stored): d <- migrate(stored); validate(d); if asset or model hash missing -> flag, never silently re-sample",
+      "key_note": "Implementation note 1 — units of the source, not of the working image. A diffusion engine runs at a fixed latent size (512/1024) and rescales, which is exactly the 4,000-vs-640 working-pixel trap: a mask or region stored in engine working pixels would be misaligned the moment the user exports at print resolution or switches to a model with a different internal size. Note 3 (masks as recipes, not pixels) is a close second, since the mask must be re-applied to a new generation at another size.",
+      "failure_or_adaptation": "The generated pixels are the one thing that is not parameterisable, so the document must be hybrid: keep the recipe as the source of truth but store each output as a content-addressed asset, because re-running diffusion on new weights or new hardware is not byte-reproducible. Record model, weights hash and sampler version (the data-pack analogue of note 6) and refuse to silently re-render when they are absent. Inpainted content merged into a layer is destructive and cannot be re-derived, so the chapter's \"store pixels if you must, and say which\" clause has to be a first-class record type. Print resolution also depends on the Chapter 8 tiling machinery for the vectors and adjustments, while the generated asset's own resolution is a fixed limit."
+    },
+    {
+      "context": "Colour grading for video: per-shot grades of nodes with curves, qualifiers and object-tracking power windows, shared between colourists, rendered at proxy and full resolution.",
+      "participants": {
+        "Document": "Shot grade document: clip reference (hash, reel, timecode range, source resolution), OCIO/IDT and LUT references, ordered node list, each node with curves, qualifier ranges and softness, power windows with shape and per-frame tracker keys; plus a timeline document referencing shot documents",
+        "Field schema": "Rules per path: curve point monotonic x in 0..1, qualifier hue in 0..360, node order an integer, window needs at least 3 points",
+        "Mutation": "set(\"nodes.n3.curves.luma.points\", …), set(\"nodes.n3.windows.w1.feather\", 12), set(\"nodes.n3.windows.w1\", null)",
+        "Transaction": "One grab of a curve or one keyframe nudge at one frame as one undo unit; \"copy grade from shot A to B\" as a single unit",
+        "Journal": "Per-shot journal with author colourist A/B or an assistant agent; remote or agent changes arrive pending; diffs of two journals drive review of a shot handed between colourists",
+        "Tool boundary": "Viewer coordinates at proxy scale converted to fractions of the full frame for window shapes, and to document pixels for feather/blur radii; overlays converted back at whatever proxy scale is on screen",
+        "Compiler": "Document + time t → graph: curves baked to a 3D LUT node, qualifier to a keyer node, tracker transform applied to the window, window rasterised at the render resolution, all evaluated for the requested size",
+        "Migrations": "v1 curve representation, v2 node order made explicit, v3 tracker keys normalised; pure functions, applied on load before validation"
+      },
+      "sketch": "GradeDoc: version, shotRef(hash, tcIn, tcOut), ocio, nodes: ordered [id -> Node]\nNode: enabled, curves, qualifier{hue, luma, softness_px}, windows [PowerWindow(shape: fractions, feather_px, track: [frame -> xform])]\n\nwindowTool.onDrag(screenPts, view, frame):\n  pts <- [view.toFrameFraction(p) for p in screenPts]\n  propose([set(\"nodes.\" + nid + \".windows.\" + wid + \".shape\", pts)], author: colourist)\n\ntracker.commit(track, frame, xform):      -- often machine-authored\n  propose([set(\"nodes.\" + nid + \".windows.\" + wid + \".track.\" + frame, xform)], author: agent, status: pending)\n\ncompile(doc, t, size, precision):\n  for node in doc.nodes in order:\n    curveLut <- bake(node.curves)                                    -- resolution independent\n    key   <- keyer(node.qualifier, scaledBy(size))\n    win   <- rasterize(node.windows[i].shape * size, feather = px * size/refWidth)\n           * node.windows[i].track.at(t)                              -- normalised motion\n  return evaluate(graph, t, size, precision)\n\nshare(shotA -> shotB): diff(journalA, journalB); conflicts resolved per node id, never per file",
+      "key_note": "Implementation note 2 — tag every geometric field with its unit. A grade legitimately mixes units: window shapes belong in fractions of the frame so they survive proxy-to-full, while feather, blur and qualifier softness belong in document pixels and must be rescaled at each render size. Without per-field unit tags a scaler cannot tell which numbers to move, which is precisely why the chapter keeps units out of the field list and in the catalogue.",
+      "failure_or_adaptation": "Tracking data is per-frame and derived from pixel analysis, so a track computed on proxies drifts at full resolution: the tracker must store normalised motion plus the reference resolution it was solved at, and be re-solved or refined at full res on demand. Temporality is missing from the chapter's document model — nodes, windows and effects are time-dependent, so the document needs keyframes and an evaluation time as first-class concepts, and the compiler must answer for a frame range, not a single image. Playback demands speed the chapter's compile-from-scratch stance ignores, so caching must be keyed by (document version, node subtree, frame range, resolution) with LUT baking per node. Sharing between colourists is really the concurrency case the chapter never covers: journals must diff and merge by stable node ids, and the interchange formats colourists actually use (CDL, OTIO, ALE) flatten nodes — so export is a lossy side channel, not the document. Finally note 6 matters operationally: reopening on another machine without the same OCIO config or LUT is a silent look change, so those must be recorded by hash in the document."
+    }
+  ],
+  "ratings": {
+    "understanding_confidence": 0.82,
+    "usefulness_1to5": 5,
+    "portability_1to5": 4
+  }
+}
